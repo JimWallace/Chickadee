@@ -354,6 +354,20 @@ duplicate.
   `.diff-marker` is a notebook cell boundary.  A second comparison view
   (two attempts, two students) reuses this rather than minting a twin.
 - **`.text-muted`**, `.card-meta`, `.fine-print` — muted text.
+- **`.section-items`** — the student dashboard's section list: one
+  `.results-table`, five fixed tracks (`.section-items-tile`,
+  `.section-items-status`, `.section-items-grade`, `.section-items-actions`,
+  and the flexible name track).  Rows stay in the instructor's order, so section
+  tables do not sort.  A graded row, a material row and a `.section-items-heading`
+  row each fill only the cells that apply.  The `thead` is `.visually-hidden`,
+  not removed.  Each row leads with an `.item-tile` (in an `.item-tile-cell`),
+  a square glyph coloured by `data-kind` (`slides`, `notebook`, `document`,
+  `link`, `outline`, `graded`) from the `--kind-*` token pairs — one component
+  with an attribute, not six classes.  The name cell is an `.item-title` over an
+  `.item-details` line; `.item-grade` right-aligns the grade.  A material's
+  buttons are `.action-btn-icon`, the same fixed square as an assignment's.
+  A section filter appears only at `IndexDisplayGroup.filterThreshold` (8) rows
+  or more, and never on the ungrouped bucket.
 - **`.row-phone-meta`** — a table's phone-width restatement of the columns
   `.col-hide-phone` drops below 640px: the student dashboard's Due and History,
   the admin runners table's version and job count.  Sits inside the name cell,

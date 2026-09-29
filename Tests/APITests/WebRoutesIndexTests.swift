@@ -610,11 +610,8 @@ import VaporTesting
                         !html.contains("<strong>20%</strong>"),
                         "The latest attempt's lower grade must not displace the best")
                     #expect(
-                        html.contains(#"/submissions/sub_ma3" class="submission-history-latest""#),
-                        "The latest-submission link points at the newest attempt")
-                    #expect(
-                        html.contains("+2 more"),
-                        "The history link counts every prior attempt")
+                        html.contains("3 submissions</a>"),
+                        "The details line links to the history page and counts every attempt")
                 })
         }
     }

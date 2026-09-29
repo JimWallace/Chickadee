@@ -118,6 +118,20 @@ struct ContentAttachmentView: Encodable {
     let displayName: String
     let downloadURL: String
     let sizeLabel: String  // e.g. "1.2 MB"
+    /// "/content-files/<item>/<att>/view" iff the stored file is a PDF, else nil.
+    /// The extension decides here; the route re-checks the file's magic bytes,
+    /// which a view model cannot read.
+    let viewURL: String?
+}
+
+/// One icon button in a row's Actions cell.  Content items use the same
+/// `.action-btn-icon` vocabulary as assignment actions, so every button on the
+/// dashboard lines up.
+struct ContentActionView: Encodable {
+    let href: String
+    let iconHref: String  // "#i-eye" | "#i-download" | "#i-book" | "#i-external"
+    let label: String  // title + aria-label
+    let opensNewTab: Bool  // true → target="_blank" rel="noopener noreferrer"
 }
 
 struct ContentItemRow: Encodable {
@@ -133,6 +147,14 @@ struct ContentItemRow: Encodable {
     /// False → a draft item hidden from students (surfaced only on the
     /// instructor dashboard as a "Hidden" marker).
     let isPublished: Bool
+    /// Kind-tile glyph (a sprite id); "" for a heading, which has no tile.
+    let iconHref: String
+    let isHeading: Bool
+    /// " · "-joined details line: updated label, attachments, description.  The
+    /// kind label is rendered separately, so it is not part of this string.
+    let detailsText: String
+    /// Icon buttons for the Actions cell: attachments first, then links.
+    let actions: [ContentActionView]
 
     init(from item: APICourseContentItem) {
         let itemID = item.id?.uuidString ?? ""
@@ -142,16 +164,72 @@ struct ContentItemRow: Encodable {
         self.kindLabel = ContentItemRow.label(for: item.kind)
         self.itemDescription = item.itemDescription
         self.links = item.links
-        self.attachments = item.attachments.map { attachment in
-            ContentAttachmentView(
+        let attachmentViews = item.attachments.map { attachment in
+            let downloadURL = "/content-files/\(itemID)/\(attachment.id.uuidString)"
+            let isPDF =
+                (attachment.originalName as NSString).pathExtension.lowercased() == "pdf"
+            return ContentAttachmentView(
                 id: attachment.id.uuidString,
                 displayName: attachment.displayName,
-                downloadURL: "/content-files/\(itemID)/\(attachment.id.uuidString)",
+                downloadURL: downloadURL,
                 sizeLabel: ByteCountFormatter.string(
-                    fromByteCount: Int64(attachment.sizeBytes), countStyle: .file))
+                    fromByteCount: Int64(attachment.sizeBytes), countStyle: .file),
+                viewURL: isPDF ? downloadURL + "/view" : nil)
         }
+        self.attachments = attachmentViews
         self.updatedLabel = item.updatedLabel
         self.isPublished = item.isPublished
+        self.iconHref = ContentItemRow.iconHref(for: item.kind)
+        self.isHeading = item.kind == .heading
+        self.detailsText = ContentItemRow.detailsText(
+            updatedLabel: item.updatedLabel, attachments: attachmentViews,
+            description: item.itemDescription)
+        self.actions =
+            attachmentViews.map(ContentItemRow.action(for:))
+            + item.links.map { ContentItemRow.action(for: $0, kind: item.kind) }
+    }
+
+    static func iconHref(for kind: ContentItemKind) -> String {
+        switch kind {
+        case .slides: return "#i-slides"
+        case .notebook: return "#i-book"
+        case .document: return "#i-file-text"
+        case .link: return "#i-link"
+        case .outline: return "#i-list"
+        case .heading: return ""
+        }
+    }
+
+    static func detailsText(
+        updatedLabel: String?, attachments: [ContentAttachmentView], description: String?
+    ) -> String {
+        var parts: [String] = []
+        if let updatedLabel, !updatedLabel.isEmpty { parts.append("Updated \(updatedLabel)") }
+        parts += attachments.map { "\($0.displayName), \($0.sizeLabel)" }
+        if let description, !description.isEmpty { parts.append(description) }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func action(for attachment: ContentAttachmentView) -> ContentActionView {
+        if let viewURL = attachment.viewURL {
+            return ContentActionView(
+                href: viewURL, iconHref: "#i-eye",
+                label: "Open \(attachment.displayName) in a new tab (\(attachment.sizeLabel))",
+                opensNewTab: true)
+        }
+        return ContentActionView(
+            href: attachment.downloadURL, iconHref: "#i-download",
+            label: "Download \(attachment.displayName) (\(attachment.sizeLabel))",
+            opensNewTab: false)
+    }
+
+    private static func action(for link: ContentLink, kind: ContentItemKind) -> ContentActionView {
+        // Do not double the verb: "Open in JupyterHub" stays as written.
+        let label =
+            link.label.lowercased().hasPrefix("open") ? link.label : "Open \(link.label)"
+        return ContentActionView(
+            href: link.url, iconHref: kind == .notebook ? "#i-book" : "#i-external",
+            label: label, opensNewTab: true)
     }
 
     static func label(for kind: ContentItemKind) -> String {
@@ -195,8 +273,19 @@ struct IndexSectionItem: Encodable {
 /// `#extend`'d partial) because LeafKit 1.x raises a false "cyclically
 /// referenced" error if the same partial is extended from more than one site.
 struct IndexDisplayGroup: Encodable {
+    /// A filter box is noise on a short list.  Shown only on named sections with
+    /// at least this many rows; the ungrouped bucket never gets one.
+    static let filterThreshold = 8
+
     let name: String?  // nil → ungrouped bucket (no heading)
     let items: [IndexSectionItem]
+    let showFilter: Bool
+
+    init(name: String?, items: [IndexSectionItem]) {
+        self.name = name
+        self.items = items
+        self.showFilter = name != nil && items.count >= Self.filterThreshold
+    }
 }
 
 struct IndexContext: Encodable {
