@@ -52,6 +52,7 @@
     --kind-outline-fg: #5B3F8C;
     --kind-graded-bg: var(--health-teal);
     --kind-graded-fg: #FFFFFF;
+    --state-amber: #D69E2E;  /* state dot: preview / TA — pairs with the select text */
     --amber-bg: #FFFBEB;    /* pale amber — hint / warning callouts */
     --warning-bg: #FFF8E1;  /* warm amber tint — submission warning callout */
     --warning-border: #F1C96B;
@@ -214,6 +215,7 @@
         --kind-outline-fg: #CDB9F0;
         --kind-graded-bg: #007C87;
         --kind-graded-fg: #FFFFFF;
+        --state-amber: #ECC94B;
         --avatar-back-pebble: #32332F;
         /* --border inherits dark-mode --gray-200 automatically */
     }
@@ -2637,6 +2639,61 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 @media (max-width: 640px) {
     .popover-panel { position: static; max-width: none; }
 }
+
+/* Row menu (the trailing ⋯) and + Add menus.  The panel chrome is shared: a
+   ⋯ panel is a .popover-panel that app.js floats out of the table's overflow
+   clip; a + Add panel is the .suite-section-popup shell.  Declared after both
+   so its padding and gap win.  Destructive items go last, in danger colour. */
+.row-menu-panel {
+    min-width: 13rem;
+    gap: 0;
+    padding: .3rem;
+    background: var(--surface);
+    border-radius: var(--radius-md);
+}
+.row-menu-panel form { margin: 0; min-width: 0; }
+.row-menu-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .4rem .6rem;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-base);
+    text-align: left;
+    color: var(--gray-900);
+    text-decoration: none;
+    cursor: pointer;
+}
+.row-menu-item:hover, .row-menu-item:focus-visible { background: var(--gray-100); }
+.row-menu-item--danger { color: var(--danger-fg); }
+.row-menu-item .item-tile { width: 1.5rem; height: 1.5rem; }
+.row-menu-panel hr { margin: .3rem 0; border: none; border-top: 1px solid var(--border); }
+
+/* State select: a real <select> with a dot that says the state at a glance.
+   The dot is the scan cue and the select text is the value, so colour is never
+   the only carrier. data-state is set by the server from the current value. */
+.state-select { position: relative; display: block; }
+.state-select::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    inset-inline-start: .55rem;
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    transform: translateY(-50%);
+    background: var(--gray-400);
+    pointer-events: none;
+}
+.state-select select { width: 100%; padding-inline-start: 1.5rem; }
+.state-select[data-state="open"]::before,
+.state-select[data-state="visible"]::before,
+.state-select[data-state="instructor"]::before { background: var(--kind-graded-bg); }
+.state-select[data-state="preview"]::before,
+.state-select[data-state="ta"]::before { background: var(--state-amber); }
 
 /* A centred explanatory panel standing in for content that cannot render here
    — no notebook selected, or a viewport too small for the editor. Two pages

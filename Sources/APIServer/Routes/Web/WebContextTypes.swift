@@ -264,6 +264,15 @@ struct IndexSectionItem: Encodable {
     }
 }
 
+/// When a list earns a Filter box.  One threshold for every list on the site
+/// (the student dashboard's sections, the instructor pages), so "a filter
+/// appears at 8 rows" is one rule and not one number per page.
+enum ListFilterPolicy {
+    static let minimumRows = 8
+
+    static func showsFilter(rowCount: Int) -> Bool { rowCount >= minimumRows }
+}
+
 /// One rendered group on the student dashboard.  A named section renders an
 /// `<h2>` heading; the trailing "ungrouped" bucket carries `name == nil` so it
 /// renders no heading.  Each group carries one ordered `items` list that
@@ -275,7 +284,7 @@ struct IndexSectionItem: Encodable {
 struct IndexDisplayGroup: Encodable {
     /// A filter box is noise on a short list.  Shown only on named sections with
     /// at least this many rows; the ungrouped bucket never gets one.
-    static let filterThreshold = 8
+    static let filterThreshold = ListFilterPolicy.minimumRows
 
     let name: String?  // nil → ungrouped bucket (no heading)
     let items: [IndexSectionItem]
@@ -284,7 +293,7 @@ struct IndexDisplayGroup: Encodable {
     init(name: String?, items: [IndexSectionItem]) {
         self.name = name
         self.items = items
-        self.showFilter = name != nil && items.count >= Self.filterThreshold
+        self.showFilter = name != nil && ListFilterPolicy.showsFilter(rowCount: items.count)
     }
 }
 
