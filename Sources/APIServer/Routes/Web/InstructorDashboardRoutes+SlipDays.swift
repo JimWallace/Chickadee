@@ -65,6 +65,7 @@ extension InstructorDashboardRoutes {
                 canManageLedger: canManageLedger, db: req.db)
         }
 
+        let totals = SlipDayTotals(rows: students)
         let ctx = InstructorSlipDaysContext(
             currentUser: try await req.courseAwareUserContext(),
             activeInstructorTab: "slip-days",
@@ -79,6 +80,14 @@ extension InstructorDashboardRoutes {
             settingsReadOnlyNote: settingsReadOnlyNote,
             hasStudents: !students.isEmpty,
             students: students,
+            perStudentText: policy.daysPerStudent == 1 ? "1 day" : "\(policy.daysPerStudent) days",
+            eachDayText: policy.extensionHours == 1 ? "1 hour" : "\(policy.extensionHours) hours",
+            releaseHoldText: policy.releaseRevealHold
+                ? "Held until claims lapse" : "Shown at each deadline",
+            inUseText: "\(totals.spent) of \(totals.budget) spent",
+            inUseNote: totals.studentsWithSpends == 1
+                ? "1 student" : "\(totals.studentsWithSpends) students",
+            showFilter: ListFilterPolicy.showsFilter(rowCount: students.count),
             flashSuccess: Self.slipDayFlashSuccess(req),
             flashError: Self.slipDayFlashError(req))
         return try await req.view.render("instructor-slip-days", ctx)
@@ -305,6 +314,8 @@ extension InstructorDashboardRoutes {
                     refundedAtText: spend.refundedAt.map { fmt.string(from: $0) } ?? "",
                     canRefund: spend.refundedAt == nil && canManageLedger)
             }
+            let spec = try await AvatarStore.ensureSpec(for: user, on: db)
+            let refundable = spendRows.filter(\.canRefund)
             rows.append(
                 SlipDayStudentRow(
                     userID: enrollment.userID.uuidString,
@@ -315,10 +326,19 @@ extension InstructorDashboardRoutes {
                     total: total,
                     adjustment: adjustment,
                     hasSpends: !spendRows.isEmpty,
-                    spends: spendRows))
+                    spends: spendRows,
+                    avatar: AvatarPresentation(for: spec, size: .roster, accessibility: .decorative),
+                    pips: SlipDayPip.pips(total: total, used: used, extra: adjustment),
+                    leftText: "\(max(total - used, 0)) of \(max(total, 0)) left",
+                    adjustmentText: adjustment > 0
+                        ? "+\(adjustment) granted" : (adjustment < 0 ? "−\(-adjustment) removed" : ""),
+                    refundableSpends: refundable,
+                    hasRefundable: !refundable.isEmpty))
         }
-        return rows.sorted {
-            $0.username.localizedStandardCompare($1.username) == .orderedAscending
+        // Most used first, then by name: the students who need attention lead.
+        return rows.sorted { lhs, rhs in
+            if lhs.used != rhs.used { return lhs.used > rhs.used }
+            return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
         }
     }
 
@@ -386,6 +406,37 @@ struct SlipDayStudentRow: Encodable {
     /// Precomputed `!spends.isEmpty` (Leaf's `array.isEmpty` is unreliable).
     let hasSpends: Bool
     let spends: [SlipDayLedgerSpendRow]
+    /// The student's own seeded avatar, at the roster size.
+    let avatar: AvatarPresentation
+    /// One pip per day in `total` (adjustments included): used days first, then
+    /// the days still left, with granted extras that are still left marked apart.
+    let pips: [SlipDayPip]
+    /// "2 of 3 left" — the value the decorative pips illustrate.
+    let leftText: String
+    /// "+2 granted" / "−1 removed", empty when the adjustment is zero.
+    let adjustmentText: String
+    /// The refundable spends, for the row menu. Empty means no menu at all.
+    let refundableSpends: [SlipDayLedgerSpendRow]
+    let hasRefundable: Bool
+}
+
+/// One day in a student's budget, drawn as a pip. `state` is "used", "left" or
+/// "extra" (a granted day that has not been spent).
+struct SlipDayPip: Encodable, Equatable {
+    let state: String
+}
+
+extension SlipDayPip {
+    /// Pips for a student with `total` days of which `used` are spent and
+    /// `extra` were granted by staff (the last `extra` days of the budget).
+    static func pips(total: Int, used: Int, extra: Int) -> [SlipDayPip] {
+        guard total > 0 else { return [] }
+        let extras = min(max(extra, 0), total)
+        return (0..<total).map { index in
+            if index < used { return SlipDayPip(state: "used") }
+            return SlipDayPip(state: index >= total - extras ? "extra" : "left")
+        }
+    }
 }
 
 struct InstructorSlipDaysContext: Encodable {
@@ -408,6 +459,28 @@ struct InstructorSlipDaysContext: Encodable {
     /// Precomputed `!students.isEmpty` (Leaf's `array.isEmpty` is unreliable).
     let hasStudents: Bool
     let students: [SlipDayStudentRow]
+    /// The facts card: "3 days", "24 hours", the release-hold wording, and the
+    /// class-wide "11 of 93 spent" with its "8 students" note.
+    let perStudentText: String
+    let eachDayText: String
+    let releaseHoldText: String
+    let inUseText: String
+    let inUseNote: String
+    /// Whether the ledger has enough rows to earn a Filter box.
+    let showFilter: Bool
     let flashSuccess: String?
     let flashError: String?
+}
+
+/// The class-wide totals behind the "In use" fact.
+struct SlipDayTotals: Equatable {
+    let spent: Int
+    let budget: Int
+    let studentsWithSpends: Int
+
+    init(rows: [SlipDayStudentRow]) {
+        spent = rows.reduce(0) { $0 + $1.used }
+        budget = rows.reduce(0) { $0 + $1.total }
+        studentsWithSpends = rows.filter { $0.used > 0 }.count
+    }
 }

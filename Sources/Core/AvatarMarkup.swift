@@ -26,11 +26,16 @@ public enum AvatarSize: String, CaseIterable, Sendable {
     /// around here, which is why a leaderboard names a student by their handle
     /// and uses the bird for recognition rather than identification.
     case small
+    /// 2.25rem — a roster row where the name beside the bird carries the
+    /// identity (the instructor Students, Slip days and LEARN lists).  Inside
+    /// the 32-48px band where the wing marks and expression still read.
+    case roster
 
     public var cssClass: String {
         switch self {
         case .standard: "avatar"
         case .small: "avatar avatar-sm"
+        case .roster: "avatar avatar-md"
         }
     }
 }
@@ -54,7 +59,7 @@ public enum AvatarAccessibility: Sendable, Equatable {
 /// or bool because Leaf resolves no Swift properties (see the LeafKit note in
 /// CLAUDE.md — `isEmpty` on an array silently resolves to nil, and a bare
 /// optional in a conditional is worse).
-public struct AvatarPresentation: Encodable, Sendable, Equatable {
+public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// Palette token names, e.g. "--avatar-slate-cap". The partial wraps each
     /// in `var(…)`.
     public let capToken: String
@@ -71,7 +76,7 @@ public struct AvatarPresentation: Encodable, Sendable, Equatable {
     public let wingSymbolRef: String
     public let expressionSymbolRef: String
     public let accessorySymbolRef: String
-    /// "avatar" or "avatar avatar-sm".
+    /// "avatar", "avatar avatar-sm" or "avatar avatar-md".
     public let sizeClass: String
     /// Whether to announce the bird. An explicit Bool rather than testing the
     /// optional label in the template: Leaf's truthiness rules make a bare

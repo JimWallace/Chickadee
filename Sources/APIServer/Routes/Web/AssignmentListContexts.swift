@@ -125,9 +125,20 @@ struct AssignmentsContext: Encodable {
 struct InstructorStudentsContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
+    /// Student-role rows plus pending pre-enrolments: the polled table.
     let enrolledStudents: [EnrolledStudentRow]
+    /// Instructor and TA rows: a small static list above the students.
+    let staffRows: [EnrolledStudentRow]
+    let hasStaff: Bool
     let hasEnrolledStudents: Bool  // explicit flag — Leaf's array.isEmpty is unreliable
     let enrolledStudentCount: Int
+    /// Student-role enrolments only, and the pending count beside it, for the
+    /// title bar's "31 enrolled · 2 pending".
+    let activeStudentCount: Int
+    let pendingCount: Int
+    /// Whether the students list has enough rows to earn a Filter box
+    /// (`ListFilterPolicy`).
+    let showStudentFilter: Bool
     let courseEnrollmentMode: String
     let courseIsArchived: Bool
     /// True when BrightSpace is configured on the server AND the active course
@@ -363,6 +374,20 @@ struct EnrolledStudentRow: Content {
     /// pre-enrollment into a real user (the grade-sync-testing escape valve).
     /// Empty for active enrollments.
     let registerURL: String
+    /// The student's own seeded avatar (the same bird their account page shows),
+    /// drawn at the roster size.  Nil for a pending row, which has no account.
+    /// Filled by the Students-tab loaders only; the Overview's count-only
+    /// roster never draws one.
+    var avatar: AvatarPresentation?
+    /// Explicit flag for the template: a bare optional in a Leaf conditional is
+    /// unreliable, so the partial gates on this instead of on `avatar`.
+    var hasAvatar: Bool = false
+    /// Why LEARN cannot receive this student's grade ("Not on LEARN classlist"),
+    /// read from the readiness sweep's stored status.  Nil when the course is not
+    /// linked, the student is confirmed, or the sweep has not classified them.
+    var learnFlag: String?
+    /// For a pending row: "Awaiting first login · added from CSV Sep 3".
+    var pendingNote: String = ""
 }
 
 struct AssignmentSubmissionsContext: Encodable {

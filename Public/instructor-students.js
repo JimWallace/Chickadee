@@ -1,7 +1,8 @@
 // Page wiring for the instructor students roster (instructor-students.leaf):
-// the LEARN classlist reconciliation, row-click navigation, the roster's own
-// student count, and the empty-state message — all re-applied after each
-// background repaint by table-poll.js.  Extracted from the template's inline
+// row-click navigation, the roster's own enrolled and pending counts, and the
+// empty-state message — all re-applied after each background repaint by
+// table-poll.js. LEARN readiness is rendered by the server from what the
+// roster-readiness sweep stored, so nothing here checks it.  Extracted from the template's inline
 // script block so it is linted and testable.
 (function () {
     'use strict';
@@ -11,64 +12,11 @@
     var tbody = table.querySelector('tbody');
     var emptyMsg = document.getElementById('no-students-msg');
     var countEl = document.getElementById('enrolled-count');
+    var pendingEl = document.getElementById('pending-count');
 
     function updateEmptyState() {
         if (emptyMsg) emptyMsg.hidden = tbody.querySelectorAll('tr').length > 0;
     }
-
-    // ── LEARN classlist reconciliation ───────────────────────────────
-    // After a "Check against LEARN" run, rows whose student is no longer on
-    // the LEARN classlist get a "not registered on LEARN" badge.  The id set
-    // is kept in memory so the badges survive the 5s poll repaint.
-    var learnNotOnLearn = new Set();
-    var learnBtn = document.getElementById('learn-check-btn');
-    var learnStatus = document.getElementById('learn-check-status');
-
-    function applyLearnFlags() {
-        Array.from(tbody.querySelectorAll('tr')).forEach(function (row) {
-            var nameCell = row.cells[0];
-            if (!nameCell) return;
-            var existing = nameCell.querySelector('.learn-flag');
-            if (existing) existing.remove();
-            var id = row.getAttribute('data-student-id');
-            if (id && learnNotOnLearn.has(id)) {
-                var span = document.createElement('span');
-                span.className = 'learn-flag';
-                span.textContent = 'not registered on LEARN';
-                span.title = 'Not on the LEARN classlist — remove if confirmed dropped';
-                nameCell.appendChild(span);
-            }
-        });
-    }
-
-    async function checkAgainstLearn() {
-        if (learnBtn) learnBtn.disabled = true;
-        if (learnStatus) learnStatus.textContent = 'Checking against LEARN…';
-        try {
-            var res = await fetch('/instructor/students/learn-check', {
-                headers: { 'Accept': 'application/json' },
-                cache: 'no-store'
-            });
-            if (res.redirected || res.status === 401 || res.status === 403) {
-                window.location.reload();
-                return;
-            }
-            if (!res.ok) {
-                if (learnStatus) learnStatus.textContent = 'LEARN check failed (HTTP ' + res.status + ').';
-                return;
-            }
-            var data = await res.json();
-            learnNotOnLearn = new Set(Array.isArray(data.notOnLearn) ? data.notOnLearn : []);
-            applyLearnFlags();
-            if (learnStatus) learnStatus.textContent = data.message || '';
-        } catch (_) {
-            if (learnStatus) learnStatus.textContent = 'LEARN check failed (network error).';
-        } finally {
-            if (learnBtn) learnBtn.disabled = false;
-        }
-    }
-
-    if (learnBtn) learnBtn.addEventListener('click', checkAgainstLearn);
 
     // Row-click navigation (delegated so it survives repaints).  data-href is
     // server-rendered and always an in-app path; resolving it against the
@@ -87,20 +35,24 @@
         if (url.origin === window.location.origin) window.location.href = url.href;
     });
 
-    // The roster's own count: students plus pending pre-enrolments, matching
-    // the server's enrolledStudentCount — staff enrolled for testing appear in
-    // the table but must not inflate the heading. Reads a role cell the same
-    // way the filter and the sorter do (a <select>'s value, else its text).
+    // The roster's own counts: enrolled students, and pending pre-enrolments
+    // beside them. Staff live in their own list, so every row here is one or the
+    // other. Reads a role cell the same way the filter and the sorter do (a
+    // <select>'s value, else its text).
     function updateCount() {
-        if (!countEl) return;
-        var n = Array.from(tbody.querySelectorAll('tr')).filter(function (row) {
-            if (row.classList.contains('student-row-pending')) return true;
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        var pending = rows.filter(function (row) {
+            return row.classList.contains('student-row-pending');
+        }).length;
+        var enrolled = rows.filter(function (row) {
+            if (row.classList.contains('student-row-pending')) return false;
             var cell = row.cells[2];
             if (!cell) return false;
             var sel = cell.querySelector('select');
             return (sel ? sel.value : (cell.textContent || '').trim()) === 'student';
         }).length;
-        countEl.textContent = String(n);
+        if (countEl) countEl.textContent = String(enrolled);
+        if (pendingEl) pendingEl.textContent = String(pending);
     }
 
     // Re-decorate after each background repaint (table-poll.js has already
@@ -108,7 +60,6 @@
     table.addEventListener('chickadee:table-repaint', function () {
         updateCount();
         updateEmptyState();
-        applyLearnFlags();
     });
 
     // ── Initial paint ────────────────────────────────────────────────
@@ -116,5 +67,4 @@
     // sortable-table.js on load.
     window.ChickadeeRelativeTime.applyRelativeTimes(document);
     updateEmptyState();
-    applyLearnFlags();
 })();

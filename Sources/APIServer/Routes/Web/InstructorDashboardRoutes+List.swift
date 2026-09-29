@@ -90,7 +90,7 @@ extension InstructorDashboardRoutes {
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> CourseRosterData {
-        let (enrolledUsers, rolesByUserID) = try await loadEnrolledUsersForRoster(
+        let (enrolledUsers, rolesByUserID, _) = try await loadEnrolledUsersForRoster(
             req: req, activeCourseUUID: activeCourseUUID)
         var enrolledStudents = buildEnrolledStudentRows(
             enrolledUsers: enrolledUsers,
@@ -111,7 +111,8 @@ extension InstructorDashboardRoutes {
         enrolledStudents.append(
             contentsOf: buildPendingPreEnrollmentRows(
                 pendingPreEnrollments: pendingPreEnrollments,
-                activeCourseUUID: activeCourseUUID
+                activeCourseUUID: activeCourseUUID,
+                fmt: fmt
             )
         )
 
@@ -148,7 +149,7 @@ extension InstructorDashboardRoutes {
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> (rows: [EnrolledStudentRow], count: Int) {
-        let (enrolledUsers, rolesByUserID) = try await loadEnrolledUsersForRoster(
+        let (enrolledUsers, rolesByUserID, enrollmentsByUserID) = try await loadEnrolledUsersForRoster(
             req: req, activeCourseUUID: activeCourseUUID)
         var rows = buildEnrolledStudentRows(
             enrolledUsers: enrolledUsers,
@@ -158,6 +159,18 @@ extension InstructorDashboardRoutes {
             fmt: fmt,
             isoFormatter: isoFormatter
         )
+        // The Students tab draws each student's own bird and surfaces the LEARN
+        // readiness the sweep already stored. The Overview's count-only roster
+        // above does neither.
+        let usersByID = Dictionary(
+            enrolledUsers.compactMap { u in u.id.map { ($0, u) } }, uniquingKeysWith: { first, _ in first })
+        for index in rows.indices {
+            guard let userID = UUID(uuidString: rows[index].id), let user = usersByID[userID] else { continue }
+            let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
+            rows[index].avatar = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative)
+            rows[index].hasAvatar = true
+            rows[index].learnFlag = Self.learnFlag(for: enrollmentsByUserID[userID])
+        }
         let pendingPreEnrollments = try await APIPreEnrollment.query(on: req.db)
             .filter(\.$course.$id == activeCourseUUID)
             .sort(\.$username)
@@ -165,7 +178,8 @@ extension InstructorDashboardRoutes {
         rows.append(
             contentsOf: buildPendingPreEnrollmentRows(
                 pendingPreEnrollments: pendingPreEnrollments,
-                activeCourseUUID: activeCourseUUID
+                activeCourseUUID: activeCourseUUID,
+                fmt: fmt
             )
         )
         let activeStudentCount =
@@ -173,19 +187,36 @@ extension InstructorDashboardRoutes {
         return (rows, activeStudentCount + pendingPreEnrollments.count)
     }
 
+    /// The badge text for a student LEARN cannot deliver a grade to, or nil.
+    /// Reads what the readiness sweep stored; nothing is fetched here.
+    static func learnFlag(for enrollment: APICourseEnrollment?) -> String? {
+        guard let enrollment, enrollment.role == .student,
+            enrollment.learnSyncReadiness == .unreachable
+        else { return nil }
+        let detail = enrollment.brightspaceSyncDetail ?? ""
+        return detail.isEmpty ? "Not on LEARN classlist" : detail
+    }
+
     /// Loads the enrolled users for the course, sorted last-seen-desc then
     /// username-asc.  Returns an empty array if no enrollments exist.
     private func loadEnrolledUsersForRoster(
         req: Request,
         activeCourseUUID: UUID
-    ) async throws -> (users: [APIUser], rolesByUserID: [UUID: CourseRole]) {
+    ) async throws -> (
+        users: [APIUser], rolesByUserID: [UUID: CourseRole],
+        enrollmentsByUserID: [UUID: APICourseEnrollment]
+    ) {
         let enrollments = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == activeCourseUUID)
             .all()
         let enrolledUserIDs = enrollments.map(\.userID)
-        guard !enrolledUserIDs.isEmpty else { return ([], [:]) }
+        guard !enrolledUserIDs.isEmpty else { return ([], [:], [:]) }
         var rolesByUserID: [UUID: CourseRole] = [:]
-        for enrollment in enrollments { rolesByUserID[enrollment.userID] = enrollment.role }
+        var enrollmentsByUserID: [UUID: APICourseEnrollment] = [:]
+        for enrollment in enrollments {
+            rolesByUserID[enrollment.userID] = enrollment.role
+            enrollmentsByUserID[enrollment.userID] = enrollment
+        }
         let users = try await APIUser.query(on: req.db)
             .filter(\.$id ~~ enrolledUserIDs)
             // Exclude `mcp` service accounts: they may be enrolled to scope an
@@ -205,7 +236,7 @@ extension InstructorDashboardRoutes {
                 }
                 return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
             }
-        return (users, rolesByUserID)
+        return (users, rolesByUserID, enrollmentsByUserID)
     }
 
     private func buildEnrolledStudentRows(
@@ -243,7 +274,8 @@ extension InstructorDashboardRoutes {
 
     private func buildPendingPreEnrollmentRows(
         pendingPreEnrollments: [APIPreEnrollment],
-        activeCourseUUID: UUID
+        activeCourseUUID: UUID,
+        fmt: DateFormatter
     ) -> [EnrolledStudentRow] {
         pendingPreEnrollments.compactMap { p -> EnrolledStudentRow? in
             guard let preID = p.id else { return nil }
@@ -258,7 +290,9 @@ extension InstructorDashboardRoutes {
                 unenrollURL: "/courses/\(activeCourseUUID.uuidString)/pre-unenroll/\(preID.uuidString)",
                 isPending: true,
                 registerURL:
-                    "/courses/\(activeCourseUUID.uuidString)/pre-enroll/\(preID.uuidString)/register"
+                    "/courses/\(activeCourseUUID.uuidString)/pre-enroll/\(preID.uuidString)/register",
+                pendingNote: p.createdAt.map { "Awaiting first login · added from CSV \(fmt.string(from: $0))" }
+                    ?? "Awaiting first login"
             )
         }
     }

@@ -85,12 +85,19 @@ extension InstructorDashboardRoutes {
             }
         }()
 
+        let (staffRows, studentRows) = Self.splitRoster(enrolledStudents)
+        let pendingCount = studentRows.filter(\.isPending).count
         let ctx = InstructorStudentsContext(
             currentUser: userContext,
             activeInstructorTab: "students",
-            enrolledStudents: enrolledStudents,
-            hasEnrolledStudents: !enrolledStudents.isEmpty,
+            enrolledStudents: studentRows,
+            staffRows: staffRows,
+            hasStaff: !staffRows.isEmpty,
+            hasEnrolledStudents: !studentRows.isEmpty,
             enrolledStudentCount: enrolledStudentCount,
+            activeStudentCount: studentRows.count - pendingCount,
+            pendingCount: pendingCount,
+            showStudentFilter: ListFilterPolicy.showsFilter(rowCount: studentRows.count),
             courseEnrollmentMode: courseEnrollmentMode,
             courseIsArchived: courseIsArchived,
             brightspaceLinkAvailable: brightspaceLinkAvailable,
@@ -100,6 +107,17 @@ extension InstructorDashboardRoutes {
             flashError: flashError
         )
         return try await req.view.render("instructor-students", ctx).encodeResponse(for: req)
+    }
+
+    /// Instructor and TA rows on one side, student rows and pending
+    /// pre-enrolments on the other. The polled table is the second list only;
+    /// someone whose role changes moves lists on the next full page load.
+    static func splitRoster(
+        _ rows: [EnrolledStudentRow]
+    ) -> (staff: [EnrolledStudentRow], students: [EnrolledStudentRow]) {
+        let staff = rows.filter { !$0.isPending && $0.role != CourseRole.student.rawValue }
+        let students = rows.filter { $0.isPending || $0.role == CourseRole.student.rawValue }
+        return (staff, students)
     }
 
     // MARK: - GET /instructor/students-data
@@ -146,7 +164,7 @@ extension InstructorDashboardRoutes {
                 activeCourse: courseState.active,
                 enrolledCourses: courseState.all
             ),
-            enrolledStudents: roster.rows,
+            enrolledStudents: Self.splitRoster(roster.rows).students,
             rosterReadOnly: courseIsArchived || !canManageRoster
         )
         return try await req.view.render("_student-rows", ctx).encodePollFragment(for: req)
