@@ -110,7 +110,7 @@
         </div>
     </div>
 
-    <div class="add-material-panel card" id="add-material-#(section.sectionID)">
+    <div class="add-panel card" id="add-material-#(section.sectionID)">
         <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
             #csrfFormField()
             <input type="hidden" name="sectionID" value="#(section.sectionID)">
@@ -154,7 +154,7 @@
             </label>
             <div class="toolbar">
                 <button class="btn btn-primary btn-compact" type="submit">Add material</button>
-                <button class="btn action-btn js-add-material-cancel" type="button">Cancel</button>
+                <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
             </div>
         </form>
     </div>
@@ -251,7 +251,7 @@
     </details>
         </div>
     </div>
-    <div class="add-material-panel card" id="add-material-ungrouped">
+    <div class="add-panel card" id="add-material-ungrouped">
         <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form">
             #csrfFormField()
             <input type="hidden" name="sectionID" value="">
@@ -295,7 +295,7 @@
             </label>
             <div class="toolbar">
                 <button class="btn btn-primary btn-compact" type="submit">Add material</button>
-                <button class="btn action-btn js-add-material-cancel" type="button">Cancel</button>
+                <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
             </div>
         </form>
     </div>

@@ -4,53 +4,128 @@ Students
 #endexport
 #export("content"):
 #extend("_instructor-tabs")
-
+#extend("_avatar-sprite")
 
 <div class="page-titlebar students-titlebar">
-    <h2>Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h2>
+    <h2>Students <span class="text-muted"><span id="enrolled-count">#(activeStudentCount)</span> enrolled · <span id="pending-count">#(pendingCount)</span> pending</span></h2>
     #if(currentUser.activeCourse):
     #if(!rosterReadOnly):
     <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" class="form-flush">
         #csrfFormField()
-        <label class="form-label students-mode-label">
-            <select name="enrollmentMode" class="form-input students-mode-select"
-                    aria-label="Enrolment mode" data-ck-submit-on-change>
+        <label class="visually-hidden" for="enrollment-mode">Enrolment mode</label>
+        <span class="state-select" data-state="#(courseEnrollmentMode)">
+            <select id="enrollment-mode" name="enrollmentMode" class="form-input" data-ck-submit-on-change>
                 <option value="open"   #if(courseEnrollmentMode == "open"):selected#endif>Open enrolment</option>
                 <option value="auto"   #if(courseEnrollmentMode == "auto"):selected#endif>Auto enrolment</option>
                 <option value="closed" #if(courseEnrollmentMode == "closed"):selected#endif>Closed enrolment</option>
             </select>
-        </label>
+        </span>
     </form>
-    <a class="btn action-btn" href="/instructor/enroll-csv">Enrol from CSV</a>
-    <details class="ext-details students-add-staff">
-        <summary class="btn action-btn" title="Add a co-instructor or TA">Add staff</summary>
-        <form method="post" action="/courses/#(currentUser.activeCourse.id)/staff" class="ext-panel">
-            #csrfFormField()
-            <p class="students-register-hint">Add a co-instructor or TA by username or email. If they have no account yet, a placeholder is created and adopted on their first login.</p>
-            <label class="ext-field-label">
-                Username or email
-                <input type="text" name="identifier" required autocomplete="off" class="ext-field-input">
-            </label>
-            <label class="ext-field-label">
-                Role
-                <select name="role" class="ext-field-input">
-                    <option value="ta">TA</option>
-                    <option value="instructor">Instructor</option>
-                </select>
-            </label>
-            <div class="ext-panel-actions">
-                <button class="btn action-btn" type="submit">Add</button>
-            </div>
-        </form>
+    <details class="add-section-details popup-anchor">
+        <summary class="btn action-btn summary-btn">+ Add <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+            <a class="row-menu-item" href="/instructor/enroll-csv" role="menuitem">
+                <span class="item-tile" data-kind="document"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span>
+                <span>Enrol from CSV<br><span class="card-meta">Username list; unknown users wait as pending</span></span>
+            </a>
+            <a class="row-menu-item" href="#add-staff-panel" role="menuitem" data-add-target="add-staff-panel">
+                <span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg></span>
+                <span>Add staff member<br><span class="card-meta">A co-instructor or TA, by username or email</span></span>
+            </a>
+        </div>
     </details>
     #endif
-    #if(brightspaceLinkAvailable):
-    <button type="button" class="btn action-btn" id="learn-check-btn"
-            title="Flag enrolled students who are no longer on the LEARN classlist">Check against LEARN</button>
-    <span id="learn-check-status" role="status" aria-live="polite"
-          class="students-learn-status"></span>
     #endif
-    #endif
+</div>
+
+#if(currentUser.activeCourse):
+#if(!rosterReadOnly):
+<div class="add-panel card" id="add-staff-panel">
+            <form method="post" action="/courses/#(currentUser.activeCourse.id)/staff" class="form popup-form">
+                #csrfFormField()
+                <p class="section-note">Add a co-instructor or TA by username or email. If they have no account yet, a placeholder is created and adopted on their first login.</p>
+                <label class="form-label">
+                    Username or email
+                    <input class="form-input editor-input" type="text" name="identifier" required autocomplete="off">
+                </label>
+                <label class="form-label">
+                    Role
+                    <select class="form-input editor-input" name="role">
+                        <option value="ta">TA</option>
+                        <option value="instructor">Instructor</option>
+                    </select>
+                </label>
+                <div class="toolbar">
+                    <button class="btn btn-primary btn-compact" type="submit">Add</button>
+                    <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
+                </div>
+            </form>
+</div>
+#endif
+#endif
+
+#if(hasStaff):
+<h3 class="assignment-section-heading">Course staff</h3>
+<table class="results-table section-items section-items--manage" id="course-staff-table">
+    <colgroup>
+        <col class="section-items-tile"><col><col class="section-items-status"><col class="section-items-actions">
+    </colgroup>
+    <thead class="visually-hidden">
+        <tr><th scope="col">Person</th><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Actions</th></tr>
+    </thead>
+    <tbody>
+    #for(student in staffRows):
+        <tr data-student-id="#(student.id)">
+            <td class="item-tile-cell">#extend("_avatar", student.avatar)</td>
+            <td>
+                <div class="item-title">#(student.displayName)</div>
+                <div class="item-details"><code>#(student.username)</code></div>
+            </td>
+            <td>
+                #if(rosterReadOnly):
+                #(student.role)
+                #else:
+                <form method="post" action="/courses/#(currentUser.activeCourse.id)/role/#(student.id)" class="inline-form form-flush">
+                    #csrfFormField()
+                    <label class="visually-hidden" for="role-#(student.id)">Role for #(student.displayName)</label>
+                    <span class="state-select" data-state="#(student.role)">
+                        <select id="role-#(student.id)" name="role" class="form-input" data-ck-submit-on-change>
+                            <option value="student"#if(student.role == "student"): selected#endif>Student</option>
+                            <option value="ta"#if(student.role == "ta"): selected#endif>TA</option>
+                            <option value="instructor"#if(student.role == "instructor"): selected#endif>Instructor</option>
+                        </select>
+                    </span>
+                </form>
+                #endif
+            </td>
+            <td>
+                #if(!rosterReadOnly):
+                <div class="assignment-actions-cell">
+                    <details class="ext-details row-menu">
+                        <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(student.displayName)">
+                            <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                        </summary>
+                        <div class="popover-panel row-menu-panel" role="menu">
+                            <form method="post" action="#(student.unenrollURL)" data-confirm="Remove @#(student.username) from this course?">
+                                #csrfFormField()
+                                <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                    <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Remove from course
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                </div>
+                #endif
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+<h3 class="assignment-section-heading">Students</h3>
+#endif
+
+#if(showStudentFilter):
+<div class="toolbar toolbar--end section-gap">
     <span class="filter-group">
         <label class="filter-label" for="enrolled-filter">Filter</label>
         <input id="enrolled-filter" class="form-input filter-input" type="search"
@@ -59,17 +134,22 @@ Students
                data-list-filter-empty="No students match this filter.">
     </span>
 </div>
+#endif
 
-<table class="results-table sortable-table" id="enrolled-students-table"
-       data-sort-initial="last-seen:desc" data-sort-tiebreak="username"
+<table class="results-table section-items section-items--manage sortable-table" id="enrolled-students-table"
+       data-sort-initial="last-seen:desc" data-sort-tiebreak="name"
        data-poll-url="/instructor/students-data?fragment=rows" data-poll-interval="5000">
+    <colgroup>
+        <col class="section-items-tile"><col><col class="section-items-status">
+        <col class="section-items-seen col-hide-phone"><col class="section-items-actions">
+    </colgroup>
     <thead>
         <tr>
+            <th scope="col"><span class="visually-hidden">Person</span></th>
             <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
-            <th data-sort-key="username" data-sort-type="text"><button class="sort-header" type="button">Username</button></th>
             <th data-sort-key="role" data-sort-type="text"><button class="sort-header" type="button">Role</button></th>
-            <th data-sort-key="last-seen" data-sort-type="date"><button class="sort-header" type="button">Last Seen</button></th>
-            <th>Actions</th>
+            <th data-sort-key="last-seen" data-sort-type="date" class="col-hide-phone"><button class="sort-header" type="button">Last seen</button></th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
         </tr>
     </thead>
     <tbody>
@@ -79,32 +159,9 @@ Students
 <p class="empty" id="no-students-msg"#if(hasEnrolledStudents): hidden#endif>No students enrolled yet.</p>
 
 <style>
-/* The global .page-titlebar puts the title left and actions right; this page
-   adds only what is genuinely its own: the actions cluster wraps, because the
-   roster carries five controls plus a filter. */
+/* The global .page-titlebar puts the title left and actions right; the roster
+   adds only that the cluster wraps. */
 .students-titlebar { flex-wrap: wrap; gap: .75rem; }
-.students-add-staff { margin: 0; }
-.students-mode-label { font-size: var(--text-base); margin: 0; }
-.students-mode-select { display: block; font-size: var(--text-base); }
-.students-learn-status { font-size: var(--text-sm); color: var(--gray-500); }
-/* One rule for every muted cell in a pending row (was three identical ones). */
-.students-pending-name, .students-pending-username, .students-pending-role { color: var(--gray-500); }
-.students-pending-note { font-size: var(--text-2xs); color: var(--gray-500); margin-left: .4rem; }
-.students-unenroll-btn { padding: .25rem .35rem; }
-.students-role-select { display: inline-block; font-size: var(--text-sm); padding: .1rem .3rem; }
-.students-row-actions { display: flex; align-items: center; gap: .3rem; }
-.students-register-hint { font-size: var(--text-2xs); color: var(--gray-600); margin: 0 0 .2rem; }
-.student-row-link {
-    cursor: pointer;
-}
-.student-row-link td a {
-    color: inherit;
-    text-decoration: none;
-}
-.student-row-link:hover td a strong,
-.student-row-link:hover td a code {
-    text-decoration: underline;
-}
 .learn-flag {
     display: inline-block;
     font-size: var(--text-2xs);
@@ -122,8 +179,8 @@ Students
 <script src="/list-filter.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 <script src="/table-poll.js?v=#appVersion()"></script>
-<!-- LEARN reconciliation, row-click navigation, the roster count and
-     the empty state are wired by Public/instructor-students.js. -->
+<!-- Row-click navigation, the roster counts and the empty state are wired by
+     Public/instructor-students.js. -->
 <script src="/instructor-students.js?v=#appVersion()"></script>
 #endexport
 #endextend

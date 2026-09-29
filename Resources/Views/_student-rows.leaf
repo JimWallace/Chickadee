@@ -2,53 +2,56 @@
         <tr class="student-row-link#if(student.isPending): student-row-pending#endif"
             data-student-id="#(student.id)"
             #if(!student.isPending):data-href="#(student.submissionsURL)"#endif>
-            <td>
-                #if(student.isPending):
-                <strong class="students-pending-name">#(student.displayName)</strong>
-                <span class="students-pending-note">awaiting first login</span>
+            <td class="item-tile-cell">
+                #if(student.hasAvatar):
+                #extend("_avatar", student.avatar)
                 #else:
-                <a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a>
+                <span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span>
+                #endif
+            </td>
+            <td data-sort-value="#(student.displayName)">
+                #if(student.isPending):
+                <div class="item-title text-muted"><em>#(student.displayName)</em></div>
+                <div class="item-details">#(student.pendingNote)</div>
+                #else:
+                <div class="item-title"><a href="#(student.submissionsURL)">#(student.displayName)</a>#if(student.learnFlag): <span class="learn-flag" title="Not on the LEARN classlist: remove if confirmed dropped">#(student.learnFlag)</span>#endif</div>
+                <div class="item-details"><code>#(student.username)</code></div>
                 #endif
             </td>
             <td>
                 #if(student.isPending):
-                <code class="students-pending-username">#(student.username)</code>
-                #else:
-                <a href="#(student.submissionsURL)"><code>#(student.username)</code></a>
-                #endif
-            </td>
-            <td>
-                #if(student.isPending):
-                <span class="students-pending-role">(pending)</span>
+                <span class="tier tier-preview">Pending</span>
                 #elseif(rosterReadOnly):
                 #(student.role)
                 #else:
                 <form method="post" action="/courses/#(currentUser.activeCourse.id)/role/#(student.id)"
                       class="inline-form form-flush">
                     #csrfFormField()
-                    <select name="role" class="form-input students-role-select" aria-label="Per-course role"
-                            data-ck-submit-on-change>
-                        <option value="student"#if(student.role == "student"): selected#endif>Student</option>
-                        <option value="ta"#if(student.role == "ta"): selected#endif>TA</option>
-                        <option value="instructor"#if(student.role == "instructor"): selected#endif>Instructor</option>
-                    </select>
+                    <label class="visually-hidden" for="role-#(student.id)">Role for #(student.displayName)</label>
+                    <span class="state-select" data-state="#(student.role)">
+                        <select id="role-#(student.id)" name="role" class="form-input" data-ck-submit-on-change>
+                            <option value="student"#if(student.role == "student"): selected#endif>Student</option>
+                            <option value="ta"#if(student.role == "ta"): selected#endif>TA</option>
+                            <option value="instructor"#if(student.role == "instructor"): selected#endif>Instructor</option>
+                        </select>
+                    </span>
                 </form>
                 #endif
             </td>
-            <td class="js-relative-time"
+            <td class="col-hide-phone js-relative-time"
                 #if(student.lastSeenAtISO):data-iso="#(student.lastSeenAtISO)"#endif>
                 #(student.lastSeenAtText)
             </td>
             <td>
                 #if(!rosterReadOnly):
-                <div class="students-row-actions">
+                <div class="assignment-actions-cell">
                     #if(student.isPending):
                     <details class="ext-details form-flush">
-                        <summary class="btn action-btn action-btn-icon" title="Register this student now"
+                        <summary class="btn action-btn ext-summary" title="Register this student now"
                                  aria-label="Register pending student">Register</summary>
                         <form method="post" action="#(student.registerURL)" class="ext-panel">
                             #csrfFormField()
-                            <p class="students-register-hint">Materialize <code>#(student.username)</code> into a real account now (for grade-sync testing). They appear on assignment rosters immediately; their real login adopts this account.</p>
+                            <p class="section-note">Materialize <code>#(student.username)</code> into a real account now (for grade-sync testing). They appear on assignment rosters immediately; their real login adopts this account.</p>
                             <label class="ext-field-label">
                                 Display name
                                 <input type="text" name="displayName" placeholder="#(student.username)" class="ext-field-input">
@@ -70,16 +73,25 @@
                             </div>
                         </form>
                     </details>
+                    #else:
+                    <a class="btn action-btn action-btn-icon" href="#(student.submissionsURL)"
+                       title="View #(student.displayName)'s submissions" aria-label="View #(student.displayName)'s submissions">
+                        <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+                    </a>
                     #endif
-                    <form method="post" action="#(student.unenrollURL)"
-                          class="inline-form">
-                        #csrfFormField()
-                        <button class="btn action-btn action-danger students-unenroll-btn" type="submit"
-                                title="Remove from course" aria-label="Remove from course"
-                                data-confirm="Remove @#(student.username) from this course?">
-                            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
-                        </button>
-                    </form>
+                    <details class="ext-details row-menu">
+                        <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(student.displayName)">
+                            <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                        </summary>
+                        <div class="popover-panel row-menu-panel" role="menu">
+                            <form method="post" action="#(student.unenrollURL)" data-confirm="Remove @#(student.username) from this course?">
+                                #csrfFormField()
+                                <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                    <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Remove from course
+                                </button>
+                            </form>
+                        </div>
+                    </details>
                 </div>
                 #endif
             </td>

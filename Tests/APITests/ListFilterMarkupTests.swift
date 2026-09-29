@@ -64,6 +64,7 @@ import Testing
                 "assignment-submissions.leaf",
                 "index.leaf",
                 "instructor-activity.leaf",
+                "instructor-slip-days.leaf",
                 "instructor-students.leaf",
             ],
             "the filter-input extractor found \(files.sorted()) — update this list when a page gains or loses a filter"
@@ -175,7 +176,7 @@ import Testing
     @Test func everyFilterIsEitherLiveOrInAGetForm() throws {
         let liveFilters = [
             "admin-users.leaf", "assignment-submissions.leaf", "index.leaf",
-            "instructor-students.leaf",
+            "instructor-slip-days.leaf", "instructor-students.leaf",
         ]
         for input in try Self.filterInputs() {
             let isLive = input.tag.contains("data-list-filter=")

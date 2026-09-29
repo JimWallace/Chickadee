@@ -4,6 +4,7 @@ Slip days
 #endexport
 #export("content"):
 #extend("_instructor-tabs")
+#extend("_avatar-sprite")
 
 #if(!hasActiveCourse):
 <section class="page-section">
@@ -11,52 +12,70 @@ Slip days
 </section>
 #else:
 
+<div class="page-titlebar">
+    <h2>Slip days #if(enabled):<span class="tier tier-open">On</span>#else:<span class="tier tier-closed">Off</span>#endif</h2>
+    #if(canEditSettings):
+    <a class="btn action-btn" href="#slip-settings-panel" data-add-target="slip-settings-panel">Edit settings</a>
+    #endif
+</div>
+<p class="section-intro">Students extend a deadline themselves from a fixed budget. A staff extension on an assignment always takes precedence.</p>
 
-<section class="page-section">
-    <h2>Slip days — #(courseCode)</h2>
-    <p class="section-intro">
-        A slip day is a student-initiated deadline extension drawn from a fixed
+#if(canEditSettings):
+<div class="add-panel card" id="slip-settings-panel">
+    <p class="section-note">A slip day is a student-initiated deadline extension drawn from a fixed
         per-student budget, spent without staff involvement. After a deadline
         passes, an eligible student can claim one from the dashboard within one
         extension length of the deadline; days stack on a single assignment.
-        Staff-granted extensions always take precedence — a student holding one
-        cannot spend slip days on that assignment.
-    </p>
-    #if(settingsReadOnlyNote):
-    <p class="section-note">#(settingsReadOnlyNote)</p>
-    #endif
+        Staff-granted extensions always take precedence: a student holding one
+        cannot spend slip days on that assignment.</p>
     <form method="post" action="/instructor/slip-days/settings" class="form-stack">
         #csrfFormField()
         <label class="form-label slip-day-settings-check">
-            <input type="checkbox" name="enabled" #if(enabled):checked#endif #if(!canEditSettings):disabled#endif>
+            <input type="checkbox" name="enabled" #if(enabled):checked#endif>
             Enable slip days for #(courseCode)
         </label>
         <label class="form-label">
             Days per student
             <input class="form-input slip-day-settings-number" type="number" name="daysPerStudent"
-                   min="0" max="100" value="#(daysPerStudent)" #if(!canEditSettings):disabled#endif>
+                   min="0" max="100" value="#(daysPerStudent)">
         </label>
         <label class="form-label">
             Hours per slip day
             <input class="form-input slip-day-settings-number" type="number" name="extensionHours"
-                   min="1" max="336" value="#(extensionHours)" #if(!canEditSettings):disabled#endif>
+                   min="1" max="336" value="#(extensionHours)">
             <span class="field-note field-note--muted">Each day extends the deadline by this many hours,
                 counted from the original deadline. A claim must be made within this window.</span>
         </label>
         <label class="form-label">
             <span class="slip-day-settings-check">
-                <input type="checkbox" name="releaseRevealHold" #if(releaseRevealHold):checked#endif #if(!canEditSettings):disabled#endif>
+                <input type="checkbox" name="releaseRevealHold" #if(releaseRevealHold):checked#endif>
                 Hold release-tier output until slip-day claims lapse
             </span>
             <span class="field-note field-note--muted">Off shows release-tier output at each student&rsquo;s deadline,
                 even while they could still claim a slip day and act on it.</span>
         </label>
-        #if(canEditSettings):
-        <div>
+        <div class="toolbar">
             <button class="btn btn-primary" type="submit">Save settings</button>
+            <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
         </div>
-        #endif
     </form>
+</div>
+#endif
+
+<section class="card page-section">
+    <dl class="detail-grid">
+        <dt>Per student</dt>
+        <dd><strong>#(perStudentText)</strong></dd>
+        <dt>Each day</dt>
+        <dd><strong>#(eachDayText)</strong> <span class="card-meta">From the original deadline</span></dd>
+        <dt>Release-tier output</dt>
+        <dd><strong>#(releaseHoldText)</strong></dd>
+        <dt>In use</dt>
+        <dd><strong>#(inUseText)</strong> <span class="card-meta">#(inUseNote)</span></dd>
+    </dl>
+    #if(settingsReadOnlyNote):
+    <p class="section-note">#(settingsReadOnlyNote)</p>
+    #endif
 </section>
 
 <section class="page-section">
@@ -64,73 +83,87 @@ Slip days
     #if(!hasStudents):
     <p class="empty">No students enrolled.</p>
     #else:
-    <table class="results-table">
-        <thead>
+    #if(showFilter):
+    <div class="toolbar toolbar--end section-gap">
+        <span class="filter-group">
+            <label class="filter-label" for="slip-days-filter">Filter</label>
+            <input id="slip-days-filter" class="form-input filter-input" type="search"
+                   placeholder="Filter by name or username…"
+                   data-list-filter="slip-days-ledger"
+                   data-list-filter-empty="No students match this filter.">
+        </span>
+    </div>
+    #endif
+    <table class="results-table section-items section-items--manage" id="slip-days-ledger">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status"><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
             <tr>
-                <th>Student</th>
-                <th>Used</th>
-                <th>Remaining</th>
-                <th>Adjustment</th>
-                <th>Spends</th>
+                <th scope="col">Person</th>
+                <th scope="col" data-sort-key="name">Student</th>
+                <th scope="col" data-sort-key="left">Slip days left</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
         #for(student in students):
             <tr>
+                <td class="item-tile-cell">#extend("_avatar", student.avatar)</td>
                 <td>
-                    <strong>#(student.displayName)</strong>
-                    <div class="text-muted">#(student.username)</div>
+                    <div class="item-title">#(student.displayName)</div>
+                    <div class="item-details"><code>#(student.username)</code>#if(student.adjustmentText != ""): · #(student.adjustmentText)#endif</div>
+                    #for(spend in student.spends):
+                    <div class="item-details"><span#if(spend.isRefunded): class="slip-day-spend-refunded"#endif>#(spend.assignmentTitle) → #(spend.extensionDueAtText)</span>#if(spend.isRefunded): refunded #(spend.refundedAtText)#endif</div>
+                    #endfor
                 </td>
-                <td>#(student.used)</td>
-                <td>#(student.remaining) of #(student.total)</td>
                 <td>
-                    <div class="slip-day-adjust-cell">
-                        <span>#(student.adjustment)</span>
-                        #if(canManageLedger):
-                        <form method="post" action="/instructor/slip-days/adjust" class="inline-form">
-                            #csrfFormField()
-                            <input type="hidden" name="userID" value="#(student.userID)">
-                            <input type="hidden" name="delta" value="1">
-                            <button class="btn action-btn" type="submit"
-                                    title="Grant one extra slip day"
-                                    aria-label="Grant #(student.username) one extra slip day">+1</button>
-                        </form>
+                    <span class="slip-pips" aria-hidden="true">#for(pip in student.pips):<span class="slip-pip" data-state="#(pip.state)"></span>#endfor</span>
+                    <div class="item-details">#(student.leftText)</div>
+                </td>
+                <td>
+                    #if(canManageLedger):
+                    <div class="assignment-actions-cell">
                         <form method="post" action="/instructor/slip-days/adjust" class="inline-form">
                             #csrfFormField()
                             <input type="hidden" name="userID" value="#(student.userID)">
                             <input type="hidden" name="delta" value="-1">
-                            <button class="btn action-btn" type="submit"
+                            <button class="btn action-btn action-btn-icon" type="submit"
                                     title="Remove one slip day"
-                                    aria-label="Remove one slip day from #(student.username)">−1</button>
+                                    aria-label="Remove one slip day from #(student.username)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg>
+                            </button>
                         </form>
+                        <form method="post" action="/instructor/slip-days/adjust" class="inline-form">
+                            #csrfFormField()
+                            <input type="hidden" name="userID" value="#(student.userID)">
+                            <input type="hidden" name="delta" value="1">
+                            <button class="btn action-btn action-btn-icon" type="submit"
+                                    title="Grant one extra slip day"
+                                    aria-label="Grant #(student.username) one extra slip day">
+                                <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                            </button>
+                        </form>
+                        #if(student.hasRefundable):
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(student.displayName)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                #for(spend in student.refundableSpends):
+                                <form method="post" action="/instructor/slip-days/refund"
+                                      data-confirm="Refund this slip day? The day is returned to the student and the deadline extension is recomputed (or removed).">
+                                    #csrfFormField()
+                                    <input type="hidden" name="spendID" value="#(spend.id)">
+                                    <button class="row-menu-item" type="submit" role="menuitem">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>Refund #(spend.assignmentTitle) slip day
+                                    </button>
+                                </form>
+                                #endfor
+                            </div>
+                        </details>
                         #endif
                     </div>
-                </td>
-                <td>
-                    #if(student.hasSpends):
-                    <ul class="slip-day-spend-list">
-                        #for(spend in student.spends):
-                        <li class="slip-day-spend-item">
-                            <span #if(spend.isRefunded):class="slip-day-spend-refunded"#endif>
-                                #(spend.assignmentTitle) — extended to #(spend.extensionDueAtText)
-                                (spent #(spend.spentAtText))
-                            </span>
-                            #if(spend.isRefunded):
-                            <span class="text-muted">refunded #(spend.refundedAtText)</span>
-                            #endif
-                            #if(spend.canRefund):
-                            <form method="post" action="/instructor/slip-days/refund" class="inline-form"
-                                  data-confirm="Refund this slip day? The day is returned to the student and the deadline extension is recomputed (or removed).">
-                                #csrfFormField()
-                                <input type="hidden" name="spendID" value="#(spend.id)">
-                                <button class="btn action-btn" type="submit">Refund</button>
-                            </form>
-                            #endif
-                        </li>
-                        #endfor
-                    </ul>
-                    #else:
-                    <span class="empty">—</span>
                     #endif
                 </td>
             </tr>
@@ -144,10 +177,8 @@ Slip days
 <style>
 .slip-day-settings-check { display: flex; align-items: center; gap: .5rem; }
 .slip-day-settings-number { display: block; margin-top: .25rem; max-width: 8rem; }
-.slip-day-adjust-cell { display: flex; align-items: center; gap: .5rem; }
-.slip-day-spend-list { margin: 0; padding-left: 1rem; }
-.slip-day-spend-item { margin-bottom: .25rem; }
-.slip-day-spend-refunded { text-decoration: line-through; color: var(--text-secondary); }
+.slip-day-spend-refunded { text-decoration: line-through; }
 </style>
+<script src="/list-filter.js?v=#appVersion()"></script>
 #endexport
 #endextend

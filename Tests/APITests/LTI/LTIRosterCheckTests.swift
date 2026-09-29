@@ -87,7 +87,11 @@ import VaporTesting
         }
     }
 
-    @Test func theStudentsTabOffersTheCheck() async throws {
+    /// The Students tab used to offer a "Check against LEARN" button. The
+    /// readiness sweep now keeps each enrolment's status, and the roster shows
+    /// it as a flag by the name, so the tab offers no check in either state.
+    /// The `/instructor/students/learn-check` route itself is unchanged.
+    @Test func theStudentsTabNoLongerOffersTheCheck() async throws {
         let directory = try Self.keyDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try await withAssignmentRoutesApp { app in
@@ -102,7 +106,7 @@ import VaporTesting
             try await app.asyncTest(
                 .GET, "/instructor/students",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-                afterResponse: { res in #expect(res.body.string.contains("learn-check-btn")) })
+                afterResponse: { res in #expect(!res.body.string.contains("learn-check-btn")) })
         }
     }
 

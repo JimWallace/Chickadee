@@ -328,7 +328,10 @@ duplicate.
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
   table row where the handle beside it carries the identity — the leaderboard —
   because below 48px the bird is recognition, not identification, and a row
-  with no text beside it would want a monogram chip instead.  See
+  with no text beside it would want a monogram chip instead.  **`.avatar-md`**
+  (2.25rem) is the roster size: a row on the instructor Students, Slip days or
+  LEARN list, where the name beside the bird carries the identity and the bird
+  is the student's own seeded one, the same as on their account page.  See
   [student-avatars.md](student-avatars.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A
@@ -374,9 +377,12 @@ duplicate.
   submitted-count track, and a wider state track for the status select.  Rows
   stay `<tr>` in a `tbody[data-section-id]` and keep their `data-assignment-id`
   / `data-content-item-id`, because `section-items-dnd.js` reads them.
-- **`.add-material-panel`** — the add-material form under a section header,
-  closed until a `+ Add ▾` material item opens it.  `assignments.js` toggles
-  `is-open`; without JS the item links to the panel's id and `:target` opens it.
+- **`.add-panel`** — a form that opens under a page or section header: the
+  add-material form, the add-staff form, the slip-day settings.  Closed until a
+  control carrying `data-add-target` opens it; `app.js` toggles `is-open` (and
+  preselects a kind when the control carries `data-add-kind`).  Without JS the
+  control links to the panel's id and `:target` opens it.  `.section-items-seen`
+  is the Students list's last-seen track.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
   `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
   `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so
@@ -388,6 +394,10 @@ duplicate.
   `.row-menu-item--danger` and keep their `data-confirm`.  An item that adds
   something carries a small `.item-tile` and may add a one-line `.card-meta`
   hint.
+- **`.slip-pips`** (with `.slip-pip`, keyed by `data-state`) — one dot per day in a
+  student's slip-day budget: `used` is hollow, `left` teal, `extra` (a granted
+  day not yet spent) amber.  Decorative and `aria-hidden`; the "2 of 3 left"
+  text beside it is the value.
 - **`.state-select`** — a real `<select>` in a wrapper whose dot shows the
   state (`data-state`: open, visible and instructor are teal; preview and ta are
   `--state-amber`; anything else is grey).  The select text is the value; the

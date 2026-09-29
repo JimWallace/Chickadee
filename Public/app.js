@@ -394,6 +394,39 @@ if (root) {
     }, true);
 }());
 
+// ── Add panels: a control with data-add-target opens a form under the header ──
+// The + Add menus, the slip-day "Edit settings" button and similar controls
+// carry data-add-target="<panel id>"; the panel is a .add-panel, closed until
+// opened. Class toggle only. A control may also carry data-add-kind, which
+// preselects that panel's kind select (the section + Add ▾ material items).
+// Without JS the control is a link to the panel's id and :target opens it.
+(function addPanels() {
+    document.addEventListener('click', (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+        const opener = target.closest('[data-add-target]');
+        if (opener) {
+            const panel = document.getElementById(opener.getAttribute('data-add-target'));
+            if (!panel) return;
+            e.preventDefault();
+            const kind = opener.getAttribute('data-add-kind');
+            const select = kind ? panel.querySelector('select[name="kind"]') : null;
+            if (select) select.value = kind;
+            panel.classList.add('is-open');
+            const menu = opener.closest('details');
+            if (menu) menu.open = false;
+            const first = panel.querySelector('input:not([type="hidden"]):not([type="checkbox"]), select, textarea');
+            if (first) first.focus();
+            return;
+        }
+        const cancel = target.closest('.js-add-cancel');
+        if (cancel) {
+            const open = cancel.closest('.add-panel');
+            if (open) open.classList.remove('is-open');
+        }
+    });
+}());
+
 // ── Declarative control behaviours (the former inline handlers) ──────────────
 // Three one-liner behaviours used to ride `onclick=` / `onchange=` attributes
 // in the templates.  Those attributes are what `'unsafe-inline'` in the CSP

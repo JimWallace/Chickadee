@@ -205,34 +205,6 @@
         });
     });
 
-    // ── + Add ▾ → the add-material form ───────────────────────────────────────
-    // A material item in a section's + Add menu opens that section's form with
-    // its kind preselected. Class toggle only; without JS the item is a link to
-    // the form's id and :target opens it.
-    document.addEventListener('click', function (event) {
-        var target = event.target instanceof Element ? event.target : null;
-        if (!target) return;
-        var item = target.closest('[data-add-kind]');
-        if (item) {
-            var panel = document.getElementById(item.getAttribute('data-add-target'));
-            if (!panel) return;
-            event.preventDefault();
-            var kind = panel.querySelector('select[name="kind"]');
-            if (kind) kind.value = item.getAttribute('data-add-kind');
-            panel.classList.add('is-open');
-            var menu = item.closest('details');
-            if (menu) menu.open = false;
-            var title = panel.querySelector('input[name="title"]');
-            if (title) title.focus();
-            return;
-        }
-        var cancel = target.closest('.js-add-material-cancel');
-        if (cancel) {
-            var open = cancel.closest('.add-material-panel');
-            if (open) open.classList.remove('is-open');
-        }
-    });
-
     // ── Copy student link ─────────────────────────────────────────────────────
     // Per-row buttons carry the assignment's vanity path on data-copy-url; the
     // "copied" cue is a transient class + title swap (no JS styling decision).

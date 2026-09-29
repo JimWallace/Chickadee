@@ -1719,18 +1719,38 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* Instructor Overview variant of the section list: a leading drag-handle
    track and a submitted-count track. Same row shape, wider state track. */
-.section-items--manage .section-items-status { width: 9.5rem; }
+.section-items--manage .section-items-status { width: 10.5rem; }
 .section-items-handle { width: 1.75rem; }
 .section-items--manage td.section-items-handle { padding-right: 0; padding-left: .6rem; }
 .section-items-count { width: 5rem; }
 .section-items--manage .item-details a { font-weight: 600; }
 
-/* The add-material form under a section header. Closed until a + Add item
-   opens it (a class toggle from assignments.js); without JS the item is a link
-   to this id, and :target opens it. */
-.add-material-panel { display: none; margin-bottom: .75rem; }
-.add-material-panel:target,
-.add-material-panel.is-open { display: block; }
+/* A form that opens under a page or section header: the add-material form
+   under a section, the add-staff form on the Students page, the slip-day
+   settings. Closed until a control with data-add-target opens it (a class
+   toggle from app.js); without JS that control is a link to this id, and
+   :target opens it. */
+.add-panel { display: none; margin-bottom: .75rem; padding: 1rem 1.25rem; }
+.add-panel:target,
+.add-panel.is-open { display: block; }
+.section-items-seen { width: 8rem; }
+/* A facts panel: a .detail-grid straight inside a .card, which carries no
+   padding of its own, and the optional one-line note under it. */
+.card > .detail-grid { margin: 0; padding: 1rem 1.25rem; }
+.card > .section-note { margin: 0; padding: 0 1.25rem 1rem; }
+
+/* Slip-day pips: one dot per day in a student's budget. Decorative; the
+   "2 of 3 left" text beside them is the value. Used days are hollow, days still
+   left are teal, and a granted extra that is still left is amber. */
+.slip-pips { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+.slip-pip {
+    width: .6rem;
+    height: .6rem;
+    border-radius: 50%;
+    background: var(--kind-graded-bg);
+}
+.slip-pip[data-state="used"] { background: transparent; border: 1px solid var(--gray-400); }
+.slip-pip[data-state="extra"] { background: var(--state-amber); }
 .content-item-links a { margin-right: .5rem; }
 .content-item-actions { display: flex; gap: .35rem; align-items: center; }
 .content-item-link-fields {
@@ -2870,6 +2890,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     width: 1.5rem;
     height: 1.5rem;
     margin-right: .5rem;
+}
+
+/* The 2.25rem form for a roster row where the name beside the bird carries the
+   identity (the instructor Students, Slip days and LEARN lists). See
+   AvatarSize.roster. */
+.avatar-md {
+    width: 2.25rem;
+    height: 2.25rem;
 }
 
 .av-backdrop { fill: var(--av-backdrop); }
