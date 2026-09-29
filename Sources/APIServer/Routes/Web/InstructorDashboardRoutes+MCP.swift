@@ -67,12 +67,14 @@ extension InstructorDashboardRoutes {
         }()
 
         let isCustomized = course.map(courseHasCustomAuthoringVoice) ?? false
+        let guidanceText = course.map(courseAuthoringVoice) ?? MCPServerInstructions.authoringVoice
         let ctx = InstructorMCPContext(
             currentUser: try await req.courseAwareUserContext(),
             activeInstructorTab: "mcp",
             hasActiveCourse: course != nil,
             courseCode: course?.code ?? "",
-            guidanceText: course.map(courseAuthoringVoice) ?? MCPServerInstructions.authoringVoice,
+            guidanceText: guidanceText,
+            guidanceLength: guidanceText.count,
             isCustomized: isCustomized,
             // Precomputed so the template branches on flat bools (LeafKit
             // 1.14.2 mis-parses compound conditions).

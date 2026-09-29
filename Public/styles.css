@@ -1742,6 +1742,16 @@ code { font-family: var(--font-mono); font-size: .9em; }
     gap: .4rem;
     margin: 1rem 1.25rem 0 0;
 }
+/* An editor beside its facts panel; one column on a phone. */
+.editor-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: 1.5rem;
+    align-items: start;
+}
+@media (max-width: 40rem) {
+    .editor-split { grid-template-columns: minmax(0, 1fr); }
+}
 /* A facts panel: a .detail-grid straight inside a .card, which carries no
    padding of its own, and the optional one-line note under it. */
 .card > .detail-grid { margin: 0; padding: 1rem 1.25rem; }
