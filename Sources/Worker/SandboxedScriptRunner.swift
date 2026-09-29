@@ -30,11 +30,68 @@ struct SandboxedScriptRunner: ScriptRunner {
     }
 }
 
+// MARK: - Startup probe
+
+extension SandboxedScriptRunner {
+
+    /// What an operator can do when the probe fails. It depends on the platform,
+    /// because each sandbox is refused for a different reason.
+    static var probeFailureAdvice: String {
+        #if os(Linux)
+        return "A container that drops capabilities or uses the default seccomp profile "
+            + "refuses user namespaces. Remove --sandbox, or allow them."
+        #elseif os(macOS)
+        return "sandbox-exec cannot start inside another sandbox. "
+            + "Remove --sandbox, or start the runner outside the sandbox."
+        #else
+        return "This platform has no sandbox. Remove --sandbox."
+        #endif
+    }
+
+    /// Checks that this host can start the sandbox, by running a command that
+    /// does nothing inside the same wrapper a real job uses.
+    ///
+    /// Returns `nil` when the sandbox works. Otherwise it returns the reason,
+    /// for the operator. A container that drops capabilities or uses the
+    /// default seccomp profile refuses `unshare`. Without this check, every
+    /// job would fail on that refusal. The failure would look like a broken
+    /// test script, not a broken runner.
+    static func probe(workDir: URL) async -> String? {
+        let output = await executeScriptLaunch(
+            sandboxWrap(
+                executablePath: "/bin/sh",
+                arguments: ["-c", "exit 0"],
+                workDir: workDir,
+                environment: mergedScriptEnvironment(overrides: [:])),
+            workDir: workDir,
+            timeLimitSeconds: 10,
+            launchErrorPrefix: "Failed to launch sandbox probe")
+        guard output.exitCode != 0 else { return nil }
+        let detail = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        return detail.isEmpty ? "probe exited with code \(output.exitCode)" : detail
+    }
+}
+
 // MARK: - Platform-specific sandbox setup
 
 private func sandboxedLaunch(script: URL, workDir: URL, env: [String: String]) -> ScriptLaunch {
     let invocation = scriptInvocation(for: script)
-    let environment = mergedScriptEnvironment(overrides: env)
+    return sandboxWrap(
+        executablePath: invocation.executableURL.path,
+        arguments: invocation.arguments,
+        workDir: workDir,
+        environment: mergedScriptEnvironment(overrides: env))
+}
+
+/// Puts the platform's sandbox launcher in front of a command. The one place
+/// that decides how a command is sandboxed, so the probe and real jobs cannot
+/// use different wrappers.
+private func sandboxWrap(
+    executablePath: String,
+    arguments commandArguments: [String],
+    workDir: URL,
+    environment: [String: String]
+) -> ScriptLaunch {
 
     #if os(Linux)
     return ScriptLaunch(
@@ -45,23 +102,23 @@ private func sandboxedLaunch(script: URL, workDir: URL, env: [String: String]) -
             "--user",
             "--net",
             "--map-root-user",
-            invocation.executableURL.path,
-        ] + invocation.arguments,
+            executablePath,
+        ] + commandArguments,
         env: environment
     )
     #elseif os(macOS)
     return ScriptLaunch(
         executablePath: "/usr/bin/sandbox-exec",
-        arguments: ["-p", macOSSandboxProfile(workDir: workDir), invocation.executableURL.path]
-            + invocation.arguments,
+        arguments: ["-p", macOSSandboxProfile(workDir: workDir), executablePath]
+            + commandArguments,
         env: environment
     )
     #else
     // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
     // behaviour so the worker remains functional on unexpected targets.
     return ScriptLaunch(
-        executablePath: invocation.executableURL.path,
-        arguments: invocation.arguments,
+        executablePath: executablePath,
+        arguments: commandArguments,
         env: environment
     )
     #endif
