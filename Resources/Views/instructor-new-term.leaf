@@ -1,0 +1,64 @@
+#extend("base"):
+#export("title"):
+New term
+#endexport
+#export("content"):
+#extend("_instructor-tabs")
+
+#if(!hasActiveCourse):
+<section class="page-section">
+    <p class="empty">Select a course to clone it for a new term.</p>
+</section>
+#elseif(justCloned):
+<section class="page-section">
+    <h2>#(courseCode)#if(termLabel): #(termLabel)#endif — #(courseName)</h2>
+    <p class="section-intro">This is the new course. Its assignments are closed and have no dates.</p>
+    <div class="toolbar">
+        <a class="btn btn-primary" href="/instructor">Open its assignments</a>
+    </div>
+</section>
+#else:
+
+<section class="page-section">
+    <h2>Clone #(courseCode)#if(termLabel): #(termLabel)#endif for a new term</h2>
+    <p class="section-intro">Copies this course's content into a new course that you teach; students, submissions and grades stay here.</p>
+    <p class="section-note">Copied assignments start closed, with no dates and with the solution reveal off.</p>
+    #if(canClone):
+    <form method="post" action="/instructor/new-term" class="form-stack">
+        #csrfFormField()
+        <label class="form-label">
+            Code
+            <input class="form-input" type="text" name="code" value="#(courseCode)" required>
+        </label>
+        <label class="form-label">
+            Name
+            <input class="form-input" type="text" name="name" value="#(courseName)" required>
+        </label>
+        <label class="form-label">
+            Year
+            <input class="form-input" type="number" name="termYear" min="1000" max="9999"
+                   value="#(cloneYear)" required>
+        </label>
+        <label class="form-label">
+            Term
+            <select class="form-input" name="termSeason" required>
+                #if(cloneYear):#else:
+                <option value="" selected disabled>Choose</option>
+                #endif
+                #for(option in cloneTermOptions):
+                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                #endfor
+            </select>
+        </label>
+        <div class="toolbar">
+            <button class="btn btn-primary" type="submit">Clone course</button>
+        </div>
+    </form>
+    #else:
+    <p class="section-note">Only this course's instructors can clone it.</p>
+    #endif
+</section>
+
+#endif
+#endexport
+#endextend
