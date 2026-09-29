@@ -292,8 +292,7 @@ func normalizedHost(_ raw: String) -> String {
 
 /// Reads the runner ↔ server shared secret from the environment. Kept as a
 /// free function (rather than inlining `app.appConfig.workers.sharedSecret`)
-/// because `WorkerSecretStore` is an actor without an `Application` handle and
-/// needs a fresh read after admin-panel clears so the env fallback still wins.
+/// because `WorkerSecretStore` is an actor without an `Application` handle.
 func runnerSharedSecretFromEnvironment() -> String? {
     trimmedEnv("RUNNER_SHARED_SECRET")
 }
@@ -360,7 +359,7 @@ func resolveStartupWorkerSecret(
     {
         return envSecret
     }
-    // 3. Previously persisted secret on disk (written by auto-generate or admin panel).
+    // 3. Previously persisted secret on disk (written by auto-generate).
     if let previous = readWorkerSecretFromDisk(workerSecretFilePath: workerSecretFilePath),
         !previous.isEmpty,
         !isPlaceholderWorkerSecret(previous)

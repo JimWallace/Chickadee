@@ -65,31 +65,6 @@ Admin
         </table></div>
 </section>
 
-<!-- The worker secret is a setting, so it reads as one: a label, a note saying
-     what saving does, and the button beside the field it saves. It used to sit
-     unlabelled in the Runners heading row, with a placeholder standing in for
-     the label and no statement of the consequence. -->
-<section class="page-section">
-    <h2>Worker shared secret</h2>
-    <form method="post" action="/admin/runner-secret" class="form-stack">
-        #csrfFormField()
-        <div class="field-stack">
-            <label for="worker-secret">Secret</label>
-            <input id="worker-secret"
-                   class="form-input"
-                   type="text"
-                   name="secret"
-                   value="#(workerSecret)"
-                   autocomplete="new-password"
-                   spellcheck="false">
-            <p class="field-note">Changing this drops any runner still using the old value.</p>
-        </div>
-        <div class="toolbar toolbar--end">
-            <button class="btn btn-primary" type="submit">Save secret</button>
-        </div>
-    </form>
-</section>
-
 <!-- ── Courses ────────────────────────────────────────── -->
 <section class="page-section">
     <div class="page-titlebar admin-courses-head">
