@@ -98,7 +98,11 @@ import VaporTesting
     @Test func createRefusesAnActiveDuplicateCode() async throws {
         try await withApp(app) { app in
             let cookie = try await loginAsAdmin()
-            try await makeTestCourse(on: app, code: "TRM103")
+            // Same code AND term, so this is a duplicate under the per-term
+            // rule of slice 3 as well as the code-only rule of today.
+            try await APICourse(
+                code: "TRM103", name: "Terms", term: AcademicTerm(year: 2027, season: .winter)
+            ).save(on: app.db)
             let location = try await post(
                 "/admin/courses",
                 form: ["code": "TRM103", "name": "Again", "termYear": "2027", "termSeason": "winter"],
