@@ -1,6 +1,6 @@
 # Course terms and new-term cloning
 
-**Status:** Slices 1 to 4 are built. Slices 5 and 6 are planned.
+**Status:** Slices 1 to 5 are built. Slice 6 (documentation) is planned.
 
 This document replaces the plan in
 [clone-course-for-new-term.md](clone-course-for-new-term.md) (issue #420). That
@@ -186,13 +186,28 @@ The Core type, the migration, the model accessor, and tests
 - The clone does not archive the source. The instructor can still be
   exporting grades.
 
-### Slice 5: Clone for a new term (instructor)
+### Slice 5: Clone for a new term (instructor) (built)
 
-- A "Clone for new term" action in the instructor area. The gate is
-  per-course `instructor` of the source course.
-- The system enrolls the cloning instructor as `instructor` in the new
-  offering, in the same transaction.
-- Optional: an MCP `clone_course` tool that uses the same service.
+- The instructor area has a **New term** tab (`GET /instructor/new-term`,
+  `instructor-new-term.leaf`). It clones the active course with the same
+  form as the admin clone: code, name, year and term, with the term after
+  the active course's term as the default.
+- `POST /instructor/new-term` requires a per-course `instructor` role in the
+  source course (`requireCourseRole`; admins pass). It is a read of the
+  source, so the archived-course write block does not apply. A TA sees the
+  tab with a note, and the POST refuses a TA with 403.
+- Course creation is otherwise admin-only. An instructor can create a course
+  only as a clone of a course they teach. In the same transaction as the
+  clone, the cloning instructor is enrolled as `instructor` in the new
+  course, and nobody else is enrolled. Other staff and the students join
+  the new term again.
+- After the clone, the new course becomes the active course, and the tab
+  shows a message that tells the instructor to set dates before opening
+  assignments.
+- The handlers are on `CourseAdminRoutes` (`CourseAdminRoutes+NewTerm.swift`),
+  with the other instructor course-lifecycle routes.
+- Not built: an MCP `clone_course` tool. The service would support one, but
+  course creation through an agent is a separate decision.
 
 ### Slice 6: Documentation
 

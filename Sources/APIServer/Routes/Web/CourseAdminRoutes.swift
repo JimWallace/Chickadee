@@ -33,6 +33,10 @@ struct CourseAdminRoutes: RouteCollection {
 
         let r = routes.grouped("instructor")
         r.get("enroll-csv", use: enrollCSVForm)
+        // New term tab: clone the active course into a new offering
+        // (docs/course-terms.md slice 5).
+        r.get("new-term", use: newTermPage)
+        r.post("new-term", use: cloneActiveCourseForNewTerm)
         r.post("sections", use: createSection)
         r.post("sections", "reorder", use: reorderSections)
         r.post("sections", ":sectionID", "rename", use: renameSection)
