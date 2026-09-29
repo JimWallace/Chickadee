@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.258] - 2026-09-29
+
+### Added
+
+- **Course year and term (foundation).** Courses can now store the year and Waterloo term (Winter, Spring or Fall) of their offering. This slice adds the data model only; the create, edit, clone and display work follows. See `docs/course-terms.md`.
+
+
 ## [0.5.257] - 2026-09-28
 
 ### Added
