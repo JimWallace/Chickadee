@@ -67,6 +67,15 @@ import VaporTesting
         #expect(notebook.actions.first?.opensNewTab == true)
     }
 
+    @Test func notebookLinkOnANonNotebookItemGetsTheBookIcon() {
+        let links = [
+            ContentLink(label: "PDF", url: "https://example.com/a.pdf"),
+            ContentLink(label: "Jupyter Notebook", url: "https://example.com/a"),
+        ]
+        let row = ContentItemRow(from: item(kind: .slides, links: links))
+        #expect(row.actions.map(\.iconHref) == ["#i-external", "#i-book"])
+    }
+
     @Test func linkLabelStartingWithOpenIsNotDoubled() {
         let link = ContentLink(label: "open in JupyterHub", url: "https://example.com")
         let row = ContentItemRow(from: item(kind: .notebook, links: [link]))
