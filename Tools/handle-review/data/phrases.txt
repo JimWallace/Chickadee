@@ -1,0 +1,50 @@
+# Adjective-noun pairs that are already something: a brand, a product, a
+# title, a place, an idiom or a group.  A handle that matches one exactly is
+# a red flag; one that differs by a single edit in one word is amber, for a
+# person to judge.  Hand-curated; extend it.  One pair per line.
+Arctic Circle
+Arctic Monkeys
+Azure Cache
+Azure Log
+Azure Relay
+Azure Signal
+Azure Stream
+Cloudy Bay
+Cobalt Strike
+Crimson Peak
+Crimson Tide
+Emerald City
+Emerald Forest
+Emerald Isle
+Frosted Flakes
+Gilded Age
+Gilded Cage
+Glacial Pace
+Golden Arches
+Golden Bough
+Golden Gate
+Golden Pond
+Grassy Knoll
+Icy Hot
+Misty Mountain
+Northern Lighthouse
+Northern Lights
+Northern Star
+Polar Bear
+Polar Express
+Shining Path
+Silver Bullet
+Silver Fern
+Silver Lining
+Silver Screen
+Silver Spring
+Silver Surfer
+Solar Flare
+Solar Winds
+Speckled Band
+Starry Night
+Sunny Delight
+Tidal Wave
+Twin Peaks
+Velvet Underground
+Whispering Pines

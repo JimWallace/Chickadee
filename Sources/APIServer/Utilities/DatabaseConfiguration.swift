@@ -528,6 +528,10 @@ func registerMigrations(on app: Application) {
     // not its token URL (Brightspace). Nullable; nil keeps the token URL.
     app.migrations.add(AddLTITokenAudienceColumn())
 
+    // Deep-linking requests carried by a ticket in the picker form, not the
+    // session, so the picker works inside the LMS frame. New table.
+    app.migrations.add(CreateLTIDeepLinkRequests())
+
     // The registered GitHub App (docs/github-submissions.md slice 1). New
     // table, no FKs; an empty table means GitHub submission is off.
     app.migrations.add(CreateGitHubApps())
@@ -556,8 +560,18 @@ func registerMigrations(on app: Application) {
     // only; must follow `AddCourseTerm`, which creates the columns.
     app.migrations.add(ScopeCourseCodeIndexToTerm())
 
+    // When a student's class handle locked (docs/student-avatars.md §3).
+    // Nullable column on `course_enrollments`; nil = the student may still
+    // choose once.
+    app.migrations.add(AddAvatarHandleLock())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.
     app.migrations.add(BackfillSharedSupportFiles(testSetupsDirectory: app.testSetupsDirectory))
+
+    // One-time swap of every drawn gradcap for the headband: the gradcap is
+    // now kept as a completion item (docs/student-wardrobe.md, decision 4).
+    // Raw SQL, so its place in the list is not load-bearing.
+    app.migrations.add(SwapStarterGradcapForHeadband())
 }

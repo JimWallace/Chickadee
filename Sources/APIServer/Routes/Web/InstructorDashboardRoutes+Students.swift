@@ -74,13 +74,24 @@ extension InstructorDashboardRoutes {
         let canManageRoster =
             user.isAdmin || (courseState.active?.role ?? .student) >= .instructor
 
-        let flashSuccess: String? =
+        var flashSuccess: String? =
             req.query[String.self, at: "staffAdded"] != nil
             ? "Staff member added." : nil
+        if let changed = req.query[String.self, at: "handleChanged"],
+            let activeCourseUUID = courseState.activeCourseUUID
+        {
+            flashSuccess = try await Self.handleChangedFlash(
+                userIDString: changed, courseID: activeCourseUUID, on: req.db)
+        }
         let flashError: String? = {
             switch req.query[String.self, at: "staffError"] {
             case "role": return "Choose a staff role (TA or Instructor)."
             case "identifier": return "Enter a valid username or email address."
+            default: break
+            }
+            switch req.query[String.self, at: "handleError"] {
+            case "exhausted": return "No unused class handle is left in this course."
+            case "notEnrolled": return "That person is not enrolled in this course."
             default: return nil
             }
         }()
@@ -168,6 +179,25 @@ extension InstructorDashboardRoutes {
             rosterReadOnly: courseIsArchived || !canManageRoster
         )
         return try await req.view.render("_student-rows", ctx).encodePollFragment(for: req)
+    }
+}
+
+extension InstructorDashboardRoutes {
+    /// "@username is now Hazy Cache." after "Give new handle", read from the
+    /// database rather than from the query string, so a crafted link cannot
+    /// put words in the banner.  The Students table has no handle column, so
+    /// this is where staff see what the new handle is.
+    static func handleChangedFlash(
+        userIDString: String, courseID: UUID, on db: Database
+    ) async throws -> String? {
+        guard let userID = UUID(uuidString: userIDString),
+            let handle = try await APICourseEnrollment.query(on: db)
+                .filter(\.$course.$id == courseID)
+                .filter(\.$userID == userID)
+                .first()?.avatarHandle,
+            let user = try await APIUser.find(userID, on: db)
+        else { return nil }
+        return "@\(user.username) now has the class handle \(handle)."
     }
 }
 

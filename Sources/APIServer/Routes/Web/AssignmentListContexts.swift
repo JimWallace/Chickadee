@@ -406,6 +406,9 @@ struct EnrolledStudentRow: Content {
     /// pre-enrollment into a real user (the grade-sync-testing escape valve).
     /// Empty for active enrollments.
     let registerURL: String
+    /// URL to POST to to give this student a new class handle.  Empty for a
+    /// pending row, which has no enrollment and so no handle.
+    var newHandleURL: String = ""
     /// The student's own seeded avatar (the same bird their account page shows),
     /// drawn at the roster size.  Nil for a pending row, which has no account.
     /// Filled by the Students-tab loaders only; the Overview's count-only

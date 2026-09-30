@@ -254,7 +254,7 @@ extension InstructorDashboardRoutes {
             // one (init default + the historical backfill), so this
             // branch is unreachable in practice but kept for safety.
             guard let token = u.urlToken, !token.isEmpty else { return nil }
-            return EnrolledStudentRow(
+            var row = EnrolledStudentRow(
                 id: id.uuidString,
                 username: u.username,
                 displayName: u.displayName ?? u.username,
@@ -269,6 +269,8 @@ extension InstructorDashboardRoutes {
                 isPending: false,
                 registerURL: ""
             )
+            row.newHandleURL = "/courses/\(activeCourseUUID.uuidString)/new-handle/\(id.uuidString)"
+            return row
         }
     }
 

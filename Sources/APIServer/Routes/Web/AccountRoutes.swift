@@ -5,6 +5,8 @@
 //   GET  /account                      → account.leaf (user info + enrolled courses)
 //   POST /account/enroll               → join a course → redirect to /account
 //   POST /account/unenroll/:courseID   → leave a course → redirect to /account
+//   POST /account/avatar               → AccountRoutes+Avatar.swift
+//   POST /account/handle/:courseID     → choose a class handle (AccountRoutes+Handle.swift)
 
 import Core
 import Fluent
@@ -15,6 +17,8 @@ struct AccountRoutes: RouteCollection {
         routes.get("account", use: accountPage)
         routes.post("account", "enroll", use: joinCourse)
         routes.post("account", "unenroll", ":courseID", use: leaveCourse)
+        routes.post("account", "avatar", use: saveAvatar)
+        routes.post("account", "handle", ":courseID", use: chooseHandle)
     }
 
     // MARK: - GET /account
@@ -55,12 +59,9 @@ struct AccountRoutes: RouteCollection {
         // own name. Gating here also keeps staff from consuming handles out of
         // a course's finite space. `ensureHandle` is a no-op read once the row
         // carries one.
-        var handlesByCourseID: [UUID: String] = [:]
-        for enrollment in enrollments where enrollment.role == .student {
-            guard let courseID = enrollment.course.id else { continue }
-            handlesByCourseID[courseID] = try await AvatarStore.ensureHandle(
-                for: enrollment, on: req.db)
-        }
+        let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
+        let (handlesByCourseID, handleChoicesByCourseID) = try await Self.studentHandles(
+            enrollments: enrollments, spec: spec, req: req)
 
         let enrolledRows =
             enrollments
@@ -85,7 +86,8 @@ struct AccountRoutes: RouteCollection {
                     name: e.course.name, termLabel: e.course.term?.displayName,
                     enrollmentMode: e.course.enrollmentMode.rawValue,
                     slipDaysText: slipDaysText,
-                    handle: handlesByCourseID[id]
+                    handle: handlesByCourseID[id],
+                    handleChoice: handleChoicesByCourseID[id]
                 )
             }
             .sorted { $0.code < $1.code }
@@ -99,7 +101,7 @@ struct AccountRoutes: RouteCollection {
                 return AccountCourseRow(
                     id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName,
                     enrollmentMode: c.enrollmentMode.rawValue,
-                    slipDaysText: nil, handle: nil)
+                    slipDaysText: nil, handle: nil, handleChoice: nil)
             }
 
         // Personal-data export state (#557) for the "Your data" section.
@@ -110,6 +112,7 @@ struct AccountRoutes: RouteCollection {
 
         let github = try await accountGitHubContext(req: req, userID: userID)
 
+        let avatarNotice = req.query[String.self, at: "avatar"]
         let identityName = accountIdentityName(
             displayName: user.displayName,
             preferredName: user.preferredName,
@@ -123,10 +126,9 @@ struct AccountRoutes: RouteCollection {
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
-                avatar: AvatarPresentation(
-                    for: try await AvatarStore.ensureSpec(for: user, on: req.db),
-                    size: .standard,
-                    accessibility: .decorative),
+                avatar: AvatarPresentation(for: spec, size: .standard, accessibility: .decorative),
+                avatarPicker: AvatarPickerContext(for: spec),
+                avatarInvalid: avatarNotice == "invalid",
                 studentID: user.studentID,
                 email: user.email,
                 enrolledCourses: enrolledRows,
@@ -141,11 +143,17 @@ struct AccountRoutes: RouteCollection {
                 exportNotice: req.query[String.self, at: "exportNotice"],
                 exportError: req.query[String.self, at: "exportError"],
                 github: github,
-                flashSuccess: req.query[String.self, at: "github"]
-                    .flatMap(GitHubAccountLinkRoutes.Notice.init(rawValue:))?.message,
+                flashSuccess: accountFlashSuccess(req: req, avatarNotice: avatarNotice),
                 flashError: req.query[String.self, at: "githubError"]
                     .flatMap(GitHubLinkError.init(rawValue:))?.message
             ))
+    }
+
+    /// The one-shot success banner after a redirect back to this page.
+    private func accountFlashSuccess(req: Request, avatarNotice: String?) -> String? {
+        if avatarNotice == "saved" { return "Chickadee saved." }
+        return req.query[String.self, at: "github"]
+            .flatMap(GitHubAccountLinkRoutes.Notice.init(rawValue:))?.message
     }
 
     /// The GitHub section, or nil when this user has no link to show and
@@ -266,6 +274,10 @@ private struct AccountContext: Encodable {
     /// `AvatarStore.ensureSpec`, and decorative: the name beside it carries the
     /// identity, so announcing the bird too would only repeat it.
     let avatar: AvatarPresentation
+    /// The backdrop and border choices (docs/student-wardrobe.md, W1).
+    let avatarPicker: AvatarPickerContext
+    /// A posted choice was refused by `AvatarCustomization`.
+    let avatarInvalid: Bool
     let studentID: String?
     let email: String?
     let enrolledCourses: [AccountCourseRow]
@@ -315,8 +327,11 @@ private struct AccountCourseRow: Encodable {
     /// "1 of 2 remaining" — the slip-day balance for a student enrollment in
     /// a course with the policy on; nil hides the line (#1228).
     let slipDaysText: String?
-    /// This student's pseudonym in this course, "Quiet Cedar". nil hides the
+    /// This student's pseudonym in this course, "Hazy Cedar". nil hides the
     /// line — a course whose word lists are exhausted, which is a real state
     /// rather than an error: the avatar still shows.
     let handle: String?
+    /// Whether the student can still choose a different handle, and the
+    /// options if so.  nil wherever `handle` is nil.
+    let handleChoice: AccountHandleChoice?
 }

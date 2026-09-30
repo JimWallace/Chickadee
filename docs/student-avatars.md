@@ -92,15 +92,16 @@ ship in.
 | `cap` | 8 | ink, slate, teal, forest, indigo, plum, rust, umber — the loudest axis, so it carries the least detail; it also picks the wing colour |
 | `wing` | 6 | plain, barred, tipped, speckled, edged, twotone — symmetrical, both flanks from one drawing |
 | `expression` | 6 + 3 | bright, sleepy, wink, curious, keen, startled — reads first and from furthest away; plus chirp, sly, dreamy, which are unlockables and never drawn at first use |
-| `accessory` | 8 × 5 accents | none, scarf, headphones, beanie, glasses, gradcap, bowtie, bloom |
-| `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts |
+| `accessory` | 8 + 1, × 5 accents | none, scarf, headphones, beanie, glasses, headband, bowtie, bloom; plus the gradcap, kept for a completion achievement and never drawn ([student-wardrobe.md](student-wardrobe.md), decision 4) |
+| `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts; drawn at first use, then the student may change it on the account page |
+| `border` | 1 + 5 | none, or a ring in one of the five accents — chosen by the student, never drawn, so not counted below ([student-wardrobe.md](student-wardrobe.md)) |
 | `tuft` | 5 | none, cowlick, crest, pair, swoop — the outline, the one thing that separates two hatless birds at roster size |
 | `tilt` | 3 | upright, left, right (0°, −9°, +9°) — a transform, not a symbol |
 
 **8 × 6 × 6 × 8 × 5 × 8 × 5 × 3 = 1,382,400 distinct starter birds**
 (`AvatarSpec.starterCombinationCount`), the number a first-use draw picks from.
-With the three unlockable expressions the axes can produce 2,073,600
-(`combinationCount`). The accent multiplies: it is part of the accessory axis,
+With the three unlockable expressions and the gradcap the drawn axes can
+produce 2,332,800 (`combinationCount`). The accent multiplies: it is part of the accessory axis,
 which is why the design writes it "8 + 5 accents".
 
 **Body, cheek, beak and bib are NOT axes.** They are fixed, and they are what
@@ -156,8 +157,8 @@ near-certain visible pair. Enforcing per-course
 distinctness would then make an avatar depend on the roster, so it would change
 when somebody drops. That is a bad trade for a cosmetic.
 
-Instead, every enrollment carries a **handle**: an adjective + woodland-noun
-pair, "Amber Thicket", "Quiet Cedar", drawn from curated lists and enforced
+Instead, every enrollment carries a **handle**: an adjective + forest-noun
+pair, "Hazy Cache", "Frosted Kernel", drawn from curated lists and enforced
 UNIQUE per course. The handle is the identity; the avatar is the glance. The
 leaderboard shows both, so a micro-collision costs nothing — the two rows still
 say different things.
@@ -168,7 +169,7 @@ The handle earns its place three more times over:
   text equivalent; a decorative `aria-hidden` image would leave a screen-reader
   user with an unlabelled row. The handle is that label, and it is real text
   rather than a generated alt string.
-- **Speech.** Students can say "I'm Quiet Cedar" out loud. A picture cannot be
+- **Speech.** Students can say "I'm Hazy Cedar" out loud. A picture cannot be
   said.
 - **Text contexts.** Anywhere a leaderboard is exported, sorted, or pasted into
   a discussion, the handle survives and the SVG does not.
@@ -183,6 +184,76 @@ gamification feel like it accumulates.
 Curating the word lists is real work, not a lookup: adjective-noun generators
 produce unfortunate pairs, and both lists need a pass for words that collide
 with real names.
+
+**The theme.** Adjectives are the sky over the chickadee: weather, light,
+season, moving air and water. They never describe the student, so there are no
+traits, and there are no plain colour words (red, black, white, brown, yellow).
+Nouns are places in the chickadee's forest, and many are also computing words:
+Cache (chickadees cache seed), Fork, Patch, Seed, Kernel, Stream, Node, Stack,
+Log, Shell, Delta, Port. A computing student sees the joke; everyone else sees
+a forest. There is no testing vocabulary (bug, crash, null, fail, error, kill):
+on a platform that grades code, those words read as a verdict.
+
+**What the first lists got wrong** (replaced in the Fall 2026 review). Ten
+adjectives and eleven nouns were first names (Hazel, Dawn, Ivy, Willow…), and
+eight nouns were common surnames, so "Hazel Marsh" read as a real person and
+could match a real classmate. Eleven adjectives described skin (Ivory, Olive,
+Copper, Sable…), which decision 6 bans for the avatar. Quiet and Muted were
+traits. Several words were too obscure to say (Gorse, Sedge, Yarrow).
+
+**The review tool.** `node Tools/handle-review/review.mjs > /tmp/handles.html`
+reads both lists out of `AvatarHandle.swift` and checks every word against
+first names (US SSA and Ontario baby names), surnames (US Census 2010), and
+hand-curated lists of skin-tone words, traits, slang and testing words. It
+checks every pair for a first name followed by a surname, and against a
+hand-curated list of brands, titles, places and idioms. An exact match is red
+and fails the run; a pair one edit away from a phrase, or two words with the
+same stem ("Leafy Leaf"), is amber for a person to judge. The sheet ends with
+every pair in random order for a human skim. `AvatarHandleTests` reads the same
+data files, and `AvatarHandle.excludedWords` lists the words left out on
+purpose, with the reason for each. Sources and fetch dates are in
+`Tools/handle-review/data/README.md`.
+
+**Capacity.** The pool must be at least four times the largest expected course
+(`AvatarHandle.maxExpectedEnrollment`, 1,000), so that the last students in a
+large course still get a random handle and not the remainder. 96 × 96 = 9,216
+(the Fall 2026 review shipped 64 × 64 = 4,096; 32 words were appended to each
+list the same term, for headroom beyond the rule). If a real course is larger,
+append words and run the review again.
+
+**Lists change between terms; a stored handle is kept.** A new draw uses the
+current lists only. A handle already stored is never checked against a list:
+`AvatarStore.ensureHandle` keeps any stored value of the right form (two
+title-cased words), so a list change renames nobody mid-term. A handle is per
+(user, course) and each term's offering is a new course, so an old handle ages
+out on its own. When one handle must change (a student reports that it matches
+a real name), an instructor uses **Give new handle** in the Students tab row
+menu. It draws from the current lists and writes an audit entry
+(`enrollment.handle_changed`).
+
+**Choose from three, once, before classmates see it.** A student gets some
+ownership of the handle without any way to spell their name into it. While the
+handle is unlocked, the account page shows a "Change handle" button in the
+course row's actions. It opens a panel with the current handle and two unused
+alternates from the current lists, as radio buttons, each beside the student's
+own bird. All three are random. Saving with an alternate selected changes the
+handle; saving with the current one selected changes nothing and does not use
+the change.
+
+- **The offer is kept in the session.** Reloading the page shows the same two
+  alternates while both are still free, so the choice is from three and not
+  from as many as a student cares to reload. The POST accepts only a handle
+  that was offered.
+- **Alternates are not reserved.** The unique index decides a race. If a
+  classmate stored the picked handle first, nothing changes and the panel opens
+  again with "That one was just taken. Here are two more."
+- **The lock** is `course_enrollments.avatar_handle_locked_at`. It is set when
+  the student uses their one change, and the first time the handle is rendered
+  to a classmate: a student-visible leaderboard viewed by another student
+  (`RankedIdentities.presentation` and the hill's holder). A student's own row
+  and every staff view lock nothing. After the lock, the row reads "Your handle
+  is set for this course." Staff **Give new handle** ignores the lock and does
+  not set it.
 
 ### 4. Rendered as layered SVG `use`, recoloured through design tokens
 
@@ -600,7 +671,8 @@ Each slice is independently mergeable and independently useful.
 - **S0 — the model. Done.** `AvatarSpec`, the five slot enums, the seeded draw,
   `AvatarPresentation`, the drift guards against the sprite and the palette, and
   `AvatarHandle` with its curated word lists — 80 adjectives × 80 nouns = 6,400
-  handles, drawn without replacement within a course.
+  handles at the time (96 × 96 = 9,216 since the Fall 2026 review), drawn
+  without replacement within a course.
 - **S1 — persistence. Done.** `users.avatar_spec` and
   `course_enrollments.avatar_handle` (`AddAvatarIdentity`), with a **partial**
   unique index on (course, handle) excluding NULL — without the exclusion the

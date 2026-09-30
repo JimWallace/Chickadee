@@ -39,6 +39,15 @@ public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
 /// absence: most birds wear nothing.
 public enum AvatarAccessory: String, CaseIterable, Codable, Sendable {
     case none, scarf, headphones, beanie, glasses, gradcap, bowtie, bloom
+    /// Replaced the gradcap in the first-use draw, which is now kept for a
+    /// later completion achievement (docs/student-wardrobe.md, decision 4).
+    case headband
+
+    /// The accessories a first-use draw picks from. The gradcap is NOT in this
+    /// list: it reads as "graduated", so it is kept as an earned item.
+    public static let starterCases: [AvatarAccessory] = [
+        .none, .scarf, .headphones, .beanie, .glasses, .headband, .bowtie, .bloom,
+    ]
 
     /// A hat that replaces the tuft: a bird wears one or the other, never
     /// both. The gradcap's board let a tuft stick up through it, which looked
@@ -48,7 +57,7 @@ public enum AvatarAccessory: String, CaseIterable, Codable, Sendable {
     public var hidesTuft: Bool {
         switch self {
         case .beanie, .gradcap: true
-        case .none, .scarf, .headphones, .glasses, .bowtie, .bloom: false
+        case .none, .scarf, .headphones, .glasses, .bowtie, .bloom, .headband: false
         }
     }
 }
@@ -74,6 +83,19 @@ public enum AvatarBackdrop: String, CaseIterable, Codable, Sendable {
 /// can ship.
 public enum AvatarWing: String, CaseIterable, Codable, Sendable {
     case plain, barred, tipped, speckled, edged, twotone
+}
+
+/// A ring around the disc, in one of the accent colours. Chosen by the student
+/// on the account page and never drawn: every bird starts with `none`
+/// (docs/student-wardrobe.md, decisions 1 and 2).
+///
+/// A raw value other than `none` names an `AvatarAccent`, whose palette token
+/// colours the ring, so the border adds no colour of its own.
+public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
+    case none, ember, orchid, lagoon, honey, moss
+
+    /// The accent this ring is drawn in; nil for `none`.
+    public var accent: AvatarAccent? { AvatarAccent(rawValue: rawValue) }
 }
 
 /// A feather tuft on top of the head — the one axis that changes the
@@ -120,6 +142,8 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
     public var backdrop: AvatarBackdrop
     public var tuft: AvatarTuft
     public var tilt: AvatarTilt
+    /// Chosen by the student, never drawn. Not part of `combinationCount`.
+    public var border: AvatarBorder
 
     public init(
         cap: AvatarCap,
@@ -129,7 +153,8 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
         accent: AvatarAccent,
         backdrop: AvatarBackdrop,
         tuft: AvatarTuft = .none,
-        tilt: AvatarTilt = .upright
+        tilt: AvatarTilt = .upright,
+        border: AvatarBorder = .none
     ) {
         self.cap = cap
         self.wing = wing
@@ -139,22 +164,28 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
         self.backdrop = backdrop
         self.tuft = tuft
         self.tilt = tilt
+        self.border = border
     }
 
-    /// Every distinct bird the axes can produce, unlockables included.
+    /// Every distinct bird the drawn axes can produce, unlockables included.
+    /// The border is chosen, not drawn, so it is not counted.
     public static var combinationCount: Int {
-        combinations(expressions: AvatarExpression.allCases.count)
+        combinations(
+            expressions: AvatarExpression.allCases.count,
+            accessories: AvatarAccessory.allCases.count)
     }
 
     /// Every distinct bird a first-use draw can produce. This is the number to
     /// quote: it is what a class of new students is drawn from.
     public static var starterCombinationCount: Int {
-        combinations(expressions: AvatarExpression.starterCases.count)
+        combinations(
+            expressions: AvatarExpression.starterCases.count,
+            accessories: AvatarAccessory.starterCases.count)
     }
 
-    private static func combinations(expressions: Int) -> Int {
+    private static func combinations(expressions: Int, accessories: Int) -> Int {
         AvatarCap.allCases.count * AvatarWing.allCases.count * expressions
-            * AvatarAccessory.allCases.count * AvatarAccent.allCases.count
+            * accessories * AvatarAccent.allCases.count
             * AvatarBackdrop.allCases.count * AvatarTuft.allCases.count
             * AvatarTilt.allCases.count
     }
@@ -164,7 +195,7 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
 
 extension AvatarSpec {
     private enum CodingKeys: String, CodingKey {
-        case cap, wing, expression, accessory, accent, backdrop, tuft, tilt
+        case cap, wing, expression, accessory, accent, backdrop, tuft, tilt, border
     }
 
     /// Specs stored before the tuft and tilt axes existed have neither key.
@@ -180,6 +211,9 @@ extension AvatarSpec {
         self.backdrop = try container.decode(AvatarBackdrop.self, forKey: .backdrop)
         self.tuft = try container.decodeIfPresent(AvatarTuft.self, forKey: .tuft) ?? .none
         self.tilt = try container.decodeIfPresent(AvatarTilt.self, forKey: .tilt) ?? .upright
+        // A spec stored before the border existed has no border, which is
+        // exactly `none`: the border is chosen, so there is nothing to fill.
+        self.border = try container.decodeIfPresent(AvatarBorder.self, forKey: .border) ?? .none
     }
 }
 
@@ -277,7 +311,7 @@ extension AvatarSpec {
             cap: pick(using: &generator),
             wing: pick(using: &generator),
             expression: pick(from: AvatarExpression.starterCases, using: &generator),
-            accessory: pick(using: &generator),
+            accessory: pick(from: AvatarAccessory.starterCases, using: &generator),
             accent: pick(using: &generator),
             backdrop: pick(using: &generator),
             tuft: pick(using: &generator),

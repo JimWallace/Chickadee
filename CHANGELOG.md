@@ -9,6 +9,53 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.290] - 2026-09-30
+
+### Changed
+
+- **More class handles.** Both handle word lists grew from 64 to 96 words, so a course now has 9,216 handles instead of 4,096. Every new word and pair passed the handle review tool.
+
+### Added
+
+- **Choose your chickadee's backdrop and border.** The account page has a new Chickadee section. A student can change the backdrop to any of the eight colours and add a ring in one of the five accent colours. The bird on the page changes as soon as a colour is clicked; nothing is saved until Save. Every choice goes through one check, `AvatarCustomization`, which will also check unlocks later. The plan for earned items is in `docs/student-wardrobe.md`.
+
+### Changed
+
+- **The headband replaces the gradcap in the first-use draw.** The gradcap is kept for a later completion achievement. The headband sits on the forehead. A one-time migration changes every gradcap already drawn to a headband and changes nothing else on the bird.
+
+
+## [0.5.289] - 2026-09-30
+
+### Added
+
+- **Choose a class handle.** On the account page, a student can change their class handle one time, before classmates first see it. The page offers two unused alternates beside the current handle, each with the student's bird. The handle locks after the change, or when a classmate first sees it on a leaderboard.
+
+
+## [0.5.288] - 2026-09-30
+
+### Fixed
+
+- **The LTI assignment picker works inside the LMS.** Brightspace opens the Deep Linking picker in a frame on its own page, where it showed a blank window: every Chickadee page refused to be framed, the launch-state cookie was blocked, and the picker needed the session cookie, which a browser does not send there. The picker now arrives in the launch response itself and carries a single-use ticket in place of the session, the launch-state cookie is `Partitioned`, and only these pages may be framed, by the registered platform. A deep-linking launch from an LMS course that is not linked yet now says how to link it.
+
+
+## [0.5.287] - 2026-09-30
+
+### Changed
+
+- **New class-handle word lists.** Handles now pair a sky adjective with a forest noun, many of which are also computing words ("Hazy Cache"). The review removed first names, common surnames, skin-tone words, traits and brand pairs from both lists. A new review tool, `Tools/handle-review/`, checks every word and every pair, and fails on any red flag. A stored handle is never renamed by a list change: it stays until its course ends.
+
+### Added
+
+- **Give new handle.** Instructors can give a student a new class handle from the Students tab (the row menu). The change is recorded in the audit log.
+
+
+## [0.5.286] - 2026-09-30
+
+### Changed
+
+- **The admin LEARN, MCP, LTI and GitHub pages use the shared row shape.** Each shows its setup as facts with one-line notices. MCP service accounts and connected agents are rows with ⋯ menus (mint token with a scope choice, enrol, remove, delete, revoke), and an expired agent says so. LTI platforms have an Enabled or Disabled select that saves on change, and each tool URL has a copy button. GitHub shows the registered App with Open on GitHub and a ⋯ menu to remove the registration.
+
+
 ## [0.5.285] - 2026-09-30
 
 ### Fixed
