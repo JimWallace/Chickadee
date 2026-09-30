@@ -19,6 +19,12 @@ struct LTIRoutes: RouteCollection {
     /// The tool's public key set. Empty until an admin registers an enabled
     /// platform, so a deployment that does not use LTI never generates or
     /// writes a tool key.
+    ///
+    /// Sent uncompressed. The server compresses JSON, and for a client that
+    /// accepts `deflate` it answers with zlib-wrapped deflate. Brightspace
+    /// could not read that body: it fetched the key set, got a 200, and
+    /// reported "Keyset URL cannot be reached". The body is under 1 KB, so
+    /// compression gains nothing here.
     func jwks(req: Request) async throws -> Response {
         let hasPlatform =
             try await APILTIPlatform.query(on: req.db)
@@ -31,6 +37,7 @@ struct LTIRoutes: RouteCollection {
         }
         var headers = HTTPHeaders()
         headers.contentType = .json
+        headers.responseCompression = .disable
         let body = try JSONEncoder().encode(JSONValue.object(["keys": .array(keys)]))
         return Response(status: .ok, headers: headers, body: .init(data: body))
     }
