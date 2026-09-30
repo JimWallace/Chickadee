@@ -37,6 +37,12 @@
            value="#(form.accessTokenURL)" required>
 </div>
 <div class="field-stack">
+    <label for="#(idPrefix)-audience">Token audience</label>
+    <input id="#(idPrefix)-audience" class="form-input" type="text" name="tokenAudience"
+           value="#(form.tokenAudience)" aria-describedby="#(idPrefix)-audience-note">
+    <p class="field-note" id="#(idPrefix)-audience-note">Leave blank to use the access token URL; Brightspace calls it OAuth2 Audience.</p>
+</div>
+<div class="field-stack">
     <label for="#(idPrefix)-jwks">Key set URL</label>
     <input id="#(idPrefix)-jwks" class="form-input" type="url" name="jwksURL"
            value="#(form.jwksURL)" required>

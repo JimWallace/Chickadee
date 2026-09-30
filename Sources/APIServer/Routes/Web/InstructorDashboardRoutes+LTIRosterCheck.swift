@@ -28,7 +28,7 @@ extension InstructorDashboardRoutes {
         do {
             members = try await req.application.ltiServiceClient.members(
                 membershipsURL: membershipsURL,
-                platform: .init(id: platformID, clientID: platform.clientID, accessTokenURL: platform.accessTokenURL),
+                platform: .init(id: platformID, registration: platform),
                 keys: try await req.application.ltiToolKeyAuthority())
         } catch {
             req.logger.warning("LTI membership read failed: \(error)")

@@ -34,6 +34,22 @@ import Testing
         #expect(valid.issuer == "https://learn.example.edu")
     }
 
+    @Test func blankTokenAudienceIsStoredAsNil() throws {
+        var form = Self.valid
+        form.tokenAudience = "   "
+        #expect(try form.validated().tokenAudience == nil)
+        form.tokenAudience = nil
+        #expect(try form.validated().tokenAudience == nil)
+    }
+
+    @Test func tokenAudienceIsTrimmedAndNotHeldToTheURLRules() throws {
+        var form = Self.valid
+        form.tokenAudience = "  https://api.brightspace.com/auth/token \n"
+        #expect(try form.validated().tokenAudience == "https://api.brightspace.com/auth/token")
+        form.tokenAudience = "urn:example:audience"
+        #expect(try form.validated().tokenAudience == "urn:example:audience")
+    }
+
     @Test func missingNameIsRefused() {
         expectRefusal(.missingDisplayName) { $0.displayName = "  " }
     }

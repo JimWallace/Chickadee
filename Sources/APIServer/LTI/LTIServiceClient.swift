@@ -19,6 +19,22 @@ actor LTIServiceClient {
         let id: UUID
         let clientID: String
         let accessTokenURL: String
+        /// The token-request JWT audience; nil = `accessTokenURL`.
+        var tokenAudience: String? = nil
+
+        /// The service facts of a stored registration.
+        init(id: UUID, registration platform: APILTIPlatform) {
+            self.init(
+                id: id, clientID: platform.clientID, accessTokenURL: platform.accessTokenURL,
+                tokenAudience: platform.tokenAudience)
+        }
+
+        init(id: UUID, clientID: String, accessTokenURL: String, tokenAudience: String? = nil) {
+            self.id = id
+            self.clientID = clientID
+            self.accessTokenURL = accessTokenURL
+            self.tokenAudience = tokenAudience
+        }
     }
 
     static let lineItemContainerType = "application/vnd.ims.lis.v2.lineitemcontainer+json"
@@ -150,7 +166,8 @@ actor LTIServiceClient {
 
         let assertion = try await keys.sign(
             LTIClientAssertion(
-                clientID: platform.clientID, audience: platform.accessTokenURL, issuedAt: now))
+                clientID: platform.clientID, audience: platform.tokenAudience ?? platform.accessTokenURL,
+                issuedAt: now))
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: "application/x-www-form-urlencoded")
         headers.replaceOrAdd(name: .accept, value: "application/json")

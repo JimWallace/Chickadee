@@ -108,6 +108,7 @@ The `lti_platforms` table holds one row per registration:
 | `auth_login_url` | The platform OIDC authorization endpoint. |
 | `access_token_url` | The platform OAuth2 token endpoint (AGS and NRPS). |
 | `jwks_url` | The platform key set URL. |
+| `token_audience` | The `aud` of the token-request JWT (AGS and NRPS). Optional; nil means the access token URL. Brightspace calls its value the "OAuth2 Audience", and it is not the token URL. |
 | `display_name` | A label for the admin UI. |
 | `enabled` | False stops all launches from this registration. |
 
@@ -303,8 +304,10 @@ uses AGS.
    Chickadee sent, send a clearing score (`gradingProgress` = NotReady, no
    `scoreGiven`).
 3. Get an access token with the client-credentials grant and a JWT assertion
-   signed by the tool key (`iss` = `sub` = the client ID, `aud` = the token
-   URL). Tokens are cached per platform until one minute before they expire,
+   signed by the tool key (`iss` = `sub` = the client ID, `aud` = the
+   platform's token audience, or the token URL when none is set). Brightspace
+   refuses the token URL as the audience: it expects its "OAuth2 Audience"
+   value, `https://api.brightspace.com/auth/token`. Tokens are cached per platform until one minute before they expire,
    and dropped when the LMS answers 401.
 4. Find the line item by `resource_id` = the assignment public ID, or create
    it with the suite total as `scoreMaximum`. The URL is kept on the

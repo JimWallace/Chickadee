@@ -90,6 +90,46 @@ import Vapor
         #expect(assertion.aud.value == [LTITestGradeService.tokenURL])
     }
 
+    /// Brightspace refuses an assertion whose audience is its token URL; it
+    /// expects its separate "OAuth2 Audience" value.
+    @Test func theAssertionUsesThePlatformTokenAudienceWhenOneIsSet() async throws {
+        let (keys, directory) = try await Self.toolKey()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let lms = LTITestGradeService()
+        let platform = LTIServiceClient.Platform(
+            id: UUID(), clientID: "chickadee-client", accessTokenURL: LTITestGradeService.tokenURL,
+            tokenAudience: "https://api.brightspace.com/auth/token")
+
+        try await lms.client.postScore(
+            .graded(userID: "subject-1", points: 7, maximum: 10, at: Date()),
+            lineItemURL: LTITestGradeService.createdLineItemURL, platform: platform, keys: keys)
+
+        let tokenRequest = try #require(await lms.requests.first)
+        #expect(tokenRequest.url == LTITestGradeService.tokenURL)
+        var form: [String: String] = [:]
+        for pair in tokenRequest.body.split(separator: "&") {
+            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            form[parts[0]] = parts[1].removingPercentEncoding
+        }
+        let assertion = try await keys.verify(try #require(form["client_assertion"]), as: LTIClientAssertion.self)
+        #expect(assertion.aud.value == ["https://api.brightspace.com/auth/token"])
+    }
+
+    @Test func theServicePlatformCarriesTheStoredTokenAudience() throws {
+        let stored = APILTIPlatform(
+            issuer: "https://lms.example.edu", clientID: "chickadee-client", deploymentIDs: ["d"],
+            authLoginURL: "https://lms.example.edu/auth", accessTokenURL: LTITestGradeService.tokenURL,
+            jwksURL: "https://lms.example.edu/jwks", displayName: "LMS")
+        let id = UUID()
+        #expect(LTIServiceClient.Platform(id: id, registration: stored).tokenAudience == nil)
+        stored.tokenAudience = "https://api.brightspace.com/auth/token"
+        let target = LTIServiceClient.Platform(id: id, registration: stored)
+        #expect(target.id == id)
+        #expect(target.clientID == "chickadee-client")
+        #expect(target.accessTokenURL == LTITestGradeService.tokenURL)
+        #expect(target.tokenAudience == "https://api.brightspace.com/auth/token")
+    }
+
     @Test func aTokenIsFetchedOnceAndReused() async throws {
         let (keys, directory) = try await Self.toolKey()
         defer { try? FileManager.default.removeItem(at: directory) }

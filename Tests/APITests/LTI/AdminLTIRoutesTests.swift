@@ -156,6 +156,33 @@ import VaporTesting
         }
     }
 
+    @Test func tokenAudienceIsStoredShownForEditingAndClearedWhenBlank() async throws {
+        try await withApp(app) { app in
+            let cookie = try await loginAsAdmin()
+            var fields = Self.form
+            fields["tokenAudience"] = " https://api.brightspace.com/auth/token "
+            try await post("/admin/lti/platforms", fields, cookie: cookie) { _ in }
+            let platform = try #require(try await APILTIPlatform.query(on: app.db).first())
+            let id = try platform.requireID()
+            #expect(platform.tokenAudience == "https://api.brightspace.com/auth/token")
+
+            try await get("/admin/lti", cookie: cookie) { res in
+                #expect(res.body.string.contains("value=\"https://api.brightspace.com/auth/token\""))
+            }
+
+            fields["tokenAudience"] = ""
+            try await post("/admin/lti/platforms/\(id)", fields, cookie: cookie) { res in
+                #expect(res.headers.first(name: .location) == "/admin/lti?ok=updated")
+            }
+            let updated = try #require(try await APILTIPlatform.find(id, on: app.db))
+            #expect(updated.tokenAudience == nil)
+            try await get("/admin/lti", cookie: cookie) { res in
+                #expect(res.status == .ok)
+                #expect(!res.body.string.contains("api.brightspace.com"))
+            }
+        }
+    }
+
     @Test func disablingAndEnablingToggleLaunchAcceptance() async throws {
         try await withApp(app) { app in
             let cookie = try await loginAsAdmin()
