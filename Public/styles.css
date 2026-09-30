@@ -119,14 +119,20 @@
        itself must be the same bird in both schemes.
        An accessory is drawn in one of five accents, picked by cap family, so
        an accent is never a sixth axis. */
-    --avatar-ink-cap: #2B2F3A;      --avatar-ink-wing: #454B5E;
-    --avatar-slate-cap: #3A4550;    --avatar-slate-wing: #556372;
-    --avatar-teal-cap: #1D5560;     --avatar-teal-wing: #2F7F8C;
-    --avatar-forest-cap: #2B4A35;   --avatar-forest-wing: #436B4E;
-    --avatar-indigo-cap: #3A3F6B;   --avatar-indigo-wing: #565D95;
-    --avatar-plum-cap: #5A3550;     --avatar-plum-wing: #7D5071;
-    --avatar-rust-cap: #7A3F24;     --avatar-rust-wing: #A55F38;
-    --avatar-umber-cap: #5A4630;    --avatar-umber-wing: #836B4A;
+    /* Cap tones spread across hue AND lightness since the tune-up, because
+       at the roster size cap hue is one of the few things that still reads.
+       The white eye disc sits on the cap, so every -cap keeps at least 3:1
+       against #FFFFFF (WCAG relative luminance): ink 15.1, slate 5.4,
+       teal 4.7 (the lowest), forest 6.0, indigo 6.9, plum 7.0, rust 5.2,
+       umber 6.2. */
+    --avatar-ink-cap: #23262F;      --avatar-ink-wing: #555D74;
+    --avatar-slate-cap: #5A6C7E;    --avatar-slate-wing: #8B9DAE;
+    --avatar-teal-cap: #15808C;     --avatar-teal-wing: #5BB3BD;
+    --avatar-forest-cap: #2E6F47;   --avatar-forest-wing: #67A27B;
+    --avatar-indigo-cap: #4452AA;   --avatar-indigo-wing: #7F8AD0;
+    --avatar-plum-cap: #853F79;     --avatar-plum-wing: #B77DAA;
+    --avatar-rust-cap: #B14F24;     --avatar-rust-wing: #DB8857;
+    --avatar-umber-cap: #7A5C36;    --avatar-umber-wing: #B09464;
 
     --avatar-accent-ember: #C2523F;
     --avatar-accent-orchid: #7A4A86;
@@ -134,13 +140,13 @@
     --avatar-accent-honey: #D79A2B;
     --avatar-accent-moss: #4A6B3A;
 
-    --avatar-back-sky: #DBE9EE;
-    --avatar-back-aqua: #D9ECE8;
-    --avatar-back-sage: #DFEADD;
-    --avatar-back-straw: #F2E9D2;
-    --avatar-back-peach: #F7E3D6;
-    --avatar-back-rose: #F4DFE2;
-    --avatar-back-lilac: #E6E2F0;
+    --avatar-back-sky: #D0E5F0;
+    --avatar-back-aqua: #CBEAE3;
+    --avatar-back-sage: #D9EBD0;
+    --avatar-back-straw: #F4E4BE;
+    --avatar-back-peach: #F9D9C6;
+    --avatar-back-rose: #F6D2DA;
+    --avatar-back-lilac: #E0D8F4;
     --avatar-back-pebble: #E6E6E2;
 
     /* Fixed, every bird: the chickadee under the variation. */
@@ -151,6 +157,8 @@
     --avatar-eye: #22242C;
     --avatar-glint: #FFFFFF;
     --avatar-gear: #33363F;
+    --avatar-blush: #F2AE9F;
+    --avatar-mouth: #8E3A2C;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -2905,7 +2913,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .account-identity .text-muted { font-size: var(--text-sm); }
 
 /* The generated student chickadee.  One svg carrying the size class wraps the
-   five use elements that stack into a bird (see _avatar-sprite.leaf); the spec
+   six use elements that stack into a bird (see _avatar-sprite.leaf); the spec
    picks the varying colours by assigning palette tokens to the --av-* custom
    properties on that element, which is the sanctioned inline form.
 
@@ -2955,7 +2963,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-pupil { fill: var(--avatar-eye); }
 .av-glint { fill: var(--avatar-glint); }
 .av-wing-mark { fill: var(--avatar-body); }
-.av-lash { fill: none; stroke: var(--avatar-eye); }
+.av-brow { fill: none; stroke: var(--avatar-body); }
+.av-blush { fill: var(--avatar-blush); opacity: .85; }
+.av-mouth { fill: var(--avatar-mouth); }
 .av-gear { fill: var(--avatar-gear); }
 .av-gear-line { fill: none; stroke: var(--avatar-gear); }
 .av-bloom-eye { fill: var(--avatar-beak); }
