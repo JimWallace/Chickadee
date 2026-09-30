@@ -24,7 +24,7 @@
                     </select>
                 </span>
             </form>
-            <a class="btn btn-primary" href="#(boardURL)?present=1" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-slides"/></svg> Present</a>
+            <a class="btn action-btn" href="#(boardURL)?present=1" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-slides"/></svg> Present</a>
             #endif
         </div>
     </div>

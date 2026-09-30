@@ -1934,13 +1934,11 @@ code { font-family: var(--font-mono); font-size: .9em; }
    relative to one font size that steps up with the screen, so a podium made
    for 1600 pixels still fits a laptop. */
 .present {
-    min-height: 100vh;
     padding: 2rem;
     background: var(--gray-50);
     color: var(--gray-900);
 }
-@media (min-width: 1400px) { .present { zoom: 1.4; } }
-@media (min-width: 1900px) { .present { zoom: 1.9; } }
+@media (min-width: 1900px) { .present { zoom: 1.15; } }
 .present-header {
     display: flex;
     align-items: flex-end;
@@ -1974,7 +1972,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     gap: .5rem;
     min-width: 12rem;
 }
-.podium-place .avatar { margin: 0; }
 .podium-handle { font-size: var(--text-xl); font-weight: 700; text-align: center; }
 .podium-value { font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
 .podium-plinth {
@@ -1988,10 +1985,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
     border-top-width: .4rem;
     border-radius: var(--radius-lg);
 }
-.podium-place[data-rank-tier="1"] .podium-plinth { height: 7rem; border-top-color: var(--rank-gold-bg); }
-.podium-place[data-rank-tier="2"] .podium-plinth { height: 5rem; border-top-color: var(--rank-silver-bg); }
-.podium-place[data-rank-tier="3"] .podium-plinth { height: 4rem; border-top-color: var(--rank-bronze-bg); }
-.podium-place[data-rank-tier="1"] .avatar { width: 12rem; height: 12rem; }
+.podium-place[data-rank-tier="1"] .podium-plinth { height: 6rem; border-top-color: var(--rank-gold-bg); }
+.podium-place[data-rank-tier="2"] .podium-plinth { height: 4rem; border-top-color: var(--rank-silver-bg); }
+.podium-place[data-rank-tier="3"] .podium-plinth { height: 3rem; border-top-color: var(--rank-bronze-bg); }
+.podium-place .avatar { width: 10rem; height: 10rem; }
 .present-rows { display: grid; gap: .75rem; max-width: 48rem; margin: 0 auto 2rem; }
 .present-row {
     display: flex;

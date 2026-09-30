@@ -22,7 +22,7 @@
 #if(hasPodium):
 <div class="podium">
     #for(place in podium):
-    <div class="podium-place" data-rank-tier="#(place.rankTier)">
+    <div class="podium-place" data-rank-tier="#(place.rankTier)" aria-label="Place #(place.rankText)">
         #extend("_avatar", place.avatar)
         <div class="podium-handle" data-avatar-handle>#(place.handle)</div>
         <div class="podium-value">#(place.valueText)</div>
@@ -46,4 +46,4 @@
 <p class="empty">Nobody is on the board yet.</p>
 #endif
 #endif
-<footer class="present-footer">#(rankedCount) on the board · Find yourself by your bird and handle on your own Leaderboard page · Live</footer>
+<footer class="present-footer">#(rankedCount) on the board</footer>
