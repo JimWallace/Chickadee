@@ -44,7 +44,10 @@
      iframes, and three stacked copies of the nav inside one viewport is both
      noise and a duplicate set of landmarks for a screen reader.  `embedded` is
      absent from every other page context, and a missing Leaf variable is
-     falsy, so those pages render exactly as before. -->
+     falsy, so those pages render exactly as before.  The LTI deep-linking
+     picker and its return page set it too: the LMS shows them in a frame on
+     its own page, where the nav links would load pages that refuse to be
+     framed. -->
 #if(!embedded):
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <nav class="nav">

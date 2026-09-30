@@ -21,7 +21,12 @@
 //   X-Frame-Options: SAMEORIGIN
 //     Blocks this page from being embedded in an <iframe> on a different
 //     origin, mitigating clickjacking. Covered by CSP frame-ancestors in
-//     modern browsers, but X-Frame-Options handles older ones.
+//     modern browsers, but X-Frame-Options handles older ones.  A handler
+//     can admit named origins for one response via
+//     `allowFrameAncestors(_:on:)`; that response then carries those origins
+//     in `frame-ancestors` and no X-Frame-Options (which cannot name an
+//     origin).  Only the LTI deep-linking picker does, because the LMS shows
+//     it in a frame on its own page.
 //
 //   Referrer-Policy: strict-origin-when-cross-origin
 //     Sends the full URL as Referer for same-origin requests, but only the
@@ -85,6 +90,11 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         typealias Value = [String]
     }
 
+    /// Per-request extra `frame-ancestors` origins.  See the header comment.
+    private struct FrameAncestorsKey: StorageKey {
+        typealias Value = [String]
+    }
+
     /// Per-request `Cross-Origin-Opener-Policy` override.  Lets a handler relax
     /// the default `same-origin` for a single response (e.g. the OAuth consent
     /// page, which a connector may open as a popup that needs its `opener`).
@@ -99,6 +109,16 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         var origins = request.storage[FormActionOriginsKey.self] ?? []
         if !origins.contains(origin) { origins.append(origin) }
         request.storage[FormActionOriginsKey.self] = origins
+    }
+
+    /// Lets the validated origins (`scheme://host[:port]`) frame this one
+    /// response.  Nil entries are skipped; with none left, nothing changes.
+    static func allowFrameAncestors(_ origins: [String?], on request: Request) {
+        var allowed = request.storage[FrameAncestorsKey.self] ?? []
+        for origin in origins.compactMap({ $0 }) where !allowed.contains(origin) {
+            allowed.append(origin)
+        }
+        request.storage[FrameAncestorsKey.self] = allowed
     }
 
     /// Overrides the `Cross-Origin-Opener-Policy` header for this one response.
@@ -270,8 +290,9 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         chainingTo next: any AsyncResponder
     ) async throws -> Response {
         let response = try await next.respond(to: request)
+        let frameAncestors = request.storage[FrameAncestorsKey.self] ?? []
         let csp = Self.renderCSP(
-            base: cspDirectives(for: request),
+            base: Self.withFrameAncestors(frameAncestors, in: cspDirectives(for: request)),
             formActionOrigins: formActionExtras(for: request)
         )
         // Never cache authenticated HTML — a logged-out browser must re-ask
@@ -289,7 +310,11 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
             response.headers.responseCompression = .disable
         }
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
-        response.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+        if frameAncestors.isEmpty {
+            response.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+        } else {
+            response.headers.remove(name: "X-Frame-Options")
+        }
         response.headers.replaceOrAdd(name: "Referrer-Policy", value: "strict-origin-when-cross-origin")
         response.headers.replaceOrAdd(name: "Content-Security-Policy", value: csp)
         response.headers.replaceOrAdd(name: "Permissions-Policy", value: permissionsPolicy)
@@ -317,6 +342,14 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         else { return cspBaseDirectives }
         let scriptSrc = Self.scriptSrc(inlineScriptHashes: editorInlineScriptHashes)
         return cspBaseDirectives.map { $0.hasPrefix("script-src ") ? scriptSrc : $0 }
+    }
+
+    /// The directives with `frame-ancestors` widened to `origins`, which a
+    /// handler admitted for this response.  Unchanged when there are none.
+    static func withFrameAncestors(_ origins: [String], in directives: [String]) -> [String] {
+        guard !origins.isEmpty else { return directives }
+        let directive = (["frame-ancestors 'self'"] + origins).joined(separator: " ")
+        return directives.map { $0.hasPrefix("frame-ancestors ") ? directive : $0 }
     }
 
     /// The SSO `end_session_endpoint` is an external origin the browser is

@@ -10,11 +10,20 @@
 //                          is consumed atomically, the token is verified
 //                          against the platform key set and every claim rule,
 //                          and the user is signed in and sent to the course.
+//                          A deep-linking launch renders the assignment
+//                          picker in this response instead (LTIDeepLinkRoutes).
 //
 // Both are public and outside the CSRF group: the platform's signature and
 // the single-use state are what authenticate them. The state cookie binds the
 // launch to the browser that started the login, so an attacker cannot hand a
 // victim a launch the attacker completed (login CSRF).
+//
+// The LMS may run both inside a frame on its own page: its content picker
+// always does. So the state cookie is `Partitioned` over HTTPS (a browser
+// keeps a partitioned cookie inside a frame and blocks an unpartitioned
+// one), and once the platform is known the launch response may be framed by
+// the platform's origin, which lets a refusal show as a sentence rather than
+// a blank frame.
 
 import Core
 import Fluent
@@ -114,6 +123,7 @@ extension LTIRoutes {
 
         let response = req.redirect(to: location)
         response.cookies[Self.stateCookieName] = Self.stateCookie(state, req: req)
+        Self.partitionStateCookie(in: response, req: req)
         return response
     }
 
@@ -155,6 +165,8 @@ extension LTIRoutes {
         guard let platform = try await APILTIPlatform.find(login.platformID, on: req.db), platform.enabled else {
             throw LTILaunchFailure.platformDisabled
         }
+        SecurityHeadersMiddleware.allowFrameAncestors(
+            [SecurityHeadersMiddleware.cspOrigin(of: platform.issuer)], on: req)
         let claims: LTILaunchClaims
         do {
             claims = try await req.application.ltiPlatformKeyCache.verify(
@@ -198,20 +210,23 @@ extension LTIRoutes {
             action: .loginSuccess, targetType: .auth, targetID: user.id?.uuidString,
             metadata: ["username": user.username, "method": "lti"], actorOverride: user, on: req)
 
-        // A deep link left over from an earlier launch must not steer this one.
-        LTIPendingDeepLink.clear(from: req.session)
-        deepLink?.save(to: req.session)
         let response = try await routeToCourse(
-            launch: launch, platform: platform, user: user, isDeepLink: deepLink != nil, req: req)
+            launch: launch, platform: platform, user: user, deepLink: deepLink, req: req)
         response.cookies[Self.stateCookieName] = Self.expiredStateCookie(req: req)
+        Self.partitionStateCookie(in: response, req: req)
         return response
     }
 
     /// Sends the signed-in user to the bound course, enrolling them at the
-    /// launch's role when they are not enrolled yet. An unbound context sends
-    /// an instructor to the binding page and refuses anyone else.
+    /// launch's role when they are not enrolled yet, or, for a deep-linking
+    /// launch, renders the assignment picker. An unbound context sends an
+    /// instructor to the binding page and refuses anyone else; a deep-linking
+    /// launch from one is refused with a sentence, because the binding page
+    /// needs the session cookie, which a browser does not send inside the LMS
+    /// frame the picker opens in.
     private func routeToCourse(
-        launch: LTIValidatedLaunch, platform: APILTIPlatform, user: APIUser, isDeepLink: Bool, req: Request
+        launch: LTIValidatedLaunch, platform: APILTIPlatform, user: APIUser, deepLink: LTIPendingDeepLink?,
+        req: Request
     ) async throws -> Response {
         let platformID = try platform.requireID()
         guard let context = launch.context else { throw LTILaunchFailure.missingLaunchParameters }
@@ -219,6 +234,7 @@ extension LTIRoutes {
             let course = try await LTICourseBinding.course(
                 platformID: platformID, contextID: context.id, on: req.db)
         else {
+            if deepLink != nil { throw LTILaunchFailure.deepLinkCourseNotLinked }
             guard launch.courseRole == .instructor else { throw LTILaunchFailure.courseNotLinked }
             req.session.data[Self.pendingPlatformKey] = platformID.uuidString
             req.session.data[Self.pendingContextKey] = context.id
@@ -238,9 +254,9 @@ extension LTIRoutes {
         }
         try await Self.recordLaunchServices(launch: launch, course: course, userID: userID, on: req.db)
         req.session.data["activeCourseID"] = courseID.uuidString
-        if isDeepLink {
-            req.session.data[LTIPendingDeepLink.courseKey] = courseID.uuidString
-            return req.redirect(to: "/lti/deep-link")
+        if let deepLink {
+            return try await LTIDeepLinkRoutes.startPicker(
+                deepLink, course: course, platform: platform, user: user, req: req)
         }
         return req.redirect(to: try await Self.resourceLinkDestination(launch: launch, course: course, on: req.db))
     }
@@ -326,5 +342,29 @@ extension LTIRoutes {
         var cookie = stateCookie("", req: req)
         cookie.maxAge = 0
         return cookie
+    }
+
+    /// Adds `Partitioned` to the state cookie on `response`, over HTTPS only
+    /// (a partitioned cookie must be `Secure`). Vapor's cookie type has no
+    /// such attribute, so it is appended to the serialized header. Both the
+    /// setting and the expiring cookie need it: a browser keeps a partitioned
+    /// cookie apart from an unpartitioned one of the same name.
+    static func partitionStateCookie(in response: Response, req: Request) {
+        let values = response.headers[.setCookie]
+        let rewritten = partitionedSetCookies(values, secure: req.application.appConfig.security.sessionCookieSecure)
+        guard rewritten != values else { return }
+        response.headers.remove(name: .setCookie)
+        for value in rewritten { response.headers.add(name: .setCookie, value: value) }
+    }
+
+    /// `values` with `Partitioned` added to the state cookie, when `secure`.
+    /// Every other cookie is left as it is.
+    static func partitionedSetCookies(_ values: [String], secure: Bool) -> [String] {
+        guard secure else { return values }
+        return values.map { value in
+            let isState = value.hasPrefix(stateCookieName + "=")
+            let already = value.lowercased().contains("; partitioned")
+            return isState && !already ? value + "; Partitioned" : value
+        }
     }
 }
