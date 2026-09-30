@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.282] - 2026-09-30
+
+### Changed
+
+- **The admin Health alerts and Audit log pages use the shared row shape.** Health alerts show the webhook and last delivery as facts, each rule with its threshold, and recent firings under day headings with the delivery result on the row. The audit log groups entries by day, with the action select and person search saving as you change them; each entry opens to its payload.
+
+
 ## [0.5.281] - 2026-09-30
 
 ### Changed
