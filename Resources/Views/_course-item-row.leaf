@@ -231,7 +231,8 @@
             </div>
             #else:
             <!-- Every published status - open, closed, staff-only preview -
-                 gets the same actions: copy link and edit up front, the rest
+                 gets the same actions: copy link and edit up front (and the leaderboard
+                 for a class activity), the rest
                  in the row menu. -->
             <div class="assignment-actions-cell">
                 <button class="btn action-btn action-btn-icon" type="button"
@@ -243,6 +244,12 @@
                    title="Edit assignment" aria-label="Edit assignment">
                     <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
                 </a>
+                #if(item.assignment.leaderboardURL):
+                <a class="btn action-btn action-btn-icon" href="#(item.assignment.leaderboardURL)"
+                   title="Leaderboard" aria-label="Leaderboard">
+                    <svg class="icon" aria-hidden="true"><use href="#i-award"/></svg>
+                </a>
+                #endif
                 <details class="ext-details row-menu">
                     <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(item.assignment.title)">
                         <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>

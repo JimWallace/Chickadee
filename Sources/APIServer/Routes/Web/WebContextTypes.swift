@@ -99,6 +99,9 @@ struct TestSetupRow: Encodable {
     /// Where the solution action leads: the notebook page's solution view, or
     /// the plain download for an upload-only assignment.
     let solutionURL: String
+    /// The class activity's leaderboard when this viewer may open it
+    /// (`ClassActivity.leaderboardPath`); nil hides the action.
+    let leaderboardURL: String?
 }
 
 struct LatestSubmissionItem: Encodable {
