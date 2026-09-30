@@ -238,7 +238,7 @@ import VaporTesting
     }
 
     @Test func deletingKeepsItsConfirmation() async throws {
-        try await withApp(app) { app in
+        try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
             _ = try await post("/admin/lti/platforms", Self.form, cookie: cookie)
             let html = try await page(cookie: cookie)
