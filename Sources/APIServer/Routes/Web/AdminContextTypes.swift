@@ -276,6 +276,9 @@ struct AdminCourseDetailContext: Encodable {
     /// The term select's options, with the course's (or the suggested)
     /// season marked.
     var termOptions: [CourseTermOption] = []
+    /// The year select's options, with the course's (or the current) year marked.
+    var yearOptions: [CourseTermOption] = []
+    var cloneYearOptions: [CourseTermOption] = []
     /// The clone form's defaults: the term after this course's, when it has
     /// one (docs/course-terms.md slice 4). Derived from the course, never
     /// from today's date.

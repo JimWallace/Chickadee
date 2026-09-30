@@ -36,7 +36,8 @@ extension AdminRoutes {
                 assignments: [],
                 isNew: true,
                 error: req.query[String.self, at: "error"],
-                termOptions: CourseTermForm.options(selected: nil)
+                termOptions: CourseTermForm.options(selected: nil),
+                yearOptions: CourseTermForm.yearOptions(selected: nil)
             ))
     }
 
@@ -568,6 +569,8 @@ extension AdminRoutes {
                 isNew: false,
                 error: req.query[String.self, at: "error"],
                 termOptions: CourseTermForm.options(selected: course.term?.season),
+                yearOptions: CourseTermForm.yearOptions(selected: course.termYear),
+                cloneYearOptions: CourseTermForm.yearOptions(selected: course.term?.next?.year),
                 cloneYear: course.term?.next?.year,
                 cloneError: CourseCloneFormError.message(forQuery: req.query[String.self, at: "error"]),
                 cloneTermOptions: CourseTermForm.options(selected: course.term?.next?.season)

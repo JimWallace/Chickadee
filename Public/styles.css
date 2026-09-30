@@ -488,6 +488,11 @@ h2 { font-size: var(--text-md);   margin-bottom: .4rem; }
     color: var(--gray-900);
 }
 
+/* A native select is shorter than a text input with the same padding; match it. */
+.form-label > select.form-input {
+    height: calc(1lh + 1rem + 2px);
+}
+
 textarea.form-input {
     resize: vertical;
     font-family: monospace;

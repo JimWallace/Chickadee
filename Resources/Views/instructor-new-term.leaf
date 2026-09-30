@@ -36,8 +36,11 @@ New term
         </label>
         <label class="form-label">
             Year
-            <input class="form-input" type="number" name="termYear" min="1000" max="9999"
-                   value="#(cloneYear)" required>
+            <select class="form-input" name="termYear" required>
+                #for(option in cloneYearOptions):
+                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+                #endfor
+            </select>
         </label>
         <label class="form-label">
             Term

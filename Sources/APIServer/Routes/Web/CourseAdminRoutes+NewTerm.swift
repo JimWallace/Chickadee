@@ -44,6 +44,7 @@ extension CourseAdminRoutes {
             canClone: canClone,
             justCloned: justCloned,
             cloneYear: next?.year,
+            cloneYearOptions: CourseTermForm.yearOptions(selected: next?.year),
             cloneTermOptions: CourseTermForm.options(selected: next?.season),
             flashSuccess: justCloned ? "Cloned; set the new course's dates before opening its assignments." : nil,
             flashError: flashError)
@@ -132,6 +133,7 @@ struct InstructorNewTermContext: Encodable {
     let justCloned: Bool
     /// The form defaults: the term after the active course's.
     let cloneYear: Int?
+    let cloneYearOptions: [CourseTermOption]
     let cloneTermOptions: [CourseTermOption]
     let flashSuccess: String?
     let flashError: String?
