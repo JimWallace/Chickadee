@@ -159,6 +159,9 @@
     --avatar-eye: #22242C;
     --avatar-glint: #FFFFFF;
     --avatar-gear: #33363F;
+    /* "No border": a ring that paints nothing, so a bird with no border is
+       exactly the bird it was before borders existed. */
+    --avatar-border-none: transparent;
     --avatar-blush: #F2AE9F;
     --avatar-mouth: #8E3A2C;
 }
@@ -3042,11 +3045,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     --av-backdrop: var(--avatar-back-sky);
     /* The border ring (docs/student-wardrobe.md, decision 2): an outline
        inside the disc, so it follows the radius and needs no sprite layer.
-       With no border chosen the presentation passes the backdrop colour, so
-       the ring matches the disc and cannot be seen. */
-    --av-border: var(--avatar-back-sky);
+       With no border chosen the presentation passes --avatar-border-none,
+       which is transparent. The bird is decorative and its colours are the
+       student's, so forced-colors mode leaves them as they are (and does
+       not paint the transparent ring). */
+    --av-border: var(--avatar-border-none);
     outline: 3px solid var(--av-border);
     outline-offset: -3px;
+    forced-color-adjust: none;
 }
 
 /* The 1.5rem form for a table row where the handle beside it carries the
@@ -3072,28 +3078,24 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     outline-offset: -2px;
 }
 
-/* Swatch choice: a group of radio inputs shown as round colour chips (the
-   account page's Chickadee picker; see docs/ui-design.md). The input stays in the tab order and is
-   only made invisible, so the group works with the keyboard and with no
-   JavaScript; the chip beside it shows the checked and focused states. */
-.swatch-group {
+/* Swatch choice: radio inputs shown as round colour samples with a name
+   under each, laid out in a row inside a .fieldset-plain (the account page's
+   Chickadee picker; see docs/ui-design.md). The input is invisible but stays
+   in the tab order, so the group works with the keyboard and with no
+   JavaScript. The checked option has a ring AND a bold name, so the state
+   does not depend on colour alone. */
+.swatch-row {
     display: flex;
     flex-wrap: wrap;
-    gap: .5rem;
-    border: 0;
-    padding: 0;
-    margin: 0 0 1rem;
-}
-
-.swatch-group legend {
-    padding: 0;
-    margin-bottom: .5rem;
-    font-weight: 600;
+    gap: .75rem;
 }
 
 .swatch {
     position: relative;
     display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
     cursor: pointer;
 }
 
@@ -3104,28 +3106,44 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     height: 1px;
 }
 
-.swatch-chip {
+.swatch-sample {
     display: block;
     box-sizing: border-box;
     width: 1.75rem;
     height: 1.75rem;
     border-radius: 50%;
-    outline: 2px solid transparent;
+    outline: none;
     outline-offset: 2px;
 }
 
-.swatch input:checked + .swatch-chip { outline-color: var(--gray-800); }
+.swatch-name {
+    font-size: var(--text-2xs);
+    color: var(--muted);
+}
 
-.swatch input:focus-visible + .swatch-chip { outline-color: var(--blue); }
+.swatch input:checked + .swatch-sample { outline: 2px solid var(--gray-800); }
 
-/* A backdrop swatch is a filled disc; a border swatch is a ring, so it reads
-   as a border; "no border" is a dashed grey ring. Each reads the same
-   per-student custom property the avatar itself reads. */
+.swatch input:checked ~ .swatch-name {
+    color: var(--gray-800);
+    font-weight: 600;
+}
+
+.swatch input:focus-visible + .swatch-sample { outline: 2px solid var(--blue); }
+
+/* A backdrop sample is a filled disc and a border sample is a ring, each in
+   the avatar property the option sets; "no border" is a dashed grey ring. */
 .swatch-backdrop { background: var(--av-backdrop); }
 
 .swatch-border { border: 5px solid var(--av-border); }
 
 .swatch-none { border: 2px dashed var(--muted); }
+
+/* Forced colors would paint every sample the same. Keep the samples' own
+   colours, and draw the checked ring in the system highlight colour. */
+@media (forced-colors: active) {
+    .swatch-sample { forced-color-adjust: none; }
+    .swatch input:checked + .swatch-sample { outline-color: Highlight; }
+}
 
 .av-backdrop { fill: var(--av-backdrop); }
 .av-cap { fill: var(--av-cap); }

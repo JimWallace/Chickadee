@@ -68,9 +68,8 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// is why the design writes it "8 + 5 accents".
     public let accentToken: String
     public let backdropToken: String
-    /// The ring's colour. For `.none` it is the backdrop token, so the ring
-    /// matches the disc and cannot be seen, and the template needs no
-    /// condition.
+    /// The ring's colour. For `.none` it is `--avatar-border-none`, which is
+    /// transparent, so the template needs no condition.
     public let borderToken: String
     /// Fragment references for the four symbols a spec varies, e.g.
     /// "#av-wing-barred" — WITH the leading marker, so the template never has
@@ -101,7 +100,7 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
         self.borderToken =
             spec.border.accent.map { "--avatar-accent-\($0.rawValue)" }
-            ?? "--avatar-back-\(spec.backdrop.rawValue)"
+            ?? "--avatar-border-none"
         let tuft = spec.accessory.hidesTuft ? AvatarTuft.none : spec.tuft
         self.tuftSymbolRef = "#av-tuft-\(tuft.rawValue)"
         self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"

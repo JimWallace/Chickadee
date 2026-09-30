@@ -37,11 +37,11 @@ extension AccountRoutes {
         do {
             updated = try AvatarCustomization.applying(form.choices, to: current)
         } catch is AvatarCustomizationError {
-            return req.redirect(to: "/account?avatar=invalid")
+            return req.redirect(to: "/account?avatar=invalid#chickadee")
         }
         user.avatarSpecJSON = AvatarStore.encode(updated)
         try await user.save(on: req.db)
-        return req.redirect(to: "/account?avatar=saved")
+        return req.redirect(to: "/account?avatar=saved#chickadee")
     }
 }
 
@@ -57,16 +57,21 @@ struct AvatarPickerContext: Encodable {
                 value: value,
                 label: value.capitalized,
                 token: "--avatar-back-\(value)",
-                checked: value == spec.backdrop.rawValue)
+                checked: value == spec.backdrop.rawValue,
+                isNone: false)
         }
         borders = AvatarCustomization.options(for: .border).map { value in
-            // `none` has no colour; the template draws it as an empty ring.
-            let accent = AvatarBorder(rawValue: value)?.accent
+            // The same token the presentation would name for this border, so
+            // the live preview draws exactly what a save would.
+            var preview = spec
+            preview.border = AvatarBorder(rawValue: value) ?? .none
             return AvatarPickerOption(
                 value: value,
                 label: value.capitalized,
-                token: accent.map { "--avatar-accent-\($0.rawValue)" } ?? "",
-                checked: value == spec.border.rawValue)
+                token: AvatarPresentation(for: preview, size: .standard, accessibility: .decorative)
+                    .borderToken,
+                checked: value == spec.border.rawValue,
+                isNone: value == AvatarBorder.none.rawValue)
         }
     }
 }
@@ -76,17 +81,10 @@ struct AvatarPickerContext: Encodable {
 struct AvatarPickerOption: Encodable {
     let value: String
     let label: String
-    /// A palette token name, e.g. "--avatar-back-sky"; empty for no border.
+    /// A palette token name, e.g. "--avatar-back-sky". The live preview sets
+    /// the avatar's custom property to it.
     let token: String
     let checked: Bool
-    /// The "no border" option, which has no colour to show.
+    /// The "no border" option, drawn as a dashed ring rather than a colour.
     let isNone: Bool
-
-    init(value: String, label: String, token: String, checked: Bool) {
-        self.value = value
-        self.label = label
-        self.token = token
-        self.checked = checked
-        self.isNone = token.isEmpty
-    }
 }

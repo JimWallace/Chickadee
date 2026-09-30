@@ -52,12 +52,12 @@ const TUFT_HIDING_HATS = new Set(['beanie', 'gradcap'])
 // These mirror AvatarTilt.degrees.
 const tilts = [['upright', 0], ['left', -9], ['right', 9]]
 
-// A border of 'none' is the backdrop colour, as AvatarPresentation.borderToken
-// renders it, so the ring cannot be seen.
+// A border of 'none' is the transparent --avatar-border-none, as
+// AvatarPresentation.borderToken names it.
 const style = (cap, accent, back, border = 'none') =>
   `--av-cap:var(--avatar-${cap}-cap);--av-wing:var(--avatar-${cap}-wing);` +
   `--av-accent:var(--avatar-accent-${accent});--av-backdrop:var(--avatar-back-${back});` +
-  `--av-border:var(${border === 'none' ? `--avatar-back-${back}` : `--avatar-accent-${border}`})`
+  `--av-border:var(${border === 'none' ? '--avatar-border-none' : `--avatar-accent-${border}`})`
 
 const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'none', tilt = 0,
                       border = 'none' }) =>

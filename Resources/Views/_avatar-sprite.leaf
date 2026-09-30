@@ -258,9 +258,9 @@
             </g>
         </symbol>
         <symbol id="av-accessory-headband" viewBox="0 0 64 64">
-            <path class="av-accent" d="M17.6,16.84 A22.4,22.4 0 0 1 46.4,16.84 L44.86,18.68 A20,20 0 0 0 19.14,18.68 Z"/>
-            <path class="av-accent" d="M45.2,17.3 L51,14 C51.6,15.6 51.5,17.4 50.6,18.9 Z"/>
-            <path class="av-accent" d="M45.2,17.9 L49.8,22.4 C48.3,23 46.9,22.8 45.9,21.9 Z"/>
+            <path class="av-accent" d="M17.72,18.6 Q32,15.4 46.28,18.6 A21,21 0 0 1 49.37,22.2 Q32,19 14.63,22.2 A21,21 0 0 1 17.72,18.6 Z"/>
+            <path class="av-accent" d="M48.2,20.1 L53.6,16.4 C54.3,18.2 54.1,20.1 53,21.6 Z"/>
+            <path class="av-accent" d="M48.4,21 L52.8,25.6 C51.2,26.2 49.7,25.9 48.7,24.9 Z"/>
         </symbol>
     </defs>
 </svg>

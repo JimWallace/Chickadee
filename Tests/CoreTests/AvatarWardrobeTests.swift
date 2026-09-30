@@ -61,12 +61,12 @@ import Testing
     }
 
     @Test(arguments: AvatarBorder.allCases)
-    func borderTokenIsTheAccentOrTheBackdrop(border: AvatarBorder) {
+    func borderTokenIsTheAccentOrTransparent(border: AvatarBorder) {
         let spec = AvatarSpec(
             cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
             backdrop: .straw, border: border)
         let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
-        let expected = border == .none ? "--avatar-back-straw" : "--avatar-accent-\(border.rawValue)"
+        let expected = border == .none ? "--avatar-border-none" : "--avatar-accent-\(border.rawValue)"
         #expect(p.borderToken == expected)
         #expect(p.tokens.contains(p.borderToken))
     }
@@ -130,6 +130,8 @@ import Testing
     @Test func stylesheetDrawsTheRingFromTheBorderProperty() throws {
         let css = try Self.contents(of: "Public/styles.css")
         #expect(css.contains("outline: 3px solid var(--av-border);"))
-        #expect(css.contains("--av-border: var(--avatar-back-sky);"))
+        #expect(css.contains("--av-border: var(--avatar-border-none);"))
+        // "None" paints nothing, so a bird with no border is unchanged.
+        #expect(css.contains("--avatar-border-none: transparent;"))
     }
 }

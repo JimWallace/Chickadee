@@ -65,7 +65,7 @@ import VaporTesting
 
             let result = try await postChoices(["backdrop": "lilac", "border": "moss"], cookie: cookie)
             #expect(result.status == .seeOther)
-            #expect(result.location == "/account?avatar=saved")
+            #expect(result.location == "/account?avatar=saved#chickadee")
 
             let after = try await storedSpec(username: "picker_save")
             #expect(after.backdrop == .lilac)
@@ -87,7 +87,7 @@ import VaporTesting
             // A valid backdrop beside an invalid border: neither is applied.
             let result = try await postChoices(["backdrop": "rose", "border": "gold"], cookie: cookie)
             #expect(result.status == .seeOther)
-            #expect(result.location == "/account?avatar=invalid")
+            #expect(result.location == "/account?avatar=invalid#chickadee")
             #expect(try await storedSpec(username: "picker_bad") == before)
         }
     }
@@ -106,8 +106,16 @@ import VaporTesting
                     let html = res.body.string
                     #expect(html.contains("Chickadee saved."))
                     #expect(html.contains("--av-border: var(--avatar-accent-orchid)"))
-                    #expect(html.contains(#"name="backdrop" value="peach" checked"#))
-                    #expect(html.contains(#"name="border" value="orchid" checked"#))
+                    #expect(
+                        html.contains(
+                            #"name="backdrop" value="peach" data-av-token="--avatar-back-peach" checked"#))
+                    #expect(
+                        html.contains(
+                            #"name="border" value="orchid" data-av-token="--avatar-accent-orchid" checked"#))
+                    // The live preview is wired: the script, and the avatar it
+                    // updates.
+                    #expect(html.contains(#"data-avatar-picker=".account-identity .avatar""#))
+                    #expect(html.contains("/avatar-picker.js"))
                     // One radio per option the chokepoint accepts, in each group.
                     for slot in AvatarCustomizableSlot.allCases {
                         let radios = html.components(separatedBy: #"name="\#(slot.rawValue)""#).count - 1
@@ -120,7 +128,7 @@ import VaporTesting
         }
     }
 
-    @Test func noBorderDrawsTheRingInTheBackdropColour() async throws {
+    @Test func noBorderDrawsATransparentRing() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginUser(
                 username: "picker_none", password: "pw", role: "student", on: app)
@@ -129,7 +137,12 @@ import VaporTesting
                 .GET, "/account",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
-                    #expect(res.body.string.contains("--av-border: var(--avatar-back-sage)"))
+                    #expect(res.body.string.contains("--av-border: var(--avatar-border-none)"))
+                    // The "none" radio carries the same token, so the preview
+                    // matches a save.
+                    #expect(
+                        res.body.string.contains(
+                            #"name="border" value="none" data-av-token="--avatar-border-none""#))
                     #expect(res.body.string.contains("swatch-none"))
                 })
         }

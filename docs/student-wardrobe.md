@@ -63,13 +63,20 @@ advantages:
 - `outline-style` already has `dashed`, `dotted` and `double`. A later
   "stitched" or "double" ring is one CSS rule, not new art.
 
-"No border" is not a special case. The presentation sets `--av-border` to the
-backdrop colour, so the ring has the same colour as the disc and cannot be seen.
-The template has no condition.
+"No border" is not a special case. The presentation sets `--av-border` to
+`--avatar-border-none`, which is transparent, so the ring paints nothing and
+a bird with no border is exactly the bird it was before borders existed. The
+template has no condition. (A first version used the backdrop colour for
+"none". That was wrong: an opaque ring in the backdrop colour covers the outer
+band of the disc, and the scarf tail and the beanie pom reach into it.)
 
-The ring is inside the disc, so it paints over the outer edge of the backdrop
-and under nothing else. A hat or a tuft that reaches the edge goes under the
-ring. This looks like the bird is in a frame.
+A chosen ring is inside the disc, so it paints over the outer band. A hat or a
+scarf that reaches the edge goes under the ring. This looks like the bird is in
+a frame.
+
+`.avatar` sets `forced-color-adjust: none`. The bird is decorative and its
+colours are the student's; without this, forced-colors mode repaints the bird
+and draws the transparent ring in the system colour.
 
 ### 3. One chokepoint validates every change
 
@@ -98,8 +105,10 @@ or cumulative achievement. It leaves the first-use draw:
   a rule in `ensureSpec`, because a rule in `ensureSpec` would also take away a
   gradcap that a student EARNED later.
 
-The headband is a band that follows the crown of the head. It does not hide
-the tuft: a tuft sticks up through a headband, which is what one expects.
+The headband is a band across the forehead, tied at the right side. It does
+not hide the tuft. It covers part of the brows on `curious`, `keen` and
+`startled`; those expressions still read, because since the tune-up they
+differ mainly by eye shape.
 
 ### 5. What a student sees on other pages
 
@@ -124,11 +133,20 @@ One page section on the account page, "Your chickadee":
   works with the keyboard and with no JavaScript.
 - One **Save** button. The form posts to `POST /account/avatar`.
 
-With JavaScript, `Public/avatar-picker.js` updates the preview when a choice
-changes. It sets only the two custom properties, `--av-backdrop` and
-`--av-border`, which the UI rules allow ("JS does not make styling decisions").
-Each radio input carries the token name in a data attribute, so the script
-holds no palette.
+Each choice shows its name under the sample, so a reader who cannot tell two
+colours apart can still choose. The checked choice has a ring and a bold name.
+
+With JavaScript, `Public/avatar-picker.js` updates the bird in the Account
+info section as soon as a choice changes (a live preview). It sets only the two
+custom properties, `--av-backdrop` and `--av-border`, which the UI rules allow
+("JS does not make styling decisions"). Each radio input carries the token name
+in a data attribute, so the script holds no palette. Nothing is saved until the
+student presses Save.
+
+The style guard counted every `.style.<property>` write, including a
+custom-property write, so the preview first looked impossible. The guard now
+exempts `.style.setProperty('--…')`, which is the pattern the UI rules already
+named as the right one.
 
 ---
 

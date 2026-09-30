@@ -195,15 +195,19 @@ fi
 # block, and spacing values that would fail rule 4 verbatim in a .css file.
 # Counted here: style="…" inside generated-HTML strings, .style.<prop>
 # writes (display toggles exempt — show/hide is behaviour, not styling),
-# and cssText. Baseline may only go DOWN. The rule for new code
+# and cssText. A custom-property write — .style.setProperty('--…') — is the
+# sanctioned pattern and is NOT counted: it carries a value into a rule that
+# lives in styles.css, where every guard above can see it. Baseline may only
+# go DOWN. The rule for new code
 # (docs/ui-design.md): JS toggles classes or sets a custom property
 # (workbench.js's --wb-left-width is the pattern); it does not decide
 # styling.
-JS_STYLE_DECISION_BASELINE=10
+JS_STYLE_DECISION_BASELINE=9
 js_style_count="$(
   {
     grep -ho 'style="' Public/*.js || true
-    grep -hoE '\.style\.[a-zA-Z]+' Public/*.js | grep -v '\.style\.display' || true
+    grep -hE '\.style\.[a-zA-Z]+' Public/*.js | grep -v "\.style\.setProperty('--" \
+      | grep -oE '\.style\.[a-zA-Z]+' | grep -v '\.style\.display' || true
     grep -ho 'cssText' Public/*.js || true
   } | wc -l | tr -d ' '
 )"

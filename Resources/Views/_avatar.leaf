@@ -18,7 +18,7 @@
      The style attribute is a list of custom-property assignments and nothing
      else, which is what keeps it inside the inline-style allowlist. Only the
      five varying colours are assigned here (the fifth, the border ring, is
-     the backdrop colour when the student chose none); body, cheek, beak and bib read the
+     transparent when the student chose none); body, cheek, beak and bib read the
      palette directly, because a bird whose body colour varied would stop being
      the same species as its neighbours.
 
