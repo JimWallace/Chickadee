@@ -560,6 +560,11 @@ func registerMigrations(on app: Application) {
     // only; must follow `AddCourseTerm`, which creates the columns.
     app.migrations.add(ScopeCourseCodeIndexToTerm())
 
+    // When a student's class handle locked (docs/student-avatars.md §3).
+    // Nullable column on `course_enrollments`; nil = the student may still
+    // choose once.
+    app.migrations.add(AddAvatarHandleLock())
+
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.

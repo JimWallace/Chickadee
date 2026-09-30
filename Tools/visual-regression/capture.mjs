@@ -146,7 +146,11 @@ async function main() {
           path: file,
           fullPage: true,
           animations: "disabled",
-          mask: MASKS.map((sel) => page.locator(sel)),
+          // Visible matches only. Chromium lays out the content of a CLOSED
+          // <details>, so an unfiltered mask paints boxes over elements the
+          // page does not show (the account page's handle panel draws three
+          // avatars that way) and bakes them into the baseline.
+          mask: MASKS.map((sel) => page.locator(sel).filter({ visible: true })),
           maskColor: "#FF00FF",
         });
         console.log(`captured ${p.name}--${scheme}`);

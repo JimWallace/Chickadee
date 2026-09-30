@@ -5,6 +5,7 @@
 //   GET  /account                      → account.leaf (user info + enrolled courses)
 //   POST /account/enroll               → join a course → redirect to /account
 //   POST /account/unenroll/:courseID   → leave a course → redirect to /account
+//   POST /account/handle/:courseID     → choose a class handle (AccountRoutes+Handle.swift)
 
 import Core
 import Fluent
@@ -15,6 +16,7 @@ struct AccountRoutes: RouteCollection {
         routes.get("account", use: accountPage)
         routes.post("account", "enroll", use: joinCourse)
         routes.post("account", "unenroll", ":courseID", use: leaveCourse)
+        routes.post("account", "handle", ":courseID", use: chooseHandle)
     }
 
     // MARK: - GET /account
@@ -55,12 +57,9 @@ struct AccountRoutes: RouteCollection {
         // own name. Gating here also keeps staff from consuming handles out of
         // a course's finite space. `ensureHandle` is a no-op read once the row
         // carries one.
-        var handlesByCourseID: [UUID: String] = [:]
-        for enrollment in enrollments where enrollment.role == .student {
-            guard let courseID = enrollment.course.id else { continue }
-            handlesByCourseID[courseID] = try await AvatarStore.ensureHandle(
-                for: enrollment, on: req.db)
-        }
+        let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
+        let (handlesByCourseID, handleChoicesByCourseID) = try await Self.studentHandles(
+            enrollments: enrollments, spec: spec, req: req)
 
         let enrolledRows =
             enrollments
@@ -85,7 +84,8 @@ struct AccountRoutes: RouteCollection {
                     name: e.course.name, termLabel: e.course.term?.displayName,
                     enrollmentMode: e.course.enrollmentMode.rawValue,
                     slipDaysText: slipDaysText,
-                    handle: handlesByCourseID[id]
+                    handle: handlesByCourseID[id],
+                    handleChoice: handleChoicesByCourseID[id]
                 )
             }
             .sorted { $0.code < $1.code }
@@ -99,7 +99,7 @@ struct AccountRoutes: RouteCollection {
                 return AccountCourseRow(
                     id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName,
                     enrollmentMode: c.enrollmentMode.rawValue,
-                    slipDaysText: nil, handle: nil)
+                    slipDaysText: nil, handle: nil, handleChoice: nil)
             }
 
         // Personal-data export state (#557) for the "Your data" section.
@@ -123,10 +123,7 @@ struct AccountRoutes: RouteCollection {
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
-                avatar: AvatarPresentation(
-                    for: try await AvatarStore.ensureSpec(for: user, on: req.db),
-                    size: .standard,
-                    accessibility: .decorative),
+                avatar: AvatarPresentation(for: spec, size: .standard, accessibility: .decorative),
                 studentID: user.studentID,
                 email: user.email,
                 enrolledCourses: enrolledRows,
@@ -319,4 +316,7 @@ private struct AccountCourseRow: Encodable {
     /// line — a course whose word lists are exhausted, which is a real state
     /// rather than an error: the avatar still shows.
     let handle: String?
+    /// Whether the student can still choose a different handle, and the
+    /// options if so.  nil wherever `handle` is nil.
+    let handleChoice: AccountHandleChoice?
 }
