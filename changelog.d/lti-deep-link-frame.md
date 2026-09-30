@@ -1,0 +1,3 @@
+### Fixed
+
+- **The LTI assignment picker works inside the LMS.** Brightspace opens the Deep Linking picker in a frame on its own page, where it showed a blank window: every Chickadee page refused to be framed, the launch-state cookie was blocked, and the picker needed the session cookie, which a browser does not send there. The picker now arrives in the launch response itself and carries a single-use ticket in place of the session, the launch-state cookie is `Partitioned`, and only these pages may be framed, by the registered platform. A deep-linking launch from an LMS course that is not linked yet now says how to link it.

@@ -1,9 +1,11 @@
 // Tests/APITests/LTI/LTIDeepLinkingTests.swift
 //
 // Deep Linking 2.0 end to end (docs/lti-1-3.md slice 3): a staff launch
-// reaches the picker, the chosen assignments come back as a response the
+// renders the picker, the chosen assignments come back as a response the
 // tool key signed, the return form may post only to the platform's return
-// URL, and a later launch of a returned link opens that assignment.
+// URL, and a later launch of a returned link opens that assignment. The
+// picker carries a single-use ticket instead of relying on the session,
+// because the LMS shows it in a frame where the session cookie is not sent.
 
 import Core
 import Fluent
@@ -68,15 +70,24 @@ import VaporTesting
             data: "opaque-data")
     }
 
-    /// Runs login + launch and returns the launch response's location and
-    /// session cookie.
+    /// What a launch returned.
+    struct Launched {
+        let status: HTTPStatus
+        let location: String?
+        let cookie: String
+        let html: String
+        let headers: HTTPHeaders
+    }
+
+    /// Runs login + launch and returns the launch response's status,
+    /// location, session cookie, body and headers.
     private func launch(
         roles: [String] = [LTITestPlatform.instructor],
         messageType: String = "LtiDeepLinkingRequest",
         settings: LTIDeepLinkingSettings? = LTIDeepLinkingTests.settings(),
         custom: [String: JSONValue] = [:],
         cookie priorSession: String? = nil
-    ) async throws -> (status: HTTPStatus, location: String?, cookie: String) {
+    ) async throws -> Launched {
         var state = ""
         var nonce = ""
         var stateCookie = ""
@@ -94,7 +105,7 @@ import VaporTesting
         var claims = LTITestPlatform.claims(nonce: nonce, roles: roles, messageType: messageType, custom: custom)
         claims.deepLinkingSettings = settings
         let token = try await platform.sign(claims)
-        var result: (HTTPStatus, String?, String) = (.ok, nil, "")
+        var result = Launched(status: .ok, location: nil, cookie: "", html: "", headers: [:])
         try await app.asyncTest(
             .POST, "/lti/launch",
             beforeRequest: { req in
@@ -104,38 +115,37 @@ import VaporTesting
             },
             afterResponse: { res in
                 let session = res.headers.setCookie?["vapor-session"].map { "vapor-session=\($0.string)" }
-                result = (res.status, res.headers.first(name: .location), session ?? priorSession ?? "")
+                result = Launched(
+                    status: res.status, location: res.headers.first(name: .location),
+                    cookie: session ?? priorSession ?? "", html: res.body.string, headers: res.headers)
             })
-        return (status: result.0, location: result.1, cookie: result.2)
+        return result
     }
 
-    /// POSTs the picker with `publicIDs` chosen, CSRF included.
+    /// POSTs the picker with `publicIDs` chosen and `ticket`, with no cookie
+    /// and no CSRF token: inside the LMS frame the browser sends neither.
     private func choose(
-        _ publicIDs: [String], cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ publicIDs: [String], ticket: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
     ) async throws {
-        let (token, boundCookie) = try await csrfFields(for: "/lti/deep-link", cookie: cookie, on: app)
         let body =
             (publicIDs.map { "assignments%5B%5D=\($0)" } + [
-                "_csrf=\(token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")"
+                "ticket=\(ticket.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")"
             ])
             .joined(separator: "&")
         try await app.asyncTest(
             .POST, "/lti/deep-link",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: boundCookie)
                 req.headers.contentType = .urlEncodedForm
                 req.body = .init(string: body)
             },
             afterResponse: check)
     }
 
-    private func get(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
-    ) async throws {
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: check)
+    /// The `value` of the hidden ticket input on the picker.
+    private static func ticket(in html: String) -> String? {
+        guard let range = html.range(of: #"name="ticket" value=""#) else { return nil }
+        let rest = html[range.upperBound...]
+        return rest.firstIndex(of: "\"").map { String(rest[..<$0]) }
     }
 
     /// The `value` of the hidden JWT input on the return page.
@@ -151,18 +161,16 @@ import VaporTesting
         try await withApp(app) { app in
             let fixture = try await fixture()
             let launched = try await launch()
-            #expect(launched.location == "/lti/deep-link")
-
-            try await get("/lti/deep-link", cookie: launched.cookie) { res in
-                #expect(res.status == .ok)
-                #expect(res.body.string.contains("Lab 1"))
-                #expect(res.body.string.contains("Lab 2"))
-                #expect(res.body.string.contains("type=\"checkbox\""))
-            }
+            #expect(launched.status == .ok)
+            #expect(launched.location == nil)
+            #expect(launched.html.contains("Lab 1"))
+            #expect(launched.html.contains("Lab 2"))
+            #expect(launched.html.contains("type=\"checkbox\""))
+            let ticket = try #require(Self.ticket(in: launched.html))
 
             var html = ""
             var csp = ""
-            try await choose([fixture.lab1.publicID, fixture.lab2.publicID], cookie: launched.cookie) { res in
+            try await choose([fixture.lab1.publicID, fixture.lab2.publicID], ticket: ticket) { res in
                 #expect(res.status == .ok)
                 html = res.body.string
                 csp = res.headers.first(name: "Content-Security-Policy") ?? ""
@@ -185,9 +193,10 @@ import VaporTesting
             let actions = try await APIAuditLogEntry.query(on: app.db).all().map(\.action)
             #expect(actions.contains(AuditAction.ltiContentLinked.rawValue))
 
-            // The request is answered once: the picker is gone afterwards.
-            try await get("/lti/deep-link", cookie: launched.cookie) { res in
+            // The request is answered once: its ticket is dead afterwards.
+            try await choose([fixture.lab1.publicID], ticket: ticket) { res in
                 #expect(res.status == .notFound)
+                #expect(!res.body.string.contains("name=\"JWT\""))
             }
         }
     }
@@ -216,25 +225,19 @@ import VaporTesting
         }
     }
 
-    @Test func anUnlinkedContextBindsFirstThenReturnsToThePicker() async throws {
+    /// The binding page needs the session, which the LMS frame does not
+    /// carry, so a deep-linking launch from an unlinked course says how to
+    /// link it instead, in a page the LMS frame may show.
+    @Test func anUnlinkedContextIsRefusedWithHowToLinkIt() async throws {
         try await withApp(app) { app in
-            let fixture = try await fixture(bind: false)
+            _ = try await fixture(bind: false)
             let launched = try await launch()
-            #expect(launched.location == "/lti/bind")
-            let userID = try #require(try await APILTIIdentity.query(on: app.db).first()).userID
-            try await APICourseEnrollment(userID: userID, courseID: try fixture.course.requireID(), role: .instructor)
-                .save(on: app.db)
-            let (token, boundCookie) = try await csrfFields(for: "/lti/bind", cookie: launched.cookie, on: app)
-            try await app.asyncTest(
-                .POST, "/lti/bind",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(
-                        ["courseID": try fixture.course.requireID().uuidString, "_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.headers.first(name: .location) == "/lti/deep-link")
-                })
+            #expect(launched.status == .forbidden)
+            #expect(launched.location == nil)
+            #expect(launched.html.contains("Open a Chickadee link from this course in a new window once"))
+            #expect(launched.headers.first(name: "X-Frame-Options") == nil)
+            let count = try await APILTIDeepLinkRequest.query(on: app.db).count()
+            #expect(count == 0)
         }
     }
 
@@ -268,10 +271,9 @@ import VaporTesting
         try await withApp(app) { _ in
             let fixture = try await fixture()
             let launched = try await launch(settings: Self.settings(acceptMultiple: false))
-            try await get("/lti/deep-link", cookie: launched.cookie) { res in
-                #expect(res.body.string.contains("type=\"radio\""))
-            }
-            try await choose([fixture.lab1.publicID, fixture.lab2.publicID], cookie: launched.cookie) { res in
+            #expect(launched.html.contains("type=\"radio\""))
+            let ticket = try #require(Self.ticket(in: launched.html))
+            try await choose([fixture.lab1.publicID, fixture.lab2.publicID], ticket: ticket) { res in
                 #expect(res.status == .ok)
                 #expect(res.body.string.contains("one assignment at a time"))
                 #expect(!res.body.string.contains("name=\"JWT\""))
@@ -286,27 +288,112 @@ import VaporTesting
             try await makeTestSetup(on: app, id: "setup-x", courseID: try other.requireID())
             let foreign = try await makeTestAssignment(on: app, testSetupID: "setup-x", courseID: try other.requireID())
             let launched = try await launch()
-            try await choose([], cookie: launched.cookie) { res in
+            let ticket = try #require(Self.ticket(in: launched.html))
+            try await choose([], ticket: ticket) { res in
                 #expect(res.body.string.contains("Choose at least one assignment."))
+                // A refused choice keeps the request open, under the same ticket.
+                #expect(Self.ticket(in: res.body.string) == ticket)
             }
-            try await choose([fixture.lab1.publicID, foreign.publicID], cookie: launched.cookie) { res in
+            try await choose([fixture.lab1.publicID, foreign.publicID], ticket: ticket) { res in
                 #expect(res.body.string.contains("Choose at least one assignment."))
                 #expect(!res.body.string.contains("name=\"JWT\""))
             }
         }
     }
 
-    @Test func aLaterResourceLaunchClearsAnUnansweredRequest() async throws {
+    /// Each launch is its own request under its own ticket; nothing a later
+    /// launch does in the session can answer or steer it, and a ticket no
+    /// launch issued is refused.
+    @Test func eachLaunchGetsItsOwnTicketAndAnUnknownOneIsRefused() async throws {
         try await withApp(app) { _ in
-            _ = try await fixture()
+            let fixture = try await fixture()
             let first = try await launch()
-            #expect(first.location == "/lti/deep-link")
-            let second = try await launch(
-                messageType: "LtiResourceLinkRequest", settings: nil, cookie: first.cookie)
-            #expect(second.location == "/")
-            try await get("/lti/deep-link", cookie: second.cookie) { res in
+            let second = try await launch(cookie: first.cookie)
+            let firstTicket = try #require(Self.ticket(in: first.html))
+            let secondTicket = try #require(Self.ticket(in: second.html))
+            #expect(firstTicket != secondTicket)
+            try await choose([fixture.lab1.publicID], ticket: firstTicket) { res in
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("name=\"JWT\""))
+            }
+            try await choose([fixture.lab1.publicID], ticket: "not-a-ticket") { res in
                 #expect(res.status == .notFound)
             }
+            try await choose([fixture.lab1.publicID], ticket: "") { res in
+                #expect(res.status == .notFound)
+            }
+        }
+    }
+
+    // MARK: - The LMS frame
+
+    @Test func thePickerAndItsReturnPageMayBeFramedByThePlatformOnly() async throws {
+        try await withApp(app) { _ in
+            let fixture = try await fixture()
+            let launched = try await launch()
+            let csp = launched.headers.first(name: "Content-Security-Policy") ?? ""
+            #expect(csp.contains("frame-ancestors 'self' \(LTITestPlatform.issuer)"))
+            #expect(launched.headers.first(name: "X-Frame-Options") == nil)
+            // Inside the frame the site nav would only lead to pages that
+            // refuse to be framed, so the picker renders without it.
+            #expect(!launched.html.contains("<nav class=\"nav\""))
+
+            let ticket = try #require(Self.ticket(in: launched.html))
+            try await choose([fixture.lab1.publicID], ticket: ticket) { res in
+                let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
+                #expect(csp.contains("frame-ancestors 'self' \(LTITestPlatform.issuer)"))
+                #expect(res.headers.first(name: "X-Frame-Options") == nil)
+                #expect(!res.body.string.contains("<nav class=\"nav\""))
+            }
+            // Every other page keeps the default.
+            try await app.asyncTest(.GET, "/login") { res in
+                let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
+                #expect(csp.contains("frame-ancestors 'self';"))
+                #expect(res.headers.first(name: "X-Frame-Options") == "SAMEORIGIN")
+            }
+        }
+    }
+
+    @Test func anExpiredTicketIsRefused() async throws {
+        try await withApp(app) { app in
+            let fixture = try await fixture()
+            let launched = try await launch()
+            let ticket = try #require(Self.ticket(in: launched.html))
+            let row = try #require(try await APILTIDeepLinkRequest.query(on: app.db).first())
+            row.expiresAt = Date().addingTimeInterval(-1)
+            try await row.save(on: app.db)
+            try await choose([fixture.lab1.publicID], ticket: ticket) { res in
+                #expect(res.status == .notFound)
+                #expect(!res.body.string.contains("name=\"JWT\""))
+            }
+        }
+    }
+
+    @Test func aTicketStopsWorkingWhenItsUserIsNoLongerStaff() async throws {
+        try await withApp(app) { app in
+            let fixture = try await fixture()
+            let launched = try await launch()
+            let ticket = try #require(Self.ticket(in: launched.html))
+            let enrollment = try #require(try await APICourseEnrollment.query(on: app.db).first())
+            enrollment.role = .student
+            try await enrollment.save(on: app.db)
+            try await choose([fixture.lab1.publicID], ticket: ticket) { res in
+                #expect(res.status == .forbidden)
+                #expect(!res.body.string.contains("name=\"JWT\""))
+            }
+        }
+    }
+
+    @Test func theTicketIsStoredOnlyAsAHash() async throws {
+        try await withApp(app) { app in
+            _ = try await fixture()
+            let launched = try await launch()
+            let ticket = try #require(Self.ticket(in: launched.html))
+            let row = try #require(try await APILTIDeepLinkRequest.query(on: app.db).first())
+            #expect(row.ticketHash == LTILaunchSecrets.hash(ticket))
+            #expect(row.ticketHash != ticket)
+            #expect(row.returnURL == Self.returnURL)
+            #expect(row.data == "opaque-data")
         }
     }
 }

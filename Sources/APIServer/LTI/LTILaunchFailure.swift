@@ -24,6 +24,7 @@ enum LTILaunchFailure: AbortError, Equatable {
     case deepLinkingUnsupported
     case deepLinkingNotAllowed
     case courseNotLinked
+    case deepLinkCourseNotLinked
 
     var status: HTTPResponseStatus {
         switch self {
@@ -34,7 +35,7 @@ enum LTILaunchFailure: AbortError, Equatable {
         case .stateCookieMissing, .stateUnknown, .stateExpired, .tokenInvalid, .claimRejected,
             .nonceMismatch:
             .unauthorized
-        case .linkRefused, .courseNotLinked, .deepLinkingNotAllowed: .forbidden
+        case .linkRefused, .courseNotLinked, .deepLinkCourseNotLinked, .deepLinkingNotAllowed: .forbidden
         }
     }
 
@@ -60,6 +61,8 @@ enum LTILaunchFailure: AbortError, Equatable {
             "Only course staff can add Chickadee content to the LMS."
         case .courseNotLinked:
             "This LMS course is not linked to a Chickadee course yet. Ask your instructor to open the link once."
+        case .deepLinkCourseNotLinked:
+            "This LMS course is not linked to a Chickadee course yet. Open a Chickadee link from this course in a new window once, then add content again."
         }
     }
 

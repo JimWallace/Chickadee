@@ -528,6 +528,10 @@ func registerMigrations(on app: Application) {
     // not its token URL (Brightspace). Nullable; nil keeps the token URL.
     app.migrations.add(AddLTITokenAudienceColumn())
 
+    // Deep-linking requests carried by a ticket in the picker form, not the
+    // session, so the picker works inside the LMS frame. New table.
+    app.migrations.add(CreateLTIDeepLinkRequests())
+
     // The registered GitHub App (docs/github-submissions.md slice 1). New
     // table, no FKs; an empty table means GitHub submission is off.
     app.migrations.add(CreateGitHubApps())
