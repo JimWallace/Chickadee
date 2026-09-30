@@ -6,152 +6,133 @@ Server Health Alerts
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="page-section">
+    <div class="page-titlebar">
+        <h2>Health alerts #if(enabled):<span class="tier tier-open">Enabled</span>#else:<span class="tier tier-closed">Disabled</span>#endif</h2>
+        <form method="post" action="/admin/alerts/test" class="form-flush">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit">Send test alert</button>
+        </form>
+    </div>
 
     #if(!enabled):
-    <div class="flash flash-neutral" role="status">
-        Alerting is currently <strong>disabled</strong>.  Set <code>ALERT_ENABLED=1</code> in the
-        environment and restart the server to begin evaluating rules.
+    <div class="flash flash-warning" role="status">
+        <strong>Alerting is off.</strong> Set <code>ALERT_ENABLED=1</code> and restart to evaluate rules.
     </div>
     #endif
 
-    <h2>Webhook</h2>
-    <form method="post" action="/admin/alerts/config" class="form-stack section-gap">
-        #csrfFormField()
-        <div class="field-stack">
-            <label for="alert-webhook">Webhook URL</label>
-            <input id="alert-webhook"
-                   class="form-input"
-                   type="url"
-                   name="webhookURL"
-                   value="#(webhookURL)"
-                   placeholder="https://hooks.slack.com/services/…">
-            <p class="field-note">Alerts POST here as they fire and resolve.</p>
-            #if(webhookURLFromEnvironment):
-            <p class="field-note">A fallback URL is also set in the environment as <code>ALERT_WEBHOOK_URL</code>.</p>
-            #endif
+    <div class="card section-gap">
+        <div class="facts-actions">
+            <details class="add-section-details popup-anchor">
+                <summary class="btn action-btn summary-btn">Edit webhook <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+                <div class="add-section-popup card suite-section-popup" role="dialog" aria-label="Edit webhook">
+                    <form method="post" action="/admin/alerts/config" class="form popup-form">
+                        #csrfFormField()
+                        <label class="form-label" for="alert-webhook">
+                            Webhook URL
+                            <input id="alert-webhook" class="form-input" type="url" name="webhookURL"
+                                   value="#(webhookURL)" placeholder="https://hooks.slack.com/services/…">
+                            <span class="field-note field-note--muted">Alerts POST here as they fire and resolve.</span>
+                        </label>
+                        <div class="toolbar">
+                            <button class="btn btn-primary btn-compact" type="submit">Save webhook</button>
+                        </div>
+                    </form>
+                </div>
+            </details>
         </div>
-        <div class="toolbar toolbar--end">
-            <button class="btn btn-primary" type="submit">Save webhook</button>
-        </div>
-    </form>
-    <form method="post" action="/admin/alerts/test" class="alerts-test-form">
-        #csrfFormField()
-        <button class="btn" type="submit">Send test alert</button>
-    </form>
+        <dl class="detail-grid">
+            <dt>Webhook</dt>
+            <dd><code>#(webhookDisplay)</code>#if(webhookURLFromEnvironment): <span class="card-meta">A fallback is set in <code>ALERT_WEBHOOK_URL</code></span>#endif</dd>
+            <dt>Last delivery</dt>
+            <dd>#if(hasLastDelivery):#(lastDeliveryResult) <span class="card-meta js-relative-time" data-iso="#(lastDeliveryISO)">#(lastDeliveryISO)</span>#else:No deliveries yet#endif</dd>
+        </dl>
+    </div>
+</section>
 
+<section class="page-section">
     <h2>Rules</h2>
-    <div class="table-scroll"><table class="results-table">
-        <thead>
-            <tr>
-                <th>Rule</th>
-                <th>Threshold</th>
-                <th>Status</th>
-                <th class="time">Last fired</th>
-            </tr>
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-count"><col class="section-items-seen col-hide-phone">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Rule</th><th scope="col">Condition</th><th scope="col">Status</th><th scope="col">Last fired</th></tr>
         </thead>
         <tbody>
         #for(rule in rules):
             <tr>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="#if(rule.isFiring):alert#else:ok#endif"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg></span></td>
                 <td>
-                    <strong>#(rule.humanReadable)</strong><br>
-                    <code class="alerts-rule-code">#(rule.rule)</code>
-                </td>
-                <td>
-                    #if(rule.rule == "runnerOffline"):
-                        no runner heartbeat for #(runnerOfflineSeconds)s
-                    #elseif(rule.rule == "queueBackedUp"):
-                        ≥ #(queueDepthThreshold) pending OR oldest > #(oldestPendingSeconds)s
-                    #elseif(rule.rule == "errorRateSpike"):
-                        ≥ #(errorRatePercent)% errors+timeouts in last 50 jobs
-                    #elseif(rule.rule == "databaseUnreachable"):
-                        SELECT 1 fails
-                    #endif
+                    <div class="item-title">#(rule.humanReadable)</div>
+                    <div class="item-details">#(rule.thresholdText) · <code>#(rule.rule)</code></div>
                 </td>
                 <td>
                     #if(rule.isFiring):
-                        <span class="tier tier-danger">FIRING</span>
+                    <span class="tier tier-danger">Firing</span>
                     #else:
-                        <span class="tier tier-open">ok</span>
+                    <span class="tier tier-open">OK</span>
                     #endif
                 </td>
-                <td class="time js-relative-time" data-iso="#(rule.lastFiredAt)">
-                    #if(rule.lastFiredAt):#(rule.lastFiredAt)#else:—#endif
+                <td class="col-hide-phone">
+                    #if(rule.lastFiredAt):
+                    <span class="js-relative-time" data-iso="#(rule.lastFiredAt)">#(rule.lastFiredAt)</span>
+                    #else:
+                    Never
+                    #endif
+                    <div class="item-details">last fired</div>
                 </td>
             </tr>
         #endfor
         </tbody>
-    </table></div>
+    </table>
+</section>
 
-    <h2 class="alerts-recent-heading">Recent firings</h2>
-    #if(count(recentFirings) == 0):
+<section class="page-section">
+    <h2>Recent firings</h2>
+    #if(firingCount == 0):
     <p class="empty">No alerts have fired since startup.</p>
     #else:
-    <!-- The audit log's shape — when, what, how it went, payload — minus the
-         actor column, because a rule fires itself and a column reading "system"
-         on every row carries no information.  Two log tables share a shape by
-         asking the same questions, not by having the same column count.
-
-         The summary is the reading a firing exists to deliver ("queue backed
-         up: 64 pending"), so it stays on the page; the payload row holds the
-         delivery mechanics, which are what an operator checks only when the
-         page did not reach them.  WHEN stays relative-only: a firing is
-         operational activity where recency is the question, and the audit log
-         is the forensic table that carries the absolute instant. -->
-    <div class="table-scroll"><table class="results-table">
-        <thead>
-            <tr>
-                <th class="time">When</th>
-                <th>Event</th>
-                <th>Outcome</th>
-                <th>Summary</th>
-            </tr>
+    <!-- The audit log's shape: when, what, how it went.  The actor is left out,
+         because a rule fires itself and a column reading "system" on every row
+         carries no information.  The summary is the reading a firing exists to
+         deliver ("queue backed up: 64 pending"); how it was delivered is one
+         line under it, in red when the page did not reach the operator.  When
+         stays relative: a firing is operational activity where recency is the
+         question, and the audit log is the forensic table that carries the
+         absolute instant. -->
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-count"><col class="section-items-seen col-hide-phone">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Event</th><th scope="col">Summary</th><th scope="col">Outcome</th><th scope="col">When</th></tr>
         </thead>
         <tbody>
-        #for(firing in recentFirings):
+        #for(day in firingDays):
+            <tr class="section-items-heading">
+                <td colspan="4"><strong>#(day.label)</strong></td>
+            </tr>
+            #for(firing in day.rows):
             <tr>
-                <td class="time js-relative-time" data-iso="#(firing.firedAt)">#(firing.firedAt)</td>
-                <td><code>#(firing.rule)</code></td>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="#if(firing.resolved):ok#else:alert#endif"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg></span></td>
+                <td>
+                    <div class="item-title">#(firing.summary)</div>
+                    <div class="item-details#if(firing.deliveryFailed): item-details--danger#endif"><code>#(firing.rule)</code> · #(firing.deliveryText)</div>
+                </td>
                 <td>
                     #if(firing.resolved):
-                        <span class="tier tier-open">resolved</span>
+                    <span class="tier tier-open">Resolved</span>
                     #else:
-                        <span class="tier tier-danger">fired</span>
+                    <span class="tier tier-danger">Fired</span>
                     #endif
                 </td>
-                <td>#(firing.summary)</td>
+                <td class="col-hide-phone js-relative-time" data-iso="#(firing.firedAt)">#(firing.firedAt)</td>
             </tr>
-            <tr class="test-output-row">
-                <td colspan="4">
-                    <details class="test-output-details">
-                        <summary>Payload</summary>
-                        <dl class="detail-grid log-payload">
-                            <dt>Delivery</dt>
-                            <dd>
-                                #if(firing.paged):
-                                    #if(firing.delivered):
-                                        delivered
-                                    #else:
-                                        <span class="text-error">failed</span>
-                                        #if(firing.deliveryError):<br><code class="alerts-delivery-error">#(firing.deliveryError)</code>#endif
-                                    #endif
-                                #else:
-                                    advisory — not paged
-                                #endif
-                            </dd>
-                        </dl>
-                    </details>
-                </td>
-            </tr>
+            #endfor
         #endfor
         </tbody>
-    </table></div>
+    </table>
     #endif
 </section>
-<style>
-.alerts-test-form { margin-bottom: 1.5rem; }
-.alerts-rule-code { font-size: .8em; color: var(--muted); }
-.alerts-recent-heading { margin-top: 1.5rem; }
-.alerts-delivery-error { font-size: .75em; color: var(--muted); }
-</style>
 #endexport
 #endextend

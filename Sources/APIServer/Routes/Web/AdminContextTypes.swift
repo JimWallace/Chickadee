@@ -417,6 +417,8 @@ struct AdminAlertsRuleRow: Encodable {
     let humanReadable: String
     let isFiring: Bool
     let lastFiredAt: String?
+    /// The condition the rule fires on, from the live configuration.
+    let thresholdText: String
 }
 
 struct AdminAlertsContext: Encodable {
@@ -432,7 +434,15 @@ struct AdminAlertsContext: Encodable {
     let oldestPendingSeconds: Int
     let errorRatePercent: Int
     let rules: [AdminAlertsRuleRow]
-    let recentFirings: [AlertFiringRecord]
+    /// The webhook shortened from the middle for display; "Not set" when empty.
+    let webhookDisplay: String
+    /// The newest paged firing's time and result, or none yet.
+    let hasLastDelivery: Bool
+    let lastDeliveryISO: String
+    let lastDeliveryResult: String
+    /// Recent firings under their day headings, newest first.
+    let firingDays: [DayGroup<AdminAlertFiringRow>]
+    let firingCount: Int
     let flashSuccess: String?
     let flashError: String?
 }
@@ -457,6 +467,38 @@ struct AdminAuditRow: Encodable {
     let outcome: String
     /// The status-badge variant `outcome` renders as.
     let outcomeTier: String
+    /// The instant itself, so rows can be grouped by day. Not rendered.
+    let occurredAt: Date
+    /// Time of day in the display zone, in mono, under the day heading.
+    let clockText: String
+    /// "admin", "auth", "agent" or "other": picks the tile.
+    let categoryKey: String
+    let tileKind: String
+    let iconHref: String
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp, timestampISO, actor, category, label, action, targetType, targetID
+        case metadata, remoteAddr, outcome, outcomeTier, clockText, categoryKey, tileKind, iconHref
+    }
+}
+
+/// How an audit entry's category maps to its tile: deployment-admin actions get
+/// a shield, sign-ins a key, agent activity a chip, everything else a neutral tile.
+enum AuditCategoryTile {
+    static func tile(forCategory category: String) -> (key: String, kind: String, icon: String) {
+        switch category {
+        case AuditCategory.users.rawValue, AuditCategory.courses.rawValue,
+            AuditCategory.runner.rawValue, AuditCategory.brightspace.rawValue,
+            AuditCategory.lti.rawValue, AuditCategory.github.rawValue:
+            return ("admin", "outline", "#i-shield")
+        case AuditCategory.authentication.rawValue:
+            return ("auth", "slides", "#i-key")
+        case AuditCategory.mcp.rawValue:
+            return ("agent", "notebook", "#i-cpu")
+        default:
+            return ("other", "link", "#i-link")
+        }
+    }
 }
 
 /// One selectable option in the action-filter dropdown.
@@ -470,6 +512,8 @@ struct AdminAuditContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let rows: [AdminAuditRow]
+    /// The same rows under day headings, newest first.
+    let days: [DayGroup<AdminAuditRow>]
     /// Available action filters (grouped label shown to the admin).
     let actionOptions: [AdminAuditFilterOption]
     /// The actor substring currently filtered on (echoed back into the input).

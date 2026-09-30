@@ -46,9 +46,15 @@ extension AdminRoutes {
 
         let timestampFormatter = waterlooDateTimeFormatter()
         let isoFormatter = ISO8601DateFormatter()
+        let clockFormatter = DateFormatter()
+        clockFormatter.locale = Locale(identifier: "en_CA")
+        clockFormatter.timeZone = DayGrouper.displayTimeZone
+        clockFormatter.dateFormat = "HH:mm:ss"
         let rows = entries.map { entry -> AdminAuditRow in
             let display = AuditActionDisplay.categoryLabel(forRaw: entry.action)
             let outcome = AuditActionDisplay.outcome(forRaw: entry.action)
+            let tile = AuditCategoryTile.tile(forCategory: display.category)
+            let occurredAt = entry.createdAt ?? .distantPast
             return AdminAuditRow(
                 timestamp: entry.createdAt.map { timestampFormatter.string(from: $0) } ?? "—",
                 timestampISO: entry.createdAt.map { isoFormatter.string(from: $0) } ?? "",
@@ -61,7 +67,12 @@ extension AdminRoutes {
                 metadata: entry.metadata ?? "",
                 remoteAddr: entry.remoteAddr ?? "—",
                 outcome: outcome.rawValue,
-                outcomeTier: outcome.tierClass
+                outcomeTier: outcome.tierClass,
+                occurredAt: occurredAt,
+                clockText: entry.createdAt.map { clockFormatter.string(from: $0) } ?? "",
+                categoryKey: tile.key,
+                tileKind: tile.kind,
+                iconHref: tile.icon
             )
         }
 
@@ -83,6 +94,7 @@ extension AdminRoutes {
                 currentUser: req.currentUserContext,
                 activeAdminTab: "audit",
                 rows: rows,
+                days: DayGrouper.group(rows, occurredAt: \.occurredAt),
                 actionOptions: actionOptions,
                 filterActor: filterActor ?? "",
                 filtered: filterAction != nil || filterActor != nil,

@@ -6,21 +6,16 @@ Audit Log
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="page-section">
+    <p class="page-crumb">Data</p>
     <div class="page-titlebar">
-        <h2>Audit Log</h2>
+        <h2>Audit log</h2>
     </div>
+    <p class="section-intro">Sensitive admin actions, sign-ins and agent (MCP / OAuth) activity. Older entries stay in the database.</p>
 
-    <p class="section-intro">
-        Records sensitive admin actions, authentication events, and agent
-        (MCP / OAuth) activity.  The most recent 200 matching entries are
-        shown; older entries remain in the database.
-    </p>
-
-    <form method="get" action="/admin/audit"
-        class="toolbar section-gap">
+    <form method="get" action="/admin/audit" class="toolbar section-gap">
         <label class="field-inline">
-            <span>Action</span>
-            <select name="action" class="form-input input-compact">
+            <span class="visually-hidden">Action</span>
+            <select name="action" class="form-input input-compact" data-ck-submit-on-change>
                 <option value="">All actions</option>
                 #for(option in actionOptions):
                 <option value="#(option.value)"#if(option.selected): selected#endif>#(option.label)</option>
@@ -28,58 +23,56 @@ Audit Log
             </select>
         </label>
         <span class="filter-group">
-            <label class="filter-label" for="audit-actor">Filter by person</label>
+            <label class="filter-label" for="audit-actor">Person</label>
             <input id="audit-actor" class="form-input filter-input" type="search"
                    name="actor" value="#(filterActor)" placeholder="username">
         </span>
-        <button type="submit" class="btn">Filter</button>
         #if(filtered):
-        <a href="/admin/audit" class="btn">Clear</a>
+        <a href="/admin/audit">Clear</a>
         #endif
+        <noscript><button type="submit" class="btn action-btn">Filter</button></noscript>
     </form>
 
     #if(count(rows) == 0):
     <p class="text-muted">#if(filtered):No audit entries match this filter.#else:No audit entries recorded yet.#endif</p>
     #else:
-    <p class="text-muted">
-        Showing #count(rows) of #(matchCount) matching #if(matchCount == 1):entry#else:entries#endif.
-    </p>
-    <!-- The log/event shape: when, who, what, how it went, and a payload that
-         is usually noise.  Category, target, remote address and metadata live
-         in the closed disclosure on a full-width second row — the same shape a
-         submission's output panel uses.  Nothing is dropped; it just stops
-         competing with the four facts a reader scans.  In the last column
-         instead, the payload would have wrapped JSON into the ~200px the four
-         fixed widths left over.
+    <p class="text-muted">Showing the newest #count(rows) of #(matchCount) matching #if(matchCount == 1):entry#else:entries#endif.</p>
+    <!-- The log/event shape: who, what, how it went, and when.  Each entry is
+         one disclosure: its summary is the row, and the panel under it holds
+         category, target, remote address and metadata, which are usually noise.
+         Nothing is dropped; it just stops competing with the facts a reader
+         scans.
 
          Deliberately NOT a sortable-table: the server sends the most recent
          200 of matchCount, newest first, so a client-side re-sort would offer
          "oldest" rows that are only the oldest of that window — a wrong answer
          wearing a sorted table's authority, on a compliance surface. -->
-    <div class="table-scroll"><table class="results-table">
-        <thead>
-            <tr>
-                <th class="audit-col-time">When</th>
-                <th class="audit-col-actor">Actor</th>
-                <th class="audit-col-action">Event</th>
-                <th class="audit-col-outcome">Outcome</th>
-            </tr>
+    <table class="results-table section-items section-items--manage">
+        <thead class="visually-hidden">
+            <tr><th scope="col">Entries</th></tr>
         </thead>
         <tbody>
-            #for(row in rows):
-            <tr>
-                <td class="audit-col-time">
-                    <span class="js-relative-time" data-iso="#(row.timestampISO)"></span>
-                    <span class="log-when-absolute">#(row.timestamp)</span>
-                </td>
-                <td>#(row.actor)</td>
-                <td>#(row.label)<br><code class="audit-action-code">#(row.action)</code></td>
-                <td><span class="tier #(row.outcomeTier)">#(row.outcome)</span></td>
+        #for(day in days):
+            <tr class="section-items-heading">
+                <td><strong>#(day.label)</strong></td>
             </tr>
-            <tr class="test-output-row">
-                <td colspan="4">
-                    <details class="test-output-details">
-                        <summary>Payload</summary>
+            #for(row in day.rows):
+            <tr>
+                <td class="log-entry-cell">
+                    <details class="log-entry">
+                        <summary>
+                            <span class="item-tile" data-kind="#(row.tileKind)"><svg class="icon" aria-hidden="true"><use href="#(row.iconHref)"/></svg></span>
+                            <span>
+                                <span class="item-title"><strong>#(row.actor)</strong> #(row.label)</span>
+                                <span class="item-details"><code>#(row.action)</code>#if(row.targetType): · #(row.targetType)#if(row.targetID): #(row.targetID)#endif#endif · #(row.remoteAddr)</span>
+                            </span>
+                            <span class="tier #(row.outcomeTier)">#(row.outcome)</span>
+                            <span class="log-entry-when">
+                                <span class="log-when-absolute">#(row.clockText)</span>
+                                <span class="item-details js-relative-time" data-iso="#(row.timestampISO)"></span>
+                            </span>
+                            <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                        </summary>
                         <dl class="detail-grid log-payload">
                             <dt>Category</dt>
                             <dd>#(row.category)</dd>
@@ -94,25 +87,18 @@ Audit Log
                 </td>
             </tr>
             #endfor
+        #endfor
         </tbody>
-    </table></div>
+    </table>
     #endif
 </section>
 <style>
-.audit-col-time { width: 11rem; }
-.audit-col-actor { width: 8rem; }
-.audit-col-action { width: 14rem; }
-.audit-col-outcome { width: 7rem; }
-/* Forensic instant; also the no-JS fallback for the empty relative span. */
+/* Forensic instant: mono, over the relative reading. */
 .log-when-absolute {
     display: block;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--gray-600);
-}
-.audit-action-code {
-    font-size: var(--text-xs);
-    color: var(--muted);
 }
 .audit-metadata {
     font-family: var(--font-mono);

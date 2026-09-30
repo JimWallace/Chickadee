@@ -401,6 +401,8 @@ duplicate.
   granted day not yet spent — amber) and a runner's job slots (`used` free,
   `left` busy, `extra` when every slot is busy).  Decorative and `aria-hidden`;
   the text beside it ("2 of 3 left", "2 of 4 busy") is the value.
+- **`.item-tile`** also takes `data-kind` `ok` (green) and `alert` (red) for a rule
+  that is fine or firing.
 - **`.item-details--danger`** — a details line that reports a problem (a timeout's
   limit, a failed delivery, "No course access"): the same line in danger red.
 - **`.detail-grid--cells`** — the facts panel as an auto-fitting grid of
@@ -411,6 +413,11 @@ duplicate.
   the same `.diagnostic-spark` bars (height from `--bar-h`).  `data-state` on a
   `.spark-fill` turns a full bar amber and an idle one grey.  The numbers also sit
   in a visually hidden table after the chart.
+- **`.log-entry`** (with `.log-entry-cell`, `.log-entry-when`) — a log entry whose
+  whole row is one `<details>`: the summary is the row (tile, actor and action,
+  outcome pill, time, a chevron that turns) and the panel under it is the payload
+  as a `.detail-grid`.  The audit log, under day headings; a log stays unsortable.
+  It replaces the `.test-output-row` + `.test-output-details` pairing for log tables, so a new log page does not use the old pair.  A one-field edit on a facts card (the alerts webhook) is a `.popup-anchor` popover, the house idiom for a small form.
 - **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
   above an admin page title.  Visual only; the hidden `h1` already names it.
 - **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
