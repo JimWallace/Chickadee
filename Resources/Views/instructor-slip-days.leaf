@@ -118,7 +118,7 @@ Slip days
                     #endfor
                 </td>
                 <td>
-                    <span class="slip-pips" aria-hidden="true">#for(pip in student.pips):<span class="slip-pip" data-state="#(pip.state)"></span>#endfor</span>
+                    <span class="pips" aria-hidden="true">#for(pip in student.pips):<span class="pip" data-state="#(pip.state)"></span>#endfor</span>
                     <div class="item-details">#(student.leftText)</div>
                 </td>
                 <td>

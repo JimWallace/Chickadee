@@ -22,8 +22,10 @@ extension AdminRoutes {
         guard req.query[String.self, at: "fragment"] == "rows" else {
             return try await rows.encodeResponse(for: req)
         }
-        return try await req.view.render("_worker-rows", WorkerRowsFragmentContext(workers: rows))
-            .encodePollFragment(for: req)
+        return try await req.view.render(
+            "_worker-rows", WorkerRowsFragmentContext(workers: rows.map(AdminRunnerRow.init))
+        )
+        .encodePollFragment(for: req)
     }
 
     // MARK: - GET /admin/runners/:runnerID
@@ -49,11 +51,18 @@ extension AdminRoutes {
             .limit(50)
             .all()
 
-        let usernameByID = try await fetchUsernames(req: req, jobs: recentJobs)
+        let usersByID = try await fetchUsers(req: req, jobs: recentJobs)
         let firstSeenAt = try await fetchFirstSeenAt(req: req, runnerID: runnerID)
         let statusCounts = countStatuses(in: recentJobs)
         let snapshotRows = snapshots.map(snapshotRow(for:))
-        let jobRows = recentJobs.map { jobRow(for: $0, usernameByID: usernameByID) }
+        let limitBySetupID = await timeLimits(for: recentJobs, on: req.db)
+        var jobRows: [AdminRunnerJobRow] = []
+        for metric in recentJobs {
+            jobRows.append(
+                try await jobRow(
+                    for: metric, usersByID: usersByID, limitBySetupID: limitBySetupID, on: req.db))
+        }
+        let chart = Self.utilizationChart(snapshots: snapshots)
         let summary = makeRunnerSummary(worker: worker, recentJobs: recentJobs, statusCounts: statusCounts)
         let tags = makeRunnerTags(profile: runnerProfile)
 
@@ -66,7 +75,10 @@ extension AdminRoutes {
                 summary: summary,
                 recentJobs: jobRows,
                 snapshots: snapshotRows,
-                firstSeenAt: firstSeenAt
+                firstSeenAt: firstSeenAt,
+                chartBars: chart.bars,
+                chartLabels: chart.labels,
+                offlineForText: Self.offlineDuration(of: worker)
             ))
     }
 
@@ -113,7 +125,7 @@ extension AdminRoutes {
         )
     }
 
-    private func fetchUsernames(req: Request, jobs: [JobExecutionMetric]) async throws -> [UUID: String] {
+    private func fetchUsers(req: Request, jobs: [JobExecutionMetric]) async throws -> [UUID: APIUser] {
         let userIDs = Array(Set(jobs.compactMap { $0.userID }))
         let users =
             userIDs.isEmpty
@@ -122,10 +134,26 @@ extension AdminRoutes {
                 .filter(\.$id ~~ userIDs)
                 .all()
         return Dictionary(
-            uniqueKeysWithValues: users.compactMap {
-                guard let id = $0.id else { return nil }
-                return (id, $0.username)
-            })
+            users.compactMap { user in user.id.map { ($0, user) } },
+            uniquingKeysWith: { first, _ in first })
+    }
+
+    /// The per-test time limit of each setup a timed-out job ran against, for the
+    /// "hit the 10s limit" note. A setup whose manifest will not decode is left
+    /// out: the note is a courtesy and must not fail the page.
+    private func timeLimits(for jobs: [JobExecutionMetric], on db: Database) async -> [String: Int] {
+        let setupIDs = Set(jobs.filter { $0.finalStatus == "timeout" }.map(\.testSetupID))
+        guard !setupIDs.isEmpty,
+            let setups = try? await APITestSetup.query(on: db).filter(\.$id ~~ Array(setupIDs)).all()
+        else { return [:] }
+        var limits: [String: Int] = [:]
+        for setup in setups {
+            guard let id = setup.id,
+                let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            else { continue }
+            limits[id] = props.timeLimitSeconds
+        }
+        return limits
     }
 
     private func fetchFirstSeenAt(req: Request, runnerID: String) async throws -> String? {
@@ -162,12 +190,15 @@ extension AdminRoutes {
 
     private func jobRow(
         for metric: JobExecutionMetric,
-        usernameByID: [UUID: String]
-    ) -> AdminRunnerJobRow {
-        AdminRunnerJobRow(
+        usersByID: [UUID: APIUser],
+        limitBySetupID: [String: Int],
+        on db: Database
+    ) async throws -> AdminRunnerJobRow {
+        let user = metric.userID.flatMap { usersByID[$0] }
+        var row = AdminRunnerJobRow(
             submissionID: metric.submissionID,
             assignmentID: metric.assignmentID?.uuidString,
-            username: metric.userID.flatMap { usernameByID[$0] },
+            username: user?.username,
             finalStatus: metric.finalStatus ?? "unknown",
             queueWaitMs: metric.queueWaitMs,
             executionMs: metric.executionMs,
@@ -179,6 +210,84 @@ extension AdminRoutes {
             workdirPeakFormatted: metric.workdirPeakBytes.map(formatBytes),
             completedAt: metric.completedAt.map(iso8601String)
         )
+        if let user {
+            let spec = try await AvatarStore.ensureSpec(for: user, on: db)
+            row.avatar = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative)
+            row.hasAvatar = true
+        }
+        let status = Self.statusPill(for: row.finalStatus)
+        row.statusLabel = status.label
+        row.statusTier = status.tier
+        row.detailsText = Self.jobDetails(row)
+        if row.finalStatus == "timeout", let limit = limitBySetupID[metric.testSetupID] {
+            row.limitText = "hit the \(limit)s limit"
+        }
+        return row
+    }
+
+    /// The pill for a job's final status: passed is ok, failed and errored are
+    /// danger, a timeout is amber, anything else neutral.
+    static func statusPill(for status: String) -> (label: String, tier: String) {
+        switch status {
+        case "passed": return ("Passed", "open")
+        case "failed": return ("Failed", "danger")
+        case "error": return ("Errored", "danger")
+        case "timeout": return ("Timed out", "preview")
+        default: return (status.capitalized, "closed")
+        }
+    }
+
+    /// "wait 1s · run 2s · total 3s · peak disk 12.0 MB · abc123" with the parts a
+    /// job did not record left out.
+    static func jobDetails(_ row: AdminRunnerJobRow) -> String {
+        var parts: [String] = []
+        if let wait = row.queueWaitFormatted { parts.append("wait \(wait)") }
+        if let run = row.executionFormatted { parts.append("run \(run)") }
+        if let total = row.totalProcessingFormatted { parts.append("total \(total)") }
+        if let peak = row.workdirPeakFormatted { parts.append("peak disk \(peak)") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Snapshots oldest to newest as chart bars, plus the x-axis time labels.
+    /// The snapshots arrive newest first, as the query returns them.
+    static func utilizationChart(
+        snapshots: [RunnerSnapshot],
+        timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
+    ) -> (bars: [AdminRunnerChartBar], labels: [String]) {
+        let chronological = Array(snapshots.reversed())
+        let clock = DateFormatter()
+        clock.dateFormat = "HH:mm"
+        clock.timeZone = timeZone
+        let bars = chronological.map { snapshot -> AdminRunnerChartBar in
+            let percent =
+                snapshot.maxJobs > 0
+                ? Int((Double(snapshot.activeJobs) / Double(snapshot.maxJobs) * 100).rounded()) : 0
+            let state = percent >= 100 ? "full" : (percent == 0 ? "idle" : "busy")
+            return AdminRunnerChartBar(
+                heightPercent: max(percent, 2),
+                state: state,
+                title:
+                    "\(clock.string(from: snapshot.recordedAt)) · \(snapshot.activeJobs) / \(snapshot.maxJobs) · \(percent)%"
+            )
+        }
+        guard chronological.count > 1 else {
+            return (bars, chronological.map { clock.string(from: $0.recordedAt) })
+        }
+        let wanted = min(4, chronological.count)
+        let labels = (0..<wanted).map { slot -> String in
+            let index = slot * (chronological.count - 1) / (wanted - 1)
+            return clock.string(from: chronological[index].recordedAt)
+        }
+        return (bars, labels)
+    }
+
+    /// How long a runner has been silent, for the offline notice; empty while it
+    /// is online.
+    static func offlineDuration(of worker: AdminWorkerRow, now: Date = Date()) -> String {
+        guard worker.isOffline, let last = ISO8601DateFormatter().date(from: worker.lastActive) else {
+            return ""
+        }
+        return formatMs(Int(now.timeIntervalSince(last) * 1000))
     }
 
     private func makeRunnerSummary(

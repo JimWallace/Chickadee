@@ -1694,6 +1694,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
     font-size: var(--text-sm);
     color: var(--muted);
 }
+/* A details line that reports a problem: a timeout's limit, a failed delivery. */
+.item-details--danger { color: var(--danger-fg); }
 /* In a details line the kind label is coloured text, not the pill the
    instructor view uses. */
 .item-details .content-item-kind {
@@ -1762,18 +1764,79 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .card > .detail-grid { margin: 0; padding: 1rem 1.25rem; }
 .card > .section-note { margin: 0; padding: 0 1.25rem 1rem; }
 
-/* Slip-day pips: one dot per day in a student's budget. Decorative; the
-   "2 of 3 left" text beside them is the value. Used days are hollow, days still
-   left are teal, and a granted extra that is still left is amber. */
-.slip-pips { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
-.slip-pip {
+/* A group name above a page title: "Data", "Integrations". Visual only; the
+   visually hidden h1 already names the area. */
+.page-crumb {
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+/* Holds the place of a row's ⋯ menu when that row has none, so the buttons in
+   the actions track still line up. Never an empty menu. */
+.row-menu-spacer { display: inline-block; flex: none; width: 1.95rem; height: 1.95rem; }
+
+/* A facts card whose facts are cells in an auto-fitting grid
+   (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them. */
+.detail-grid--cells {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 1rem 1.25rem;
+    max-width: none;
+}
+.detail-grid--cells dt { font-size: var(--text-xs); }
+.detail-grid--cells dd { margin: .15rem 0 0; font-weight: 600; }
+
+/* The sparkline drawn large: a y-scale, a taller plot with a midline, and an
+   x-axis of clock times. Same bars as a card sparkline; amber is a full runner
+   and grey an idle stub. */
+.spark-chart { display: grid; grid-template-columns: auto 1fr; gap: .25rem .5rem; }
+.spark-chart-scale {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-size: var(--text-2xs);
+    color: var(--muted);
+    text-align: right;
+}
+.spark-chart .diagnostic-spark {
+    position: relative;
+    height: 8rem;
+    margin-top: 0;
+    gap: .1rem;
+    border-block: 1px solid var(--border);
+}
+.spark-chart .diagnostic-spark::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    border-top: 1px dashed var(--border);
+}
+.spark-chart .spark-fill[data-state="full"] { background: var(--state-amber); }
+.spark-chart .spark-fill[data-state="idle"] { background: var(--gray-300); }
+.spark-chart-axis {
+    grid-column: 2;
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-2xs);
+    color: var(--muted);
+}
+
+/* Pips: one dot per unit of a budget or capacity (a student's slip days, a
+   runner's job slots). Decorative; the text beside them ("2 of 3 left",
+   "2 of 4 busy") is the value. Hollow is spent or free, teal is left or busy,
+   and amber is a granted extra or a full runner. */
+.pips { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+.pip {
     width: .6rem;
     height: .6rem;
     border-radius: 50%;
     background: var(--kind-graded-bg);
 }
-.slip-pip[data-state="used"] { background: transparent; border: 1px solid var(--gray-400); }
-.slip-pip[data-state="extra"] { background: var(--state-amber); }
+.pip[data-state="used"] { background: transparent; border: 1px solid var(--gray-400); }
+.pip[data-state="extra"] { background: var(--state-amber); }
 .content-item-links a { margin-right: .5rem; }
 .content-item-actions { display: flex; gap: .35rem; align-items: center; }
 .content-item-link-fields {
@@ -2781,7 +2844,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .state-select[data-state="open"]::before,
 .state-select[data-state="visible"]::before,
 .state-select[data-state="mapped"]::before,
-.state-select[data-state="instructor"]::before { background: var(--kind-graded-bg); }
+.state-select[data-state="instructor"]::before,
+.state-select[data-state="admin"]::before { background: var(--kind-graded-bg); }
 .state-select[data-state="preview"]::before,
 .state-select[data-state="ta"]::before { background: var(--state-amber); }
 

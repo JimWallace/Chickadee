@@ -41,41 +41,48 @@ Admin
 <section class="page-section">
     <h2>Runners</h2>
 
-    <div class="table-scroll"><table id="workers-table" class="results-table sortable-table"
-            data-sort-initial="runner:asc" data-sort-tiebreak="runner"
-            data-poll-url="/admin/runners?fragment=rows" data-poll-interval="5000">
-            <thead>
-                <!-- Phone keeps the three columns that answer "is it up and is
-                     it coping": runner, load, last heartbeat. Version and job
-                     count fold into the name cell as .row-phone-meta; the two
-                     averages are trend figures, and trends are desk work. -->
-                <tr>
-                    <th data-sort-key="runner" data-sort-type="text"><button class="sort-header" type="button">Runner</button></th>
-                    <th class="col-hide-phone" data-sort-key="version" data-sort-type="text"><button class="sort-header" type="button">Version</button></th>
-                    <th class="time" data-sort-key="load" data-sort-type="number"><button class="sort-header" type="button">Load</button></th>
-                    <th class="time col-hide-phone" data-sort-key="jobs-processed" data-sort-type="number"><button class="sort-header" type="button">Jobs Processed</button></th>
-                    <th class="time col-hide-phone" data-sort-key="avg-run" data-sort-type="duration"><button class="sort-header" type="button">Avg Run</button></th>
-                    <th class="time col-hide-phone" data-sort-key="avg-wait" data-sort-type="duration"><button class="sort-header" type="button">Avg Wait</button></th>
-                    <th class="time" data-sort-key="last-active" data-sort-type="date"><button class="sort-header" type="button">Last Active</button></th>
-                </tr>
-            </thead>
-            <tbody id="workers-body">
-            #extend("_worker-rows")
-            </tbody>
-        </table></div>
+    <table id="workers-table" class="results-table section-items section-items--manage sortable-table"
+           data-sort-initial="runner:asc" data-sort-tiebreak="runner"
+           data-poll-url="/admin/runners?fragment=rows" data-poll-interval="5000">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status">
+            <col class="section-items-seen col-hide-phone"><col class="section-items-count">
+        </colgroup>
+        <thead>
+            <tr>
+                <th scope="col"><span class="visually-hidden">Runner</span></th>
+                <th data-sort-key="runner" data-sort-type="text"><button class="sort-header" type="button">Runner</button></th>
+                <th data-sort-key="load" data-sort-type="number"><button class="sort-header" type="button">Load</button></th>
+                <th class="col-hide-phone" data-sort-key="last-active" data-sort-type="date"><button class="sort-header" type="button">Last active</button></th>
+                <th scope="col"><span class="visually-hidden">Open</span></th>
+            </tr>
+        </thead>
+        <tbody id="workers-body">
+        #extend("_worker-rows")
+        </tbody>
+    </table>
 </section>
 
 <!-- ── Courses ────────────────────────────────────────── -->
 <section class="page-section">
-    <div class="page-titlebar admin-courses-head">
-        <h2>Courses</h2>
-        <div class="admin-courses-actions">
-            <a href="/admin/courses/new" class="btn">Create course</a>
-            <button class="btn btn-primary" type="button" id="importCourseBtn">Import course</button>
-        </div>
+    <div class="page-titlebar">
+        <h2>Courses <span class="text-muted">#count(courses) active</span></h2>
+        <details class="add-section-details popup-anchor">
+            <summary class="btn action-btn summary-btn">+ Add <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                <a class="row-menu-item" href="/admin/courses/new" role="menuitem">
+                    <span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></span>
+                    <span>Create course<br><span class="card-meta">A new offering in a term</span></span>
+                </a>
+                <button class="row-menu-item" type="button" id="importCourseBtn" role="menuitem">
+                    <span class="item-tile" data-kind="document"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span>
+                    <span>Import course bundle<br><span class="card-meta">From a .zip exported here</span></span>
+                </button>
+            </div>
+        </details>
     </div>
 
-    <!-- Hidden import form — triggered by the button above -->
+    <!-- Hidden import form — triggered by the menu item above -->
     <form method="post" action="/admin/courses/import" enctype="multipart/form-data"
           id="importCourseForm">
         #csrfFormField()
@@ -85,47 +92,67 @@ Admin
     #if(count(courses) == 0):
     <p class="empty">No courses yet.</p>
     #else:
-    <div class="table-scroll"><table class="results-table sortable-table" id="courses-table"
-        data-sort-initial="code:asc" data-sort-tiebreak="code">
-        <thead>
+    #if(showCourseFilter):
+    <div class="toolbar toolbar--end section-gap">
+        <span class="filter-group">
+            <label class="filter-label" for="courses-filter">Filter</label>
+            <input id="courses-filter" class="form-input filter-input" type="search"
+                   placeholder="Filter by code or name…"
+                   data-list-filter="courses-table"
+                   data-list-filter-empty="No courses match this filter.">
+        </span>
+    </div>
+    #endif
+    <table class="results-table section-items section-items--manage" id="courses-table">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-count"><col class="section-items-count">
+        </colgroup>
+        <thead class="visually-hidden">
             <tr>
-                <th data-sort-key="code" data-sort-type="text"><button class="sort-header" type="button">Code</button></th>
-                <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
-                <th data-sort-key="term" data-sort-type="number"><button class="sort-header" type="button">Term</button></th>
-                <th data-sort-key="students" data-sort-type="number"><button class="sort-header" type="button">Students</button></th>
-                <!-- Phone: the submission total is scale you read at a desk;
-                     the enrolment count and the term are what an archive
-                     decision needs, so both stay visible. -->
-                <th class="col-hide-phone" data-sort-key="submissions" data-sort-type="number"><button class="sort-header" type="button">Submissions</button></th>
-                <th>Actions</th>
+                <th scope="col">Course</th>
+                <th scope="col">Name</th>
+                <th scope="col">Students</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
         #for(course in courses):
-            <tr class="status-open">
-                <td><a href="/admin/courses/#(course.id)"><strong>#(course.code)</strong></a></td>
-                <td>#(course.name)</td>
-                <td data-sort-value="#(course.termSortValue)">#if(course.termLabel):#(course.termLabel)#else:—#endif</td>
-                <td>#(course.enrollmentCount)</td>
-                <td class="col-hide-phone">#(course.submissionCount)</td>
-                <td class="action-cell">
-                    <a class="btn action-btn action-btn-icon" href="/admin/courses/#(course.id)#clone-course"
-                       title="Clone course" aria-label="Clone course">
-                        <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
-                    </a>
-                    <form method="post" action="/admin/courses/#(course.id)/archive" class="inline-form">
-                        #csrfFormField()
-                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
-                                title="Archive course" aria-label="Archive course"
-                                data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back.">
-                            <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>
-                        </button>
-                    </form>
+            <tr>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg></span></td>
+                <td>
+                    <div class="item-title"><a href="/admin/courses/#(course.id)">#(course.code) — #(course.name)</a></div>
+                    <div class="item-details">#if(course.termLabel):#(course.termLabel) · #endif#(course.submissionCount) submissions</div>
+                </td>
+                <td class="item-grade"><strong>#(course.enrollmentCount)</strong><div class="item-details">students</div></td>
+                <td>
+                    <div class="assignment-actions-cell">
+                        <a class="btn action-btn action-btn-icon" href="/admin/courses/#(course.id)#clone-course"
+                           title="Clone course" aria-label="Clone course">
+                            <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
+                        </a>
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(course.code)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                <a class="row-menu-item" href="/admin/courses/#(course.id)/export" role="menuitem">
+                                    <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export course bundle
+                                </a>
+                                <form method="post" action="/admin/courses/#(course.id)/archive"
+                                      data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back.">
+                                    #csrfFormField()
+                                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>Archive course
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
                 </td>
             </tr>
         #endfor
         </tbody>
-    </table></div>
+    </table>
     #endif
 
 </section>
@@ -133,32 +160,12 @@ Admin
 <style>
 /* Clickable diagnostic-card + sparkline styles are global (styles.css),
    shared with the instructor dashboard. */
-.worker-host {
-    font-size: .8em;
-    color: var(--muted);
-}
-.runner-load-busy {
-    font-weight: 600;
-}
-.admin-courses-head {
-    gap: 0;
-    flex-wrap: nowrap;
-}
-.admin-courses-actions {
-    display: flex;
-    gap: .5rem;
-}
-.action-cell {
-    display: flex;
-    gap: .4rem;
-    flex-wrap: wrap;
-    align-items: center;
-}
 tr.runner-row-offline {
     opacity: .5;
 }
 </style>
 <script src="/sortable-table.js?v=#appVersion()"></script>
+<script src="/list-filter.js?v=#appVersion()"></script>
 <script src="/table-poll.js?v=#appVersion()"></script>
 <!-- Load summary, diagnostic cards, the Active Users card and the
      import-course picker are wired by Public/admin-dashboard.js. -->
