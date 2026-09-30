@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.280] - 2026-09-30
+
+### Fixed
+
+- **Brightspace can read the LTI key set.** `GET /lti/jwks` is now sent uncompressed. The server answered a client that accepts `deflate` with zlib-wrapped deflate, and Brightspace reported "Keyset URL cannot be reached" when it registered the tool, although the request returned 200.
+
+
 ## [0.5.279] - 2026-09-30
 
 ### Added
