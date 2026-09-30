@@ -403,7 +403,9 @@ duplicate.
 - **`.state-select`** — a real `<select>` in a wrapper whose dot shows the
   state (`data-state`: open, visible and instructor are teal; preview and ta are
   `--state-amber`; anything else is grey).  The select text is the value; the
-  dot is only the scan cue.  It holds what is changed most on a row.
+  dot is only the scan cue.  It holds what is changed most on a row.  A select
+  here has no native arrow: the wrapper draws its own chevron, because a native
+  select can ignore the padding that keeps the dot clear of the text.
 - **`.row-phone-meta`** — a table's phone-width restatement of the columns
   `.col-hide-phone` drops below 640px: the student dashboard's Due and History,
   the admin runners table's version and job count.  Sits inside the name cell,
