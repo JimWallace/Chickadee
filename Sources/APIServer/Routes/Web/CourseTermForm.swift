@@ -43,6 +43,25 @@ enum CourseTermInput: Equatable {
 }
 
 enum CourseTermForm {
+    /// How many years before and after the current year the year select offers.
+    static let yearsBefore = 1
+    static let yearsAfter = 2
+
+    /// The years a term select offers: last year to two years ahead. The
+    /// current year is marked when `selected` is nil. A `selected` year outside
+    /// the window is added so an older course keeps its own value.
+    static func yearOptions(
+        selected: Int?, now: Date = Date(), calendar: Calendar = Calendar(identifier: .gregorian)
+    ) -> [CourseTermOption] {
+        let current = calendar.component(.year, from: now)
+        let marked = selected ?? current
+        var years = Set((current - yearsBefore)...(current + yearsAfter))
+        if AcademicTerm.yearRange.contains(marked) { years.insert(marked) }
+        return years.sorted().map {
+            CourseTermOption(value: String($0), label: String($0), selected: $0 == marked)
+        }
+    }
+
     /// The three seasons in calendar order, with `selected` marked.
     static func options(selected: TermSeason?) -> [CourseTermOption] {
         TermSeason.allCases.map {
