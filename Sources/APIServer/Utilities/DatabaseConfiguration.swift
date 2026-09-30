@@ -528,6 +528,10 @@ func registerMigrations(on app: Application) {
     // not its token URL (Brightspace). Nullable; nil keeps the token URL.
     app.migrations.add(AddLTITokenAudienceColumn())
 
+    // Deep-linking requests carried by a ticket in the picker form, not the
+    // session, so the picker works inside the LMS frame. New table.
+    app.migrations.add(CreateLTIDeepLinkRequests())
+
     // The registered GitHub App (docs/github-submissions.md slice 1). New
     // table, no FKs; an empty table means GitHub submission is off.
     app.migrations.add(CreateGitHubApps())
@@ -555,6 +559,11 @@ func registerMigrations(on app: Application) {
     // Course codes unique per term (docs/course-terms.md slice 3). Index
     // only; must follow `AddCourseTerm`, which creates the columns.
     app.migrations.add(ScopeCourseCodeIndexToTerm())
+
+    // When a student's class handle locked (docs/student-avatars.md §3).
+    // Nullable column on `course_enrollments`; nil = the student may still
+    // choose once.
+    app.migrations.add(AddAvatarHandleLock())
 
     // Data repair, registered LAST for the same reason as
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every

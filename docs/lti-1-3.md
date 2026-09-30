@@ -74,6 +74,11 @@ D2L supports "open as external resource" (a new window) for an LTI link. Use it.
 Iframe support is out of scope. If it is necessary later, it must start with a
 measurement of the isolation result inside the platform iframe.
 
+There is one exception: the Deep Linking picker. D2L always opens it in a
+frame on its own page, and the instructor cannot change that. The picker
+runs no kernel, so isolation does not matter to it, and it is built for the
+frame (see "Deep Linking" below).
+
 ## Tool identity (slice 1)
 
 ### The tool key
@@ -241,25 +246,47 @@ one, and a student does not become a TA because the LMS says so later.
 **Status:** implemented. `LTIDeepLinkRoutes`, `LTIDeepLinkingResponse`,
 `LTIPendingDeepLink`.
 
+The picker runs in a frame on the LMS page. A browser sends no `SameSite=Lax`
+cookie there, so Chickadee's session cookie does not arrive, and Safari blocks
+every unpartitioned cookie from another site. The flow therefore uses no
+session:
+
 1. The launch checks an `LtiDeepLinkingRequest` before anyone is signed in:
    the `deep_linking_settings` claim must accept `ltiResourceLink` and give an
    `https` return URL, the launch must name a context, and the role must be TA
    or instructor. A student gets 403; anything else gets 400.
-2. The verified request (return URL, `data`, deployment, `accept_multiple`) is
-   held in the session. The return URL comes only from the signed token, never
-   from the browser, so the picker cannot be pointed at another site. Every
-   launch first clears an older, unanswered request.
-3. `/lti/deep-link` lists the bound course's assignments, as checkboxes or, when
-   the platform accepts one item, radios. An unbound context goes through
-   `/lti/bind` first and then continues to the picker.
-4. The choice becomes an `LtiDeepLinkingResponse` signed with the tool key:
+2. The launch-state cookie is `Partitioned` over HTTPS, so the login and the
+   launch find it inside the frame. Once the platform is known, the launch
+   response admits the platform's issuer origin in `frame-ancestors` and drops
+   `X-Frame-Options`, so a refusal shows as a sentence, not a blank frame.
+   Every other page keeps `frame-ancestors 'self'` and `SAMEORIGIN`.
+3. The verified request (return URL, `data`, deployment, `accept_multiple`),
+   the course, the platform and the signed-in user are stored as an
+   `lti_deep_link_requests` row under a random ticket. Only the ticket's
+   SHA-256 is stored. The row lives 30 minutes. The return URL comes only from
+   the signed token, never from the browser, so the picker cannot be pointed
+   at another site.
+4. The launch response is the picker itself: the bound course's assignments,
+   as checkboxes or, when the platform accepts one item, radios, with the
+   ticket in a hidden field. There is no redirect. An unbound context is
+   refused with a sentence that says to open a Chickadee link from the course
+   in a new window once, because `/lti/bind` needs the session.
+5. `POST /lti/deep-link` is public and outside the CSRF group. The ticket
+   authenticates it: it is unguessable, names one request, and dies when used,
+   so it also does the CSRF token's job. The route refuses an unknown,
+   answered or expired ticket with one 404, and checks again that the stored
+   user is TA or instructor in the course. A refused choice (nothing chosen,
+   two on a single-item platform) keeps the ticket. A valid one consumes it
+   atomically (`UPDATE … WHERE consumed = false`) before signing.
+6. The choice becomes an `LtiDeepLinkingResponse` signed with the tool key:
    `iss` = the client ID, `aud` = the platform issuer, the request's `data`
    echoed, and one `ltiResourceLink` per assignment with the launch URL and
    `custom.assignment` = the assignment public ID. It is audited as
    `lti.content_linked`.
-5. The return page posts the JWT to the return URL. Its CSP `form-action`
-   allows exactly that origin for that one response. There is no auto-submit:
-   the CSP forbids inline script, so the page has one button.
+7. The return page posts the JWT to the return URL. Its CSP `form-action`
+   allows exactly that origin for that one response, and its `frame-ancestors`
+   the platform's. There is no auto-submit: the CSP forbids inline script, so
+   the page has one button.
 
 A resource-link launch that carries `custom.assignment` opens that assignment,
 when it is in the bound course, at its vanity URL; otherwise it opens the

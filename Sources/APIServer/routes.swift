@@ -16,6 +16,11 @@ func routes(_ app: Application) throws {
     _ = app.ltiToolKeyProvider
     _ = app.ltiPlatformKeyCache
     try app.register(collection: LTIRoutes())
+    // The deep-linking picker's choice (docs/lti-1-3.md "Deep Linking").
+    // Public and outside the CSRF group: the picker runs in the LMS frame,
+    // where the session cookie is not sent, so a single-use ticket in the
+    // form authenticates the choice instead.
+    try app.register(collection: LTIDeepLinkRoutes())
     // GitHub webhook deliveries (docs/github-submissions.md slice 5): signed by
     // GitHub, so no session and no CSRF token.
     try app.register(collection: GitHubWebhookRoutes())
@@ -66,7 +71,6 @@ func routes(_ app: Application) throws {
     // Binds an LMS course to a Chickadee course after an instructor launch
     // (docs/lti-1-3.md "Courses"). A first-party form, so it rides the CSRF group.
     try auth.register(collection: LTIBindRoutes())
-    try auth.register(collection: LTIDeepLinkRoutes())
     // Registered last so fixed-path routes always take precedence.
     try auth.register(collection: VanityURLRoutes())
 

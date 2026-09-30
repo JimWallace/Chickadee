@@ -121,7 +121,8 @@ func buildUnionPresentation(
     for tally in tally.kills {
         guard
             let identity = try await identities.presentation(
-                for: tally.userID, includeName: includeNames, fallbackLabel: "Student", on: db)
+                for: tally.userID, includeName: includeNames,
+                lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Student", on: db)
         else { continue }
         kills.append(
             UnionKillRow(
@@ -134,7 +135,8 @@ func buildUnionPresentation(
     for tally in tally.defences {
         guard
             let identity = try await identities.presentation(
-                for: tally.userID, includeName: includeNames, fallbackLabel: "Student", on: db)
+                for: tally.userID, includeName: includeNames,
+                lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Student", on: db)
         else { continue }
         let statusText: String
         if tally.defeated {
@@ -177,7 +179,8 @@ func buildTournamentPresentation(
     var bySeed: [Int: TournamentEntrantPresentation] = [:]
     for entrant in entrants {
         let identity = try await identities.presentation(
-            for: entrant.userID, includeName: includeNames, fallbackLabel: "Seed \(entrant.seed)", on: db)
+            for: entrant.userID, includeName: includeNames,
+            lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Seed \(entrant.seed)", on: db)
         // A dropped entrant keeps their seed on the bracket they played.
         bySeed[entrant.seed] = TournamentEntrantPresentation(
             seed: entrant.seed,
@@ -239,6 +242,10 @@ func buildChampionPresentation(
             .first()
     else { return nil }
     let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
+    // The same lock as a ranking row: a classmate has now seen this handle.
+    if !includeNames, champion.userID != viewerID {
+        await AvatarStore.lockHandle(for: enrollment, on: db)
+    }
     let spec = try await AvatarStore.ensureSpec(for: user, on: db)
     let accessibility: AvatarAccessibility = handle.isEmpty ? .labelled("Champion") : .decorative
     // The model requires the date; the fallback only keeps the two strings
@@ -502,7 +509,8 @@ func buildLeaderboardRows(
         }
         guard
             let identity = try await identities.presentation(
-                for: entry.userID, includeName: includeNames, fallbackLabel: "Student \(rank)", on: db)
+                for: entry.userID, includeName: includeNames,
+                lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Student \(rank)", on: db)
         else { continue }
         rows.append(
             LeaderboardRow(
@@ -538,7 +546,8 @@ func buildStandingRows(
         }
         guard
             let identity = try await identities.presentation(
-                for: standing.userID, includeName: includeNames, fallbackLabel: "Student \(rank)", on: db)
+                for: standing.userID, includeName: includeNames,
+                lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Student \(rank)", on: db)
         else { continue }
         rows.append(
             StandingRow(
@@ -603,11 +612,20 @@ struct RankedIdentities {
     }
 
     /// nil when `isOnRoster` is false.
+    ///
+    /// `lockingFor` is the student viewing the page, or nil for a staff view.
+    /// Showing a handle to a classmate locks it (docs/student-avatars.md §3):
+    /// from then on the student cannot choose a different one.  A student's own
+    /// row, and anything staff see, locks nothing.
     func presentation(
-        for userID: UUID, includeName: Bool, fallbackLabel: String, on db: Database
+        for userID: UUID, includeName: Bool, lockingFor viewerID: UUID?, fallbackLabel: String,
+        on db: Database
     ) async throws -> Presentation? {
         guard let user = userByID[userID], let enrollment = enrollmentByUser[userID] else { return nil }
         let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
+        if let viewerID, viewerID != userID {
+            await AvatarStore.lockHandle(for: enrollment, on: db)
+        }
         let spec = try await AvatarStore.ensureSpec(for: user, on: db)
         // Decorative when the handle carries the identity; the bird must
         // announce whose it is only when there is no handle beside it.

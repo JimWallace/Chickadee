@@ -6,7 +6,7 @@
 // Both are drawn once and stored, never re-derived.  See
 // docs/student-avatars.md — re-deriving a spec on each render means appending
 // one option to one slot reshuffles every existing avatar, and re-deriving a
-// handle means a student's name changes when the word lists grow.
+// handle means a student's name changes when the word lists change.
 
 import Core
 import Fluent
@@ -71,7 +71,9 @@ enum AvatarStore {
     static func ensureHandle(
         for enrollment: APICourseEnrollment, on db: Database
     ) async throws -> String? {
-        if let handle = enrollment.avatarHandle, AvatarHandle.isWellFormed(handle) {
+        // Shape, not list membership: a handle from an earlier word list is
+        // kept, because a list change must never rename a student mid-term.
+        if let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) {
             return handle
         }
         let courseID = enrollment.$course.id
@@ -99,6 +101,121 @@ enum AvatarStore {
                 .flatMap { $0?.avatarHandle }
             enrollment.avatarHandle = winner
             return winner
+        }
+    }
+
+    /// Replaces this enrollment's handle with a fresh draw from the current
+    /// lists.  This is the staff "Give new handle" action, for a handle that
+    /// must change (a student reports that it matches a real name).  Nothing
+    /// calls it automatically: a list change never renames a student mid-term.
+    ///
+    /// Returns nil when the course has exhausted the current lists, and leaves
+    /// the old handle in place.  A lost unique-index race is retried with the
+    /// winner's handle excluded.
+    static func redrawHandle(
+        for enrollment: APICourseEnrollment, on db: Database
+    ) async throws -> String? {
+        let courseID = enrollment.$course.id
+        var taken = Set(
+            try await APICourseEnrollment.query(on: db)
+                .filter(\.$course.$id == courseID)
+                .all()
+                .compactMap(\.avatarHandle))
+        let previous = enrollment.avatarHandle
+        for _ in 0..<3 {
+            guard let handle = AvatarHandle.make(excluding: taken) else { break }
+            enrollment.avatarHandle = handle
+            do {
+                try await enrollment.save(on: db)
+                return handle
+            } catch {
+                taken.insert(handle)
+            }
+        }
+        enrollment.avatarHandle = previous
+        return nil
+    }
+
+    // MARK: - The student's one choice (docs/student-avatars.md §3)
+
+    /// Every handle already stored in this course.
+    static func takenHandles(inCourse courseID: UUID, on db: Database) async throws -> Set<String> {
+        Set(
+            try await APICourseEnrollment.query(on: db)
+                .filter(\.$course.$id == courseID)
+                .all()
+                .compactMap(\.avatarHandle))
+    }
+
+    /// Two unused handles from the current lists, for the account page's
+    /// "Choose a different handle" panel.  They are not reserved: the choice
+    /// is checked again against the unique index when the student picks one.
+    /// Fewer than two when the course has nearly exhausted the lists.
+    static func drawAlternates(
+        for enrollment: APICourseEnrollment, count: Int = 2, on db: Database
+    ) async throws -> [String] {
+        var taken = try await takenHandles(inCourse: enrollment.$course.id, on: db)
+        var alternates: [String] = []
+        while alternates.count < count, let handle = AvatarHandle.make(excluding: taken) {
+            alternates.append(handle)
+            taken.insert(handle)
+        }
+        return alternates
+    }
+
+    /// Whether an offered alternate can still be picked: from the current
+    /// lists and not stored by anybody in the course.
+    static func isStillAvailable(_ handle: String, taken: Set<String>) -> Bool {
+        AvatarHandle.isWellFormed(handle) && !taken.contains(handle)
+    }
+
+    enum HandleChoice: Equatable {
+        /// The handle is now the student's, and it is locked.
+        case chosen
+        /// The handle was already locked; nothing changed.
+        case locked
+        /// Somebody else stored this handle first; nothing changed.
+        case taken
+    }
+
+    /// The student's one change.  Saves `handle` and locks it in the same
+    /// write, so a second change is refused.  The caller has already checked
+    /// that `handle` was one of the alternates it offered.
+    static func chooseHandle(
+        _ handle: String, for enrollment: APICourseEnrollment, on db: Database
+    ) async throws -> HandleChoice {
+        guard enrollment.avatarHandleLockedAt == nil else { return .locked }
+        let courseID = enrollment.$course.id
+        guard try await !takenHandles(inCourse: courseID, on: db).contains(handle) else { return .taken }
+
+        let previous = enrollment.avatarHandle
+        enrollment.avatarHandle = handle
+        enrollment.avatarHandleLockedAt = Date()
+        do {
+            try await enrollment.save(on: db)
+            return .chosen
+        } catch {
+            enrollment.avatarHandle = previous
+            enrollment.avatarHandleLockedAt = nil
+            // A concurrent pick of the same handle loses on the unique index.
+            // Anything else is a real failure.
+            if (try? await takenHandles(inCourse: courseID, on: db).contains(handle)) == true {
+                return .taken
+            }
+            throw error
+        }
+    }
+
+    /// Locks this enrollment's handle, because somebody other than the student
+    /// or staff has now seen it.  A no-op once locked, and never worth failing
+    /// the page that showed the handle.
+    static func lockHandle(for enrollment: APICourseEnrollment, on db: Database) async {
+        guard enrollment.avatarHandle != nil, enrollment.avatarHandleLockedAt == nil else { return }
+        enrollment.avatarHandleLockedAt = Date()
+        do {
+            try await enrollment.save(on: db)
+        } catch {
+            enrollment.avatarHandleLockedAt = nil
         }
     }
 

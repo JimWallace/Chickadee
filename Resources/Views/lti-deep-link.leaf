@@ -10,10 +10,10 @@ Add to LMS
 #endif
 #if(count(assignments) == 0):
 <p class="empty">This course has no assignments yet.</p>
-<p class="section-note"><a href="/instructor/new">Create an assignment</a>, then open the LMS content picker again.</p>
+<p class="section-note"><a href="/instructor/new" target="_blank" rel="noopener noreferrer">Create an assignment</a>, then open the LMS content picker again.</p>
 #else:
 <form method="post" action="/lti/deep-link" class="form-stack">
-    #csrfFormField()
+    <input type="hidden" name="ticket" value="#(ticket)">
     <fieldset class="fieldset-plain">
         <legend class="visually-hidden">Assignments</legend>
         <div class="checkbox-list">

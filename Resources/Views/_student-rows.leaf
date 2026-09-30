@@ -84,6 +84,15 @@
                             <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
                         </summary>
                         <div class="popover-panel row-menu-panel" role="menu">
+                            #if(!student.isPending):
+                            <form method="post" action="#(student.newHandleURL)"
+                                  data-confirm="Give @#(student.username) a new class handle? They will see the new handle on their account page and on leaderboards.">
+                                #csrfFormField()
+                                <button class="row-menu-item" type="submit" role="menuitem">
+                                    <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Give new handle
+                                </button>
+                            </form>
+                            #endif
                             <form method="post" action="#(student.unenrollURL)" data-confirm="Remove @#(student.username) from this course?">
                                 #csrfFormField()
                                 <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
