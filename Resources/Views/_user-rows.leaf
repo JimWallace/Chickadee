@@ -1,51 +1,62 @@
         #for(user in users):
             <tr>
-                <td>
-                    #if(user.displayName):
-                        #(user.displayName)
-                    #else:
-                        —
+                <td class="item-tile-cell">
+                    #if(user.hasAvatar):
+                    #extend("_avatar", user.avatar)
                     #endif
                 </td>
-                <td><code>#(user.username)</code></td>
-                <td>
+                <td data-sort-value="#if(user.displayName):#(user.displayName)#else:#(user.username)#endif">
+                    #if(user.displayName):
+                    <div class="item-title">#(user.displayName)</div>
+                    #else:
+                    <div class="item-title"><code>#(user.username)</code></div>
+                    #endif
+                    <div class="item-details">#if(user.displayName):<code>#(user.username)</code> · #endif joined <span class="js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</span></div>
+                </td>
+                <td data-sort-value="#(user.role)">
                     #if(user.role == "mcp"):
-                    <code>mcp</code>
+                    <span class="tier tier-preview">MCP service</span>
                     #else:
                     <form method="post" action="/admin/users/#(user.id)/role"
-                          class="role-form">
+                          class="inline-form form-flush">
                         #csrfFormField()
                         <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
-                        <select id="role-#(user.id)" name="role" class="form-input role-select">
-                            <option value="user"  #if(user.role == "user"):selected#endif>user</option>
-                            <option value="admin" #if(user.role == "admin"):selected#endif>admin</option>
-                        </select>
-                        <button class="btn action-btn" type="submit">Save</button>
+                        <span class="state-select" data-state="#(user.role)">
+                            <select id="role-#(user.id)" name="role" class="form-input" data-ck-submit-on-change>
+                                <option value="user"#if(user.role == "user"): selected#endif>User</option>
+                                <option value="admin"#if(user.role == "admin"): selected#endif>Admin</option>
+                            </select>
+                        </span>
                     </form>
                     #endif
                 </td>
-                <td class="time js-relative-time col-hide-phone" data-iso="#(user.lastSeenAt)">
+                <td class="col-hide-phone js-relative-time" data-iso="#(user.lastSeenAt)">
                     #if(user.lastSeenAt):
                         #(user.lastSeenAt)
                     #else:
                         —
                     #endif
                 </td>
-                <td class="time js-relative-time col-hide-phone" data-iso="#(user.createdAt)">#(user.createdAt)</td>
                 <td>
-                    <div class="user-actions">
+                    <div class="assignment-actions-cell">
                         <a href="/admin/users/#(user.id)"
                            class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">
                             <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
                         </a>
-                        <form method="post" action="/admin/users/#(user.id)/delete" class="user-delete-form">
-                            #csrfFormField()
-                            <button class="btn action-btn action-btn-icon action-danger" type="submit"
-                                    title="Delete user" aria-label="Delete user"
-                                    data-confirm="Delete @#(user.username)? They lose access immediately and their enrollments are removed. Their submissions are kept, and a returning user gets a new account rather than this one.">
-                                <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
-                            </button>
-                        </form>
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(user.username)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                <form method="post" action="/admin/users/#(user.id)/delete"
+                                      data-confirm="Delete @#(user.username)? They lose access immediately and their enrollments are removed. Their submissions are kept, and a returning user gets a new account rather than this one.">
+                                    #csrfFormField()
+                                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem" aria-label="Delete user">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Delete user
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
                     </div>
                 </td>
             </tr>

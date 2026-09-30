@@ -112,21 +112,29 @@
     --shadow-pop: 0 4px 16px rgba(0, 0, 0, .15);
 
     /* ── Avatar palette (generated student chickadees) ────
-       Five axes vary: cap family, wing pattern, expression, accessory,
-       backdrop.  Everything else is FIXED — body, cheek, beak, bib, eye — and
-       that is deliberate: they are what keeps every bird a chickadee even when
-       the cap goes plum.  Only the BACKDROPS have dark-mode mirrors; the bird
-       itself must be the same bird in both schemes.
-       An accessory is drawn in one of five accents, picked by cap family, so
-       an accent is never a sixth axis. */
-    --avatar-ink-cap: #2B2F3A;      --avatar-ink-wing: #454B5E;
-    --avatar-slate-cap: #3A4550;    --avatar-slate-wing: #556372;
-    --avatar-teal-cap: #1D5560;     --avatar-teal-wing: #2F7F8C;
-    --avatar-forest-cap: #2B4A35;   --avatar-forest-wing: #436B4E;
-    --avatar-indigo-cap: #3A3F6B;   --avatar-indigo-wing: #565D95;
-    --avatar-plum-cap: #5A3550;     --avatar-plum-wing: #7D5071;
-    --avatar-rust-cap: #7A3F24;     --avatar-rust-wing: #A55F38;
-    --avatar-umber-cap: #5A4630;    --avatar-umber-wing: #836B4A;
+       Seven axes vary: cap family, wing pattern, expression, accessory,
+       backdrop, tuft and tilt.  Tuft is drawn in the cap colour and tilt is a
+       transform, so neither adds a colour here.  Everything else is FIXED —
+       body, cheek, beak, bib, eye — and that is deliberate: they are what
+       keeps every bird a chickadee even when the cap goes plum.  Only the
+       BACKDROPS have dark-mode mirrors; the bird itself must be the same bird
+       in both schemes.  An accessory is drawn in one of five accents, so an
+       accent is part of the accessory axis, never an axis of its own.
+
+       Cap tones spread across hue AND lightness since the tune-up, because
+       at the roster size cap hue is one of the few things that still reads.
+       The white eye disc sits on the cap, so every -cap keeps at least 3:1
+       against #FFFFFF (WCAG relative luminance): ink 15.1, slate 5.4,
+       teal 4.7 (the lowest), forest 6.0, indigo 6.9, plum 7.0, rust 5.2,
+       umber 6.2. */
+    --avatar-ink-cap: #23262F;      --avatar-ink-wing: #555D74;
+    --avatar-slate-cap: #5A6C7E;    --avatar-slate-wing: #8B9DAE;
+    --avatar-teal-cap: #15808C;     --avatar-teal-wing: #5BB3BD;
+    --avatar-forest-cap: #2E6F47;   --avatar-forest-wing: #67A27B;
+    --avatar-indigo-cap: #4452AA;   --avatar-indigo-wing: #7F8AD0;
+    --avatar-plum-cap: #853F79;     --avatar-plum-wing: #B77DAA;
+    --avatar-rust-cap: #B14F24;     --avatar-rust-wing: #DB8857;
+    --avatar-umber-cap: #7A5C36;    --avatar-umber-wing: #B09464;
 
     --avatar-accent-ember: #C2523F;
     --avatar-accent-orchid: #7A4A86;
@@ -134,13 +142,13 @@
     --avatar-accent-honey: #D79A2B;
     --avatar-accent-moss: #4A6B3A;
 
-    --avatar-back-sky: #DBE9EE;
-    --avatar-back-aqua: #D9ECE8;
-    --avatar-back-sage: #DFEADD;
-    --avatar-back-straw: #F2E9D2;
-    --avatar-back-peach: #F7E3D6;
-    --avatar-back-rose: #F4DFE2;
-    --avatar-back-lilac: #E6E2F0;
+    --avatar-back-sky: #D0E5F0;
+    --avatar-back-aqua: #CBEAE3;
+    --avatar-back-sage: #D9EBD0;
+    --avatar-back-straw: #F4E4BE;
+    --avatar-back-peach: #F9D9C6;
+    --avatar-back-rose: #F6D2DA;
+    --avatar-back-lilac: #E0D8F4;
     --avatar-back-pebble: #E6E6E2;
 
     /* Fixed, every bird: the chickadee under the variation. */
@@ -151,6 +159,8 @@
     --avatar-eye: #22242C;
     --avatar-glint: #FFFFFF;
     --avatar-gear: #33363F;
+    --avatar-blush: #F2AE9F;
+    --avatar-mouth: #8E3A2C;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1688,12 +1698,16 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .item-tile[data-kind="document"] { background: var(--kind-document-bg); color: var(--kind-document-fg); }
 .item-tile[data-kind="outline"] { background: var(--kind-outline-bg); color: var(--kind-outline-fg); }
 .item-tile[data-kind="graded"] { background: var(--kind-graded-bg); color: var(--kind-graded-fg); }
+.item-tile[data-kind="ok"] { background: var(--open-bg); color: var(--open-fg); }
+.item-tile[data-kind="alert"] { background: var(--danger-bg); color: var(--danger-fg); }
 
 .item-title { font-weight: 600; }
 .item-details {
     font-size: var(--text-sm);
     color: var(--muted);
 }
+/* A details line that reports a problem: a timeout's limit, a failed delivery. */
+.item-details--danger { color: var(--danger-fg); }
 /* In a details line the kind label is coloured text, not the pill the
    instructor view uses. */
 .item-details .content-item-kind {
@@ -1762,18 +1776,116 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .card > .detail-grid { margin: 0; padding: 1rem 1.25rem; }
 .card > .section-note { margin: 0; padding: 0 1.25rem 1rem; }
 
-/* Slip-day pips: one dot per day in a student's budget. Decorative; the
-   "2 of 3 left" text beside them is the value. Used days are hollow, days still
-   left are teal, and a granted extra that is still left is amber. */
-.slip-pips { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
-.slip-pip {
+/* A group name above a page title: "Data", "Integrations". Visual only; the
+   visually hidden h1 already names the area. */
+.page-crumb {
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+/* Holds the place of a row's ⋯ menu when that row has none, so the buttons in
+   the actions track still line up. Never an empty menu. */
+.row-menu-spacer { display: inline-block; flex: none; width: 1.95rem; height: 1.95rem; }
+
+/* A facts card whose facts are cells in an auto-fitting grid
+   (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them. */
+.detail-grid--cells {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 1rem 1.25rem;
+    max-width: none;
+}
+.detail-grid--cells dt { font-size: var(--text-xs); }
+.detail-grid--cells dd { margin: .15rem 0 0; font-weight: 600; }
+
+/* The sparkline drawn large: a y-scale, a taller plot with a midline, and an
+   x-axis of clock times. Same bars as a card sparkline; amber is a full runner
+   and grey an idle stub. */
+.spark-chart { display: grid; grid-template-columns: auto 1fr; gap: .25rem .5rem; }
+.spark-chart-scale {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-size: var(--text-2xs);
+    color: var(--muted);
+    text-align: right;
+}
+.spark-chart .diagnostic-spark {
+    position: relative;
+    height: 8rem;
+    margin-top: 0;
+    gap: .1rem;
+    border-block: 1px solid var(--border);
+}
+.spark-chart .diagnostic-spark::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    border-top: 1px dashed var(--border);
+}
+.spark-chart .spark-fill[data-state="full"] { background: var(--state-amber); }
+.spark-chart .spark-fill[data-state="idle"] { background: var(--gray-300); }
+.spark-chart-axis {
+    grid-column: 2;
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-2xs);
+    color: var(--muted);
+}
+
+/* A log entry whose whole row is the disclosure: tile, actor and what they did,
+   outcome, when, and a chevron that turns when it opens. The panel under it
+   holds the payload. */
+.section-items td.log-entry-cell { padding: 0; }
+.log-entry > summary {
+    display: grid;
+    grid-template-columns: 2.25rem 1fr auto 6.5rem 1rem;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem .9rem;
+    cursor: pointer;
+    list-style: none;
+}
+.log-entry > summary::-webkit-details-marker { display: none; }
+.log-entry > summary > .icon:last-child { transition: transform .15s; }
+.log-entry[open] > summary > .icon:last-child { transform: rotate(180deg); }
+.log-entry .item-title, .log-entry .item-details { display: block; }
+.log-entry-when { text-align: right; }
+.log-entry .log-payload { margin: 0 0 .75rem 4rem; max-width: none; }
+
+/* A share bar: a 4px track whose teal fill is --share, a percent the server
+   worked out for the row (the Storage page). The label beside it is the value. */
+.share-bar {
+    display: block;
+    height: 4px;
+    background: var(--border);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+.share-bar::before {
+    content: "";
+    display: block;
+    width: var(--share, 0);
+    height: 100%;
+    background: var(--health-teal);
+}
+
+/* Pips: one dot per unit of a budget or capacity (a student's slip days, a
+   runner's job slots). Decorative; the text beside them ("2 of 3 left",
+   "2 of 4 busy") is the value. Hollow is spent or free, teal is left or busy,
+   and amber is a granted extra or a full runner. */
+.pips { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+.pip {
     width: .6rem;
     height: .6rem;
     border-radius: 50%;
     background: var(--kind-graded-bg);
 }
-.slip-pip[data-state="used"] { background: transparent; border: 1px solid var(--gray-400); }
-.slip-pip[data-state="extra"] { background: var(--state-amber); }
+.pip[data-state="used"] { background: transparent; border: 1px solid var(--gray-400); }
+.pip[data-state="extra"] { background: var(--state-amber); }
 .content-item-links a { margin-right: .5rem; }
 .content-item-actions { display: flex; gap: .35rem; align-items: center; }
 .content-item-link-fields {
@@ -2781,7 +2893,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .state-select[data-state="open"]::before,
 .state-select[data-state="visible"]::before,
 .state-select[data-state="mapped"]::before,
-.state-select[data-state="instructor"]::before { background: var(--kind-graded-bg); }
+.state-select[data-state="instructor"]::before,
+.state-select[data-state="admin"]::before { background: var(--kind-graded-bg); }
 .state-select[data-state="preview"]::before,
 .state-select[data-state="ta"]::before { background: var(--state-amber); }
 
@@ -2905,7 +3018,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .account-identity .text-muted { font-size: var(--text-sm); }
 
 /* The generated student chickadee.  One svg carrying the size class wraps the
-   five use elements that stack into a bird (see _avatar-sprite.leaf); the spec
+   six use elements that stack into a bird (see _avatar-sprite.leaf); the spec
    picks the varying colours by assigning palette tokens to the --av-* custom
    properties on that element, which is the sanctioned inline form.
 
@@ -2955,7 +3068,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-pupil { fill: var(--avatar-eye); }
 .av-glint { fill: var(--avatar-glint); }
 .av-wing-mark { fill: var(--avatar-body); }
-.av-lash { fill: none; stroke: var(--avatar-eye); }
+.av-brow { fill: none; stroke: var(--avatar-body); }
+.av-blush { fill: var(--avatar-blush); opacity: .85; }
+.av-mouth { fill: var(--avatar-mouth); }
 .av-gear { fill: var(--avatar-gear); }
 .av-gear-line { fill: none; stroke: var(--avatar-gear); }
 .av-bloom-eye { fill: var(--avatar-beak); }

@@ -313,18 +313,20 @@ duplicate.
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
-- **`.avatar`** and the `.av-*` fill classes — the generated student chickadee.
-  One `<svg>` carrying the size class wraps five `<use>` elements naming symbols
-  in `_avatar-sprite.leaf`: backdrop, plumage, wing, expression, accessory.
+- **`.avatar`** and the `.av-*` part classes — the generated student chickadee.
+  One `<svg>` carrying the size class wraps six `<use>` elements naming symbols
+  in `_avatar-sprite.leaf`: backdrop, then — inside one group that carries the
+  tilt transform — tuft, plumage, wing, expression, accessory.
   **A page that renders `_avatar` must also include `_avatar-sprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
   which no guard can catch.  Only four colours are per-student
   (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, assigned inline,
   which is the sanctioned form); the fixed parts of the bird — `.av-body`,
   `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
-  `.av-wing-mark`, `.av-lash`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
+  `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
+  `.av-gear-line`, `.av-bloom-eye` —
   read the palette directly, because a body or a beak that varied would stop
-  the birds being one species.  **Two sizes.**  `.avatar` alone is 3rem: the
+  the birds being one species.  **Three sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
   table row where the handle beside it carries the identity — the leaderboard —
   because below 48px the bird is recognition, not identification, and a row
@@ -396,10 +398,36 @@ duplicate.
   `.row-menu-item--danger` and keep their `data-confirm`.  An item that adds
   something carries a small `.item-tile` and may add a one-line `.card-meta`
   hint.
-- **`.slip-pips`** (with `.slip-pip`, keyed by `data-state`) — one dot per day in a
-  student's slip-day budget: `used` is hollow, `left` teal, `extra` (a granted
-  day not yet spent) amber.  Decorative and `aria-hidden`; the "2 of 3 left"
-  text beside it is the value.
+- **`.pips`** (with `.pip`, keyed by `data-state`) — one dot per unit of a budget
+  or capacity: a student's slip days (`used` hollow, `left` teal, `extra` — a
+  granted day not yet spent — amber) and a runner's job slots (`used` free,
+  `left` busy, `extra` when every slot is busy).  Decorative and `aria-hidden`;
+  the text beside it ("2 of 3 left", "2 of 4 busy") is the value.
+- **`.item-tile`** also takes `data-kind` `ok` (green) and `alert` (red) for a rule
+  that is fine or firing.
+- **`.item-details--danger`** — a details line that reports a problem (a timeout's
+  limit, a failed delivery, "No course access"): the same line in danger red.
+- **`.detail-grid--cells`** — the facts panel as an auto-fitting grid of
+  label-over-value cells (`<div><dt>…</dt><dd>…</dd></div>`), for ten or more
+  facts (the runner detail); omit a fact with no value rather than showing a dash.
+- **`.spark-chart`** (with `.spark-chart-scale`, `.spark-chart-axis`) — a sparkline
+  drawn large: a 100 / 50 / 0 scale, a taller plot and an x-axis of times, around
+  the same `.diagnostic-spark` bars (height from `--bar-h`).  `data-state` on a
+  `.spark-fill` turns a full bar amber and an idle one grey.  The numbers also sit
+  in a visually hidden table after the chart.
+- **`.log-entry`** (with `.log-entry-cell`, `.log-entry-when`) — a log entry whose
+  whole row is one `<details>`: the summary is the row (tile, actor and action,
+  outcome pill, time, a chevron that turns) and the panel under it is the payload
+  as a `.detail-grid`.  The audit log, under day headings; a log stays unsortable.
+  It replaces the `.test-output-row` + `.test-output-details` pairing for log tables, so a new log page does not use the old pair.  A one-field edit on a facts card (the alerts webhook) is a `.popup-anchor` popover, the house idiom for a small form.
+- **`.share-bar`** — a 4px track with a teal fill whose width is the `--share` custom
+  property (a percent the server worked out for that row); the percent label beside
+  it is the value.  Storage, by assignment.
+- **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
+  above an admin page title.  Visual only; the hidden `h1` already names it.
+- **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
+  row type only sometimes has one, so the actions track lines up.  Never an
+  empty menu.
 - **`.state-select`** — a real `<select>` in a wrapper whose dot shows the
   state (`data-state`: open, visible and instructor are teal; preview and ta are
   `--state-amber`; anything else is grey).  The select text is the value; the

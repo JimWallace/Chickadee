@@ -13,6 +13,11 @@ struct AdminUserRow: Content {
     let role: String
     let createdAt: String
     let lastSeenAt: String?
+    /// The user's own seeded avatar, at the roster size; nil on the JSON feed's
+    /// decode path for rows that predate it. `hasAvatar` is the flat flag the
+    /// template branches on (a bare optional in a Leaf conditional is unreliable).
+    var avatar: AvatarPresentation?
+    var hasAvatar: Bool = false
 }
 
 struct AdminWorkerRow: Content {
@@ -35,6 +40,67 @@ struct AdminWorkerRow: Content {
     /// replaced only ran during a poll, so a freshly loaded dashboard showed
     /// no offline badges at all until the first tick.
     let isOffline: Bool
+}
+
+/// One runner as the Overview table draws it: the facts of `AdminWorkerRow`
+/// plus the strings and pips the row shows, built once so the page and the poll
+/// fragment cannot disagree. The JSON feed keeps `AdminWorkerRow`.
+struct AdminRunnerRow: Encodable {
+    let workerID: String
+    let isOffline: Bool
+    let assignedJobs: Int
+    let maxConcurrentJobs: Int
+    let lastActive: String
+    let runnerVersion: String
+    let jobsProcessed: Int
+    let avgExecutionMs: Int?
+    let avgQueueWaitMs: Int?
+    /// "host · version · 12 jobs · avg run 14s · avg wait 3s"; a missing value is
+    /// left out rather than shown as a dash.
+    let detailsText: String
+    /// True when the runner reports a slot count, so the load track draws pips.
+    let hasSlots: Bool
+    let pips: [SlipDayPip]
+    /// "2 of 4 busy" or "idle"; the plain count when the runner reports no slots.
+    let loadLabel: String
+
+    init(_ worker: AdminWorkerRow) {
+        workerID = worker.workerID
+        isOffline = worker.isOffline
+        assignedJobs = worker.assignedJobs
+        maxConcurrentJobs = worker.maxConcurrentJobs
+        lastActive = worker.lastActive
+        runnerVersion = worker.runnerVersion
+        jobsProcessed = worker.jobsProcessed
+        avgExecutionMs = worker.avgExecutionMs
+        avgQueueWaitMs = worker.avgQueueWaitMs
+        let jobs = "\(worker.jobsProcessed) \(worker.jobsProcessed == 1 ? "job" : "jobs")"
+        var parts: [String] = []
+        if !worker.hostname.isEmpty { parts.append(worker.hostname) }
+        if !worker.runnerVersion.isEmpty { parts.append(worker.runnerVersion) }
+        parts.append(jobs)
+        if let run = worker.avgExecutionFormatted { parts.append("avg run \(run)") }
+        if let wait = worker.avgQueueWaitFormatted { parts.append("avg wait \(wait)") }
+        detailsText = parts.joined(separator: " · ")
+        hasSlots = worker.maxConcurrentJobs > 0
+        pips = Self.loadPips(assigned: worker.assignedJobs, slots: worker.maxConcurrentJobs)
+        if worker.maxConcurrentJobs > 0 {
+            loadLabel =
+                worker.assignedJobs == 0
+                ? "idle" : "\(worker.assignedJobs) of \(worker.maxConcurrentJobs) busy"
+        } else {
+            loadLabel = worker.assignedJobs == 0 ? "idle" : "\(worker.assignedJobs) busy"
+        }
+    }
+
+    /// One pip per slot, busy ones first. `left` draws busy; once every slot is
+    /// busy they all read `extra` (amber), the "at capacity" cue.
+    static func loadPips(assigned: Int, slots: Int) -> [SlipDayPip] {
+        guard slots > 0 else { return [] }
+        let busy = min(max(assigned, 0), slots)
+        if busy == slots { return Array(repeating: SlipDayPip(state: "extra"), count: slots) }
+        return (0..<slots).map { SlipDayPip(state: $0 < busy ? "left" : "used") }
+    }
 }
 
 struct AdminCourseRow: Encodable {
@@ -107,6 +173,18 @@ struct AdminRunnerJobRow: Encodable {
     let workdirPeakBytes: Int?
     let workdirPeakFormatted: String?
     let completedAt: String?
+    /// The submitting student's own seeded avatar; the row shows a grey tile and
+    /// "No user" when the job has no user (a validation run, say).
+    var avatar: AvatarPresentation?
+    var hasAvatar: Bool = false
+    /// The status as the pill words it, and the pill's class suffix
+    /// ("open" passed, "danger" failed or errored, "preview" timed out).
+    var statusLabel: String = ""
+    var statusTier: String = "closed"
+    /// "wait 1s · run 2s · total 3s · peak disk 12.0 MB" — missing parts left out.
+    var detailsText: String = ""
+    /// "hit the 10s limit" on a timed-out job whose limit is known; else empty.
+    var limitText: String = ""
 }
 
 struct AdminRunnerSnapshotRow: Encodable {
@@ -145,13 +223,54 @@ struct AdminStorageContext: Encodable, Sendable {
     let totalFormatted: String
     let dbBackend: String
     let assignments: [AdminAssignmentStorageRow]
+    /// Raw bytes behind `totalFormatted`, the denominator of each assignment's
+    /// share. Zero when a caller does not know it.
+    var totalBytes: Int = 0
+}
+
+/// One assignment as the Storage page draws it: its footprint as a share of the
+/// whole, and as a bar sized against the largest row.
+struct AdminStorageShareRow: Encodable, Sendable {
+    let assignmentTitle: String
+    let courseCode: String
+    /// "suite 1.2 MB · submissions 3.4 MB · 12 submissions".
+    let detailsText: String
+    let totalFormatted: String
+    /// This row's percent of the total on disk, for the label ("<1%" under one).
+    let shareLabel: String
+    /// The bar's width, 0...100, relative to the largest row so the biggest row
+    /// always fills it and the rest read against it.
+    let barPercent: Int
+
+    /// Rows in the order given (largest first), with the share and bar worked
+    /// out. `totalBytes` of zero falls back to the sum of the rows.
+    static func rows(from assignments: [AdminAssignmentStorageRow], totalBytes: Int) -> [Self] {
+        let denominator = totalBytes > 0 ? totalBytes : assignments.reduce(0) { $0 + $1.totalBytes }
+        let largest = assignments.map(\.totalBytes).max() ?? 0
+        return assignments.map { row in
+            let share = denominator > 0 ? Double(row.totalBytes) / Double(denominator) * 100 : 0
+            let label = row.totalBytes > 0 && share < 1 ? "<1%" : "\(Int(share.rounded()))%"
+            let bar = largest > 0 ? Int((Double(row.totalBytes) / Double(largest) * 100).rounded()) : 0
+            let count = "\(row.submissionCount) \(row.submissionCount == 1 ? "submission" : "submissions")"
+            return AdminStorageShareRow(
+                assignmentTitle: row.assignmentTitle,
+                courseCode: row.courseCode,
+                detailsText: "suite \(row.testSuiteFormatted) · submissions \(row.submissionsFormatted) · \(count)",
+                totalFormatted: row.totalFormatted,
+                shareLabel: label,
+                barPercent: row.totalBytes > 0 ? max(bar, 1) : 0)
+        }
+    }
 }
 
 struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
-    let workers: [AdminWorkerRow]
+    let workers: [AdminRunnerRow]
     let courses: [AdminCourseRow]
+    /// Whether the course list is long enough to earn a filter box
+    /// (`ListFilterPolicy`).
+    let showCourseFilter: Bool
     let version: String
     /// Default (24h) activity series, JSON-encoded into the page so the chart
     /// renders before the first poll.  The client re-fetches GET /admin/activity
@@ -162,13 +281,12 @@ struct AdminContext: Encodable {
     // one): under the CI build's batch/non-WMO mode the synthesized init's
     // symbol can fail to emit, producing an "undefined reference to
     // AdminContext.init(...)" link error in chickadee-server. A hand-written
-    // init is emitted normally and sidesteps that. It is intentionally
-    // identical to the memberwise init, so silence the "unneeded" rule.
-    // swiftlint:disable:next unneeded_synthesized_initializer
+    // init is emitted normally and sidesteps that. It also derives
+    // `showCourseFilter` from the course count.
     init(
         currentUser: CurrentUserContext?,
         activeAdminTab: String,
-        workers: [AdminWorkerRow],
+        workers: [AdminRunnerRow],
         courses: [AdminCourseRow],
         version: String,
         activityChart: ActivityChartData
@@ -177,6 +295,7 @@ struct AdminContext: Encodable {
         self.activeAdminTab = activeAdminTab
         self.workers = workers
         self.courses = courses
+        self.showCourseFilter = ListFilterPolicy.showsFilter(rowCount: courses.count)
         self.version = version
         self.activityChart = activityChart
     }
@@ -186,11 +305,13 @@ struct AdminUsersContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let users: [AdminUserRow]
+    let userCount: Int
+    let adminCount: Int
 }
 
 /// Context for the rows-only fragment of the runners table (`?fragment=rows`).
 struct WorkerRowsFragmentContext: Encodable {
-    let workers: [AdminWorkerRow]
+    let workers: [AdminRunnerRow]
 }
 
 /// Context for the rows-only fragment of the users table (`?fragment=rows`).
@@ -248,6 +369,7 @@ struct AdminStoragePageContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let storage: AdminStorageContext
+    let assignmentRows: [AdminStorageShareRow]
 }
 
 struct AdminUserDetailContext: Encodable {
@@ -288,6 +410,16 @@ struct AdminCourseDetailContext: Encodable {
     var cloneTermOptions: [CourseTermOption] = []
 }
 
+/// One snapshot drawn as a bar of the utilization chart.
+struct AdminRunnerChartBar: Encodable {
+    /// Bar height as a percent of the plot; a 0% snapshot keeps a 2% stub so its
+    /// slot is visible.
+    let heightPercent: Int
+    /// "idle" (grey stub), "busy" (teal) or "full" (amber, every slot in use).
+    let state: String
+    let title: String
+}
+
 struct AdminRunnerDetailContext: Encodable {
     let currentUser: CurrentUserContext?
     let runner: AdminWorkerRow
@@ -296,6 +428,12 @@ struct AdminRunnerDetailContext: Encodable {
     let recentJobs: [AdminRunnerJobRow]
     let snapshots: [AdminRunnerSnapshotRow]
     let firstSeenAt: String?
+    /// The snapshots oldest to newest, one bar each.
+    let chartBars: [AdminRunnerChartBar]
+    /// Three or four evenly spaced clock times for the chart's x-axis.
+    let chartLabels: [String]
+    /// "12m 3s" — how long since the last heartbeat; empty while the runner is online.
+    let offlineForText: String
 }
 
 struct AdminCourseEnrolledUserRow: Encodable {
@@ -318,6 +456,8 @@ struct AdminAlertsRuleRow: Encodable {
     let humanReadable: String
     let isFiring: Bool
     let lastFiredAt: String?
+    /// The condition the rule fires on, from the live configuration.
+    let thresholdText: String
 }
 
 struct AdminAlertsContext: Encodable {
@@ -333,7 +473,15 @@ struct AdminAlertsContext: Encodable {
     let oldestPendingSeconds: Int
     let errorRatePercent: Int
     let rules: [AdminAlertsRuleRow]
-    let recentFirings: [AlertFiringRecord]
+    /// The webhook shortened from the middle for display; "Not set" when empty.
+    let webhookDisplay: String
+    /// The newest paged firing's time and result, or none yet.
+    let hasLastDelivery: Bool
+    let lastDeliveryISO: String
+    let lastDeliveryResult: String
+    /// Recent firings under their day headings, newest first.
+    let firingDays: [DayGroup<AdminAlertFiringRow>]
+    let firingCount: Int
     let flashSuccess: String?
     let flashError: String?
 }
@@ -358,6 +506,38 @@ struct AdminAuditRow: Encodable {
     let outcome: String
     /// The status-badge variant `outcome` renders as.
     let outcomeTier: String
+    /// The instant itself, so rows can be grouped by day. Not rendered.
+    let occurredAt: Date
+    /// Time of day in the display zone, in mono, under the day heading.
+    let clockText: String
+    /// "admin", "auth", "agent" or "other": picks the tile.
+    let categoryKey: String
+    let tileKind: String
+    let iconHref: String
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp, timestampISO, actor, category, label, action, targetType, targetID
+        case metadata, remoteAddr, outcome, outcomeTier, clockText, categoryKey, tileKind, iconHref
+    }
+}
+
+/// How an audit entry's category maps to its tile: deployment-admin actions get
+/// a shield, sign-ins a key, agent activity a chip, everything else a neutral tile.
+enum AuditCategoryTile {
+    static func tile(forCategory category: String) -> (key: String, kind: String, icon: String) {
+        switch category {
+        case AuditCategory.users.rawValue, AuditCategory.courses.rawValue,
+            AuditCategory.runner.rawValue, AuditCategory.brightspace.rawValue,
+            AuditCategory.lti.rawValue, AuditCategory.github.rawValue:
+            return ("admin", "outline", "#i-shield")
+        case AuditCategory.authentication.rawValue:
+            return ("auth", "slides", "#i-key")
+        case AuditCategory.mcp.rawValue:
+            return ("agent", "notebook", "#i-cpu")
+        default:
+            return ("other", "link", "#i-link")
+        }
+    }
 }
 
 /// One selectable option in the action-filter dropdown.
@@ -371,6 +551,8 @@ struct AdminAuditContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let rows: [AdminAuditRow]
+    /// The same rows under day headings, newest first.
+    let days: [DayGroup<AdminAuditRow>]
     /// Available action filters (grouped label shown to the admin).
     let actionOptions: [AdminAuditFilterOption]
     /// The actor substring currently filtered on (echoed back into the input).

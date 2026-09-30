@@ -89,7 +89,9 @@ struct AdminRoutes: RouteCollection {
         let bsSyncEnabled = req.application.brightSpaceAppCredentials != nil
         // Archived courses move out of Overview and live on the Retention tab.
         let iso = ISO8601DateFormatter()
-        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
+        let courseRows = allCourses.sorted {
+            $0.code.localizedStandardCompare($1.code) == .orderedAscending
+        }.compactMap { course -> AdminCourseRow? in
             guard let id = course.id, !course.isArchived else { return nil }
             return AdminCourseRow(
                 id: id.uuidString,
@@ -114,7 +116,7 @@ struct AdminRoutes: RouteCollection {
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "overview",
-            workers: workerRows,
+            workers: workerRows.map(AdminRunnerRow.init),
             courses: courseRows,
             version: ChickadeeVersion.current,
             activityChart: activityChart
@@ -144,7 +146,9 @@ struct AdminRoutes: RouteCollection {
         let ctx = AdminUsersContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "users",
-            users: userRows
+            users: userRows,
+            userCount: userRows.count,
+            adminCount: userRows.filter { $0.role == UserRole.admin.rawValue }.count
         )
         return try await req.view.render("admin-users", ctx)
     }
@@ -198,16 +202,23 @@ struct AdminRoutes: RouteCollection {
             }
 
         let iso = ISO8601DateFormatter()
-        return users.map { u in
-            AdminUserRow(
-                id: u.id?.uuidString ?? "",
-                displayName: u.displayName,
-                username: u.username,
-                role: u.role,
-                createdAt: u.createdAt.map { iso.string(from: $0) } ?? "—",
-                lastSeenAt: u.lastSeenAt.map { iso.string(from: $0) }
-            )
+        var rows: [AdminUserRow] = []
+        for user in users {
+            // Each person's own seeded bird, the one their account page shows.
+            // A user seen here for the first time gets one written.
+            let spec = try await AvatarStore.ensureSpec(for: user, on: db)
+            rows.append(
+                AdminUserRow(
+                    id: user.id?.uuidString ?? "",
+                    displayName: user.displayName,
+                    username: user.username,
+                    role: user.role,
+                    createdAt: user.createdAt.map { iso.string(from: $0) } ?? "—",
+                    lastSeenAt: user.lastSeenAt.map { iso.string(from: $0) },
+                    avatar: AvatarPresentation(for: spec, size: .roster, accessibility: .decorative),
+                    hasAvatar: true))
         }
+        return rows
     }
 
     // MARK: - GET /admin/storage
@@ -218,7 +229,9 @@ struct AdminRoutes: RouteCollection {
         let ctx = AdminStoragePageContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "storage",
-            storage: storage
+            storage: storage,
+            assignmentRows: AdminStorageShareRow.rows(
+                from: storage.assignments, totalBytes: storage.totalBytes)
         )
         return try await req.view.render("admin-storage", ctx)
     }
@@ -348,7 +361,8 @@ struct AdminRoutes: RouteCollection {
             rows: rows,
             totalFormatted: humanReadableBytes(total),
             dbBackend: app.appConfig.database.backend.rawValue,
-            assignments: assignmentRows
+            assignments: assignmentRows,
+            totalBytes: total
         )
     }
 
@@ -442,10 +456,13 @@ struct AdminRoutes: RouteCollection {
                 rule: rule.rawValue,
                 humanReadable: rule.humanReadable,
                 isFiring: state.isFiring,
-                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) }
+                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) },
+                thresholdText: rule.thresholdText(configuration)
             )
         }
 
+        let firingRows = recent.map(AdminAlertFiringRow.init)
+        let lastDelivery = AdminAlertsPresentation.lastDelivery(firingRows, records: recent)
         let ctx = AdminAlertsContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "alerts",
@@ -459,7 +476,12 @@ struct AdminRoutes: RouteCollection {
             oldestPendingSeconds: Int(configuration.oldestPendingSeconds),
             errorRatePercent: Int((configuration.errorRateThreshold * 100).rounded()),
             rules: ruleRows,
-            recentFirings: recent,
+            webhookDisplay: AdminAlertsPresentation.webhookDisplay(effectiveURL),
+            hasLastDelivery: lastDelivery != nil,
+            lastDeliveryISO: lastDelivery?.iso ?? "",
+            lastDeliveryResult: lastDelivery?.result ?? "",
+            firingDays: DayGrouper.group(firingRows, occurredAt: \.occurredAt),
+            firingCount: firingRows.count,
             flashSuccess: query.ok,
             flashError: query.error
         )

@@ -15,16 +15,28 @@ import Vapor
 
 enum AvatarStore {
 
-    /// This user's stored avatar, drawing and saving one on first call.
+    /// This user's stored avatar, drawing and saving one on first call, and
+    /// filling any axis added since it was stored.
     ///
     /// - Important: do NOT call inside an enclosing `db.transaction { … }`.
     ///   On Postgres a failed write aborts the whole transaction, so the
     ///   recover-by-refetch below would itself throw — the same rule, and the
     ///   same reason, as `AssignmentSeedStore.ensureSeed`.
     static func ensureSpec(for user: APIUser, on db: Database) async throws -> AvatarSpec {
-        if let stored = user.avatarSpecJSON, let spec = decode(stored) { return spec }
-
-        let spec = AvatarSpec.drawn()
+        var spec: AvatarSpec
+        if let stored = user.avatarSpecJSON, let decoded = decode(stored) {
+            // A spec stored before the tuft and tilt axes existed decodes with
+            // their defaults. Fill ONLY those slots, once, and write it back:
+            // a draw into an empty slot, not a reshuffle, so every slot the
+            // student already has stays as it is. Without this, every student
+            // who predates the axes would stay tuftless and upright, a cohort
+            // their classmates could see.
+            let missing = AvatarSpec.missingAxes(inStoredJSON: stored)
+            if missing.isEmpty { return decoded }
+            spec = decoded.fillingMissing(missing)
+        } else {
+            spec = AvatarSpec.drawn()
+        }
         user.avatarSpecJSON = encode(spec)
         do {
             try await user.save(on: db)
@@ -41,7 +53,11 @@ enum AvatarStore {
             // is precisely what the comment above says must never happen. The
             // drawn spec is a perfectly good answer; the next load persists it.
             let winner = (try? await APIUser.find(user.id, on: db)).flatMap { $0?.avatarSpecJSON }
-            if let winner, let spec = decode(winner) { return spec }
+            if let winner, AvatarSpec.missingAxes(inStoredJSON: winner).isEmpty,
+                let stored = decode(winner)
+            {
+                return stored
+            }
         }
         return spec
     }

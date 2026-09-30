@@ -3,18 +3,20 @@
 Runner #(runner.workerID)
 #endexport
 #export("content"):
+#extend("_avatar-sprite")
 <!-- Detail-page shape, shared with the course and user pages: titlebar (name,
      current state, actions) → subtitle (the identifiers you would paste into a
      ticket) → a status block ONLY when something is wrong → the facts → the
-     history.  The facts used to be a second column inside the titlebar, which
+     history (a utilization chart, then recent jobs).  The facts used to be a second column inside the titlebar, which
      put ten measurements level with the page name and left the one fact that
      needed attention — that the runner is offline — as a grey pill in the
      heading. -->
 <section class="page-section">
+    <p class="page-crumb"><a href="/admin">Overview</a> › Runners</p>
     <div data-runner-id="#(runner.workerID)" class="page-titlebar">
         <h1><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="tier"#if(!runner.isOffline): hidden#endif>Offline</span></h1>
     </div>
-    <p class="page-subtitle">
+    <p class="section-intro">
         <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
         ·
         <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
@@ -22,41 +24,8 @@ Runner #(runner.workerID)
     </p>
 
     <div id="runner-offline-status" class="flash flash-warning" role="status"#if(!runner.isOffline): hidden#endif>
-        No heartbeat recently, so Chickadee has stopped handing this runner work. Queued jobs wait for a runner that is online.
+        <strong>No heartbeat#if(offlineForText != ""): for #(offlineForText)#endif.</strong> Chickadee has stopped handing this runner work; queued jobs wait for a runner that is online.
     </div>
-
-    <dl class="detail-grid section-gap">
-        <dt>Last active</dt>
-        <dd><span id="runner-last-active" class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></dd>
-        <dt>Capacity</dt>
-        <dd>#(summary.activeJobs) / #(summary.maxJobs)</dd>
-        <dt>Jobs processed</dt>
-        <dd>#(summary.jobsProcessed)</dd>
-        <dt>Avg run</dt>
-        <dd>#if(summary.avgExecutionFormatted):#(summary.avgExecutionFormatted)#else:—#endif</dd>
-        <dt>Avg wait</dt>
-        <dd>#if(summary.avgQueueWaitFormatted):#(summary.avgQueueWaitFormatted)#else:—#endif</dd>
-        <dt>Avg setup/other</dt>
-        <dd>#if(summary.avgOverheadFormatted):#(summary.avgOverheadFormatted)#else:—#endif</dd>
-        <dt>Avg cache acquire</dt>
-        <dd>#if(summary.avgCacheAcquireFormatted):#(summary.avgCacheAcquireFormatted)#else:—#endif</dd>
-        <dt>Cache hit rate</dt>
-        <dd>#if(summary.cacheHitRateFormatted):#(summary.cacheHitRateFormatted)#else:—#endif</dd>
-        <dt>Avg download</dt>
-        <dd>#if(summary.avgDownloadFormatted):#(summary.avgDownloadFormatted)#else:—#endif</dd>
-        <dt>Avg prep</dt>
-        <dd>#if(summary.avgPrepFormatted):#(summary.avgPrepFormatted)#else:—#endif</dd>
-        #if(count(tags) > 0):
-        <dt>Tags</dt>
-        <dd>
-            <div class="chip-row">
-                #for(tag in tags):
-                <span class="chip">#(tag)</span>
-                #endfor
-            </div>
-        </dd>
-        #endif
-    </dl>
 
     <div class="diagnostics-cards section-gap">
         <div class="diagnostic-card"><span class="diagnostic-label">Passed</span><span class="diagnostic-value">#(summary.passedCount)</span></div>
@@ -64,6 +33,96 @@ Runner #(runner.workerID)
         <div class="diagnostic-card"><span class="diagnostic-label">Errored</span><span class="diagnostic-value">#(summary.errorCount)</span></div>
         <div class="diagnostic-card"><span class="diagnostic-label">Timed Out</span><span class="diagnostic-value">#(summary.timeoutCount)</span></div>
     </div>
+
+    <div class="card section-gap">
+        <dl class="detail-grid detail-grid--cells">
+            <div><dt>Last active</dt>
+            <dd><span id="runner-last-active" class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></dd></div>
+            <div><dt>Capacity</dt>
+            <dd>#(summary.activeJobs) / #(summary.maxJobs) jobs</dd></div>
+            <div><dt>Jobs processed</dt>
+            <dd>#(summary.jobsProcessed)</dd></div>
+            #if(summary.avgQueueWaitFormatted):
+            <div><dt>Avg wait</dt>
+            <dd>#(summary.avgQueueWaitFormatted)</dd></div>
+            #endif
+            #if(summary.avgDownloadFormatted):
+            <div><dt>Avg download</dt>
+            <dd>#(summary.avgDownloadFormatted)</dd></div>
+            #endif
+            #if(summary.avgPrepFormatted):
+            <div><dt>Avg prep</dt>
+            <dd>#(summary.avgPrepFormatted)</dd></div>
+            #endif
+            #if(summary.avgExecutionFormatted):
+            <div><dt>Avg run</dt>
+            <dd>#(summary.avgExecutionFormatted)</dd></div>
+            #endif
+            #if(summary.avgCacheAcquireFormatted):
+            <div><dt>Avg cache acquire</dt>
+            <dd>#(summary.avgCacheAcquireFormatted)</dd></div>
+            #endif
+            #if(summary.cacheHitRateFormatted):
+            <div><dt>Cache hit rate</dt>
+            <dd>#(summary.cacheHitRateFormatted)</dd></div>
+            #endif
+            #if(summary.avgOverheadFormatted):
+            <div><dt>Avg setup/other</dt>
+            <dd>#(summary.avgOverheadFormatted)</dd></div>
+            #endif
+            #if(count(tags) > 0):
+            <div><dt>Tags</dt>
+            <dd>
+                <div class="chip-row">
+                    #for(tag in tags):
+                    <span class="chip">#(tag)</span>
+                    #endfor
+                </div>
+            </dd></div>
+            #endif
+        </dl>
+    </div>
+</section>
+
+<section class="page-section">
+    <h2>Utilization</h2>
+    #if(count(chartBars) == 0):
+    <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
+    #else:
+    <!-- Bars are server-rendered; each height is a percent passed as a custom
+         property. The same numbers sit in the visually hidden table below. -->
+    <div class="spark-chart">
+        <div class="spark-chart-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></div>
+        <div class="diagnostic-spark" aria-hidden="true">#for(bar in chartBars):<div class="spark-slot" title="#(bar.title)"><span class="spark-fill" data-state="#(bar.state)" style="--bar-h:#(bar.heightPercent)%"></span></div>#endfor</div>
+        <div class="spark-chart-axis" aria-hidden="true">#for(label in chartLabels):<span>#(label)</span>#endfor</div>
+    </div>
+    #if(runner.isOffline):
+    <p class="section-note">None since it went offline.</p>
+    #endif
+    <div class="visually-hidden">
+    <table class="results-table">
+        <caption>Recent snapshots</caption>
+        <thead>
+            <tr>
+                <th scope="col">Recorded</th>
+                <th scope="col">Active Jobs</th>
+                <th scope="col">Utilization %</th>
+                <th scope="col">Last Poll</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(snapshot in snapshots):
+            <tr>
+                <td>#(snapshot.recordedAt)</td>
+                <td>#(snapshot.activeJobsLabel)</td>
+                <td>#(snapshot.utilizationPercent)%</td>
+                <td>#if(snapshot.lastPollAt):#(snapshot.lastPollAt)#else:—#endif</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    </div>
+    #endif
 </section>
 
 <section class="page-section">
@@ -71,66 +130,57 @@ Runner #(runner.workerID)
     #if(count(recentJobs) == 0):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:
-    <div class="table-scroll"><table class="results-table sortable-table">
+    <table class="results-table section-items section-items--manage sortable-table">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status">
+            <col class="section-items-seen col-hide-phone"><col class="section-items-count">
+        </colgroup>
         <thead>
             <tr>
-                <th data-sort-type="text"><button class="sort-header" type="button">Submission</button></th>
+                <th scope="col"><span class="visually-hidden">Person</span></th>
                 <th data-sort-type="text"><button class="sort-header" type="button">User</button></th>
                 <th data-sort-type="text"><button class="sort-header" type="button">Status</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Queue Wait</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Execution</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Total</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Peak Disk</button></th>
-                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Completed</button></th>
+                <th class="col-hide-phone" data-sort-type="date"><button class="sort-header" type="button">Completed</button></th>
+                <th scope="col"><span class="visually-hidden">Open</span></th>
             </tr>
         </thead>
         <tbody>
         #for(job in recentJobs):
             <tr>
-                <td data-sort-value="#(job.submissionID)"><a href="/submissions/#(job.submissionID)"><code>#(job.submissionID)</code></a></td>
-                <td data-sort-value="#if(job.username):#(job.username)#else:~#endif">#if(job.username):#(job.username)#else:—#endif</td>
-                <td data-sort-value="#(job.finalStatus)">#(job.finalStatus)</td>
-                <td class="time" #if(job.queueWaitMs):data-sort-value="#(job.queueWaitMs)"#else:data-sort-value="-1"#endif>#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
-                <td class="time" #if(job.executionMs):data-sort-value="#(job.executionMs)"#else:data-sort-value="-1"#endif>#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
-                <td class="time" #if(job.totalProcessingMs):data-sort-value="#(job.totalProcessingMs)"#else:data-sort-value="-1"#endif>#if(job.totalProcessingFormatted):#(job.totalProcessingFormatted)#else:—#endif</td>
-                <td class="time" #if(job.workdirPeakBytes):data-sort-value="#(job.workdirPeakBytes)"#else:data-sort-value="-1"#endif>#if(job.workdirPeakFormatted):#(job.workdirPeakFormatted)#else:—#endif</td>
-                <td class="time js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)" data-sort-value="#(job.completedAt)"#else:data-sort-value=""#endif>
+                <td class="item-tile-cell">
+                    #if(job.hasAvatar):
+                    #extend("_avatar", job.avatar)
+                    #else:
+                    <span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span>
+                    #endif
+                </td>
+                <td data-sort-value="#if(job.username):#(job.username)#else:~#endif">
+                    #if(job.username):
+                    <div class="item-title">#(job.username)</div>
+                    #else:
+                    <div class="item-title text-muted">No user</div>
+                    #endif
+                    <div class="item-details">#if(job.detailsText != ""):#(job.detailsText) · #endif<code>#(job.submissionID)</code></div>
+                </td>
+                <td data-sort-value="#(job.finalStatus)">
+                    <span class="tier tier-#(job.statusTier)">#(job.statusLabel)</span>
+                    #if(job.limitText != ""):
+                    <div class="item-details item-details--danger">#(job.limitText)</div>
+                    #endif
+                </td>
+                <td class="col-hide-phone js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)" data-sort-value="#(job.completedAt)"#else:data-sort-value=""#endif>
                     #if(job.completedAt):#(job.completedAt)#else:—#endif
                 </td>
-            </tr>
-        #endfor
-        </tbody>
-    </table></div>
-    #endif
-</section>
-
-<section class="page-section">
-    <h2>Recent Snapshots</h2>
-    #if(count(snapshots) == 0):
-    <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
-    #else:
-    <div class="table-scroll"><table class="results-table sortable-table">
-        <thead>
-            <tr>
-                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Recorded</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Active Jobs</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Utilization %</button></th>
-                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Last Poll</button></th>
-            </tr>
-        </thead>
-        <tbody>
-        #for(snapshot in snapshots):
-            <tr>
-                <td class="time js-relative-time" data-iso="#(snapshot.recordedAt)" data-sort-value="#(snapshot.recordedAt)">#(snapshot.recordedAt)</td>
-                <td class="time" data-sort-value="#(snapshot.activeJobs)">#(snapshot.activeJobsLabel)</td>
-                <td class="time" data-sort-value="#(snapshot.utilizationPercent)">#(snapshot.utilizationPercent)%</td>
-                <td class="time js-relative-time" #if(snapshot.lastPollAt):data-iso="#(snapshot.lastPollAt)" data-sort-value="#(snapshot.lastPollAt)"#else:data-sort-value=""#endif>
-                    #if(snapshot.lastPollAt):#(snapshot.lastPollAt)#else:—#endif
+                <td>
+                    <a class="btn action-btn action-btn-icon" href="/submissions/#(job.submissionID)"
+                       title="Open submission" aria-label="Open submission #(job.submissionID)">
+                        <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+                    </a>
                 </td>
             </tr>
         #endfor
         </tbody>
-    </table></div>
+    </table>
     #endif
 </section>
 

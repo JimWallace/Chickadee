@@ -341,7 +341,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=589
+PAGE_STYLE_BASELINE=551
 page_style_count="$(
   awk '
     FNR==1 { inblock = 0 }
@@ -395,13 +395,15 @@ fi
 # row the server is rendering and cannot live in a stylesheet. A width that
 # differs because someone preferred it there is a design decision, and belongs
 # in styles.css as the token's value or as a named modifier class.
+# --share is the same shape on the other axis: a share bar's fill is one row's
+# percent of the whole, worked out by the server (Storage, by assignment).
 # The avatar props are the second honest case, and the same shape as --bar-h:
 # every one carries a palette token chosen for the STUDENT the server is
 # rendering, so no stylesheet can hold it and no modifier class could enumerate
 # 9,216 of them. They are a closed set — one per slot in AvatarSpec, plus the
 # wing-mark that reuses the cheek — and the Swift side names the tokens
 # (Core/AvatarMarkup.swift), so a page cannot invent an eighth.
-PER_DATUM_INLINE_PROPS="--bar-h --av-cap --av-wing --av-accent --av-backdrop"
+PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop"
 inline_prop_violations=""
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue

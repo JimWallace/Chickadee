@@ -6,98 +6,78 @@ Retention
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="page-section">
-
-    <p class="section-intro">
-        Archived courses can be restored at any time. #(retentionDays) days
-        after a course is archived, an admin may permanently delete it and all
-        its data. <strong>Deletion cannot be undone.</strong>
-    </p>
+    <p class="page-crumb">Data</p>
+    <div class="page-titlebar">
+        <h2>Retention <span class="text-muted">#count(rows) archived · #(deletableCount) eligible to delete</span></h2>
+    </div>
+    <p class="section-intro">Archived courses can be restored at any time. #(retentionDays) days after archiving, an admin may permanently delete one, which can&rsquo;t be undone.</p>
 
     #if(count(rows) == 0):
     <p class="text-muted">No archived courses. The retention clock starts when a course is archived.</p>
     #else:
-    #if(deletableCount > 0):
-    <p class="text-muted">#(deletableCount) course(s) past retention and eligible to delete.</p>
-    #endif
-    <div class="table-scroll"><table class="results-table sortable-table">
-        <thead>
-            <tr>
-                <th data-sort-type="text"><button class="sort-header" type="button">Code</button></th>
-                <th data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
-                <th data-sort-type="date" class="retention-col-date"><button class="sort-header" type="button">Archived</button></th>
-                <th data-sort-type="number" class="retention-col-subs"><button class="sort-header" type="button">Submissions</button></th>
-                <th data-sort-type="date" class="retention-col-date"><button class="sort-header" type="button">Delete eligible</button></th>
-                <th class="retention-col-action">Action</th>
-            </tr>
+    <!-- Server order: delete-eligible courses first, then the soonest to become
+         eligible. The list is short and already in the order an admin acts in. -->
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status"><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Course</th><th scope="col">Detail</th><th scope="col">Status</th><th scope="col">Actions</th></tr>
         </thead>
         <tbody>
             #for(row in rows):
-            <tr class="#if(row.isDeletable):status-closed#else:status-open#endif">
-                <td><a href="/admin/courses/#(row.id)"><strong>#(row.code)</strong></a>#if(row.termLabel): #(row.termLabel)#endif</td>
-                <td>#(row.name)</td>
-                <td class="retention-date-cell" data-sort-value="#(row.archivedAtISO)">#(row.archivedAt)</td>
-                <td>#(row.submissionCount)</td>
-                <td class="retention-date-cell" data-sort-value="#(row.purgeEligibleAtISO)">
+            <tr>
+                <td class="item-tile-cell"><span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg></span></td>
+                <td>
+                    <div class="item-title"><a href="/admin/courses/#(row.id)"><strong>#(row.code)</strong></a> — #(row.name)</div>
+                    <div class="item-details">#if(row.termLabel):#(row.termLabel) · #endif archived #(row.archivedAt) · #(row.submissionCount) submissions</div>
+                </td>
+                <td>
                     #if(row.isDeletable):
-                    <span class="tier tier-closed">eligible</span>
+                    <span class="tier tier-danger">Eligible to delete</span>
                     #else:
-                    #(row.purgeEligibleAt)
+                    <span class="tier tier-closed">Deletable #(row.purgeEligibleAt)</span>
                     #endif
                 </td>
                 <td>
-                    <div class="retention-actions">
+                    <div class="assignment-actions-cell">
                         <form method="post" action="/admin/courses/#(row.id)/archive" class="inline-form">
                             #csrfFormField()
                             <button class="btn action-btn action-btn-icon" type="submit"
-                                    title="Restore course" aria-label="Restore course"
+                                    title="Restore course" aria-label="Restore #(row.code)"
                                     data-confirm="Restore #(row.code)? Students regain access immediately. Its submissions are kept and the retention clock stops.">
                                 <svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg>
                             </button>
                         </form>
                         <a class="btn action-btn action-btn-icon" href="/admin/courses/#(row.id)/export"
-                           title="Export course bundle" aria-label="Export course bundle">
+                           title="Export course bundle" aria-label="Export #(row.code)">
                             <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
                         </a>
                         #if(row.isDeletable):
-                        <form method="post" action="/admin/courses/#(row.id)/delete" class="inline-form">
-                            #csrfFormField()
-                            <button class="btn action-btn action-btn-icon action-danger" type="submit"
-                                    title="Delete course" aria-label="Delete course"
-                                    data-confirm="Permanently delete #(row.code)? Its course record, assignments, test suites and every submission are erased. This cannot be undone.">
-                                <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
-                            </button>
-                        </form>
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(row.code)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                <form method="post" action="/admin/courses/#(row.id)/delete"
+                                      data-confirm="Permanently delete #(row.code)? Its course record, assignments, test suites and every submission are erased. This cannot be undone.">
+                                    #csrfFormField()
+                                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Delete course permanently
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
+                        #else:
+                        <span class="row-menu-spacer" aria-hidden="true"></span>
                         #endif
                     </div>
                 </td>
             </tr>
             #endfor
         </tbody>
-    </table></div>
+    </table>
     #endif
 </section>
-<style>
-.retention-col-date {
-    width: 11rem;
-}
-.retention-col-subs {
-    width: 7rem;
-}
-.retention-col-action {
-    width: 11rem;
-}
-.retention-date-cell {
-    font-size: var(--text-base);
-}
-.retention-actions {
-    display: flex;
-    gap: .4rem;
-    flex-wrap: nowrap;
-}
-@media (max-width: 640px) {
-    .retention-actions { flex-wrap: wrap; }
-}
-</style>
-<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

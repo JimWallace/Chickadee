@@ -203,7 +203,7 @@ import VaporTesting
             let term = try #require(AcademicTerm(year: 2027, season: .winter))
             try await APICourse(code: "TRM301", name: "Terms", term: term).save(on: app.db)
             let html = try await getHTML("/admin", cookie: cookie)
-            #expect(html.contains("data-sort-value=\"\(term.ordinal)\">Winter 2027</td>"))
+            #expect(html.contains("Winter 2027 · 0 submissions"))
         }
     }
 

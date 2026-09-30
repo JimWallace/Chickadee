@@ -9,6 +9,41 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.285] - 2026-09-30
+
+### Fixed
+
+- **LTI grade and roster services work with Brightspace.** An LTI platform now has an optional token audience. Chickadee signs its access-token request with that audience, or with the token URL when the field is blank. Brightspace refuses the token URL and expects its "OAuth2 Audience" value, so without this field every grade push and roster read through LTI would fail.
+
+
+## [0.5.284] - 2026-09-30
+
+### Changed
+
+- **The admin Storage and Retention pages use the shared row shape.** Storage lists each assignment with a share bar and its percent of the total on disk, largest first. Retention shows each archived course with its status pill, Restore and Export, and a ⋯ menu with permanent delete only once a course is eligible.
+
+
+## [0.5.283] - 2026-09-30
+
+### Changed
+
+- **Avatar tune-up: birds that read at roster size.** At 36px the six expressions differed mostly by pupil size, the `curious` brow was invisible, and six caps sat in one dark band. The palette spreads the caps over hue and lightness, the expressions are drawn by eye shape (lids, pale brows, an open beak), and the wing marks are about twice as wide. Two axes are new: `tuft` (the outline) and `tilt` (a lean of ±9°), for 1,382,400 starter birds. Three expressions, `chirp`, `sly` and `dreamy`, are appended as the first wardrobe unlocks and are never drawn at first use. A spec stored before this change keeps every slot it has and gets a one-time random tuft and tilt on its next load. See `docs/student-avatars.md`, decision 7.
+
+
+## [0.5.282] - 2026-09-30
+
+### Changed
+
+- **The admin Health alerts and Audit log pages use the shared row shape.** Health alerts show the webhook and last delivery as facts, each rule with its threshold, and recent firings under day headings with the delivery result on the row. The audit log groups entries by day, with the action select and person search saving as you change them; each entry opens to its payload.
+
+
+## [0.5.281] - 2026-09-30
+
+### Changed
+
+- **The admin Overview, runner detail and People pages use the shared row shape.** Runners show a load pip per job slot, amber when every slot is busy. Courses have a `+ Add` menu (create, import) and a ⋯ menu (export, archive). The runner detail page shows one facts card and a utilization chart drawn from server-rendered bars, with the snapshot table kept for screen readers. People rows show each person's own avatar and a role select that saves on change.
+
+
 ## [0.5.280] - 2026-09-30
 
 ### Fixed

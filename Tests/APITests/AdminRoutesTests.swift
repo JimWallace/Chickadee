@@ -812,7 +812,7 @@ private struct PassthroughResponder: AsyncResponder {
                     #expect(body.contains(">Available<") == false)
                     // Peak Disk column shows the formatted bytes; Setup/Other column
                     // was removed in favour of it.
-                    #expect(body.contains("Peak Disk"))
+                    #expect(body.contains("peak disk 12.0 MB"))
                     #expect(body.contains("12.0 MB"))
                     #expect(body.contains(">Setup/Other<") == false)
                 })
