@@ -174,4 +174,51 @@ import Testing
             }
         }
     }
+
+    /// The key-level check above cannot see a value of the wrong type — an
+    /// always-present key encoded as null against a `string` schema has the
+    /// right key and still fails a client's validation. So validate each
+    /// representative's actual values against the schema, as the client does.
+    @Test func representativeOutputsValidateAgainstDeclaredSchemas() throws {
+        for testCase in Self.representativeCases + Self.sparseCases {
+            let schema = try #require(testCase.schema, "\(testCase.name) declares no outputSchema")
+            let violations = MCPOutputSchemaValidator.violations(
+                of: try JSONValue(encoding: testCase.output), against: schema)
+            #expect(violations.isEmpty, "\(testCase.name): \(violations)")
+        }
+    }
+
+    /// Outputs at the other extreme from the representatives: every optional
+    /// unset, which is where an always-present key encodes as null.
+    private static let sparseCases: [(name: String, schema: JSONValue?, output: any Encodable & Sendable)] = [
+        (
+            // A kind with no opponent file chosen and no live-session window.
+            SetActivityTool.name, SetActivityTool.outputSchema,
+            SetActivityTool.Output(
+                assignmentPublicID: "abc123", kind: "beatTheInstructor",
+                leaderboardVisibility: "hidden", leaderboardPath: "/testsetups/x/leaderboard",
+                recordAchievementSeeded: true, opponentSource: "supportFile")
+        ),
+        (
+            // An ordinary assignment: opponentSource is null too.
+            SetActivityTool.name, SetActivityTool.outputSchema,
+            SetActivityTool.Output(
+                assignmentPublicID: "abc123", kind: SetActivityTool.noActivityChoice,
+                leaderboardVisibility: nil, leaderboardPath: nil, recordAchievementSeeded: false)
+        ),
+    ]
+
+    /// The validator must catch the production failure it exists for: a null
+    /// against a bare `string` schema (set_activity's schema before the fix).
+    @Test func validatorRejectsNullAgainstABareStringSchema() {
+        let schema = MCPSchema.object(properties: ["opensAt": MCPSchema.string], additionalProperties: nil)
+        let violations = MCPOutputSchemaValidator.violations(
+            of: .object(["opensAt": .null]), against: schema)
+        #expect(violations == ["data/opensAt must be string, got null"])
+        #expect(
+            MCPOutputSchemaValidator.violations(
+                of: .object(["opensAt": .null]),
+                against: MCPSchema.object(properties: ["opensAt": MCPSchema.nullableString], additionalProperties: nil)
+            ).isEmpty)
+    }
 }

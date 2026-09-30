@@ -14,6 +14,23 @@ enum MCPSchema {
 
     /// `{"type": "string"}` — output-schema property with no description.
     static let string: JSONValue = .object(["type": .string("string")])
+    /// A string that may be null — for an output key the tool encodes on
+    /// every call (with `encode`, not `encodeIfPresent`) so that "unset" reads
+    /// as an explicit null rather than an absent key. A plain `string` there
+    /// makes every null a schema violation, and clients that validate
+    /// `structuredContent` report a successful call as a failure.
+    static let nullableString: JSONValue = .object([
+        "type": .array([.string("string"), .string("null")])
+    ])
+    /// A string enum that may be null, for the same always-present keys as
+    /// `nullableString`. JSON Schema checks `enum` independently of `type`, so
+    /// null must be one of the listed values as well as an admitted type.
+    static func nullableStringEnum(_ values: [String]) -> JSONValue {
+        .object([
+            "type": .array([.string("string"), .string("null")]),
+            "enum": .array(values.map { .string($0) } + [.null]),
+        ])
+    }
     /// `{"type": "integer"}`
     static let integer: JSONValue = .object(["type": .string("integer")])
     /// An integer that may be null (an optional numeric setting reported as
