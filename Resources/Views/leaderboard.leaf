@@ -10,12 +10,20 @@
 <section class="page-section">
     <div class="page-titlebar">
         <h2>Leaderboard</h2>
-        <div>
+        <div class="toolbar">
             <span class="chip">#(kindLabel)</span>
             #if(isStaff):
-            #if(!visibleToStudents):
-            <span class="chip">Hidden from students</span>
-            #endif
+            <form method="post" action="/instructor/#(assignmentPublicID)/activity" class="inline-form form-flush">
+                #csrfFormField()
+                <input type="hidden" name="returnTo" value="#(boardURL)">
+                <label class="visually-hidden" for="leaderboard-visibility">Visibility to students</label>
+                <span class="state-select" data-state="#if(visibleToStudents):visible#else:hidden#endif">
+                    <select id="leaderboard-visibility" name="visibility" class="form-input" data-ck-submit-on-change>
+                        <option value="visible"#if(visibleToStudents): selected#endif>Visible to students</option>
+                        <option value="hidden"#if(!visibleToStudents): selected#endif>Hidden from students</option>
+                    </select>
+                </span>
+            </form>
             #endif
         </div>
     </div>
@@ -28,9 +36,23 @@
     #else:
     <p class="section-intro">Highest metric first. A tie goes to the submission that reached it first. Students appear under their class handle.</p>
     #endif
-    <div id="activity-results"#if(pollsLive): data-poll-swap="region" data-poll-url="/testsetups/#(testSetupID)/leaderboard?fragment=body" data-poll-interval="5000"#if(hasPollUntil): data-poll-until="#(pollUntilISO)"#endif#endif>
+    #if(showFilter):
+    <div class="toolbar toolbar--end section-gap">
+        <span class="filter-group">
+            <label class="filter-label" for="leaderboard-filter">Filter</label>
+            <input id="leaderboard-filter" class="form-input filter-input" type="search"
+                   placeholder="Filter by handle or name…"
+                   data-list-filter="leaderboard-table"
+                   data-list-filter-empty="Nobody on the board matches this filter.">
+        </span>
+    </div>
+    #endif
+    <div id="activity-results"#if(pollsLive): data-poll-swap="region" data-poll-url="#(pollURL)" data-poll-interval="5000"#if(hasPollUntil): data-poll-until="#(pollUntilISO)"#endif#endif>
     #extend("_leaderboard-body")
     </div>
 </section>
+#if(showFilter):
+<script src="/list-filter.js?v=#appVersion()"></script>
+#endif
 #endexport
 #endextend

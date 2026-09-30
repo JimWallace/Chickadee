@@ -7,6 +7,40 @@
         <span class="chip">#(window.label) <span class="js-relative-time" data-iso="#(window.boundaryISO)">#(window.boundaryText)</span></span>
     </div>
     #endif
+    #if(showsMetricBoard):
+    #if(hasYou):
+    <section class="you-card card" aria-label="Your standing">
+        #extend("_avatar", you.avatar)
+        <div class="you-card-who">
+            <div class="you-card-name">
+                #if(you.hasHandle):<span data-avatar-handle>#(you.handle)</span> #endif<span class="you-pill">You</span>
+            </div>
+            #if(you.isRanked):
+            <div class="you-card-rank">#(you.rankHeadline) <small>#(you.ofText)</small></div>
+            #else:
+            <div class="you-card-rank">#(you.rankHeadline)</div>
+            <p class="section-note"><a href="#(you.submitURL)">Submit to get on the board.</a></p>
+            #endif
+            #if(you.hasHandle):
+            <p class="section-note">#(you.privacyLine)</p>
+            #endif
+        </div>
+        #if(you.isRanked):
+        <dl class="you-card-stats">
+            <dt>Your best</dt>
+            <dd>#(you.bestText) <span class="text-muted">· <span class="js-relative-time" data-iso="#(you.bestAtISO)">#(you.bestAtText)</span></span></dd>
+            #if(you.hasNextPlace):
+            <dt>Next place</dt>
+            <dd>#(you.nextPlaceText)</dd>
+            #endif
+        </dl>
+        #endif
+    </section>
+    #endif
+    #if(isStaff):
+    <p class="section-note">#(staffSummary)</p>
+    #endif
+    #endif
     #if(hasHill):
     #if(champion):
     <p>
@@ -213,34 +247,53 @@
     #elseif(count(rows) == 0):
     <p class="empty">No submission has reported a ranking metric yet.</p>
     #else:
-    <table class="results-table">
-        <thead>
+    <table class="results-table section-items" id="leaderboard-table">
+        <colgroup>
+            <col class="leaderboard-rank"><col class="section-items-tile"><col><col class="section-items-status">#if(isStaff):<col class="section-items-actions">#endif
+        </colgroup>
+        <thead class="visually-hidden">
             <tr>
-                <th>Rank</th>
-                <th>Student</th>
+                <th scope="col">Rank</th>
+                <th scope="col">Bird</th>
+                <th scope="col" data-sort-key="student" data-sort-type="text">Student</th>
+                <th scope="col">Metric</th>
                 #if(isStaff):
-                <th>Name</th>
+                <th scope="col">Actions</th>
                 #endif
-                <th class="time">Metric</th>
             </tr>
         </thead>
         <tbody>
-        #for(row in rows):
-            <tr>
-                <td>#(row.rank)</td>
+        #for(item in displayItems):
+        #if(item.isGap):
+            <tr class="leaderboard-gap">
+                <td colspan="#if(isStaff):5#else:4#endif"><a href="#(allURL)">#(item.gapLabel)</a></td>
+            </tr>
+        #else:
+            <tr#if(item.row.isViewer): class="leaderboard-row--you"#endif>
+                <td class="leaderboard-rank"><span class="rank-disc" data-rank-tier="#(item.row.rankTier)">#(item.row.rankText)</span></td>
+                <td class="item-tile-cell">#extend("_avatar", item.row.avatar)</td>
                 <td>
-                    #extend("_avatar", row.avatar)
-                    <span data-avatar-handle>#(row.handle)</span>
-                    #if(row.isViewer):
-                    <span class="chip">you</span>
+                    <div class="item-title"><span data-avatar-handle>#(item.row.handle)</span>#if(item.row.isViewer): <span class="you-pill">You</span>#endif</div>
+                    #if(isStaff):
+                    <div class="item-details">#(item.row.name) · <code>#(item.row.username)</code> · #(item.row.submissionCountText) · best <span class="js-relative-time" data-iso="#(item.row.bestAtISO)"></span></div>
+                    #elseif(item.row.hasTieNote):
+                    <div class="item-details">#(item.row.tieNote)</div>
                     #endif
                 </td>
+                <td class="item-grade">#(item.row.metricText)</td>
                 #if(isStaff):
-                <td>#(row.name)</td>
+                <td>
+                    <div class="assignment-actions-cell">
+                        <a class="btn action-btn action-btn-icon" href="#(item.row.bestSubmissionURL)" title="View best submission" aria-label="View best submission of #(item.row.handle)"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></a>
+                    </div>
+                </td>
                 #endif
-                <td class="time">#(row.metricText)</td>
             </tr>
+        #endif
         #endfor
         </tbody>
     </table>
+    #if(showingAll):
+    <p class="section-note"><a href="#(boardURL)">Show my standing</a></p>
+    #endif
     #endif
