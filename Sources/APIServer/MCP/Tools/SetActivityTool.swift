@@ -155,13 +155,13 @@ struct SetActivityTool: ContentTool {
             "leaderboardVisibility": MCPSchema.string,
             "leaderboardPath": MCPSchema.string,
             "recordAchievementSeeded": MCPSchema.boolean,
-            "opponentSource": .object([
-                "type": .string("string"),
-                "enum": .array(ActivityOpponentSource.allCases.map { .string($0.rawValue) }),
-            ]),
-            "opponentFile": MCPSchema.string,
-            "opensAt": MCPSchema.string,
-            "closesAt": MCPSchema.string,
+            // Always encoded (see `Output.encode(to:)`), so null is a value
+            // these four keys carry, not an absence.
+            "opponentSource": MCPSchema.nullableStringEnum(
+                ActivityOpponentSource.allCases.map(\.rawValue)),
+            "opponentFile": MCPSchema.nullableString,
+            "opensAt": MCPSchema.nullableString,
+            "closesAt": MCPSchema.nullableString,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("recordAchievementSeeded"),

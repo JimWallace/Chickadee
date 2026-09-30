@@ -177,4 +177,33 @@ import Vapor
             }
         }
     }
+
+    /// The production failure (v0.5.273): beatTheInstructor with no window and
+    /// no opponent file returns null opensAt/closesAt/opponentFile, which the
+    /// client rejected against a bare-`string` schema although the write had
+    /// been applied. Validate the real results, as the client does — including
+    /// kind "none", where opponentSource is null too.
+    @Test func resultsValidateAgainstTheOutputSchemaWhenBoundsAndOpponentAreUnset() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let (assignment, _) = try await fixture(on: app)
+            let schema = try #require(SetActivityTool.outputSchema)
+            for kind in ["beatTheInstructor", SetActivityTool.noActivityChoice] {
+                let out = try await SetActivityTool().execute(
+                    .init(assignmentPublicID: assignment.publicID, kind: kind, leaderboardVisibility: nil),
+                    context(app))
+                let encoded = try JSONValue(encoding: out)
+                guard case .object(let fields) = encoded else {
+                    Issue.record("\(kind): output did not encode to an object")
+                    continue
+                }
+                // The always-present contract holds: the keys are there, as null.
+                for key in ["opponentFile", "opensAt", "closesAt"] {
+                    #expect(fields[key] == .null, "\(kind): \(key)")
+                }
+                let violations = MCPOutputSchemaValidator.violations(of: encoded, against: schema)
+                #expect(violations.isEmpty, "\(kind): \(violations)")
+            }
+        }
+    }
 }
