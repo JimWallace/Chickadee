@@ -68,14 +68,19 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// is why the design writes it "8 + 5 accents".
     public let accentToken: String
     public let backdropToken: String
-    /// Fragment references for the three symbols a spec varies, e.g.
+    /// Fragment references for the four symbols a spec varies, e.g.
     /// "#av-wing-barred" — WITH the leading marker, so the template never has
     /// to write one next to an interpolation. A template writing a literal
     /// marker immediately before an interpolation is exactly the Leaf lexing
     /// shape that has cost this codebase before.
+    public let tuftSymbolRef: String
     public let wingSymbolRef: String
     public let expressionSymbolRef: String
     public let accessorySymbolRef: String
+    /// The tilt as an SVG transform, e.g. "rotate(-9 32 34)", about the body
+    /// centre. Always a value, never empty — upright is "rotate(0 32 34)" — so
+    /// the template never has to test for one.
+    public let tiltTransform: String
     /// "avatar", "avatar avatar-sm" or "avatar avatar-md".
     public let sizeClass: String
     /// Whether to announce the bird. An explicit Bool rather than testing the
@@ -90,9 +95,12 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         self.wingToken = "--avatar-\(spec.cap.rawValue)-wing"
         self.accentToken = "--avatar-accent-\(spec.accent.rawValue)"
         self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
+        let tuft = spec.accessory.hidesTuft ? AvatarTuft.none : spec.tuft
+        self.tuftSymbolRef = "#av-tuft-\(tuft.rawValue)"
         self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"
         self.expressionSymbolRef = "#av-expression-\(spec.expression.rawValue)"
         self.accessorySymbolRef = "#av-accessory-\(spec.accessory.rawValue)"
+        self.tiltTransform = "rotate(\(spec.tilt.degrees) 32 34)"
         self.sizeClass = size.cssClass
         switch accessibility {
         case .decorative:
@@ -114,16 +122,20 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// Every symbol this presentation names, in the order the partial stacks
     /// them — with the two that never vary.
     public var layerRefs: [String] {
-        ["#av-backdrop", "#av-plumage", wingSymbolRef, expressionSymbolRef, accessorySymbolRef]
+        [
+            "#av-backdrop", tuftSymbolRef, "#av-plumage", wingSymbolRef, expressionSymbolRef,
+            accessorySymbolRef,
+        ]
     }
 }
 
 public enum AvatarMarkup {
     /// The symbol ids stacked to draw `spec`, back to front.
     ///
-    /// Five, not one per feature: body, cap, cheek, beak and bib never vary, so
+    /// Six, not one per feature: body, cap, cheek, beak and bib never vary, so
     /// they are baked into one plumage symbol. A slot is split out only when it
-    /// varies.
+    /// varies. Tilt is not a layer; it is a transform on everything after the
+    /// backdrop.
     public static func layerSymbolIDs(for spec: AvatarSpec) -> [String] {
         AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
             .layerRefs
