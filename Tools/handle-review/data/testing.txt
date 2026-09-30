@@ -1,0 +1,35 @@
+# Words that read as a verdict on code, on a platform that grades code.
+# Hand-curated; extend it.  One word per line, Title Case.
+Abort
+Bad
+Broken
+Bug
+Buggy
+Crash
+Crashed
+Dead
+Deadlock
+Defeat
+Error
+Exception
+Fail
+Failing
+Failure
+Fault
+Flaky
+Frozen
+Glitch
+Halt
+Hang
+Kill
+Leak
+Lost
+Null
+Panic
+Segfault
+Stuck
+Timeout
+Undefined
+Void
+Wrong
+Zero

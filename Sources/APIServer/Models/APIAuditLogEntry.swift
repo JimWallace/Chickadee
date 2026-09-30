@@ -130,6 +130,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case enrollmentBulkAdded = "enrollment.bulk_added"
     case enrollmentRemoved = "enrollment.removed"
     case enrollmentRoleChanged = "enrollment.role_changed"
+    case enrollmentHandleChanged = "enrollment.handle_changed"
 
     // Assignment lifecycle (#421). Content edits are recorded separately and in
     // far more detail by `assignment_versions`; these are the metadata and
@@ -241,7 +242,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .courseCreated, .courseCloned, .courseArchived, .courseUnarchived, .courseDeleted,
             .courseBundleImported, .courseBundleExported:
             return .courses
-        case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged:
+        case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged:
             return .enrollment
         case .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged:
@@ -294,7 +295,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .userProvisioned, .userRoleChanged, .userDeleted, .userDataExportRequested,
             .userDataExportDownloaded, .courseCreated, .courseCloned, .courseArchived, .courseUnarchived,
             .courseDeleted, .courseBundleImported, .courseBundleExported,
-            .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged,
+            .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged, .enrollmentHandleChanged,
             .assignmentCreated, .assignmentCloned, .assignmentDeleted,
             .assignmentVisibilityChanged, .assignmentDueDateChanged, .submissionsPurged,
             .submissionRetestAll, .submissionRetestForStudent, .submissionsBulkDownloaded,
@@ -349,6 +350,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .enrollmentBulkAdded: return "Bulk enrollment"
         case .enrollmentRemoved: return "Unenrolled"
         case .enrollmentRoleChanged: return "Per-course role changed"
+        case .enrollmentHandleChanged: return "Class handle changed"
         case .assignmentCreated: return "Assignment created"
         case .assignmentCloned: return "Assignment cloned"
         case .assignmentDeleted: return "Assignment deleted"

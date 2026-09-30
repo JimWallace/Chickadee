@@ -1,0 +1,33 @@
+# Words that describe a person: a handle must never read as a judgement of
+# the student.  Hand-curated; extend it.  One word per line, Title Case.
+Angry
+Bold
+Brave
+Clever
+Crazy
+Curious
+Dumb
+Gentle
+Grumpy
+Happy
+Humble
+Keen
+Kind
+Lazy
+Loud
+Mean
+Muted
+Nervous
+Proud
+Quiet
+Sad
+Shy
+Silly
+Sleepy
+Slow
+Smart
+Sneaky
+Stormy
+Sunny
+Timid
+Weird
