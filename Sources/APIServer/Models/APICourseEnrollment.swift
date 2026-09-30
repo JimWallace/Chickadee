@@ -56,6 +56,13 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "avatar_handle")
     var avatarHandle: String?
 
+    /// When this handle stopped being the student's to change: the first time
+    /// a classmate saw it on a student-visible leaderboard, or when the student
+    /// used their one change on the account page.  nil while the student may
+    /// still choose.  Staff "Give new handle" ignores it.
+    @OptionalField(key: "avatar_handle_locked_at")
+    var avatarHandleLockedAt: Date?
+
     /// LEARN grade-sync readiness for this (student, course): whether the
     /// roster-readiness sweep has confirmed we can deliver this student's grade
     /// to the course's LEARN classlist. Stored as `LearnSyncReadiness.rawValue`;

@@ -228,6 +228,30 @@ a real name), an instructor uses **Give new handle** in the Students tab row
 menu. It draws from the current lists and writes an audit entry
 (`enrollment.handle_changed`).
 
+**Choose from three, once, before classmates see it.** A student gets some
+ownership of the handle without any way to spell their name into it. While the
+handle is unlocked, the account page shows a "Change handle" button in the
+course row's actions. It opens a panel with the current handle and two unused
+alternates from the current lists, as radio buttons, each beside the student's
+own bird. All three are random. Saving with an alternate selected changes the
+handle; saving with the current one selected changes nothing and does not use
+the change.
+
+- **The offer is kept in the session.** Reloading the page shows the same two
+  alternates while both are still free, so the choice is from three and not
+  from as many as a student cares to reload. The POST accepts only a handle
+  that was offered.
+- **Alternates are not reserved.** The unique index decides a race. If a
+  classmate stored the picked handle first, nothing changes and the panel opens
+  again with "That one was just taken. Here are two more."
+- **The lock** is `course_enrollments.avatar_handle_locked_at`. It is set when
+  the student uses their one change, and the first time the handle is rendered
+  to a classmate: a student-visible leaderboard viewed by another student
+  (`RankedIdentities.presentation` and the hill's holder). A student's own row
+  and every staff view lock nothing. After the lock, the row reads "Your handle
+  is set for this course." Staff **Give new handle** ignores the lock and does
+  not set it.
+
 ### 4. Rendered as layered SVG `use`, recoloured through design tokens
 
 The repo's UI guards decide the mechanism here, and they decide it well.
