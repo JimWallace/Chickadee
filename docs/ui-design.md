@@ -417,6 +417,7 @@ duplicate.
   whole row is one `<details>`: the summary is the row (tile, actor and action,
   outcome pill, time, a chevron that turns) and the panel under it is the payload
   as a `.detail-grid`.  The audit log, under day headings; a log stays unsortable.
+  It replaces the `.test-output-row` + `.test-output-details` pairing for log tables, so a new log page does not use the old pair.  A one-field edit on a facts card (the alerts webhook) is a `.popup-anchor` popover, the house idiom for a small form.
 - **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
   above an admin page title.  Visual only; the hidden `h1` already names it.
 - **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a

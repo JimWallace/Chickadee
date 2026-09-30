@@ -52,6 +52,15 @@ struct AdminAlertFiringRow: Encodable, Sendable {
         case rule, summary, firedAt, resolved, deliveryText, deliveryFailed
     }
 
+    /// The delivery error on one line: an unbounded error would wrap a details
+    /// line that should be a phrase.
+    static let errorLimit = 120
+
+    private static func cappedError(_ error: String) -> String {
+        let flat = error.replacingOccurrences(of: "\n", with: " ")
+        return flat.count > errorLimit ? String(flat.prefix(errorLimit - 1)) + "…" : flat
+    }
+
     init(_ record: AlertFiringRecord) {
         rule = record.rule
         summary = record.summary
@@ -65,7 +74,8 @@ struct AdminAlertFiringRow: Encodable, Sendable {
             deliveryText = "Delivered"
             deliveryFailed = false
         } else {
-            deliveryText = record.deliveryError.map { "Delivery failed: \($0)" } ?? "Delivery failed"
+            deliveryText =
+                record.deliveryError.map { "Delivery failed: \(Self.cappedError($0))" } ?? "Delivery failed"
             deliveryFailed = true
         }
     }

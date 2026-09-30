@@ -73,6 +73,23 @@ private struct StampedRow: Encodable, Sendable, Equatable {
         #expect(HealthRule.databaseUnreachable.thresholdText(config) == "SELECT 1 fails")
     }
 
+    /// Threshold text is chrome: a short phrase, not a sentence.
+    @Test func thresholdTextStaysUnderTwentyWords() {
+        for rule in HealthRule.allCases {
+            let words = rule.thresholdText(config).split(separator: " ").count
+            #expect(words <= 20, "\(rule.rawValue): \(words) words")
+        }
+    }
+
+    @Test func aLongDeliveryErrorIsCapped() {
+        let record = AlertFiringRecord(
+            rule: "runnerOffline", resolved: false, summary: "s", firedAt: "2026-09-30T12:00:00Z",
+            paged: true, delivered: false, deliveryError: String(repeating: "x", count: 500))
+        let row = AdminAlertFiringRow(record)
+        #expect(row.deliveryText.count <= "Delivery failed: ".count + AdminAlertFiringRow.errorLimit)
+        #expect(row.deliveryText.hasSuffix("…"))
+    }
+
     @Test func aWebhookIsShortenedFromTheMiddle() {
         let url = "https://hooks.slack.com/services/T04ABCDEF/B07GHIJKL/xoxbSECRETSECRETSECRET"
         let shown = AdminAlertsPresentation.webhookDisplay(url)
