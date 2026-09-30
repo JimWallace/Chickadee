@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.289] - 2026-09-30
+
+### Added
+
+- **Choose a class handle.** On the account page, a student can change their class handle one time, before classmates first see it. The page offers two unused alternates beside the current handle, each with the student's bird. The handle locks after the change, or when a classmate first sees it on a leaderboard.
+
+
 ## [0.5.288] - 2026-09-30
 
 ### Fixed
