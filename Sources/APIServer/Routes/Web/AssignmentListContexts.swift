@@ -34,6 +34,7 @@ struct AssignmentRow: Encodable {
     let createdAt: String
     let submittedStudentCount: Int?  // nil if unpublished; unique enrolled students who submitted at least once
     let vanityURL: String?  // e.g. "/CS101/lab-1-intro"; nil if unpublished or no active course
+    let leaderboardURL: String?  // the class activity's board; nil when not an activity
 }
 
 /// Aggregate of one setup's current validation-variant batch (multi-variant

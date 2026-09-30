@@ -248,6 +248,11 @@
                         <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
                     </summary>
                     <div class="popover-panel row-menu-panel" role="menu">
+                        #if(item.assignment.leaderboardURL):
+                        <a class="row-menu-item" href="#(item.assignment.leaderboardURL)" role="menuitem">
+                            <svg class="icon" aria-hidden="true"><use href="#i-award"/></svg>Leaderboard
+                        </a>
+                        #endif
                         <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
                               data-confirm="Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.">
                             #csrfFormField()

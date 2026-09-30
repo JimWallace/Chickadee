@@ -396,12 +396,8 @@ extension InstructorDashboardRoutes {
         allSetups.map { setup in
             let assignment = assignmentBySetup[setup.id ?? ""]
             let setupID = setup.id ?? ""
-            let suiteCount: Int = {
-                guard let props = setup.decodedManifest()
-
-                else { return 0 }
-                return props.testSuites.count
-            }()
+            let props = setup.decodedManifest()
+            let suiteCount = props?.testSuites.count ?? 0
 
             let status: String
             if let a = assignment {
@@ -439,7 +435,10 @@ extension InstructorDashboardRoutes {
                 suiteCount: suiteCount,
                 createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil,
-                vanityURL: vanityURL
+                vanityURL: vanityURL,
+                // Staff always reach the board; a draft has no students to rank.
+                leaderboardURL: assignment == nil
+                    ? nil : props?.activity?.leaderboardPath(testSetupID: setupID, viewerIsStaff: true)
             )
         }
     }

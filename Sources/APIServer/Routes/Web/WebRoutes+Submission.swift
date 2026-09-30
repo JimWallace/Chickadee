@@ -532,12 +532,8 @@ extension WebRoutes {
                 ? "/testsetups/\(submission.testSetupID)/solution/download"
                 : "/testsetups/\(submission.testSetupID)/notebook?file=solution"
         }
-        var leaderboardURL: String?
-        if let activity = props?.activity, activity.kind.aggregatesToLeaderboard,
-            isStaff || activity.leaderboardVisibleToStudents
-        {
-            leaderboardURL = "/testsetups/\(submission.testSetupID)/leaderboard"
-        }
+        let leaderboardURL = props?.activity?.leaderboardPath(
+            testSetupID: submission.testSetupID, viewerIsStaff: isStaff)
         return (solutionURL, leaderboardURL)
     }
 

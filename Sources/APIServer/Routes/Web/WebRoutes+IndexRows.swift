@@ -427,6 +427,8 @@ extension WebRoutes {
         let gates = dashboardRowActionGates(
             props: props, canEdit: canEdit, isOpenForThisUser: isOpenForThisUser,
             hasNotebook: hasNotebook, slipDayAvailable: slipDayLabel != nil)
+        let leaderboardURL = props?.activity?.leaderboardPath(
+            testSetupID: setupID, viewerIsStaff: context.isActiveCourseStaff)
         return TestSetupRow(
             id: setupID,
             title: assignment?.title,
@@ -470,15 +472,22 @@ extension WebRoutes {
             showEditAction: gates.edit,
             showUploadAction: gates.upload,
             showResetNotebookAction: gates.resetNotebook,
-            hasAnyAction: gates.any || solutionAvailable,
+            hasAnyAction: gates.any || solutionAvailable || leaderboardURL != nil,
             slipDayAvailable: gates.slipDay,
             slipDayURL: "/testsetups/\(setupID)/slip-day",
             slipDayActionLabel: slipDayLabel ?? "",
             solutionAvailable: solutionAvailable,
-            solutionURL: props?.effectiveSubmissionMode == .uploadOnly
-                ? "/testsetups/\(setupID)/solution/download"
-                : "/testsetups/\(setupID)/notebook?file=solution"
+            solutionURL: dashboardSolutionURL(setupID: setupID, props: props),
+            leaderboardURL: leaderboardURL
         )
+    }
+
+    /// Where the row's solution action leads: the notebook page's solution
+    /// view, or the plain download for an upload-only assignment.
+    private static func dashboardSolutionURL(setupID: String, props: TestProperties?) -> String {
+        props?.effectiveSubmissionMode == .uploadOnly
+            ? "/testsetups/\(setupID)/solution/download"
+            : "/testsetups/\(setupID)/notebook?file=solution"
     }
 
     /// The slip-day action's tooltip/aria text for one row (#1228), nil when

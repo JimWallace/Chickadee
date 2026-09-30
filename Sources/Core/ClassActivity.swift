@@ -436,6 +436,16 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// True when students may open the leaderboard.
     public var leaderboardVisibleToStudents: Bool { leaderboardVisibility == .visible }
 
+    /// The leaderboard page for this activity when the viewer may open it:
+    /// staff always, a student once it is visible. nil for a kind with no
+    /// ranking page. The one rule every link to the board asks, so the
+    /// dashboards and the submission page cannot disagree about who sees it.
+    public func leaderboardPath(testSetupID: String, viewerIsStaff: Bool) -> String? {
+        guard kind.aggregatesToLeaderboard, viewerIsStaff || leaderboardVisibleToStudents
+        else { return nil }
+        return "/testsetups/\(testSetupID)/leaderboard"
+    }
+
     /// True when grading this activity stages an opponent beside the
     /// submission — the question every opponent-dependent seam asks (the
     /// claim gate, the browser-grading refusal, the job's opponent).
