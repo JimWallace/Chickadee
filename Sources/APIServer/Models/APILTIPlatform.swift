@@ -39,6 +39,12 @@ final class APILTIPlatform: Model, @unchecked Sendable {
     @Field(key: "access_token_url")
     var accessTokenURL: String
 
+    /// The audience of the JWT the tool signs to get an access token. Nil =
+    /// the access token URL, which the IMS Security Framework names as the
+    /// default. Brightspace needs its "OAuth2 Audience" value here instead.
+    @OptionalField(key: "token_audience")
+    var tokenAudience: String?
+
     /// The platform key-set URL that verifies launch `id_token`s.
     @Field(key: "jwks_url")
     var jwksURL: String

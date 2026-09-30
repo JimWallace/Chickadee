@@ -121,8 +121,7 @@ struct LTIGradeSyncSweep {
                 .first()
         else { throw Failure(message: Self.notLaunchedMessage) }
 
-        let target = LTIServiceClient.Platform(
-            id: platformID, clientID: platform.clientID, accessTokenURL: platform.accessTokenURL)
+        let target = LTIServiceClient.Platform(id: platformID, registration: platform)
         let keys = try await keys()
 
         guard let grade = try await bestGradeForStudent(userID: row.userID, testSetupID: row.testSetupID, db: db)

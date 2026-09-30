@@ -16,6 +16,8 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
     var authLoginURL: String
     var accessTokenURL: String
     var jwksURL: String
+    /// Optional; blank = the access token URL is the audience.
+    var tokenAudience: String?
     /// The checkbox: present and true when ticked, absent otherwise.
     var trustUsername: Bool?
 
@@ -28,6 +30,8 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
         let authLoginURL: String
         let accessTokenURL: String
         let jwksURL: String
+        /// Nil when the field was blank.
+        let tokenAudience: String?
         let trustUsername: Bool
     }
 
@@ -45,12 +49,14 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
             authLoginURL: platform.authLoginURL,
             accessTokenURL: platform.accessTokenURL,
             jwksURL: platform.jwksURL,
+            tokenAudience: platform.tokenAudience,
             trustUsername: platform.trustUsername ?? false)
     }
 
     init(
         displayName: String, issuer: String, clientID: String, deploymentIDs: String,
-        authLoginURL: String, accessTokenURL: String, jwksURL: String, trustUsername: Bool? = nil
+        authLoginURL: String, accessTokenURL: String, jwksURL: String, tokenAudience: String? = nil,
+        trustUsername: Bool? = nil
     ) {
         self.displayName = displayName
         self.issuer = issuer
@@ -59,6 +65,7 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
         self.authLoginURL = authLoginURL
         self.accessTokenURL = accessTokenURL
         self.jwksURL = jwksURL
+        self.tokenAudience = tokenAudience
         self.trustUsername = trustUsername
     }
 
@@ -84,7 +91,18 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
             authLoginURL: try Self.secureURL(authLoginURL, field: .authLoginURL),
             accessTokenURL: try Self.secureURL(accessTokenURL, field: .accessTokenURL),
             jwksURL: try Self.secureURL(jwksURL, field: .jwksURL),
+            tokenAudience: Self.optionalText(tokenAudience),
             trustUsername: trustUsername ?? false)
+    }
+
+    /// The trimmed text, or nil when it is blank. The token audience is an
+    /// identifier the platform compares, not a URL Chickadee calls, so it is
+    /// not held to the URL rules.
+    static func optionalText(_ raw: String?) -> String? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     /// An absolute `https` URL. Plain `http` is accepted only for a loopback

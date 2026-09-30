@@ -524,6 +524,10 @@ func registerMigrations(on app: Application) {
     // LTI 1.3 roster through NRPS (docs/lti-1-3.md slice 5).
     app.migrations.add(AddLTIMembershipsColumn())
 
+    // The audience of the token-request JWT, for a platform whose audience is
+    // not its token URL (Brightspace). Nullable; nil keeps the token URL.
+    app.migrations.add(AddLTITokenAudienceColumn())
+
     // The registered GitHub App (docs/github-submissions.md slice 1). New
     // table, no FKs; an empty table means GitHub submission is off.
     app.migrations.add(CreateGitHubApps())
