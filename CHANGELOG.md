@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.284] - 2026-09-30
+
+### Changed
+
+- **The admin Storage and Retention pages use the shared row shape.** Storage lists each assignment with a share bar and its percent of the total on disk, largest first. Retention shows each archived course with its status pill, Restore and Export, and a ⋯ menu with permanent delete only once a course is eligible.
+
+
 ## [0.5.283] - 2026-09-30
 
 ### Changed
