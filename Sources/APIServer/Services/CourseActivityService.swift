@@ -88,42 +88,10 @@ struct ActivityDay: Encodable, Sendable {
     /// boundary can be tested.
     static func group(
         _ rows: [CourseActivityRow], now: Date = Date(),
-        timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        timeZone: TimeZone = DayGrouper.displayTimeZone
     ) -> [ActivityDay] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let today = calendar.startOfDay(for: now)
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_CA")
-        formatter.timeZone = timeZone
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
-
-        var days: [ActivityDay] = []
-        var currentStart: Date?
-        var bucket: [CourseActivityRow] = []
-        var currentLabel = ""
-        func flush() {
-            if !bucket.isEmpty { days.append(ActivityDay(label: currentLabel, rows: bucket)) }
-            bucket = []
-        }
-        for row in rows {
-            let start = calendar.startOfDay(for: row.occurredAt)
-            if start != currentStart {
-                flush()
-                currentStart = start
-                if start == today {
-                    currentLabel = "Today"
-                } else if start == yesterday {
-                    currentLabel = "Yesterday"
-                } else {
-                    currentLabel = formatter.string(from: start)
-                }
-            }
-            bucket.append(row)
-        }
-        flush()
-        return days
+        DayGrouper.group(rows, occurredAt: \.occurredAt, now: now, timeZone: timeZone)
+            .map { ActivityDay(label: $0.label, rows: $0.rows) }
     }
 }
 

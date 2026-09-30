@@ -453,10 +453,13 @@ struct AdminRoutes: RouteCollection {
                 rule: rule.rawValue,
                 humanReadable: rule.humanReadable,
                 isFiring: state.isFiring,
-                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) }
+                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) },
+                thresholdText: rule.thresholdText(configuration)
             )
         }
 
+        let firingRows = recent.map(AdminAlertFiringRow.init)
+        let lastDelivery = AdminAlertsPresentation.lastDelivery(firingRows, records: recent)
         let ctx = AdminAlertsContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "alerts",
@@ -470,7 +473,12 @@ struct AdminRoutes: RouteCollection {
             oldestPendingSeconds: Int(configuration.oldestPendingSeconds),
             errorRatePercent: Int((configuration.errorRateThreshold * 100).rounded()),
             rules: ruleRows,
-            recentFirings: recent,
+            webhookDisplay: AdminAlertsPresentation.webhookDisplay(effectiveURL),
+            hasLastDelivery: lastDelivery != nil,
+            lastDeliveryISO: lastDelivery?.iso ?? "",
+            lastDeliveryResult: lastDelivery?.result ?? "",
+            firingDays: DayGrouper.group(firingRows, occurredAt: \.occurredAt),
+            firingCount: firingRows.count,
             flashSuccess: query.ok,
             flashError: query.error
         )

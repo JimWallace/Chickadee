@@ -1688,6 +1688,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .item-tile[data-kind="document"] { background: var(--kind-document-bg); color: var(--kind-document-fg); }
 .item-tile[data-kind="outline"] { background: var(--kind-outline-bg); color: var(--kind-outline-fg); }
 .item-tile[data-kind="graded"] { background: var(--kind-graded-bg); color: var(--kind-graded-fg); }
+.item-tile[data-kind="ok"] { background: var(--open-bg); color: var(--open-fg); }
+.item-tile[data-kind="alert"] { background: var(--danger-bg); color: var(--danger-fg); }
 
 .item-title { font-weight: 600; }
 .item-details {
@@ -1823,6 +1825,26 @@ code { font-family: var(--font-mono); font-size: .9em; }
     font-size: var(--text-2xs);
     color: var(--muted);
 }
+
+/* A log entry whose whole row is the disclosure: tile, actor and what they did,
+   outcome, when, and a chevron that turns when it opens. The panel under it
+   holds the payload. */
+.section-items td.log-entry-cell { padding: 0; }
+.log-entry > summary {
+    display: grid;
+    grid-template-columns: 2.25rem 1fr auto 6.5rem 1rem;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem .9rem;
+    cursor: pointer;
+    list-style: none;
+}
+.log-entry > summary::-webkit-details-marker { display: none; }
+.log-entry > summary > .icon:last-child { transition: transform .15s; }
+.log-entry[open] > summary > .icon:last-child { transform: rotate(180deg); }
+.log-entry .item-title, .log-entry .item-details { display: block; }
+.log-entry-when { text-align: right; }
+.log-entry .log-payload { margin: 0 0 .75rem 4rem; max-width: none; }
 
 /* Pips: one dot per unit of a budget or capacity (a student's slip days, a
    runner's job slots). Decorative; the text beside them ("2 of 3 left",
