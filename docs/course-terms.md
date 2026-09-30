@@ -141,6 +141,17 @@ The Core type, the migration, the model accessor, and tests
   the keys to choose from. `list_courses` returns each course's `term` and
   `key`. The course guidance resources and the initialize guidance use the
   key, so two offerings do not share a URI.
+- **MCP results name the offering.** A read with a bare code takes the
+  newest term, so a result that only echoed the argument did not tell the
+  agent which offering it read. Every tool result that names a course
+  (`get_assignment`, `list_assignments`, `create_assignment`,
+  `clone_assignment`, the course-section tools, the content-item list and
+  the reorder tools) now returns `courseCode` (the code of the course that
+  was used, not the argument), `courseKey` and `courseTerm` (null when the
+  course has no term). The manifest resources use the key in their names.
+  The initialize guidance and the course inputs of `create_assignment`,
+  `clone_assignment` and the admin `get_instructor_card_series` say that a
+  key is accepted. `MCPCourseTermOutputTests` covers this.
 - The enrollment lookup that MCP resolution needs lives in `ToolContext`
   (`subjectEnrollments(among:)`), the one MCP file allowed to query identity
   models (`MCPStudentDataWallTests`).
@@ -231,7 +242,7 @@ use the lookup rule in slice 3:
 | `findActiveCourse(byCode:)` | `Routes/Web/CourseLookupHelpers.swift` |
 | Vanity URLs `/:courseCode/:assignmentSlug` (and `/notebook`, `/submit`, `/history`, `/leaderboard`) | `Routes/Web/VanityURLRoutes.swift` |
 | Staff student paths `/:courseCode/students/...` | `Routes/Web/StudentCoursePaths.swift`, `StudentCourseRoutes+History.swift` |
-| MCP `resolveCourseID` / `resolveCourseIDForWrite` (these do not filter archived courses today) | `MCP/Tools/CourseSectionTools.swift` |
+| MCP `resolveCourse` / `resolveCourseForWrite` (these do not filter archived courses today) | `MCP/Tools/CourseSectionTools.swift` |
 | MCP `list_assignments`, `clone_assignment` | `MCP/Tools/ListAssignmentsTool.swift`, `CloneAssignmentTool.swift` |
 | MCP resource `chickadee://course/<code>/authoring-guidance` | `MCP/Resources/MCPResourceProvider.swift` |
 | Admin MCP `get_instructor_card_series` | `MCP/Admin/Tools/GetInstructorCardSeriesTool.swift` |

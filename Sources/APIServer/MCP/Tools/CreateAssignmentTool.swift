@@ -35,6 +35,9 @@ struct CreateAssignmentTool: ContentTool {
         let title: String
         let slug: String
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let cellCount: Int
         let isOpen: Bool
     }
@@ -51,7 +54,10 @@ struct CreateAssignmentTool: ContentTool {
         "properties": .object([
             "courseCode": .object([
                 "type": .string("string"),
-                "description": .string("Code of the course to create the assignment in."),
+                "description": .string(
+                    "The course to create the assignment in: its code, e.g. \"CS136\", or its key "
+                        + "with the term, e.g. \"CS136-F26\", when several offerings share the code "
+                        + "(list_courses returns it)."),
             ]),
             "title": .object([
                 "type": .string("string"),
@@ -87,11 +93,14 @@ struct CreateAssignmentTool: ContentTool {
             "title": MCPSchema.string,
             "slug": MCPSchema.string,
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "cellCount": MCPSchema.integer,
             "isOpen": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
+            .string("courseKey"),
             .string("cellCount"), .string("isOpen"),
         ]),
     ])
@@ -116,10 +125,11 @@ struct CreateAssignmentTool: ContentTool {
         }
 
         // Creating an assignment is instructor-level (#417); archived is blocked too.
-        // The lookup is an exact match, so `code` is the course's stored code.
-        let code = input.courseCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        let courseID = try await resolveCourseIDForWrite(
-            code: code, tool: Self.name, context: context, atLeast: .instructor)
+        // `courseCode` may be a bare code or a course key, so the output reports
+        // the resolved course rather than echoing the argument.
+        let course = try await resolveCourseForWrite(
+            code: input.courseCode, tool: Self.name, context: context, atLeast: .instructor)
+        let courseID = try course.requireID()
 
         let data: Data
         do {
@@ -153,7 +163,9 @@ struct CreateAssignmentTool: ContentTool {
             publicID: created.assignment.publicID,
             title: created.assignment.title,
             slug: created.assignment.slug,
-            courseCode: code,
+            courseCode: course.code,
+            courseKey: course.urlKey,
+            courseTerm: course.term?.displayName,
             cellCount: notebookCellCount(input.notebook),
             isOpen: created.assignment.isOpen)
     }

@@ -120,12 +120,14 @@ import Testing
             CloneAssignmentTool.name, CloneAssignmentTool.outputSchema,
             CloneAssignmentTool.Output(
                 publicID: "abc123", title: "T", slug: "t", courseCode: "CS136",
+                courseKey: "CS136-F26", courseTerm: "Fall 2026",
                 sourceAssignmentPublicID: "def456", isOpen: false, validationStatus: "pending")
         ),
         (
             CreateAssignmentTool.name, CreateAssignmentTool.outputSchema,
             CreateAssignmentTool.Output(
                 publicID: "abc123", title: "T", slug: "t", courseCode: "CS136",
+                courseKey: "CS136-F26", courseTerm: "Fall 2026",
                 cellCount: 2, isOpen: false)
         ),
         (

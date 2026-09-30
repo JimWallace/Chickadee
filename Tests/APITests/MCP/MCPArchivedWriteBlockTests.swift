@@ -2,10 +2,10 @@
 //
 // #417 Slice D-MCP: every MCP content-WRITE tool now routes through a
 // write-only resolver (`authorizedAssignment[AndSetup]ForWrite`,
-// `authorizeCourseWriteAccess`, `resolveCourseIDForWrite`,
+// `authorizeCourseWriteAccess`, `resolveCourseForWrite`,
 // `resolveCourseSectionForEdit`) so it can't mutate an ARCHIVED course's
 // content by id. The READ tools deliberately stay on the read resolvers
-// (`authorizedAssignmentAndSetup`, `resolveCourseID`) so archived courses
+// (`authorizedAssignmentAndSetup`, `resolveCourse`) so archived courses
 // remain READABLE — the invariant the review flagged would break under a
 // naive shared chokepoint. These tests pin both halves: writes blocked,
 // reads still work, on the same archived fixtures.
@@ -85,7 +85,7 @@ import Vapor
         }
     }
 
-    // MARK: - Course-code write resolver (resolveCourseIDForWrite)
+    // MARK: - Course-code write resolver (resolveCourseForWrite)
 
     @Test func createCourseSectionBlockedOnArchivedCourse() async throws {
         let app = try await makeTestApp()
@@ -98,13 +98,13 @@ import Vapor
         }
     }
 
-    // MARK: - Read invariant on the course-code resolver (resolveCourseID)
+    // MARK: - Read invariant on the course-code resolver (resolveCourse)
 
     @Test func listCourseSectionsStillWorksOnArchivedCourse() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             _ = try await fixture(on: app, archived: true, code: "ARCHLS")
-            // list_course_sections routes through the READ resolveCourseID; an
+            // list_course_sections routes through the READ resolveCourse; an
             // archived course must still list (here: empty), not 403.
             let out = try await ListCourseSectionsTool().execute(.init(courseCode: "ARCHLS"), context(app))
             #expect(out.sections.isEmpty)

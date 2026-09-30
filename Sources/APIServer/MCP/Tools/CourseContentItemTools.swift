@@ -10,7 +10,7 @@
 // These mirror the web instructor handlers (`CourseAdminRoutes+ContentItems.swift`)
 // and sit beside the course-section tools (`CourseSectionTools.swift`). Content
 // authoring is TA+ (matching script / notebook editing), so the write tools use
-// `resolveCourseIDForWrite(atLeast: .ta)`. Content items own no test setup, so
+// `resolveCourseForWrite(atLeast: .ta)`. Content items own no test setup, so
 // editing them never closes an assignment, re-validates, or re-grades.
 
 import Core
@@ -317,6 +317,9 @@ struct ListContentItemsTool: ContentTool {
 
     struct Output: Encodable, Sendable {
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let contentItems: [ContentItemDTO]
     }
 
@@ -339,22 +342,27 @@ struct ListContentItemsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "contentItems": .object([
                 "type": .string("array"),
                 "items": contentItemObjectSchema,
             ]),
         ]),
-        "required": .array([.string("courseCode"), .string("contentItems")]),
+        "required": .array([.string("courseCode"), .string("courseKey"), .string("contentItems")]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseID(code: input.courseCode, tool: Self.name, context: context)
+        let course = try await resolveCourse(code: input.courseCode, tool: Self.name, context: context)
+        let courseID = try course.requireID()
         let items = try await APICourseContentItem.query(on: context.db)
             .filter(\.$courseID == courseID)
             .sort(\.$sortOrder)
             .all()
-        return Output(courseCode: input.courseCode, contentItems: items.map(contentItemDTO(from:)))
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            contentItems: items.map(contentItemDTO(from:)))
     }
 }
 
@@ -448,8 +456,9 @@ struct CreateContentItemTool: ContentTool {
         guard !title.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "title must not be empty.")
         }
-        let courseID = try await resolveCourseIDForWrite(
+        let course = try await resolveCourseForWrite(
             code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+        let courseID = try course.requireID()
         let kind = ContentItemKind(rawValue: input.kind ?? "") ?? .link
         let links = try contentLinksFromInput(input.links ?? [], tool: Self.name)
         let sectionID = try await resolveContentItemSectionID(
@@ -691,6 +700,9 @@ struct ReorderContentItemsTool: ContentTool {
 
     struct Output: Encodable, Sendable {
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let contentItems: [ContentItemDTO]
     }
 
@@ -717,20 +729,23 @@ struct ReorderContentItemsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "contentItems": .object([
                 "type": .string("array"),
                 "items": contentItemObjectSchema,
             ]),
         ]),
-        "required": .array([.string("courseCode"), .string("contentItems")]),
+        "required": .array([.string("courseCode"), .string("courseKey"), .string("contentItems")]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseIDForWrite(
+        let course = try await resolveCourseForWrite(
             code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+        let courseID = try course.requireID()
         let uuids = input.orderedContentItemIDs.compactMap {
             UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
         }
@@ -743,7 +758,9 @@ struct ReorderContentItemsTool: ContentTool {
                 tool: Self.name, detail: "orderedContentItemIDs contains a duplicate content-item id.")
         }
         guard !uuids.isEmpty else {
-            return Output(courseCode: input.courseCode, contentItems: [])
+            return Output(
+                courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+                contentItems: [])
         }
         // Scope to this course so a reorder can't renumber another course's items.
         let items = try await APICourseContentItem.query(on: context.db)
@@ -753,7 +770,7 @@ struct ReorderContentItemsTool: ContentTool {
         guard items.count == uuids.count else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
-                detail: "orderedContentItemIDs must all be content items in course \(input.courseCode).")
+                detail: "orderedContentItemIDs must all be content items in course \(course.urlKey).")
         }
         let byID = Dictionary(
             uniqueKeysWithValues: items.compactMap { item -> (UUID, APICourseContentItem)? in
@@ -767,7 +784,9 @@ struct ReorderContentItemsTool: ContentTool {
             try await item.save(on: context.db)
             ordered.append(contentItemDTO(from: item))
         }
-        return Output(courseCode: input.courseCode, contentItems: ordered)
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            contentItems: ordered)
     }
 }
 

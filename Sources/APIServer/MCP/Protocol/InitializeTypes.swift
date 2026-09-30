@@ -136,7 +136,13 @@ enum MCPServerInstructions {
         the content:read scope; write tools require content:write.
 
         Key concepts:
-        - Course — identified by a short code (e.g. "CS136").
+        - Course — one offering of a course in one term. Identified by a short code (e.g. \
+        "CS136"); the code is unique per term, so offerings in different terms can share it. \
+        Every course-scoped tool also accepts the course key, which adds the term (e.g. \
+        "CS136-F26") and names exactly one offering. list_courses returns each course's term and \
+        key. With a bare code that several offerings share, a read uses the newest term and a \
+        write is refused; every result that names a course reports its courseKey and courseTerm \
+        so you can see which offering was used.
         - Assignment — identified by a 6-character public ID; has a title, an optional due date \
         (ISO 8601), and an open/closed state. Every assignment is authored in ONE language — \
         \(supportedLanguageNames) — resolved from its graded scripts and its starter notebook's \

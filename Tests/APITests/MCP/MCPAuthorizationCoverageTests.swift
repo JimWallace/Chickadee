@@ -34,8 +34,8 @@ import Testing
         // Course-scoped wrappers: resolve the course code / section, then
         // authorize (read = authorizeCourseAccess, write =
         // authorizeCourseWriteAccess) before returning (CourseSectionTools.swift).
-        // "resolveCourseID" also matches "resolveCourseIDForWrite".
-        "resolveCourseID",
+        // "resolveCourse" also matches "resolveCourseForWrite".
+        "resolveCourse",
         "resolveCourseSectionForEdit",
     ]
 

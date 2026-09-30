@@ -36,7 +36,8 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
         "Time-series (sparkline) data behind the instructor dashboard's four cards for one course: "
         + "per-bucket student submissions, active students (distinct count), active assignments "
         + "(distinct count), and browser errors. Requires courseCode (e.g. \"CS136\", matched "
-        + "case-insensitively). Returns every selectable window in one payload (24h = 24 hourly "
+        + "case-insensitively, or a course key with the term such as \"CS136-F26\"; a bare code "
+        + "shared by several offerings takes the newest term). Returns every selectable window in one payload (24h = 24 hourly "
         + "buckets, 7d = 28 six-hour buckets, 30d = 30 daily buckets), each with bucket labels, a "
         + "headline, and the per-bucket series. Read-only; aggregate counts only — no student "
         + "identities, grades, or submission contents."
@@ -46,7 +47,8 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
             "courseCode": .object([
                 "type": .string("string"),
                 "description": .string(
-                    "Course code to scope the series to, e.g. \"CS136\" (case-insensitive)."),
+                    "Course code to scope the series to, e.g. \"CS136\" (case-insensitive), or "
+                        + "a course key with the term, e.g. \"CS136-F26\"."),
             ])
         ]),
         "required": .array([.string("courseCode")]),

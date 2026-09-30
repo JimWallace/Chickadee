@@ -18,6 +18,9 @@ struct GetAssignmentTool: ContentTool {
         let title: String
         let slug: String
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let isOpen: Bool
         /// Three-state visibility: "closed" | "preview" | "open". `isOpen` is the
         /// derived legacy flag (true only when "open").
@@ -121,6 +124,8 @@ struct GetAssignmentTool: ContentTool {
             "title": MCPSchema.string,
             "slug": MCPSchema.string,
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "isOpen": MCPSchema.boolean,
             "visibility": .object([
                 "type": .string("string"),
@@ -170,6 +175,7 @@ struct GetAssignmentTool: ContentTool {
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
+            .string("courseKey"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
             .string("gradingMode"), .string("secretRevealEnabled"),
             .string("solutionVisibility"), .string("submissionMode"),
@@ -208,6 +214,8 @@ struct GetAssignmentTool: ContentTool {
             title: assignment.title,
             slug: assignment.slug,
             courseCode: course.code,
+            courseKey: course.urlKey,
+            courseTerm: course.term?.displayName,
             isOpen: assignment.isOpen,
             visibility: assignment.visibility.rawValue,
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
