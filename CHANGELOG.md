@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.285] - 2026-09-30
+
+### Fixed
+
+- **LTI grade and roster services work with Brightspace.** An LTI platform now has an optional token audience. Chickadee signs its access-token request with that audience, or with the token URL when the field is blank. Brightspace refuses the token URL and expects its "OAuth2 Audience" value, so without this field every grade push and roster read through LTI would fail.
+
+
 ## [0.5.284] - 2026-09-30
 
 ### Changed
