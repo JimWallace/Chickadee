@@ -41,7 +41,7 @@
         <span class="filter-group">
             <label class="filter-label" for="leaderboard-filter">Filter</label>
             <input id="leaderboard-filter" class="form-input filter-input" type="search"
-                   placeholder="Filter by handle or name…"
+                   placeholder="#(filterPlaceholder)"
                    data-list-filter="leaderboard-table"
                    data-list-filter-empty="Nobody on the board matches this filter.">
         </span>

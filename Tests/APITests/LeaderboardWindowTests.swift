@@ -119,7 +119,7 @@ import Testing
     @Test func onlyTheTopThreeRanksCarryATier() {
         #expect(LeaderboardStandingText.tier(rank: 1) == "1")
         #expect(LeaderboardStandingText.tier(rank: 3) == "3")
-        #expect(LeaderboardStandingText.tier(rank: 4) == "")
+        #expect(LeaderboardStandingText.tier(rank: 4).isEmpty)
     }
 
     @Test func durationsAreShort() {

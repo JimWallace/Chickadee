@@ -255,7 +255,7 @@
             <tr>
                 <th scope="col">Rank</th>
                 <th scope="col">Bird</th>
-                <th scope="col" data-sort-key="student" data-sort-type="text">Student</th>
+                <th scope="col">Student</th>
                 <th scope="col">Metric</th>
                 #if(isStaff):
                 <th scope="col">Actions</th>
@@ -275,7 +275,7 @@
                 <td>
                     <div class="item-title"><span data-avatar-handle>#(item.row.handle)</span>#if(item.row.isViewer): <span class="you-pill">You</span>#endif</div>
                     #if(isStaff):
-                    <div class="item-details">#(item.row.name) · <code>#(item.row.username)</code> · #(item.row.submissionCountText) · best <span class="js-relative-time" data-iso="#(item.row.bestAtISO)"></span></div>
+                    <div class="item-details">#(item.row.name) · <code>#(item.row.username)</code> · #(item.row.submissionCountText) · best <span class="js-relative-time" data-iso="#(item.row.bestAtISO)">#(item.row.bestAtText)</span></div>
                     #elseif(item.row.hasTieNote):
                     <div class="item-details">#(item.row.tieNote)</div>
                     #endif

@@ -90,6 +90,7 @@ extension WebRoutes {
                 allURL: "\(boardURL)?all=1",
                 boardURL: boardURL,
                 showFilter: showingAll && board.rankedCount >= LeaderboardBoard.filterThreshold,
+                filterPlaceholder: isStaff ? "Filter by handle or name…" : "Filter by handle…",
                 pollURL: showingAll && !isStaff
                     ? "\(boardURL)?fragment=body&all=1" : "\(boardURL)?fragment=body",
                 metricLabel: "metric",
@@ -308,6 +309,8 @@ struct LeaderboardContext: Encodable {
     let boardURL: String
     /// The filter box appears only over a full list of eight or more rows.
     let showFilter: Bool
+    /// Staff can search names; a student's page holds none.
+    let filterPlaceholder: String
     /// The background refresh's URL; it keeps `?all=1` so a full list stays
     /// full.
     let pollURL: String
@@ -535,6 +538,8 @@ struct LeaderboardRow: Encodable {
     /// Staff only: "6 submissions", and the submission that set the best.
     let submissionCountText: String
     let bestAtISO: String
+    /// The same instant as text, shown until the relative-time script runs.
+    let bestAtText: String
     let bestSubmissionURL: String
 }
 
@@ -655,6 +660,8 @@ func buildLeaderboard(
                 submissionCountText: isStaff
                     ? "\(submissions) \(submissions == 1 ? "submission" : "submissions")" : "",
                 bestAtISO: isStaff ? entry.reachedAt.map(ISO8601DateFormatter().string(from:)) ?? "" : "",
+                bestAtText: isStaff
+                    ? entry.reachedAt.map(waterlooDateTimeFormatter().string(from:)) ?? "" : "",
                 bestSubmissionURL: isStaff ? "/submissions/\(entry.submissionID)" : ""))
     }
 
