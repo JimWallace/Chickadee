@@ -112,14 +112,16 @@
     --shadow-pop: 0 4px 16px rgba(0, 0, 0, .15);
 
     /* ── Avatar palette (generated student chickadees) ────
-       Five axes vary: cap family, wing pattern, expression, accessory,
-       backdrop.  Everything else is FIXED — body, cheek, beak, bib, eye — and
-       that is deliberate: they are what keeps every bird a chickadee even when
-       the cap goes plum.  Only the BACKDROPS have dark-mode mirrors; the bird
-       itself must be the same bird in both schemes.
-       An accessory is drawn in one of five accents, picked by cap family, so
-       an accent is never a sixth axis. */
-    /* Cap tones spread across hue AND lightness since the tune-up, because
+       Seven axes vary: cap family, wing pattern, expression, accessory,
+       backdrop, tuft and tilt.  Tuft is drawn in the cap colour and tilt is a
+       transform, so neither adds a colour here.  Everything else is FIXED —
+       body, cheek, beak, bib, eye — and that is deliberate: they are what
+       keeps every bird a chickadee even when the cap goes plum.  Only the
+       BACKDROPS have dark-mode mirrors; the bird itself must be the same bird
+       in both schemes.  An accessory is drawn in one of five accents, so an
+       accent is part of the accessory axis, never an axis of its own.
+
+       Cap tones spread across hue AND lightness since the tune-up, because
        at the roster size cap hue is one of the few things that still reads.
        The white eye disc sits on the cap, so every -cap keeps at least 3:1
        against #FFFFFF (WCAG relative luminance): ink 15.1, slate 5.4,

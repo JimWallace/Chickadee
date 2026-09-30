@@ -68,7 +68,7 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// is why the design writes it "8 + 5 accents".
     public let accentToken: String
     public let backdropToken: String
-    /// Fragment references for the three symbols a spec varies, e.g.
+    /// Fragment references for the four symbols a spec varies, e.g.
     /// "#av-wing-barred" — WITH the leading marker, so the template never has
     /// to write one next to an interpolation. A template writing a literal
     /// marker immediately before an interpolation is exactly the Leaf lexing

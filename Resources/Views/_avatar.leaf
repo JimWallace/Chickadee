@@ -2,7 +2,8 @@
 
      Rendered from an AvatarPresentation passed as a SUB-CONTEXT
      (Core/AvatarMarkup.swift), which carries palette TOKEN NAMES rather than
-     colours and a wing symbol reference rather than any geometry.
+     colours, and symbol references plus one rotate transform rather than
+     any path data.
 
      The sub-context form makes the passed object this partial's root, so its
      fields are addressed flat here. Qualifying them with the caller's field
