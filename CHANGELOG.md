@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.279] - 2026-09-30
+
+### Added
+
+- **Leaderboard action on the dashboards.** A class activity's row now offers a Leaderboard action in its Actions column: an icon on the student dashboard once the instructor makes the board visible, and in the row menu on the instructor course page for every activity. Before this, the board was reachable only from a submission page or the edit page, so a student could not find it before submitting. All three links now ask one rule, `ClassActivity.leaderboardPath`.
+
+### Fixed
+
+- **MCP results say which course offering they used.** A course code can name offerings in more than one term, and a read with a bare code uses the newest term. Tool results only echoed the code, so an agent could not see which offering it read or changed. Every MCP result that names a course now also returns `courseKey` (for example `CS136-F26`) and `courseTerm` (for example "Fall 2026"), and `courseCode` is the code of the course that was used. Manifest resource names use the course key. The initialize text and the course inputs of `create_assignment`, `clone_assignment` and `get_instructor_card_series` now say that a course key is accepted.
+
+
 ## [0.5.278] - 2026-09-30
 
 ### Fixed
