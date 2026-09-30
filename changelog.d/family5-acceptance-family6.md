@@ -1,3 +1,0 @@
-### Changed
-
-- **CI flake Family 5 is closed for monitoring.** The acceptance test its entry named ran against 88 `main` runs since the fix landed: the throughput collapse has not recurred, the excursion rate went from 10.8 % of runs to none, and both APITests lanes sit at roughly half their former cost — `api-tests` 291 s to 156 s, `api-tests-postgres` 391 s to 198 s. Excluding one run wedged by Family 6, `api-tests` now has a tighter run-to-run spread than the `build` lane that served as the control. The entry still records that the collapse was never root-caused, so "it stopped appearing" and "it is fixed" stay distinguishable, and it notes that the `[ci-pressure]` telemetry is what told the one apparent recurrence apart from a genuine one.
