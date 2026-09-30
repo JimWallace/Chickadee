@@ -20,7 +20,7 @@ actor LTIServiceClient {
         let clientID: String
         let accessTokenURL: String
         /// The token-request JWT audience; nil = `accessTokenURL`.
-        var tokenAudience: String? = nil
+        var tokenAudience: String?
 
         /// The service facts of a stored registration.
         init(id: UUID, registration platform: APILTIPlatform) {
