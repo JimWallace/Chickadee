@@ -396,10 +396,26 @@ duplicate.
   `.row-menu-item--danger` and keep their `data-confirm`.  An item that adds
   something carries a small `.item-tile` and may add a one-line `.card-meta`
   hint.
-- **`.slip-pips`** (with `.slip-pip`, keyed by `data-state`) — one dot per day in a
-  student's slip-day budget: `used` is hollow, `left` teal, `extra` (a granted
-  day not yet spent) amber.  Decorative and `aria-hidden`; the "2 of 3 left"
-  text beside it is the value.
+- **`.pips`** (with `.pip`, keyed by `data-state`) — one dot per unit of a budget
+  or capacity: a student's slip days (`used` hollow, `left` teal, `extra` — a
+  granted day not yet spent — amber) and a runner's job slots (`used` free,
+  `left` busy, `extra` when every slot is busy).  Decorative and `aria-hidden`;
+  the text beside it ("2 of 3 left", "2 of 4 busy") is the value.
+- **`.item-details--danger`** — a details line that reports a problem (a timeout's
+  limit, a failed delivery, "No course access"): the same line in danger red.
+- **`.detail-grid--cells`** — the facts panel as an auto-fitting grid of
+  label-over-value cells (`<div><dt>…</dt><dd>…</dd></div>`), for ten or more
+  facts (the runner detail); omit a fact with no value rather than showing a dash.
+- **`.spark-chart`** (with `.spark-chart-scale`, `.spark-chart-axis`) — a sparkline
+  drawn large: a 100 / 50 / 0 scale, a taller plot and an x-axis of times, around
+  the same `.diagnostic-spark` bars (height from `--bar-h`).  `data-state` on a
+  `.spark-fill` turns a full bar amber and an idle one grey.  The numbers also sit
+  in a visually hidden table after the chart.
+- **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
+  above an admin page title.  Visual only; the hidden `h1` already names it.
+- **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
+  row type only sometimes has one, so the actions track lines up.  Never an
+  empty menu.
 - **`.state-select`** — a real `<select>` in a wrapper whose dot shows the
   state (`data-state`: open, visible and instructor are teal; preview and ta are
   `--state-amber`; anything else is grey).  The select text is the value; the

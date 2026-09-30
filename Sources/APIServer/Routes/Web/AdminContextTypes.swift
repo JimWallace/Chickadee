@@ -13,6 +13,11 @@ struct AdminUserRow: Content {
     let role: String
     let createdAt: String
     let lastSeenAt: String?
+    /// The user's own seeded avatar, at the roster size; nil on the JSON feed's
+    /// decode path for rows that predate it. `hasAvatar` is the flat flag the
+    /// template branches on (a bare optional in a Leaf conditional is unreliable).
+    var avatar: AvatarPresentation?
+    var hasAvatar: Bool = false
 }
 
 struct AdminWorkerRow: Content {
@@ -35,6 +40,67 @@ struct AdminWorkerRow: Content {
     /// replaced only ran during a poll, so a freshly loaded dashboard showed
     /// no offline badges at all until the first tick.
     let isOffline: Bool
+}
+
+/// One runner as the Overview table draws it: the facts of `AdminWorkerRow`
+/// plus the strings and pips the row shows, built once so the page and the poll
+/// fragment cannot disagree. The JSON feed keeps `AdminWorkerRow`.
+struct AdminRunnerRow: Encodable {
+    let workerID: String
+    let isOffline: Bool
+    let assignedJobs: Int
+    let maxConcurrentJobs: Int
+    let lastActive: String
+    let runnerVersion: String
+    let jobsProcessed: Int
+    let avgExecutionMs: Int?
+    let avgQueueWaitMs: Int?
+    /// "host · version · 12 jobs · avg run 14s · avg wait 3s"; a missing value is
+    /// left out rather than shown as a dash.
+    let detailsText: String
+    /// True when the runner reports a slot count, so the load track draws pips.
+    let hasSlots: Bool
+    let pips: [SlipDayPip]
+    /// "2 of 4 busy" or "idle"; the plain count when the runner reports no slots.
+    let loadLabel: String
+
+    init(_ worker: AdminWorkerRow) {
+        workerID = worker.workerID
+        isOffline = worker.isOffline
+        assignedJobs = worker.assignedJobs
+        maxConcurrentJobs = worker.maxConcurrentJobs
+        lastActive = worker.lastActive
+        runnerVersion = worker.runnerVersion
+        jobsProcessed = worker.jobsProcessed
+        avgExecutionMs = worker.avgExecutionMs
+        avgQueueWaitMs = worker.avgQueueWaitMs
+        let jobs = "\(worker.jobsProcessed) \(worker.jobsProcessed == 1 ? "job" : "jobs")"
+        var parts: [String] = []
+        if !worker.hostname.isEmpty { parts.append(worker.hostname) }
+        if !worker.runnerVersion.isEmpty { parts.append(worker.runnerVersion) }
+        parts.append(jobs)
+        if let run = worker.avgExecutionFormatted { parts.append("avg run \(run)") }
+        if let wait = worker.avgQueueWaitFormatted { parts.append("avg wait \(wait)") }
+        detailsText = parts.joined(separator: " · ")
+        hasSlots = worker.maxConcurrentJobs > 0
+        pips = Self.loadPips(assigned: worker.assignedJobs, slots: worker.maxConcurrentJobs)
+        if worker.maxConcurrentJobs > 0 {
+            loadLabel =
+                worker.assignedJobs == 0
+                ? "idle" : "\(worker.assignedJobs) of \(worker.maxConcurrentJobs) busy"
+        } else {
+            loadLabel = worker.assignedJobs == 0 ? "idle" : "\(worker.assignedJobs) busy"
+        }
+    }
+
+    /// One pip per slot, busy ones first. `left` draws busy; once every slot is
+    /// busy they all read `extra` (amber), the "at capacity" cue.
+    static func loadPips(assigned: Int, slots: Int) -> [SlipDayPip] {
+        guard slots > 0 else { return [] }
+        let busy = min(max(assigned, 0), slots)
+        if busy == slots { return Array(repeating: SlipDayPip(state: "extra"), count: slots) }
+        return (0..<slots).map { SlipDayPip(state: $0 < busy ? "left" : "used") }
+    }
 }
 
 struct AdminCourseRow: Encodable {
@@ -107,6 +173,18 @@ struct AdminRunnerJobRow: Encodable {
     let workdirPeakBytes: Int?
     let workdirPeakFormatted: String?
     let completedAt: String?
+    /// The submitting student's own seeded avatar; the row shows a grey tile and
+    /// "No user" when the job has no user (a validation run, say).
+    var avatar: AvatarPresentation?
+    var hasAvatar: Bool = false
+    /// The status as the pill words it, and the pill's class suffix
+    /// ("open" passed, "danger" failed or errored, "preview" timed out).
+    var statusLabel: String = ""
+    var statusTier: String = "closed"
+    /// "wait 1s · run 2s · total 3s · peak disk 12.0 MB" — missing parts left out.
+    var detailsText: String = ""
+    /// "hit the 10s limit" on a timed-out job whose limit is known; else empty.
+    var limitText: String = ""
 }
 
 struct AdminRunnerSnapshotRow: Encodable {
@@ -150,8 +228,11 @@ struct AdminStorageContext: Encodable, Sendable {
 struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
-    let workers: [AdminWorkerRow]
+    let workers: [AdminRunnerRow]
     let courses: [AdminCourseRow]
+    /// Whether the course list is long enough to earn a filter box
+    /// (`ListFilterPolicy`).
+    let showCourseFilter: Bool
     let version: String
     /// Default (24h) activity series, JSON-encoded into the page so the chart
     /// renders before the first poll.  The client re-fetches GET /admin/activity
@@ -162,13 +243,12 @@ struct AdminContext: Encodable {
     // one): under the CI build's batch/non-WMO mode the synthesized init's
     // symbol can fail to emit, producing an "undefined reference to
     // AdminContext.init(...)" link error in chickadee-server. A hand-written
-    // init is emitted normally and sidesteps that. It is intentionally
-    // identical to the memberwise init, so silence the "unneeded" rule.
-    // swiftlint:disable:next unneeded_synthesized_initializer
+    // init is emitted normally and sidesteps that. It also derives
+    // `showCourseFilter` from the course count.
     init(
         currentUser: CurrentUserContext?,
         activeAdminTab: String,
-        workers: [AdminWorkerRow],
+        workers: [AdminRunnerRow],
         courses: [AdminCourseRow],
         version: String,
         activityChart: ActivityChartData
@@ -177,6 +257,7 @@ struct AdminContext: Encodable {
         self.activeAdminTab = activeAdminTab
         self.workers = workers
         self.courses = courses
+        self.showCourseFilter = ListFilterPolicy.showsFilter(rowCount: courses.count)
         self.version = version
         self.activityChart = activityChart
     }
@@ -186,11 +267,13 @@ struct AdminUsersContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let users: [AdminUserRow]
+    let userCount: Int
+    let adminCount: Int
 }
 
 /// Context for the rows-only fragment of the runners table (`?fragment=rows`).
 struct WorkerRowsFragmentContext: Encodable {
-    let workers: [AdminWorkerRow]
+    let workers: [AdminRunnerRow]
 }
 
 /// Context for the rows-only fragment of the users table (`?fragment=rows`).
@@ -288,6 +371,16 @@ struct AdminCourseDetailContext: Encodable {
     var cloneTermOptions: [CourseTermOption] = []
 }
 
+/// One snapshot drawn as a bar of the utilization chart.
+struct AdminRunnerChartBar: Encodable {
+    /// Bar height as a percent of the plot; a 0% snapshot keeps a 2% stub so its
+    /// slot is visible.
+    let heightPercent: Int
+    /// "idle" (grey stub), "busy" (teal) or "full" (amber, every slot in use).
+    let state: String
+    let title: String
+}
+
 struct AdminRunnerDetailContext: Encodable {
     let currentUser: CurrentUserContext?
     let runner: AdminWorkerRow
@@ -296,6 +389,12 @@ struct AdminRunnerDetailContext: Encodable {
     let recentJobs: [AdminRunnerJobRow]
     let snapshots: [AdminRunnerSnapshotRow]
     let firstSeenAt: String?
+    /// The snapshots oldest to newest, one bar each.
+    let chartBars: [AdminRunnerChartBar]
+    /// Three or four evenly spaced clock times for the chart's x-axis.
+    let chartLabels: [String]
+    /// "12m 3s" — how long since the last heartbeat; empty while the runner is online.
+    let offlineForText: String
 }
 
 struct AdminCourseEnrolledUserRow: Encodable {

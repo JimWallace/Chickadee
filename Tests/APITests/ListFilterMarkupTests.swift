@@ -60,6 +60,7 @@ import Testing
         #expect(
             files == [
                 "admin-audit.leaf",
+                "admin.leaf",
                 "admin-users.leaf",
                 "assignment-submissions.leaf",
                 "index.leaf",
@@ -174,7 +175,7 @@ import Testing
     /// the server. Nothing else is a valid filter.
     @Test func everyFilterIsEitherLiveOrInAGetForm() throws {
         let liveFilters = [
-            "admin-users.leaf", "assignment-submissions.leaf", "index.leaf",
+            "admin.leaf", "admin-users.leaf", "assignment-submissions.leaf", "index.leaf",
             "instructor-slip-days.leaf", "instructor-students.leaf",
         ]
         for input in try Self.filterInputs() {

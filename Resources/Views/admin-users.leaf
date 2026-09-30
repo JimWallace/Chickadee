@@ -5,7 +5,11 @@ Users
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
+#extend("_avatar-sprite")
 <section class="page-section">
+    <div class="page-titlebar">
+        <h2>People <span class="text-muted">#(userCount) users · #(adminCount) admins</span></h2>
+    </div>
     <div class="toolbar toolbar--end section-gap">
         <span class="filter-group">
             <label class="filter-label" for="users-filter">Filter</label>
@@ -15,43 +19,27 @@ Users
                    data-list-filter-empty="No users match this filter.">
         </span>
     </div>
-    <div class="table-scroll"><table class="results-table sortable-table" id="users-table"
-           data-sort-initial="last-seen:desc" data-sort-tiebreak="username"
+    <table class="results-table section-items section-items--manage sortable-table" id="users-table"
+           data-sort-initial="last-seen:desc" data-sort-tiebreak="name"
            data-poll-url="/admin/users-data?fragment=rows" data-poll-interval="5000">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status">
+            <col class="section-items-seen col-hide-phone"><col class="section-items-actions">
+        </colgroup>
         <thead>
             <tr>
+                <th scope="col"><span class="visually-hidden">Person</span></th>
                 <th data-sort-key="name" data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
-                <th data-sort-key="username" data-sort-type="text"><button class="sort-header" type="button">Username</button></th>
                 <th data-sort-key="role" data-sort-type="text"><button class="sort-header" type="button">Role</button></th>
-                <th class="time col-hide-phone" data-sort-key="last-seen" data-sort-type="date"><button class="sort-header" type="button">Last Seen</button></th>
-                <th class="time col-hide-phone" data-sort-key="joined" data-sort-type="date"><button class="sort-header" type="button">Joined</button></th>
+                <th class="col-hide-phone" data-sort-key="last-seen" data-sort-type="date"><button class="sort-header" type="button">Last seen</button></th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
         #extend("_user-rows")
         </tbody>
-    </table></div>
+    </table>
 </section>
-<style>
-.role-form {
-    display: flex;
-    gap: .4rem;
-    align-items: center;
-}
-.role-select {
-    padding: .25rem .5rem;
-    font-size: var(--text-sm);
-}
-.user-actions {
-    display: flex;
-    align-items: center;
-    gap: .35rem;
-}
-.user-delete-form {
-    display: inline;
-}
-</style>
 <script src="/list-filter.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 <script src="/table-poll.js?v=#appVersion()"></script>
