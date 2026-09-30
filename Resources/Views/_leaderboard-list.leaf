@@ -1,0 +1,37 @@
+<!-- The ranked list shared by the round robin standings and the tests half of a
+     tests-and-code activity. It is given one sub-context (see
+     LeaderboardListContext), so nothing here reads the page context. The
+     metric list keeps its own markup because its staff rows carry extra
+     actions. -->
+<table class="results-table section-items" id="#(tableID)">
+    <colgroup>
+        <col class="leaderboard-rank"><col class="section-items-tile"><col><col class="section-items-status">
+    </colgroup>
+    <thead class="visually-hidden">
+        <tr>
+            <th scope="col">Rank</th>
+            <th scope="col">Bird</th>
+            <th scope="col">Student</th>
+            <th scope="col">#(valueLabel)</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(item in items):
+    #if(item.isGap):
+        <tr class="leaderboard-gap">
+            <td colspan="4"><a href="#(allURL)">#(item.gapLabel)</a></td>
+        </tr>
+    #else:
+        <tr#if(item.row.isViewer): class="leaderboard-row--you"#endif>
+            <td class="leaderboard-rank"><span class="rank-disc" data-rank-tier="#(item.row.rankTier)">#(item.row.rankText)</span></td>
+            <td class="item-tile-cell">#extend("_avatar", item.row.avatar)</td>
+            <td>
+                <div class="item-title"><span data-avatar-handle>#(item.row.handle)</span>#if(item.row.isViewer): <span class="you-pill">You</span>#endif</div>
+                <div class="item-details">#if(isStaff):#(item.row.name) · #endif#(item.row.detailsText)</div>
+            </td>
+            <td class="item-grade">#(item.row.valueText)</td>
+        </tr>
+    #endif
+    #endfor
+    </tbody>
+</table>

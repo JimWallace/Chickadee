@@ -48,14 +48,13 @@ extension WebRoutes {
         let board =
             showsMetricBoard
             ? try await buildLeaderboard(
-                setup: setup, viewer: user, isStaff: isStaff, showAll: showingAll,
-                allURL: "\(boardURL)?all=1", on: req.db)
+                setup: setup, viewer: user, isStaff: isStaff, showAll: showingAll, on: req.db)
             : LeaderboardBoard.empty
-        let standings =
+        let standingsBoard =
             showsStandings
-            ? try await buildStandingRows(
-                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
-            : []
+            ? try await buildStandingsBoard(
+                setup: setup, viewer: user, isStaff: isStaff, showAll: showingAll, on: req.db)
+            : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
         let tournament =
@@ -66,9 +65,11 @@ extension WebRoutes {
         let union =
             showsUnion
             ? try await buildUnionPresentation(
-                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+                setup: setup, viewer: user, isStaff: isStaff, showAll: showingAll,
+                allURL: "\(boardURL)?all=1", on: req.db)
             : nil
 
+        let listedCount = showsStandings ? standingsBoard.rankedCount : board.rankedCount
         let session = LiveSessionPresentation.make(activity)
         let context =
             LeaderboardContext(
@@ -81,15 +82,15 @@ extension WebRoutes {
                 showsMetricBoard: showsMetricBoard,
                 rows: board.rows,
                 displayItems: board.items,
-                you: board.you,
-                hasYou: board.you != nil,
-                rankedCount: board.rankedCount,
+                you: board.you ?? standingsBoard.you,
+                hasYou: (board.you ?? standingsBoard.you) != nil,
+                rankedCount: showsStandings ? standingsBoard.rankedCount : board.rankedCount,
                 unrankedCount: board.unrankedCount,
                 staffSummary: board.staffSummary,
                 showingAll: showingAll && !isStaff,
                 allURL: "\(boardURL)?all=1",
                 boardURL: boardURL,
-                showFilter: showingAll && board.rankedCount >= LeaderboardBoard.filterThreshold,
+                showFilter: showingAll && listedCount >= LeaderboardBoard.filterThreshold,
                 filterPlaceholder: isStaff ? "Filter by handle or name…" : "Filter by handle…",
                 pollURL: showingAll && !isStaff
                     ? "\(boardURL)?fragment=body&all=1" : "\(boardURL)?fragment=body",
@@ -97,7 +98,10 @@ extension WebRoutes {
                 hasHill: activity.kind.opponentSource == .champion,
                 champion: champion,
                 showsStandings: showsStandings,
-                standings: standings,
+                standings: standingsBoard.rows,
+                standingList: LeaderboardListContext(
+                    items: standingsBoard.items, valueLabel: "Average", isStaff: isStaff,
+                    allURL: "\(boardURL)?all=1", tableID: "leaderboard-table"),
                 showsBracket: showsBracket,
                 hasTournament: tournament != nil,
                 tournament: tournament,
@@ -131,7 +135,8 @@ extension WebRoutes {
 /// bird. Nil when no match has landed yet, so the page can say so once
 /// rather than printing two empty tables.
 func buildUnionPresentation(
-    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, on db: Database
+    setup: APITestSetup, viewer: APIUser, isStaff: Bool, showAll: Bool, allURL: String,
+    on db: Database
 ) async throws -> UnionPresentation? {
     let tally = try await unionTally(setup: setup, on: db)
     guard tally.targetCount > 0 else { return nil }
@@ -139,26 +144,44 @@ func buildUnionPresentation(
         userIDs: tally.kills.map(\.userID) + tally.defences.map(\.userID),
         courseID: setup.courseID, on: db)
 
+    // Competition ranking over the same key the tally sorts on.
+    var killRanks: [Int] = []
+    let rosterKills = tally.kills.filter { identities.isOnRoster($0.userID) }
+    for (index, kill) in rosterKills.enumerated() {
+        let previous = index > 0 ? rosterKills[index - 1] : nil
+        let ties = previous.map { $0.defeated == kill.defeated && $0.faced == kill.faced } ?? false
+        killRanks.append(ties ? killRanks[index - 1] : index + 1)
+    }
+    let killTieSizes = Dictionary(killRanks.map { ($0, 1) }, uniquingKeysWith: +)
+
     var kills: [UnionKillRow] = []
-    for tally in tally.kills {
+    for (index, kill) in rosterKills.enumerated() {
+        let rank = killRanks[index]
+        let isTied = (killTieSizes[rank] ?? 1) > 1
         guard
             let identity = try await identities.presentation(
-                for: tally.userID, includeName: includeNames,
-                lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Student", on: db)
+                for: kill.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student", size: .roster,
+                on: db)
         else { continue }
         kills.append(
             UnionKillRow(
+                rank: rank,
+                rankText: LeaderboardStandingText.rankText(rank: rank, isTied: isTied),
+                isTied: isTied,
+                rankTier: LeaderboardStandingText.tier(rank: rank),
                 handle: identity.handle, name: identity.name,
-                defeated: tally.defeated, faced: tally.faced,
-                isViewer: tally.userID == viewerID, avatar: identity.avatar))
+                defeated: kill.defeated, faced: kill.faced,
+                valueText: "\(kill.defeated)",
+                detailsText: "tested \(kill.faced)",
+                isViewer: kill.userID == viewer.id, avatar: identity.avatar))
     }
 
     var defences: [UnionDefenceRow] = []
     for tally in tally.defences {
         guard
             let identity = try await identities.presentation(
-                for: tally.userID, includeName: includeNames,
-                lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Student", on: db)
+                for: tally.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student", size: .roster,
+                on: db)
         else { continue }
         let statusText: String
         if tally.defeated {
@@ -172,7 +195,8 @@ func buildUnionPresentation(
             UnionDefenceRow(
                 handle: identity.handle, name: identity.name,
                 faced: tally.faced, statusText: statusText,
-                isViewer: tally.userID == viewerID, avatar: identity.avatar))
+                detailsText: "\(statusText) · tested by \(tally.faced)",
+                isViewer: tally.userID == viewer.id, avatar: identity.avatar))
     }
 
     // Counted from the rows the page SHOWS, not from the tally: a student
@@ -180,10 +204,52 @@ func buildUnionPresentation(
     // handle), and a denominator that counted them would not match the
     // table under it.
     let defeated = defences.filter { $0.statusText == "defeated" }.count
+    let viewerIndex = kills.firstIndex(where: \.isViewer)
+    let you =
+        isStaff
+        ? nil
+        : try await buildUnionYouCard(
+            viewer: viewer, setup: setup,
+            kill: kills.first(where: \.isViewer), defence: defences.first(where: \.isViewer), on: db)
     return UnionPresentation(
         summaryText: "\(defeated) of \(defences.count) submissions defeated so far.",
         kills: kills,
-        defences: defences)
+        killList: LeaderboardListContext(
+            items: leaderboardWindowItems(
+                rows: kills, ranks: kills.map(\.rank), viewerIndex: viewerIndex,
+                showAll: showAll || isStaff),
+            valueLabel: "Faults", isStaff: isStaff, allURL: allURL, tableID: "leaderboard-table"),
+        defences: defences,
+        hasYou: you != nil,
+        you: you)
+}
+
+/// The viewer's card for a tests-and-code activity: both halves in one place.
+private func buildUnionYouCard(
+    viewer: APIUser, setup: APITestSetup, kill: UnionKillRow?, defence: UnionDefenceRow?,
+    on db: Database
+) async throws -> UnionYouCard? {
+    guard let identity = try await ViewerIdentity.load(viewer: viewer, setup: setup, on: db) else {
+        return nil
+    }
+    guard kill != nil || defence != nil else {
+        return UnionYouCard(
+            isRanked: false, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
+            avatar: identity.avatar, kicker: "You · \(identity.handle)",
+            titleText: "Not on the board yet", noteText: "", privacyLine: identity.privacyLine,
+            submitURL: identity.submitURL)
+    }
+    let found = kill?.defeated ?? 0
+    let status = defence?.statusText ?? "not tested yet"
+    let tested = kill?.faced ?? 0
+    let testedBy = defence?.faced ?? 0
+    return UnionYouCard(
+        isRanked: true, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
+        avatar: identity.avatar, kicker: "You · \(identity.handle)",
+        titleText: "Your tests found \(found) \(found == 1 ? "fault" : "faults") · your code is \(status)",
+        noteText:
+            "Tested \(tested) \(tested == 1 ? "classmate" : "classmates") · \(testedBy) \(testedBy == 1 ? "has" : "have") tested you",
+        privacyLine: identity.privacyLine, submitURL: identity.submitURL)
 }
 
 /// The latest tournament run as the page shows it: its status, the winner
@@ -231,12 +297,17 @@ func buildTournamentPresentation(
         let match = TournamentMatchPresentation(
             home: home, away: away, hasAway: away != nil,
             resultText: resultText,
+            isLive: slot.awaySeed != nil && slot.winnerSeed == nil,
             homeWon: slot.winnerSeed == slot.homeSeed,
             awayWon: slot.awaySeed != nil && slot.winnerSeed == slot.awaySeed)
         if let index = rounds.firstIndex(where: { $0.number == slot.round }) {
             rounds[index].matches.append(match)
         } else {
-            rounds.append(TournamentRoundPresentation(number: slot.round, matches: [match]))
+            let isFinal = run.tournamentSchedule == .bracket && run.roundCount > 1 && slot.round == run.roundCount
+            rounds.append(
+                TournamentRoundPresentation(
+                    number: slot.round, label: isFinal ? "Final" : "Round \(slot.round)",
+                    matches: [match]))
         }
     }
     let winner = run.winnerUserID.flatMap { winnerID in entrants.first { $0.userID == winnerID } }
@@ -280,7 +351,7 @@ func buildChampionPresentation(
         crownedAtText: waterlooDateTimeFormatter().string(from: crownedAt),
         defencesText: champion.defences == 1 ? "1 defence" : "\(champion.defences) defences",
         isViewer: champion.userID == viewerID,
-        avatar: AvatarPresentation(for: spec, size: .small, accessibility: accessibility))
+        avatar: AvatarPresentation(for: spec, size: .hero, accessibility: accessibility))
 }
 
 // MARK: - Context
@@ -301,7 +372,7 @@ struct LeaderboardContext: Encodable {
     let rows: [LeaderboardRow]
     /// What the list shows: every row for staff and for "show all", else the
     /// top places and the viewer's neighbourhood with gap rows between.
-    let displayItems: [LeaderboardDisplayItem]
+    let displayItems: [LeaderboardWindowItem<LeaderboardRow>]
     /// The viewer's own standing, for a student; nil for staff.
     let you: ViewerStanding?
     let hasYou: Bool
@@ -333,6 +404,7 @@ struct LeaderboardContext: Encodable {
     /// won, drawn, lost, average score) instead of the metric ranking.
     let showsStandings: Bool
     let standings: [StandingRow]
+    let standingList: LeaderboardListContext<StandingRow>
     /// True for a tournament kind: the page shows the latest run's bracket.
     let showsBracket: Bool
     /// True when a run has been started; the template gates on this, never
@@ -417,35 +489,66 @@ struct LiveSessionPresentation: Encodable {
     }
 }
 
-/// A union activity's two tables plus the one-line count above them.
-struct UnionPresentation: Encodable {
+/// A union activity's two lists plus the one-line count above them.
+struct UnionPresentation: Encodable, Sendable {
     /// "7 of 24 submissions defeated so far."
     let summaryText: String
     let kills: [UnionKillRow]
+    /// The Tests list as the viewer is shown it: the window, or everything.
+    let killList: LeaderboardListContext<UnionKillRow>
     let defences: [UnionDefenceRow]
+    /// A student's card; nil for staff.
+    let hasYou: Bool
+    let you: UnionYouCard?
+}
+
+/// The viewer's card above a union activity's lists.
+struct UnionYouCard: Encodable, Sendable {
+    let isRanked: Bool
+    let handle: String
+    let hasHandle: Bool
+    let avatar: AvatarPresentation
+    /// "You · Quiet Cedar".
+    let kicker: String
+    /// "Your tests found 3 faults · your code is holding".
+    let titleText: String
+    /// "Tested 11 classmates · 4 have tested you".
+    let noteText: String
+    let privacyLine: String
+    let submitURL: String
 }
 
 /// One student's tests, by what they defeated.
-struct UnionKillRow: Encodable {
+struct UnionKillRow: Encodable, Sendable {
+    let rank: Int
+    let rankText: String
+    let isTied: Bool
+    let rankTier: String
     let handle: String
     /// Staff only; empty for a student viewer.
     let name: String
     let defeated: Int
     let faced: Int
+    /// The defeated count as printed in the value column.
+    let valueText: String
+    /// "tested 11".
+    let detailsText: String
     let isViewer: Bool
     let avatar: AvatarPresentation
 }
 
 /// One student's code, by how it has held up.
-struct UnionDefenceRow: Encodable {
+struct UnionDefenceRow: Encodable, Sendable {
     let handle: String
     /// Staff only; empty for a student viewer.
     let name: String
     let faced: Int
-    /// "holding", "defeated" or "not tested yet". Plain text in the table:
+    /// "holding", "defeated" or "not tested yet". Plain text, never a pill:
     /// early on nearly every row is holding, so badging the ordinary state
     /// would paint the column one colour and cue nothing.
     let statusText: String
+    /// "holding · tested by 4" — the status as details text.
+    let detailsText: String
     let isViewer: Bool
     let avatar: AvatarPresentation
 }
@@ -462,6 +565,8 @@ struct TournamentPresentation: Encodable {
 
 struct TournamentRoundPresentation: Encodable {
     let number: Int
+    /// "Round 1", … and "Final" for the last round of a single elimination.
+    let label: String
     var matches: [TournamentMatchPresentation]
 }
 
@@ -471,6 +576,8 @@ struct TournamentMatchPresentation: Encodable {
     let away: TournamentEntrantPresentation?
     let hasAway: Bool
     let resultText: String
+    /// True for a match that has two entrants and no result yet.
+    let isLive: Bool
     let homeWon: Bool
     let awayWon: Bool
 }
@@ -488,18 +595,20 @@ struct TournamentEntrantPresentation: Encodable {
 }
 
 /// One row of a round robin's standings.
-struct StandingRow: Encodable {
+struct StandingRow: Encodable, Sendable {
     /// Competition ranking on the standings order; equal keys share a rank.
     let rank: Int
+    let rankText: String
+    let isTied: Bool
+    let rankTier: String
     let handle: String
     /// Staff only; empty for a student viewer.
     let name: String
-    let played: Int
-    let wins: Int
-    let draws: Int
-    let losses: Int
+    /// "P 5 · W 3 · D 1 · L 1" — plain text under the handle, because four
+    /// columns of counts are more than a row at this width can carry.
+    let detailsText: String
     /// The average match score, as the page prints a metric.
-    let averageText: String
+    let valueText: String
     let isViewer: Bool
     let avatar: AvatarPresentation
 }
@@ -519,7 +628,7 @@ struct ChampionPresentation: Encodable {
     let avatar: AvatarPresentation
 }
 
-struct LeaderboardRow: Encodable {
+struct LeaderboardRow: Encodable, Sendable {
     /// Competition ranking: equal metrics share a rank and the next rank skips.
     let rank: Int
     /// The rank as printed: "14", or "14=" for a tie.
@@ -550,15 +659,29 @@ struct LeaderboardRow: Encodable {
     let bestSubmissionURL: String
 }
 
-/// One line of the windowed list: a row, or a run of rows folded away.
-struct LeaderboardDisplayItem: Encodable {
+/// One line of a windowed list: a row, or a run of rows folded away.
+struct LeaderboardWindowItem<Row: Encodable & Sendable>: Encodable, Sendable {
     let isGap: Bool
     let gapLabel: String
-    let row: LeaderboardRow?
+    let row: Row?
+}
+
+/// What the shared list partial (`_leaderboard-list.leaf`) needs: the lines,
+/// the heading over the value column, and the two facts the partial cannot
+/// read once it is given a sub-context as its root. Every row type it renders
+/// carries `rankText`, `rankTier`, `handle`, `name`, `detailsText`,
+/// `valueText`, `isViewer` and `avatar`.
+struct LeaderboardListContext<Row: Encodable & Sendable>: Encodable, Sendable {
+    let items: [LeaderboardWindowItem<Row>]
+    /// "Average" or "Faults": what the value column counts.
+    let valueLabel: String
+    let isStaff: Bool
+    let allURL: String
+    let tableID: String
 }
 
 /// The viewer's card at the top of the page.
-struct ViewerStanding: Encodable {
+struct ViewerStanding: Encodable, Sendable {
     /// False when the viewer has no submission on the board yet.
     let isRanked: Bool
     let handle: String
@@ -568,9 +691,12 @@ struct ViewerStanding: Encodable {
     let rankHeadline: String
     /// "of 31".
     let ofText: String
+    /// "Your best", or "Your average" on a round robin.
+    let bestLabel: String
     let bestText: String
     /// When the best was reached: the ISO instant `.js-relative-time` reads,
     /// and the absolute text shown without JS.
+    let hasBestAt: Bool
     let bestAtISO: String
     let bestAtText: String
     /// "+0.004 to pass Golden Sedge"; empty at the top.
@@ -582,9 +708,9 @@ struct ViewerStanding: Encodable {
 }
 
 /// Everything the metric board needs, built once per request.
-struct LeaderboardBoard {
+struct LeaderboardBoard: Sendable {
     let rows: [LeaderboardRow]
-    let items: [LeaderboardDisplayItem]
+    let items: [LeaderboardWindowItem<LeaderboardRow>]
     let you: ViewerStanding?
     let rankedCount: Int
     let unrankedCount: Int
@@ -609,8 +735,7 @@ struct LeaderboardBoard {
 /// `isStaff` decides whether names, usernames and submission counts are built
 /// at all — a student's page never holds them.
 func buildLeaderboard(
-    setup: APITestSetup, viewer: APIUser, isStaff: Bool, showAll: Bool, allURL: String,
-    on db: Database
+    setup: APITestSetup, viewer: APIUser, isStaff: Bool, showAll: Bool, on db: Database
 ) async throws -> LeaderboardBoard {
     let setupID = setup.id ?? ""
     let allEntries = try await leaderboardEntries(testSetupID: setupID, on: db)
@@ -674,8 +799,8 @@ func buildLeaderboard(
     }
 
     let rowViewerIndex = rows.firstIndex(where: \.isViewer)
-    let items = leaderboardDisplayItems(
-        rows: rows, viewerIndex: rowViewerIndex, showAll: showAll, allURL: allURL)
+    let items = leaderboardWindowItems(
+        rows: rows, ranks: rows.map(\.rank), viewerIndex: rowViewerIndex, showAll: showAll)
     let you =
         isStaff
         ? nil
@@ -693,19 +818,20 @@ func buildLeaderboard(
 }
 
 /// The rows as the page lists them: all of them when the viewer may see the
-/// whole list, else the window of `LeaderboardWindow`.
-func leaderboardDisplayItems(
-    rows: [LeaderboardRow], viewerIndex: Int?, showAll: Bool, allURL: String
-) -> [LeaderboardDisplayItem] {
+/// whole list, else the window of `LeaderboardWindow`. `ranks` are the rows'
+/// competition ranks, best first.
+func leaderboardWindowItems<Row: Encodable & Sendable>(
+    rows: [Row], ranks: [Int], viewerIndex: Int?, showAll: Bool
+) -> [LeaderboardWindowItem<Row>] {
     guard !showAll else {
-        return rows.map { LeaderboardDisplayItem(isGap: false, gapLabel: "", row: $0) }
+        return rows.map { LeaderboardWindowItem(isGap: false, gapLabel: "", row: $0) }
     }
-    return LeaderboardWindow.slots(ranks: rows.map(\.rank), viewerIndex: viewerIndex).map { slot in
+    return LeaderboardWindow.slots(ranks: ranks, viewerIndex: viewerIndex).map { slot in
         switch slot {
         case .row(let index):
-            return LeaderboardDisplayItem(isGap: false, gapLabel: "", row: rows[index])
+            return LeaderboardWindowItem(isGap: false, gapLabel: "", row: rows[index])
         case .gap(let count, let low, let high, let trailing):
-            return LeaderboardDisplayItem(
+            return LeaderboardWindowItem(
                 isGap: true,
                 gapLabel: LeaderboardWindow.gapLabel(
                     count: count, lowRank: low, highRank: high, isTrailing: trailing),
@@ -739,39 +865,86 @@ private func unrankedStudentCount(
     return students.filter { !rankedIDs.contains($0.userID) }.count
 }
 
+/// Who the viewer is to the page: their handle and hero bird, from the same
+/// store every other row reads, and the lines a card shares across kinds.
+struct ViewerIdentity {
+    let handle: String
+    let avatar: AvatarPresentation
+    let privacyLine: String
+    let submitURL: String
+
+    /// nil when the viewer is not enrolled in the setup's course.
+    static func load(viewer: APIUser, setup: APITestSetup, on db: Database) async throws -> ViewerIdentity? {
+        guard let viewerID = viewer.id,
+            let enrollment = try await APICourseEnrollment.query(on: db)
+                .filter(\.$course.$id == setup.courseID)
+                .filter(\.$userID == viewerID)
+                .first()
+        else { return nil }
+        let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
+        let spec = try await AvatarStore.ensureSpec(for: viewer, on: db)
+        return ViewerIdentity(
+            handle: handle,
+            avatar: AvatarPresentation(
+                for: spec, size: .hero,
+                accessibility: handle.isEmpty ? .labelled("You") : .decorative),
+            privacyLine: handle.isEmpty
+                ? "" : "Only you and course staff can link \(handle) to you. It stays the same all term.",
+            submitURL: "/testsetups/\(setup.id ?? "")/submit")
+    }
+}
+
+/// The value a card reports for a ranked viewer.
+struct ViewerBest {
+    /// "Your best", or "Your average".
+    let label: String
+    let text: String
+    /// Nil where the kind has no single moment the value was reached (a round
+    /// robin's average).
+    let reachedAt: Date?
+    let nextPlaceText: String
+}
+
+extension ViewerStanding {
+    /// The card for a viewer with no row on the board.
+    static func notRanked(_ identity: ViewerIdentity) -> ViewerStanding {
+        ViewerStanding(
+            isRanked: false, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
+            avatar: identity.avatar, rankHeadline: "Not on the board yet", ofText: "",
+            bestLabel: "", bestText: "", hasBestAt: false, bestAtISO: "", bestAtText: "",
+            nextPlaceText: "", hasNextPlace: false, privacyLine: identity.privacyLine,
+            submitURL: identity.submitURL)
+    }
+
+    /// The card for a ranked viewer.
+    static func ranked(
+        _ identity: ViewerIdentity, row: (rank: Int, isTied: Bool), total: Int, best: ViewerBest
+    ) -> ViewerStanding {
+        ViewerStanding(
+            isRanked: true, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
+            avatar: identity.avatar,
+            rankHeadline: LeaderboardStandingText.headline(rank: row.rank, isTied: row.isTied),
+            ofText: "of \(total)", bestLabel: best.label, bestText: best.text,
+            hasBestAt: best.reachedAt != nil,
+            bestAtISO: best.reachedAt.map(ISO8601DateFormatter().string(from:)) ?? "",
+            bestAtText: best.reachedAt.map(waterlooDateTimeFormatter().string(from:)) ?? "",
+            nextPlaceText: best.nextPlaceText, hasNextPlace: !best.nextPlaceText.isEmpty,
+            privacyLine: identity.privacyLine, submitURL: identity.submitURL)
+    }
+}
+
 /// The viewer's card: their place and best when they are ranked, else the
 /// invitation to submit.
 private func buildViewerStanding(
     viewer: APIUser, setup: APITestSetup, rows: [LeaderboardRow], entries: [APILeaderboardEntry],
     viewerRowIndex: Int?, on db: Database
 ) async throws -> ViewerStanding? {
-    guard let viewerID = viewer.id,
-        let enrollment = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == setup.courseID)
-            .filter(\.$userID == viewerID)
-            .first()
-    else { return nil }
-    let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
-    let spec = try await AvatarStore.ensureSpec(for: viewer, on: db)
-    let avatar = AvatarPresentation(
-        for: spec, size: .hero,
-        accessibility: handle.isEmpty ? .labelled("You") : .decorative)
-    let privacy =
-        handle.isEmpty
-        ? ""
-        : "Only you and course staff can link \(handle) to you. It stays the same all term."
-    let submitURL = "/testsetups/\(setup.id ?? "")/submit"
-
-    // Every entry is on the roster by now, so rows and entries line up.
-    guard let index = viewerRowIndex else {
-        return ViewerStanding(
-            isRanked: false, handle: handle, hasHandle: !handle.isEmpty, avatar: avatar,
-            rankHeadline: "Not on the board yet", ofText: "", bestText: "", bestAtISO: "",
-            bestAtText: "", nextPlaceText: "", hasNextPlace: false, privacyLine: privacy,
-            submitURL: submitURL)
+    guard let identity = try await ViewerIdentity.load(viewer: viewer, setup: setup, on: db) else {
+        return nil
     }
+    // Every entry is on the roster by now, so rows and entries line up.
+    guard let index = viewerRowIndex else { return .notRanked(identity) }
     let row = rows[index]
-    let reached = entries[index].reachedAt ?? Date()
     var nextPlace = ""
     let metrics = entries.map(\.metric)
     if let target = LeaderboardNextPlace.targetIndex(metrics: metrics, viewerIndex: index) {
@@ -780,55 +953,80 @@ private func buildViewerStanding(
         let name = rival.handle.isEmpty ? LeaderboardStandingText.ordinal(rival.rank) : rival.handle
         nextPlace = "\(delta) to pass \(name)"
     }
-    return ViewerStanding(
-        isRanked: true, handle: handle, hasHandle: !handle.isEmpty, avatar: avatar,
-        rankHeadline: LeaderboardStandingText.headline(rank: row.rank, isTied: row.isTied),
-        ofText: "of \(rows.count)", bestText: row.metricText,
-        bestAtISO: ISO8601DateFormatter().string(from: reached),
-        bestAtText: waterlooDateTimeFormatter().string(from: reached),
-        nextPlaceText: nextPlace, hasNextPlace: !nextPlace.isEmpty, privacyLine: privacy,
-        submitURL: submitURL)
+    return .ranked(
+        identity, row: (row.rank, row.isTied), total: rows.count,
+        best: ViewerBest(
+            label: "Your best", text: row.metricText, reachedAt: entries[index].reachedAt ?? Date(),
+            nextPlaceText: nextPlace))
 }
 
-/// The standings rows for a round robin, best first (`activityStandings`),
-/// under the same handle-and-bird identity as a ranking row.
-func buildStandingRows(
-    setup: APITestSetup, viewerID: UUID?, includeNames: Bool, on db: Database
-) async throws -> [StandingRow] {
+/// A round robin's standings as the page shows them: every row, the list the
+/// viewer is shown, and their own card.
+struct StandingsBoard: Sendable {
+    let rows: [StandingRow]
+    let items: [LeaderboardWindowItem<StandingRow>]
+    let you: ViewerStanding?
+    let rankedCount: Int
+
+    static let empty = StandingsBoard(rows: [], items: [], you: nil, rankedCount: 0)
+}
+
+/// The standings for a round robin, best first (`activityStandings`), under
+/// the same handle-and-bird identity as a ranking row.
+func buildStandingsBoard(
+    setup: APITestSetup, viewer: APIUser, isStaff: Bool, showAll: Bool, on db: Database
+) async throws -> StandingsBoard {
     let standings = try await activityStandings(testSetupID: setup.id ?? "", on: db)
-    guard !standings.isEmpty else { return [] }
     let identities = try await RankedIdentities.load(
         userIDs: standings.map(\.userID), courseID: setup.courseID, on: db)
+    let ranked = standings.filter { identities.isOnRoster($0.userID) }
+
+    var ranks: [Int] = []
+    for (index, standing) in ranked.enumerated() {
+        let tiesPrevious = index > 0 && StandingKey(standing) == StandingKey(ranked[index - 1])
+        ranks.append(tiesPrevious ? ranks[index - 1] : index + 1)
+    }
+    let tieSizes = Dictionary(ranks.map { ($0, 1) }, uniquingKeysWith: +)
 
     var rows: [StandingRow] = []
-    var rank = 0
-    var previousKey: StandingKey?
-    for (index, standing) in standings.enumerated() {
-        guard identities.isOnRoster(standing.userID) else { continue }
-        let key = StandingKey(standing)
-        if key != previousKey {
-            rank = index + 1
-            previousKey = key
-        }
+    for (index, standing) in ranked.enumerated() {
+        let rank = ranks[index]
+        let isTied = (tieSizes[rank] ?? 1) > 1
         guard
             let identity = try await identities.presentation(
-                for: standing.userID, includeName: includeNames,
-                lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Student \(rank)", on: db)
+                for: standing.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student \(rank)",
+                size: .roster, on: db)
         else { continue }
         rows.append(
             StandingRow(
                 rank: rank,
+                rankText: LeaderboardStandingText.rankText(rank: rank, isTied: isTied),
+                isTied: isTied,
+                rankTier: LeaderboardStandingText.tier(rank: rank),
                 handle: identity.handle,
                 name: identity.name,
-                played: standing.played,
-                wins: standing.wins,
-                draws: standing.draws,
-                losses: standing.losses,
-                averageText: formatLeaderboardMetric(standing.averageScore),
-                isViewer: standing.userID == viewerID,
+                detailsText:
+                    "P \(standing.played) · W \(standing.wins) · D \(standing.draws) · L \(standing.losses)",
+                valueText: formatLeaderboardMetric(standing.averageScore),
+                isViewer: standing.userID == viewer.id,
                 avatar: identity.avatar))
     }
-    return rows
+
+    let viewerIndex = rows.firstIndex(where: \.isViewer)
+    let items = leaderboardWindowItems(
+        rows: rows, ranks: rows.map(\.rank), viewerIndex: viewerIndex, showAll: showAll)
+    var you: ViewerStanding?
+    if !isStaff, let identity = try await ViewerIdentity.load(viewer: viewer, setup: setup, on: db) {
+        if let viewerIndex {
+            let row = rows[viewerIndex]
+            you = .ranked(
+                identity, row: (row.rank, row.isTied), total: rows.count,
+                best: ViewerBest(label: "Your average", text: row.valueText, reachedAt: nil, nextPlaceText: ""))
+        } else {
+            you = .notRanked(identity)
+        }
+    }
+    return StandingsBoard(rows: rows, items: items, you: you, rankedCount: rows.count)
 }
 
 /// The part of a standings row that decides its rank: two rows with equal
