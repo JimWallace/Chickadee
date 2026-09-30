@@ -200,6 +200,11 @@
             var form = document.createElement('form');
             form.method = 'post';
             form.action = url.href;
+            var token = document.createElement('input');
+            token.type = 'hidden';
+            token.name = '_csrf';
+            token.value = csrfToken;
+            form.appendChild(token);
             document.body.appendChild(form);
             form.submit();
         });
