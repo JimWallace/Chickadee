@@ -227,8 +227,12 @@ struct ContentItemRow: Encodable {
         // Do not double the verb: "Open in JupyterHub" stays as written.
         let label =
             link.label.lowercased().hasPrefix("open") ? link.label : "Open \(link.label)"
+        // A notebook link gets the book whatever the item's kind: a slides
+        // item often carries "PDF" and "Jupyter Notebook" side by side, and
+        // two identical arrows leave the reader guessing which is which.
+        let isNotebook = kind == .notebook || link.label.lowercased().contains("notebook")
         return ContentActionView(
-            href: link.url, iconHref: kind == .notebook ? "#i-book" : "#i-external",
+            href: link.url, iconHref: isNotebook ? "#i-book" : "#i-external",
             label: label, opensNewTab: true)
     }
 

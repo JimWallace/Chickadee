@@ -2754,6 +2754,25 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 }
 .state-select select,
 .state-select input { width: 100%; padding-inline-start: 1.5rem; }
+/* A natively drawn select can ignore its inline padding (Safari on macOS), which
+   put the dot on top of the first letter. Drop the native chrome and draw the
+   chevron here, so the padding always applies. */
+.state-select select {
+    appearance: none;
+    padding-inline-end: 1.5rem;
+}
+.state-select:has(select)::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    inset-inline-end: .6rem;
+    width: .35rem;
+    height: .35rem;
+    border-inline-end: 2px solid var(--gray-500);
+    border-block-end: 2px solid var(--gray-500);
+    transform: translateY(-75%) rotate(45deg);
+    pointer-events: none;
+}
 .state-select[data-state="open"]::before,
 .state-select[data-state="visible"]::before,
 .state-select[data-state="mapped"]::before,
