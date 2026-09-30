@@ -103,6 +103,10 @@ Classification column references `policy46-classification.md`.
 | `create_assignment` | course | new public ID | No | Confidential |
 | `clone_assignment` | source + target setup | new public ID | No | Confidential |
 
+Every result above that names a course also returns the course key and term
+(`courseKey`, `courseTerm`). These are course metadata, the same values that
+`list_courses` returns. They contain no student data.
+
 ## Models the MCP surface touches vs. never touches
 
 **Touched (authoring + authz):** `APICourse`, `APICourseEnrollment` (authz read

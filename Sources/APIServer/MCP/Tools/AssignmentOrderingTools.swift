@@ -47,6 +47,9 @@ struct ReorderSectionItemsTool: ContentTool {
             let sortOrder: Int
         }
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let items: [Item]
     }
 
@@ -92,6 +95,8 @@ struct ReorderSectionItemsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "items": .object([
                 "type": .string("array"),
                 "items": .object([
@@ -108,7 +113,7 @@ struct ReorderSectionItemsTool: ContentTool {
                 ]),
             ]),
         ]),
-        "required": .array([.string("courseCode"), .string("items")]),
+        "required": .array([.string("courseCode"), .string("courseKey"), .string("items")]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
@@ -117,8 +122,9 @@ struct ReorderSectionItemsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseIDForWrite(
+        let course = try await resolveCourseForWrite(
             code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+        let courseID = try course.requireID()
 
         let assignmentIDs = input.orderedItems.filter { $0.type == "assignment" }.map(\.id)
         let contentRaw = input.orderedItems.filter { $0.type == "content" }.map(\.id)
@@ -158,7 +164,7 @@ struct ReorderSectionItemsTool: ContentTool {
         guard assignments.count == assignmentIDs.count, contentItems.count == contentUUIDs.count else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
-                detail: "orderedItems must all be assignments or content items in course \(input.courseCode).")
+                detail: "orderedItems must all be assignments or content items in course \(course.urlKey).")
         }
         let assignmentByPublicID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
         let contentByID = Dictionary(
@@ -179,7 +185,9 @@ struct ReorderSectionItemsTool: ContentTool {
                     Output.Item(type: "content", id: ref.id, title: item.title, sortOrder: order))
             }
         }
-        return Output(courseCode: input.courseCode, items: ordered)
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            items: ordered)
     }
 }
 
@@ -202,6 +210,9 @@ struct ReorderAssignmentsTool: ContentTool {
             let sectionID: String
         }
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let assignments: [Assignment]
     }
 
@@ -232,6 +243,8 @@ struct ReorderAssignmentsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "assignments": .object([
                 "type": .string("array"),
                 "items": .object([
@@ -249,15 +262,16 @@ struct ReorderAssignmentsTool: ContentTool {
                 ]),
             ]),
         ]),
-        "required": .array([.string("courseCode"), .string("assignments")]),
+        "required": .array([.string("courseCode"), .string("courseKey"), .string("assignments")]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseIDForWrite(
+        let course = try await resolveCourseForWrite(
             code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+        let courseID = try course.requireID()
 
         let ids = input.orderedAssignmentPublicIDs.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -273,7 +287,9 @@ struct ReorderAssignmentsTool: ContentTool {
                 detail: "orderedAssignmentPublicIDs contains a duplicate assignment public ID.")
         }
         guard !ids.isEmpty else {
-            return Output(courseCode: input.courseCode, assignments: [])
+            return Output(
+                courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+                assignments: [])
         }
 
         // Scope to this course so a reorder can't renumber another course's rows.
@@ -284,7 +300,7 @@ struct ReorderAssignmentsTool: ContentTool {
         guard assignments.count == ids.count else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
-                detail: "orderedAssignmentPublicIDs must all be assignments in course \(input.courseCode).")
+                detail: "orderedAssignmentPublicIDs must all be assignments in course \(course.urlKey).")
         }
 
         let byID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
@@ -300,6 +316,8 @@ struct ReorderAssignmentsTool: ContentTool {
                     sortOrder: index + 1,
                     sectionID: assignment.sectionID?.uuidString ?? ""))
         }
-        return Output(courseCode: input.courseCode, assignments: ordered)
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            assignments: ordered)
     }
 }

@@ -32,6 +32,9 @@ struct CloneAssignmentTool: ContentTool {
         let title: String
         let slug: String
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let sourceAssignmentPublicID: String
         let isOpen: Bool
         let validationStatus: String?
@@ -58,7 +61,9 @@ struct CloneAssignmentTool: ContentTool {
             "targetCourseCode": .object([
                 "type": .string("string"),
                 "description": .string(
-                    "Course code to clone into. Omit to clone within the source's own course."),
+                    "The course to clone into: its code, or its key with the term (e.g. "
+                        + "\"CS136-F26\") when several offerings share the code. Omit to clone "
+                        + "within the source's own course."),
             ]),
         ]),
         "required": .array([
@@ -73,12 +78,15 @@ struct CloneAssignmentTool: ContentTool {
             "title": MCPSchema.string,
             "slug": MCPSchema.string,
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "sourceAssignmentPublicID": MCPSchema.string,
             "isOpen": MCPSchema.boolean,
             "validationStatus": MCPSchema.string,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
+            .string("courseKey"),
             .string("sourceAssignmentPublicID"), .string("isOpen"),
         ]),
     ])
@@ -101,16 +109,20 @@ struct CloneAssignmentTool: ContentTool {
         }
 
         // Resolve the target course: same as source unless a code is given.
-        let targetCourseID: UUID
+        let targetCourse: APICourse
         if let code = input.targetCourseCode?.trimmingCharacters(in: .whitespacesAndNewlines),
             !code.isEmpty
         {
-            let target = try await resolveMCPCourse(
+            targetCourse = try await resolveMCPCourse(
                 key: code, tool: Self.name, context: context, forWrite: true)
-            targetCourseID = try target.requireID()
         } else {
-            targetCourseID = source.courseID
+            guard let sourceCourse = try await APICourse.find(source.courseID, on: context.db) else {
+                throw MCPToolError.invalidArguments(
+                    tool: Self.name, detail: "The source assignment's course could not be found.")
+            }
+            targetCourse = sourceCourse
         }
+        let targetCourseID = try targetCourse.requireID()
         // The clone WRITES a new assignment into the target course, so block an
         // archived destination (covers both the explicit-target and
         // default-to-source branches). The source stays read-authorized above —
@@ -148,13 +160,13 @@ struct CloneAssignmentTool: ContentTool {
                 "via": "mcp",
             ], on: context.request)
 
-        let courseCode =
-            try await APICourse.find(targetCourseID, on: context.db)?.code ?? ""
         return Output(
             publicID: cloned.assignment.publicID,
             title: cloned.assignment.title,
             slug: cloned.assignment.slug,
-            courseCode: courseCode,
+            courseCode: targetCourse.code,
+            courseKey: targetCourse.urlKey,
+            courseTerm: targetCourse.term?.displayName,
             sourceAssignmentPublicID: source.publicID,
             isOpen: cloned.assignment.isOpen,
             validationStatus: cloned.assignment.validationStatus)

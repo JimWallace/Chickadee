@@ -83,13 +83,13 @@ source of truth; a census re-count is required whenever either changes
 | `delete_course_section` | `CourseSectionTools.swift:409` | section id | course-enrol (`:586`) | `APICourseSection` (assignments ungrouped) |
 | `reorder_course_sections` | `CourseSectionTools.swift:483` | `courseCode` | course-enrol (`:632`) | `APICourseSection` order |
 | `set_assignment_course_section` | `CourseSectionTools.swift:208` | `assignmentPublicID` + section | course-enrol (`:247`, `:453`) | `APIAssignment` section ref |
-| `reorder_section_items` | `AssignmentOrderingTools.swift` | `courseCode` + `orderedItems` | course-enrol (`resolveCourseIDForWrite`, TA+) | `APIAssignment` + `APICourseContentItem` order (`sort_order`) |
-| `reorder_assignments` | `AssignmentOrderingTools.swift` | `courseCode` | course-enrol (`resolveCourseIDForWrite`, TA+) | `APIAssignment` order (`sort_order`) |
-| `list_content_items` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseID`) | `APICourseContentItem` (read) |
-| `create_content_item` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseIDForWrite`, TA+) | new `APICourseContentItem` |
+| `reorder_section_items` | `AssignmentOrderingTools.swift` | `courseCode` + `orderedItems` | course-enrol (`resolveCourseForWrite`, TA+) | `APIAssignment` + `APICourseContentItem` order (`sort_order`) |
+| `reorder_assignments` | `AssignmentOrderingTools.swift` | `courseCode` | course-enrol (`resolveCourseForWrite`, TA+) | `APIAssignment` order (`sort_order`) |
+| `list_content_items` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourse`) | `APICourseContentItem` (read) |
+| `create_content_item` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseForWrite`, TA+) | new `APICourseContentItem` |
 | `update_content_item` | `CourseContentItemTools.swift` | content-item id | course-enrol (`authorizeCourseWriteAccess`, TA+) | `APICourseContentItem` |
 | `delete_content_item` | `CourseContentItemTools.swift` | content-item id | course-enrol (`authorizeCourseWriteAccess`, TA+) | `APICourseContentItem` |
-| `reorder_content_items` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseIDForWrite`, TA+) | `APICourseContentItem` order (`sort_order`) |
+| `reorder_content_items` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseForWrite`, TA+) | `APICourseContentItem` order (`sort_order`) |
 
 ## Escape-hatch / general-capability audit
 

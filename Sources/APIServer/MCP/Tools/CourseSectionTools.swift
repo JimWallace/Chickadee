@@ -32,6 +32,9 @@ struct ListCourseSectionsTool: ContentTool {
             let sortOrder: Int
         }
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let sections: [Section]
     }
 
@@ -54,6 +57,8 @@ struct ListCourseSectionsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "sections": .object([
                 "type": .string("array"),
                 "items": .object([
@@ -71,12 +76,13 @@ struct ListCourseSectionsTool: ContentTool {
                 ]),
             ]),
         ]),
-        "required": .array([.string("courseCode"), .string("sections")]),
+        "required": .array([.string("courseCode"), .string("courseKey"), .string("sections")]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseID(code: input.courseCode, tool: Self.name, context: context)
+        let course = try await resolveCourse(code: input.courseCode, tool: Self.name, context: context)
+        let courseID = try course.requireID()
         let sections = try await APICourseSection.query(on: context.db)
             .filter(\.$courseID == courseID)
             .sort(\.$sortOrder)
@@ -89,7 +95,9 @@ struct ListCourseSectionsTool: ContentTool {
                 defaultGradingMode: section.defaultGradingMode,
                 sortOrder: section.sortOrder)
         }
-        return Output(courseCode: input.courseCode, sections: rows)
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            sections: rows)
     }
 }
 
@@ -105,6 +113,9 @@ struct CreateCourseSectionTool: ContentTool {
 
     struct Output: Encodable, Sendable {
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let sectionID: String
         let name: String
         let defaultGradingMode: String
@@ -138,13 +149,15 @@ struct CreateCourseSectionTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "sectionID": MCPSchema.string,
             "name": MCPSchema.string,
             "defaultGradingMode": MCPSchema.string,
             "sortOrder": MCPSchema.integer,
         ]),
         "required": .array([
-            .string("courseCode"), .string("sectionID"), .string("name"),
+            .string("courseCode"), .string("courseKey"), .string("sectionID"), .string("name"),
             .string("defaultGradingMode"), .string("sortOrder"),
         ]),
     ])
@@ -162,7 +175,8 @@ struct CreateCourseSectionTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "defaultGradingMode must be \"browser\" or \"worker\".")
         }
-        let courseID = try await resolveCourseIDForWrite(code: input.courseCode, tool: Self.name, context: context)
+        let course = try await resolveCourseForWrite(code: input.courseCode, tool: Self.name, context: context)
+        let courseID = try course.requireID()
 
         let maxOrder =
             try await APICourseSection.query(on: context.db)
@@ -173,7 +187,7 @@ struct CreateCourseSectionTool: ContentTool {
         try await section.save(on: context.db)
 
         return Output(
-            courseCode: input.courseCode,
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             sectionID: try section.requireID().uuidString,
             name: name,
             defaultGradingMode: mode,
@@ -490,6 +504,9 @@ struct ReorderCourseSectionsTool: ContentTool {
             let sortOrder: Int
         }
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let sections: [Section]
     }
 
@@ -518,6 +535,8 @@ struct ReorderCourseSectionsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "sections": .object([
                 "type": .string("array"),
                 "items": .object([
@@ -533,14 +552,15 @@ struct ReorderCourseSectionsTool: ContentTool {
                 ]),
             ]),
         ]),
-        "required": .array([.string("courseCode"), .string("sections")]),
+        "required": .array([.string("courseCode"), .string("courseKey"), .string("sections")]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseIDForWrite(code: input.courseCode, tool: Self.name, context: context)
+        let course = try await resolveCourseForWrite(code: input.courseCode, tool: Self.name, context: context)
+        let courseID = try course.requireID()
         let uuids = input.orderedSectionIDs.compactMap {
             UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
         }
@@ -575,7 +595,9 @@ struct ReorderCourseSectionsTool: ContentTool {
             ordered.append(
                 Output.Section(sectionID: uuid.uuidString, name: section.name, sortOrder: section.sortOrder))
         }
-        return Output(courseCode: input.courseCode, sections: ordered)
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            sections: ordered)
     }
 }
 
@@ -606,28 +628,28 @@ func resolveCourseSectionForEdit(
 // SetGradingModeTool, and the web CourseAdminRoutes+Sections), not
 // course-section concerns.
 
-/// Resolves a course code to its id, enforcing that the acting account may act
-/// on it (read access).  Shared by the course-section tools, including the READ
-/// `list_course_sections` — so this must NOT carry the archived-write block.
-func resolveCourseID(code: String, tool: String, context: ToolContext) async throws -> UUID {
+/// Resolves a course code or key to its course, enforcing that the acting
+/// account may act on it (read access).  Shared by the course-section tools,
+/// including the READ `list_course_sections` — so this must NOT carry the
+/// archived-write block.  Returns the course, not only its id, so a tool can
+/// report which offering a bare code resolved to (`courseKey`, `courseTerm`).
+func resolveCourse(code: String, tool: String, context: ToolContext) async throws -> APICourse {
     let course = try await resolveMCPCourse(key: code, tool: tool, context: context, forWrite: false)
-    let courseID = try course.requireID()
-    try await context.authorizeCourseAccess(courseID, tool: tool)
-    return courseID
+    try await context.authorizeCourseAccess(try course.requireID(), tool: tool)
+    return course
 }
 
-/// Write variant of `resolveCourseID`: resolves the course by code and
+/// Write variant of `resolveCourse`: resolves the course by code or key and
 /// authorizes a *write* to it (archived block).  Used by the course-section
 /// WRITE tools (create_course_section, reorder_course_sections, and
 /// reorder_assignments) so they can't mutate an archived course; the read
-/// `list_course_sections` stays on `resolveCourseID` (#417 Slice D-MCP).
-func resolveCourseIDForWrite(
+/// `list_course_sections` stays on `resolveCourse` (#417 Slice D-MCP).
+func resolveCourseForWrite(
     code: String, tool: String, context: ToolContext, atLeast minimum: CourseRole = .instructor
-) async throws -> UUID {
+) async throws -> APICourse {
     let course = try await resolveMCPCourse(key: code, tool: tool, context: context, forWrite: true)
-    let courseID = try course.requireID()
     // Course-level structure edits (sections, assignment ordering, new
     // assignments) are instructor-level (#417), matching the web.
-    try await context.authorizeCourseWriteAccess(courseID, tool: tool, atLeast: minimum)
-    return courseID
+    try await context.authorizeCourseWriteAccess(try course.requireID(), tool: tool, atLeast: minimum)
+    return course
 }

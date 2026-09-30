@@ -42,6 +42,23 @@ enum MCPSchema {
                 + "pass the course key with its term, e.g. \"CS136-F26\" (list_courses returns it)."),
     ])
 
+    /// Output property: the course key of the course a tool acted on
+    /// (`APICourse.urlKey`). It names exactly one offering, so an agent can
+    /// pass it back as `courseCode`.
+    static let courseKeyOutput: JSONValue = .object([
+        "type": .string("string"),
+        "description": .string(
+            "The key of the course this result is for, e.g. \"CS136-F26\" (the code alone for a "
+                + "course with no term). Pass it as courseCode to name exactly this offering."),
+    ])
+
+    /// Output property: the display name of the course's term, or null when
+    /// the course records no term.
+    static let courseTermOutput: JSONValue = .object([
+        "type": .array([.string("string"), .string("null")]),
+        "description": .string("The course's term, e.g. \"Fall 2026\"; null when none is recorded."),
+    ])
+
     /// A test-tier enum property.  The student-visible tiers by default; tools
     /// that also accept support files pass `TestTierValues.withSupport`.
     static func tierEnum(

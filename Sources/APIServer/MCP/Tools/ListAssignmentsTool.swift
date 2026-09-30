@@ -24,6 +24,9 @@ struct ListAssignmentsTool: ContentTool {
             let startsAt: String?
         }
         let courseCode: String
+        /// The key and term of the course acted on; see `MCPSchema.courseKeyOutput`.
+        let courseKey: String
+        let courseTerm: String?
         let assignments: [Assignment]
     }
 
@@ -44,6 +47,8 @@ struct ListAssignmentsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "courseCode": MCPSchema.string,
+            "courseKey": MCPSchema.courseKeyOutput,
+            "courseTerm": MCPSchema.courseTermOutput,
             "assignments": .object([
                 "type": .string("array"),
                 "items": .object([
@@ -69,7 +74,7 @@ struct ListAssignmentsTool: ContentTool {
                 ]),
             ]),
         ]),
-        "required": .array([.string("courseCode"), .string("assignments")]),
+        "required": .array([.string("courseCode"), .string("courseKey"), .string("assignments")]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
@@ -94,6 +99,8 @@ struct ListAssignmentsTool: ContentTool {
                 startsAt: assignment.startsAt.map { formatter.string(from: $0) }
             )
         }
-        return Output(courseCode: input.courseCode, assignments: summaries)
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            assignments: summaries)
     }
 }

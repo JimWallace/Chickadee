@@ -166,10 +166,10 @@ struct MCPResourceProvider: Sendable {
             guard let course = courseByID[assignment.courseID] else { return nil }
             return .object([
                 "uri": .string(Self.manifestURI(publicID: assignment.publicID)),
-                "name": .string("\(course.code) — \(assignment.title) (test suite manifest)"),
+                "name": .string("\(course.urlKey) — \(assignment.title) (test suite manifest)"),
                 "description": .string(
                     "Raw test.properties.json for assignment \(assignment.publicID) in "
-                        + "\(course.code): test suites, pattern families, sections, and required "
+                        + "\(course.urlKey): test suites, pattern families, sections, and required "
                         + "files. The canonical authoring spec; get_suite is the structured view."),
                 "mimeType": .string("application/json"),
             ])
