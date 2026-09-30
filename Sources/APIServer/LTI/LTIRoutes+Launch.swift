@@ -19,11 +19,21 @@
 // victim a launch the attacker completed (login CSRF).
 //
 // The LMS may run both inside a frame on its own page: its content picker
-// always does. So the state cookie is `Partitioned` over HTTPS (a browser
-// keeps a partitioned cookie inside a frame and blocks an unpartitioned
-// one), and once the platform is known the launch response may be framed by
-// the platform's origin, which lets a refusal show as a sentence rather than
-// a blank frame.
+// always does. So the state cookie is `Partitioned` over HTTPS, and once the
+// platform is known the launch response may be framed by the platform's
+// origin, which lets a refusal show as a sentence rather than a blank frame.
+//
+// A browser may still drop the cookie in that frame: Brightspace's picker lost
+// it in Safari 26.6, which supports partitioned cookies. So a deep-linking
+// launch neither needs the cookie nor signs anyone in. The cookie exists to
+// stop login CSRF, a sign-in an attacker started finished in the victim's
+// browser; a launch that creates no session has nothing for that attack to
+// take over. The picker it renders runs on its own single-use ticket
+// (LTIDeepLinkRoutes). Every other check still applies to it: the platform's
+// signature, the single-use state, the nonce and the staff role. A resource-
+// link launch opens in a new window, where the cookie works, and still needs
+// it. A cookie that is present but names another state is refused for every
+// launch, since it can only come from tampering or a crossed login.
 
 import Core
 import Fluent
@@ -145,9 +155,8 @@ extension LTIRoutes {
         guard let state = body?.state, let idToken = body?.idToken else {
             throw LTILaunchFailure.missingLaunchParameters
         }
-        guard let cookie = req.cookies[Self.stateCookieName]?.string, cookie == state else {
-            throw LTILaunchFailure.stateCookieMissing
-        }
+        let stateCookie = req.cookies[Self.stateCookieName]?.string
+        if let stateCookie, stateCookie != state { throw LTILaunchFailure.stateCookieMissing }
 
         // Burn first, then read: two concurrent posts of one state cannot
         // both get past this line.
@@ -183,6 +192,8 @@ extension LTIRoutes {
         }
         guard launch.nonce == login.nonce else { throw LTILaunchFailure.nonceMismatch }
         let deepLink = try launch.messageType == .deepLinking ? Self.deepLinkRequest(launch) : nil
+        // Only a launch that signs someone in needs the cookie (see the header).
+        if stateCookie == nil, deepLink == nil { throw LTILaunchFailure.stateCookieMissing }
 
         let resolution: LTIIdentityResolver.Resolution
         do {
@@ -202,13 +213,16 @@ extension LTIRoutes {
                 actorUsernameOverride: "lti", on: req)
         }
 
-        // Same session establishment as local and SSO sign-in.
-        req.auth.login(user)
-        req.session.rotateID()
-        req.session.authenticate(user)
-        await AuditLogger.record(
-            action: .loginSuccess, targetType: .auth, targetID: user.id?.uuidString,
-            metadata: ["username": user.username, "method": "lti"], actorOverride: user, on: req)
+        // Same session establishment as local and SSO sign-in, for every
+        // launch except a deep-linking one, which signs nobody in.
+        if deepLink == nil {
+            req.auth.login(user)
+            req.session.rotateID()
+            req.session.authenticate(user)
+            await AuditLogger.record(
+                action: .loginSuccess, targetType: .auth, targetID: user.id?.uuidString,
+                metadata: ["username": user.username, "method": "lti"], actorOverride: user, on: req)
+        }
 
         let response = try await routeToCourse(
             launch: launch, platform: platform, user: user, deepLink: deepLink, req: req)
@@ -253,11 +267,11 @@ extension LTIRoutes {
                 .save(on: req.db)
         }
         try await Self.recordLaunchServices(launch: launch, course: course, userID: userID, on: req.db)
-        req.session.data["activeCourseID"] = courseID.uuidString
         if let deepLink {
             return try await LTIDeepLinkRoutes.startPicker(
                 deepLink, course: course, platform: platform, user: user, req: req)
         }
+        req.session.data["activeCourseID"] = courseID.uuidString
         return req.redirect(to: try await Self.resourceLinkDestination(launch: launch, course: course, on: req.db))
     }
 

@@ -255,8 +255,15 @@ session:
    the `deep_linking_settings` claim must accept `ltiResourceLink` and give an
    `https` return URL, the launch must name a context, and the role must be TA
    or instructor. A student gets 403; anything else gets 400.
-2. The launch-state cookie is `Partitioned` over HTTPS, so the login and the
-   launch find it inside the frame. Once the platform is known, the launch
+2. The launch-state cookie is `Partitioned` over HTTPS. A browser can still
+   drop it inside the frame: Brightspace's picker lost it in Safari 26.6,
+   which supports partitioned cookies. So a deep-linking launch does not need
+   the cookie and **signs nobody in**. The cookie stops login CSRF, and a
+   launch that creates no session leaves that attack nothing to take over.
+   The signature, the single-use state, the nonce, the role and the ticket
+   below still apply. A cookie that is present but names another state is
+   refused on every launch, and a resource-link launch, which opens in a new
+   window where the cookie works, still requires it. Once the platform is known, the launch
    response admits the platform's issuer origin in `frame-ancestors` and drops
    `X-Frame-Options`, so a refusal shows as a sentence, not a blank frame.
    Every other page keeps `frame-ancestors 'self'` and `SAMEORIGIN`.
