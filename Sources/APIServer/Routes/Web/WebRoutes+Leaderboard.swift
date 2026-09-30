@@ -160,7 +160,8 @@ func buildUnionPresentation(
         let isTied = (killTieSizes[rank] ?? 1) > 1
         guard
             let identity = try await identities.presentation(
-                for: kill.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student", size: .roster,
+                for: kill.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student",
+                size: .roster,
                 on: db)
         else { continue }
         kills.append(
@@ -180,7 +181,8 @@ func buildUnionPresentation(
     for tally in tally.defences {
         guard
             let identity = try await identities.presentation(
-                for: tally.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student", size: .roster,
+                for: tally.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id,
+                fallbackLabel: "Student", size: .roster,
                 on: db)
         else { continue }
         let statusText: String
@@ -995,7 +997,8 @@ func buildStandingsBoard(
         let isTied = (tieSizes[rank] ?? 1) > 1
         guard
             let identity = try await identities.presentation(
-                for: standing.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student \(rank)",
+                for: standing.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id,
+                fallbackLabel: "Student \(rank)",
                 size: .roster, on: db)
         else { continue }
         rows.append(
