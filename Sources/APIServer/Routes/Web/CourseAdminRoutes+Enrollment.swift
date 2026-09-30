@@ -168,6 +168,57 @@ extension CourseAdminRoutes {
         return req.redirect(to: "/instructor")
     }
 
+    // MARK: - POST /courses/:courseID/new-handle/:userID
+    //
+    // Gives an enrolled student a new class handle, drawn from the current word
+    // lists.  This is the only way a handle changes: a list change never renames
+    // anybody mid-term (docs/student-avatars.md §3).  It exists for a handle
+    // that must go, for example one a student reports as a real classmate's
+    // name.  Instructor-only, like every other roster change.
+
+    @Sendable
+    func instructorGiveNewHandle(req: Request) async throws -> Response {
+        guard
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: courseIDString),
+            let userIDString = req.parameters.get("userID"),
+            let userID = UUID(uuidString: userIDString)
+        else {
+            throw WebAssignmentError.invalidParameter(
+                name: "courseID/userID", reason: "Invalid courseID or userID parameter")
+        }
+
+        let caller = try req.auth.require(APIUser.self)
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
+
+        guard
+            let enrollment = try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$course.$id == courseID)
+                .filter(\.$userID == userID)
+                .first()
+        else {
+            return req.redirect(to: "/instructor/students?handleError=notEnrolled")
+        }
+        let previous = enrollment.avatarHandle
+        guard let handle = try await AvatarStore.redrawHandle(for: enrollment, on: req.db) else {
+            return req.redirect(to: "/instructor/students?handleError=exhausted")
+        }
+
+        await AuditLogger.record(
+            action: .enrollmentHandleChanged,
+            targetType: .enrollment,
+            targetID: userIDString,
+            metadata: [
+                "course_id": courseIDString,
+                "subject_user_id": userIDString,
+                "previous_handle": previous ?? "",
+                "new_handle": handle,
+            ],
+            on: req
+        )
+        return req.redirect(to: "/instructor/students?handleChanged=\(userIDString)")
+    }
+
     // MARK: - POST /courses/:courseID/pre-unenroll/:preEnrollmentID
     //
     // Cancels a pending pre-enrollment (instructor bulk-uploaded the

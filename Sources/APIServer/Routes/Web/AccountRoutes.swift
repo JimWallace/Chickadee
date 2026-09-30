@@ -315,7 +315,7 @@ private struct AccountCourseRow: Encodable {
     /// "1 of 2 remaining" — the slip-day balance for a student enrollment in
     /// a course with the policy on; nil hides the line (#1228).
     let slipDaysText: String?
-    /// This student's pseudonym in this course, "Quiet Cedar". nil hides the
+    /// This student's pseudonym in this course, "Hazy Cedar". nil hides the
     /// line — a course whose word lists are exhausted, which is a real state
     /// rather than an error: the avatar still shows.
     let handle: String?

@@ -352,6 +352,7 @@ import VaporTesting
         "POST /courses/:courseID/enrollment-mode": .instructor,
         "POST /courses/:courseID/enroll-csv": .instructor,
         "POST /courses/:courseID/unenroll/:userID": .instructor,
+        "POST /courses/:courseID/new-handle/:userID": .instructor,
         "POST /courses/:courseID/pre-unenroll/:preEnrollmentID": .instructor,
         "POST /courses/:courseID/pre-enroll/:preEnrollmentID/register": .instructor,
         "POST /courses/:courseID/role/:userID": .instructor,

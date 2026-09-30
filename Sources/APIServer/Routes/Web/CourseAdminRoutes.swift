@@ -28,6 +28,8 @@ struct CourseAdminRoutes: RouteCollection {
             use: instructorRegisterPreEnrollment)
         // Set a roster member's per-course role (Phase 4b).
         routes.post("courses", ":courseID", "role", ":userID", use: instructorSetEnrollmentRole)
+        // Replace a student's class handle with a fresh draw (docs/student-avatars.md §3).
+        routes.post("courses", ":courseID", "new-handle", ":userID", use: instructorGiveNewHandle)
         // Self-serve staff invite: add a co-instructor / TA by username or email (#417 Slice F).
         routes.post("courses", ":courseID", "staff", use: instructorInviteStaff)
 

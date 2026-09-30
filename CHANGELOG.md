@@ -9,6 +9,24 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.287] - 2026-09-30
+
+### Changed
+
+- **New class-handle word lists.** Handles now pair a sky adjective with a forest noun, many of which are also computing words ("Hazy Cache"). The review removed first names, common surnames, skin-tone words, traits and brand pairs from both lists. A new review tool, `Tools/handle-review/`, checks every word and every pair, and fails on any red flag. A stored handle is never renamed by a list change: it stays until its course ends.
+
+### Added
+
+- **Give new handle.** Instructors can give a student a new class handle from the Students tab (the row menu). The change is recorded in the audit log.
+
+
+## [0.5.286] - 2026-09-30
+
+### Changed
+
+- **The admin LEARN, MCP, LTI and GitHub pages use the shared row shape.** Each shows its setup as facts with one-line notices. MCP service accounts and connected agents are rows with ⋯ menus (mint token with a scope choice, enrol, remove, delete, revoke), and an expired agent says so. LTI platforms have an Enabled or Disabled select that saves on change, and each tool URL has a copy button. GitHub shows the registered App with Open on GitHub and a ⋯ menu to remove the registration.
+
+
 ## [0.5.285] - 2026-09-30
 
 ### Fixed

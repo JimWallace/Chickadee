@@ -62,7 +62,8 @@ struct MCPAgentsRoutes: RouteCollection {
                 createdAt: grant.createdAt.map { formatter.string(from: $0) } ?? "—",
                 lastUsedAt: grant.lastUsedAt.map { formatter.string(from: $0) },
                 expiresAt: formatter.string(from: grant.expiresAt),
-                revoked: grant.revoked)
+                revoked: grant.revoked,
+                isExpired: grant.expiresAt < Date())
         }
     }
 
@@ -97,6 +98,35 @@ struct AgentGrantRow: Encodable {
     let lastUsedAt: String?
     let expiresAt: String
     let revoked: Bool
+    /// True once `expiresAt` has passed. Worked out here so the page does not
+    /// compare timestamps in a template.
+    var isExpired: Bool = false
+    /// "Active", "Revoked" or "Expired": the pill's words.
+    var statusLabel: String {
+        revoked ? "Revoked" : (isExpired ? "Expired" : "Active")
+    }
+    /// Revoking only means something for a grant that still works.
+    var canRevoke: Bool { !revoked && !isExpired }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, agentName, scope, owner, createdAt, lastUsedAt, expiresAt, revoked
+        case isExpired, statusLabel, canRevoke
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(agentName, forKey: .agentName)
+        try c.encode(scope, forKey: .scope)
+        try c.encodeIfPresent(owner, forKey: .owner)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(lastUsedAt, forKey: .lastUsedAt)
+        try c.encode(expiresAt, forKey: .expiresAt)
+        try c.encode(revoked, forKey: .revoked)
+        try c.encode(isExpired, forKey: .isExpired)
+        try c.encode(statusLabel, forKey: .statusLabel)
+        try c.encode(canRevoke, forKey: .canRevoke)
+    }
 }
 
 struct ConnectedAgentsContext: Encodable {

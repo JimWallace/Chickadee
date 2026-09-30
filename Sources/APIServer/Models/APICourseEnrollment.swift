@@ -45,7 +45,7 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "role")
     var roleRaw: String?
 
-    /// This student's pseudonym in this course — "Quiet Cedar".
+    /// This student's pseudonym in this course — "Hazy Cedar".
     ///
     /// Per (user, course) rather than per user: it is what makes uniqueness
     /// enforceable at enrollment time, and it keeps a student unlinkable across
