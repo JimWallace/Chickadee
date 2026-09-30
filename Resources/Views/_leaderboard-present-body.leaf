@@ -1,0 +1,49 @@
+<!-- The projected leaderboard's moving part: rendered inline by
+     leaderboard-present.leaf and again as its background refresh. -->
+<header class="present-header">
+    <div>
+        <div class="present-kicker">#(courseCode) · #(assignmentTitle)</div>
+        <h1 class="present-title">#(title)</h1>
+    </div>
+    #if(hasWindow):
+    <div class="present-clock">#(window.label) <span class="js-relative-time" data-iso="#(window.boundaryISO)">#(window.boundaryText)</span></div>
+    #endif
+</header>
+#if(showsBracket):
+#if(hasTournament):
+#extend("_leaderboard-bracket", tournament)
+#else:
+<p class="empty">No tournament has been run yet.</p>
+#endif
+#else:
+#if(hasChampion):
+<p class="present-kicker">Holds the hill: <span data-avatar-handle>#(championHandle)</span></p>
+#endif
+#if(hasPodium):
+<div class="podium">
+    #for(place in podium):
+    <div class="podium-place" data-rank-tier="#(place.rankTier)">
+        #extend("_avatar", place.avatar)
+        <div class="podium-handle" data-avatar-handle>#(place.handle)</div>
+        <div class="podium-value">#(place.valueText)</div>
+        <div class="podium-plinth"><span class="rank-disc" data-rank-tier="#(place.rankTier)">#(place.rankText)</span></div>
+    </div>
+    #endfor
+</div>
+#if(count(rest) > 0):
+<div class="present-rows">
+    #for(place in rest):
+    <div class="present-row">
+        <span class="rank-disc" data-rank-tier="#(place.rankTier)">#(place.rankText)</span>
+        #extend("_avatar", place.avatar)
+        <span class="present-row-handle" data-avatar-handle>#(place.handle)</span>
+        <span class="present-row-value">#(place.valueText)</span>
+    </div>
+    #endfor
+</div>
+#endif
+#else:
+<p class="empty">Nobody is on the board yet.</p>
+#endif
+#endif
+<footer class="present-footer">#(rankedCount) on the board · Find yourself by your bird and handle on your own Leaderboard page · Live</footer>

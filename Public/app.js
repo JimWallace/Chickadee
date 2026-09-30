@@ -457,6 +457,15 @@ if (root) {
         if (field && typeof field.select === 'function') field.select();
     });
 
+    // data-ck-fullscreen — show the page full screen, for a projector. A no-op
+    // where the browser has no Fullscreen API.
+    document.addEventListener('click', (e) => {
+        const button = e.target instanceof Element ? e.target.closest('[data-ck-fullscreen]') : null;
+        if (button && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+        }
+    });
+
     // data-copy-url — copy a link to the clipboard. The value is a path, which
     // gets this site's origin put in front of it, or an absolute URL, which is
     // copied as it is. The cue is a transient class (.action-copied) plus a
