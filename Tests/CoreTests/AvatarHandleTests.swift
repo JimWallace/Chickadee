@@ -1,10 +1,11 @@
 import Core
+import Foundation
 import Testing
 
 /// The handle is what a leaderboard identifies a student by, so these are as
 /// much about the WORD LISTS as about the generator. There is no moderation
 /// anywhere in this feature: the lists are the safety mechanism, and the
-/// properties below are the ones a reviewer cannot eyeball across 6,400 pairs.
+/// properties below are the ones a reviewer cannot eyeball across 4,096 pairs.
 @Suite struct AvatarHandleTests {
 
     @Test func listsHaveNoDuplicates() {
@@ -37,10 +38,10 @@ import Testing
     }
 
     /// Headroom, not just size. A course draws without replacement, so the
-    /// space has to stay comfortably larger than any course we expect —
+    /// space has to stay at least four times the largest course we expect —
     /// otherwise the last students in a big course get whatever is left.
     @Test func theSpaceIsLargeEnoughForACourse() {
-        #expect(AvatarHandle.combinationCount >= 6_000)
+        #expect(AvatarHandle.combinationCount >= 4 * AvatarHandle.maxExpectedEnrollment)
         #expect(AvatarHandle.combinationCount == AvatarHandle.adjectives.count * AvatarHandle.nouns.count)
     }
 
@@ -83,5 +84,93 @@ import Testing
 
     @Test func drawIsReproducibleFromASeed() {
         #expect(AvatarHandle.make(fromSeed: 42) == AvatarHandle.make(fromSeed: 42))
+    }
+
+    // MARK: - Word-list review (docs/student-avatars.md §3, Tools/handle-review)
+
+    /// Alphabetised, so a reviewer can find a word and a diff shows a change
+    /// in place rather than as an append.
+    @Test func listsAreAlphabetised() {
+        #expect(AvatarHandle.adjectives == AvatarHandle.adjectives.sorted())
+        #expect(AvatarHandle.nouns == AvatarHandle.nouns.sorted())
+    }
+
+    /// Short enough to say and to fit a leaderboard row, long enough to be a
+    /// real word.
+    @Test func everyWordIsThreeToTenLetters() {
+        for word in AvatarHandle.adjectives + AvatarHandle.nouns {
+            #expect((3...10).contains(word.count), "\(word) has \(word.count) letters")
+        }
+    }
+
+    /// The same lists the review tool reads. A word on any of them is a red
+    /// flag there and a failure here, so the tool and the tests cannot
+    /// disagree about what is allowed.
+    @Test(arguments: [
+        "first-names.txt", "surnames.txt", "skin-tone.txt", "traits.txt", "slang.txt", "testing.txt",
+    ])
+    func noWordIsOnAReviewList(file: String) throws {
+        let listed = try Self.reviewList(file)
+        #expect(!listed.isEmpty, "\(file) is empty")
+        for word in AvatarHandle.adjectives + AvatarHandle.nouns {
+            #expect(!listed.contains(word.lowercased()), "\(word) is in \(file)")
+        }
+    }
+
+    /// No pair is a known brand, title, place or idiom.
+    @Test func noPairIsAKnownPhrase() throws {
+        let phrases = try Self.reviewList("phrases.txt")
+        #expect(!phrases.isEmpty)
+        for adjective in AvatarHandle.adjectives {
+            for noun in AvatarHandle.nouns {
+                let pair = "\(adjective) \(noun)".lowercased()
+                #expect(!phrases.contains(pair), "\(adjective) \(noun) is in phrases.txt")
+            }
+        }
+    }
+
+    /// The words left out on purpose stay out.
+    @Test func excludedWordsAreInNeitherList() {
+        let words = Set(AvatarHandle.adjectives + AvatarHandle.nouns)
+        let readmitted = words.intersection(AvatarHandle.excludedWords)
+        #expect(readmitted.isEmpty, "excluded words are back: \(readmitted.sorted())")
+    }
+
+    /// New draws come from the current lists only.
+    @Test func drawsOnlyFromTheCurrentLists() throws {
+        for seed in 0..<500 as Range<UInt64> {
+            let handle = try #require(AvatarHandle.make(fromSeed: seed))
+            #expect(AvatarHandle.isWellFormed(handle), "\(handle) is not from the current lists")
+        }
+    }
+
+    /// A stored handle is judged by its form, not by the lists, so that a list
+    /// change renames nobody. "Quiet Cedar" is from the lists before the Fall
+    /// 2026 review.
+    @Test func aStoredHandleFromAnEarlierListKeepsItsShape() {
+        #expect(AvatarHandle.hasHandleShape("Quiet Cedar"))
+        #expect(!AvatarHandle.isWellFormed("Quiet Cedar"))
+        #expect(!AvatarHandle.hasHandleShape("quiet cedar"))
+        #expect(!AvatarHandle.hasHandleShape("Quiet"))
+        #expect(!AvatarHandle.hasHandleShape("Quiet Cedar Grove"))
+        #expect(!AvatarHandle.hasHandleShape("Quiet  Cedar"))
+        #expect(!AvatarHandle.hasHandleShape("Quiet C3dar"))
+        #expect(!AvatarHandle.hasHandleShape(""))
+    }
+
+    /// One review list from Tools/handle-review/data, lower-cased. Lines that
+    /// start with `#` are comments.
+    private static func reviewList(_ file: String) throws -> Set<String> {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // CoreTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // repo root
+        let url = root.appendingPathComponent("Tools/handle-review/data/\(file)")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        return Set(
+            text.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+                .map { $0.lowercased() })
     }
 }

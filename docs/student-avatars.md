@@ -152,8 +152,8 @@ near-certain visible pair. Enforcing per-course
 distinctness would then make an avatar depend on the roster, so it would change
 when somebody drops. That is a bad trade for a cosmetic.
 
-Instead, every enrollment carries a **handle**: an adjective + woodland-noun
-pair, "Amber Thicket", "Quiet Cedar", drawn from curated lists and enforced
+Instead, every enrollment carries a **handle**: an adjective + forest-noun
+pair, "Hazy Cache", "Frosted Kernel", drawn from curated lists and enforced
 UNIQUE per course. The handle is the identity; the avatar is the glance. The
 leaderboard shows both, so a micro-collision costs nothing — the two rows still
 say different things.
@@ -164,7 +164,7 @@ The handle earns its place three more times over:
   text equivalent; a decorative `aria-hidden` image would leave a screen-reader
   user with an unlabelled row. The handle is that label, and it is real text
   rather than a generated alt string.
-- **Speech.** Students can say "I'm Quiet Cedar" out loud. A picture cannot be
+- **Speech.** Students can say "I'm Hazy Cedar" out loud. A picture cannot be
   said.
 - **Text contexts.** Anywhere a leaderboard is exported, sorted, or pasted into
   a discussion, the handle survives and the SVG does not.
@@ -179,6 +179,50 @@ gamification feel like it accumulates.
 Curating the word lists is real work, not a lookup: adjective-noun generators
 produce unfortunate pairs, and both lists need a pass for words that collide
 with real names.
+
+**The theme.** Adjectives are the sky over the chickadee: weather, light,
+season, moving air and water. They never describe the student, so there are no
+traits, and there are no plain colour words (red, black, white, brown, yellow).
+Nouns are places in the chickadee's forest, and many are also computing words:
+Cache (chickadees cache seed), Fork, Patch, Seed, Kernel, Stream, Node, Stack,
+Log, Shell, Delta, Port. A computing student sees the joke; everyone else sees
+a forest. There is no testing vocabulary (bug, crash, null, fail, error, kill):
+on a platform that grades code, those words read as a verdict.
+
+**What the first lists got wrong** (replaced in the Fall 2026 review). Ten
+adjectives and eleven nouns were first names (Hazel, Dawn, Ivy, Willow…), and
+eight nouns were common surnames, so "Hazel Marsh" read as a real person and
+could match a real classmate. Eleven adjectives described skin (Ivory, Olive,
+Copper, Sable…), which decision 6 bans for the avatar. Quiet and Muted were
+traits. Several words were too obscure to say (Gorse, Sedge, Yarrow).
+
+**The review tool.** `node Tools/handle-review/review.mjs > /tmp/handles.html`
+reads both lists out of `AvatarHandle.swift` and checks every word against
+first names (US SSA and Ontario baby names), surnames (US Census 2010), and
+hand-curated lists of skin-tone words, traits, slang and testing words. It
+checks every pair for a first name followed by a surname, and against a
+hand-curated list of brands, titles, places and idioms. An exact match is red
+and fails the run; a pair one edit away from a phrase, or two words with the
+same stem ("Leafy Leaf"), is amber for a person to judge. The sheet ends with
+every pair in random order for a human skim. `AvatarHandleTests` reads the same
+data files, and `AvatarHandle.excludedWords` lists the words left out on
+purpose, with the reason for each. Sources and fetch dates are in
+`Tools/handle-review/data/README.md`.
+
+**Capacity.** The pool must be at least four times the largest expected course
+(`AvatarHandle.maxExpectedEnrollment`, 1,000), so that the last students in a
+large course still get a random handle and not the remainder. 64 × 64 = 4,096.
+If a real course is larger, append words and run the review again.
+
+**Lists change between terms; a stored handle is kept.** A new draw uses the
+current lists only. A handle already stored is never checked against a list:
+`AvatarStore.ensureHandle` keeps any stored value of the right form (two
+title-cased words), so a list change renames nobody mid-term. A handle is per
+(user, course) and each term's offering is a new course, so an old handle ages
+out on its own. When one handle must change (a student reports that it matches
+a real name), an instructor uses **Give new handle** in the Students tab row
+menu. It draws from the current lists and writes an audit entry
+(`enrollment.handle_changed`).
 
 ### 4. Rendered as layered SVG `use`, recoloured through design tokens
 

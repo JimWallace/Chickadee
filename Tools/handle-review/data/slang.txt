@@ -1,0 +1,38 @@
+# Words with a sexual, drug or crude slang reading, in any English that a
+# student in the class may speak.  Hand-curated; extend it.  One word per
+# line, Title Case.
+Baked
+Balls
+Beaver
+Blunt
+Bone
+Booty
+Box
+Bum
+Bush
+Butt
+Crack
+Crotch
+Fag
+Faggot
+Hoary
+Hoe
+Hole
+Horny
+Hump
+Joint
+Knob
+Lit
+Moist
+Nuts
+Pole
+Pot
+Root
+Shaft
+Spunk
+Stiff
+Stoned
+Thicc
+Trunk
+Weed
+Wood

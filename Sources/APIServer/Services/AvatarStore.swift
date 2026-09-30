@@ -6,7 +6,7 @@
 // Both are drawn once and stored, never re-derived.  See
 // docs/student-avatars.md — re-deriving a spec on each render means appending
 // one option to one slot reshuffles every existing avatar, and re-deriving a
-// handle means a student's name changes when the word lists grow.
+// handle means a student's name changes when the word lists change.
 
 import Core
 import Fluent
@@ -55,7 +55,9 @@ enum AvatarStore {
     static func ensureHandle(
         for enrollment: APICourseEnrollment, on db: Database
     ) async throws -> String? {
-        if let handle = enrollment.avatarHandle, AvatarHandle.isWellFormed(handle) {
+        // Shape, not list membership: a handle from an earlier word list is
+        // kept, because a list change must never rename a student mid-term.
+        if let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) {
             return handle
         }
         let courseID = enrollment.$course.id
@@ -84,6 +86,38 @@ enum AvatarStore {
             enrollment.avatarHandle = winner
             return winner
         }
+    }
+
+    /// Replaces this enrollment's handle with a fresh draw from the current
+    /// lists.  This is the staff "Give new handle" action, for a handle that
+    /// must change (a student reports that it matches a real name).  Nothing
+    /// calls it automatically: a list change never renames a student mid-term.
+    ///
+    /// Returns nil when the course has exhausted the current lists, and leaves
+    /// the old handle in place.  A lost unique-index race is retried with the
+    /// winner's handle excluded.
+    static func redrawHandle(
+        for enrollment: APICourseEnrollment, on db: Database
+    ) async throws -> String? {
+        let courseID = enrollment.$course.id
+        var taken = Set(
+            try await APICourseEnrollment.query(on: db)
+                .filter(\.$course.$id == courseID)
+                .all()
+                .compactMap(\.avatarHandle))
+        let previous = enrollment.avatarHandle
+        for _ in 0..<3 {
+            guard let handle = AvatarHandle.make(excluding: taken) else { break }
+            enrollment.avatarHandle = handle
+            do {
+                try await enrollment.save(on: db)
+                return handle
+            } catch {
+                taken.insert(handle)
+            }
+        }
+        enrollment.avatarHandle = previous
+        return nil
     }
 
     // MARK: - Coding

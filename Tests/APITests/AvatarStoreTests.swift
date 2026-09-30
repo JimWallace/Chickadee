@@ -121,9 +121,9 @@ import VaporTesting
         }
     }
 
-    /// A handle from an older, wider word list stops being current when a word
-    /// leaves the list: it is replaced rather than shown.
-    @Test func handleOutsideTheCurrentListsIsReplaced() async throws {
+    /// A handle from an earlier word list is kept: a list change must never
+    /// rename a student mid-term (docs/student-avatars.md §3).
+    @Test func handleFromAnEarlierListIsKept() async throws {
         try await withApp(app) { _ in
             let course = try await makeTestCourse(on: app, code: "AVH5")
             let user = try await makeTestStudent(on: app, username: "av_stale")
@@ -132,10 +132,56 @@ import VaporTesting
             enrollment.avatarHandle = "Sneaky Cedar"
             try await enrollment.save(on: app.db)
 
+            let handle = try await AvatarStore.ensureHandle(for: enrollment, on: app.db)
+            #expect(handle == "Sneaky Cedar")
+            let stored = try await APICourseEnrollment.find(enrollment.id, on: app.db)?.avatarHandle
+            #expect(stored == "Sneaky Cedar")
+        }
+    }
+
+    /// A stored value of the wrong form (a hand-edited row) is redrawn.
+    @Test(arguments: ["sneaky cedar", "Sneaky", "Sneaky Cedar Grove", ""])
+    func malformedHandleIsRedrawn(stored: String) async throws {
+        try await withApp(app) { _ in
+            let course = try await makeTestCourse(on: app, code: "AVH6")
+            let user = try await makeTestStudent(on: app, username: "av_malformed")
+            let enrollment = try await makeTestEnrollment(
+                on: app, userID: try user.requireID(), courseID: try course.requireID())
+            enrollment.avatarHandle = stored
+            try await enrollment.save(on: app.db)
+
             let handle = try #require(
                 try await AvatarStore.ensureHandle(for: enrollment, on: app.db))
-            #expect(handle != "Sneaky Cedar")
+            #expect(handle != stored)
             #expect(AvatarHandle.isWellFormed(handle))
         }
     }
+
+    /// The staff "Give new handle" action: a fresh draw from the current lists,
+    /// never the old handle and never one already taken in the course.
+    @Test func redrawGivesANewCurrentHandle() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeTestCourse(on: app, code: "AVH7")
+            let courseID = try course.requireID()
+            let other = try await makeTestStudent(on: app, username: "av_redraw_other")
+            let otherEnrollment = try await makeTestEnrollment(
+                on: app, userID: try other.requireID(), courseID: courseID)
+            let otherHandle = try #require(
+                try await AvatarStore.ensureHandle(for: otherEnrollment, on: app.db))
+
+            let user = try await makeTestStudent(on: app, username: "av_redraw")
+            let enrollment = try await makeTestEnrollment(
+                on: app, userID: try user.requireID(), courseID: courseID)
+            enrollment.avatarHandle = "Quiet Cedar"
+            try await enrollment.save(on: app.db)
+
+            let handle = try #require(try await AvatarStore.redrawHandle(for: enrollment, on: app.db))
+            #expect(handle != "Quiet Cedar")
+            #expect(handle != otherHandle)
+            #expect(AvatarHandle.isWellFormed(handle))
+            let stored = try await APICourseEnrollment.find(enrollment.id, on: app.db)?.avatarHandle
+            #expect(stored == handle)
+        }
+    }
+
 }
