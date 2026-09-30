@@ -457,16 +457,24 @@ if (root) {
         if (field && typeof field.select === 'function') field.select();
     });
 
-    // data-ck-copy — copy the attribute's text to the clipboard and say so in
-    // the control's title, so a long URL is one click rather than a drag
-    // selection. Text only: the title is the confirmation, nothing is styled.
+    // data-copy-url — copy a link to the clipboard. The value is a path, which
+    // gets this site's origin put in front of it, or an absolute URL, which is
+    // copied as it is. The cue is a transient class (.action-copied) plus a
+    // title swap, so JS makes no styling decision. Used by the per-row "copy
+    // student link" button and the LTI tool URLs.
     document.addEventListener('click', (e) => {
-        const button = e.target.closest('[data-ck-copy]');
+        const button = e.target instanceof Element ? e.target.closest('[data-copy-url]') : null;
         if (!button || !navigator.clipboard) return;
-        const original = button.getAttribute('title') || 'Copy';
-        navigator.clipboard.writeText(button.getAttribute('data-ck-copy')).then(() => {
-            button.setAttribute('title', 'Copied');
-            setTimeout(() => button.setAttribute('title', original), 1500);
+        const value = button.getAttribute('data-copy-url');
+        const url = /^https?:\/\//.test(value) ? value : window.location.origin + value;
+        navigator.clipboard.writeText(url).then(() => {
+            const previous = button.title;
+            button.title = 'Copied!';
+            button.classList.add('action-copied');
+            setTimeout(() => {
+                button.title = previous;
+                button.classList.remove('action-copied');
+            }, 2000);
         });
     });
 

@@ -198,7 +198,7 @@ import VaporTesting
     @Test func everyToolURLHasACopyButton() async throws {
         try await withApp(app) { _ in
             let html = try await page(cookie: try await loginAsAdmin())
-            #expect(html.components(separatedBy: "data-ck-copy=\"").count - 1 == 4)
+            #expect(html.components(separatedBy: "data-copy-url=\"").count - 1 == 4)
             #expect(html.contains("+ Register platform"))
             #expect(html.contains("0 platform(s) enabled"))
         }

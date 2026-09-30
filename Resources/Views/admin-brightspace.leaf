@@ -69,7 +69,7 @@ LEARN
     <div#if(authorized): class="add-panel card"#endif id="replace-key-panel">
         <form method="post" action="/admin/brightspace/set-credentials" class="form popup-form">
             #csrfFormField()
-            <p class="section-note">Paste the <strong>User ID</strong> and <strong>User Key</strong> from your institution&rsquo;s credential service. They are verified against D2L and stored live, with no restart.</p>
+            <p class="section-note">Paste the <strong>User ID</strong> and <strong>User Key</strong> from your institution&rsquo;s credential service.</p>
             <label class="form-label">User ID
                 <input class="form-input" type="text" name="userID" autocomplete="off" spellcheck="false" required>
             </label>

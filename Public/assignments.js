@@ -210,24 +210,6 @@
         });
     });
 
-    // ── Copy student link ─────────────────────────────────────────────────────
-    // Per-row buttons carry the assignment's vanity path on data-copy-url; the
-    // "copied" cue is a transient class + title swap (no JS styling decision).
-    document.body.addEventListener('click', function (event) {
-        var btn = event.target instanceof Element ? event.target.closest('[data-copy-url]') : null;
-        if (!btn) return;
-        var url = window.location.origin + btn.getAttribute('data-copy-url');
-        navigator.clipboard.writeText(url).then(function () {
-            var prev = btn.title;
-            btn.title = 'Copied!';
-            btn.classList.add('action-copied');
-            setTimeout(function () {
-                btn.title = prev;
-                btn.classList.remove('action-copied');
-            }, 2000);
-        });
-    });
-
     // ── UWaterloo important-date proximity warning ────────────────────────────
     // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
     // The compact publish form keeps its shorter label.

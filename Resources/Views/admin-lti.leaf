@@ -10,7 +10,7 @@ LTI
     <div class="page-titlebar">
         <h2>LTI <span class="text-muted">#(enabledPlatformCount) platform(s) enabled</span></h2>
     </div>
-    <p class="section-intro">Give these values to the LMS administrator who registers Chickadee as an LTI 1.3 tool. Set the link to open in a new window.</p>
+    <p class="section-intro">Give these values to the LMS administrator who registers Chickadee as an LTI 1.3 tool.</p>
     #if(!baseURLConfigured):
     <div class="flash flash-warning" role="status">
         <strong><code>PUBLIC_BASE_URL</code> is not set,</strong> so these are paths. Set it and restart the server.
@@ -19,17 +19,18 @@ LTI
     <div class="card section-gap">
         <dl class="detail-grid detail-grid--cells">
             <div><dt>OIDC login URL</dt>
-            <dd><code>#(loginURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-ck-copy="#(loginURL)" title="Copy" aria-label="Copy the OIDC login URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
+            <dd><code>#(loginURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-copy-url="#(loginURL)" title="Copy" aria-label="Copy the OIDC login URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
             <div><dt>Redirect URL</dt>
-            <dd><code>#(launchURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-ck-copy="#(launchURL)" title="Copy" aria-label="Copy the redirect URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
+            <dd><code>#(launchURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-copy-url="#(launchURL)" title="Copy" aria-label="Copy the redirect URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
             <div><dt>Target link URL</dt>
-            <dd><code>#(launchURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-ck-copy="#(launchURL)" title="Copy" aria-label="Copy the target link URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
+            <dd><code>#(launchURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-copy-url="#(launchURL)" title="Copy" aria-label="Copy the target link URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
             <div><dt>Key set URL</dt>
-            <dd><code>#(jwksURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-ck-copy="#(jwksURL)" title="Copy" aria-label="Copy the key set URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
+            <dd><code>#(jwksURL)</code> <button class="btn action-btn action-btn-icon" type="button" data-copy-url="#(jwksURL)" title="Copy" aria-label="Copy the key set URL"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></dd></div>
             <div><dt>Signing algorithm</dt>
             <dd><code>RS256</code></dd></div>
         </dl>
     </div>
+    <p class="field-note">Set the link to open in a new window.</p>
 </section>
 
 <section class="page-section">
