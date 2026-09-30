@@ -40,6 +40,10 @@ const STARTER_EXPRESSIONS = 6
 const starterExpressions = expressions.slice(0, STARTER_EXPRESSIONS)
 const unlockableExpressions = expressions.slice(STARTER_EXPRESSIONS)
 
+// A hat replaces the tuft. Mirrors AvatarAccessory.hidesTuft, which
+// AvatarPresentation applies at render time.
+const TUFT_HIDING_HATS = new Set(['beanie', 'gradcap'])
+
 // Tilt is a transform, not a symbol, so there is nothing to read it from.
 // These mirror AvatarTilt.degrees.
 const tilts = [['upright', 0], ['left', -9], ['right', 9]]
@@ -52,7 +56,7 @@ const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'no
   `<svg class="avatar" style="${style(cap, accent, back)};width:${size}px;height:${size}px"
         viewBox="0 0 64 64" role="img" aria-label="chickadee avatar">
      <use href="#av-backdrop"/><g transform="rotate(${tilt} 32 34)">
-     <use href="#av-tuft-${tuft}"/><use href="#av-plumage"/><use href="#av-wing-${wing}"/>
+     <use href="#av-tuft-${TUFT_HIDING_HATS.has(accessory) ? 'none' : tuft}"/><use href="#av-plumage"/><use href="#av-wing-${wing}"/>
      <use href="#av-expression-${expression}"/><use href="#av-accessory-${accessory}"/></g></svg>`
 
 const label = (t, inner) => `<figure><div>${inner}</div><figcaption>${t}</figcaption></figure>`
@@ -73,7 +77,7 @@ const sections = [
   ]],
   ['Tuft — the outline, without a hat', tufts.map((tuft, i) =>
     label(tuft, bird(88, { ...base, tuft, cap: at(caps, i) })))],
-  ['Tuft × hat — a hat covers the tuft on purpose; review the overlaps',
+  ['Tuft × hat — beanie and gradcap replace the tuft; review the overlaps',
     tufts.flatMap(tuft => ['beanie', 'gradcap', 'headphones', 'bloom'].map(accessory =>
       label(`${tuft} + ${accessory}`, bird(64, { ...base, tuft, accessory, back: 'straw' }))))],
   ['Tilt — a transform on everything but the backdrop', tilts.map(([name, tilt]) =>

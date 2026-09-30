@@ -13,7 +13,8 @@
      they are what keeps every bird a chickadee even when the cap goes plum.
      Layer order back to front: backdrop, tuft, plumage, wings, expression,
      accessory. The tuft sits BEFORE the plumage so the body circle covers its
-     base, and a hat drawn later covers the tuft on purpose. Tilt is not a
+     base. A bird wearing the beanie or the gradcap is given no tuft (the
+     presentation decides), so no hat is ever drawn over one. Tilt is not a
      symbol: it is one rotate transform on a group that wraps every layer but
      the backdrop.
 

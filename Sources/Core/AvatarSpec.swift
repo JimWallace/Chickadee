@@ -39,6 +39,18 @@ public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
 /// absence: most birds wear nothing.
 public enum AvatarAccessory: String, CaseIterable, Codable, Sendable {
     case none, scarf, headphones, beanie, glasses, gradcap, bowtie, bloom
+
+    /// A hat that replaces the tuft: a bird wears one or the other, never
+    /// both. The gradcap's board let a tuft stick up through it, which looked
+    /// wrong; the beanie covers every tuft anyway. The rule is applied at
+    /// render time, so the stored tuft is kept and comes back if the
+    /// accessory changes.
+    public var hidesTuft: Bool {
+        switch self {
+        case .beanie, .gradcap: true
+        case .none, .scarf, .headphones, .glasses, .bowtie, .bloom: false
+        }
+    }
 }
 
 /// The colour an accessory is drawn in.  Part of the accessory axis rather

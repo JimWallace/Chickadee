@@ -95,7 +95,8 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         self.wingToken = "--avatar-\(spec.cap.rawValue)-wing"
         self.accentToken = "--avatar-accent-\(spec.accent.rawValue)"
         self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
-        self.tuftSymbolRef = "#av-tuft-\(spec.tuft.rawValue)"
+        let tuft = spec.accessory.hidesTuft ? AvatarTuft.none : spec.tuft
+        self.tuftSymbolRef = "#av-tuft-\(tuft.rawValue)"
         self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"
         self.expressionSymbolRef = "#av-expression-\(spec.expression.rawValue)"
         self.accessorySymbolRef = "#av-accessory-\(spec.accessory.rawValue)"

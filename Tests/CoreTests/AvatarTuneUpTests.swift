@@ -107,6 +107,20 @@ import Testing
         #expect(p.tiltTransform == "rotate(-9 32 34)")
     }
 
+    /// A bird wears a tuft or a hat, never both: under the beanie or the
+    /// gradcap the presentation draws no tuft, and the stored tuft is kept.
+    @Test(arguments: AvatarAccessory.allCases)
+    func aHatReplacesTheTuft(accessory: AvatarAccessory) {
+        let spec = AvatarSpec(
+            cap: .umber, wing: .plain, expression: .bright, accessory: accessory, accent: .honey,
+            backdrop: .straw, tuft: .crest, tilt: .upright)
+        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let expected = [.beanie, .gradcap].contains(accessory) ? "#av-tuft-none" : "#av-tuft-crest"
+        #expect(accessory.hidesTuft == [.beanie, .gradcap].contains(accessory))
+        #expect(p.tuftSymbolRef == expected)
+        #expect(spec.tuft == .crest)
+    }
+
     /// The tuft reference and the tilt transform are never empty, including
     /// for the two "nothing" values — Leaf gives an empty value no warning.
     @Test(arguments: AvatarTuft.allCases)

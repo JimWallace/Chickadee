@@ -384,8 +384,13 @@ shape, accessory colour.** The tune-up targets those:
   the bird.
 - **Wing marks** are about twice as wide (bars 2.3 units, dots r 1.45).
 - **Two new axes.** `tuft` changes the outline; its symbol sits BEFORE the
-  plumage so the body circle covers its base, and a hat drawn later covers the
-  tuft on purpose. `tilt` is one rotate transform on a group that holds every
+  plumage so the body circle covers its base. A bird wears a tuft OR a hat,
+  never both: `AvatarAccessory.hidesTuft` is true for the beanie and the
+  gradcap, and `AvatarPresentation` then draws no tuft. The gradcap's board
+  let a crest or a pair stick up through it; the beanie covered every tuft
+  anyway. The rule is applied at render time, not at the draw, so the stored
+  tuft is kept and comes back if the accessory changes. Headphones keep the
+  tuft, which shows above the band and reads as intended. `tilt` is one rotate transform on a group that holds every
   layer except the backdrop, about the body centre (32, 34). A transform
   resolves no ids, so the sprite rule against `url()` references still holds.
 - **Three appended expressions** — `chirp`, `sly`, `dreamy` — are the first
