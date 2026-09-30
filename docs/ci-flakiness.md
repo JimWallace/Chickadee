@@ -5,6 +5,14 @@ Handoff document for the flakiness work. Families 1–3 are the original
 (2026-09-27) were added later**, so the header date is where this started, not
 where it ends. Check the newest families first — they are the ones still open.
 
+**Family 5 is closed for monitoring as of 2026-09-28** (acceptance run: 88
+`main` runs, no recurrence). **Family 6 is root-caused and fixed** — the
+ceiling-wedges after the resolute move. The two look identical from the
+outside and are opposite shapes: Family 5 runs slowly and keeps finishing
+tests, Family 6 stops completely. The `[ci-pressure]` telemetry separates them
+in one line (`scopes=0.0/min` with `self cpu=0.0%` is Family 6), which is what
+it was added for. Read Family 6 before diagnosing any `cancelled` job.
+
 Family 5 was rewritten on 2026-09-16 against a 213-run population rather than
 a single log tail. Two of the three tells it used to carry turned out to be
 artifacts of Swift Testing's reporting, so if you are working from a copy of
@@ -571,9 +579,18 @@ the first thing to check.
 
 ### The occurrences
 
-Seven, not one. Five of them are on `main`, where the concurrency group never
-cancels a run, so `cancelled` there can only be the job's own
-`timeout-minutes`.
+Seven, not one. Five are on `main`, and each was confirmed by its `Run
+APITests` step running to the budget (1373-1398 s) rather than by the
+conclusion string.
+
+**Do not shortcut that check.** An earlier revision of this paragraph said
+`main` never cancels for concurrency, so `cancelled` there could only be a
+job timeout. That is false: with `cancel-in-progress: false` GitHub keeps only
+the newest PENDING run in a group and cancels older ones, which the
+auto-release commit landing seconds after a merge produces constantly — 39 of
+the 117 runs in the acceptance window below are exactly that, cancelled with
+**no job ever started**. A ceiling kill is a run with a cancelled JOB whose
+step ran to the budget; anything else is bookkeeping.
 
 | date | ref | `Run APITests` | conclusion |
 |---|---|---|---|
@@ -1179,6 +1196,43 @@ the recorder's `io_full`.
    variance, which is the subject of this entry and is why both are quoted
    rather than the better.
 
+### Acceptance (2026-09-28): the collapse has not recurred — 88 runs
+
+The test this entry named. `swift-tests.yml` on `main`, 2026-09-16 14:00 →
+2026-09-28 12:26: **117 completed runs, 88 of which started jobs.**
+
+| lane | median | was | max/med | ≥2× median | was |
+|---|---|---|---|---|---|
+| `build` (control) | 630 s | 597 s | 1.14 | 0.0 % | 0.0 % |
+| **`api-tests`** | **156 s** | 291 s | 8.95 † | **1.1 %** | **10.8 %** |
+| `api-tests-postgres` | **198 s** | 391 s | 2.08 | 1.1 % | 3.8 % |
+| `worker-tests` | 21 s | 20 s | 53.19 ‡ | 10.2 % ‡ | 0.5 % |
+| `core-tests` | 9 s | 14 s | 1.89 | 0.0 % | 0.5 % |
+
+† and ‡ are NOT this family — see Family 6. Excluding the single wedged run,
+`api-tests` has a p90 of 177 s against a 156 s median: a 1.13 spread, tighter
+than the `build` control's 1.14.
+
+**Established.** The throughput collapse has not recurred. Both lanes are
+roughly half their former cost and the excursion rate went 10.8 % → 0 genuine
+excursions in 88 runs. That is stronger than "headroom absorbed it", because
+the ≥2×-**median** metric is scale-free: a 3-5× collapse against the new
+median would still register, and does not. At the old rate one would expect
+about nine excursions in 88; there are none.
+
+**Still not root-caused, and that distinction still matters.** Nobody ever
+explained the collapse. It stopped appearing after two changes that removed
+its cost, which is consistent with "fixed" and equally consistent with "the
+mechanism needs a load the lane no longer reaches". Nothing here distinguishes
+those, and the entry should not be read as though it does. What is different
+from a year of guessing is that the next occurrence arrives with telemetry
+attached — which is exactly what happened to the run that looked like a
+recurrence and was not (Family 6).
+
+**What retires.** Family 5 is closed for monitoring. The lever that worked was
+the median, not the ceiling; the two harness artifacts corrected above remain
+the reason the original diagnosis was possible at all.
+
 **The arming guard's own first flake (2026-08-22) — FIXED.** The watchdog's
 drift guard `WedgeWatchdogArmingTests.withAppArmsTheWatchdog` was itself the
 sole failure in a 3,045-test `api-tests-postgres` run (run 32542491009,
@@ -1526,9 +1580,24 @@ Subprocess helpers for tests.
    cause of a Family 5 event.** An intermediate revision of this file
    reclassified "cosmetic" as an unmeasured assumption; that reclassification
    was itself the unmeasured thing, and the original wording was closer to
-   right. `Tests/CoreTests/PipeCloseOnExecTests.swift` pins the measurement so
-   a toolchain change that re-opens the leak is caught here rather than in a
-   wedged job. Note the precise claim: *our pipe's write end* does not reach
+   right. `Tests/CoreTests/PipeCloseOnExecTests.swift` pinned the measurement
+   so a toolchain change that re-opens the leak would be caught there rather
+   than in a wedged job.
+
+   **That test no longer exists** — #1551 deleted it with the helper it
+   covered, for sound reasons (zero production callers). The toolchain then
+   moved underneath the claim (glibc 2.39 → 2.43 with resolute), so the
+   sentence above is now unpinned: nothing re-measures it on the current
+   libc.
+
+   That is worth knowing, but it is NOT what caused the wedges that followed.
+   Family 6 root-caused those to a different descriptor mechanism entirely —
+   Foundation's `Process` emulating close-on-exec by listing descriptors
+   before `posix_spawn`, so a descriptor another thread opens in the gap is
+   inherited anyway — and then to glibc's abort lock inherited through
+   swift-subprocess's `clone3`. An earlier revision of this paragraph put the
+   deletion and the wedges in a suggestive timeline; the real answer was
+   measured, and it is in Family 6. Note the precise claim: *our pipe's write end* does not reach
    the child. Other inherited descriptors do — "the child holds only fds
    0/1/2" is too strong and measures false.
 
