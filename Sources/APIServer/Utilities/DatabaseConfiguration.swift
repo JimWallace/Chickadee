@@ -560,4 +560,9 @@ func registerMigrations(on app: Application) {
     // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
     // copied setup the shared support directory the copy paths never wrote.
     app.migrations.add(BackfillSharedSupportFiles(testSetupsDirectory: app.testSetupsDirectory))
+
+    // One-time swap of every drawn gradcap for the headband: the gradcap is
+    // now kept as a completion item (docs/student-wardrobe.md, decision 4).
+    // Raw SQL, so its place in the list is not load-bearing.
+    app.migrations.add(SwapStarterGradcapForHeadband())
 }

@@ -257,5 +257,10 @@
             <circle class="av-bloom-eye" cx="0" cy="0" r="2.2"/>
             </g>
         </symbol>
+        <symbol id="av-accessory-headband" viewBox="0 0 64 64">
+            <path class="av-accent" d="M17.6,16.84 A22.4,22.4 0 0 1 46.4,16.84 L44.86,18.68 A20,20 0 0 0 19.14,18.68 Z"/>
+            <path class="av-accent" d="M45.2,17.3 L51,14 C51.6,15.6 51.5,17.4 50.6,18.9 Z"/>
+            <path class="av-accent" d="M45.2,17.9 L49.8,22.4 C48.3,23 46.9,22.8 45.9,21.9 Z"/>
+        </symbol>
     </defs>
 </svg>

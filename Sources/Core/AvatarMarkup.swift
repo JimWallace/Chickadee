@@ -68,6 +68,10 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// is why the design writes it "8 + 5 accents".
     public let accentToken: String
     public let backdropToken: String
+    /// The ring's colour. For `.none` it is the backdrop token, so the ring
+    /// matches the disc and cannot be seen, and the template needs no
+    /// condition.
+    public let borderToken: String
     /// Fragment references for the four symbols a spec varies, e.g.
     /// "#av-wing-barred" — WITH the leading marker, so the template never has
     /// to write one next to an interpolation. A template writing a literal
@@ -95,6 +99,9 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         self.wingToken = "--avatar-\(spec.cap.rawValue)-wing"
         self.accentToken = "--avatar-accent-\(spec.accent.rawValue)"
         self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
+        self.borderToken =
+            spec.border.accent.map { "--avatar-accent-\($0.rawValue)" }
+            ?? "--avatar-back-\(spec.backdrop.rawValue)"
         let tuft = spec.accessory.hidesTuft ? AvatarTuft.none : spec.tuft
         self.tuftSymbolRef = "#av-tuft-\(tuft.rawValue)"
         self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"
@@ -116,7 +123,7 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// is declared in the stylesheet, and that the stylesheet declares no
     /// avatar token no presentation can name.
     public var tokens: [String] {
-        [capToken, wingToken, accentToken, backdropToken]
+        [capToken, wingToken, accentToken, backdropToken, borderToken]
     }
 
     /// Every symbol this presentation names, in the order the partial stacks

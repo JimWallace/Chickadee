@@ -92,15 +92,16 @@ ship in.
 | `cap` | 8 | ink, slate, teal, forest, indigo, plum, rust, umber — the loudest axis, so it carries the least detail; it also picks the wing colour |
 | `wing` | 6 | plain, barred, tipped, speckled, edged, twotone — symmetrical, both flanks from one drawing |
 | `expression` | 6 + 3 | bright, sleepy, wink, curious, keen, startled — reads first and from furthest away; plus chirp, sly, dreamy, which are unlockables and never drawn at first use |
-| `accessory` | 8 × 5 accents | none, scarf, headphones, beanie, glasses, gradcap, bowtie, bloom |
-| `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts |
+| `accessory` | 8 + 1, × 5 accents | none, scarf, headphones, beanie, glasses, headband, bowtie, bloom; plus the gradcap, kept for a completion achievement and never drawn ([student-wardrobe.md](student-wardrobe.md), decision 4) |
+| `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts; drawn at first use, then the student may change it on the account page |
+| `border` | 1 + 5 | none, or a ring in one of the five accents — chosen by the student, never drawn, so not counted below ([student-wardrobe.md](student-wardrobe.md)) |
 | `tuft` | 5 | none, cowlick, crest, pair, swoop — the outline, the one thing that separates two hatless birds at roster size |
 | `tilt` | 3 | upright, left, right (0°, −9°, +9°) — a transform, not a symbol |
 
 **8 × 6 × 6 × 8 × 5 × 8 × 5 × 3 = 1,382,400 distinct starter birds**
 (`AvatarSpec.starterCombinationCount`), the number a first-use draw picks from.
-With the three unlockable expressions the axes can produce 2,073,600
-(`combinationCount`). The accent multiplies: it is part of the accessory axis,
+With the three unlockable expressions and the gradcap the drawn axes can
+produce 2,332,800 (`combinationCount`). The accent multiplies: it is part of the accessory axis,
 which is why the design writes it "8 + 5 accents".
 
 **Body, cheek, beak and bib are NOT axes.** They are fixed, and they are what

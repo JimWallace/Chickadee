@@ -3040,6 +3040,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     --av-wing: var(--avatar-slate-wing);
     --av-accent: var(--avatar-accent-ember);
     --av-backdrop: var(--avatar-back-sky);
+    /* The border ring (docs/student-wardrobe.md, decision 2): an outline
+       inside the disc, so it follows the radius and needs no sprite layer.
+       With no border chosen the presentation passes the backdrop colour, so
+       the ring matches the disc and cannot be seen. */
+    --av-border: var(--avatar-back-sky);
+    outline: 3px solid var(--av-border);
+    outline-offset: -3px;
 }
 
 /* The 1.5rem form for a table row where the handle beside it carries the
@@ -3051,6 +3058,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     width: 1.5rem;
     height: 1.5rem;
     margin-right: .5rem;
+    outline-width: 2px;
+    outline-offset: -2px;
 }
 
 /* The 2.25rem form for a roster row where the name beside the bird carries the
@@ -3059,7 +3068,64 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .avatar-md {
     width: 2.25rem;
     height: 2.25rem;
+    outline-width: 2px;
+    outline-offset: -2px;
 }
+
+/* Swatch choice: a group of radio inputs shown as round colour chips (the
+   account page's Chickadee picker; see docs/ui-design.md). The input stays in the tab order and is
+   only made invisible, so the group works with the keyboard and with no
+   JavaScript; the chip beside it shows the checked and focused states. */
+.swatch-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    border: 0;
+    padding: 0;
+    margin: 0 0 1rem;
+}
+
+.swatch-group legend {
+    padding: 0;
+    margin-bottom: .5rem;
+    font-weight: 600;
+}
+
+.swatch {
+    position: relative;
+    display: inline-flex;
+    cursor: pointer;
+}
+
+.swatch input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+
+.swatch-chip {
+    display: block;
+    box-sizing: border-box;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+}
+
+.swatch input:checked + .swatch-chip { outline-color: var(--gray-800); }
+
+.swatch input:focus-visible + .swatch-chip { outline-color: var(--blue); }
+
+/* A backdrop swatch is a filled disc; a border swatch is a ring, so it reads
+   as a border; "no border" is a dashed grey ring. Each reads the same
+   per-student custom property the avatar itself reads. */
+.swatch-backdrop { background: var(--av-backdrop); }
+
+.swatch-border { border: 5px solid var(--av-border); }
+
+.swatch-none { border: 2px dashed var(--muted); }
 
 .av-backdrop { fill: var(--av-backdrop); }
 .av-cap { fill: var(--av-cap); }

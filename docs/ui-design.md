@@ -319,9 +319,11 @@ duplicate.
   tilt transform — tuft, plumage, wing, expression, accessory.
   **A page that renders `_avatar` must also include `_avatar-sprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
-  which no guard can catch.  Only four colours are per-student
-  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, assigned inline,
-  which is the sanctioned form); the fixed parts of the bird — `.av-body`,
+  which no guard can catch.  Five colours are per-student
+  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
+  assigned inline, which is the sanctioned form); `--av-border` colours the
+  ring, an `outline` inside the disc, and is the backdrop colour when the
+  student chose no border; the fixed parts of the bird — `.av-body`,
   `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
   `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
   `.av-gear-line`, `.av-bloom-eye` —
@@ -335,6 +337,15 @@ duplicate.
   LEARN list, where the name beside the bird carries the identity and the bird
   is the student's own seeded one, the same as on their account page.  See
   [student-avatars.md](student-avatars.md).
+- **`.swatch-group`**, `.swatch`, `.swatch-chip` — a choice of one colour: a
+  `<fieldset>` of radio inputs, each shown as a round chip.  The input is made
+  invisible but stays in the tab order, so the group works with the keyboard
+  and with no JavaScript; the chip shows the checked and focused states.  The
+  chip's colour comes from a per-student custom property, so a swatch is the
+  same colour as the avatar part it chooses: `.swatch-backdrop` (a filled
+  disc, `--av-backdrop`), `.swatch-border` (a ring, `--av-border`) and
+  `.swatch-none` (a dashed ring, for "no border").  Used by the account page's
+  Chickadee picker; see [student-wardrobe.md](student-wardrobe.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A
   modifier on `.diagnostic-value`, not a second tile component.
