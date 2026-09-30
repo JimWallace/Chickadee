@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.278] - 2026-09-30
+
+### Fixed
+
+- **`set_activity` results no longer fail MCP output-schema validation.** The tool always returns `opponentSource`, `opponentFile`, `opensAt` and `closesAt`, as an explicit `null` when unset, but its `outputSchema` declared them as plain strings. Clients that validate `structuredContent` (Claude's connector) therefore reported a successful call as an error, for example `beatTheInstructor` with no window and no opponent file. The schema now admits `null` for those keys (new `MCPSchema.nullableString` / `nullableStringEnum`), and a test validates tool outputs' actual values against their declared schemas, not only their keys.
+
+
 ## [0.5.277] - 2026-09-30
 
 ### Changed
