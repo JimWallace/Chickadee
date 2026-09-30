@@ -95,8 +95,8 @@ import VaporTesting
             try await row.save(on: app.db)
 
             let html = try await get("/testsetups/lk_union/leaderboard", cookie: cookie, on: app)
-            #expect(html.contains("Your tests found 1 fault · your code is not tested yet"))
-            #expect(html.contains("Tested 1 classmate · 0 have tested you"))
+            #expect(html.contains("1 fault found"))
+            #expect(html.contains("Your code is not tested yet · tested 1 classmate, tested by 0"))
             #expect(html.contains("class=\"you-card-kicker\">You · "))
             // The Tests list carries the record as details and the defeated
             // count as its value; the Code list carries the status as text.
@@ -127,7 +127,6 @@ import VaporTesting
             #expect(other.contains("class=\"champion-card card\""))
             #expect(other.contains("Holds the hill"))
             #expect(other.contains("1 defence"))
-            #expect(other.contains("beat their submission to take it"))
             #expect(other.contains("avatar avatar-lg"))
             #expect(!other.contains("Champion:"))
 

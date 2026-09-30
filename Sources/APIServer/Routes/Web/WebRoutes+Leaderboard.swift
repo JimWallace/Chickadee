@@ -246,9 +246,9 @@ private func buildUnionYouCard(
     return UnionYouCard(
         isRanked: true, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
         avatar: identity.avatar, kicker: "You · \(identity.handle)",
-        titleText: "Your tests found \(found) \(found == 1 ? "fault" : "faults") · your code is \(status)",
+        titleText: "\(found) \(found == 1 ? "fault" : "faults") found",
         noteText:
-            "Tested \(tested) \(tested == 1 ? "classmate" : "classmates") · \(testedBy) \(testedBy == 1 ? "has" : "have") tested you",
+            "Your code is \(status) · tested \(tested) \(tested == 1 ? "classmate" : "classmates"), tested by \(testedBy)",
         privacyLine: identity.privacyLine, submitURL: identity.submitURL)
 }
 
@@ -297,7 +297,8 @@ func buildTournamentPresentation(
         let match = TournamentMatchPresentation(
             home: home, away: away, hasAway: away != nil,
             resultText: resultText,
-            isLive: slot.awaySeed != nil && slot.winnerSeed == nil,
+            isLive: slot.awaySeed != nil && slot.winnerSeed == nil
+                && run.status != APITournamentRun.Status.superseded,
             homeWon: slot.winnerSeed == slot.homeSeed,
             awayWon: slot.awaySeed != nil && slot.winnerSeed == slot.awaySeed)
         if let index = rounds.firstIndex(where: { $0.number == slot.round }) {

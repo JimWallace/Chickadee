@@ -48,7 +48,7 @@
         <div class="you-card-who">
             <div class="you-card-kicker">Holds the hill</div>
             <div class="you-card-name"><span data-avatar-handle>#(champion.handle)</span>#if(champion.isViewer): <span class="you-pill">You</span>#endif#if(isStaff): <span class="text-muted">· #(champion.name)</span>#endif</div>
-            <p class="section-note">Took it <span class="js-relative-time" data-iso="#(champion.crownedAtISO)">#(champion.crownedAtText)</span> · #(champion.defencesText) · beat their submission to take it</p>
+            <p class="section-note">Took it <span class="js-relative-time" data-iso="#(champion.crownedAtISO)">#(champion.crownedAtText)</span> · #(champion.defencesText)</p>
         </div>
     </section>
     #else:
@@ -69,13 +69,13 @@
         </div>
     </section>
     #endif
-    <div class="table-scroll">
-    <div class="bracket">
+    <div class="table-scroll" role="region" aria-label="Bracket" tabindex="0">
+    <div class="bracket" role="list">
         #for(round in tournament.rounds):
-        <div class="bracket-round">
+        <div class="bracket-round" role="listitem">
             <h3 class="bracket-round-label">#(round.label)</h3>
             #for(match in round.matches):
-            <div class="bracket-match card">
+            <div class="bracket-match card" role="group" aria-label="#(round.label) match">
                 <div class="bracket-entrant#if(match.home.isViewer): bracket-entrant--you#endif#if(match.homeWon): bracket-entrant--won#endif">
                     #if(match.home.hasAvatar):
                     #extend("_avatar", match.home.avatar)
