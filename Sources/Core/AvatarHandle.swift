@@ -42,28 +42,36 @@ public enum AvatarHandle {
     /// Never the student.  No first names, no skin-tone words, no traits, no plain
     /// colour words.  Checked by Tools/handle-review; see docs/student-avatars.md §3.
     public static let adjectives: [String] = [
-        "Arctic", "Balmy", "Blustery", "Boreal", "Breezy", "Brisk", "Cascading", "Cerulean",
-        "Chilly", "Citrine", "Cloudy", "Cobalt", "Crimson", "Crisp", "Dappled", "Dazzling",
-        "Dewy", "Drifting", "Drizzly", "Foggy", "Frosted", "Gilded", "Glacial", "Glassy",
-        "Gleaming", "Glinting", "Glowing", "Gusty", "Hazy", "Humming", "Icy", "Leafy",
-        "Lilac", "Lunar", "Moonlit", "Mossy", "Northern", "Overcast", "Pebbled", "Polar",
-        "Rainy", "Rippling", "Rustling", "Shimmering", "Silver", "Sleety", "Snowy", "Solar",
-        "Sparkling", "Speckled", "Starlit", "Starry", "Sunlit", "Teal", "Thawing", "Tidal",
-        "Twilit", "Twinkling", "Upland", "Verdant", "Whispering", "Windswept", "Wintry", "Woven",
+        "Arctic", "Autumnal", "Balmy", "Billowing", "Blustery", "Boreal", "Breezy", "Brisk",
+        "Cascading", "Cerulean", "Chilly", "Citrine", "Cloudless", "Cloudy", "Coastal", "Cobalt",
+        "Crackling", "Crimson", "Crisp", "Dappled", "Dazzling", "Dewy", "Drifting", "Drizzly",
+        "Flickering", "Flowing", "Foamy", "Fogbound", "Foggy", "Frosted", "Gilded", "Glacial",
+        "Glassy", "Gleaming", "Glimmering", "Glinting", "Glistening", "Glittering", "Glowing", "Gusty",
+        "Hazy", "Highland", "Humming", "Icy", "Leafy", "Lilac", "Luminous", "Lunar",
+        "Moonlit", "Mossy", "Muggy", "Northern", "Oceanic", "Overcast", "Pastel", "Pebbled",
+        "Polar", "Rainy", "Rippling", "Rolling", "Rumbling", "Rustling", "Shimmering", "Showery",
+        "Silken", "Silver", "Sleety", "Snowbound", "Snowy", "Solar", "Sparkling", "Speckled",
+        "Splashing", "Starlit", "Starry", "Summery", "Sunlit", "Swirling", "Teal", "Thawing",
+        "Thundering", "Tidal", "Torrential", "Trickling", "Tumbling", "Turquoise", "Twilit", "Twinkling",
+        "Upland", "Verdant", "Vernal", "Wavy", "Whispering", "Windswept", "Wintry", "Woven",
     ]
 
     /// Places in the chickadee's forest, many of which are also computing words
     /// (Cache, Fork, Kernel, Stack…).  No first names or common surnames, no body
     /// words, no animals, no testing vocabulary.
     public static let nouns: [String] = [
-        "Acorn", "Alder", "Beacon", "Birdhouse", "Bloom", "Bough", "Cabin", "Cache",
-        "Canopy", "Cedar", "Clearing", "Cluster", "Cove", "Creek", "Current", "Delta",
-        "Driftwood", "Feeder", "Fork", "Glade", "Grove", "Harbour", "Hedgerow", "Hilltop",
-        "Hollow", "Icicle", "Kernel", "Lattice", "Leaf", "Log", "Lookout", "Loop",
-        "Maple", "Nest", "Node", "Orchard", "Patch", "Pebble", "Perch", "Pine",
-        "Pinecone", "Pond", "Pool", "Port", "Prairie", "Relay", "Sapling", "Seed",
-        "Shell", "Signal", "Snowdrift", "Sprig", "Spruce", "Stack", "Stem", "Stream",
-        "Summit", "Thicket", "Thistle", "Trail", "Tree", "Treetop", "Twig", "Waterfall",
+        "Acorn", "Alder", "Beacon", "Birdbath", "Birdhouse", "Bloom", "Blossom", "Boardwalk",
+        "Bough", "Boulder", "Bridge", "Burrow", "Cabin", "Cache", "Cairn", "Campsite",
+        "Canopy", "Cedar", "Channel", "Clearing", "Cluster", "Cove", "Crate", "Creek",
+        "Current", "Delta", "Dock", "Driftwood", "Estuary", "Feeder", "Footpath", "Fork",
+        "Glade", "Grove", "Harbour", "Heap", "Hedgerow", "Hilltop", "Hollow", "Icicle",
+        "Kernel", "Lagoon", "Lantern", "Lattice", "Leaf", "Log", "Lookout", "Loop",
+        "Maple", "Mesh", "Nest", "Nestbox", "Node", "Orchard", "Outcrop", "Patch",
+        "Pebble", "Perch", "Petal", "Pier", "Pine", "Pinecone", "Plateau", "Pond",
+        "Pool", "Poplar", "Port", "Prairie", "Rapids", "Ravine", "Redwood", "Relay",
+        "Sandbox", "Sapling", "Seed", "Seedling", "Shell", "Signal", "Snowdrift", "Sprig",
+        "Spruce", "Stack", "Stem", "Stream", "Summit", "Sycamore", "Thicket", "Thistle",
+        "Thread", "Trail", "Trailhead", "Tree", "Treetop", "Twig", "Waterfall", "Web",
     ]
 
     /// Words left out on purpose, with the reason, so nobody "fixes" a list by

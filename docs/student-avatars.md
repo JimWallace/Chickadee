@@ -215,8 +215,10 @@ purpose, with the reason for each. Sources and fetch dates are in
 
 **Capacity.** The pool must be at least four times the largest expected course
 (`AvatarHandle.maxExpectedEnrollment`, 1,000), so that the last students in a
-large course still get a random handle and not the remainder. 64 × 64 = 4,096.
-If a real course is larger, append words and run the review again.
+large course still get a random handle and not the remainder. 96 × 96 = 9,216
+(the Fall 2026 review shipped 64 × 64 = 4,096; 32 words were appended to each
+list the same term, for headroom beyond the rule). If a real course is larger,
+append words and run the review again.
 
 **Lists change between terms; a stored handle is kept.** A new draw uses the
 current lists only. A handle already stored is never checked against a list:
@@ -668,7 +670,8 @@ Each slice is independently mergeable and independently useful.
 - **S0 — the model. Done.** `AvatarSpec`, the five slot enums, the seeded draw,
   `AvatarPresentation`, the drift guards against the sprite and the palette, and
   `AvatarHandle` with its curated word lists — 80 adjectives × 80 nouns = 6,400
-  handles, drawn without replacement within a course.
+  handles at the time (96 × 96 = 9,216 since the Fall 2026 review), drawn
+  without replacement within a course.
 - **S1 — persistence. Done.** `users.avatar_spec` and
   `course_enrollments.avatar_handle` (`AddAvatarIdentity`), with a **partial**
   unique index on (course, handle) excluding NULL — without the exclusion the
