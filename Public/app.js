@@ -457,6 +457,19 @@ if (root) {
         if (field && typeof field.select === 'function') field.select();
     });
 
+    // data-ck-copy — copy the attribute's text to the clipboard and say so in
+    // the control's title, so a long URL is one click rather than a drag
+    // selection. Text only: the title is the confirmation, nothing is styled.
+    document.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-ck-copy]');
+        if (!button || !navigator.clipboard) return;
+        const original = button.getAttribute('title') || 'Copy';
+        navigator.clipboard.writeText(button.getAttribute('data-ck-copy')).then(() => {
+            button.setAttribute('title', 'Copied');
+            setTimeout(() => button.setAttribute('title', original), 1500);
+        });
+    });
+
     // data-ck-submit-on-change — submit the owning form as soon as the control
     // changes, for the pickers that have no Save button (enrolment mode, a
     // per-course role, an assignment's open/closed status, the CSV file input

@@ -1793,11 +1793,12 @@ code { font-family: var(--font-mono); font-size: .9em; }
 /* A facts card whose facts are cells in an auto-fitting grid
    (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them. */
 .detail-grid--cells {
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
     gap: 1rem 1.25rem;
     max-width: none;
 }
 .detail-grid--cells dt { font-size: var(--text-xs); }
+.detail-grid--cells code { overflow-wrap: anywhere; }
 .detail-grid--cells dd { margin: .15rem 0 0; font-weight: 600; }
 
 /* The sparkline drawn large: a y-scale, a taller plot with a midline, and an
@@ -1872,6 +1873,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
     height: 100%;
     background: var(--health-teal);
 }
+
+/* A list row that is switched off or finished: dimmed, still readable. */
+.row-muted { opacity: .6; }
 
 /* Pips: one dot per unit of a budget or capacity (a student's slip days, a
    runner's job slots). Decorative; the text beside them ("2 of 3 left",

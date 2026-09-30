@@ -111,6 +111,14 @@ extension AdminRoutes {
         return user
     }
 
+    /// A token lifetime in words: "1 hour", "30 minutes", "90 seconds".
+    static func lifetimeText(seconds: Int) -> String {
+        func unit(_ value: Int, _ name: String) -> String { "\(value) \(name)\(value == 1 ? "" : "s")" }
+        if seconds >= 3600, seconds % 3600 == 0 { return unit(seconds / 3600, "hour") }
+        if seconds >= 60, seconds % 60 == 0 { return unit(seconds / 60, "minute") }
+        return unit(seconds, "second")
+    }
+
     private func renderMCPPage(
         req: Request,
         mintedToken: String?,
@@ -144,17 +152,21 @@ extension AdminRoutes {
                 AdminMCPCourseRef(id: courseID.uuidString, code: course.code, name: course.name))
         }
 
+        let allCourses = courses.compactMap { course -> AdminMCPCourseRef? in
+            guard let id = course.id else { return nil }
+            return AdminMCPCourseRef(id: id.uuidString, code: course.code, name: course.name)
+        }
         let accounts = mcpUsers.compactMap { user -> AdminMCPAccountRow? in
             guard let id = user.id else { return nil }
+            let enrolled = (enrolledByUser[id] ?? []).sorted { $0.code < $1.code }
+            let enrolledIDs = Set(enrolled.map(\.id))
             return AdminMCPAccountRow(
                 id: id.uuidString,
                 username: user.username,
                 createdAt: user.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                enrolledCourses: (enrolledByUser[id] ?? []).sorted { $0.code < $1.code })
-        }
-        let allCourses = courses.compactMap { course -> AdminMCPCourseRef? in
-            guard let id = course.id else { return nil }
-            return AdminMCPCourseRef(id: id.uuidString, code: course.code, name: course.name)
+                enrolledCourses: enrolled,
+                coursesText: enrolled.map(\.code).joined(separator: " · "),
+                enrollableCourses: allCourses.filter { !enrolledIDs.contains($0.id) })
         }
 
         // Browser-flow OAuth grants (admin sees all), reusing the /agents loader.
@@ -176,7 +188,9 @@ extension AdminRoutes {
             mintedToken: mintedToken,
             mintedFor: mintedFor,
             mintedScopes: mintedScopes,
-            error: error)
+            error: error,
+            modeLabel: enabled ? (mcp.mode.scopeCeiling.contains(.write) ? "Read/write" : "Read-only") : "Inactive",
+            tokenLifetimeText: Self.lifetimeText(seconds: mcp.tokenTTLSeconds))
         return try await req.view.render("admin-mcp", ctx)
     }
 

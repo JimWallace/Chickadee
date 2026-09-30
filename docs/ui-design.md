@@ -423,6 +423,10 @@ duplicate.
 - **`.share-bar`** — a 4px track with a teal fill whose width is the `--share` custom
   property (a percent the server worked out for that row); the percent label beside
   it is the value.  Storage, by assignment.
+- **`.row-muted`** — a list row that is switched off or finished (a disabled LTI
+  platform, a revoked or expired agent): dimmed, still readable.
+- **`data-ck-copy`** — on a button: copies its value to the clipboard and sets the
+  button title to "Copied" for a moment (the LTI tool URLs).  Text only; no style.
 - **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
   above an admin page title.  Visual only; the hidden `h1` already names it.
 - **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
