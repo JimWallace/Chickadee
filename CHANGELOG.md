@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.283] - 2026-09-30
+
+### Changed
+
+- **Avatar tune-up: birds that read at roster size.** At 36px the six expressions differed mostly by pupil size, the `curious` brow was invisible, and six caps sat in one dark band. The palette spreads the caps over hue and lightness, the expressions are drawn by eye shape (lids, pale brows, an open beak), and the wing marks are about twice as wide. Two axes are new: `tuft` (the outline) and `tilt` (a lean of ±9°), for 1,382,400 starter birds. Three expressions, `chirp`, `sly` and `dreamy`, are appended as the first wardrobe unlocks and are never drawn at first use. A spec stored before this change keeps every slot it has and gets a one-time random tuft and tilt on its next load. See `docs/student-avatars.md`, decision 7.
+
+
 ## [0.5.282] - 2026-09-30
 
 ### Changed
