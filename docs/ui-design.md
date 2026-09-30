@@ -314,15 +314,17 @@ duplicate.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
 - **`.avatar`** and the `.av-*` fill classes — the generated student chickadee.
-  One `<svg>` carrying the size class wraps five `<use>` elements naming symbols
-  in `_avatar-sprite.leaf`: backdrop, plumage, wing, expression, accessory.
+  One `<svg>` carrying the size class wraps six `<use>` elements naming symbols
+  in `_avatar-sprite.leaf`: backdrop, then — inside one group that carries the
+  tilt transform — tuft, plumage, wing, expression, accessory.
   **A page that renders `_avatar` must also include `_avatar-sprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
   which no guard can catch.  Only four colours are per-student
   (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, assigned inline,
   which is the sanctioned form); the fixed parts of the bird — `.av-body`,
   `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
-  `.av-wing-mark`, `.av-lash`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
+  `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
+  `.av-gear-line`, `.av-bloom-eye` —
   read the palette directly, because a body or a beak that varied would stop
   the birds being one species.  **Two sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a

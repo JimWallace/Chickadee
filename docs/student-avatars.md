@@ -91,13 +91,17 @@ ship in.
 |---|---|---|
 | `cap` | 8 | ink, slate, teal, forest, indigo, plum, rust, umber — the loudest axis, so it carries the least detail; it also picks the wing colour |
 | `wing` | 6 | plain, barred, tipped, speckled, edged, twotone — symmetrical, both flanks from one drawing |
-| `expression` | 6 | bright, sleepy, wink, curious, keen, startled — reads first and from furthest away |
+| `expression` | 6 + 3 | bright, sleepy, wink, curious, keen, startled — reads first and from furthest away; plus chirp, sly, dreamy, which are unlockables and never drawn at first use |
 | `accessory` | 8 × 5 accents | none, scarf, headphones, beanie, glasses, gradcap, bowtie, bloom |
 | `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts |
+| `tuft` | 5 | none, cowlick, crest, pair, swoop — the outline, the one thing that separates two hatless birds at roster size |
+| `tilt` | 3 | upright, left, right (0°, −9°, +9°) — a transform, not a symbol |
 
-**8 × 6 × 6 × 8 × 5 × 8 = 92,160 distinct birds.** The accent multiplies: it is
-part of the accessory axis, which is why the design writes it "8 + 5 accents"
-and why 8 × 6 × 6 × 8 × 8 — 18,432 — is the wrong arithmetic.
+**8 × 6 × 6 × 8 × 5 × 8 × 5 × 3 = 1,382,400 distinct starter birds**
+(`AvatarSpec.starterCombinationCount`), the number a first-use draw picks from.
+With the three unlockable expressions the axes can produce 2,073,600
+(`combinationCount`). The accent multiplies: it is part of the accessory axis,
+which is why the design writes it "8 + 5 accents".
 
 **Body, cheek, beak and bib are NOT axes.** They are fixed, and they are what
 keeps every bird a chickadee even when the cap goes plum. Cheek and flank were
@@ -351,6 +355,54 @@ mirrored by negating its x values alone; its sweep flag has to invert too, and
 getting that wrong produces a curve that is subtly wrong in a way nobody will
 look for. One drawing, mirrored by the renderer.
 
+#### Tune-up: what still reads at 36px
+
+The bird was redrawn once more after it reached the roster, where `.avatar-md`
+is 2.25rem (about 36px) and one sprite unit is about 0.56px. The size test
+found five problems:
+
+- Five of the six expressions differed mainly by **pupil radius** — 2.1 to 4.3
+  units, about 1px apart at 36px.
+- **`curious`'s raised brow was drawn in the cap colour, on the cap**, so it was
+  invisible. That is why `curious` and `bright` could not be told apart.
+- Six of the eight caps sat in one dark band.
+- Wing marks were 1 to 1.5 units wide, which disappears below about 64px.
+- Every bird had the same outline unless it wore a hat.
+
+What still reads at 36px, in order: **outline, backdrop hue, cap hue, eye
+shape, accessory colour.** The tune-up targets those:
+
+- **Palette.** The caps now spread over hue and lightness, and the backdrops
+  have more saturation. The names did not change, so no stored spec changed.
+  The white eye disc keeps at least 3:1 against every cap; the lowest is teal
+  at 4.7:1, and the ratios are in the palette comment in `styles.css`.
+- **Expressions** are drawn by eye SHAPE, not pupil size: lids, closed eyes,
+  brows and an open beak. Brows and closed eyes use `.av-brow`, a pale stroke
+  on the cap, which is the fix for the invisible `curious` brow. `.av-lash` is
+  gone, because nothing used it after the redraw. New fixed tokens
+  `--avatar-blush` and `--avatar-mouth` have no dark mirror, like the rest of
+  the bird.
+- **Wing marks** are about twice as wide (bars 2.3 units, dots r 1.45).
+- **Two new axes.** `tuft` changes the outline; its symbol sits BEFORE the
+  plumage so the body circle covers its base, and a hat drawn later covers the
+  tuft on purpose. `tilt` is one rotate transform on a group that holds every
+  layer except the backdrop, about the body centre (32, 34). A transform
+  resolves no ids, so the sprite rule against `url()` references still holds.
+- **Three appended expressions** — `chirp`, `sly`, `dreamy` — are the first
+  wardrobe unlocks (decision 5: new options arrive as something to earn).
+  `AvatarExpression.starterCases` lists the first six, and the first-use draw
+  picks only from it. Until the wardrobe slice exists, nothing assigns the
+  three except tests and the preview tool.
+
+**Specs stored before the tune-up** have no `tuft` or `tilt` key. They decode to
+`none` / `upright`, and on the next `AvatarStore.ensureSpec` load they get a
+one-time random fill of **only the missing keys**, which is written back. That
+is a draw into an empty slot, not a reshuffle, so decision 2 holds: every slot
+the student already had stays as it was. The alternative, keeping them tuftless
+and upright forever, would split every class into two cohorts anybody could
+see. `AvatarSpec.missingAxes(inStoredJSON:)` tells an absent key from a stored
+default, so a student whose draw was `none` / `upright` is never redrawn.
+
 ### 8. Seed to bird, bird to page
 
 `Core/AvatarSpec.swift`, `Core/AvatarHandle.swift` and `Core/AvatarMarkup.swift`
@@ -384,7 +436,7 @@ a second copy of the palette.
 Those seven `--av-*` properties are on the inline-custom-property allowlist in
 `check-styles.sh`, alongside `--bar-h`, and for the same stated reason: each
 carries a value that varies per **datum** — the student being rendered — which
-no stylesheet can hold and no modifier class could enumerate 92,160 of.
+no stylesheet can hold and no modifier class could enumerate 1,382,400 of.
 
 **A standalone SVG** (an `<img>` src, a download, an email) is a different
 function and is not written. It cannot reference the sprite or the stylesheet, so

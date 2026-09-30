@@ -41,18 +41,19 @@ import Testing
         }
         #expect(caps.count == AvatarCap.allCases.count)
         #expect(wings.count == AvatarWing.allCases.count)
-        #expect(expressions.count == AvatarExpression.allCases.count)
+        // Starter expressions only: the unlockables are never drawn.
+        #expect(expressions == Set(AvatarExpression.starterCases))
         #expect(accessories.count == AvatarAccessory.allCases.count)
         #expect(accents.count == AvatarAccent.allCases.count)
         #expect(backdrops.count == AvatarBackdrop.allCases.count)
     }
 
     @Test func combinationCountMatchesTheSlots() {
-        // The five axes the design specifies: 8 caps, 6 wings, 6 expressions,
-        // 8 accessories in 5 accents, 8 backdrops. The accent multiplies —
-        // 8*6*6*8*8 is 18,432, and the design's own header says 92,160.
-        #expect(AvatarSpec.combinationCount == 8 * 6 * 6 * 8 * 5 * 8)
-        #expect(AvatarSpec.combinationCount == 92_160)
+        // 8 caps, 6 wings, 9 expressions (6 starter + 3 unlockable),
+        // 8 accessories in 5 accents, 8 backdrops, 5 tufts, 3 tilts. The
+        // accent multiplies — it is part of the accessory axis.
+        #expect(AvatarSpec.combinationCount == 8 * 6 * 9 * 8 * 5 * 8 * 5 * 3)
+        #expect(AvatarSpec.combinationCount == 2_073_600)
     }
 
     @Test func specRoundTripsThroughJSON() throws {
@@ -66,14 +67,14 @@ import Testing
 
     // MARK: - Presentation
 
-    @Test func aBirdIsFiveLayersInOrder() {
+    @Test func aBirdIsSixLayersInOrder() {
         let spec = AvatarSpec(
             cap: .plum, wing: .barred, expression: .wink, accessory: .scarf, accent: .ember,
             backdrop: .sky)
         #expect(
             AvatarMarkup.layerSymbolIDs(for: spec) == [
-                "av-backdrop", "av-plumage", "av-wing-barred", "av-expression-wink",
-                "av-accessory-scarf",
+                "av-backdrop", "av-tuft-none", "av-plumage", "av-wing-barred",
+                "av-expression-wink", "av-accessory-scarf",
             ])
     }
 
@@ -166,16 +167,16 @@ import Testing
             backdrop: .sky)
         let presentation = AvatarPresentation(
             for: spec, size: .standard, accessibility: .decorative)
-        // The three varying layers are interpolated; the two fixed ones are
+        // The four varying layers are interpolated; the two fixed ones are
         // literal fragments.
         let expected = [
-            "#av-backdrop", "#av-plumage", "#(wingSymbolRef)", "#(expressionSymbolRef)",
-            "#(accessorySymbolRef)",
+            "#av-backdrop", "#(tuftSymbolRef)", "#av-plumage", "#(wingSymbolRef)",
+            "#(expressionSymbolRef)", "#(accessorySymbolRef)",
         ]
         #expect(refs == expected, "partial layers \(refs) do not match the model's")
         // And the interpolated one really is the wing, marker included.
-        #expect(presentation.layerRefs.count == 5)
-        #expect(presentation.wingSymbolRef == "#" + AvatarMarkup.layerSymbolIDs(for: spec)[2])
+        #expect(presentation.layerRefs.count == 6)
+        #expect(presentation.wingSymbolRef == "#" + AvatarMarkup.layerSymbolIDs(for: spec)[3])
     }
 
     /// Every `--av-*` the partial assigns is one the presentation supplies, and
@@ -216,7 +217,8 @@ import Testing
         // third spelling of the palette and the thing most likely to drift.
         var expected: Set<String> = [
             "--avatar-body", "--avatar-bib", "--avatar-beak", "--avatar-eyewhite",
-            "--avatar-eye", "--avatar-glint", "--avatar-gear",
+            "--avatar-eye", "--avatar-glint", "--avatar-gear", "--avatar-blush",
+            "--avatar-mouth",
         ]
         for cap in AvatarCap.allCases {
             for accent in AvatarAccent.allCases {
