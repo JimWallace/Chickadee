@@ -86,12 +86,41 @@ My Account
                 <td>#(course.name)
                     #if(course.handle):
                     <div class="text-muted" data-avatar-handle>Class handle: #(course.handle)</div>
+                    #if(course.handleChoice.isLocked):
+                    <div class="text-muted">Your handle is set for this course.</div>
+                    #endif
                     #endif
                     #if(course.slipDaysText):
                     <div class="text-muted">#(course.slipDaysText)</div>
                     #endif
                 </td>
                 <td>
+                    <div class="toolbar">
+                    #if(course.handleChoice.canChoose):
+                    <details class="ext-details form-flush"#if(course.handleChoice.wasTaken): open#endif>
+                        <summary class="btn action-btn ext-summary">Change handle</summary>
+                        <form method="post" action="/account/handle/#(course.id)" class="ext-panel">
+                            #csrfFormField()
+                            #if(course.handleChoice.wasTaken):
+                            <p class="form-error" role="alert">That one was just taken. Here are two more.</p>
+                            #endif
+                            <p class="field-note">You can change it once, until classmates see it.</p>
+                            <div class="checkbox-list" role="radiogroup" aria-label="Class handle for #(course.code)">
+                                #for(option in course.handleChoice.options):
+                                <label class="checkbox-row">
+                                    <input type="radio" name="handle" value="#(option.handle)"#if(option.isCurrent): checked#endif>
+                                    #extend("_avatar", option.avatar)
+                                    #(option.handle)
+                                    #if(option.isCurrent):<span class="chip">Current</span>#endif
+                                </label>
+                                #endfor
+                            </div>
+                            <div class="ext-panel-actions">
+                                <button class="btn action-btn" type="submit">Save</button>
+                            </div>
+                        </form>
+                    </details>
+                    #endif
                     #if(course.enrollmentMode == "open"):
                     <form method="post" action="/account/unenroll/#(course.id)" class="inline-form">
                         #csrfFormField()
@@ -103,6 +132,7 @@ My Account
                     #else:
                     <span class="chip" title="Managed by instructor — contact them to be removed">Managed</span>
                     #endif
+                    </div>
                 </td>
             </tr>
         #endfor
