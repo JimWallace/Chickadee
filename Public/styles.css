@@ -1856,6 +1856,23 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .log-entry-when { text-align: right; }
 .log-entry .log-payload { margin: 0 0 .75rem 4rem; max-width: none; }
 
+/* A share bar: a 4px track whose teal fill is --share, a percent the server
+   worked out for the row (the Storage page). The label beside it is the value. */
+.share-bar {
+    display: block;
+    height: 4px;
+    background: var(--border);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+.share-bar::before {
+    content: "";
+    display: block;
+    width: var(--share, 0);
+    height: 100%;
+    background: var(--health-teal);
+}
+
 /* Pips: one dot per unit of a budget or capacity (a student's slip days, a
    runner's job slots). Decorative; the text beside them ("2 of 3 left",
    "2 of 4 busy") is the value. Hollow is spent or free, teal is left or busy,

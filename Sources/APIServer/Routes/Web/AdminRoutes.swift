@@ -229,7 +229,9 @@ struct AdminRoutes: RouteCollection {
         let ctx = AdminStoragePageContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "storage",
-            storage: storage
+            storage: storage,
+            assignmentRows: AdminStorageShareRow.rows(
+                from: storage.assignments, totalBytes: storage.totalBytes)
         )
         return try await req.view.render("admin-storage", ctx)
     }
@@ -359,7 +361,8 @@ struct AdminRoutes: RouteCollection {
             rows: rows,
             totalFormatted: humanReadableBytes(total),
             dbBackend: app.appConfig.database.backend.rawValue,
-            assignments: assignmentRows
+            assignments: assignmentRows,
+            totalBytes: total
         )
     }
 
