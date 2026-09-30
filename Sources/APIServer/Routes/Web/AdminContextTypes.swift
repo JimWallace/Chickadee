@@ -223,6 +223,44 @@ struct AdminStorageContext: Encodable, Sendable {
     let totalFormatted: String
     let dbBackend: String
     let assignments: [AdminAssignmentStorageRow]
+    /// Raw bytes behind `totalFormatted`, the denominator of each assignment's
+    /// share. Zero when a caller does not know it.
+    var totalBytes: Int = 0
+}
+
+/// One assignment as the Storage page draws it: its footprint as a share of the
+/// whole, and as a bar sized against the largest row.
+struct AdminStorageShareRow: Encodable, Sendable {
+    let assignmentTitle: String
+    let courseCode: String
+    /// "suite 1.2 MB · submissions 3.4 MB · 12 submissions".
+    let detailsText: String
+    let totalFormatted: String
+    /// This row's percent of the total on disk, for the label ("<1%" under one).
+    let shareLabel: String
+    /// The bar's width, 0...100, relative to the largest row so the biggest row
+    /// always fills it and the rest read against it.
+    let barPercent: Int
+
+    /// Rows in the order given (largest first), with the share and bar worked
+    /// out. `totalBytes` of zero falls back to the sum of the rows.
+    static func rows(from assignments: [AdminAssignmentStorageRow], totalBytes: Int) -> [Self] {
+        let denominator = totalBytes > 0 ? totalBytes : assignments.reduce(0) { $0 + $1.totalBytes }
+        let largest = assignments.map(\.totalBytes).max() ?? 0
+        return assignments.map { row in
+            let share = denominator > 0 ? Double(row.totalBytes) / Double(denominator) * 100 : 0
+            let label = row.totalBytes > 0 && share < 1 ? "<1%" : "\(Int(share.rounded()))%"
+            let bar = largest > 0 ? Int((Double(row.totalBytes) / Double(largest) * 100).rounded()) : 0
+            let count = "\(row.submissionCount) \(row.submissionCount == 1 ? "submission" : "submissions")"
+            return AdminStorageShareRow(
+                assignmentTitle: row.assignmentTitle,
+                courseCode: row.courseCode,
+                detailsText: "suite \(row.testSuiteFormatted) · submissions \(row.submissionsFormatted) · \(count)",
+                totalFormatted: row.totalFormatted,
+                shareLabel: label,
+                barPercent: row.totalBytes > 0 ? max(bar, 1) : 0)
+        }
+    }
 }
 
 struct AdminContext: Encodable {
@@ -331,6 +369,7 @@ struct AdminStoragePageContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let storage: AdminStorageContext
+    let assignmentRows: [AdminStorageShareRow]
 }
 
 struct AdminUserDetailContext: Encodable {

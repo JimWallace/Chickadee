@@ -6,8 +6,9 @@ Storage
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="diagnostics-section">
-    <div class="toolbar toolbar--end section-gap">
-        <span class="storage-meta">Total: #(storage.totalFormatted) · DB: #(storage.dbBackend)</span>
+    <p class="page-crumb">Data</p>
+    <div class="page-titlebar">
+        <h2>Storage <span class="text-muted">#(storage.totalFormatted) total · #(storage.dbBackend)</span></h2>
     </div>
     <div class="diagnostics-cards">
         #for(row in storage.rows):
@@ -19,53 +20,41 @@ Storage
     </div>
 </section>
 <section class="page-section">
-    <div class="page-titlebar page-titlebar--baseline">
-        <h2>By Assignment</h2>
-        <span class="storage-meta">Largest first</span>
+    <div class="page-titlebar">
+        <h2>By Assignment <span class="text-muted">Largest first</span></h2>
     </div>
-    #if(count(storage.assignments) == 0):
+    #if(count(assignmentRows) == 0):
     <p class="text-muted">No assignments yet.</p>
     #else:
-    <div class="table-scroll"><table class="results-table sortable-table">
-        <thead>
-            <tr>
-                <th data-sort-type="text"><button class="sort-header" type="button">Assignment</button></th>
-                <th data-sort-type="text"><button class="sort-header" type="button">Course</button></th>
-                <!-- Phone keeps assignment, course and total: the breakdown is
-                     what you read once you already know which row is large. -->
-                <th data-sort-type="number" class="storage-num col-hide-phone"><button class="sort-header" type="button">Test Suite</button></th>
-                <th data-sort-type="number" class="storage-num col-hide-phone"><button class="sort-header" type="button">Submissions</button></th>
-                <th data-sort-type="number" class="storage-num col-hide-phone"><button class="sort-header" type="button">Subs</button></th>
-                <th data-sort-type="number" class="storage-num"><button class="sort-header" type="button">Total</button></th>
-            </tr>
+    <!-- Server order is already largest first, so the list is not sortable: a
+         client-side re-sort would only repeat it or scramble it. The bar is the
+         row's size against the largest row; the label is its share of the total
+         on disk. -->
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-seen col-hide-phone"><col class="section-items-count">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Assignment</th><th scope="col">Detail</th><th scope="col">Share of total</th><th scope="col">Total</th></tr>
         </thead>
         <tbody>
-            #for(row in storage.assignments):
+        #for(row in assignmentRows):
             <tr>
-                <td>#(row.assignmentTitle)</td>
-                <td><code>#(row.courseCode)</code></td>
-                <td class="storage-num col-hide-phone" data-sort-value="#(row.testSuiteBytes)">#(row.testSuiteFormatted)</td>
-                <td class="storage-num col-hide-phone" data-sort-value="#(row.submissionsBytes)">#(row.submissionsFormatted)</td>
-                <td class="storage-num col-hide-phone" data-sort-value="#(row.submissionCount)">#(row.submissionCount)</td>
-                <td class="storage-num storage-num--strong" data-sort-value="#(row.totalBytes)">#(row.totalFormatted)</td>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span></td>
+                <td>
+                    <div class="item-title">#(row.assignmentTitle)</div>
+                    <div class="item-details"><span class="content-item-kind" data-kind="graded">#(row.courseCode)</span> · #(row.detailsText)</div>
+                </td>
+                <td class="col-hide-phone">
+                    <span class="share-bar" style="--share:#(row.barPercent)%"></span>
+                    <div class="item-details item-grade">#(row.shareLabel)</div>
+                </td>
+                <td class="item-grade"><strong>#(row.totalFormatted)</strong></td>
             </tr>
-            #endfor
+        #endfor
         </tbody>
-    </table></div>
+    </table>
     #endif
 </section>
-<style>
-.storage-meta {
-    color: var(--gray-600);
-    font-size: var(--text-base);
-}
-.storage-num {
-    text-align: right;
-}
-.storage-num--strong {
-    font-weight: 600;
-}
-</style>
-<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

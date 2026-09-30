@@ -418,6 +418,9 @@ duplicate.
   outcome pill, time, a chevron that turns) and the panel under it is the payload
   as a `.detail-grid`.  The audit log, under day headings; a log stays unsortable.
   It replaces the `.test-output-row` + `.test-output-details` pairing for log tables, so a new log page does not use the old pair.  A one-field edit on a facts card (the alerts webhook) is a `.popup-anchor` popover, the house idiom for a small form.
+- **`.share-bar`** — a 4px track with a teal fill whose width is the `--share` custom
+  property (a percent the server worked out for that row); the percent label beside
+  it is the value.  Storage, by assignment.
 - **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
   above an admin page title.  Visual only; the hidden `h1` already names it.
 - **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
