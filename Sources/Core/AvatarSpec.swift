@@ -1,9 +1,11 @@
 // Core/AvatarSpec.swift
 //
-// What a generated student chickadee IS: five slot choices, not an image and
+// What a generated student chickadee IS: seven slot choices, not an image and
 // not a seed.  See docs/student-avatars.md for why the spec is the stored
 // artifact — the short version is that re-deriving from a seed on every render
 // means appending one option to one slot reshuffles every existing avatar.
+
+import Foundation
 
 /// The cap and, via its family, the wing beside it.  The loudest axis, which is
 /// why it carries the least detail.
@@ -16,8 +18,21 @@ public enum AvatarCap: String, CaseIterable, Codable, Sendable {
 
 /// How the bird looks out of the page — the axis that reads first and from
 /// furthest away.
+///
+/// Append only: a stored spec names a case by its raw value, so a case that is
+/// renamed, reordered or removed changes or breaks a student's bird.
 public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
     case bright, sleepy, wink, curious, keen, startled
+    /// The first wardrobe unlocks (docs/student-avatars.md, decision 5): new
+    /// options arrive as something to earn, so the first-use draw never
+    /// yields these three. See `starterCases`.
+    case chirp, sly, dreamy
+
+    /// The expressions a first-use draw picks from. Every case appended after
+    /// the first six is an unlockable and is NOT in this list.
+    public static let starterCases: [AvatarExpression] = [
+        .bright, .sleepy, .wink, .curious, .keen, .startled,
+    ]
 }
 
 /// Where the personality actually lives.  `none` is a real option, not an
@@ -49,6 +64,31 @@ public enum AvatarWing: String, CaseIterable, Codable, Sendable {
     case plain, barred, tipped, speckled, edged, twotone
 }
 
+/// A feather tuft on top of the head — the one axis that changes the
+/// outline of a bird without a hat, which is the feature that still reads at
+/// roster size.  `none` is a real option.
+///
+/// A raw value names a `<symbol>` in the sprite (`av-tuft-<rawValue>`), with
+/// the same both-directions drift test as `AvatarWing`.
+public enum AvatarTuft: String, CaseIterable, Codable, Sendable {
+    case none, cowlick, crest, pair, swoop
+}
+
+/// How far the whole bird leans. Not a symbol: one rotate transform on the
+/// group that holds every layer except the backdrop, about the body centre.
+public enum AvatarTilt: String, CaseIterable, Codable, Sendable {
+    case upright, left, right
+
+    /// Degrees, clockwise positive (the SVG convention).
+    public var degrees: Int {
+        switch self {
+        case .upright: 0
+        case .left: -9
+        case .right: 9
+        }
+    }
+}
+
 /// One student's bird.
 ///
 /// `Codable` with string raw values so the stored form is legible in a JSON
@@ -66,6 +106,8 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
     /// putting one on later does not need a second draw.
     public var accent: AvatarAccent
     public var backdrop: AvatarBackdrop
+    public var tuft: AvatarTuft
+    public var tilt: AvatarTilt
 
     public init(
         cap: AvatarCap,
@@ -73,7 +115,9 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
         expression: AvatarExpression,
         accessory: AvatarAccessory,
         accent: AvatarAccent,
-        backdrop: AvatarBackdrop
+        backdrop: AvatarBackdrop,
+        tuft: AvatarTuft = .none,
+        tilt: AvatarTilt = .upright
     ) {
         self.cap = cap
         self.wing = wing
@@ -81,13 +125,101 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
         self.accessory = accessory
         self.accent = accent
         self.backdrop = backdrop
+        self.tuft = tuft
+        self.tilt = tilt
     }
 
-    /// Every distinct bird the five axes can produce.
+    /// Every distinct bird the axes can produce, unlockables included.
     public static var combinationCount: Int {
-        AvatarCap.allCases.count * AvatarWing.allCases.count * AvatarExpression.allCases.count
+        combinations(expressions: AvatarExpression.allCases.count)
+    }
+
+    /// Every distinct bird a first-use draw can produce. This is the number to
+    /// quote: it is what a class of new students is drawn from.
+    public static var starterCombinationCount: Int {
+        combinations(expressions: AvatarExpression.starterCases.count)
+    }
+
+    private static func combinations(expressions: Int) -> Int {
+        AvatarCap.allCases.count * AvatarWing.allCases.count * expressions
             * AvatarAccessory.allCases.count * AvatarAccent.allCases.count
-            * AvatarBackdrop.allCases.count
+            * AvatarBackdrop.allCases.count * AvatarTuft.allCases.count
+            * AvatarTilt.allCases.count
+    }
+}
+
+// MARK: - Decoding
+
+extension AvatarSpec {
+    private enum CodingKeys: String, CodingKey {
+        case cap, wing, expression, accessory, accent, backdrop, tuft, tilt
+    }
+
+    /// Specs stored before the tuft and tilt axes existed have neither key.
+    /// They decode to `.none` / `.upright`; `missingAxes(inStoredJSON:)` is how
+    /// the store tells such a spec apart from one that chose those values.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.cap = try container.decode(AvatarCap.self, forKey: .cap)
+        self.wing = try container.decode(AvatarWing.self, forKey: .wing)
+        self.expression = try container.decode(AvatarExpression.self, forKey: .expression)
+        self.accessory = try container.decode(AvatarAccessory.self, forKey: .accessory)
+        self.accent = try container.decode(AvatarAccent.self, forKey: .accent)
+        self.backdrop = try container.decode(AvatarBackdrop.self, forKey: .backdrop)
+        self.tuft = try container.decodeIfPresent(AvatarTuft.self, forKey: .tuft) ?? .none
+        self.tilt = try container.decodeIfPresent(AvatarTilt.self, forKey: .tilt) ?? .upright
+    }
+}
+
+/// An axis added after specs were first stored. A spec saved before the axis
+/// existed has no value for it, which is different from choosing its default.
+public enum AvatarLateAxis: String, CaseIterable, Sendable {
+    case tuft, tilt
+}
+
+extension AvatarSpec {
+    /// The late axes `json` carries no key for. Empty for a current spec and
+    /// for JSON that is not an object.
+    public static func missingAxes(inStoredJSON json: String) -> Set<AvatarLateAxis> {
+        guard let data = json.data(using: .utf8),
+            let probe = try? JSONDecoder().decode(LateAxisProbe.self, from: data)
+        else { return [] }
+        var missing: Set<AvatarLateAxis> = []
+        if !probe.hasTuft { missing.insert(.tuft) }
+        if !probe.hasTilt { missing.insert(.tilt) }
+        return missing
+    }
+
+    /// Reads only whether each late key is PRESENT, not its value: a value
+    /// that no longer decodes is the full decoder's problem, not this one's.
+    private struct LateAxisProbe: Decodable {
+        let hasTuft: Bool
+        let hasTilt: Bool
+
+        private enum CodingKeys: String, CodingKey { case tuft, tilt }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            hasTuft = container.contains(.tuft)
+            hasTilt = container.contains(.tilt)
+        }
+    }
+
+    /// This spec with a fresh random value in each of `axes` and every other
+    /// slot unchanged. A draw into an empty slot, not a reshuffle.
+    public func fillingMissing<G: RandomNumberGenerator>(
+        _ axes: Set<AvatarLateAxis>, using generator: inout G
+    ) -> AvatarSpec {
+        var filled = self
+        if axes.contains(.tuft) { filled.tuft = Self.pick(using: &generator) }
+        if axes.contains(.tilt) { filled.tilt = Self.pick(using: &generator) }
+        return filled
+    }
+
+    /// `fillingMissing(_:using:)` with the system RNG — the production path.
+    public func fillingMissing(_ axes: Set<AvatarLateAxis>) -> AvatarSpec {
+        var generator = SystemRandomNumberGenerator()
+        return fillingMissing(axes, using: &generator)
     }
 }
 
@@ -115,7 +247,7 @@ public struct AvatarSeedGenerator: RandomNumberGenerator, Sendable {
 
 extension AvatarSpec {
 
-    /// A fresh bird, drawn uniformly from every slot.
+    /// A fresh bird, drawn uniformly from every slot's starter options.
     ///
     /// - Important: call this ONCE per student, at first use, and store the
     ///   result.  There is deliberately no `spec(forSeed:)` convenience that a
@@ -132,10 +264,12 @@ extension AvatarSpec {
         AvatarSpec(
             cap: pick(using: &generator),
             wing: pick(using: &generator),
-            expression: pick(using: &generator),
+            expression: pick(from: AvatarExpression.starterCases, using: &generator),
             accessory: pick(using: &generator),
             accent: pick(using: &generator),
-            backdrop: pick(using: &generator)
+            backdrop: pick(using: &generator),
+            tuft: pick(using: &generator),
+            tilt: pick(using: &generator)
         )
     }
 
@@ -152,10 +286,15 @@ extension AvatarSpec {
         return drawn(using: &generator)
     }
 
-    private static func pick<T: CaseIterable, G: RandomNumberGenerator>(
+    fileprivate static func pick<T: CaseIterable, G: RandomNumberGenerator>(
         using generator: inout G
     ) -> T where T.AllCases.Index == Int {
-        let all = T.allCases
-        return all[Int.random(in: 0..<all.count, using: &generator)]
+        pick(from: Array(T.allCases), using: &generator)
+    }
+
+    private static func pick<T, G: RandomNumberGenerator>(
+        from options: [T], using generator: inout G
+    ) -> T {
+        options[Int.random(in: 0..<options.count, using: &generator)]
     }
 }
