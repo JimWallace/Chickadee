@@ -91,6 +91,25 @@ import VaporTesting
         }
     }
 
+    /// Brightspace could not read a deflate-encoded key set and reported the
+    /// URL as unreachable. Compression runs in the server pipeline, so this
+    /// needs a running server, not an in-memory test.
+    @Test func keySetIsSentUncompressedEvenWhenTheClientAcceptsCompression() async throws {
+        try await withApp(app) { app in
+            app.http.server.configuration.responseCompression = .enabledForCompressibleTypes
+            try await makePlatform(on: app)
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+                .GET, "/lti/jwks",
+                headers: ["Accept-Encoding": "gzip, deflate"]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: .contentEncoding) == nil)
+                let keySet = try? res.content.decode(KeySet.self)
+                #expect(keySet?.keys.count == 1)
+            }
+        }
+    }
+
     @Test func keySetNeedsNoSession() async throws {
         try await withApp(app) { app in
             try await makePlatform(on: app)
