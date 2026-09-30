@@ -319,9 +319,13 @@ duplicate.
   tilt transform — tuft, plumage, wing, expression, accessory.
   **A page that renders `_avatar` must also include `_avatar-sprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
-  which no guard can catch.  Only four colours are per-student
-  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, assigned inline,
-  which is the sanctioned form); the fixed parts of the bird — `.av-body`,
+  which no guard can catch.  Five colours are per-student
+  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
+  assigned inline, which is the sanctioned form); `--av-border` colours the
+  ring, an `outline` inside the disc, and is the transparent
+  `--avatar-border-none` when the student chose no border.  `.avatar` sets
+  `forced-color-adjust: none`: the bird is decorative, and forced colors
+  would otherwise repaint it and draw the transparent ring; the fixed parts of the bird — `.av-body`,
   `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
   `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
   `.av-gear-line`, `.av-bloom-eye` —
@@ -335,6 +339,23 @@ duplicate.
   LEARN list, where the name beside the bird carries the identity and the bird
   is the student's own seeded one, the same as on their account page.  See
   [student-avatars.md](student-avatars.md).
+- **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
+  wraps a group of radio or checkbox choices (enroll, the LTI grade
+  transport, LTI deep linking, the Chickadee picker).  Use it for any group
+  of choices rather than restyling a fieldset.
+- **`.swatch-row`**, `.swatch`, `.swatch-sample`, `.swatch-name` — a choice of
+  one colour, inside a `.fieldset-plain`: each option is a radio input shown
+  as a round sample with its name under it.  The input is invisible but stays
+  in the tab order, so the group works with the keyboard and with no
+  JavaScript.  The checked option has a ring and a bold name, so the state
+  does not depend on colour alone; in forced-colors mode the samples keep
+  their colours and the ring is the system `Highlight`.  The sample reuses the
+  avatar's own custom-property names, set per option: `.swatch-backdrop` (a
+  filled disc, `--av-backdrop`), `.swatch-border` (a ring, `--av-border`) and
+  `.swatch-none` (a dashed ring, for "no border").  Used by the account page's
+  Chickadee picker, whose live preview (`avatar-picker.js`) copies the
+  checked option's token onto the avatar; see
+  [student-wardrobe.md](student-wardrobe.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A
   modifier on `.diagnostic-value`, not a second tile component.
@@ -745,8 +766,11 @@ Two idioms reached zero in the 2026-08 editor conversion and are now
 
 What remains counted by the **shrink-only ratchet**
 (`JS_STYLE_DECISION_BASELINE` in `scripts/check-styles.sh`) is the residue
-the greps cannot classify: computed geometry writes, `setProperty` calls,
-and `.style` reads.  It may only decrease.
+the greps cannot classify: computed geometry writes, `setProperty` calls on
+ordinary properties, and `.style` reads.  It may only decrease.  A
+custom-property write — `.style.setProperty('--…')` — is the sanctioned
+pattern above and is not counted (`workbench.js`'s `--wb-left-width` and
+`avatar-picker.js`'s live preview).
 
 ## Page-local styles
 

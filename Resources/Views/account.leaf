@@ -40,6 +40,46 @@ My Account
     </dl>
 </section>
 
+<section class="page-section" id="chickadee">
+    <h2>Chickadee</h2>
+    #if(avatarInvalid):
+    <p class="form-error" role="alert">That choice is not available.</p>
+    #endif
+    <form method="post" action="/account/avatar" data-avatar-picker=".account-identity .avatar">
+        #csrfFormField()
+        <fieldset class="fieldset-plain">
+            <legend>Backdrop</legend>
+            <div class="swatch-row">
+            #for(option in avatarPicker.backdrops):
+            <label class="swatch">
+                <input type="radio" name="backdrop" value="#(option.value)" data-av-token="#(option.token)"#if(option.checked): checked#endif>
+                <span class="swatch-sample swatch-backdrop" aria-hidden="true" style="--av-backdrop: var(#(option.token))"></span>
+                <span class="swatch-name">#(option.label)</span>
+            </label>
+            #endfor
+            </div>
+        </fieldset>
+        <fieldset class="fieldset-plain">
+            <legend>Border</legend>
+            <div class="swatch-row">
+            #for(option in avatarPicker.borders):
+            <label class="swatch">
+                <input type="radio" name="border" value="#(option.value)" data-av-token="#(option.token)"#if(option.checked): checked#endif>
+                #if(option.isNone):
+                <span class="swatch-sample swatch-none" aria-hidden="true"></span>
+                #else:
+                <span class="swatch-sample swatch-border" aria-hidden="true" style="--av-border: var(#(option.token))"></span>
+                #endif
+                <span class="swatch-name">#(option.label)</span>
+            </label>
+            #endfor
+            </div>
+        </fieldset>
+        <button class="btn btn-primary" type="submit">Save</button>
+    </form>
+    <script src="/avatar-picker.js?v=#appVersion()"></script>
+</section>
+
 #if(github):
 <section class="page-section">
     <h2>GitHub</h2>

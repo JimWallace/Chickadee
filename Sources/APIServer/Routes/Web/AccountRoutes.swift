@@ -5,6 +5,7 @@
 //   GET  /account                      → account.leaf (user info + enrolled courses)
 //   POST /account/enroll               → join a course → redirect to /account
 //   POST /account/unenroll/:courseID   → leave a course → redirect to /account
+//   POST /account/avatar               → AccountRoutes+Avatar.swift
 //   POST /account/handle/:courseID     → choose a class handle (AccountRoutes+Handle.swift)
 
 import Core
@@ -16,6 +17,7 @@ struct AccountRoutes: RouteCollection {
         routes.get("account", use: accountPage)
         routes.post("account", "enroll", use: joinCourse)
         routes.post("account", "unenroll", ":courseID", use: leaveCourse)
+        routes.post("account", "avatar", use: saveAvatar)
         routes.post("account", "handle", ":courseID", use: chooseHandle)
     }
 
@@ -110,6 +112,7 @@ struct AccountRoutes: RouteCollection {
 
         let github = try await accountGitHubContext(req: req, userID: userID)
 
+        let avatarNotice = req.query[String.self, at: "avatar"]
         let identityName = accountIdentityName(
             displayName: user.displayName,
             preferredName: user.preferredName,
@@ -124,6 +127,8 @@ struct AccountRoutes: RouteCollection {
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
                 avatar: AvatarPresentation(for: spec, size: .standard, accessibility: .decorative),
+                avatarPicker: AvatarPickerContext(for: spec),
+                avatarInvalid: avatarNotice == "invalid",
                 studentID: user.studentID,
                 email: user.email,
                 enrolledCourses: enrolledRows,
@@ -138,11 +143,17 @@ struct AccountRoutes: RouteCollection {
                 exportNotice: req.query[String.self, at: "exportNotice"],
                 exportError: req.query[String.self, at: "exportError"],
                 github: github,
-                flashSuccess: req.query[String.self, at: "github"]
-                    .flatMap(GitHubAccountLinkRoutes.Notice.init(rawValue:))?.message,
+                flashSuccess: accountFlashSuccess(req: req, avatarNotice: avatarNotice),
                 flashError: req.query[String.self, at: "githubError"]
                     .flatMap(GitHubLinkError.init(rawValue:))?.message
             ))
+    }
+
+    /// The one-shot success banner after a redirect back to this page.
+    private func accountFlashSuccess(req: Request, avatarNotice: String?) -> String? {
+        if avatarNotice == "saved" { return "Chickadee saved." }
+        return req.query[String.self, at: "github"]
+            .flatMap(GitHubAccountLinkRoutes.Notice.init(rawValue:))?.message
     }
 
     /// The GitHub section, or nil when this user has no link to show and
@@ -263,6 +274,10 @@ private struct AccountContext: Encodable {
     /// `AvatarStore.ensureSpec`, and decorative: the name beside it carries the
     /// identity, so announcing the bird too would only repeat it.
     let avatar: AvatarPresentation
+    /// The backdrop and border choices (docs/student-wardrobe.md, W1).
+    let avatarPicker: AvatarPickerContext
+    /// A posted choice was refused by `AvatarCustomization`.
+    let avatarInvalid: Bool
     let studentID: String?
     let email: String?
     let enrolledCourses: [AccountCourseRow]

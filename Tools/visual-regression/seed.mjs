@@ -270,6 +270,20 @@ export async function seed(baseURL) {
     [200, 302, 303]
   );
 
+  // The student's chickadee is drawn at random on first view. The bird itself
+  // is masked in the capture, but the account page's picker marks the current
+  // backdrop as checked, so a random draw would move that mark between runs.
+  // Choose the backdrop and border through the picker route instead.
+  csrf = await csrfFrom(stud, "/account");
+  await expectOK(
+    "student chickadee choices",
+    stud.post("/account/avatar", {
+      form: { backdrop: "sky", border: "none", _csrf: csrf },
+      maxRedirects: 0,
+    }),
+    [302, 303]
+  );
+
   // One submission so the results page has something to show (stays pending —
   // no runner is attached).
   csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);

@@ -40,6 +40,10 @@ const STARTER_EXPRESSIONS = 6
 const starterExpressions = expressions.slice(0, STARTER_EXPRESSIONS)
 const unlockableExpressions = expressions.slice(STARTER_EXPRESSIONS)
 
+// The gradcap is kept for a completion achievement and is not in the first-use
+// draw. Mirrors AvatarAccessory.starterCases.
+const starterAccessories = accessories.filter(a => a !== 'gradcap')
+
 // A hat replaces the tuft. Mirrors AvatarAccessory.hidesTuft, which
 // AvatarPresentation applies at render time.
 const TUFT_HIDING_HATS = new Set(['beanie', 'gradcap'])
@@ -48,12 +52,16 @@ const TUFT_HIDING_HATS = new Set(['beanie', 'gradcap'])
 // These mirror AvatarTilt.degrees.
 const tilts = [['upright', 0], ['left', -9], ['right', 9]]
 
-const style = (cap, accent, back) =>
+// A border of 'none' is the transparent --avatar-border-none, as
+// AvatarPresentation.borderToken names it.
+const style = (cap, accent, back, border = 'none') =>
   `--av-cap:var(--avatar-${cap}-cap);--av-wing:var(--avatar-${cap}-wing);` +
-  `--av-accent:var(--avatar-accent-${accent});--av-backdrop:var(--avatar-back-${back})`
+  `--av-accent:var(--avatar-accent-${accent});--av-backdrop:var(--avatar-back-${back});` +
+  `--av-border:var(${border === 'none' ? '--avatar-border-none' : `--avatar-accent-${border}`})`
 
-const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'none', tilt = 0 }) =>
-  `<svg class="avatar" style="${style(cap, accent, back)};width:${size}px;height:${size}px"
+const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'none', tilt = 0,
+                      border = 'none' }) =>
+  `<svg class="avatar${size <= 40 ? ' avatar-md' : ''}" style="${style(cap, accent, back, border)};width:${size}px;height:${size}px"
         viewBox="0 0 64 64" role="img" aria-label="chickadee avatar">
      <use href="#av-backdrop"/><g transform="rotate(${tilt} 32 34)">
      <use href="#av-tuft-${TUFT_HIDING_HATS.has(accessory) ? 'none' : tuft}"/><use href="#av-plumage"/><use href="#av-wing-${wing}"/>
@@ -78,7 +86,7 @@ const sections = [
   ['Tuft — the outline, without a hat', tufts.map((tuft, i) =>
     label(tuft, bird(88, { ...base, tuft, cap: at(caps, i) })))],
   ['Tuft × hat — beanie and gradcap replace the tuft; review the overlaps',
-    tufts.flatMap(tuft => ['beanie', 'gradcap', 'headphones', 'bloom'].map(accessory =>
+    tufts.flatMap(tuft => ['beanie', 'gradcap', 'headband', 'headphones', 'bloom'].map(accessory =>
       label(`${tuft} + ${accessory}`, bird(64, { ...base, tuft, accessory, back: 'straw' }))))],
   ['Tilt — a transform on everything but the backdrop', tilts.map(([name, tilt]) =>
     label(name, bird(88, { ...base, tilt, tuft: 'crest' })))],
@@ -87,6 +95,10 @@ const sections = [
                                 back: 'straw' })))],
   ['Accent — the accessory\'s colour', accents.map(accent =>
     label(accent, bird(88, { ...base, accessory: 'scarf', accent, back: 'straw' })))],
+  ['Border — chosen on the account page, never drawn; the five accents', ['none', ...accents].map(border =>
+    label(border, bird(88, { ...base, border, accessory: 'headband', back: 'straw' })))],
+  ['Border at 36px', ['none', ...accents].map(border =>
+    label(border, bird(36, { ...base, border, back: 'sky' })))],
   ['Backdrop — all near the same lightness so no bird shouts', backs.map(back =>
     label(back, bird(88, { ...base, cap: 'ink', back })))],
   ['At size — the bird earns its detail at 48px and up', [96, 64, 48, 40, 36, 32, 24].map((s, i) =>
@@ -109,10 +121,10 @@ process.stdout.write(`<!doctype html><meta charset="utf-8">
 </style>
 ${sprite}
 <h1 style="font-size:16px">Chickadee avatars — ${caps.length} caps &times; ${wings.length} wings
-&times; ${starterExpressions.length} starter expressions &times; ${accessories.length} accessories in
+&times; ${starterExpressions.length} starter expressions &times; ${starterAccessories.length} starter accessories in
 ${accents.length} accents &times; ${backs.length} backdrops &times; ${tufts.length} tufts
 &times; ${tilts.length} tilts =
-${(caps.length * wings.length * starterExpressions.length * accessories.length * accents.length
+${(caps.length * wings.length * starterExpressions.length * starterAccessories.length * accents.length
    * backs.length * tufts.length * tilts.length).toLocaleString()}
 starter birds (plus ${unlockableExpressions.length} unlockable expressions)</h1>
 ${sections.map(([t, cells]) => `<h2>${t}</h2><div class="sheet">${cells.join('')}</div>`).join('')}

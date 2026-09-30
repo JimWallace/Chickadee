@@ -43,17 +43,19 @@ import Testing
         #expect(wings.count == AvatarWing.allCases.count)
         // Starter expressions only: the unlockables are never drawn.
         #expect(expressions == Set(AvatarExpression.starterCases))
-        #expect(accessories.count == AvatarAccessory.allCases.count)
+        // Starter accessories only: the gradcap is kept for an achievement.
+        #expect(accessories == Set(AvatarAccessory.starterCases))
         #expect(accents.count == AvatarAccent.allCases.count)
         #expect(backdrops.count == AvatarBackdrop.allCases.count)
     }
 
     @Test func combinationCountMatchesTheSlots() {
         // 8 caps, 6 wings, 9 expressions (6 starter + 3 unlockable),
-        // 8 accessories in 5 accents, 8 backdrops, 5 tufts, 3 tilts. The
-        // accent multiplies — it is part of the accessory axis.
-        #expect(AvatarSpec.combinationCount == 8 * 6 * 9 * 8 * 5 * 8 * 5 * 3)
-        #expect(AvatarSpec.combinationCount == 2_073_600)
+        // 9 accessories (8 starter + the gradcap) in 5 accents, 8 backdrops,
+        // 5 tufts, 3 tilts. The accent multiplies — it is part of the
+        // accessory axis. The border is chosen, not drawn, so it is not counted.
+        #expect(AvatarSpec.combinationCount == 8 * 6 * 9 * 9 * 5 * 8 * 5 * 3)
+        #expect(AvatarSpec.combinationCount == 2_332_800)
     }
 
     @Test func specRoundTripsThroughJSON() throws {
