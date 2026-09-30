@@ -457,6 +457,27 @@ if (root) {
         if (field && typeof field.select === 'function') field.select();
     });
 
+    // data-copy-url — copy a link to the clipboard. The value is a path, which
+    // gets this site's origin put in front of it, or an absolute URL, which is
+    // copied as it is. The cue is a transient class (.action-copied) plus a
+    // title swap, so JS makes no styling decision. Used by the per-row "copy
+    // student link" button and the LTI tool URLs.
+    document.addEventListener('click', (e) => {
+        const button = e.target instanceof Element ? e.target.closest('[data-copy-url]') : null;
+        if (!button || !navigator.clipboard) return;
+        const value = button.getAttribute('data-copy-url');
+        const url = /^https?:\/\//.test(value) ? value : window.location.origin + value;
+        navigator.clipboard.writeText(url).then(() => {
+            const previous = button.title;
+            button.title = 'Copied!';
+            button.classList.add('action-copied');
+            setTimeout(() => {
+                button.title = previous;
+                button.classList.remove('action-copied');
+            }, 2000);
+        });
+    });
+
     // data-ck-submit-on-change — submit the owning form as soon as the control
     // changes, for the pickers that have no Save button (enrolment mode, a
     // per-course role, an assignment's open/closed status, the CSV file input

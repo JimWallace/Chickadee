@@ -6,105 +6,88 @@ LEARN
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="page-section">
-
-    <p class="section-intro">
-        LEARN grade sync runs as one D2L service account. The app credentials
-        (URL / App ID / App Key) come from the server environment; this page sets
-        the matching <strong>Valence user key</strong> — harvested from your
-        institution's credential service — with no env change or restart. A key
-        set here takes precedence over <code>BRIGHTSPACE_USER_KEY</code>.
-    </p>
+    <p class="page-crumb">Integrations</p>
+    <div class="page-titlebar">
+        <h2>LEARN #if(configured):#if(authorized):<span class="tier tier-open">Authorized</span>#else:<span class="tier tier-closed">Not authorized</span>#endif#endif</h2>
+        #if(configured):
+        #if(authorized):
+        <div class="toolbar">
+            <form method="post" action="/admin/brightspace/test" class="form-flush">
+                #csrfFormField()
+                <button class="btn action-btn" type="submit">Test connection</button>
+            </form>
+            <details class="add-section-details popup-anchor">
+                <summary class="btn action-btn action-btn-icon summary-btn" title="More actions" aria-label="More actions for LEARN">
+                    <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                </summary>
+                <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                    <a class="row-menu-item" href="#replace-key-panel" role="menuitem" data-add-target="replace-key-panel">
+                        <svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>Replace user key…
+                    </a>
+                    #if(keySource == "authorized"):
+                    <form method="post" action="/admin/brightspace/clear"
+                          data-confirm="Clear the stored LEARN authorization? Grade sync reverts to the environment key if one is set, otherwise it stops. You can re-authorize from this page.">
+                        #csrfFormField()
+                        <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Clear authorization
+                        </button>
+                    </form>
+                    #endif
+                </div>
+            </details>
+        </div>
+        #endif
+        #endif
+    </div>
+    <p class="section-intro">Grade sync for every course runs as one D2L service account. App credentials come from the server environment.</p>
 
     #if(!configured):
-    <p class="text-muted">
-        Not configured. Set <code>BRIGHTSPACE_URL</code>,
-        <code>BRIGHTSPACE_APP_ID</code>, and <code>BRIGHTSPACE_APP_KEY</code> in
-        the server environment, then reload this page to set the user key.
-    </p>
+    <div class="flash flash-warning" role="status">
+        <strong>Not configured.</strong> Set <code>BRIGHTSPACE_URL</code>, <code>BRIGHTSPACE_APP_ID</code> and <code>BRIGHTSPACE_APP_KEY</code>, then reload.
+    </div>
     #else:
-    <dl class="detail-grid section-gap">
-        <dt>Status</dt>
-        <dd>
-            #if(authorized):
-            <span class="tier tier-open">Authorized</span>
-            #if(keySource == "env"):<span class="text-muted">(using key from env)</span>#endif
-            #else:
-            <span class="tier tier-closed">Not authorized</span>
+    <div class="card section-gap">
+        <dl class="detail-grid">
+            <dt>Status</dt>
+            <dd>
+                #if(authorized):
+                <span class="tier tier-open">Authorized</span>
+                <span class="card-meta">#if(keySource == "authorized"):Key set on this page · overrides <code>BRIGHTSPACE_USER_KEY</code>#else:Using key from environment#endif</span>
+                #else:
+                <span class="tier tier-closed">Not authorized</span>
+                #endif
+            </dd>
+            <dt>LMS</dt>
+            <dd><code>#(baseURL)</code></dd>
+            #if(identityName):
+            <dt>Authorized as</dt>
+            <dd>#(identityName)#if(capturedAt): <span class="card-meta">#(capturedAt)</span>#endif</dd>
             #endif
-        </dd>
-        <dt>LMS</dt>
-        <dd><code>#(baseURL)</code></dd>
-        #if(identityName):
-        <dt>Authorized as</dt>
-        <dd>#(identityName)#if(capturedAt): <span class="text-muted">— #(capturedAt)</span>#endif</dd>
-        #endif
-    </dl>
-
-    <div class="toolbar">
-        #if(authorized):
-        <form method="post" action="/admin/brightspace/test" class="inline-form">
-            #csrfFormField()
-            <button class="btn" type="submit">Test connection</button>
-        </form>
-        #endif
-        #if(keySource == "authorized"):
-        <form method="post" action="/admin/brightspace/clear" class="inline-form"
-              data-confirm="Clear the stored LEARN authorization? Grade sync reverts to the environment key if one is set, otherwise it stops. You can re-authorize from this page.">
-            #csrfFormField()
-            <button class="btn action-danger" type="submit">Clear authorization</button>
-        </form>
-        #endif
+        </dl>
     </div>
 
-    <div class="bs-manual">
-        <h3>Set the user key</h3>
-        <p class="text-muted">
-            Harvest the <strong>User ID</strong> and <strong>User Key</strong> for
-            your service account from your institution's credential service (e.g.
-            UW's <code>d2l-api-cred.fast.uwaterloo.ca</code>), then paste them here —
-            they're verified against D2L and stored live, no env change or restart.
-        </p>
-        <form method="post" action="/admin/brightspace/set-credentials" class="bs-manual-form">
+    <div#if(authorized): class="add-panel card"#endif id="replace-key-panel">
+        <form method="post" action="/admin/brightspace/set-credentials" class="form popup-form">
             #csrfFormField()
-            <label class="bs-field">User ID
-                <input type="text" name="userID" autocomplete="off" spellcheck="false" required>
+            <p class="section-note">Paste the <strong>User ID</strong> and <strong>User Key</strong> from your institution&rsquo;s credential service.</p>
+            <label class="form-label">User ID
+                <input class="form-input" type="text" name="userID" autocomplete="off" spellcheck="false" required>
             </label>
-            <label class="bs-field">User Key
-                <input type="text" name="userKey" autocomplete="off" spellcheck="false" required>
+            <label class="form-label">User Key
+                <input class="form-input" type="text" name="userKey" autocomplete="off" spellcheck="false" required>
             </label>
-            <button class="btn btn-primary" type="submit">Save &amp; verify</button>
+            <div class="toolbar">
+                <button class="btn btn-primary btn-compact" type="submit">Save &amp; verify</button>
+                #if(authorized):
+                <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
+                #endif
+            </div>
         </form>
     </div>
 
-    <p class="section-note">
-        Instructors map assignments to grade items and watch grades flow on
-        their course's LEARN tab; this page only sets the shared connection.
-    </p>
+    <p class="section-note">Instructors map grade items on their course&rsquo;s LEARN tab. This page only sets the shared connection.</p>
     #endif
 </section>
-<style>
-.bs-manual {
-    margin-top: 1.5rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border);
-}
-.bs-manual-form {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: .8rem;
-    margin-top: .6rem;
-}
-.bs-field {
-    display: flex;
-    flex-direction: column;
-    gap: .25rem;
-    font-size: var(--text-base);
-}
-.bs-field input {
-    width: 22rem;
-    max-width: 100%;
-}
-</style>
+
 #endexport
 #endextend

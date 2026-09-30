@@ -334,6 +334,10 @@ struct AdminMCPAccountRow: Encodable {
     /// Courses this account is enrolled in — the only courses its tokens may
     /// touch (admins excepted). Empty means the account can do nothing.
     let enrolledCourses: [AdminMCPCourseRef]
+    /// "CS135 · CS136" for the details line; empty when the account has none.
+    let coursesText: String
+    /// Courses the account is not yet enrolled in, for the enrol picker.
+    let enrollableCourses: [AdminMCPCourseRef]
 }
 
 struct AdminMCPContext: Encodable {
@@ -363,6 +367,10 @@ struct AdminMCPContext: Encodable {
     let mintedScopes: String?
     /// A short error key surfaced as a banner (e.g. "username_taken").
     let error: String?
+    /// The mode pill: "Read/write", "Read-only" or "Inactive".
+    let modeLabel: String
+    /// Token lifetime in words ("1 hour", "30 minutes").
+    let tokenLifetimeText: String
 }
 
 struct AdminStoragePageContext: Encodable {
@@ -608,6 +616,8 @@ struct AdminLTIContext: Encodable {
     let launchURL: String
     let jwksURL: String
     let platforms: [AdminLTIPlatformRow]
+    /// Platforms with launches switched on, for the title's note.
+    let enabledPlatformCount: Int
     /// True when a registration failed validation, so the form reopens with
     /// what the admin typed, or when no platform exists yet, so the only way
     /// forward is already open.

@@ -5,24 +5,20 @@ MCP
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
-#if(showServiceAccounts):
 <section class="page-section">
-    <h2>MCP service accounts</h2>
+    <p class="page-crumb">Integrations</p>
+    <div class="page-titlebar">
+        <h2>MCP <span class="tier #if(!enabled):tier-danger#elseif(writeAllowed):tier-open#else:tier-preview#endif">#(modeLabel)</span></h2>
+    </div>
 
     #if(!enabled):
-    <div class="form-error" role="status">
-        The MCP endpoint is not active, so tokens cannot be minted. Set
-        <code>MCP_MODE=read_only</code> or <code>MCP_MODE=read_write</code>
-        and <code>PUBLIC_BASE_URL</code> (or <code>MCP_ISSUER</code>/<code>MCP_RESOURCE</code>),
-        then restart the server.
+    <div class="flash flash-error" role="status">
+        <strong>MCP is inactive.</strong> Set <code>MCP_MODE</code> and <code>PUBLIC_BASE_URL</code>, then restart.
     </div>
-    #endif
-    #if(enabled):
+    #else:
     #if(!writeAllowed):
     <div class="flash flash-warning" role="status">
-        MCP is in <strong>read-only</strong> mode (<code>MCP_MODE=read_only</code>): agents can read
-        course content but cannot create or edit it. Minted tokens carry <code>content:read</code> only.
-        Set <code>MCP_MODE=read_write</code> and restart to allow writes.
+        <strong>Read-only mode.</strong> Agents can read course content but not edit it; tokens carry <code>content:read</code>.
     </div>
     #endif
     #endif
@@ -50,192 +46,186 @@ MCP
     #endif
 
     #if(enabled):
-    <p class="mcp-issuer-note">
-        Issuer <code>#(issuer)</code> &middot; Resource <code>#(resource)</code>.
-        Tokens are stateless: deleting an account stops new tokens being minted, but a token
-        already issued stays valid until it expires.
-    </p>
+    <div class="card section-gap">
+        <dl class="detail-grid">
+            <dt>Issuer</dt>
+            <dd><code>#(issuer)</code></dd>
+            <dt>Resource</dt>
+            <dd><code>#(resource)</code></dd>
+            <dt>Token lifetime</dt>
+            <dd>#(tokenLifetimeText) <span class="card-meta">Stateless: deleting an account doesn&rsquo;t revoke issued tokens</span></dd>
+        </dl>
+    </div>
     #endif
+</section>
 
-    <form method="post" action="/admin/mcp/accounts" class="form-stack mcp-create-form">
-        #csrfFormField()
-        <div class="field-stack">
-            <label for="mcp-new-account">Account name</label>
-            <input id="mcp-new-account" class="form-input" type="text" name="username" required
-                   autocomplete="new-password"
-                   placeholder="course-bot">
-            <p class="field-note">A new account has no course access until you enroll it in a course.</p>
-        </div>
-        <div class="toolbar toolbar--end">
-            <button class="btn btn-primary" type="submit">Create account</button>
-        </div>
-    </form>
+#if(showServiceAccounts):
+<section class="page-section">
+    <div class="page-titlebar">
+        <h2>MCP service accounts</h2>
+        <details class="add-section-details popup-anchor">
+            <summary class="btn action-btn summary-btn">+ New account <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="add-section-popup card suite-section-popup" role="dialog" aria-label="New account">
+                <form method="post" action="/admin/mcp/accounts" class="form popup-form">
+                    #csrfFormField()
+                    <label class="form-label" for="mcp-new-account">
+                        Create account
+                        <input id="mcp-new-account" class="form-input" type="text" name="username" required
+                               autocomplete="new-password" placeholder="course-bot">
+                        <span class="field-note field-note--muted">A new account has no course access until you enrol it in a course.</span>
+                    </label>
+                    <div class="toolbar">
+                        <button class="btn btn-primary btn-compact" type="submit">Create account</button>
+                    </div>
+                </form>
+            </div>
+        </details>
+    </div>
 
-    <div class="table-scroll"><table class="results-table sortable-table">
-        <thead>
-            <tr>
-                <th data-sort-type="text"><button class="sort-header" type="button">Username</button></th>
-                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Created</button></th>
-                <th>Courses</th>
-                <th>Actions</th>
-            </tr>
+    #if(count(accounts) == 0):
+    <p class="text-muted">No MCP accounts yet.</p>
+    #else:
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Account</th><th scope="col">Detail</th><th scope="col">Actions</th></tr>
         </thead>
         <tbody>
         #for(account in accounts):
             <tr>
-                <td><code>#(account.username)</code></td>
-                <td class="time js-relative-time" data-iso="#(account.createdAt)">#(account.createdAt)</td>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span></td>
                 <td>
-                    <div class="mcp-course-cell">
-                        #for(c in account.enrolledCourses):
-                        <span class="chip">
-                            <code>#(c.code)</code>
-                            <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll" class="inline-form">
-                                #csrfFormField()
-                                <input type="hidden" name="courseID" value="#(c.id)">
-                                <button type="submit" title="Remove from #(c.code)"
-                                        class="mcp-chip-remove">&times;</button>
-                            </form>
-                        </span>
-                        #endfor
-                        #if(count(account.enrolledCourses) == 0):
-                        <span class="mcp-none">none — no access</span>
-                        #endif
-                        <form method="post" action="/admin/mcp/accounts/#(account.id)/enroll" class="mcp-enroll-form">
-                            #csrfFormField()
-                            <label class="visually-hidden" for="enroll-#(account.id)">Enroll #(account.username) in a course</label>
-                            <select id="enroll-#(account.id)" name="courseID" class="form-input mcp-enroll-select">
-                                #for(c in allCourses):
-                                <option value="#(c.id)">#(c.code)</option>
-                                #endfor
-                            </select>
-                            <button class="btn action-btn" type="submit">Enroll</button>
-                        </form>
-                    </div>
+                    <div class="item-title"><code>#(account.username)</code></div>
+                    <div class="item-details#if(account.coursesText == ""): item-details--danger#endif">created <span class="js-relative-time" data-iso="#(account.createdAt)">#(account.createdAt)</span> · #if(account.coursesText == ""):No course access#else:<code>#(account.coursesText)</code>#endif</div>
                 </td>
                 <td>
-                    <div class="toolbar">
+                    <div class="assignment-actions-cell">
                         #if(enabled):
-                        <form method="post" action="/admin/mcp/accounts/#(account.id)/token"
-                              class="mcp-token-form">
+                        #if(writeAllowed):
+                        <details class="add-section-details popup-anchor">
+                            <summary class="btn action-btn summary-btn">Mint token <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+                            <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                                <form method="post" action="/admin/mcp/accounts/#(account.id)/token">
+                                    #csrfFormField()
+                                    <input type="hidden" name="scope" value="readwrite">
+                                    <button class="row-menu-item" type="submit" role="menuitem">Read + write</button>
+                                </form>
+                                <form method="post" action="/admin/mcp/accounts/#(account.id)/token">
+                                    #csrfFormField()
+                                    <input type="hidden" name="scope" value="read">
+                                    <button class="row-menu-item" type="submit" role="menuitem">Read only</button>
+                                </form>
+                            </div>
+                        </details>
+                        #else:
+                        <form method="post" action="/admin/mcp/accounts/#(account.id)/token" class="form-flush">
                             #csrfFormField()
-                            <label class="visually-hidden" for="scope-#(account.id)">Token scope for #(account.username)</label>
-                            <select id="scope-#(account.id)" name="scope" class="form-input mcp-scope-select">
-                                #if(writeAllowed):
-                                <option value="readwrite">read + write</option>
-                                #endif
-                                <option value="read">read only</option>
-                            </select>
+                            <input type="hidden" name="scope" value="read">
                             <button class="btn action-btn" type="submit">Mint token</button>
                         </form>
                         #endif
-                        <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" class="inline-form">
-                            #csrfFormField()
-                            <button class="btn action-btn action-danger" type="submit"
-                                    data-confirm="Delete the MCP account #(account.username)? It loses access immediately. Tokens it already minted stay valid until they expire, and the account cannot be restored.">Delete</button>
-                        </form>
+                        #endif
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(account.username)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                #if(count(account.enrollableCourses) > 0):
+                                <form method="post" action="/admin/mcp/accounts/#(account.id)/enroll" class="mcp-enroll-form">
+                                    #csrfFormField()
+                                    <label class="visually-hidden" for="enroll-#(account.id)">Enrol #(account.username) in a course</label>
+                                    <select id="enroll-#(account.id)" name="courseID" class="form-input">
+                                        #for(c in account.enrollableCourses):
+                                        <option value="#(c.id)">#(c.code)</option>
+                                        #endfor
+                                    </select>
+                                    <button class="btn action-btn" type="submit">Enrol</button>
+                                </form>
+                                #endif
+                                #for(c in account.enrolledCourses):
+                                <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll">
+                                    #csrfFormField()
+                                    <input type="hidden" name="courseID" value="#(c.id)">
+                                    <button class="row-menu-item" type="submit" role="menuitem">Remove from #(c.code)</button>
+                                </form>
+                                #endfor
+                                <form method="post" action="/admin/mcp/accounts/#(account.id)/delete"
+                                      data-confirm="Delete the MCP account #(account.username)? It loses access immediately. Tokens it already minted stay valid until they expire, and the account cannot be restored.">
+                                    #csrfFormField()
+                                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Delete account
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
                     </div>
                 </td>
             </tr>
         #endfor
-        #if(count(accounts) == 0):
-            <tr><td colspan="4" class="text-muted">No MCP accounts yet.</td></tr>
-        #endif
         </tbody>
-    </table></div>
+    </table>
+    #endif
 </section>
 #endif
 
 <section class="page-section">
     <h2>Connected agents</h2>
-    <div class="table-scroll"><table class="results-table sortable-table">
-        <thead>
-            <tr>
-                <th data-sort-type="text"><button class="sort-header" type="button">Agent</button></th>
-                <th data-sort-type="text"><button class="sort-header" type="button">Authorized by</button></th>
-                <th data-sort-type="text"><button class="sort-header" type="button">Scopes</button></th>
-                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Authorized</button></th>
-                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Last used</button></th>
-                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Expires</button></th>
-                <th>Status</th>
-            </tr>
+    #if(count(grants) == 0):
+    <p class="text-muted">No agents have connected yet.</p>
+    #else:
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-count"><col class="section-items-count">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Agent</th><th scope="col">Detail</th><th scope="col">Status</th><th scope="col">Actions</th></tr>
         </thead>
         <tbody>
         #for(grant in grants):
-            <tr>
-                <td>#(grant.agentName)</td>
-                <td><code>#(grant.owner)</code></td>
-                <td><code>#(grant.scope)</code></td>
-                <td class="time js-relative-time" data-iso="#(grant.createdAt)">#(grant.createdAt)</td>
-                <td class="time#if(grant.lastUsedAt): js-relative-time#endif"#if(grant.lastUsedAt): data-iso="#(grant.lastUsedAt)"#endif>#if(grant.lastUsedAt):#(grant.lastUsedAt)#else:—#endif</td>
-                <td class="time js-relative-time" data-iso="#(grant.expiresAt)">#(grant.expiresAt)</td>
+            <tr#if(!grant.canRevoke): class="row-muted"#endif>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span></td>
                 <td>
-                    #if(grant.revoked):
-                    <span class="text-muted">Revoked</span>
-                    #else:
-                    <form method="post" action="/agents/#(grant.id)/revoke" class="inline-form">
-                        #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit"
-                                data-confirm="Revoke this agent? It loses access immediately. The audit record of what it did is kept, and the agent can be authorized again from its client.">Revoke</button>
-                    </form>
-                    #endif
+                    <div class="item-title">#(grant.agentName)</div>
+                    <div class="item-details">authorized by <code>#(grant.owner)</code> · last used #if(grant.lastUsedAt):<span class="js-relative-time" data-iso="#(grant.lastUsedAt)">#(grant.lastUsedAt)</span>#else:never#endif · expires <span class="js-relative-time" data-iso="#(grant.expiresAt)">#(grant.expiresAt)</span> · <code>#(grant.scope)</code></div>
+                </td>
+                <td>
+                    <span class="tier #if(grant.canRevoke):tier-open#elseif(grant.revoked):tier-closed#else:tier-preview#endif">#(grant.statusLabel)</span>
+                </td>
+                <td>
+                    <div class="assignment-actions-cell">
+                        #if(grant.canRevoke):
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(grant.agentName)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                <form method="post" action="/agents/#(grant.id)/revoke"
+                                      data-confirm="Revoke this agent? It loses access immediately. The audit record of what it did is kept, and the agent can be authorized again from its client.">
+                                    #csrfFormField()
+                                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">Revoke agent</button>
+                                </form>
+                            </div>
+                        </details>
+                        #else:
+                        <span class="row-menu-spacer" aria-hidden="true"></span>
+                        #endif
+                    </div>
                 </td>
             </tr>
         #endfor
-        #if(count(grants) == 0):
-            <tr><td colspan="7" class="text-muted mcp-cell-center">No agents have connected yet.</td></tr>
-        #endif
         </tbody>
-    </table></div>
+    </table>
+    #endif
 </section>
 <style>
 .mcp-token-caption { margin: .1rem 0 .5rem; }
-.mcp-issuer-note {
-    color: var(--gray-600);
-    font-size: var(--text-sm);
-}
-.mcp-create-form { margin: 1rem 0; }
-.mcp-course-cell {
-    display: flex;
-    gap: .35rem;
-    flex-wrap: wrap;
-    align-items: center;
-}
-.mcp-chip-remove {
-    background: none;
-    border: 0;
-    cursor: pointer;
-    color: var(--gray-600);
-    padding: 0;
-    font-size: var(--text-md);
-    line-height: 1;
-}
-.mcp-none {
-    color: var(--gray-600);
-    font-size: var(--text-sm);
-}
 .mcp-enroll-form {
-    display: inline-flex;
-    gap: .2rem;
-}
-.mcp-enroll-select {
-    padding: .2rem .4rem;
-    font-size: var(--text-sm);
-}
-.mcp-token-form {
     display: flex;
     gap: .3rem;
-    align-items: center;
-}
-.mcp-scope-select {
-    padding: .25rem .5rem;
-    font-size: var(--text-sm);
-}
-.mcp-cell-center {
-    text-align: center;
-    padding: 1rem;
+    padding: .3rem;
 }
 </style>
-<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

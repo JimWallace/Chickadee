@@ -6,31 +6,46 @@ GitHub
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
 #extend("_admin-tabs")
 <section class="page-section">
-    <h2>GitHub App</h2>
+    <p class="page-crumb">Integrations</p>
+    <div class="page-titlebar">
+        <h2>GitHub App #if(app):<span class="tier tier-open">Registered</span>#else:<span class="tier tier-closed">Not registered</span>#endif</h2>
+        #if(app):
+        <div class="toolbar">
+            <a class="btn action-btn" href="#(app.htmlURL)" target="_blank" rel="noopener noreferrer">Open on GitHub <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+            <details class="add-section-details popup-anchor">
+                <summary class="btn action-btn action-btn-icon summary-btn" title="More actions" aria-label="More actions for the GitHub App">
+                    <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                </summary>
+                <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                    <form method="post" action="/admin/github/delete"
+                          data-confirm="Remove the GitHub App registration? Chickadee deletes the App credentials from this server and cannot restore them.">
+                        #csrfFormField()
+                        <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
+                            <span>Remove registration<br><span class="card-meta">Deletes credentials here, not the App on GitHub</span></span>
+                        </button>
+                    </form>
+                </div>
+            </details>
+        </div>
+        #endif
+    </div>
     #if(app):
     <p class="section-intro">Chickadee reads student repositories through this App.</p>
-    <dl class="detail-grid section-gap">
-        <dt>Name</dt>
-        <dd>#(app.name)</dd>
-        <dt>App ID</dt>
-        <dd><code>#(app.appID)</code></dd>
-        <dt>Client ID</dt>
-        <dd><code>#(app.clientID)</code></dd>
-        #if(app.owner):
-        <dt>Owner</dt>
-        <dd>#(app.owner)</dd>
-        #endif
-        <dt>Settings</dt>
-        <dd><a href="#(app.htmlURL)" target="_blank" rel="noopener noreferrer">#(app.slug) on GitHub</a></dd>
-    </dl>
-    <form method="post" action="/admin/github/delete" class="form-stack">
-        #csrfFormField()
-        <p class="field-note">Removing the registration does not delete the App on GitHub.</p>
-        <div class="toolbar">
-            <button class="btn action-btn action-danger" type="submit"
-                    data-confirm="Remove the GitHub App registration? Chickadee deletes the App credentials from this server and cannot restore them.">Remove registration</button>
-        </div>
-    </form>
+    <div class="card section-gap">
+        <dl class="detail-grid detail-grid--cells">
+            <div><dt>Name</dt>
+            <dd>#(app.name)</dd></div>
+            <div><dt>App ID</dt>
+            <dd><code>#(app.appID)</code></dd></div>
+            <div><dt>Client ID</dt>
+            <dd><code>#(app.clientID)</code></dd></div>
+            #if(app.owner):
+            <div><dt>Owner</dt>
+            <dd>#(app.owner)</dd></div>
+            #endif
+        </dl>
+    </div>
     #else:
     <p class="empty">No GitHub App registered.</p>
     <p class="section-note">GitHub submission is off until an App is registered, which must wait for the privacy review.</p>
