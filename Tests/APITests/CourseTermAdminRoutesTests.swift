@@ -123,11 +123,12 @@ import VaporTesting
             #expect(html.contains("<option value=\"spring\""))
             #expect(html.contains("<option value=\"fall\""))
             #expect(html.contains("Enter a four-digit year and a term."))
-            // Nothing is guessed: no year, and the term select starts on
-            // its placeholder. (A date-based default would also change the
-            // visual-regression baseline every term.)
+            // The year select starts on the current year. The term is not
+            // guessed: its select starts on the placeholder.
+            let year = Calendar(identifier: .gregorian).component(.year, from: Date())
+            #expect(html.contains("<option value=\"\(year)\" selected>"))
             #expect(html.contains("<option value=\"\" selected disabled>Choose</option>"))
-            #expect(!html.contains("\" selected>"))
+            #expect(html.components(separatedBy: "\" selected>").count == 2)
         }
     }
 
