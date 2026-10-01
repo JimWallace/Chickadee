@@ -41,12 +41,12 @@ Activity
         #for(row in day.rows):
         <tr>
             <td class="item-tile-cell"><span class="item-tile" data-kind="#(row.tileKind)"><svg class="icon" aria-hidden="true"><use href="#(row.iconHref)"/></svg></span></td>
-            <td>
+            <td class="item-main">
                 <div class="item-title"><strong>#(row.actor)</strong> #(row.summary) #if(row.link):<a href="#(row.link)">#(row.target)</a>#else:#(row.target)#endif</div>
                 <div class="item-details">#(row.category) · #(row.clockText)#if(row.detail != ""): · <span class="activity-detail">#(row.detail)</span>#endif</div>
             </td>
             <td class="col-hide-phone js-relative-time" data-iso="#(row.timestampISO)">#(row.timestamp)</td>
-            <td>
+            <td class="item-actions-td">
                 #if(row.link):
                 <div class="assignment-actions-cell">
                     <a class="btn action-btn action-btn-icon" href="#(row.link)" title="View #(row.target)" aria-label="View #(row.target)">

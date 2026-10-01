@@ -113,7 +113,7 @@
         #for(row in union.defences):
             <tr#if(row.isViewer): class="leaderboard-row--you"#endif>
                 <td class="item-tile-cell">#extend("_avatar", row.avatar)</td>
-                <td>
+                <td class="item-main">
                     <div class="item-title"><span data-avatar-handle>#(row.handle)</span>#if(row.isViewer): <span class="you-pill">You</span>#endif</div>
                     <div class="item-details">#if(isStaff):#(row.name) · #endif#(row.detailsText)</div>
                 </td>
@@ -161,7 +161,7 @@
             <tr#if(item.row.isViewer): class="leaderboard-row--you"#endif>
                 <td class="leaderboard-rank"><span class="rank-disc" data-rank-tier="#(item.row.rankTier)">#(item.row.rankText)</span></td>
                 <td class="item-tile-cell">#extend("_avatar", item.row.avatar)</td>
-                <td>
+                <td class="item-main">
                     <div class="item-title"><span data-avatar-handle>#(item.row.handle)</span>#if(item.row.isViewer): <span class="you-pill">You</span>#endif</div>
                     #if(isStaff):
                     <div class="item-details">#(item.row.name) · <code>#(item.row.username)</code> · #(item.row.submissionCountText) · best <span class="js-relative-time" data-iso="#(item.row.bestAtISO)">#(item.row.bestAtText)</span></div>
@@ -169,9 +169,9 @@
                     <div class="item-details">#(item.row.tieNote)</div>
                     #endif
                 </td>
-                <td class="item-grade">#(item.row.metricText)</td>
+                <td class="item-status item-grade">#(item.row.metricText)</td>
                 #if(isStaff):
-                <td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         <a class="btn action-btn action-btn-icon" href="#(item.row.bestSubmissionURL)" title="View best submission" aria-label="View best submission of #(item.row.handle)"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></a>
                     </div>

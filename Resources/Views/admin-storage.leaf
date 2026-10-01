@@ -41,7 +41,7 @@ Storage
         #for(row in assignmentRows):
             <tr>
                 <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(row.assignmentTitle)</div>
                     <div class="item-details"><span class="content-item-kind" data-kind="graded">#(row.courseCode)</span> · #(row.detailsText)</div>
                 </td>

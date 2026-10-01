@@ -77,11 +77,11 @@ Students
     #for(student in staffRows):
         <tr data-student-id="#(student.id)">
             <td class="item-tile-cell">#extend("_avatar", student.avatar)</td>
-            <td>
+            <td class="item-main">
                 <div class="item-title">#(student.displayName)</div>
                 <div class="item-details"><code>#(student.username)</code></div>
             </td>
-            <td>
+            <td class="item-status">
                 #if(rosterReadOnly):
                 #(student.role)
                 #else:
@@ -98,7 +98,7 @@ Students
                 </form>
                 #endif
             </td>
-            <td>
+            <td class="item-actions-td">
                 #if(!rosterReadOnly):
                 <div class="assignment-actions-cell">
                     <details class="ext-details row-menu">

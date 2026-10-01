@@ -65,13 +65,13 @@
     #else:
         <tr>
             <td class="item-tile-cell"><span class="item-tile" data-kind="#(item.content.kind)"><svg class="icon" aria-hidden="true"><use href="#(item.content.iconHref)"/></svg></span></td>
-            <td>
+            <td class="item-main">
                 <div class="item-title">#(item.content.title)#if(!item.content.isPublished): <span class="content-item-hidden">Hidden</span>#endif</div>
                 <div class="item-details"><span class="content-item-kind" data-kind="#(item.content.kind)">#(item.content.kindLabel)</span>#if(item.content.detailsText != ""): · #(item.content.detailsText)#endif</div>
             </td>
-            <td></td>
+            <td class="item-status"></td>
             <td class="col-hide-phone"></td>
-            <td>
+            <td class="item-actions-td">
                 <div class="assignment-actions-cell">
                     #for(action in item.content.actions):
                     <a class="btn action-btn action-btn-icon" href="#(action.href)" title="#(action.label)" aria-label="#(action.label)"#if(action.opensNewTab): target="_blank" rel="noopener noreferrer"#endif>
@@ -85,7 +85,7 @@
     #else:
         <tr>
             <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span></td>
-            <td>
+            <td class="item-main">
                 #if(item.setup.title):
                     <div class="assignment-title-cell">
                         <strong>#(item.setup.title)</strong>
@@ -126,7 +126,7 @@
                 <span class="text-muted">Unpublished</span>
                 #endif
             </td>
-            <td>
+            <td class="item-status">
                 #if(item.setup.staffOnly):
                 <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">preview</span>
                 #elseif(item.setup.status == "extended"):
@@ -140,7 +140,7 @@
                 #endif
             </td>
             <td class="item-grade col-hide-phone">#if(item.setup.bestGradeText):<strong>#(item.setup.bestGradeText)</strong>#else:<span class="empty">—</span>#endif</td>
-            <td>
+            <td class="item-actions-td">
                 <div class="assignment-actions-cell">
                     #if(!item.setup.hasAnyAction):
                     <span class="empty">—</span>

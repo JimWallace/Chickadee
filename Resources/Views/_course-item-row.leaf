@@ -18,11 +18,11 @@
         <td colspan="4"><strong>#(item.content.title)</strong>#if(item.content.itemDescription): <span class="text-muted">#(item.content.itemDescription)</span>#endif</td>
         #else:
         <td class="item-tile-cell"><span class="item-tile" data-kind="#(item.content.kind)"><svg class="icon" aria-hidden="true"><use href="#(item.content.iconHref)"/></svg></span></td>
-        <td>
+        <td class="item-main">
             <div class="item-title#if(!item.content.isPublished): text-muted#endif">#(item.content.title)</div>
             <div class="item-details"><span class="content-item-kind" data-kind="#(item.content.kind)">#(item.content.kindLabel)</span>#if(item.content.detailsText != ""): · #(item.content.detailsText)#endif</div>
         </td>
-        <td>
+        <td class="item-status">
             <form method="post" action="/instructor/content-items/#(item.content.id)/visibility" class="status-form">
                 #csrfFormField()
                 <label class="visually-hidden" for="visibility-#(item.content.id)">Visibility of #(item.content.title)</label>
@@ -36,7 +36,7 @@
         </td>
         <td class="col-hide-phone"></td>
         #endif
-        <td>
+        <td class="item-actions-td">
             <div class="assignment-actions-cell">
                 #for(action in item.content.actions):
                 <a class="btn action-btn action-btn-icon" href="#(action.href)" title="#(action.label)" aria-label="#(action.label)"#if(action.opensNewTab): target="_blank" rel="noopener noreferrer"#endif>
@@ -135,7 +135,7 @@
             <span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span>
             #endif
         </td>
-        <td>
+        <td class="item-main">
             #if(item.assignment.assignmentID):
             <div class="item-title"><a href="/instructor/#(item.assignment.assignmentID)/submissions">#(item.assignment.title)</a></div>
             <div class="item-details">
@@ -163,7 +163,7 @@
             <div class="item-details">Uploaded #(item.assignment.createdAt) · #(item.assignment.suiteCount) tests</div>
             #endif
         </td>
-        <td>
+        <td class="item-status">
             #if(!item.assignment.assignmentID):
             <span class="tier tier-unpublished">Unpublished</span>
             #elseif(item.assignment.validationStatus == "passed"):
@@ -194,7 +194,7 @@
             <div class="item-details">submitted</div>
             #endif
         </td>
-        <td>
+        <td class="item-actions-td">
             #if(item.assignment.status == "unpublished"):
             <div class="assignment-actions-cell">
                 <details class="publish-details">

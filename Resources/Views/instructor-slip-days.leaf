@@ -110,18 +110,18 @@ Slip days
         #for(student in students):
             <tr>
                 <td class="item-tile-cell">#extend("_avatar", student.avatar)</td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(student.displayName)</div>
                     <div class="item-details"><code>#(student.username)</code>#if(student.adjustmentText != ""): · #(student.adjustmentText)#endif</div>
                     #for(spend in student.spends):
                     <div class="item-details"><span#if(spend.isRefunded): class="slip-day-spend-refunded"#endif>#(spend.assignmentTitle) → #(spend.extensionDueAtText)</span>#if(spend.isRefunded): refunded #(spend.refundedAtText)#endif</div>
                     #endfor
                 </td>
-                <td>
+                <td class="item-status">
                     <span class="pips" aria-hidden="true">#for(pip in student.pips):<span class="pip" data-state="#(pip.state)"></span>#endfor</span>
                     <div class="item-details">#(student.leftText)</div>
                 </td>
-                <td>
+                <td class="item-actions-td">
                     #if(canManageLedger):
                     <div class="assignment-actions-cell">
                         <form method="post" action="/instructor/slip-days/adjust" class="inline-form">

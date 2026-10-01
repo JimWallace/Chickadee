@@ -104,7 +104,7 @@ import VaporTesting
             #expect(html.contains("href=\"/testsetups/lb_win/leaderboard?all=1\""))
             #expect(!html.contains("Show my standing"))
             // Only the window's eight rows, not thirty-one.
-            #expect(html.components(separatedBy: "<td class=\"item-grade\">").count - 1 == 8)
+            #expect(html.components(separatedBy: "<td class=\"item-status item-grade\">").count - 1 == 8)
         }
     }
 
@@ -115,7 +115,7 @@ import VaporTesting
                 on: app, setupID: "lb_all", metrics: (0..<31).map { Double(100 - $0) },
                 viewerPlace: 13)
             let html = try await get("/testsetups/lb_all/leaderboard?all=1", cookie: cookie, on: app).body.string
-            #expect(html.components(separatedBy: "<td class=\"item-grade\">").count - 1 == 31)
+            #expect(html.components(separatedBy: "<td class=\"item-status item-grade\">").count - 1 == 31)
             #expect(html.contains("Show my standing"))
             #expect(html.contains("data-list-filter=\"leaderboard-table\""))
             // The refresh keeps the full list full.
@@ -148,7 +148,7 @@ import VaporTesting
             let html = try await get("/testsetups/lb_none/leaderboard", cookie: cookie, on: app).body.string
             #expect(html.contains("Not on the board yet"))
             #expect(html.contains("href=\"/testsetups/lb_none/submit\""))
-            #expect(html.components(separatedBy: "<td class=\"item-grade\">").count - 1 == 5)
+            #expect(html.components(separatedBy: "<td class=\"item-status item-grade\">").count - 1 == 5)
             #expect(html.contains("4 more below"))
         }
     }
@@ -166,7 +166,7 @@ import VaporTesting
 
             let html = try await get("/testsetups/lb_staff2/leaderboard", cookie: cookie, on: app).body.string
             #expect(!html.contains("you-card card"))
-            #expect(html.components(separatedBy: "<td class=\"item-grade\">").count - 1 == 10)
+            #expect(html.components(separatedBy: "<td class=\"item-status item-grade\">").count - 1 == 10)
             #expect(html.contains("<code>lb_staff2_s0</code>"))
             #expect(html.contains("0 submissions"))
             #expect(html.contains("href=\"/submissions/lb_staff2_0\""))

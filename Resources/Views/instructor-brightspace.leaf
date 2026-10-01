@@ -167,11 +167,11 @@ LEARN
         #for(row in assignmentRows):
             <tr>
                 <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(row.title)</div>
                     <div class="item-details#if(row.hasSyncError): chip-err#endif">#(row.syncDetailText)</div>
                 </td>
-                <td>
+                <td class="item-status">
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace"
                           class="bs-grade-form" data-assignment-id="#(row.assignmentID)">
                         #csrfFormField()
@@ -195,7 +195,7 @@ LEARN
                     <span class="empty">—</span>
                     #endif
                 </td>
-                <td>
+                <td class="item-actions-td">
                     #if(!courseIsArchived):
                     <div class="assignment-actions-cell">
                         <form method="post" action="/instructor/#(row.assignmentID)/brightspace/push-all"
@@ -250,11 +250,11 @@ LEARN
         #for(student in unreachableStudents):
             <tr>
                 <td class="item-tile-cell">#extend("_avatar", student.avatar)</td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(student.displayName)</div>
                     <div class="item-details"><code>#(student.username)</code> · <span class="chip-err" title="#(student.detail)">Couldn't match to LEARN</span></div>
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         <a class="btn action-btn action-btn-icon" href="/instructor/students?highlight=#(student.userID)"
                            title="Match this student's LEARN ID" aria-label="Match #(student.displayName)'s LEARN ID">

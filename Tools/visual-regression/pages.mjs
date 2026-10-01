@@ -18,7 +18,21 @@
 // that differ every run, so a pixel baseline would be one big mask. Its
 // markup is covered by the render tests.
 //
+// The pages also captured at 375px: the ones built from the shared
+// `.section-items` list rows, whose phone layout is a single block of CSS.
+// Their baselines carry a `--w375` suffix before the colour scheme.
+//
 // Keep names stable — they are the baseline filenames.
+export const PHONE_PAGE_NAMES = [
+  "student-dashboard",
+  "instructor-assignments",
+  "instructor-students",
+  "instructor-slip-days",
+  "admin-dashboard",
+  "admin-users",
+  "admin-alerts",
+];
+
 export function pageList({
   setupID, instructorState, studentState, resultsPath, gradedResultsPath,
 }) {

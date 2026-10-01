@@ -62,7 +62,7 @@ Server Health Alerts
         #for(rule in rules):
             <tr>
                 <td class="item-tile-cell"><span class="item-tile" data-kind="#if(rule.isFiring):alert#else:ok#endif"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(rule.humanReadable)</div>
                     <div class="item-details">#(rule.thresholdText) · <code>#(rule.rule)</code></div>
                 </td>
@@ -115,7 +115,7 @@ Server Health Alerts
             #for(firing in day.rows):
             <tr>
                 <td class="item-tile-cell"><span class="item-tile" data-kind="#if(firing.resolved):ok#else:alert#endif"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(firing.summary)</div>
                     <div class="item-details#if(firing.deliveryFailed): item-details--danger#endif"><code>#(firing.rule)</code> · #(firing.deliveryText)</div>
                 </td>

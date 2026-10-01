@@ -154,7 +154,7 @@ Runner #(runner.workerID)
                     <span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span>
                     #endif
                 </td>
-                <td data-sort-value="#if(job.username):#(job.username)#else:~#endif">
+                <td class="item-main" data-sort-value="#if(job.username):#(job.username)#else:~#endif">
                     #if(job.username):
                     <div class="item-title">#(job.username)</div>
                     #else:
@@ -162,7 +162,7 @@ Runner #(runner.workerID)
                     #endif
                     <div class="item-details">#if(job.detailsText != ""):#(job.detailsText) · #endif<code>#(job.submissionID)</code></div>
                 </td>
-                <td data-sort-value="#(job.finalStatus)">
+                <td class="item-status" data-sort-value="#(job.finalStatus)">
                     <span class="tier tier-#(job.statusTier)">#(job.statusLabel)</span>
                     #if(job.limitText != ""):
                     <div class="item-details item-details--danger">#(job.limitText)</div>

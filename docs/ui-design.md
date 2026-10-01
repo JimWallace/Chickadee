@@ -397,6 +397,13 @@ duplicate.
   checked option's token onto the avatar and points its ring layer at the
   checked ring; see
   [student-wardrobe.md](student-wardrobe.md).
+- **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a
+  `.section-items` row: the title and details, the state or value, and the cell
+  that holds the actions.  They change nothing on a desktop; at 640px and below
+  the row becomes a wrapping flex line (tile, title, state, then the actions on a
+  line of their own under the title), still a table to a screen reader.  Put them
+  on the cells of any new `.section-items` list; the existing `.item-tile-cell`,
+  `.section-items-handle` and `.leaderboard-rank` stay.
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A
   modifier on `.diagnostic-value`, not a second tile component.

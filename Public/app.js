@@ -502,4 +502,12 @@ if (root) {
         const form = owningForm(control);
         if (form) form.submit();
     });
+    // The course tab bar scrolls sideways on a phone. Bring the active tab into
+    // view by setting scrollLeft on the bar itself: scrollIntoView would also
+    // scroll the page.
+    const courseTabs = document.querySelector('.course-tabs');
+    const activeTab = courseTabs && courseTabs.querySelector('.course-tab-active');
+    if (courseTabs && activeTab) {
+        courseTabs.scrollLeft = activeTab.offsetLeft - courseTabs.clientWidth / 2 + activeTab.offsetWidth / 2;
+    }
 }());
