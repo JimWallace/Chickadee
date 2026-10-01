@@ -169,6 +169,15 @@ and both are still in the tree:
 - `chickadee-runner` links `-lcurl` explicitly, because 6.4 drops libcurl the
   same way
 
+A third 6.4 problem has no workaround in the tree. The default Swift Build
+engine crashes in SwiftPM itself, at the start of planning, in a small share
+of cold `swift build` runs: a libdispatch use-after-free that Swift Build's
+tool discovery trips (`docs/ci-flakiness.md`, Family 7; upstream
+swiftlang/swift-build#1786). `--build-system native` does not run that
+planning, so the release build and the coverage run have never seen it. That
+is one more thing to measure before the flag is deleted: a clean link is not
+the whole answer.
+
 Try the build without each workaround on the new toolchain. If the link is
 clean, delete the workaround and say so in the changelog fragment.
 `--build-system native` is deprecated and prints a warning on every build.

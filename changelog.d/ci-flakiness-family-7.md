@@ -1,0 +1,3 @@
+### Changed
+
+- **`docs/ci-flakiness.md` records Family 7: the `build` job's exit-139 crash as Swift Build starts planning.** Two first attempts on 2026-10-01 died in SwiftPM itself, before any compile, with the same libdispatch frame; the window before held 400 runs and none. The entry carries the signature to recognise it by, the upstream reports (swiftlang/swift-build#1786, swiftlang/swift-corelibs-libdispatch#949), the cost of a hit, the handling (one re-run, never a read of the diff) and three mitigations with their costs, none shipped. CLAUDE.md and the toolchain-upgrade runbook point at it.

@@ -1,9 +1,10 @@
-# CI flakiness — state of knowledge (2026-07-02, last extended 2026-09-27)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-10-01)
 
 Handoff document for the flakiness work. Families 1–3 are the original
-2026-07-02 body; **Family 4 (2026-08-05), Family 5 (2026-08-09) and Family 6
-(2026-09-27) were added later**, so the header date is where this started, not
-where it ends. Check the newest families first — they are the ones still open.
+2026-07-02 body; **Family 4 (2026-08-05), Family 5 (2026-08-09), Family 6
+(2026-09-27) and Family 7 (2026-10-01) were added later**, so the header date
+is where this started, not where it ends. Check the newest families first —
+they are the ones still open.
 
 **Family 5 is closed for monitoring as of 2026-09-28** (acceptance run: 88
 `main` runs, no recurrence). **Family 6 is root-caused and fixed** — the
@@ -12,6 +13,12 @@ outside and are opposite shapes: Family 5 runs slowly and keeps finishing
 tests, Family 6 stops completely. The `[ci-pressure]` telemetry separates them
 in one line (`scopes=0.0/min` with `self cpu=0.0%` is Family 6), which is what
 it was added for. Read Family 6 before diagnosing any `cancelled` job.
+
+**Family 7 (2026-10-01) is an upstream toolchain crash, not ours.** The
+`build` job exits 139 before it compiles anything: SwiftPM 6.4's default
+Swift Build engine trips a libdispatch use-after-free as planning starts.
+Read it before you re-run a red `build` job, and before you read a diff for a
+crash that happened before any compile.
 
 Family 5 was rewritten on 2026-09-16 against a 213-run population rather than
 a single log tail. Two of the three tells it used to carry turned out to be
@@ -1367,6 +1374,146 @@ as a `SupervisedProcess`, which is also the type to use for any other
 long-lived child; `Tests/TestSupport/InterpreterSpawn.swift` has the one-shot
 Subprocess helpers for tests.
 
+## Family 7 — `build` exits 139 as Swift Build starts planning (libdispatch epoll use-after-free, upstream) — UPSTREAM BUG, RE-RUN ONCE
+
+**Symptom.** The `build` job fails in its `Build all targets and tests` step
+about 85 s after the step starts, with `Segmentation fault (core dumped)` and
+`Process completed with exit code 139`. Nothing has been compiled: the log
+shows the dependency fetch, the manifest load, `Building for debugging...`,
+`[Computing dependencies]`, then `[Planning 1 / 3660]`, and the next line is
+`*** Signal 11: Backtracing from ...`. The four test lanes are skipped and
+`swift-tests-gate` reads `failure`. The same commit builds and passes on
+`rerun-failed-jobs`. Two PRs hit it on 2026-10-01, #1678 and #1679, both on
+their first attempt, both green on the second.
+
+**Signature.** The Swift backtracer's report is the same in both runs, to the
+instruction:
+
+```text
+*** Program crashed: Bad pointer dereference at 0xffffaa3c56f157f2 ***
+Platform: x86_64 Linux (Ubuntu 26.04.1 LTS)
+Thread 2 "DispatchWorker" crashed:
+0      _dispatch_event_loop_drain + 1130 in libdispatch.so
+1 [ra] _dispatch_mgr_invoke + 129 in libdispatch.so
+2 [ra] _dispatch_mgr_thread + 108 in libdispatch.so
+3 [ra] _dispatch_worker_thread + 660 in libdispatch.so
+```
+
+The crashed thread is libdispatch's manager thread, the one that drains the
+epoll event loop. The faulting address is non-canonical (`0xffffaa…` in both
+runs), which is a freed and reused pointer, not a Swift object. The main
+thread is named `swift-build` and the image is `/usr/bin/swift-package`: this
+is SwiftPM itself, not the compiler. The other threads are inside Swift
+Build's planning: `BuildPlan.init(planRequest:taskPlanningDelegate:)` →
+`SourcesTaskProducer.generateTasks()` under `parallelForEach`, and in one run
+`ClangCompilerSpec.constructTasks` → `discoveredClangToolInfo`, which is the
+tool-discovery subprocess the next paragraph names. The signal lands about
+40 ms after `[Planning 1 / 3660]`; the remaining ~25 s of the step is the
+backtracer symbolicating (`Backtrace took 25.16s`).
+
+**Root cause (upstream, open).** SwiftPM 6.4 made the Swift Build engine the
+default (`swift build --help` on the CI image: `--build-system … (default:
+swiftbuild)`), and the resolute image (#1572, 2026-09-22) carries 6.4. The
+`build` job and the four test lanes run the default. During planning, Swift
+Build discovers tool versions by spawning subprocesses in parallel, and its
+`Processes.getOutput` reads each 4 KiB chunk of their output through a fresh
+`DispatchIO.read(fromFileDescriptor:)`. libdispatch's epoll backend on Linux
+can free a `dispatch_muxnote` that `epoll_wait` still delivers, and the
+manager thread then dereferences the freed note in `_dispatch_event_loop_drain`.
+That is the exact frame here. Reports:
+
+- [swiftlang/swift-build#1786](https://github.com/swiftlang/swift-build/issues/1786)
+  (opened 2026-09-24, open) — the Swift Build side, with this crash signature
+  and the per-chunk `DispatchIO` mechanism.
+- [swiftlang/swift-corelibs-libdispatch#949](https://github.com/swiftlang/swift-corelibs-libdispatch/issues/949)
+  (opened 2026-07-10, open) — the use-after-free itself, with the delivery
+  path through `_dispatch_event_loop_drain` described.
+- [swiftlang/swift#87033](https://github.com/swiftlang/swift/issues/87033)
+  (February 2026, open) — the same frame from a 6.3 development toolchain run
+  with `--build-system swiftbuild`, before it was the default.
+
+No fix is merged in any of the three as of 2026-10-01. The release image and
+the coverage run already pin `--build-system native` for unrelated reasons
+(the static link and coverage; see `docs/swift-toolchain-upgrades.md`), which
+is why neither has seen this.
+
+**Population.** The 100 most recent `swift-tests.yml` runs span
+2026-09-30 19:50 to 2026-10-01 07:58 UTC. 42 of them are concurrency
+cancellations with no job started; the other 58 each ran one first-attempt
+`build` job. 57 of those ran the `Build all targets and tests` step (one
+skipped it on an exact build-cache hit), and **2 of the 57 failed, both with
+this signature, both at exactly 84 s**; the 55 that passed took 374–739 s
+(median 639 s). A third run with a second attempt that morning (36804743549)
+was a `PersonalizationEvaluator` timeout in `api-tests`, not this family, and
+the one run in the window with a `failure` conclusion (36770886466) failed in
+`APITests` with a green build. The 400 runs before the window (2026-09-14 to
+2026-09-30) hold 20 runs with a failure or a second attempt and exactly one
+failed `build` job among them: the 2026-09-19 `manifest unknown`
+image-bootstrap trap from the 6.4 upgrade, not a crash. So the count is
+**2 of 57 build steps in one morning, after none in the sixteen days before**,
+of which the last eight were on the same 6.4 toolchain. Read 2 of 57 as a
+rate with a wide interval, not as a trend: the audit arc produced an unusual
+density of cold builds that morning, and the trigger is a race in a planning
+phase that every cold build runs.
+
+**Why it is credible that this is new noise and not a new bug.** Nothing in
+the two diffs reaches SwiftPM; one touched BrightSpace route handlers and the
+other the manifest codec. Both crashed at the identical instruction in a
+toolchain library, with the same register shape, before compiling either
+diff. And the upstream report with this signature predates both PRs by a
+week.
+
+**What one hit costs.** The build cache is written only when the step
+succeeds (`Post Cache build artifacts` is skipped on failure), so the re-run
+repeats the whole cold build, 6–12 min (the window's median is 639 s), and
+then the four lanes, about 6 min more. Each hit therefore costs 12–18 min of
+wall clock and one red `swift-tests-gate` on the PR, plus whoever reads the
+red check.
+
+**Handling.** Recognise it by the signature, not by the exit code alone: step
+`Build all targets and tests` red within about 90 s, `[Planning 1 / N]` as
+the last build line, `DispatchWorker` crashed in `_dispatch_event_loop_drain`.
+Then:
+
+1. Comment `/rerun-failed` on the PR (or call `rerun-failed-jobs` on the run).
+   Nothing in the diff was compiled, so the diff cannot be the cause. Do not
+   push an empty commit.
+2. If the second attempt dies with the same signature, re-run again. The
+   signature is deterministic evidence of the known bug; only the trigger is
+   probabilistic. A repeat is a repeat, not a reason to read the diff.
+3. Anything else in that step, including a segfault in a different thread or
+   frame, is not this family. A crash in `swift-frontend` after `Compiling`
+   lines is a compiler crash and is the PR's to root-cause.
+
+**Mitigations considered, none shipped.** Record the measurement before
+choosing one; the rate above is the input.
+
+1. **Retry the build step inside the job when it exits 139 with this
+   signature.** Cheapest by far: the fetched checkouts stay in `.build`, so a
+   retry repeats only the 60 s of manifest load and planning, the default
+   engine stays, and the cache logic is untouched. Gate it on the signature
+   (grep the step log for `_dispatch_event_loop_drain`) so a real crash is not
+   retried blindly, and emit a `::warning` so the rate stays visible, as the
+   webkit tolerances do.
+2. **`--build-system native` on the `build` job and the four lanes.** Removes
+   the trigger outright, and it is the engine the release image already
+   builds with. Costs: `native` is deprecated and warns on every build; the
+   lanes restore the build job's `.build` and run `swift test --skip-build`,
+   so all five invocations must agree or the lanes rebuild; and an engine
+   change re-orders compiler flags, which is how `-Xswiftc` lost its effect
+   last time (`docs/swift-toolchain-upgrades.md`), so the mutation toolset
+   check and each lane's duration need re-measuring after the switch.
+3. **Wait for upstream.** A libdispatch fix for #949, or Swift Build moving
+   `Processes.getOutput` off `DispatchIO`, ends it. Whichever of 1 or 2 is
+   chosen should be removed when the pinned toolchain carries that fix; the
+   semi-annual upgrade runbook's "try the build without each workaround" step
+   is the place that catches it.
+
+**What this does NOT share with Families 5 and 6.** It is not a stall: the
+job is red in under two minutes, with a backtrace. It is not a test: no test
+binary exists yet. And it is not ours: the `[ci-pressure]` lines and the
+wedge watchdog never run, because the process that dies is SwiftPM.
+
 ## Structural problems → current state
 
 1. **A bot's only re-kick was a new SHA.** Fixed: comment `/rerun-failed`
@@ -1684,3 +1831,19 @@ Subprocess helpers for tests.
   same machine and build: `/tmp` on disk 287.6 s / 274.9 s with PSI
   `io_full` 20-27 %; `/tmp` on tmpfs 165.7 s / 162.1 s with `io_full`
   0.0-0.2 %; peak tmpfs occupancy 4 MiB.
+- PR #1678 (Family 7) — run 36826739310, `build` attempt 1 job 110253994905
+  (`failure`, exit 139 at `[Planning 1 / 3660]`, step 84 s) vs attempt 2 job
+  110254985713 (`success`, build step 10 m 27 s) on the same commit `76c711c`.
+- PR #1679 (Family 7) — run 36830441382, `build` attempt 1 job 110265579843
+  (`failure`, same signature, step 84 s) vs attempt 2 job 110266431713
+  (`success`, build step 8 m 27 s) on the same commit `bff2b46`.
+- `swift-tests.yml` run history, 2026-09-30 19:50 → 2026-10-01 07:58 (Family 7
+  census) — 100 runs; 58 first-attempt `build` jobs, 57 ran the build step,
+  2 failed (jobs 110253994905 and 110265579843, 84 s each, exit 139), 55
+  passed in 374–739 s, median 639 s.
+- `swift-tests.yml` run history, 2026-09-14 → 2026-09-30 (Family 7 baseline)
+  — 400 runs, 20 with a failure or a second attempt, one failed `build` job
+  among them (the 2026-09-19 `manifest unknown` image-bootstrap trap), none
+  with a segmentation fault.
+- Upstream for Family 7 — swiftlang/swift-build#1786,
+  swiftlang/swift-corelibs-libdispatch#949, swiftlang/swift#87033.
