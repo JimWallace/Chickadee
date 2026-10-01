@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.300] - 2026-10-01
+
+### Fixed
+
+- **The AGS retry-on-launch rule keys on a reason code, not the sentence.** `lti_grade_syncs` gains a `failure_reason` column beside the instructor-facing sentence; the sweep writes both, the launch retries only rows whose code is `notLaunched`, and the migration backfills the code on rows that failed before. Rewording a message no longer changes behaviour (#1652).
+
+### Fixed
+
+- **Two first LTI launches of one subject no longer race to a 500.** When both tried to create the account or the identity link at once, the loser's insert failed on a unique index. The resolver now runs once more after such a failure and finds what the winner wrote. The LTI doc also records why `target_link_uri` is required and never routed on (#1661).
+
+### Changed
+
+- **The single-use burn is a shared helper.** The atomic `UPDATE … WHERE consumed = false RETURNING` primitive that OAuth codes, consent tokens, LTI login states and deep-link tickets all consume through moved from `MCPOAuthRoutes` to `SingleUseRecord.burn`. No behaviour change (#1650).
+
+
 ## [0.5.299] - 2026-10-01
 
 ### Changed
