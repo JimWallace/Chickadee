@@ -209,31 +209,13 @@ struct SetDatasetTool: ContentTool {
             }
         }
 
-        try await mutateManifest(setup: setup, on: context.db) { dict in
-            var specs = (dict["datasets"] as? [[String: Any]]) ?? []
+        try await mutateManifest(setup: setup, on: context.db) { props in
             // Replaced, never appended — two specs for one file would disagree
             // about how many rows a student gets, and both PUT endpoints reject
             // such a pair outright.
-            specs.removeAll { ($0["file"] as? String) == cleaned }
+            props.datasets.removeAll { $0.file == cleaned }
             if !remove {
-                var entry: [String: Any] = ["file": cleaned, "kind": written.kind.rawValue]
-                if let sampleSize = written.sampleSize { entry["sampleSize"] = sampleSize }
-                if let column = written.stratumColumn { entry["stratumColumn"] = column }
-                if !written.transforms.isEmpty {
-                    entry["transforms"] = written.transforms.map { transform -> [String: Any] in
-                        var step: [String: Any] = [
-                            "kind": transform.kind.rawValue, "columns": transform.columns,
-                        ]
-                        if let rate = transform.rate { step["rate"] = rate }
-                        return step
-                    }
-                }
-                specs.append(entry)
-            }
-            if specs.isEmpty {
-                dict.removeValue(forKey: "datasets")
-            } else {
-                dict["datasets"] = specs
+                props.datasets.append(written)
             }
         }
 

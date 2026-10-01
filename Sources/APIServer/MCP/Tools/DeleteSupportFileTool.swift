@@ -185,28 +185,14 @@ struct DeleteSupportFileTool: ContentTool {
     private static func clearManifestMarks(
         setup: APITestSetup, filename: String, on db: any Database
     ) async throws -> Bool {
-        let dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
-        let wasGraderOnly = ((dict?["graderOnlyFiles"] as? [String]) ?? []).contains(filename)
-        let wasDataset = ((dict?["datasets"] as? [[String: Any]]) ?? []).contains {
-            ($0["filename"] as? String) == filename
-        }
+        guard let props = setup.decodedManifest() else { return false }
+        let wasGraderOnly = props.graderOnlyFiles.contains(filename)
+        let wasDataset = props.datasets.contains { $0.file == filename }
         guard wasGraderOnly || wasDataset else { return false }
 
-        try await mutateManifest(setup: setup, on: db) { dict in
-            if wasGraderOnly {
-                var files = (dict["graderOnlyFiles"] as? [String]) ?? []
-                files.removeAll { $0 == filename }
-                dict["graderOnlyFiles"] = files
-            }
-            if wasDataset {
-                var specs = (dict["datasets"] as? [[String: Any]]) ?? []
-                specs.removeAll { ($0["filename"] as? String) == filename }
-                if specs.isEmpty {
-                    dict.removeValue(forKey: "datasets")
-                } else {
-                    dict["datasets"] = specs
-                }
-            }
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.graderOnlyFiles.removeAll { $0 == filename }
+            props.datasets.removeAll { $0.file == filename }
         }
         return true
     }

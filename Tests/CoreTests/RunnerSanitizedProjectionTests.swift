@@ -20,13 +20,13 @@ struct RunnerSanitizedProjectionTests {
         return e
     }()
 
-    /// Every key `TestProperties.encode(to:)` can emit for a sanitized
-    /// manifest.  Stripped fields (`testItems`, the mirrored legacy
-    /// `patternFamilies` / `notebookChecks`, `globalExpressions`,
-    /// `datasets`, `graderOnlyFiles`, `achievements`, …) still appear as
-    /// empty containers because `encode(to:)` writes them unconditionally;
-    /// they are listed here because the *key* is runner-visible even though
-    /// the content is emptied.
+    /// Every key `TestProperties.encode(to:)` emits for the sanitized
+    /// `fullyPopulatedManifest()`.  An empty list and a false flag are
+    /// omitted from the encoding (#1655), so a field `runnerSanitized()`
+    /// strips (`testItems`, the mirrored legacy `patternFamilies` /
+    /// `notebookChecks`, `globalExpressions`, `datasets`, `graderOnlyFiles`,
+    /// `achievements`, …) is absent rather than empty, and a field it
+    /// forwards shows up because the fixture populates every field.
     private let expectedRunnerVisibleKeys: Set<String> = [
         "schemaVersion",
         "gradingMode",
@@ -40,17 +40,8 @@ struct RunnerSanitizedProjectionTests {
         "timeLimitSeconds",
         "makefile",
         "starterNotebook",
-        "testItems",
-        "patternFamilies",
-        "notebookChecks",
         "sections",
         "globalVariables",
-        "globalExpressions",
-        "datasets",
-        "graderOnlyFiles",
-        "achievements",
-        "disabledBuiltInAwardIDs",
-        "builtInAchievementsSeeded",
     ]
 
     /// A `TestProperties` with **every** field populated with a non-default
@@ -138,8 +129,8 @@ struct RunnerSanitizedProjectionTests {
             Decide explicitly: either strip the field in runnerSanitized() \
             (server-only concern — the usual answer; see datasets / \
             graderOnlyFiles / achievements), or, if runners genuinely need \
-            it, forward it deliberately and add its key to \
-            expectedRunnerVisibleKeys in this test.
+            it, forward it deliberately, populate it in fullyPopulatedManifest() \
+            and add its key to expectedRunnerVisibleKeys in this test.
             """)
     }
 }

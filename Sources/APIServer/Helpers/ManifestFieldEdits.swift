@@ -3,39 +3,29 @@
 // Single-field manifest edits shared across surfaces (#1121): the MCP tools
 // (`set_grading_mode`, `set_time_limit`, `author_script`,
 // `set_assignment_course_section`) and the web section-adoption path
-// (`CourseAdminRoutes+Sections`) all mutate exactly one JSON field on
+// (`CourseAdminRoutes+Sections`) all change exactly one field of
 // `test_setups.manifest`.  Each helper is a `mutateManifest` closure
-// (SuiteEditHelpers.swift) so the parse → mutate → sorted-keys re-serialise →
-// save pattern lives once; unknown fields the server doesn't model survive
-// the round trip.  Helpers save only when the field actually changes, so a
-// no-op call doesn't bump the row.  Unlike the pre-#1121 copies (which
-// silently skipped the write), a manifest that isn't a JSON object now
-// throws — that indicates a corrupted setup, not a user error.
+// (SuiteEditHelpers.swift) over the decoded `TestProperties`, so the decode →
+// mutate → stable-encode → save pattern lives once.  Helpers save only when
+// the field actually changes, so a no-op call doesn't bump the row.  A
+// manifest that does not decode throws — that indicates a corrupted setup,
+// not a user error.
 
 import Core
 import Fluent
 import Foundation
 
-/// Reads the `gradingMode` field straight from a manifest JSON string without
-/// round-tripping `TestProperties`, defaulting to "worker" (TestProperties' own
-/// default) when the field is absent or the manifest can't be parsed — so every
+/// Reads the `gradingMode` of a manifest JSON string, defaulting to "worker"
+/// (TestProperties' own default) when the manifest can't be decoded — so every
 /// tool reports the same effective mode `get_assignment` does.
 func currentManifestGradingMode(_ manifest: String?) -> String {
-    guard let manifest,
-        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
-    else { return "worker" }
-    return (dict["gradingMode"] as? String) ?? "worker"
+    (manifest.flatMap(decodeManifest(fromJSON:))?.gradingMode ?? .worker).rawValue
 }
 
-/// Reads the `graderOnlyFiles` list straight from a manifest JSON string —
-/// same access pattern as `currentManifestGradingMode` — empty when the field
-/// is absent or the manifest can't be parsed.
+/// Reads the `graderOnlyFiles` list of a manifest JSON string — empty when
+/// the manifest can't be decoded.
 func currentManifestGraderOnlyFiles(_ manifest: String?) -> [String] {
-    guard
-        let manifest,
-        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
-    else { return [] }
-    return (dict["graderOnlyFiles"] as? [String]) ?? []
+    manifest.flatMap(decodeManifest(fromJSON:))?.graderOnlyFiles ?? []
 }
 
 /// Sets the test setup's `gradingMode` to `mode` when it differs.  Returns the
@@ -54,13 +44,16 @@ func currentManifestGraderOnlyFiles(_ manifest: String?) -> [String] {
 func setManifestGradingMode(
     setup: APITestSetup, to mode: String, on db: any Database
 ) async throws -> String {
-    if mode == GradingMode.browser.rawValue,
+    guard let parsed = GradingMode(rawValue: mode) else {
+        throw AppError.badRequest(reason: "Unknown grading mode \"\(mode)\".")
+    }
+    if parsed == .browser,
         currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue
     {
         throw AppError.badRequest(
             reason: uploadModeGradingConflictMessage)
     }
-    if mode == GradingMode.browser.rawValue,
+    if parsed == .browser,
         !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
     {
         throw AppError.badRequest(reason: graderOnlyGradingConflictMessage)
@@ -68,12 +61,12 @@ func setManifestGradingMode(
     // And for an activity that stages an opponent: the opponent lives in a
     // directory only the native worker creates, so a browser-graded match
     // would run with nobody on the other side.
-    if mode == GradingMode.browser.rawValue, currentManifestActivityStagesAnOpponent(setup.manifest) {
+    if parsed == .browser, currentManifestActivityStagesAnOpponent(setup.manifest) {
         throw AppError.badRequest(reason: activityOpponentGradingConflictMessage)
     }
     if currentManifestGradingMode(setup.manifest) != mode {
-        try await mutateManifest(setup: setup, on: db) { dict in
-            dict["gradingMode"] = mode
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.gradingMode = parsed
         }
     }
     return mode
@@ -126,26 +119,20 @@ func requiresUploadOnlySubmission(_ language: AssignmentLanguage) -> Bool {
     return false
 }
 
-/// The same question asked of a manifest's recorded `language` string, for the
-/// sites that hold raw manifest JSON rather than a decoded `TestProperties`.
-/// An unrecognised or absent value is not upload-only — it is not a language
-/// this build knows, and refusing on it would block an author over a field they
-/// cannot see.
+/// The same question asked of a manifest's recorded `language`, for the sites
+/// that hold raw manifest JSON rather than a decoded `TestProperties`. An
+/// absent language is not upload-only.
 func manifestRequiresUploadOnlySubmission(_ manifest: String?) -> AssignmentLanguage? {
-    guard let raw = currentManifestLanguage(manifest),
-        let language = AssignmentLanguage(rawValue: raw),
+    guard let language = manifest.flatMap(decodeManifest(fromJSON:))?.language,
         requiresUploadOnlySubmission(language)
     else { return nil }
     return language
 }
 
-/// Reads the recorded `language` straight from a manifest JSON string, or nil
-/// when none is recorded (or the manifest can't be parsed).
+/// Reads the recorded `language` of a manifest JSON string, or nil when none
+/// is recorded (or the manifest can't be decoded).
 func currentManifestLanguage(_ manifest: String?) -> String? {
-    guard let manifest,
-        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
-    else { return nil }
-    return dict["language"] as? String
+    manifest.flatMap(decodeManifest(fromJSON:))?.language?.rawValue
 }
 
 /// Sets the test setup's recorded `language` to `language` when it differs.
@@ -185,8 +172,8 @@ func setManifestLanguage(
     if manifestHasGeneratedScripts(setup.manifest) {
         throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
     }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        dict["language"] = language
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.language = parsed
     }
     return language
 }
@@ -244,30 +231,22 @@ func parseLanguageChoice(_ raw: String) throws -> AssignmentLanguage? {
 func declareManifestLanguage(
     setup: APITestSetup, to language: AssignmentLanguage?, on db: any Database
 ) async throws {
-    try await mutateManifest(setup: setup, on: db) { dict in
-        dict["languageDeclared"] = true
-        guard let language else {
-            dict.removeValue(forKey: "language")
-            return
-        }
-        dict["language"] = language.rawValue
-        if case .uploadOnly = language.editorSupport {
-            dict["submissionMode"] = SubmissionMode.uploadOnly.rawValue
-            dict["gradingMode"] = GradingMode.worker.rawValue
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.languageDeclared = true
+        props.language = language
+        if let language, case .uploadOnly = language.editorSupport {
+            props.submissionMode = .uploadOnly
+            props.gradingMode = .worker
         }
     }
 }
 
 /// True when the manifest carries any generated test — a pattern-family case or
-/// a notebook check. Read off `generatedBy` rather than the family/check lists
+/// a notebook check. Read off the entries rather than the family/check lists
 /// so a family that has produced no enabled case doesn't block a change that
 /// would rewrite nothing.
 func manifestHasGeneratedScripts(_ manifest: String?) -> Bool {
-    guard let manifest,
-        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any],
-        let suites = dict["testSuites"] as? [[String: Any]]
-    else { return false }
-    return suites.contains { $0["generatedBy"] != nil }
+    manifest.flatMap(decodeManifest(fromJSON:))?.testSuites.contains(where: \.isGenerated) ?? false
 }
 
 /// Names the languages rather than listing an enum case, so the message stays
@@ -313,14 +292,11 @@ let undeclaredLanguageExpressionMessage =
     + "to run in. Set the assignment's language before adding expressions — literal variables "
     + "work without one."
 
-/// Reads the `submissionMode` field straight from a manifest JSON string,
-/// defaulting to "notebook" (TestProperties' own default) when the field is
-/// absent or the manifest can't be parsed.
+/// Reads the `submissionMode` of a manifest JSON string, defaulting to
+/// "notebook" (TestProperties' own default) when the manifest can't be
+/// decoded.
 func currentManifestSubmissionMode(_ manifest: String?) -> String {
-    guard let manifest,
-        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
-    else { return SubmissionMode.notebook.rawValue }
-    return (dict["submissionMode"] as? String) ?? SubmissionMode.notebook.rawValue
+    (manifest.flatMap(decodeManifest(fromJSON:))?.submissionMode ?? .notebook).rawValue
 }
 
 /// Sets the test setup's `submissionMode` to `mode` when it differs.  Returns
@@ -330,7 +306,10 @@ func currentManifestSubmissionMode(_ manifest: String?) -> String {
 func setManifestSubmissionMode(
     setup: APITestSetup, to mode: String, on db: any Database
 ) async throws -> String {
-    if mode == SubmissionMode.uploadOnly.rawValue,
+    guard let parsed = SubmissionMode(rawValue: mode) else {
+        throw AppError.badRequest(reason: "Unknown submission mode \"\(mode)\".")
+    }
+    if parsed == .uploadOnly,
         currentManifestGradingMode(setup.manifest) == GradingMode.browser.rawValue
     {
         throw AppError.badRequest(
@@ -340,14 +319,14 @@ func setManifestSubmissionMode(
     // an upload-only language back to the notebook workflow it does not have.
     // Asked of `editorSupport` rather than spelled `== .cpp`, which is what let
     // Racket through here.
-    if mode == SubmissionMode.notebook.rawValue,
+    if parsed == .notebook,
         let language = manifestRequiresUploadOnlySubmission(setup.manifest)
     {
         throw AppError.badRequest(reason: requiresUploadOnlyMessage(language))
     }
     if currentManifestSubmissionMode(setup.manifest) != mode {
-        try await mutateManifest(setup: setup, on: db) { dict in
-            dict["submissionMode"] = mode
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.submissionMode = parsed
         }
     }
     return mode
@@ -359,17 +338,14 @@ func setManifestSubmissionMode(
 func setManifestGraderOnly(
     setup: APITestSetup, filename: String, graderOnly: Bool, on db: any Database
 ) async throws {
-    let dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
-    let present = ((dict?["graderOnlyFiles"] as? [String]) ?? []).contains(filename)
+    let present = currentManifestGraderOnlyFiles(setup.manifest).contains(filename)
     guard graderOnly != present else { return }  // already in the desired state
-    try await mutateManifest(setup: setup, on: db) { dict in
-        var files = (dict["graderOnlyFiles"] as? [String]) ?? []
+    try await mutateManifest(setup: setup, on: db) { props in
         if graderOnly {
-            files.append(filename)
+            props.graderOnlyFiles.append(filename)
         } else {
-            files.removeAll { $0 == filename }
+            props.graderOnlyFiles.removeAll { $0 == filename }
         }
-        dict["graderOnlyFiles"] = files
     }
 }
 
@@ -378,10 +354,9 @@ func setManifestGraderOnly(
 func setManifestTimeLimitSeconds(
     setup: APITestSetup, to seconds: Int, on db: any Database
 ) async throws -> Int {
-    let dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
-    if (dict?["timeLimitSeconds"] as? Int) != seconds {
-        try await mutateManifest(setup: setup, on: db) { dict in
-            dict["timeLimitSeconds"] = seconds
+    if setup.decodedManifest()?.timeLimitSeconds != seconds {
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.timeLimitSeconds = seconds
         }
     }
     return seconds
@@ -389,64 +364,46 @@ func setManifestTimeLimitSeconds(
 
 /// Sets (or clears) the test setup's `minimumRunnerVersion` gate, saving only
 /// when it actually changes.  A blank/nil `version` clears the gate (the key is
-/// removed, matching `TestProperties.encodeIfPresent` which omits a nil value).
-/// A gated setup is only handed to a native runner whose advertised version is
-/// `>=` this value — see docs/runner-capability-profiles.md.  Returns the
-/// effective value (nil when cleared).
+/// omitted, matching `TestProperties.encodeIfPresent`).  A gated setup is only
+/// handed to a native runner whose advertised version is `>=` this value — see
+/// docs/runner-capability-profiles.md.  Returns the effective value (nil when
+/// cleared).
 func setManifestMinimumRunnerVersion(
     setup: APITestSetup, to version: String?, on db: any Database
 ) async throws -> String? {
     let normalized = version?.trimmingCharacters(in: .whitespacesAndNewlines)
     let effective = (normalized?.isEmpty == false) ? normalized : nil
-    let dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
-    guard (dict?["minimumRunnerVersion"] as? String) != effective else { return effective }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        if let effective {
-            dict["minimumRunnerVersion"] = effective
-        } else {
-            dict.removeValue(forKey: "minimumRunnerVersion")
-        }
+    guard setup.decodedManifest()?.minimumRunnerVersion != effective else { return effective }
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.minimumRunnerVersion = effective
     }
     return effective
 }
 
 /// Turns GitHub submission on or off for the test setup
 /// (docs/github-submissions.md slice 3), saving only when it changes. Off
-/// removes the key, matching `TestProperties.encode`, which omits `false`.
+/// omits the key, matching `TestProperties.encode`, which omits `false`.
 func setManifestGitHubSubmission(setup: APITestSetup, enabled: Bool, on db: any Database) async throws {
     guard setup.decodedManifest()?.githubSubmission != enabled else { return }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        if enabled {
-            dict["githubSubmission"] = true
-        } else {
-            dict.removeValue(forKey: "githubSubmission")
-        }
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.githubSubmission = enabled
     }
 }
 
 /// Turns commit statuses on or off (slice 6), saving only when it changes.
-/// Off removes the key, matching `TestProperties.encode`.
+/// Off omits the key, matching `TestProperties.encode`.
 func setManifestGitHubStatusChecks(setup: APITestSetup, enabled: Bool, on db: any Database) async throws {
     guard setup.decodedManifest()?.githubStatusChecks != enabled else { return }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        if enabled {
-            dict["githubStatusChecks"] = true
-        } else {
-            dict.removeValue(forKey: "githubStatusChecks")
-        }
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.githubStatusChecks = enabled
     }
 }
 
-/// Reads the `activity` block straight from a manifest JSON string — the same
-/// access pattern as `currentManifestGradingMode` — nil when the field is
-/// absent, unreadable, or names a kind this build does not know.
+/// Reads the `activity` block of a manifest JSON string — nil when the field
+/// is absent, or the manifest can't be decoded (which includes an activity
+/// kind this build does not know).
 func currentManifestActivity(_ manifest: String?) -> ClassActivity? {
-    guard let manifest,
-        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any],
-        let block = dict["activity"],
-        let data = try? JSONSerialization.data(withJSONObject: block)
-    else { return nil }
-    return try? JSONDecoder().decode(ClassActivity.self, from: data)
+    manifest.flatMap(decodeManifest(fromJSON:))?.activity
 }
 
 /// True when the manifest's activity stages an opponent (a bot kind with its
@@ -457,9 +414,7 @@ func currentManifestActivityStagesAnOpponent(_ manifest: String?) -> Bool {
 }
 
 /// Sets (or clears, with nil) the test setup's `activity` block, saving only
-/// when it actually changes. A surgical edit like `setManifestMinimumRunnerVersion`,
-/// so fields this build does not model survive; the dict builder is threaded
-/// separately so a later suite rebuild keeps the block too.
+/// when it actually changes.
 ///
 /// Callers decide the lifecycle rule (the kind is locked once a student has
 /// submitted); this helper only writes.
@@ -467,15 +422,7 @@ func setManifestActivity(
     setup: APITestSetup, to activity: ClassActivity?, on db: any Database
 ) async throws {
     guard currentManifestActivity(setup.manifest) != activity else { return }
-    let encoded: [String: Any]? = try activity.map { value in
-        let data = try JSONEncoder().encode(value)
-        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-    }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        if let encoded {
-            dict["activity"] = encoded
-        } else {
-            dict.removeValue(forKey: "activity")
-        }
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.activity = activity
     }
 }
