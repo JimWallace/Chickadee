@@ -4,7 +4,7 @@
      one: icons are stroked 24x24 Feather glyphs inlined on every page, while
      these are flat-filled 64x64 plumage parts wanted only by the pages that
      show an avatar. Include this partial from those pages, ONCE per page; a
-     call site is one svg carrying class "avatar" wrapping six use elements,
+     call site is one svg carrying class "avatar" wrapping seven use elements,
      each with an href that is a same-page fragment naming a symbol below. Copy
      a live call site rather than working from this description.
 
@@ -12,7 +12,8 @@
      accessory, backdrop, tuft and tilt. Body, cheek, beak and bib are fixed -
      they are what keeps every bird a chickadee even when the cap goes plum.
      Layer order back to front: backdrop, tuft, plumage, wings, expression,
-     accessory. The tuft sits BEFORE the plumage so the body circle covers its
+     accessory, ring. The ring is what the student chose to wear around the
+     disc, or the staff ring for course staff; see docs/student-wardrobe.md. The tuft sits BEFORE the plumage so the body circle covers its
      base. A bird wearing the beanie or the gradcap is given no tuft (the
      presentation decides), so no hat is ever drawn over one. Tilt is not a
      symbol: it is one rotate transform on a group that wraps every layer but
@@ -261,6 +262,66 @@
             <path class="av-accent" d="M17.72,18.6 Q32,15.4 46.28,18.6 A21,21 0 0 1 49.37,22.2 Q32,19 14.63,22.2 A21,21 0 0 1 17.72,18.6 Z"/>
             <path class="av-accent" d="M48.2,20.1 L53.6,16.4 C54.3,18.2 54.1,20.1 53,21.6 Z"/>
             <path class="av-accent" d="M48.4,21 L52.8,25.6 C51.2,26.2 49.7,25.9 48.7,24.9 Z"/>
+        </symbol>
+        <symbol id="av-ring-none" viewBox="0 0 64 64">
+            <g/>
+        </symbol>
+        <symbol id="av-ring-solid" viewBox="0 0 64 64">
+            <path class="av-ring" d="M32,0 A32,32 0 0 1 32,64 L32,60.8 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-ring" d="M32,64 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 32,60.8 Z"/>
+        </symbol>
+        <symbol id="av-ring-rainbow" viewBox="0 0 64 64">
+            <path class="av-rainbow-red" d="M32,0 A32,32 0 0 1 59.71,16 L56.94,17.6 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-rainbow-orange" d="M59.71,16 A32,32 0 0 1 59.71,48 L56.94,46.4 A28.8,28.8 0 0 0 56.94,17.6 Z"/>
+            <path class="av-rainbow-yellow" d="M59.71,48 A32,32 0 0 1 32,64 L32,60.8 A28.8,28.8 0 0 0 56.94,46.4 Z"/>
+            <path class="av-rainbow-green" d="M32,64 A32,32 0 0 1 4.29,48 L7.06,46.4 A28.8,28.8 0 0 0 32,60.8 Z"/>
+            <path class="av-rainbow-blue" d="M4.29,48 A32,32 0 0 1 4.29,16 L7.06,17.6 A28.8,28.8 0 0 0 7.06,46.4 Z"/>
+            <path class="av-rainbow-violet" d="M4.29,16 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 7.06,17.6 Z"/>
+        </symbol>
+        <symbol id="av-ring-spectrum" viewBox="0 0 64 64">
+            <path class="av-spectrum-ember" d="M32,0 A32,32 0 0 1 62.43,22.11 L59.39,23.1 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-spectrum-honey" d="M62.43,22.11 A32,32 0 0 1 50.81,57.89 L48.93,55.3 A28.8,28.8 0 0 0 59.39,23.1 Z"/>
+            <path class="av-spectrum-moss" d="M50.81,57.89 A32,32 0 0 1 13.19,57.89 L15.07,55.3 A28.8,28.8 0 0 0 48.93,55.3 Z"/>
+            <path class="av-spectrum-lagoon" d="M13.19,57.89 A32,32 0 0 1 1.57,22.11 L4.61,23.1 A28.8,28.8 0 0 0 15.07,55.3 Z"/>
+            <path class="av-spectrum-orchid" d="M1.57,22.11 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 4.61,23.1 Z"/>
+        </symbol>
+        <symbol id="av-ring-twotone" viewBox="0 0 64 64">
+            <path class="av-accent" d="M32,0 A32,32 0 0 1 32,64 L32,60.8 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-cap" d="M32,64 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 32,60.8 Z"/>
+        </symbol>
+        <symbol id="av-ring-stitched" viewBox="0 0 64 64">
+            <path class="av-accent" d="M32,0 A32,32 0 0 1 32,64 L32,60.8 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-accent" d="M32,64 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 32,60.8 Z"/>
+            <path class="av-body" d="M62.76,33.61 A30.8,30.8 0 0 1 62.33,37.35 L61.54,37.21 A30,30 0 0 0 61.96,33.57 Z"/>
+            <path class="av-body" d="M61.29,41.52 A30.8,30.8 0 0 1 59.91,45.02 L59.19,44.68 A30,30 0 0 0 60.53,41.27 Z"/>
+            <path class="av-body" d="M57.83,48.77 A30.8,30.8 0 0 1 55.59,51.8 L54.98,51.28 A30,30 0 0 0 57.16,48.34 Z"/>
+            <path class="av-body" d="M52.61,54.89 A30.8,30.8 0 0 1 49.67,57.23 L49.21,56.57 A30,30 0 0 0 52.07,54.29 Z"/>
+            <path class="av-body" d="M45.98,59.44 A30.8,30.8 0 0 1 42.53,60.94 L42.26,60.19 A30,30 0 0 0 45.62,58.73 Z"/>
+            <path class="av-body" d="M38.4,62.13 A30.8,30.8 0 0 1 34.68,62.68 L34.61,61.89 A30,30 0 0 0 38.24,61.34 Z"/>
+            <path class="av-body" d="M30.39,62.76 A30.8,30.8 0 0 1 26.65,62.33 L26.79,61.54 A30,30 0 0 0 30.43,61.96 Z"/>
+            <path class="av-body" d="M22.48,61.29 A30.8,30.8 0 0 1 18.98,59.91 L19.32,59.19 A30,30 0 0 0 22.73,60.53 Z"/>
+            <path class="av-body" d="M15.23,57.83 A30.8,30.8 0 0 1 12.2,55.59 L12.72,54.98 A30,30 0 0 0 15.66,57.16 Z"/>
+            <path class="av-body" d="M9.11,52.61 A30.8,30.8 0 0 1 6.77,49.67 L7.43,49.21 A30,30 0 0 0 9.71,52.07 Z"/>
+            <path class="av-body" d="M4.56,45.98 A30.8,30.8 0 0 1 3.06,42.53 L3.81,42.26 A30,30 0 0 0 5.27,45.62 Z"/>
+            <path class="av-body" d="M1.87,38.4 A30.8,30.8 0 0 1 1.32,34.68 L2.11,34.61 A30,30 0 0 0 2.66,38.24 Z"/>
+            <path class="av-body" d="M1.24,30.39 A30.8,30.8 0 0 1 1.67,26.65 L2.46,26.79 A30,30 0 0 0 2.04,30.43 Z"/>
+            <path class="av-body" d="M2.71,22.48 A30.8,30.8 0 0 1 4.09,18.98 L4.81,19.32 A30,30 0 0 0 3.47,22.73 Z"/>
+            <path class="av-body" d="M6.17,15.23 A30.8,30.8 0 0 1 8.41,12.2 L9.02,12.72 A30,30 0 0 0 6.84,15.66 Z"/>
+            <path class="av-body" d="M11.39,9.11 A30.8,30.8 0 0 1 14.33,6.77 L14.79,7.43 A30,30 0 0 0 11.93,9.71 Z"/>
+            <path class="av-body" d="M18.02,4.56 A30.8,30.8 0 0 1 21.47,3.06 L21.74,3.81 A30,30 0 0 0 18.38,5.27 Z"/>
+            <path class="av-body" d="M25.6,1.87 A30.8,30.8 0 0 1 29.32,1.32 L29.39,2.11 A30,30 0 0 0 25.76,2.66 Z"/>
+            <path class="av-body" d="M33.61,1.24 A30.8,30.8 0 0 1 37.35,1.67 L37.21,2.46 A30,30 0 0 0 33.57,2.04 Z"/>
+            <path class="av-body" d="M41.52,2.71 A30.8,30.8 0 0 1 45.02,4.09 L44.68,4.81 A30,30 0 0 0 41.27,3.47 Z"/>
+            <path class="av-body" d="M48.77,6.17 A30.8,30.8 0 0 1 51.8,8.41 L51.28,9.02 A30,30 0 0 0 48.34,6.84 Z"/>
+            <path class="av-body" d="M54.89,11.39 A30.8,30.8 0 0 1 57.23,14.33 L56.57,14.79 A30,30 0 0 0 54.29,11.93 Z"/>
+            <path class="av-body" d="M59.44,18.02 A30.8,30.8 0 0 1 60.94,21.47 L60.19,21.74 A30,30 0 0 0 58.73,18.38 Z"/>
+            <path class="av-body" d="M62.13,25.6 A30.8,30.8 0 0 1 62.68,29.32 L61.89,29.39 A30,30 0 0 0 61.34,25.76 Z"/>
+        </symbol>
+        <symbol id="av-ring-staff" viewBox="0 0 64 64">
+            <path class="av-staff-ring" d="M32,0 A32,32 0 0 1 32,64 L32,62.2 A30.2,30.2 0 0 0 32,1.8 Z"/>
+            <path class="av-staff-ring" d="M32,64 A32,32 0 0 1 32,0 L32,1.8 A30.2,30.2 0 0 0 32,62.2 Z"/>
+            <path class="av-staff-ring" d="M32,3.4 A28.6,28.6 0 0 1 32,60.6 L32,58.8 A26.8,26.8 0 0 0 32,5.2 Z"/>
+            <path class="av-staff-ring" d="M32,60.6 A28.6,28.6 0 0 1 32,3.4 L32,5.2 A26.8,26.8 0 0 0 32,58.8 Z"/>
         </symbol>
     </defs>
 </svg>

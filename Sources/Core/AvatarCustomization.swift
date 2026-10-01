@@ -4,9 +4,10 @@
 // (docs/student-wardrobe.md, decision 3). A route never writes a spec field
 // itself: it hands the raw form values here and stores what comes back.
 //
-// Today every option of the two customizable slots is open to every student.
-// When unlocks arrive, `options(for:)` narrows and `applying(_:to:)` refuses a
-// locked option; nothing else has to change.
+// Every backdrop and every starter ring is open to every student. Earned and
+// special rings exist and are shown locked: `applying` refuses them until
+// unlocks arrive (docs/student-wardrobe.md, W3), and then only `isOpen` has to
+// learn about a student's unlocks. Course staff cannot change their ring.
 
 /// A slot a student may change on the account page.
 public enum AvatarCustomizableSlot: String, CaseIterable, Sendable {
@@ -20,6 +21,11 @@ public enum AvatarCustomizationError: Error, Equatable, Sendable {
     case slotNotCustomizable(String)
     /// The value is not an option of that slot.
     case unknownOption(slot: AvatarCustomizableSlot, value: String)
+    /// The option exists but is not open to this student yet: an earned or
+    /// special ring, before unlocks exist.
+    case optionLocked(slot: AvatarCustomizableSlot, value: String)
+    /// Course staff wear the staff ring, which they cannot change.
+    case staffRingIsFixed
 }
 
 public enum AvatarCustomization {
@@ -32,11 +38,31 @@ public enum AvatarCustomization {
         }
     }
 
-    /// `spec` with each chosen slot set, keyed by slot raw value. A slot not in
-    /// `choices` is left as it is. Throws, and changes nothing, if any key is
-    /// not a customizable slot or any value is not an option of its slot.
+    /// Whether a student may choose `value` for `slot` now. Every backdrop is
+    /// open; a ring is open when it is a starter ring.
+    public static func isOpen(_ value: String, for slot: AvatarCustomizableSlot) -> Bool {
+        switch slot {
+        case .backdrop: AvatarBackdrop(rawValue: value) != nil
+        case .border: AvatarBorder(rawValue: value)?.availability == .starter
+        }
+    }
+
+    /// `spec` with each chosen slot set, keyed by slot raw value — for a
+    /// student. See `applying(_:to:isStaff:)`.
     public static func applying(
         _ choices: [String: String], to spec: AvatarSpec
+    ) throws
+        -> AvatarSpec
+    {
+        try applying(choices, to: spec, isStaff: false)
+    }
+
+    /// `spec` with each chosen slot set, keyed by slot raw value. A slot not in
+    /// `choices` is left as it is. Throws, and changes nothing, if any key is
+    /// not a customizable slot, any value is not an option of its slot, a
+    /// chosen ring is locked, or `isStaff` and a ring was chosen at all.
+    public static func applying(
+        _ choices: [String: String], to spec: AvatarSpec, isStaff: Bool
     ) throws
         -> AvatarSpec
     {
@@ -54,6 +80,10 @@ public enum AvatarCustomization {
             case .border:
                 guard let border = AvatarBorder(rawValue: value) else {
                     throw AvatarCustomizationError.unknownOption(slot: slot, value: value)
+                }
+                if isStaff { throw AvatarCustomizationError.staffRingIsFixed }
+                guard border.availability == .starter else {
+                    throw AvatarCustomizationError.optionLocked(slot: slot, value: value)
                 }
                 updated.border = border
             }

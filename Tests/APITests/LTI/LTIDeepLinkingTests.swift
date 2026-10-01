@@ -184,7 +184,8 @@ import VaporTesting
             #expect(csp.contains("form-action 'self' https://lms.example.edu"))
 
             let jwt = try #require(Self.jwt(in: html))
-            let response = try await app.ltiToolKeyAuthority().verify(jwt, as: LTIDeepLinkingResponse.self)
+            let response = try await LTITestPlatform.verifyAsPlatform(
+                jwt, signedBy: app.ltiToolKeyAuthority(), as: LTIDeepLinkingResponse.self)
             #expect(response.iss.value == LTITestPlatform.clientID)
             #expect(response.aud.value == [LTITestPlatform.issuer])
             #expect(response.messageType == "LtiDeepLinkingResponse")

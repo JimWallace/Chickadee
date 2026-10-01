@@ -202,6 +202,9 @@ struct AdminRoutes: RouteCollection {
             }
 
         let iso = ISO8601DateFormatter()
+        // This list belongs to no one course, so the staff ring means "teaches
+        // somewhere", as on the account page (docs/student-wardrobe.md).
+        let staff = try await AvatarStore.courseStaff(among: users.compactMap(\.id), on: db)
         var rows: [AdminUserRow] = []
         for user in users {
             // Each person's own seeded bird, the one their account page shows.
@@ -215,7 +218,9 @@ struct AdminRoutes: RouteCollection {
                     role: user.role,
                     createdAt: user.createdAt.map { iso.string(from: $0) } ?? "—",
                     lastSeenAt: user.lastSeenAt.map { iso.string(from: $0) },
-                    avatar: AvatarPresentation(for: spec, size: .roster, accessibility: .decorative),
+                    avatar: AvatarPresentation(
+                        for: spec, size: .roster, accessibility: .decorative,
+                        isStaff: user.id.map(staff.contains) ?? false),
                     hasAvatar: true))
         }
         return rows

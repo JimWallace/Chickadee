@@ -45,7 +45,7 @@ My Account
     #if(avatarInvalid):
     <p class="form-error" role="alert">That choice is not available.</p>
     #endif
-    <form method="post" action="/account/avatar" data-avatar-picker=".account-identity .avatar">
+    <form method="post" action="/account/avatar" data-avatar-picker=".account-identity .avatar" style="--av-backdrop: var(#(avatarPicker.backdropToken))">
         #csrfFormField()
         <fieldset class="fieldset-plain">
             <legend>Backdrop</legend>
@@ -61,19 +61,24 @@ My Account
         </fieldset>
         <fieldset class="fieldset-plain">
             <legend>Border</legend>
+            #if(avatarPicker.isStaff):
+            <p class="field-note">Course staff wear the staff ring.</p>
+            #else:
             <div class="swatch-row">
             #for(option in avatarPicker.borders):
             <label class="swatch">
-                <input type="radio" name="border" value="#(option.value)" data-av-token="#(option.token)"#if(option.checked): checked#endif>
+                <input type="radio" data-av-ring="#(option.ringRef)" name="border" value="#(option.value)" data-av-token="#(option.token)"#if(option.checked): checked#endif#if(option.isLocked): disabled#endif>
                 #if(option.isNone):
                 <span class="swatch-sample swatch-none" aria-hidden="true"></span>
                 #else:
-                <span class="swatch-sample swatch-border" aria-hidden="true" style="--av-border: var(#(option.token))"></span>
+                <svg class="swatch-sample" viewBox="0 0 64 64" aria-hidden="true" style="--av-border: var(#(option.token)); --av-accent: var(#(avatarPicker.accentToken)); --av-cap: var(#(avatarPicker.capToken))"><use href="#av-backdrop"/><use href="#(option.ringRef)"/></svg>
                 #endif
                 <span class="swatch-name">#(option.label)</span>
             </label>
             #endfor
             </div>
+            <p class="field-note">Locked rings will be earned through course achievements.</p>
+            #endif
         </fieldset>
         <button class="btn btn-primary" type="submit">Save</button>
     </form>

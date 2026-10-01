@@ -53,10 +53,17 @@ import Testing
         #expect(try JSONDecoder().decode(AvatarSpec.self, from: data) == spec)
     }
 
-    /// Every border but `none` names an accent, so it adds no palette token.
+    /// Every solid-colour border names an accent, so it adds no palette token.
     @Test func everyBorderButNoneIsAnAccent() {
-        for border in AvatarBorder.allCases {
+        for border in AvatarBorder.allCases where border.ring == .solid || border == .none {
             #expect((border.accent == nil) == (border == .none), "\(border)")
+        }
+    }
+
+    /// A patterned ring colours itself by class, so it names no accent.
+    @Test func patternedRingsHaveNoAccent() {
+        for border in AvatarBorder.allCases where border.ring != .solid && border != .none {
+            #expect(border.accent == nil, "\(border)")
         }
     }
 
@@ -66,7 +73,8 @@ import Testing
             cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
             backdrop: .straw, border: border)
         let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
-        let expected = border == .none ? "--avatar-border-none" : "--avatar-accent-\(border.rawValue)"
+        let expected =
+            border.ring == .solid ? "--avatar-accent-\(border.rawValue)" : "--avatar-border-none"
         #expect(p.borderToken == expected)
         #expect(p.tokens.contains(p.borderToken))
     }
@@ -125,11 +133,11 @@ import Testing
         #expect(partial.components(separatedBy: assignment).count - 1 == 2)
     }
 
-    /// The ring is an outline on the avatar element, coloured by the property
-    /// the partial assigns.
+    /// The ring is a sprite layer; a solid ring is coloured by the property the
+    /// partial assigns.
     @Test func stylesheetDrawsTheRingFromTheBorderProperty() throws {
         let css = try Self.contents(of: "Public/styles.css")
-        #expect(css.contains("outline: 3px solid var(--av-border);"))
+        #expect(css.contains(".av-ring { fill: var(--av-border); }"))
         #expect(css.contains("--av-border: var(--avatar-border-none);"))
         // "None" paints nothing, so a bird with no border is unchanged.
         #expect(css.contains("--avatar-border-none: transparent;"))

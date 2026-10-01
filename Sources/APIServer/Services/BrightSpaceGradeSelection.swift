@@ -10,6 +10,16 @@ import Fluent
 import Foundation
 import Vapor
 
+/// Why `bestGradeForStudent` could not produce a grade. The type belongs to
+/// grade selection, not to a transport: the Valence sweep maps it to
+/// `BrightSpaceSyncError.missingPoints` and the AGS sweep stores `.noGrade`,
+/// so neither sweep has to know the other's error taxonomy.
+enum GradeSelectionError: Error, Equatable {
+    /// Submissions exist, but none yields a parseable grade, or no total is
+    /// known to scale an override onto.
+    case missingPoints
+}
+
 /// One student's best grade for a test setup: the raw points Chickadee would
 /// push (in suite-point units) plus the denominator (suite total) used to
 /// derive them, so the caller can rescale to the BrightSpace grade item's own
@@ -65,7 +75,7 @@ func bestGradeForStudent(
                 .values.joined()
                 .compactMap { $0.gradeTotalPointsValue }.max()
         }
-        guard let total, total > 0 else { throw BrightSpaceSyncError.missingPoints }
+        guard let total, total > 0 else { throw GradeSelectionError.missingPoints }
         return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)
     }
 
@@ -82,7 +92,7 @@ func bestGradeForStudent(
         let best = bestGradeResult(of: allResults),
         let earned = best.gradePointsValue
     else {
-        throw BrightSpaceSyncError.missingPoints
+        throw GradeSelectionError.missingPoints
     }
     // Denominator: prefer the manifest's suite total (stable, matches the grades
     // CSV); fall back to the winning result's own recorded total when the
@@ -90,7 +100,7 @@ func bestGradeForStudent(
     // the pre-#1085 behaviour).
     let resultTotal = best.gradeTotalPointsValue
     guard let total = manifestTotal ?? resultTotal, total > 0 else {
-        throw BrightSpaceSyncError.missingPoints
+        throw GradeSelectionError.missingPoints
     }
     // Express the winning result's grade on the chosen denominator.  When the
     // result carries its own total, scale exactly (earned / resultTotal * total)

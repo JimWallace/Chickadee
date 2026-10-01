@@ -69,14 +69,14 @@ import Testing
 
     // MARK: - Presentation
 
-    @Test func aBirdIsSixLayersInOrder() {
+    @Test func aBirdIsSevenLayersInOrder() {
         let spec = AvatarSpec(
             cap: .plum, wing: .barred, expression: .wink, accessory: .scarf, accent: .ember,
             backdrop: .sky)
         #expect(
             AvatarMarkup.layerSymbolIDs(for: spec) == [
                 "av-backdrop", "av-tuft-none", "av-plumage", "av-wing-barred",
-                "av-expression-wink", "av-accessory-scarf",
+                "av-expression-wink", "av-accessory-scarf", "av-ring-none",
             ])
     }
 
@@ -173,11 +173,11 @@ import Testing
         // literal fragments.
         let expected = [
             "#av-backdrop", "#(tuftSymbolRef)", "#av-plumage", "#(wingSymbolRef)",
-            "#(expressionSymbolRef)", "#(accessorySymbolRef)",
+            "#(expressionSymbolRef)", "#(accessorySymbolRef)", "#(ringSymbolRef)",
         ]
         #expect(refs == expected, "partial layers \(refs) do not match the model's")
         // And the interpolated one really is the wing, marker included.
-        #expect(presentation.layerRefs.count == 6)
+        #expect(presentation.layerRefs.count == 7)
         #expect(presentation.wingSymbolRef == "#" + AvatarMarkup.layerSymbolIDs(for: spec)[3])
     }
 
@@ -220,7 +220,9 @@ import Testing
         var expected: Set<String> = [
             "--avatar-body", "--avatar-bib", "--avatar-beak", "--avatar-eyewhite",
             "--avatar-eye", "--avatar-glint", "--avatar-gear", "--avatar-blush",
-            "--avatar-mouth",
+            "--avatar-mouth", "--avatar-rainbow-red", "--avatar-rainbow-orange",
+            "--avatar-rainbow-yellow", "--avatar-rainbow-green", "--avatar-rainbow-blue",
+            "--avatar-rainbow-violet", "--avatar-staff-ring",
         ]
         for cap in AvatarCap.allCases {
             for accent in AvatarAccent.allCases {

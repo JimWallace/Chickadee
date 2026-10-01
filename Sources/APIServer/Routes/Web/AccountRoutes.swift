@@ -113,6 +113,9 @@ struct AccountRoutes: RouteCollection {
         let github = try await accountGitHubContext(req: req, userID: userID)
 
         let avatarNotice = req.query[String.self, at: "avatar"]
+        // Staff anywhere wear the staff ring here: this page belongs to no one
+        // course (docs/student-wardrobe.md, "The staff ring").
+        let isStaff = try await AvatarStore.courseStaff(among: [userID], on: req.db).isEmpty == false
         let identityName = accountIdentityName(
             displayName: user.displayName,
             preferredName: user.preferredName,
@@ -126,8 +129,9 @@ struct AccountRoutes: RouteCollection {
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
-                avatar: AvatarPresentation(for: spec, size: .standard, accessibility: .decorative),
-                avatarPicker: AvatarPickerContext(for: spec),
+                avatar: AvatarPresentation(
+                    for: spec, size: .standard, accessibility: .decorative, isStaff: isStaff),
+                avatarPicker: AvatarPickerContext(for: spec, isStaff: isStaff),
                 avatarInvalid: avatarNotice == "invalid",
                 studentID: user.studentID,
                 email: user.email,
