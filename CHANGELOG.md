@@ -9,6 +9,29 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.306] - 2026-10-01
+
+### Changed
+
+- **The last dictionary writer of a manifest is gone, and the sorted encoders share one instance.** The solution-notebook scaffold now edits the decoded manifest through `mutateManifest`; the runner's setup-cache key and the pattern-family and notebook-check spec hashes use `ManifestCodec.stableEncoder` instead of a private copy each. Bytes are unchanged. Slice 3 of #1655.
+
+### Changed
+
+- **A suite rebuild copies the manifest instead of rebuilding it from a list of fields.** `makeWorkerManifestJSON(preserving:)` now copies the decoded `TestProperties` and replaces only the suite, so a field no caller thought to carry survives every script edit, family apply and section change. The create paths build a `TestProperties` from nothing and encode it the same way. Slice 2 of #1655.
+
+### Fixed
+
+- **A suite edit no longer drops the grader-only marks.** `graderOnlyFiles` was never threaded through the old fresh-dict rebuild, so adding or removing a script, or applying a pattern family, silently cleared every mark (#1655).
+
+### Changed
+
+- **One writer for a stored manifest.** Every single-field edit (grading mode, language, sections, datasets, achievements, the activity block, the MCP tools) now edits the decoded `TestProperties` and stores it with `ManifestCodec.stableEncoder`, instead of editing a `[String: Any]` dictionary. Equal values store equal bytes, and `TestSuiteEntry` and `TestProperties` omit defaults when encoded, so a manifest's bytes no longer depend on which writer produced them. Slice 1 of #1655.
+
+### Fixed
+
+- **Deleting a support file now clears its dataset mark.** The dictionary edit looked the mark up under the wrong key, so the per-student slice survived the file it named (#1655).
+
+
 ## [0.5.305] - 2026-10-01
 
 ### Changed
