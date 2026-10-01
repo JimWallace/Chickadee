@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.293] - 2026-10-01
+
+### Added
+
+- **Codebase audit, September 2026.** `docs/audit-2026-09.md` records the month's structural numbers, the LTI sweep's findings, a prioritised list of PR-sized changes, and the sweep programme still to run.
+
+
 ## [0.5.292] - 2026-10-01
 
 ### Changed
