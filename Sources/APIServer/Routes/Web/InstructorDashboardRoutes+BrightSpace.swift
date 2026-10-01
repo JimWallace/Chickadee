@@ -96,66 +96,41 @@ extension InstructorDashboardRoutes {
             req.session.data["bs_flash_error"] = "Both User ID and User Key are required."
             return req.redirect(to: "/instructor/brightspace")
         }
-        guard let appCreds = req.application.brightSpaceAppCredentials else {
-            req.session.data["bs_flash_error"] = "BrightSpace is not configured on this server."
-            return req.redirect(to: "/instructor/brightspace")
-        }
         guard let userUUID = user.id else {
             req.session.data["bs_flash_error"] = "Could not resolve your account."
             return req.redirect(to: "/instructor/brightspace")
         }
 
-        // Verify the pasted pair against D2L before persisting, so a bad paste
-        // fails loudly here rather than silently breaking grade sync.
-        let config = BrightSpaceSyncConfig(app: appCreds, userID: valenceUserID, userKey: valenceUserKey)
-        let candidate = BrightSpaceAPIClient(config: config)
-        let who: BrightSpaceWhoAmI
+        let courseState = try await req.resolveActiveCourse(for: user)
+        let connection: BrightSpaceConnectionService.Connection
         do {
-            who = try await candidate.whoami(on: req.application)
-        } catch {
-            req.logger.warning(
-                "BrightSpace connect: whoami verification failed: \(error.localizedDescription)")
+            connection = try await BrightSpaceConnectionService.connect(
+                userUUID: userUUID, valenceUserID: valenceUserID, valenceUserKey: valenceUserKey,
+                activeCourseUUID: courseState.activeCourseUUID, on: req.db, application: req.application)
+        } catch BrightSpaceConnectionService.ConnectError.notConfigured {
+            req.session.data["bs_flash_error"] = "BrightSpace is not configured on this server."
+            return req.redirect(to: "/instructor/brightspace")
+        } catch BrightSpaceConnectionService.ConnectError.credentialsRejected(let reason) {
             req.session.data["bs_flash_error"] =
-                "Could not verify those credentials against D2L: \(error.localizedDescription)"
+                "Could not verify those credentials against D2L: \(reason)"
             return req.redirect(to: "/instructor/brightspace")
         }
 
-        let identity = who.uniqueName.isEmpty ? who.displayName : "\(who.displayName) (\(who.uniqueName))"
-        try await BrightSpaceCredentialStore.save(
-            valenceUserID: valenceUserID,
-            valenceUserKey: valenceUserKey,
-            identityName: identity,
-            capturedByUserID: userUUID,
-            userID: userUUID,
-            on: req.db
-        )
-        await req.application.brightSpaceClientRegistry.invalidate(userUUID.uuidString)
-
-        // Claim the active course's sync identity if it has none yet (default =
-        // whoever connects; any connected instructor can reassign it below).
-        var claimedCourse = false
-        let courseState = try await req.resolveActiveCourse(for: user)
-        if let courseUUID = courseState.activeCourseUUID,
-            let course = try await APICourse.find(courseUUID, on: req.db),
-            course.brightspaceSyncUserID == nil
-        {
-            course.brightspaceSyncUserID = userUUID
-            try await course.save(on: req.db)
-            claimedCourse = true
-        }
-
-        req.logger.info("BrightSpace connected by \(user.username) as \(identity)")
+        req.logger.info("BrightSpace connected by \(user.username) as \(connection.identity)")
         await AuditLogger.record(
             action: .brightspaceAccountConnected,
             targetType: .user,
             targetID: userUUID.uuidString,
-            metadata: ["identity": identity, "claimed_course_identity": String(claimedCourse)],
+            metadata: [
+                "identity": connection.identity,
+                "claimed_course_identity": String(connection.claimedCourse),
+            ],
             on: req
         )
         req.session.data["bs_flash_success"] =
-            claimedCourse
-            ? "Connected as \(identity). This course now syncs grades as your LEARN account."
-            : "Connected as \(identity)."
+            connection.claimedCourse
+            ? "Connected as \(connection.identity). This course now syncs grades as your LEARN account."
+            : "Connected as \(connection.identity)."
         let response = req.redirect(to: "/instructor/brightspace")
         response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
         return response
@@ -173,11 +148,6 @@ extension InstructorDashboardRoutes {
             req.session.data["bs_flash_error"] = "Could not resolve your account."
             return req.redirect(to: "/instructor/brightspace")
         }
-        guard try await BrightSpaceCredentialStore.load(userID: userUUID, on: req.db) != nil else {
-            req.session.data["bs_flash_error"] =
-                "Connect your LEARN account first, then set it as this course's sync identity."
-            return req.redirect(to: "/instructor/brightspace")
-        }
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseUUID = courseState.activeCourseUUID,
             let course = try await APICourse.find(courseUUID, on: req.db)
@@ -185,8 +155,13 @@ extension InstructorDashboardRoutes {
             req.session.data["bs_flash_error"] = "No active course."
             return req.redirect(to: "/instructor/brightspace")
         }
-        course.brightspaceSyncUserID = userUUID
-        try await course.save(on: req.db)
+        do {
+            try await BrightSpaceConnectionService.designate(userUUID: userUUID, course: course, on: req.db)
+        } catch BrightSpaceConnectionService.DesignateError.notConnected {
+            req.session.data["bs_flash_error"] =
+                "Connect your LEARN account first, then set it as this course's sync identity."
+            return req.redirect(to: "/instructor/brightspace")
+        }
         await AuditLogger.record(
             action: .brightspaceSyncIdentitySet,
             targetType: .course,
@@ -210,8 +185,8 @@ extension InstructorDashboardRoutes {
             req.session.data["bs_flash_error"] = "Could not resolve your account."
             return req.redirect(to: "/instructor/brightspace")
         }
-        try await BrightSpaceCredentialStore.clear(userID: userUUID, on: req.db)
-        await req.application.brightSpaceClientRegistry.invalidate(userUUID.uuidString)
+        try await BrightSpaceConnectionService.disconnect(
+            userUUID: userUUID, on: req.db, application: req.application)
         await AuditLogger.record(
             action: .brightspaceAccountDisconnected,
             targetType: .user,
@@ -251,9 +226,7 @@ extension InstructorDashboardRoutes {
 
         // Clearing the binding (blank submit) — leave the sync identity alone.
         if rawOrgUnit.isEmpty {
-            course.brightspaceOrgUnitID = nil
-            course.brightspaceOrgUnitName = nil
-            try await course.save(on: req.db)
+            try await BrightSpaceCourseBinding.clearOrgUnit(course: course, on: req.db)
             await AuditLogger.record(
                 action: .brightspaceOrgUnitCleared,
                 targetType: .course,
@@ -265,20 +238,16 @@ extension InstructorDashboardRoutes {
             return req.redirect(to: "/instructor/brightspace")
         }
 
-        // Binding requires a connected key — the org unit is verified with it,
-        // and pushes run as it.
-        guard try await BrightSpaceCredentialStore.load(userID: userUUID, on: req.db) != nil else {
+        let verification: BrightSpaceCourseBinding.Verification
+        do {
+            verification = try await BrightSpaceCourseBinding.bindOrgUnit(
+                course: course, orgUnitID: rawOrgUnit, binderUUID: userUUID,
+                on: req.db, application: req.application)
+        } catch BrightSpaceCourseBinding.BindError.binderNotConnected {
             req.session.data["bs_flash_error"] =
                 "Connect your LEARN account first — the org unit is verified with your key."
             return req.redirect(to: "/instructor/brightspace")
         }
-
-        // The binder becomes the course's sync identity, then we verify the org
-        // unit using their (now course-resolved) key.
-        course.brightspaceOrgUnitID = rawOrgUnit
-        course.brightspaceSyncUserID = userUUID
-        course.brightspaceOrgUnitName = nil
-        try await course.save(on: req.db)
         await AuditLogger.record(
             action: .brightspaceOrgUnitBound,
             targetType: .course,
@@ -287,24 +256,18 @@ extension InstructorDashboardRoutes {
             on: req
         )
 
-        guard let client = try await req.application.brightSpaceClient(forCourse: course) else {
+        switch verification {
+        case .verified(let name):
+            req.session.data["bs_flash_success"] =
+                "Linked to \(name) (org unit \(rawOrgUnit)); this course syncs grades as your LEARN account."
+        case .unverified:
             req.session.data["bs_flash_success"] = "Org unit \(rawOrgUnit) saved (unverified)."
-            return req.redirect(to: "/instructor/brightspace")
-        }
-        do {
-            if let info = try await client.getOrgUnit(orgUnitID: rawOrgUnit, on: req.application) {
-                course.brightspaceOrgUnitName = info.name
-                try await course.save(on: req.db)
-                req.session.data["bs_flash_success"] =
-                    "Linked to \(info.name) (org unit \(rawOrgUnit)); this course syncs grades as your LEARN account."
-            } else {
-                req.session.data["bs_flash_error"] =
-                    "Saved org unit \(rawOrgUnit), but D2L reports no such org unit (or your key can't see it) — check the ID."
-            }
-        } catch {
-            req.logger.warning("BrightSpace org-unit verification failed for \(rawOrgUnit): \(error)")
+        case .notFound:
             req.session.data["bs_flash_error"] =
-                "Saved org unit \(rawOrgUnit), but couldn't verify it in D2L: \(error.localizedDescription)"
+                "Saved org unit \(rawOrgUnit), but D2L reports no such org unit (or your key can't see it) — check the ID."
+        case .failed(let reason):
+            req.session.data["bs_flash_error"] =
+                "Saved org unit \(rawOrgUnit), but couldn't verify it in D2L: \(reason)"
         }
         return req.redirect(to: "/instructor/brightspace")
     }
@@ -351,33 +314,15 @@ extension InstructorDashboardRoutes {
             return req.redirect(to: "/instructor/brightspace")
         }
 
-        let gradeObjects: [BrightSpaceGradeObject]
+        let mapped: Int
         do {
-            gradeObjects = try await client.listGradeObjects(orgUnitID: orgUnitID, on: req.application)
+            mapped = try await BrightSpaceCourseBinding.autoMap(
+                courseUUID: courseUUID, orgUnitID: orgUnitID, client: client,
+                on: req.db, application: req.application)
         } catch {
             req.session.data["bs_flash_error"] =
                 "Couldn't read the LEARN grade book: \(error.localizedDescription)"
             return req.redirect(to: "/instructor/brightspace")
-        }
-
-        // Index grade items by normalized name; first wins if D2L has duplicates.
-        var idByName: [String: String] = [:]
-        for object in gradeObjects {
-            let key = object.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if !key.isEmpty, idByName[key] == nil { idByName[key] = object.id }
-        }
-
-        let assignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == courseUUID)
-            .all()
-        var mapped = 0
-        for assignment in assignments where (assignment.brightspaceGradeObjectID ?? "").isEmpty {
-            let key = assignment.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if let objectID = idByName[key] {
-                assignment.brightspaceGradeObjectID = objectID
-                try await assignment.save(on: req.db)
-                mapped += 1
-            }
         }
 
         await AuditLogger.record(
@@ -408,12 +353,12 @@ extension InstructorDashboardRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         if let courseUUID = courseState.activeCourseUUID {
-            try await requeueErroredGradePushes(req: req, courseUUID: courseUUID)
+            try await requeueErroredGradePushes(courseUUID: courseUUID, on: req.db)
         }
         // The requeue above is fast local writes; the sweep itself is one
         // sequential D2L PUT per student, so it runs detached instead of
         // holding this request open (a large class risks a proxy timeout).
-        launchBackgroundBrightspaceSweep(req.application)
+        launchBackgroundBrightSpaceSweep(req.application)
         await AuditLogger.record(
             action: .brightspaceSyncNow,
             targetType: .course,
@@ -423,45 +368,6 @@ extension InstructorDashboardRoutes {
         req.session.data["bs_flash_success"] =
             "Grade sync started — pending grades are pushing to LEARN in the background."
         return req.redirect(to: "/instructor/brightspace")
-    }
-
-    /// Clears the recorded error and re-flags as pending every grade-sync row in
-    /// the course (result rows, override-only rows, and queued grade clears)
-    /// that previously errored, back-dating `pendingSince` so the next sweep
-    /// retries it immediately. The "hard reset" half of "Sync now".
-    private func requeueErroredGradePushes(req: Request, courseUUID: UUID) async throws {
-        let resultKeys = try await courseStudentResultIDs(req: req, courseUUID: courseUUID)
-        let results =
-            resultKeys.isEmpty
-            ? []
-            : try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ resultKeys)
-                .all()
-        try await requeueForImmediateSync(
-            results.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
-        // Errored override-only pushes (no-submission students) live on the
-        // override row, not a result row — re-queue those too.
-        let setupIDs = try await courseSetupIDs(req: req, courseUUID: courseUUID)
-        let overrides =
-            setupIDs.isEmpty
-            ? []
-            : try await APIGradeOverride.query(on: req.db)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .all()
-        try await requeueForImmediateSync(
-            overrides.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
-        // Errored grade CLEARS (queued removals) are re-queued too — nothing
-        // else touches `brightspace_grade_clears` after a terminal failure, so
-        // before this an errored clear lingered forever with an error nobody
-        // could see (#1105).
-        let clears =
-            setupIDs.isEmpty
-            ? []
-            : try await APIBrightSpaceGradeClear.query(on: req.db)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .all()
-        try await requeueForImmediateSync(
-            clears.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
     }
 
     // MARK: - POST /instructor/brightspace/reconcile-now
@@ -537,7 +443,7 @@ extension InstructorDashboardRoutes {
         try await requeueForImmediateSync(overrides, on: req.db)
         // Requeues above are fast local writes; the per-student D2L pushes run
         // detached so a large class can't hold this request to a proxy timeout.
-        launchBackgroundBrightspaceSweep(req.application)
+        launchBackgroundBrightSpaceSweep(req.application)
         await AuditLogger.record(
             action: .brightspacePushAll,
             targetType: .assignment,
@@ -554,64 +460,6 @@ extension InstructorDashboardRoutes {
         return req.redirect(to: "/instructor/brightspace")
     }
 
-    // MARK: - Helpers
-
-    /// Submission IDs (used as result-query keys) for all student submissions
-    /// in the active course's test setups.
-    private func courseStudentResultIDs(req: Request, courseUUID: UUID) async throws -> [String] {
-        let setupIDs = try await courseSetupIDs(req: req, courseUUID: courseUUID)
-        guard !setupIDs.isEmpty else { return [] }
-        return try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID ~~ setupIDs)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .all()
-            .compactMap(\.id)
-    }
-
-    /// Distinct test setup IDs for the active course's assignments.  Used to
-    /// scope override-row queries (override-only grade pushes) by course.
-    private func courseSetupIDs(req: Request, courseUUID: UUID) async throws -> [String] {
-        let setupIDs = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == courseUUID)
-            .all()
-            .map(\.testSetupID)
-        return Array(Set(setupIDs))
-    }
-
-    /// Kicks off a grade-sync sweep in a detached background task and returns
-    /// immediately, so a manual "Sync now" / "Push all" click never holds the
-    /// HTTP request open for the duration of every D2L push — a large class is
-    /// dozens of sequential round-trips, which would otherwise risk a
-    /// reverse-proxy timeout and leave the instructor staring at a spinner.
-    /// The rows are already flagged pending by the caller (a fast local
-    /// write), so even if this task dies the 60-second periodic monitor picks
-    /// them up. Uses `application.db` (NOT `req.db`, which is request-scoped)
-    /// since the task outlives the request, and bypasses the debounce so every
-    /// pending row pushes immediately. Failures are recorded per-row by the
-    /// sweep itself; a sweep-level throw is logged (it used to be silently
-    /// swallowed, #1117). No-op when BrightSpace isn't configured.
-    private func launchBackgroundBrightspaceSweep(_ application: Application) {
-        guard let app = application.brightSpaceAppCredentials else { return }
-        let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
-        Task {
-            // Each course resolves its designated identity (or the fallback).
-            do {
-                _ = try await sweepBrightSpaceGradeSync(
-                    on: application.db,
-                    debounceSecs: debounce,
-                    resolveClient: { course in
-                        try await application.brightSpaceClient(forCourse: course)
-                    },
-                    logger: application.logger,
-                    application: application,
-                    bypassDebounce: true
-                )
-            } catch {
-                application.logger.warning(
-                    "BrightSpace background sweep failed: \(error)")
-            }
-        }
-    }
 }
 
 /// JSON payload for the connection-test button.
