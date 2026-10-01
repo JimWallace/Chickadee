@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.304] - 2026-10-01
+
+### Changed
+
+- **The LEARN tab's view model is assembled by `BrightSpacePagePresenter`.** The grade-item rows, the per-student sync rollup, the roster-readiness panel and the facts card moved out of the 1,100-line BrightSpace route extension into a service over the database, so they are testable without a request. The handlers keep the request work. Slice 1 of #1654.
+
+
 ## [0.5.303] - 2026-10-01
 
 ### Changed
