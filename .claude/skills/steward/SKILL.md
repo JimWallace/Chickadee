@@ -32,8 +32,10 @@ every suite ends at about the run's total. Chasing a "slow test" there is
 chasing an artifact.
 
 Start at `docs/ci-flakiness.md` before diagnosing any red check on a PR that
-did not touch the failing area. Five flake families are documented; two are
-open.
+did not touch the failing area. Its header says which families are open. One
+of them is not a test at all: a `build` job that exits 139 at `[Planning 1 /
+N]` before any compile is Family 7, an upstream SwiftPM crash, and the answer
+is one `/rerun-failed`, never a read of the diff.
 
 ## Never bump the version
 
