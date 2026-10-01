@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.296] - 2026-10-01
+
+### Fixed
+
+- **LTI login states and deep-link requests are reaped.** `/lti/login` wrote a row per unauthenticated hit and the deep-linking launch a row per picker open, and nothing deleted either, so both tables grew without bound. An hourly sweep now removes rows that have expired or been consumed (#1646).
+
+
 ## [0.5.295] - 2026-10-01
 
 ### Added
