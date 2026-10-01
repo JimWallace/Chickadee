@@ -243,6 +243,33 @@ import VaporTesting
         }
     }
 
+    @Test func theLaunchRetryKeysOnTheReasonCodeNotTheSentence() async throws {
+        try await withApp(app) { app in
+            let fixture = try await fixture(launched: false)
+            try await submit(fixture, earned: 7)
+            try await app.ltiGradeSyncSweep.run(bypassDebounce: true)
+            let courseID = try fixture.course.requireID()
+
+            let failed = try await row(fixture)
+            #expect(failed.failure == .notLaunched)
+            // A reworded sentence must not change what the launch retries.
+            failed.error = "Reworded."
+            try await failed.save(on: app.db)
+            try await LTIGradeSyncQueue.retryFailed(userID: fixture.studentID, courseID: courseID, on: app.db)
+            let retried = try await row(fixture)
+            #expect(retried.pending)
+            #expect(retried.failure == nil)
+
+            // Any other reason waits for a person, whatever its sentence says.
+            retried.pending = false
+            retried.failure = .noLineItems
+            retried.error = LTIGradeSyncSweep.notLaunchedMessage
+            try await retried.save(on: app.db)
+            try await LTIGradeSyncQueue.retryFailed(userID: fixture.studentID, courseID: courseID, on: app.db)
+            #expect(try await !row(fixture).pending)
+        }
+    }
+
     @Test func aFailureShowsOneShortSentence() async throws {
         // A class suite builds an app per test, which must be shut down.
         try await withApp(app) { _ in
