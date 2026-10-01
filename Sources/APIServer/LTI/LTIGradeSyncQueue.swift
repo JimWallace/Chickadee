@@ -47,7 +47,8 @@ enum LTIGradeSyncQueue {
     }
 
     /// Queues again the rows that failed because the student had not yet
-    /// opened Chickadee from the LMS. Called when that student launches.
+    /// opened Chickadee from the LMS. Called when that student launches. The
+    /// rule keys on the stored reason code, never on the sentence.
     static func retryFailed(userID: UUID, courseID: UUID, on db: Database, now: Date = Date()) async throws {
         let setupIDs = try await APIAssignment.query(on: db)
             .filter(\.$courseID == courseID)
@@ -58,12 +59,13 @@ enum LTIGradeSyncQueue {
             .filter(\.$userID == userID)
             .filter(\.$testSetupID ~~ setupIDs)
             .filter(\.$pending == false)
-            .filter(\.$error == LTIGradeSyncSweep.notLaunchedMessage)
+            .filter(\.$failureReason == LTIGradeSyncFailureReason.notLaunched.rawValue)
             .all()
         for row in failed {
             row.pending = true
             row.pendingSince = now
             row.error = nil
+            row.failure = nil
             try await row.save(on: db)
         }
     }
@@ -92,6 +94,7 @@ enum LTIGradeSyncQueue {
                 if !row.pending { row.pendingSince = now }
                 row.pending = true
                 row.error = nil
+                row.failure = nil
                 try await row.save(on: db)
             } else {
                 try await APILTIGradeSync(userID: userID, testSetupID: testSetupID, pendingSince: now).save(on: db)

@@ -88,13 +88,16 @@ struct LTIGradeSyncSweep {
                 try await send(row, assignment: assignment, course: course, platform: platform, now: now)
                 row.pending = false
                 row.error = nil
+                row.failure = nil
             } catch let failure as Failure {
                 row.pending = false
                 row.error = failure.message
+                row.failure = failure.reason
             } catch {
                 let retryable = Self.isRetryable(error)
                 row.pending = retryable
                 row.error = Self.reason(for: error)
+                row.failure = Self.failureReason(for: error)
                 logger.warning(
                     "LTI grade sync \(retryable ? "transient" : "terminal") failure: \(error)",
                     metadata: ["test_setup_id": .string(row.testSetupID)])
@@ -107,19 +110,22 @@ struct LTIGradeSyncSweep {
 
     /// A reason the sweep will not send this row until something changes.
     private struct Failure: Error {
+        let reason: LTIGradeSyncFailureReason
         let message: String
     }
 
     private func send(
         _ row: APILTIGradeSync, assignment: APIAssignment, course: APICourse, platform: APILTIPlatform, now: Date
     ) async throws {
-        guard let lineItemsURL = course.ltiLineItemsURL else { throw Failure(message: Self.noLineItemsMessage) }
+        guard let lineItemsURL = course.ltiLineItemsURL else {
+            throw Failure(reason: .noLineItems, message: Self.noLineItemsMessage)
+        }
         guard let platformID = platform.id,
             let identity = try await APILTIIdentity.query(on: db)
                 .filter(\.$platformID == platformID)
                 .filter(\.$userID == row.userID)
                 .first()
-        else { throw Failure(message: Self.notLaunchedMessage) }
+        else { throw Failure(reason: .notLaunched, message: Self.notLaunchedMessage) }
 
         let target = LTIServiceClient.Platform(id: platformID, registration: platform)
         let keys = try await keys()
@@ -134,7 +140,7 @@ struct LTIGradeSyncSweep {
             row.syncedAt = nil
             return
         }
-        guard let total = grade.total, total > 0 else { throw Failure(message: Self.noTotalMessage) }
+        guard let total = grade.total, total > 0 else { throw Failure(reason: .noTotal, message: Self.noTotalMessage) }
 
         let lineItem: String
         if let known = assignment.ltiLineItemURL {
@@ -172,6 +178,13 @@ struct LTIGradeSyncSweep {
         if let agsError = error as? LTIServiceError { return agsError.description }
         if error is BrightSpaceSyncError { return noGradeMessage }
         return unreachableMessage
+    }
+
+    /// The stored code for a failure the sweep did not raise itself.
+    static func failureReason(for error: any Error) -> LTIGradeSyncFailureReason {
+        if error is LTIServiceError { return .service }
+        if error is BrightSpaceSyncError { return .noGrade }
+        return .unreachable
     }
 
     /// AGS errors say for themselves. `bestGradeForStudent` throws a

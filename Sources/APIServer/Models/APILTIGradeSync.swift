@@ -35,9 +35,22 @@ final class APILTIGradeSync: Model, @unchecked Sendable {
     @OptionalField(key: "synced_at")
     var syncedAt: Date?
 
-    /// Why the last push failed. Nil after a success.
+    /// Why the last push failed, as the one sentence the instructor page
+    /// shows. Nil after a success.
     @OptionalField(key: "error")
     var error: String?
+
+    /// Why the last push failed, as a code the sweep and the queue read
+    /// (`LTIGradeSyncFailureReason`). Nil after a success. The sentence in
+    /// `error` is for people; this is for the retry rule, so rewording the
+    /// sentence changes nothing.
+    @OptionalField(key: "failure_reason")
+    var failureReason: String?
+
+    var failure: LTIGradeSyncFailureReason? {
+        get { failureReason.flatMap(LTIGradeSyncFailureReason.init(rawValue:)) }
+        set { failureReason = newValue?.rawValue }
+    }
 
     init() {}
 
@@ -47,4 +60,11 @@ final class APILTIGradeSync: Model, @unchecked Sendable {
         self.pending = true
         self.pendingSince = pendingSince
     }
+}
+
+/// The reasons an AGS push can fail, as stored codes. The queue retries a
+/// `.notLaunched` row when its student launches; every other reason waits
+/// for a person.
+enum LTIGradeSyncFailureReason: String, Sendable, CaseIterable {
+    case notLaunched, noLineItems, noTotal, noGrade, unreachable, service
 }

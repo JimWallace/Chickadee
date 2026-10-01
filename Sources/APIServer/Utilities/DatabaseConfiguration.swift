@@ -532,6 +532,10 @@ func registerMigrations(on app: Application) {
     // session, so the picker works inside the LMS frame. New table.
     app.migrations.add(CreateLTIDeepLinkRequests())
 
+    // Why an AGS push failed, as a code beside the sentence, so the
+    // retry-on-launch rule does not key on wording (#1652).
+    app.migrations.add(AddLTIGradeSyncFailureReasonColumn())
+
     // The registered GitHub App (docs/github-submissions.md slice 1). New
     // table, no FKs; an empty table means GitHub submission is off.
     app.migrations.add(CreateGitHubApps())
