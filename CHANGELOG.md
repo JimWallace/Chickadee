@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.297] - 2026-10-01
+
+### Fixed
+
+- **Deleting an LTI platform unbinds its courses.** The delete left each bound course with a dangling platform ID, so AGS grade pushes found no platform and the course could not be bound again. The platform and its course bindings now go in one transaction, and the notice says so (#1647).
+
+### Changed
+
+- **One writer for secret files.** `.worker-secret`, `.mcp-signing-key`, `.lti-tool-key` and `.github-app-secrets` are all created with mode 0600 in one call through `SecretFile`. Three of the four writers used to write the file first and restrict it second, leaving a moment in which the secret was readable by other local users (#1649).
+
+### Fixed
+
+- **Snapshots carry the signing keys.** `scripts/snapshot.sh` and `scripts/restore.sh` predated the per-integration key files, so a restore to a fresh host lost the LTI tool key, the MCP signing key and the GitHub App secrets, and every LTI launch then failed signature verification. The three files now ride the snapshot, and `--regenerate-secrets` also drops the two regenerable keys (#1648).
+
+
 ## [0.5.296] - 2026-10-01
 
 ### Fixed
