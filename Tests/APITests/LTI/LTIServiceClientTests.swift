@@ -84,7 +84,8 @@ import Vapor
         #expect(form["grant_type"] == "client_credentials")
         #expect(form["client_assertion_type"] == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
         #expect(form["scope"] == LTIServiceClient.agsScopes.joined(separator: " "))
-        let assertion = try await keys.verify(try #require(form["client_assertion"]), as: LTIClientAssertion.self)
+        let assertion = try await LTITestPlatform.verifyAsPlatform(
+            try #require(form["client_assertion"]), signedBy: keys, as: LTIClientAssertion.self)
         #expect(assertion.iss.value == "chickadee-client")
         #expect(assertion.sub.value == "chickadee-client")
         #expect(assertion.aud.value == [LTITestGradeService.tokenURL])
@@ -111,7 +112,8 @@ import Vapor
             let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
             form[parts[0]] = parts[1].removingPercentEncoding
         }
-        let assertion = try await keys.verify(try #require(form["client_assertion"]), as: LTIClientAssertion.self)
+        let assertion = try await LTITestPlatform.verifyAsPlatform(
+            try #require(form["client_assertion"]), signedBy: keys, as: LTIClientAssertion.self)
         #expect(assertion.aud.value == ["https://api.brightspace.com/auth/token"])
     }
 
