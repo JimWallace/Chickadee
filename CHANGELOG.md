@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.302] - 2026-10-01
+
+### Changed
+
+- **Grade selection has its own error type.** `bestGradeForStudent` now throws `GradeSelectionError` instead of a Valence-named error. The Valence sweep maps it to its own `missingPoints`, so the sync log reads as before, and the AGS sweep classifies it without importing the Valence error taxonomy (#1651).
+
+### Changed
+
+- **`LTIToolKeyAuthority` no longer carries a test-only `verify`.** The deep-linking test now verifies the tool's response the way a platform does, with a key set built from the published JWK. The launch test that refuses a deep-linking request on the launch endpoint is named for what it checks (#1661).
+
+
 ## [0.5.301] - 2026-10-01
 
 ### Added
