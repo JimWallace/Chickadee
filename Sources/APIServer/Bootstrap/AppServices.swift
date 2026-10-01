@@ -36,6 +36,9 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })
     // LTI grades through AGS. Its queue stays empty unless a course chose AGS.
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.ltiGradeSyncMonitor })
+    // The LTI single-use rows (login states, deep-link tickets) are written on
+    // every launch and never deleted in-flow.
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.ltiRecordReaperMonitor })
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // The browser grading kernel's module inventory, used to reject an authoring
