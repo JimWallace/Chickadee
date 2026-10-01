@@ -166,6 +166,9 @@ jobs:
       - name: Deployment-target resolution self-tests
         run: scripts/deployment-target-tests.sh
 
+      - name: Build-retry helper self-tests
+        run: scripts/ci-build-retry.sh --self-test
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles
@@ -223,9 +226,16 @@ jobs:
 
       # Exact cache hit: artifacts already match this exact tree, skip even the
       # near-no-op build.  Any miss = clean cold build (no stale-object reuse).
+      #
+      # The helper runs `swift build --build-tests` and retries it ONCE, only
+      # when the first attempt died with the Family 7 signature (exit 139 with
+      # `_dispatch_event_loop_drain` in the backtrace): SwiftPM 6.4's default
+      # Swift Build engine crashing in libdispatch as planning starts, before
+      # any compile (docs/ci-flakiness.md, Family 7; swiftlang/swift-build#1786).
+      # Any other failure fails the step on the first attempt.
       - name: Build all targets and tests
         if: steps.build-cache.outputs.cache-hit != 'true'
-        run: swift build --build-tests
+        run: scripts/ci-build-retry.sh
 
   core-tests:
     runs-on: ubuntu-latest
