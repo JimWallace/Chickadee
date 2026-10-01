@@ -231,6 +231,10 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
 /// Optional Makefile step to run before tests.
 public struct MakefileConfig: Codable, Equatable, Sendable {
     public let target: String?  // nil means bare `make` with no target
+
+    public init(target: String?) {
+        self.target = target
+    }
 }
 
 /// Slice 2 of #461 — a named, per-student-evaluated Python expression

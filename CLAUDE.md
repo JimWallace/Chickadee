@@ -317,9 +317,10 @@ a missing declaration in seconds; a student cannot fix it at all. So generating
 a test, storing an `=` expression, and checking a solution file's extension all
 refuse on a declared-None assignment, while extraction, literal rendering,
 notebook scaffolding and the two display paths keep a locally-stated default.
-Corollary worth knowing: `makeWorkerManifestJSON` writes a **fresh dict**, so
-every rebuild must thread `language` *and* `languageDeclared` — carrying only
-the language turns a deliberate "None" back into "nobody has been asked". See
+Corollary worth knowing: `makeWorkerManifestJSON(preserving:)` copies the
+decoded manifest and replaces only the suite, so a rebuild cannot drop
+`languageDeclared`. It used to write a **fresh dict**, and carrying only the
+language turned a deliberate "None" back into "nobody has been asked". See
 [docs/language-declaration.md](docs/language-declaration.md) for the per-site
 table. Also `docs/r-support.md`.
 

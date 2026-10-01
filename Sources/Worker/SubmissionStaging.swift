@@ -424,21 +424,6 @@ func shouldNormalizePythonSubmission(
     ) == .pythonModule
 }
 
-/// A `JSONEncoder` whose output is stable for equal input.
-///
-/// `ManifestCodec.encoder` is NOT: it is a plain `JSONEncoder`, so the order of
-/// keys in its output is not contractual, and it was measured emitting two
-/// different orderings for two equal `TestProperties` values encoded back to
-/// back, serially, in one process -- 40 of 40 pairs on one run and 0 of 40 on
-/// the next. Anything that HASHES a manifest therefore needs its own canonical
-/// encoder; the shared one is for allocation reuse on decode-and-re-encode
-/// paths, where key order does not matter.
-private let canonicalManifestEncoder: JSONEncoder = {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    return encoder
-}()
-
 /// The runner's key for a prepared test-setup directory.
 ///
 /// Two properties matter and only one of them was ever asserted. Different
@@ -468,7 +453,10 @@ private let canonicalManifestEncoder: JSONEncoder = {
 ///     separator IS reachable, because a test-setup id and a URL can be chosen
 ///     to straddle it, and `SubmissionStagingGapTests` does exactly that.
 func testSetupCacheKey(for job: Job) -> String {
-    let manifestBytes = (try? canonicalManifestEncoder.encode(job.manifest)) ?? Data()
+    // `ManifestCodec.stableEncoder`, never `.encoder`: the key order of the
+    // plain encoder is not contractual, and a key that hashed it could not
+    // reliably hit (#1526).
+    let manifestBytes = (try? ManifestCodec.stableEncoder.encode(job.manifest)) ?? Data()
     var material = Data()
     material.append(Data(job.testSetupID.utf8))
     material.append(0)

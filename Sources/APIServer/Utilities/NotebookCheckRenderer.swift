@@ -121,9 +121,7 @@ func renderNotebookCheck(
 /// given spec; bust the manifest cache when anything about the check
 /// changes.  Mirrors `patternFamilySpecHash`.
 func notebookCheckSpecHash(_ check: NotebookCheck) -> String {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let data = (try? encoder.encode(check)) ?? Data()
+    let data = (try? ManifestCodec.stableEncoder.encode(check)) ?? Data()
     return String(sha256HexDigest(data).prefix(16))
 }
 
