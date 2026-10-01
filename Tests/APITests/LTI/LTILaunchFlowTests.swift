@@ -317,7 +317,7 @@ import VaporTesting
         }
     }
 
-    @Test func deepLinkingIsNotAvailableYet() async throws {
+    @Test func deepLinkingRequestSentToTheLaunchEndpointIsRefused() async throws {
         try await withApp(app) { app in
             try await platform.install(on: app)
             let login = try await login()
