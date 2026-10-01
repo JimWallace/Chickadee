@@ -19,7 +19,7 @@ extension AdminRoutes {
     /// Post-redirect notices, as keys so a query string cannot put arbitrary
     /// text on the page.
     enum LTIAdminNotice: String {
-        case registered, updated, enabled, disabled, deleted
+        case registered, updated, enabled, disabled, deleted, deletedUnbound
 
         var message: String {
             switch self {
@@ -28,6 +28,8 @@ extension AdminRoutes {
             case .enabled: "Platform enabled."
             case .disabled: "Platform disabled. It accepts no launches."
             case .deleted: "Platform deleted."
+            case .deletedUnbound:
+                "Platform deleted. Its courses are no longer bound to the LMS, and their grades no longer go through AGS."
             }
         }
     }
@@ -113,16 +115,34 @@ extension AdminRoutes {
 
     // MARK: - POST /admin/lti/platforms/:platformID/delete
 
+    /// Deletes the platform and unbinds its courses in one transaction. The
+    /// identity, login-state and deep-link rows go with the platform through
+    /// their foreign keys; `courses.lti_platform_id` has none, so a bound
+    /// course would otherwise keep a dangling platform ID that sends grades
+    /// nowhere and blocks a new binding (#1647).
     @Sendable
     func deleteLTIPlatform(req: Request) async throws -> Response {
         let platform = try await findLTIPlatform(req)
-        let id = platform.id?.uuidString
+        let platformID = try platform.requireID()
         let issuer = platform.issuer
-        try await platform.delete(on: req.db)
+        let unbound = try await req.db.transaction { db in
+            let courses = try await APICourse.query(on: db).filter(\.$ltiPlatformID == platformID).all()
+            for course in courses {
+                course.ltiPlatformID = nil
+                course.ltiContextID = nil
+                course.ltiLineItemsURL = nil
+                course.ltiMembershipsURL = nil
+                course.ltiGradesEnabled = nil
+                try await course.save(on: db)
+            }
+            try await platform.delete(on: db)
+            return courses.count
+        }
         await AuditLogger.record(
-            action: .ltiPlatformDeleted, targetType: .ltiPlatform, targetID: id,
-            metadata: ["issuer": issuer], on: req)
-        return req.redirect(to: "/admin/lti?ok=\(LTIAdminNotice.deleted.rawValue)")
+            action: .ltiPlatformDeleted, targetType: .ltiPlatform, targetID: platformID.uuidString,
+            metadata: ["issuer": issuer, "courses_unbound": String(unbound)], on: req)
+        let notice: LTIAdminNotice = unbound > 0 ? .deletedUnbound : .deleted
+        return req.redirect(to: "/admin/lti?ok=\(notice.rawValue)")
     }
 
     // MARK: - Helpers
