@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.308] - 2026-10-01
+
+### Changed
+
+- **The CI build step retries itself once on the Family 7 crash.** `scripts/ci-build-retry.sh` runs `swift build --build-tests` and runs it once more only when the first attempt exited 139 with `_dispatch_event_loop_drain` in its output, the upstream SwiftPM 6.4 planning crash (`docs/ci-flakiness.md`, Family 7). Any other failure still fails on the first attempt. A `::warning` keeps the rate visible, and the helper's self-test runs in `format-lint`. Closes #1698.
+
+### Security
+
+- **`sanitize-html` raised to 2.18.0 in the vendor build tool.** Dependabot alert 7: `Tools/vendor/package-lock.json` resolved it to 2.12.1, which carries two moderate advisories, through `jupyter-iframe-commands-host` and JupyterLab's apputils. The copy existed only in the build tool's `node_modules`; no file under `Public/vendor/` contains it, so nothing served to a browser changes. An `overrides` entry pins the fixed release and `npm audit` reports zero findings across all five lockfiles. Closes #1701.
+
+
 ## [0.5.307] - 2026-10-01
 
 ### Changed
