@@ -276,7 +276,7 @@ import VaporTesting
             struct TransportError: Error {}
             #expect(LTIGradeSyncSweep.reason(for: TransportError()) == LTIGradeSyncSweep.unreachableMessage)
             #expect(
-                LTIGradeSyncSweep.reason(for: BrightSpaceSyncError.missingPoints) == LTIGradeSyncSweep.noGradeMessage)
+                LTIGradeSyncSweep.reason(for: GradeSelectionError.missingPoints) == LTIGradeSyncSweep.noGradeMessage)
             #expect(
                 LTIGradeSyncSweep.reason(for: LTIServiceError.lineItemGone) == LTIServiceError.lineItemGone.description)
 
@@ -297,6 +297,16 @@ import VaporTesting
             for reason in reasons {
                 #expect(reason.split(separator: " ").count <= 15, "\(reason)")
             }
+        }
+    }
+
+    @Test func aGradeSelectionFailureIsTerminalAndStoredAsNoGrade() async throws {
+        // A class suite builds an app per test, which must be shut down.
+        try await withApp(app) { _ in
+            // Grade selection reports in its own type, so the AGS sweep
+            // classifies it without knowing the Valence error taxonomy.
+            #expect(!LTIGradeSyncSweep.isRetryable(GradeSelectionError.missingPoints))
+            #expect(LTIGradeSyncSweep.failureReason(for: GradeSelectionError.missingPoints) == .noGrade)
         }
     }
 

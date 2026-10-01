@@ -176,23 +176,23 @@ struct LTIGradeSyncSweep {
     /// error goes to the log only, so the page never shows raw error text.
     static func reason(for error: any Error) -> String {
         if let agsError = error as? LTIServiceError { return agsError.description }
-        if error is BrightSpaceSyncError { return noGradeMessage }
+        if error is GradeSelectionError { return noGradeMessage }
         return unreachableMessage
     }
 
     /// The stored code for a failure the sweep did not raise itself.
     static func failureReason(for error: any Error) -> LTIGradeSyncFailureReason {
         if error is LTIServiceError { return .service }
-        if error is BrightSpaceSyncError { return .noGrade }
+        if error is GradeSelectionError { return .noGrade }
         return .unreachable
     }
 
     /// AGS errors say for themselves. `bestGradeForStudent` throws a
-    /// `BrightSpaceSyncError` when a grade cannot be computed, which no retry
+    /// `GradeSelectionError` when a grade cannot be computed, which no retry
     /// fixes. Anything else is a transport error, worth another try.
     static func isRetryable(_ error: any Error) -> Bool {
         if let agsError = error as? LTIServiceError { return agsError.isRetryable }
-        if error is BrightSpaceSyncError { return false }
+        if error is GradeSelectionError { return false }
         return true
     }
 }
