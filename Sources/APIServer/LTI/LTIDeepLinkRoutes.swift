@@ -94,7 +94,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
         // Burn first, then sign: two concurrent posts of one ticket cannot
         // both get a response.
         guard
-            try await MCPOAuthRoutes.burnConsumable(
+            try await SingleUseRecord.burn(
                 on: req.db, table: APILTIDeepLinkRequest.schema, hashColumn: "ticket_hash",
                 hash: pending.row.ticketHash)
         else { throw Self.requestGone }
