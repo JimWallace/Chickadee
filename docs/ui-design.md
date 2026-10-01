@@ -165,7 +165,7 @@ Anatomy rules that hold across archetypes:
   `.section-block` is the suite editor's per-test-section grouping and
   `.submission-section-block` the results grouping — not general-purpose.
   `.submission-section-heading` is the sub-heading over a grouped
-  `.results-table` inside a section (a results section, a bracket round).
+  `.results-table` inside a section (a results section).
 - Dense/wide tables wrap in `.table-scroll`.
 
 ## Component vocabulary
@@ -352,6 +352,12 @@ duplicate.
   `.leaderboard-gap` (a run of rows folded away, linking to the full list).
   The tokens are `--you-bg`, `--teal-ink`, `--teal-ink-fg` and the
   `--rank-gold|silver|bronze-bg|fg` pairs, each with a dark-mode value.
+  The hill holder and the tournament winner share the card as
+  `.champion-card` (its markup carries both `champion-card` and `you-card` when the viewer holds it, for the tint) with a
+  `.you-card-kicker` line.  A tournament is a `.bracket` of `.bracket-round`
+  columns (`.bracket-round-label`) of `.bracket-match` cards of two
+  `.bracket-entrant` lines (`.bracket-entrant--won` bold,
+  `.bracket-entrant--you` tinted), inside a `.table-scroll`.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the Chickadee picker).  Use it for any group

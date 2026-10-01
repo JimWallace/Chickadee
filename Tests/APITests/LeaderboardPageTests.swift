@@ -233,9 +233,9 @@ import VaporTesting
             let res = try await get("/testsetups/lb_hill/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
-            #expect(html.contains("Champion:"))
+            #expect(html.contains("Holds the hill"))
             #expect(html.contains("3 defences"))
-            #expect(html.contains("took the hill"))
+            #expect(html.contains("Took it"))
             #expect(html.contains("js-relative-time"))
             let enrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
@@ -285,7 +285,7 @@ import VaporTesting
             let res = try await get("/testsetups/lb_robin/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
-            #expect(html.contains("<th class=\"time\">Played</th>"))
+            #expect(html.contains("P 4 · W 3 · D 1 · L 0"))
             #expect(html.contains("Highest average match score first"))
             let mateEnrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
@@ -295,11 +295,13 @@ import VaporTesting
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == (try viewer.requireID())).first())
             let viewerHandle = try #require(viewerEnrollment.avatarHandle)
-            let mateAt = try #require(html.range(of: mateHandle)?.lowerBound)
-            let viewerAt = try #require(html.range(of: viewerHandle)?.lowerBound)
+            // The list, not the viewer's card above it.
+            let list = try #require(html.range(of: "<tbody>")).upperBound
+            let mateAt = try #require(html.range(of: mateHandle, range: list..<html.endIndex)?.lowerBound)
+            let viewerAt = try #require(html.range(of: viewerHandle, range: list..<html.endIndex)?.lowerBound)
             #expect(mateAt < viewerAt)
             #expect(html.contains("0.875"))
-            #expect(html.contains("<span class=\"chip\">you</span>"))
+            #expect(html.contains("<span class=\"you-pill\">You</span>"))
             #expect(!html.contains("lb_robin_mate"))
         }
     }
@@ -360,7 +362,7 @@ import VaporTesting
             #expect(html.contains("<h3 class=\"submission-section-heading\">Code</h3>"))
             #expect(html.contains("defeated"))
             #expect(html.contains("not tested yet"))
-            #expect(html.contains("<span class=\"chip\">you</span>"))
+            #expect(html.contains("<span class=\"you-pill\">You</span>"))
             #expect(!html.contains("lb_union_mate"))
             let enrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
@@ -425,7 +427,7 @@ import VaporTesting
             #expect(html.contains("round 1 of 2 in progress"))
             #expect(html.contains("bye"))
             #expect(html.contains("in progress"))
-            #expect(html.contains("<span class=\"chip\">you</span>"))
+            #expect(html.contains("<span class=\"you-pill\">You</span>"))
             #expect(!html.contains("Winner:"))
             #expect(!html.contains("lb_cup_mate"))
             let enrollment = try #require(
@@ -437,7 +439,7 @@ import VaporTesting
             run.winnerUserID = try mate.requireID()
             try await run.update(on: app.db)
             let done = try await get("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
-            #expect(done.body.string.contains("Winner:"))
+            #expect(done.body.string.contains("Winner"))
             #expect(done.body.string.contains("complete after 2 rounds"))
         }
     }

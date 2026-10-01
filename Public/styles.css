@@ -1751,16 +1751,23 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* Leaderboard: the viewer's card, the rank disc, the You pill and the folded
    rows of a windowed list. The list itself is a .section-items table. */
-.you-card {
+.you-card,
+.champion-card {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 1.25rem;
     padding: 1.25rem;
     margin-bottom: 1.25rem;
-    background: var(--you-bg);
 }
+.you-card { background: var(--you-bg); }
 .you-card-who { flex: 1 1 14rem; min-width: 0; }
+.you-card-kicker {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gray-600);
+}
 .you-card-name { font-size: var(--text-xl); font-weight: 700; }
 .you-card-rank { font-size: var(--text-2xl); font-weight: 700; }
 .you-card-rank small {
@@ -1809,6 +1816,41 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .rank-disc[data-rank-tier="1"] { background: var(--rank-gold-bg); color: var(--rank-gold-fg); }
 .rank-disc[data-rank-tier="2"] { background: var(--rank-silver-bg); color: var(--rank-silver-fg); }
 .rank-disc[data-rank-tier="3"] { background: var(--rank-bronze-bg); color: var(--rank-bronze-fg); }
+
+/* A single-elimination bracket: one column per round, each match a small card
+   of two entrant lines. Columns spread their matches with space-around so they
+   roughly line up with the matches they feed; no connector lines. */
+.bracket {
+    display: flex;
+    gap: 1.5rem;
+    min-width: min-content;
+    padding-bottom: .5rem;
+}
+.bracket-round {
+    display: flex;
+    flex: 1 0 14rem;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: .75rem;
+}
+.bracket-round-label {
+    margin: 0;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gray-600);
+}
+.bracket-match { padding: .25rem; }
+.bracket-entrant {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .3rem .5rem;
+    border-radius: var(--radius-md);
+}
+.bracket-entrant .avatar { margin-right: 0; }
+.bracket-entrant--won { font-weight: 700; }
+.bracket-entrant--you { background: var(--you-bg); }
 
 .section-items .leaderboard-rank { width: 3.25rem; text-align: center; }
 .section-items .leaderboard-row--you td { background: var(--you-bg); }
