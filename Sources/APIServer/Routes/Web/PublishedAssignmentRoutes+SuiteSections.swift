@@ -15,11 +15,9 @@
 //   - JSON POST body for AJAX reorder; returns 200 OK
 //   - CSRF via `#csrfFormField()` (or `x-csrf-token` header for AJAX)
 //
-// The manifest is a JSON string stored in APITestSetup.manifest; we mutate
-// it via JSONSerialization to avoid touching the codable TestProperties
-// (which is shared with the runner) — that way a future field the client
-// knows about but the runner doesn't won't be stripped on save.  Same
-// approach `moveToSection` uses for the `gradingMode` field.
+// The manifest is a JSON string stored in APITestSetup.manifest; every
+// write goes through `mutateManifest` (SuiteEditHelpers.swift), which edits
+// the decoded `TestProperties` and stores it with the stable encoder.
 
 import Core
 import Fluent

@@ -81,3 +81,14 @@ func decodeManifest(from data: Data) -> TestProperties? {
 func decodeManifest(fromJSON json: String) -> TestProperties? {
     decodeManifest(from: Data(json.utf8))
 }
+
+/// The one way a manifest becomes the string stored in
+/// `test_setups.manifest`: `ManifestCodec.stableEncoder`, so equal values
+/// store equal bytes and a version snapshot or a runner cache key changes
+/// only when the content does.
+func encodeManifest(_ props: TestProperties) throws -> String {
+    guard let json = String(bytes: try ManifestCodec.stableEncoder.encode(props), encoding: .utf8) else {
+        throw WebAssignmentError.internalFailure(reason: "Failed to encode manifest.")
+    }
+    return json
+}

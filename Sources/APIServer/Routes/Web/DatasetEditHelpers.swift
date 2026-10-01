@@ -274,30 +274,7 @@ func applyDatasetsEdit(
         }
     }
 
-    // Splice the updated array into the manifest JSON, preserving every other
-    // field.  Using JSONSerialization lets us avoid rebuilding the entire
-    // manifest from components (no risk of dropping unrecognised keys).
-    guard let manifestData = setup.manifest.data(using: .utf8),
-        var dict = try? JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
-    else {
-        throw Abort(.internalServerError, reason: "Could not decode assignment manifest.")
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.datasets = datasets
     }
-
-    if datasets.isEmpty {
-        dict.removeValue(forKey: "datasets")
-    } else {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let encoded = try encoder.encode(datasets)
-        if let parsed = try? JSONSerialization.jsonObject(with: encoded) as? [Any] {
-            dict["datasets"] = parsed
-        }
-    }
-
-    let newData = try JSONSerialization.data(withJSONObject: dict)
-    guard let newManifest = String(data: newData, encoding: .utf8) else {
-        throw Abort(.internalServerError, reason: "Could not re-encode assignment manifest.")
-    }
-    setup.manifest = newManifest
-    try await setup.save(on: db)
 }

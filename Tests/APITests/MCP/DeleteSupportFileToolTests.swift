@@ -161,6 +161,29 @@ import Vapor
         }
     }
 
+    /// A dataset mark naming the deleted file goes with it too, so a later
+    /// file reusing the name does not inherit a per-student slice. The old
+    /// dictionary edit read the mark under the wrong key and never cleared it.
+    @Test func clearsADatasetMark() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let manifest = #"""
+                {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\#
+                "datasets":[{"file":"data.csv","kind":"rowSample","sampleSize":3},\#
+                {"file":"other.csv","kind":"rowSample","sampleSize":3}]}
+                """#
+            let assignment = try await fixture(
+                on: app, support: ["data.csv": "a,b\n1,2\n"], manifest: manifest)
+
+            let output = try await run(app, assignment, "data.csv")
+            #expect(output.clearedManifestMarks)
+
+            let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try #require(reloaded.decodedManifest())
+            #expect(props.datasets.map(\.file) == ["other.csv"], "unrelated marks must survive")
+        }
+    }
+
     /// Removing a support file closes a currently-open assignment so students
     /// can't submit against the not-yet-revalidated setup, and reports it.
     @Test func closesAnOpenAssignmentAndReportsIt() async throws {
