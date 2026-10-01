@@ -314,18 +314,23 @@ duplicate.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
 - **`.avatar`** and the `.av-*` part classes — the generated student chickadee.
-  One `<svg>` carrying the size class wraps six `<use>` elements naming symbols
-  in `_avatar-sprite.leaf`: backdrop, then — inside one group that carries the
-  tilt transform — tuft, plumage, wing, expression, accessory.
+  One `<svg>` carrying the size class wraps seven `<use>` elements naming
+  symbols in `_avatar-sprite.leaf`: backdrop, then — inside one group that
+  carries the tilt transform — tuft, plumage, wing, expression, accessory, and
+  last, on top and untilted, the ring.
   **A page that renders `_avatar` must also include `_avatar-sprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
   which no guard can catch.  Five colours are per-student
   (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
-  assigned inline, which is the sanctioned form); `--av-border` colours the
-  ring, an `outline` inside the disc, and is the transparent
-  `--avatar-border-none` when the student chose no border.  `.avatar` sets
-  `forced-color-adjust: none`: the bird is decorative, and forced colors
-  would otherwise repaint it and draw the transparent ring; the fixed parts of the bird — `.av-body`,
+  assigned inline, which is the sanctioned form); `--av-border` colours a solid
+  ring (`.av-ring`) and is the transparent `--avatar-border-none` for every
+  other ring.  The patterned rings colour themselves by class
+  (`.av-rainbow-*`, `.av-spectrum-*`, or the student's `.av-accent` and
+  `.av-cap`), and the **staff ring** (`.av-staff-ring`, a double ring in a
+  colour no student ring uses, with a dark-mode mirror) is drawn from a course
+  role, never from a stored choice.  `.avatar` sets `forced-color-adjust:
+  none`: the bird is decorative, and forced colors would otherwise repaint it;
+  the fixed parts of the bird — `.av-body`,
   `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
   `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
   `.av-gear-line`, `.av-bloom-eye` —
@@ -351,10 +356,17 @@ duplicate.
   does not depend on colour alone; in forced-colors mode the samples keep
   their colours and the ring is the system `Highlight`.  The sample reuses the
   avatar's own custom-property names, set per option: `.swatch-backdrop` (a
-  filled disc, `--av-backdrop`), `.swatch-border` (a ring, `--av-border`) and
-  `.swatch-none` (a dashed ring, for "no border").  Used by the account page's
+  filled disc, `--av-backdrop`), a ring sample (a small `<svg>` drawing the
+  backdrop and the ring symbol from the avatar sprite; it inherits
+  `--av-backdrop` from the form, so it follows the previewed backdrop) and
+  `.swatch-none` (a dashed ring, for "no border").  An option that exists but
+  cannot be chosen yet has a `disabled` input, which dims its swatch
+  (`.swatch:has(input:disabled)`, the `.row-muted` opacity); its name says
+  "(locked)" and a note says how locked rings are earned, so the state does
+  not rest on the dimming alone.  Used by the account page's
   Chickadee picker, whose live preview (`avatar-picker.js`) copies the
-  checked option's token onto the avatar; see
+  checked option's token onto the avatar and points its ring layer at the
+  checked ring; see
   [student-wardrobe.md](student-wardrobe.md).
 - **`.diagnostic-value-alert`** — the one count in a tile row that is not
   neutral information (the submission band's failed count), in `--red`.  A

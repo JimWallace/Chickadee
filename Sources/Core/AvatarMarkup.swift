@@ -68,10 +68,14 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// is why the design writes it "8 + 5 accents".
     public let accentToken: String
     public let backdropToken: String
-    /// The ring's colour. For `.none` it is `--avatar-border-none`, which is
-    /// transparent, so the template needs no condition.
+    /// The colour of a solid ring. For every other ring it is
+    /// `--avatar-border-none`, which is transparent: the patterned rings and the
+    /// staff ring colour themselves by class.
     public let borderToken: String
-    /// Fragment references for the four symbols a spec varies, e.g.
+    /// The ring layer, e.g. "#av-ring-solid" or "#av-ring-staff". Never empty:
+    /// no ring is "#av-ring-none".
+    public let ringSymbolRef: String
+    /// Fragment references for the symbols a spec varies, e.g.
     /// "#av-wing-barred" — WITH the leading marker, so the template never has
     /// to write one next to an interpolation. A template writing a literal
     /// marker immediately before an interpolation is exactly the Leaf lexing
@@ -93,13 +97,25 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// The handle to announce; empty when decorative.
     public let label: String
 
+    /// A student's bird, wearing the ring they chose.
     public init(for spec: AvatarSpec, size: AvatarSize, accessibility: AvatarAccessibility) {
+        self.init(for: spec, size: size, accessibility: accessibility, isStaff: false)
+    }
+
+    /// `isStaff` draws the reserved staff ring in place of the chosen one. The
+    /// caller decides it from the course role of the person drawn, for the course
+    /// the page belongs to (or any course, on a page that belongs to none).
+    public init(
+        for spec: AvatarSpec, size: AvatarSize, accessibility: AvatarAccessibility, isStaff: Bool
+    ) {
         self.capToken = "--avatar-\(spec.cap.rawValue)-cap"
         self.wingToken = "--avatar-\(spec.cap.rawValue)-wing"
         self.accentToken = "--avatar-accent-\(spec.accent.rawValue)"
         self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
+        let ring = isStaff ? AvatarRing.staff : spec.border.ring
+        self.ringSymbolRef = "#av-ring-\(ring.rawValue)"
         self.borderToken =
-            spec.border.accent.map { "--avatar-accent-\($0.rawValue)" }
+            (isStaff ? nil : spec.border.accent).map { "--avatar-accent-\($0.rawValue)" }
             ?? "--avatar-border-none"
         let tuft = spec.accessory.hidesTuft ? AvatarTuft.none : spec.tuft
         self.tuftSymbolRef = "#av-tuft-\(tuft.rawValue)"
@@ -130,7 +146,7 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     public var layerRefs: [String] {
         [
             "#av-backdrop", tuftSymbolRef, "#av-plumage", wingSymbolRef, expressionSymbolRef,
-            accessorySymbolRef,
+            accessorySymbolRef, ringSymbolRef,
         ]
     }
 }
@@ -138,10 +154,10 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
 public enum AvatarMarkup {
     /// The symbol ids stacked to draw `spec`, back to front.
     ///
-    /// Six, not one per feature: body, cap, cheek, beak and bib never vary, so
+    /// Seven, not one per feature: body, cap, cheek, beak and bib never vary, so
     /// they are baked into one plumage symbol. A slot is split out only when it
-    /// varies. Tilt is not a layer; it is a transform on everything after the
-    /// backdrop.
+    /// varies. Tilt is not a layer; it is a transform on everything between the
+    /// backdrop and the ring.
     public static func layerSymbolIDs(for spec: AvatarSpec) -> [String] {
         AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
             .layerRefs

@@ -104,6 +104,11 @@ With the three unlockable expressions and the gradcap the drawn axes can
 produce 2,332,800 (`combinationCount`). The accent multiplies: it is part of the accessory axis,
 which is why the design writes it "8 + 5 accents".
 
+Both numbers count **combinations of settings**, not birds that look different.
+Two settings can look almost the same at 36px, and a hat hides the tuft, so the
+number of birds that a person can tell apart is smaller. The counts also leave
+out the ring, because the draw never chooses one.
+
 **Body, cheek, beak and bib are NOT axes.** They are fixed, and they are what
 keeps every bird a chickadee even when the cap goes plum. Cheek and flank were
 axes in the first cut and stopped being them in the design pass: variation that
@@ -303,12 +308,24 @@ customization validates the chosen slots against the student's unlocked set at
 one chokepoint — the same shape as `evaluateCourseWrite`, one function that
 every door goes through.
 
-There is deliberately **no staff cosmetic**. A TA-only colourway is an
-impersonation surface the moment a student's random draw lands near it, and role
-already has a place in the UI — a chip beside a name, which says the thing
-unambiguously and is searchable. (Impersonation between students is not a risk
-worth engineering against: the handle is unique per course and cannot be chosen,
-so a copied outfit still sits under a different name.)
+There is **one staff cosmetic, and it is reserved by construction**: the staff
+ring (see [student-wardrobe.md](student-wardrobe.md), "The staff ring"). The
+first version of this note refused any staff cosmetic, because a TA-only
+colourway is an impersonation surface the moment a student's random draw lands
+near it. The staff ring does not have that problem, for three reasons:
+
+- It is not a value a student can store. `AvatarRing.staff` is not the ring of
+  any `AvatarBorder` case, and a test checks this for every case.
+- The draw does not choose a ring, and the chokepoint refuses a ring change
+  from staff, so nothing can move a bird towards it or away from it.
+- It has its own shape (two thin rings) and its own reserved colour, with a
+  dark-mode mirror. No student ring has either.
+
+The role chip beside a name stays. The ring is a second signal, not a
+replacement: a chip is searchable and a screen reader reads it. (Impersonation
+between students is not a risk worth engineering against: the handle is unique
+per course and cannot be chosen, so a copied outfit still sits under a different
+name.)
 
 Three consequences to accept up front:
 

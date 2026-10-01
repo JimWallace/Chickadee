@@ -258,7 +258,8 @@ func buildChampionPresentation(
         crownedAtText: waterlooDateTimeFormatter().string(from: crownedAt),
         defencesText: champion.defences == 1 ? "1 defence" : "\(champion.defences) defences",
         isViewer: champion.userID == viewerID,
-        avatar: AvatarPresentation(for: spec, size: .small, accessibility: accessibility))
+        avatar: AvatarPresentation(
+            for: spec, size: .small, accessibility: accessibility, isStaff: enrollment.role >= .ta))
 }
 
 // MARK: - Context
@@ -633,7 +634,8 @@ struct RankedIdentities {
         return Presentation(
             handle: handle,
             name: includeName ? staffFacingName(user) : "",
-            avatar: AvatarPresentation(for: spec, size: .small, accessibility: accessibility))
+            avatar: AvatarPresentation(
+                for: spec, size: .small, accessibility: accessibility, isStaff: enrollment.role >= .ta))
     }
 }
 

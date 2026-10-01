@@ -59,3 +59,51 @@ test('attach: a change on the form sets the preview custom properties', () => {
     '--av-border': 'var(--avatar-accent-orchid)',
   });
 });
+
+test('previewRing: passes a ring symbol reference and nothing else', () => {
+  assert.equal(Picker.previewRing(() => '#av-ring-rainbow'), '#av-ring-rainbow');
+  assert.equal(Picker.previewRing(() => null), null);
+  assert.equal(Picker.previewRing(() => ''), null);
+  assert.equal(Picker.previewRing(() => '#av-wing-plain'), null);
+  assert.equal(Picker.previewRing(() => 'https://example.com/x.svg#a'), null);
+});
+
+test('attach: a ring choice points the preview ring layer at the checked ring', () => {
+  const attrs = {
+    'data-av-token': '--avatar-border-none',
+    'data-av-ring': '#av-ring-rainbow',
+  };
+  const border = { getAttribute: name => attrs[name] };
+  let onChange = null;
+  const form = {
+    querySelector: sel => (sel.includes('name="border"') ? border : null),
+    addEventListener: (_type, fn) => { onChange = fn; },
+  };
+  const layer = { href: '#av-ring-none', setAttribute(name, value) { this[name] = value; } };
+  const written = {};
+  const preview = {
+    style: { setProperty: (name, value) => { written[name] = value; } },
+    querySelector: sel => (sel === 'use[data-av-ring]' ? layer : null),
+  };
+
+  Picker.attach(form, preview);
+  onChange();
+  assert.equal(layer.href, '#av-ring-rainbow');
+  assert.deepEqual(written, { '--av-border': 'var(--avatar-border-none)' });
+});
+
+test('attach: a backdrop choice also goes on the form, so the ring samples follow it', () => {
+  const backdrop = { getAttribute: () => '--avatar-back-rose' };
+  let onChange = null;
+  const formWritten = {};
+  const form = {
+    querySelector: sel => (sel.includes('name="backdrop"') ? backdrop : null),
+    addEventListener: (_type, fn) => { onChange = fn; },
+    style: { setProperty: (name, value) => { formWritten[name] = value; } },
+  };
+  const preview = { style: { setProperty: () => {} } };
+
+  Picker.attach(form, preview);
+  onChange();
+  assert.deepEqual(formWritten, { '--av-backdrop': 'var(--avatar-back-rose)' });
+});
