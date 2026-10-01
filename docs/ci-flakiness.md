@@ -1438,22 +1438,23 @@ the coverage run already pin `--build-system native` for unrelated reasons
 is why neither has seen this.
 
 **Population.** The 100 most recent `swift-tests.yml` runs span
-2026-09-30 19:50 to 2026-10-01 07:58 UTC. Of the 63 runs created on
-2026-10-01, 25 are concurrency cancellations on `main` (no job started)
-and 38 completed; of those 38, the two above are the only ones whose
-`build` job failed, and a third run with a second attempt (36804743549) was a
-`PersonalizationEvaluator` timeout in `api-tests`, not this family. The 400
-runs before that window (2026-09-14 to 2026-09-30) hold 20 runs with a failure
-or a second attempt and exactly one failed `build` job among them: the
-2026-09-19 `manifest unknown` image-bootstrap trap from the 6.4 upgrade, not a
-crash. So the count is **2 hits in one morning after none in sixteen days**, of
-which the last eight were on the same 6.4 toolchain. The denominator that
-matters is the number of `Build all targets and tests` steps that actually
-ran, since a docs-only tree hits the exact-match build cache and skips the
-step; it is at most 38 for 2026-10-01. Read the two hits as a rate with a
-wide interval, not as a trend: the audit arc produced an unusual density of
-cold builds that morning, and the trigger is a race in a planning phase that
-every cold build runs.
+2026-09-30 19:50 to 2026-10-01 07:58 UTC. 42 of them are concurrency
+cancellations with no job started; the other 58 each ran one first-attempt
+`build` job. 57 of those ran the `Build all targets and tests` step (one
+skipped it on an exact build-cache hit), and **2 of the 57 failed, both with
+this signature, both at exactly 84 s**; the 55 that passed took 374–739 s
+(median 639 s). A third run with a second attempt that morning (36804743549)
+was a `PersonalizationEvaluator` timeout in `api-tests`, not this family, and
+the one run in the window with a `failure` conclusion (36770886466) failed in
+`APITests` with a green build. The 400 runs before the window (2026-09-14 to
+2026-09-30) hold 20 runs with a failure or a second attempt and exactly one
+failed `build` job among them: the 2026-09-19 `manifest unknown`
+image-bootstrap trap from the 6.4 upgrade, not a crash. So the count is
+**2 of 57 build steps in one morning, after none in the sixteen days before**,
+of which the last eight were on the same 6.4 toolchain. Read 2 of 57 as a
+rate with a wide interval, not as a trend: the audit arc produced an unusual
+density of cold builds that morning, and the trigger is a race in a planning
+phase that every cold build runs.
 
 **Why it is credible that this is new noise and not a new bug.** Nothing in
 the two diffs reaches SwiftPM; one touched BrightSpace route handlers and the
@@ -1464,9 +1465,10 @@ week.
 
 **What one hit costs.** The build cache is written only when the step
 succeeds (`Post Cache build artifacts` is skipped on failure), so the re-run
-repeats the whole cold build, 8–10 min, and then the four lanes, about 6 min
-more. Each hit therefore costs 15–17 min of wall clock and one red
-`swift-tests-gate` on the PR, plus whoever reads the red check.
+repeats the whole cold build, 6–12 min (the window's median is 639 s), and
+then the four lanes, about 6 min more. Each hit therefore costs 12–18 min of
+wall clock and one red `swift-tests-gate` on the PR, plus whoever reads the
+red check.
 
 **Handling.** Recognise it by the signature, not by the exit code alone: step
 `Build all targets and tests` red within about 90 s, `[Planning 1 / N]` as
@@ -1835,6 +1837,10 @@ wedge watchdog never run, because the process that dies is SwiftPM.
 - PR #1679 (Family 7) — run 36830441382, `build` attempt 1 job 110265579843
   (`failure`, same signature, step 84 s) vs attempt 2 job 110266431713
   (`success`, build step 8 m 27 s) on the same commit `bff2b46`.
+- `swift-tests.yml` run history, 2026-09-30 19:50 → 2026-10-01 07:58 (Family 7
+  census) — 100 runs; 58 first-attempt `build` jobs, 57 ran the build step,
+  2 failed (jobs 110253994905 and 110265579843, 84 s each, exit 139), 55
+  passed in 374–739 s, median 639 s.
 - `swift-tests.yml` run history, 2026-09-14 → 2026-09-30 (Family 7 baseline)
   — 400 runs, 20 with a failure or a second attempt, one failed `build` job
   among them (the 2026-09-19 `manifest unknown` image-bootstrap trap), none
