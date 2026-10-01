@@ -21,17 +21,15 @@ struct GitHubAppSecrets: Codable, Sendable, Equatable {
         return try JSONDecoder().decode(GitHubAppSecrets.self, from: data)
     }
 
-    /// Writes the secrets to `path` with mode 0600. The file is created with
-    /// that mode, so the secrets are never readable by others, not even
-    /// between the write and a later permission change.
+    /// Writes the secrets to `path` with mode 0600 from the moment the file
+    /// exists (`SecretFile`).
     func write(path: String) throws {
         let data = try JSONEncoder().encode(self)
-        let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: path) {
-            try fileManager.removeItem(atPath: path)
+        do {
+            try SecretFile.write(data, toPath: path)
+        } catch is SecretFileError {
+            throw GitHubAppRegistrationError.secretsNotWritten
         }
-        guard fileManager.createFile(atPath: path, contents: data, attributes: [.posixPermissions: 0o600])
-        else { throw GitHubAppRegistrationError.secretsNotWritten }
     }
 
     /// Deletes the file at `path`. An absent file is not an error.

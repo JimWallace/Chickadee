@@ -45,16 +45,7 @@ actor MCPTokenAuthority {
     /// Loads the ES256 key from `path`, generating and persisting a new one
     /// (mode 0600) if the file is absent or empty.
     static func loadOrGenerate(path: String, keyID: String) async throws -> MCPTokenAuthority {
-        let pem: String
-        if let existing = try? String(contentsOfFile: path, encoding: .utf8),
-            !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            pem = existing
-        } else {
-            pem = ES256PrivateKey().pemRepresentation
-            try pem.write(toFile: path, atomically: true, encoding: .utf8)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
-        }
+        let pem = try SecretFile.loadOrCreateText(path: path) { ES256PrivateKey().pemRepresentation }
         return try await make(privateKeyPEM: pem, keyID: keyID)
     }
 
