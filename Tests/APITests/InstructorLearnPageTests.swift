@@ -161,31 +161,32 @@ import VaporTesting
 
     @Test func syncDetailTextPrefersTheFailureOverTheTime() {
         #expect(
-            InstructorDashboardRoutes.syncDetailText(status: "error", detail: "403 from D2L", at: "Sep 3")
+            BrightSpacePagePresenter.syncDetailText(status: "error", detail: "403 from D2L", at: "Sep 3")
                 == "403 from D2L")
         #expect(
-            InstructorDashboardRoutes.syncDetailText(status: "error", detail: nil, at: "Sep 3")
+            BrightSpacePagePresenter.syncDetailText(status: "error", detail: nil, at: "Sep 3")
                 == "The last push failed")
         #expect(
-            InstructorDashboardRoutes.syncDetailText(status: "success", detail: nil, at: "Sep 3")
+            BrightSpacePagePresenter.syncDetailText(status: "success", detail: nil, at: "Sep 3")
                 == "Last synced Sep 3")
         #expect(
-            InstructorDashboardRoutes.syncDetailText(status: "none", detail: nil, at: nil)
+            BrightSpacePagePresenter.syncDetailText(status: "none", detail: nil, at: nil)
                 == "Not synced yet")
     }
 
     @Test func pushesAsNamesTheAccountThatWillActuallyPush() {
-        let fallback = (name: Optional("Deployment default account"), connected: true, isMe: false)
+        let fallback = BrightSpacePagePresenter.SyncIdentity(
+            name: "Deployment default account", connected: true, isMe: false)
         #expect(
-            InstructorDashboardRoutes.pushesAs(identity: fallback, usesServiceAccount: true).text
+            BrightSpacePagePresenter.pushesAs(identity: fallback, usesServiceAccount: true).text
                 == "Service account")
-        let designated = (name: Optional("Prof Lee (plee)"), connected: true, isMe: false)
+        let designated = BrightSpacePagePresenter.SyncIdentity(name: "Prof Lee (plee)", connected: true, isMe: false)
         #expect(
-            InstructorDashboardRoutes.pushesAs(identity: designated, usesServiceAccount: true).text
+            BrightSpacePagePresenter.pushesAs(identity: designated, usesServiceAccount: true).text
                 == "Prof Lee (plee)")
-        let nobody = (name: String?.none, connected: false, isMe: false)
+        let nobody = BrightSpacePagePresenter.SyncIdentity(name: nil, connected: false, isMe: false)
         #expect(
-            InstructorDashboardRoutes.pushesAs(identity: nobody, usesServiceAccount: false).text
+            BrightSpacePagePresenter.pushesAs(identity: nobody, usesServiceAccount: false).text
                 == "Not connected")
     }
 
