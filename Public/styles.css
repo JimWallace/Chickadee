@@ -2121,6 +2121,12 @@ code { font-family: var(--font-mono); font-size: .9em; }
     .course-tab { flex: none; white-space: nowrap; }
     .page-titlebar .toolbar { margin-left: auto; }
     .tier-summary-row { flex-wrap: wrap; }
+    /* The account menu opens against the nav bar's right edge, not its toggle:
+       the nav wraps on a phone, so the toggle can sit anywhere, and a panel
+       right-aligned to a toggle near the left edge ran off the screen. */
+    .nav { position: relative; }
+    .nav-user { position: static; }
+    .nav-user .nav-dropdown-menu { top: 100%; left: auto; right: .75rem; }
 }
 /* An editor beside its facts panel; one column on a phone. */
 .editor-split {
