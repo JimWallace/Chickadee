@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.299] - 2026-10-01
+
+### Changed
+
+- **LTI is in the compliance inventories.** The data-flow inventory lists the login, launch, deep-linking, AGS and NRPS flows with what crosses and what is stored, and the trust-boundary note names the LMS as an inbound and outbound counterparty, as `docs/lti-1-3.md` requires before a production registration (#1659).
+
+### Changed
+
+- **The `@unchecked Sendable` comment rule is enforced, with Fluent models exempt.** `scripts/check-unchecked-sendable.sh` fails `format-lint` on any non-model declaration that has no comment saying why the conformance is unchecked. Fluent `Model` classes are exempt, because the reason is always the same, and the convention in CLAUDE.md now says so (#1658).
+
+
 ## [0.5.298] - 2026-10-01
 
 ### Changed
