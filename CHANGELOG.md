@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.298] - 2026-10-01
+
+### Changed
+
+- **Three superseded docs moved to `docs/archive/`.** `clone-course-for-new-term.md` (replaced by `course-terms.md`), `handoff-page-scaffolds.md` and `ui-ratchet-handoff.md` (closure records of finished work) each carry an archival banner, and the links that pointed at them follow (#1660).
+
+### Changed
+
+- **Three lock boxes moved to `Mutex`.** `AssignmentVersionCaptureScope`, `AdminEventSink` and `MCPVersionCaptureScope` each guarded one value with an `NSLock` behind `@unchecked Sendable`. They now hold a `Synchronization.Mutex`, which the compiler checks, and the unchecked conformances and the lock/unlock pairs are gone. No behaviour change (#1656).
+
+### Changed
+
+- **The three target READMEs point at the current docs.** `Sources/Core`, `Sources/APIServer` and `Sources/Worker` each carried a README that described the first MVP (anonymous submissions, a `student` tier, a five-field manifest). Each is now a short note on what the target is for, with links to CLAUDE.md and the architecture doc (#1657).
+
+
 ## [0.5.297] - 2026-10-01
 
 ### Fixed
