@@ -154,7 +154,7 @@ extension MCPOAuthRoutes {
         // and only proceed if this submit won the burn — a concurrent replay
         // loses the conditional UPDATE and is rejected.
         guard
-            try await Self.burnConsumable(
+            try await SingleUseRecord.burn(
                 on: req.db, table: MCPConsentRequest.schema, hashColumn: "token_hash", hash: tokenHash)
         else {
             throw Abort(

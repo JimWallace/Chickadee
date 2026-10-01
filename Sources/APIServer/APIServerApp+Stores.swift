@@ -389,12 +389,10 @@ func readWorkerSecretFromDisk(workerSecretFilePath: String) -> String? {
 func writeWorkerSecretToDisk(secret: String, workerSecretFilePath: String) {
     let value = secret.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !value.isEmpty else { return }
-    let url = URL(fileURLWithPath: workerSecretFilePath)
-    try? value.write(to: url, atomically: true, encoding: .utf8)
     // The runner shared secret is the HMAC signing key for every worker
-    // request.  Default umask (typically 0644 on Linux) lets any local user
-    // read it and forge worker traffic; restrict to owner read/write only.
-    restrictWorkerSecretFilePermissions(at: workerSecretFilePath)
+    // request. The file is created owner read/write only (`SecretFile`), so no
+    // other local user can read it and forge worker traffic.
+    try? SecretFile.write(Data(value.utf8), toPath: workerSecretFilePath)
 }
 
 private func restrictWorkerSecretFilePermissions(at path: String) {

@@ -1212,7 +1212,11 @@ greeting. The example below does so in R."
 
 ## Coding Conventions
 
-- Swift 6, strict concurrency. No `@unchecked Sendable` without a comment explaining why.
+- Swift 6, strict concurrency. No `@unchecked Sendable` without a comment
+  explaining why, except on a Fluent `Model` class, where the reason is always
+  the same (Fluent's property wrappers are what the compiler cannot check).
+  `scripts/check-unchecked-sendable.sh` fails `format-lint` on any other site
+  without a comment.
 - `async/await` throughout. No completion handlers.
 - Actors for any shared mutable state (`WorkerSecretStore`, `WorkerActivityStore`,
   `LocalRunnerAutoStartStore`, `LocalRunnerManager`).
@@ -1731,7 +1735,8 @@ shim); and archived finished-era docs under `docs/archive/`.
   represented at the collection level (`buildStatus: "failed"`).
 - Do not write a runner JSON protocol — the runner interprets exit codes directly.
 - Do not add per-language build strategies in Swift — test suites are plain shell scripts.
-- Do not use `@unchecked Sendable` without a comment.
+- Do not use `@unchecked Sendable` without a comment (Fluent `Model` classes
+  excepted; `scripts/check-unchecked-sendable.sh` enforces it).
 - **Do not introduce new environment variables.** This is a standing rule, not a
   per-case judgement, and it applies to the server (`AppConfig`) and the runner
   (`RunnerDaemonConfig`) alike. Every new env var is another thing that must be
@@ -1777,7 +1782,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
 - `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
 - `docs/slip-days.md` — student-managed slip days (#1228): per-course bank, self-serve extensions
-- `docs/course-terms.md` — the year and Waterloo term of each course offering: the three maintainer decisions (codes unique per term, a term required at every door and never inferred, clone by admins and by instructors), the `COALESCE` index and why NULL terms need it, the URL key and the two course-code resolvers (web prefers the viewer's offering; MCP refuses an ambiguous write), and the clone (what it copies, what it leaves, and why copied assignments start with no dates). Supersedes `clone-course-for-new-term.md`
+- `docs/course-terms.md` — the year and Waterloo term of each course offering: the three maintainer decisions (codes unique per term, a term required at every door and never inferred, clone by admins and by instructors), the `COALESCE` index and why NULL terms need it, the URL key and the two course-code resolvers (web prefers the viewer's offering; MCP refuses an ambiguous write), and the clone (what it copies, what it leaves, and why copied assignments start with no dates). Supersedes `clone-course-for-new-term.md` (now in `docs/archive/`)
 - `docs/solution-visibility.md` — post-deadline solution reveal: the per-assignment `SolutionVisibility` policy, the per-student reveal gate and its slip-day claim-window ceiling (shared with release-output gating), the enforcement chokepoints, and the accepted residual leak
 - `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)

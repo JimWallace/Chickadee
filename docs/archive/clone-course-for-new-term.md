@@ -1,6 +1,9 @@
 # Clone course for new term (issue #420)  -  plan
 
-**Status:** Superseded by [course-terms.md](course-terms.md), which adds a year and term to each course and re-plans the clone around them. Kept for its analysis of `copyCourse`.
+> **Archived 2026-10-01.** Superseded plan; the shipped design is
+> [course-terms.md](../course-terms.md). Kept for its analysis of `copyCourse`.
+
+**Status:** Superseded by [course-terms.md](../course-terms.md), which adds a year and term to each course and re-plans the clone around them. Kept for its analysis of `copyCourse`.
 
 **Original status:** Planning. This doc re-scopes #420 against the *current* codebase, which
 has moved on since the issue was filed (2026-04-25). Most of the gaps the issue

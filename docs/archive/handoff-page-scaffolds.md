@@ -1,12 +1,15 @@
 # Handoff — make the compliant page the easy one to start from
 
+> **Archived 2026-10-01.** Closure record of finished work. The live rules
+> are in [ui-design.md](../ui-design.md).
+
 **Status: steps 1, 2 and 4 shipped. Step 3 (the component gallery)
 deliberately not built — the condition for revisiting it is at the bottom.**
 This was the additive half of the UI-language work.
 
 What shipped:
 
-- **An exemplar per archetype**, in the [ui-design.md](ui-design.md) table's
+- **An exemplar per archetype**, in the [ui-design.md](../ui-design.md) table's
   new *Copy this* column: `alerts.leaf`, `instructor-mcp.leaf`,
   `admin-user.leaf`, `account.leaf`, `register.leaf`,
   `assignment-edit.leaf`, `workbench.leaf`.  Chosen on measured grounds —
@@ -69,7 +72,7 @@ is a **scaffold**, and it is genuinely absent.
 
 ## What exists, and what is missing
 
-[ui-design.md](ui-design.md) defines **seven page archetypes** in a table:
+[ui-design.md](../ui-design.md) defines **seven page archetypes** in a table:
 Admin tabbed, Instructor tabbed, Titlebar page, Plain student page, Auth box,
 Body-partial shim, Full-bleed app. Each row lists three example pages.
 

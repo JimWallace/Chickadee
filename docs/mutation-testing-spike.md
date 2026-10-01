@@ -29,7 +29,7 @@ nothing (the fixture picked a one-word category, then the allocation floor never
 engaged, then both titles landed at exactly the cap).
 
 The house rule already exists — *"a check never seen to fail is not a check"*
-([ui-ratchet-handoff.md](ui-ratchet-handoff.md)) — and it is the one discipline
+([ui-ratchet-handoff.md](archive/ui-ratchet-handoff.md)) — and it is the one discipline
 here with no enforcement behind it. Mutation testing is the industrial form of
 that rule: change the source, and any mutant the suite fails to kill is a hole
 in the suite.

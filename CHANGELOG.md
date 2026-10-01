@@ -9,6 +9,90 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.300] - 2026-10-01
+
+### Fixed
+
+- **The AGS retry-on-launch rule keys on a reason code, not the sentence.** `lti_grade_syncs` gains a `failure_reason` column beside the instructor-facing sentence; the sweep writes both, the launch retries only rows whose code is `notLaunched`, and the migration backfills the code on rows that failed before. Rewording a message no longer changes behaviour (#1652).
+
+### Fixed
+
+- **Two first LTI launches of one subject no longer race to a 500.** When both tried to create the account or the identity link at once, the loser's insert failed on a unique index. The resolver now runs once more after such a failure and finds what the winner wrote. The LTI doc also records why `target_link_uri` is required and never routed on (#1661).
+
+### Changed
+
+- **The single-use burn is a shared helper.** The atomic `UPDATE … WHERE consumed = false RETURNING` primitive that OAuth codes, consent tokens, LTI login states and deep-link tickets all consume through moved from `MCPOAuthRoutes` to `SingleUseRecord.burn`. No behaviour change (#1650).
+
+
+## [0.5.299] - 2026-10-01
+
+### Changed
+
+- **LTI is in the compliance inventories.** The data-flow inventory lists the login, launch, deep-linking, AGS and NRPS flows with what crosses and what is stored, and the trust-boundary note names the LMS as an inbound and outbound counterparty, as `docs/lti-1-3.md` requires before a production registration (#1659).
+
+### Changed
+
+- **The `@unchecked Sendable` comment rule is enforced, with Fluent models exempt.** `scripts/check-unchecked-sendable.sh` fails `format-lint` on any non-model declaration that has no comment saying why the conformance is unchecked. Fluent `Model` classes are exempt, because the reason is always the same, and the convention in CLAUDE.md now says so (#1658).
+
+
+## [0.5.298] - 2026-10-01
+
+### Changed
+
+- **Three superseded docs moved to `docs/archive/`.** `clone-course-for-new-term.md` (replaced by `course-terms.md`), `handoff-page-scaffolds.md` and `ui-ratchet-handoff.md` (closure records of finished work) each carry an archival banner, and the links that pointed at them follow (#1660).
+
+### Changed
+
+- **Three lock boxes moved to `Mutex`.** `AssignmentVersionCaptureScope`, `AdminEventSink` and `MCPVersionCaptureScope` each guarded one value with an `NSLock` behind `@unchecked Sendable`. They now hold a `Synchronization.Mutex`, which the compiler checks, and the unchecked conformances and the lock/unlock pairs are gone. No behaviour change (#1656).
+
+### Changed
+
+- **The three target READMEs point at the current docs.** `Sources/Core`, `Sources/APIServer` and `Sources/Worker` each carried a README that described the first MVP (anonymous submissions, a `student` tier, a five-field manifest). Each is now a short note on what the target is for, with links to CLAUDE.md and the architecture doc (#1657).
+
+
+## [0.5.297] - 2026-10-01
+
+### Fixed
+
+- **Deleting an LTI platform unbinds its courses.** The delete left each bound course with a dangling platform ID, so AGS grade pushes found no platform and the course could not be bound again. The platform and its course bindings now go in one transaction, and the notice says so (#1647).
+
+### Changed
+
+- **One writer for secret files.** `.worker-secret`, `.mcp-signing-key`, `.lti-tool-key` and `.github-app-secrets` are all created with mode 0600 in one call through `SecretFile`. Three of the four writers used to write the file first and restrict it second, leaving a moment in which the secret was readable by other local users (#1649).
+
+### Fixed
+
+- **Snapshots carry the signing keys.** `scripts/snapshot.sh` and `scripts/restore.sh` predated the per-integration key files, so a restore to a fresh host lost the LTI tool key, the MCP signing key and the GitHub App secrets, and every LTI launch then failed signature verification. The three files now ride the snapshot, and `--regenerate-secrets` also drops the two regenerable keys (#1648).
+
+
+## [0.5.296] - 2026-10-01
+
+### Fixed
+
+- **LTI login states and deep-link requests are reaped.** `/lti/login` wrote a row per unauthenticated hit and the deep-linking launch a row per picker open, and nothing deleted either, so both tables grew without bound. An hourly sweep now removes rows that have expired or been consumed (#1646).
+
+
+## [0.5.295] - 2026-10-01
+
+### Added
+
+- **Leaderboard Present mode.** Course staff can open the leaderboard for a projector from a Present button. The page has no site navigation, is always dark, shows the top three on a podium and places four to ten as large rows, and refreshes itself. It shows handles and birds only, never a name, even to staff. Metric, round robin, tests-and-code (the tests ranking) and hill kinds use the podium, and a tournament shows its bracket.
+
+
+## [0.5.294] - 2026-10-01
+
+### Changed
+
+- **Leaderboard: the other activity kinds share the new rows.** Round robin standings and the tests half of a tests-and-code activity use the same ranked list, window and card as the metric board, with the record or the test count as a details line. The code half lists each status as plain text. The hill holder and the tournament winner get a card, and a tournament shows as a bracket of round columns with match cards, byes, live tags and the viewer marked.
+
+
+## [0.5.293] - 2026-10-01
+
+### Added
+
+- **Codebase audit, September 2026.** `docs/audit-2026-09.md` records the month's structural numbers, the LTI sweep's findings, a prioritised list of PR-sized changes, and the sweep programme still to run.
+
+
 ## [0.5.292] - 2026-10-01
 
 ### Changed

@@ -464,7 +464,8 @@ docker run --rm \
 and restore for **PostgreSQL deployments** (Docker Compose). Each snapshot
 captures the database (`pg_dump -Fc`) plus the on-disk artifacts that the
 database rows reference (`testsetups/`, `submissions/`, `results/`,
-`.worker-secret`, `.local-runner-autostart`) into a timestamped directory
+`.worker-secret`, `.local-runner-autostart`, and the three key files
+`.mcp-signing-key`, `.lti-tool-key` and `.github-app-secrets`) into a timestamped directory
 under `backups/snapshot-<TS>[-<label>]/`. A `manifest.json` is written last
 so a partial snapshot can be detected and refused.
 
@@ -562,10 +563,14 @@ scripts/restore.sh backups/snapshot-from-prod \
   --regenerate-secrets --scrub-pii --yes
 ```
 
-- `--regenerate-secrets` deletes `.worker-secret` so the staging server
-  writes a fresh runner HMAC secret on next boot. **Always pass this when
-  copying across environments** — without it, a staging runner could
-  authenticate against prod (or vice versa).
+- `--regenerate-secrets` deletes `.worker-secret`, `.mcp-signing-key` and
+  `.lti-tool-key` so the staging server writes a fresh runner HMAC secret and
+  fresh signing keys on next boot. **Always pass this when copying across
+  environments** — without it, a staging runner could authenticate against
+  prod (or vice versa), and staging could sign MCP tokens and LTI messages
+  that prod's peers accept. `.github-app-secrets` is restored as is, because
+  it cannot be regenerated: re-register the App on staging if it must not
+  share prod's.
 - `--scrub-pii` anonymises identity columns on `users` rows where
   `role='student'` (username, email, display_name, preferred_name,
   user_id, student_id, external_subject, brightspace_user_id). Admin and

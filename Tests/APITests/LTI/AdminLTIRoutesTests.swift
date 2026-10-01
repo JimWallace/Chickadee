@@ -236,4 +236,32 @@ import VaporTesting
             }
         }
     }
+
+    @Test func deletingUnbindsItsCoursesSoGradesStopGoingThroughAGS() async throws {
+        try await withApp(app) { app in
+            let cookie = try await loginAsAdmin()
+            try await post("/admin/lti/platforms", Self.form, cookie: cookie) { _ in }
+            let platformID = try #require(try await APILTIPlatform.query(on: app.db).first()).requireID()
+            let courseID = try await app.testCourseID(code: "LTI-BOUND")
+            let course = try #require(try await APICourse.find(courseID, on: app.db))
+            course.ltiPlatformID = platformID
+            course.ltiContextID = "ctx-1"
+            course.ltiLineItemsURL = "https://learn.example.edu/lineitems"
+            course.ltiMembershipsURL = "https://learn.example.edu/members"
+            course.ltiGradesEnabled = true
+            try await course.save(on: app.db)
+
+            try await post("/admin/lti/platforms/\(platformID)/delete", [:], cookie: cookie) { res in
+                #expect(res.headers.first(name: .location) == "/admin/lti?ok=deletedUnbound")
+            }
+            let after = try #require(try await APICourse.find(courseID, on: app.db))
+            #expect(after.ltiPlatformID == nil)
+            #expect(after.ltiContextID == nil)
+            #expect(after.ltiLineItemsURL == nil)
+            #expect(after.ltiMembershipsURL == nil)
+            #expect(after.usesLTIGrades == false)
+            let count = try await APILTIPlatform.query(on: app.db).count()
+            #expect(count == 0)
+        }
+    }
 }

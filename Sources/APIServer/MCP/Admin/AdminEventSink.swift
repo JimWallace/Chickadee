@@ -10,6 +10,7 @@
 // history is ever needed (docs/admin-mcp.md §6.2).
 
 import Foundation
+import Synchronization
 import Vapor
 
 /// One captured log/diagnostic event.  `metadata` is already PII-redacted.
@@ -22,13 +23,11 @@ struct CapturedEvent: Encodable, Sendable {
     let metadata: [String: String]
 }
 
-/// Bounded ring buffer of recent events.  Thread-safe via a lock because
+/// Bounded ring buffer of recent events.  Thread-safe via a mutex because
 /// `LogHandler.log` is synchronous and called from arbitrary threads, so an
 /// actor (async-only) can't sit on that path.
-final class AdminEventSink: @unchecked Sendable {
-    // @unchecked Sendable: every access to `events` is guarded by `lock`.
-    private let lock = NSLock()
-    private var events: [CapturedEvent] = []
+final class AdminEventSink: Sendable {
+    private let events = Mutex<[CapturedEvent]>([])
     private let capacity: Int
 
     init(capacity: Int = 2000) {
@@ -38,19 +37,17 @@ final class AdminEventSink: @unchecked Sendable {
     var bufferCapacity: Int { capacity }
 
     func record(_ event: CapturedEvent) {
-        lock.lock()
-        defer { lock.unlock() }
-        events.append(event)
-        if events.count > capacity {
-            events.removeFirst(events.count - capacity)
+        events.withLock { events in
+            events.append(event)
+            if events.count > capacity {
+                events.removeFirst(events.count - capacity)
+            }
         }
     }
 
     /// A point-in-time copy of the buffer, oldest first.
     func snapshot() -> [CapturedEvent] {
-        lock.lock()
-        defer { lock.unlock() }
-        return events
+        events.withLock { $0 }
     }
 }
 

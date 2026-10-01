@@ -40,14 +40,9 @@ actor LTIToolKeyAuthority {
     /// Loads the key from `path`, or generates a 2048-bit key and writes it
     /// there (mode 0600) when the file is absent or empty.
     static func loadOrGenerate(path: String) async throws -> LTIToolKeyAuthority {
-        if let existing = try? String(contentsOfFile: path, encoding: .utf8),
-            !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            return try await make(privateKeyPEM: existing)
+        let pem = try SecretFile.loadOrCreateText(path: path) {
+            try _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation
         }
-        let pem = try _RSA.Signing.PrivateKey(keySize: .bits2048).pemRepresentation
-        try pem.write(toFile: path, atomically: true, encoding: .utf8)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
         return try await make(privateKeyPEM: pem)
     }
 

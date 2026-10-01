@@ -3,7 +3,7 @@
 **Status:** Built (slices 1 to 6).
 
 This document replaces the plan in
-[clone-course-for-new-term.md](clone-course-for-new-term.md) (issue #420). That
+[clone-course-for-new-term.md](archive/clone-course-for-new-term.md) (issue #420). That
 plan did not have a term on the course. This plan adds one, and the clone
 workflow uses it.
 
@@ -226,7 +226,7 @@ The Core type, the migration, the model accessor, and tests
 document. `docs/multi-course-roles.md` no longer says there is no term,
 `docs/slip-days.md` says what a clone does with the slip-day policy, and the
 compliance inventories list the term and key that `list_courses` now returns.
-`clone-course-for-new-term.md` is marked superseded (slice 1).
+`clone-course-for-new-term.md` is marked superseded (slice 1) and archived.
 `docs/admin-mcp.md` needed no change: `get_instructor_card_series` resolves
 its `courseCode` through the shared resolver, so it also accepts a key.
 

@@ -4,7 +4,7 @@ set -uo pipefail
 # Guard self-test: every guard must be SEEN to fail.
 #
 # The house rule is already written — "a check never seen to fail is not a
-# check" (docs/ui-ratchet-handoff.md) — and it is the one discipline here with
+# check" (docs/archive/ui-ratchet-handoff.md) — and it is the one discipline here with
 # nothing enforcing it. The cost of that gap is on the record four times: a
 # regression test matching a wiring string after the wiring went dead, the
 # repaint probe's filter assertion passing against a dead poll, the S5 guard

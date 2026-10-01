@@ -137,7 +137,7 @@ import Testing
     }
 
     /// The staff colour is none of the student ring colours, and it has a
-    /// dark-mode mirror so it reads on a dark backdrop.
+    /// dark-mode mirror in both dark blocks so it reads on a dark backdrop.
     @Test func staffRingColourIsReservedAndMirrored() throws {
         let css = try Self.contents(of: "Public/styles.css")
         func value(of token: String) -> String? {
@@ -152,6 +152,7 @@ import Testing
         for token in studentTokens {
             #expect(value(of: token) != staff, "\(token) is the staff colour")
         }
-        #expect(css.components(separatedBy: "--avatar-staff-ring:").count - 1 == 2)
+        // Light, the dark media block and the explicit dark-theme block.
+        #expect(css.components(separatedBy: "--avatar-staff-ring:").count - 1 == 3)
     }
 }

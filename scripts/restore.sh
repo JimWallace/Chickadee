@@ -9,11 +9,15 @@
 #   --yes                  Skip the interactive "type RESTORE" confirmation.
 #                          Also required to proceed across a chickadee-version
 #                          mismatch between the snapshot and the current code.
-#   --regenerate-secrets   Delete /data/.worker-secret after restore so the
-#                          server regenerates a fresh runner HMAC secret on
-#                          next boot. Use this when copying a prod snapshot
-#                          to staging (otherwise staging and prod share a
-#                          secret).
+#   --regenerate-secrets   Delete /data/.worker-secret, /data/.mcp-signing-key
+#                          and /data/.lti-tool-key after restore so the server
+#                          regenerates a fresh runner HMAC secret and fresh
+#                          signing keys on next boot. Use this when copying a
+#                          prod snapshot to staging (otherwise staging and prod
+#                          share a secret, and staging can sign MCP tokens and
+#                          LTI messages that prod's peers accept).
+#                          .github-app-secrets is kept: it cannot be
+#                          regenerated, only re-registered.
 #   --scrub-pii            Anonymise user identity columns after restore.
 #                          Replaces username/email/display_name/preferred_name/
 #                          user_id/student_id/external_subject/brightspace_user_id
@@ -244,8 +248,9 @@ cat <<EOF
 This will:
   1. Stop the server and runner containers.
   2. Drop and reload every object in the '$DATABASE_NAME' database.
-  3. Wipe testsetups/, submissions/, results/, .worker-secret, and
-     .local-runner-autostart inside the data volume, then untar the
+  3. Wipe testsetups/, submissions/, results/, .worker-secret,
+     .local-runner-autostart and the three key files (.mcp-signing-key,
+     .lti-tool-key, .github-app-secrets) inside the data volume, then untar the
      snapshot contents back in.
   4. Restart the server and runner containers.
 
@@ -345,15 +350,15 @@ docker run --rm \
   -v "$DATA_VOLUME":/data \
   -v "$SNAPSHOT_DIR":/snap:ro \
   ubuntu:22.04 \
-  sh -c 'set -e; rm -rf /data/testsetups /data/submissions /data/results /data/.worker-secret /data/.local-runner-autostart; tar xzf /snap/data.tar.gz -C /data'
+  sh -c 'set -e; rm -rf /data/testsetups /data/submissions /data/results /data/.worker-secret /data/.local-runner-autostart /data/.mcp-signing-key /data/.lti-tool-key /data/.github-app-secrets; tar xzf /snap/data.tar.gz -C /data'
 
 # ----------------------------------------------------------------
 # 4. Optional: regenerate worker secret
 # ----------------------------------------------------------------
 if [[ $REGEN_SECRETS -eq 1 ]]; then
-  echo "==> Removing .worker-secret (server will regenerate on next boot) ..."
+  echo "==> Removing .worker-secret, .mcp-signing-key and .lti-tool-key (server will regenerate on next boot) ..."
   docker run --rm -v "$DATA_VOLUME":/data ubuntu:22.04 \
-    sh -c 'rm -f /data/.worker-secret'
+    sh -c 'rm -f /data/.worker-secret /data/.mcp-signing-key /data/.lti-tool-key'
   echo "    NOTE: any running runner containers will need to be restarted"
   echo "          after the server boots and writes the new secret."
 fi

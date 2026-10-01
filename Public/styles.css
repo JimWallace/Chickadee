@@ -267,6 +267,85 @@
     }
 }
 
+/* The same dark values under an attribute, for a page that must be dark
+   whatever the viewer prefers (leaderboard Present mode, which is projected).
+   tests assert it stays identical to the media-query block above. */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --blue: #00C4D3;         /* bright teal — readable on dark backgrounds */
+    --gold: #FFCC33;
+    --gold-hover: #E6B800;
+    --teal-hover: #00D4E8;
+    --green: #4ADE80;
+    --red: #F87171;
+    --purple: #C084FC;
+    --amber: #FBBF24;
+    --gray-50: #0B1220;
+    --gray-100: #111827;
+    --gray-200: #1F2937;
+    --gray-400: #9CA3AF;
+    --gray-500: #9CA3AF;
+    --gray-600: #CBD5E1;
+    --gray-700: #D1D5DB;
+    --gray-800: #E2E8F0;
+    --gray-900: #E5E7EB;
+    --surface: #111827;
+    --surface-muted: #0F172A;
+    --danger-bg: #3B1217;
+    --danger-border: #7F1D1D;
+    --accent-bg: #3D2800;   /* dark gold tint */
+    --accent-fg: #FED34C;   /* soft gold — readable on dark gold tint */
+    --accent-border: #7A4800; /* muted gold border — readable on dark */
+    --hover-bg: #072D35;    /* dark teal tint */
+    --open-bg:  #072D35;    /* dark teal — active/open state */
+    --open-fg:  #67E8F9;    /* bright cyan-teal — readable on dark teal */
+    --closed-bg: #1F2937;   /* dark gray — inactive/closed */
+    --closed-fg: #9CA3AF;
+    --preview-bg: #422006;  /* dark amber — staff-only preview/beta */
+    --preview-fg: #FCD34D;  /* bright amber — readable on dark */
+    --amber-bg: #422006;    /* dark amber — hint / warning callouts */
+    --warning-bg: #3A2A06;  /* dark warm amber — submission warning callout */
+    --warning-border: #7A4800;
+    --success-bg: #072D35;
+    --success-fg: #67E8F9;  /* bright cyan-teal — readable on dark teal */
+    --danger-fg: #F87171;   /* soft red — readable on dark danger tint */
+    --shadow-pop: 0 4px 16px rgba(0, 0, 0, .5);
+    /* Avatar backdrops only — see the palette note above.  A pale disc
+       behind the bird glares on a dark page; the bird does not. */
+    --avatar-back-sky: #2A3A42;
+    --avatar-back-aqua: #23383D;
+    --avatar-back-sage: #26362C;
+    --avatar-back-straw: #3A3529;
+    --avatar-back-peach: #3E2F25;
+    --avatar-back-rose: #3B2C35;
+    --avatar-back-lilac: #2E2B3D;
+    --kind-slides-bg: #3A2A06;
+    --kind-slides-fg: #FCD34D;
+    --kind-notebook-bg: var(--open-bg);
+    --kind-notebook-fg: var(--open-fg);
+    --kind-document-bg: #1A2640;
+    --kind-document-fg: #A9C2F2;
+    --kind-link-bg: #1F2937;
+    --kind-link-fg: #CBD5E1;
+    --kind-outline-bg: #2A2140;
+    --kind-outline-fg: #CDB9F0;
+    --kind-graded-bg: #007C87;
+    --kind-graded-fg: #FFFFFF;
+    --state-amber: #ECC94B;
+    --avatar-back-pebble: #32332F;
+    --avatar-staff-ring: #E5E7EB;
+    --you-bg: #0F2F35;
+    --teal-ink: #00C4D3;
+    --teal-ink-fg: #00262B;
+    --rank-gold-bg: #7A5C00;
+    --rank-gold-fg: #FFF4CC;
+    --rank-silver-bg: #5B6472;
+    --rank-silver-fg: #F3F4F6;
+    --rank-bronze-bg: #8A5A2B;
+    --rank-bronze-fg: #FCE9D4;
+    /* --border inherits dark-mode --gray-200 automatically */
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -1764,16 +1843,23 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* Leaderboard: the viewer's card, the rank disc, the You pill and the folded
    rows of a windowed list. The list itself is a .section-items table. */
-.you-card {
+.you-card,
+.champion-card {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 1.25rem;
     padding: 1.25rem;
     margin-bottom: 1.25rem;
-    background: var(--you-bg);
 }
+.you-card { background: var(--you-bg); }
 .you-card-who { flex: 1 1 14rem; min-width: 0; }
+.you-card-kicker {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gray-600);
+}
 .you-card-name { font-size: var(--text-xl); font-weight: 700; }
 .you-card-rank { font-size: var(--text-2xl); font-weight: 700; }
 .you-card-rank small {
@@ -1822,6 +1908,120 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .rank-disc[data-rank-tier="1"] { background: var(--rank-gold-bg); color: var(--rank-gold-fg); }
 .rank-disc[data-rank-tier="2"] { background: var(--rank-silver-bg); color: var(--rank-silver-fg); }
 .rank-disc[data-rank-tier="3"] { background: var(--rank-bronze-bg); color: var(--rank-bronze-fg); }
+
+/* A single-elimination bracket: one column per round, each match a small card
+   of two entrant lines. Columns spread their matches with space-around so they
+   roughly line up with the matches they feed; no connector lines. */
+.bracket {
+    display: flex;
+    gap: 1.5rem;
+    min-width: min-content;
+    padding-bottom: .5rem;
+}
+.bracket-round {
+    display: flex;
+    flex: 1 0 14rem;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: .75rem;
+}
+.bracket-round-label {
+    margin: 0;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gray-600);
+}
+.bracket-match { padding: .25rem; }
+.bracket-entrant {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .3rem .5rem;
+    border-radius: var(--radius-md);
+}
+.bracket-entrant .avatar { margin-right: 0; }
+.bracket-entrant--won { font-weight: 700; }
+.bracket-entrant--you { background: var(--you-bg); }
+
+/* Leaderboard Present mode: a projected page, read across a room. Sizes are
+   relative to one font size that steps up with the screen, so a podium made
+   for 1600 pixels still fits a laptop. */
+.present {
+    padding: 2rem;
+    background: var(--gray-50);
+    color: var(--gray-900);
+}
+@media (min-width: 1900px) { .present { zoom: 1.15; } }
+.present-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.present-kicker {
+    font-size: var(--text-base);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gray-600);
+}
+.present-title { margin: 0; font-size: var(--text-2xl); }
+.present-clock {
+    font-size: var(--text-2xl);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+.podium {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+.podium-place {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    min-width: 12rem;
+}
+.podium-handle { font-size: var(--text-xl); font-weight: 700; text-align: center; }
+.podium-value { font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
+.podium-plinth {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    padding-top: .75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top-width: .4rem;
+    border-radius: var(--radius-lg);
+}
+.podium-place[data-rank-tier="1"] .podium-plinth { height: 6rem; border-top-color: var(--rank-gold-bg); }
+.podium-place[data-rank-tier="2"] .podium-plinth { height: 4rem; border-top-color: var(--rank-silver-bg); }
+.podium-place[data-rank-tier="3"] .podium-plinth { height: 3rem; border-top-color: var(--rank-bronze-bg); }
+.podium-place .avatar { width: 10rem; height: 10rem; }
+.present-rows { display: grid; gap: .75rem; max-width: 48rem; margin: 0 auto 2rem; }
+.present-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: .5rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    font-size: var(--text-xl);
+}
+.present-row .avatar { width: 3.5rem; height: 3.5rem; }
+.present-row-handle { flex: 1 1 auto; font-weight: 600; }
+.present-row-value { font-variant-numeric: tabular-nums; font-weight: 700; }
+.present-footer {
+    text-align: center;
+    font-size: var(--text-base);
+    color: var(--gray-600);
+}
 
 .section-items .leaderboard-rank { width: 3.25rem; text-align: center; }
 .section-items .leaderboard-row--you td { background: var(--you-bg); }
