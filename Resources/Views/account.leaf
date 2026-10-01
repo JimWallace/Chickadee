@@ -47,7 +47,6 @@ My Account
     #if(avatarInvalid):
     <p class="form-error" role="alert">That choice is not available.</p>
     #endif
-    <div class="card section-gap">
     <form method="post" action="/account/avatar" data-avatar-picker=".account-identity .avatar" style="--av-backdrop: var(#(avatarPicker.backdropToken))">
         #csrfFormField()
         <fieldset class="fieldset-plain">
@@ -86,7 +85,6 @@ My Account
         </fieldset>
         <button class="btn btn-primary" type="submit">Save</button>
     </form>
-    </div>
     <script src="/avatar-picker.js?v=#appVersion()"></script>
 </section>
 
@@ -270,7 +268,6 @@ My Account
 
 <section class="page-section">
     <h2>Your data</h2>
-    <div class="card section-gap">
         #if(exportNotice == "started"):
         <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
         #elseif(exportNotice == "in_progress"):
@@ -306,7 +303,6 @@ My Account
             <button class="btn btn-primary" type="submit">Request data export</button>
         </form>
         #endif
-    </div>
 </section>
 
 #endexport
