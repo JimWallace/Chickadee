@@ -13,31 +13,33 @@ My Account
 
 <section class="page-section">
     <h2>Account info</h2>
-    <div class="account-identity">
-        #extend("_avatar", avatar)
-        <div>
-            <strong>#(identityName)</strong>
-            #if(identitySecondary):
-            <span class="text-muted">#(identitySecondary)</span>
-            #endif
+    <div class="card section-gap">
+        <div class="account-identity">
+            #extend("_avatar", avatar)
+            <div>
+                <strong>#(identityName)</strong>
+                #if(identitySecondary):
+                <span class="text-muted">#(identitySecondary)</span>
+                #endif
+            </div>
         </div>
+        <dl class="detail-grid detail-grid--cells">
+            <div><dt>Username</dt>
+            <dd><strong>#(username)</strong></dd></div>
+            #if(preferredName):
+            <div><dt>Preferred name</dt>
+            <dd>#(preferredName)</dd></div>
+            #endif
+            #if(studentID):
+            <div><dt>Student ID</dt>
+            <dd>#(studentID)</dd></div>
+            #endif
+            #if(email):
+            <div><dt>Email</dt>
+            <dd>#(email)</dd></div>
+            #endif
+        </dl>
     </div>
-    <dl class="detail-grid">
-        <dt>Username</dt>
-        <dd><strong>#(username)</strong></dd>
-        #if(preferredName):
-        <dt>Preferred name</dt>
-        <dd>#(preferredName)</dd>
-        #endif
-        #if(studentID):
-        <dt>Student ID</dt>
-        <dd>#(studentID)</dd>
-        #endif
-        #if(email):
-        <dt>Email</dt>
-        <dd>#(email)</dd>
-        #endif
-    </dl>
 </section>
 
 <section class="page-section" id="chickadee">
@@ -45,6 +47,7 @@ My Account
     #if(avatarInvalid):
     <p class="form-error" role="alert">That choice is not available.</p>
     #endif
+    <div class="card section-gap">
     <form method="post" action="/account/avatar" data-avatar-picker=".account-identity .avatar" style="--av-backdrop: var(#(avatarPicker.backdropToken))">
         #csrfFormField()
         <fieldset class="fieldset-plain">
@@ -83,6 +86,7 @@ My Account
         </fieldset>
         <button class="btn btn-primary" type="submit">Save</button>
     </form>
+    </div>
     <script src="/avatar-picker.js?v=#appVersion()"></script>
 </section>
 
@@ -90,15 +94,29 @@ My Account
 <section class="page-section">
     <h2>GitHub</h2>
     #if(github.login):
-    <dl class="detail-grid">
-        <dt>GitHub login</dt>
-        <dd><strong>#(github.login)</strong></dd>
-    </dl>
-    <form method="post" action="/account/github/unlink" class="inline-form">
-        #csrfFormField()
-        <button class="btn action-btn action-danger" type="submit"
-                data-confirm="Unlink the GitHub account #(github.login)?">Unlink</button>
-    </form>
+    <div class="card section-gap">
+        <div class="toolbar toolbar--end">
+            <span class="tier tier-open">Linked</span>
+            <details class="add-section-details popup-anchor">
+                <summary class="btn action-btn action-btn-icon summary-btn" title="More actions" aria-label="More actions for your GitHub link">
+                    <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                </summary>
+                <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                    <form method="post" action="/account/github/unlink">
+                        #csrfFormField()
+                        <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem"
+                                data-confirm="Unlink the GitHub account #(github.login)?">
+                            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Unlink
+                        </button>
+                    </form>
+                </div>
+            </details>
+        </div>
+        <dl class="detail-grid detail-grid--cells">
+            <div><dt>GitHub login</dt>
+            <dd><strong>#(github.login)</strong></dd></div>
+        </dl>
+    </div>
     #else:
     <p class="empty">No GitHub account linked.</p>
     <p class="section-note">Chickadee keeps only your GitHub user ID and login.</p>
@@ -117,31 +135,44 @@ My Account
         <a href="/enroll">Browse available courses</a>
     </p>
     #else:
-    <table class="results-table">
-        <thead>
+    <table class="results-table section-items">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status"><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
             <tr>
                 <th>Code</th>
                 <th>Name</th>
+                <th>Enrolment</th>
                 <th><span class="visually-hidden">Actions</span></th>
             </tr>
         </thead>
         <tbody>
         #for(course in enrolledCourses):
             <tr>
-                <td><strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif</td>
-                <td>#(course.name)
+                <td class="item-tile-cell"><span class="item-tile" data-kind="outline"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span></td>
+                <td class="item-main">
+                    <div class="item-title"><strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif</div>
+                    <div class="item-details">#(course.name)</div>
                     #if(course.handle):
-                    <div class="text-muted" data-avatar-handle>Class handle: #(course.handle)</div>
+                    <div class="item-details" data-avatar-handle>Class handle: #(course.handle)</div>
                     #if(course.handleChoice.isLocked):
-                    <div class="text-muted">Your handle is set for this course.</div>
+                    <div class="item-details">Your handle is set for this course.</div>
                     #endif
                     #endif
                     #if(course.slipDaysText):
-                    <div class="text-muted">#(course.slipDaysText)</div>
+                    <div class="item-details">#(course.slipDaysText)</div>
                     #endif
                 </td>
-                <td>
-                    <div class="toolbar">
+                <td class="item-status">
+                    #if(course.enrollmentMode == "auto"):
+                    <span class="tier tier-closed" title="Auto-enrolled — contact your instructor to be removed">Auto</span>
+                    #elseif(course.enrollmentMode != "open"):
+                    <span class="tier tier-closed" title="Managed by instructor — contact them to be removed">Managed</span>
+                    #endif
+                </td>
+                <td class="item-actions-td">
+                    <div class="assignment-actions-cell">
                     #if(course.handleChoice.canChoose):
                     <details class="ext-details form-flush"#if(course.handleChoice.wasTaken): open#endif>
                         <summary class="btn action-btn ext-summary">Change handle</summary>
@@ -168,15 +199,20 @@ My Account
                     </details>
                     #endif
                     #if(course.enrollmentMode == "open"):
-                    <form method="post" action="/account/unenroll/#(course.id)" class="inline-form">
-                        #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit"
-                                data-confirm="Leave #(course.code)?">Leave</button>
-                    </form>
-                    #elseif(course.enrollmentMode == "auto"):
-                    <span class="chip" title="Auto-enrolled — contact your instructor to be removed">Auto</span>
-                    #else:
-                    <span class="chip" title="Managed by instructor — contact them to be removed">Managed</span>
+                    <details class="ext-details row-menu">
+                        <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for #(course.code)">
+                            <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                        </summary>
+                        <div class="popover-panel row-menu-panel" role="menu">
+                            <form method="post" action="/account/unenroll/#(course.id)">
+                                #csrfFormField()
+                                <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem"
+                                        data-confirm="Leave #(course.code)?">
+                                    <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Leave course
+                                </button>
+                            </form>
+                        </div>
+                    </details>
                     #endif
                     </div>
                 </td>
@@ -192,8 +228,11 @@ My Account
     #if(!hasAvailableCourses):
     <p class="empty">There are no other courses open to join right now.</p>
     #else:
-    <table class="results-table">
-        <thead>
+    <table class="results-table section-items">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
             <tr>
                 <th>Code</th>
                 <th>Name</th>
@@ -203,14 +242,19 @@ My Account
         <tbody>
         #for(course in availableCourses):
             <tr>
-                <td><strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif</td>
-                <td>#(course.name)</td>
-                <td>
-                    <form method="post" action="/account/enroll" class="inline-form">
-                        #csrfFormField()
-                        <input type="hidden" name="courseID" value="#(course.id)">
-                        <button class="btn btn-primary" type="submit">Join</button>
-                    </form>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="outline"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span></td>
+                <td class="item-main">
+                    <div class="item-title"><strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif</div>
+                    <div class="item-details">#(course.name)</div>
+                </td>
+                <td class="item-actions-td">
+                    <div class="assignment-actions-cell">
+                        <form method="post" action="/account/enroll" class="inline-form">
+                            #csrfFormField()
+                            <input type="hidden" name="courseID" value="#(course.id)">
+                            <button class="btn action-btn" type="submit">Join</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
         #endfor
@@ -221,41 +265,43 @@ My Account
 
 <section class="page-section">
     <h2>Your data</h2>
-    #if(exportNotice == "started"):
-    <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
-    #elseif(exportNotice == "in_progress"):
-    <div class="flash flash-neutral" role="status">Your data export is already being prepared. This page will refresh when it is ready.</div>
-    #endif
-    #if(exportError == "rate_limited"):
-    <p class="form-error" role="alert">You can request one data export per day. Please try again later.</p>
-    #elseif(exportError == "not_ready"):
-    <p class="form-error" role="alert">Your data export is not ready to download yet.</p>
-    #endif
-    #if(exportStatus == "pending"):
-    <p id="export-pending"><span class="chip">In progress</span>
-        Requested #(exportRequestedAtDisplay). Preparing your export can take
-        a few minutes.</p>
-    <script src="/account-export.js?v=#appVersion()"></script>
-    #elseif(exportStatus == "complete"):
-    <p>
-        <a class="btn btn-primary" href="/account/export/download">Download your export</a>
-    </p>
-    <p>Prepared #(exportCompletedAtDisplay). Downloads are available for three
-        days after the export is prepared, then the archive is deleted from
-        the server.</p>
-    #elseif(exportStatus == "failed"):
-    <p class="form-error" role="alert">Your last export attempt failed. Please try again.</p>
-    #endif
-    <p>Request a copy of the personal information Chickadee holds about you:
-        your profile, course enrollments, submissions (including the files you
-        uploaded), grading results, and account activity records — delivered
-        as a single zip archive. Limit one export per day.</p>
-    #if(exportCanRequest):
-    <form method="post" action="/account/export" class="inline-form">
-        #csrfFormField()
-        <button class="btn btn-primary" type="submit">Request data export</button>
-    </form>
-    #endif
+    <div class="card section-gap">
+        #if(exportNotice == "started"):
+        <div class="flash flash-neutral" role="status">Your data export is being prepared. This page will refresh when it is ready.</div>
+        #elseif(exportNotice == "in_progress"):
+        <div class="flash flash-neutral" role="status">Your data export is already being prepared. This page will refresh when it is ready.</div>
+        #endif
+        #if(exportError == "rate_limited"):
+        <p class="form-error" role="alert">You can request one data export per day. Please try again later.</p>
+        #elseif(exportError == "not_ready"):
+        <p class="form-error" role="alert">Your data export is not ready to download yet.</p>
+        #endif
+        #if(exportStatus == "pending"):
+        <p id="export-pending"><span class="tier tier-preview">In progress</span>
+            Requested #(exportRequestedAtDisplay). Preparing your export can take
+            a few minutes.</p>
+        <script src="/account-export.js?v=#appVersion()"></script>
+        #elseif(exportStatus == "complete"):
+        <p>
+            <a class="btn btn-primary" href="/account/export/download">Download your export</a>
+        </p>
+        <p>Prepared #(exportCompletedAtDisplay). Downloads are available for three
+            days after the export is prepared, then the archive is deleted from
+            the server.</p>
+        #elseif(exportStatus == "failed"):
+        <p class="form-error" role="alert">Your last export attempt failed. Please try again.</p>
+        #endif
+        <p>Request a copy of the personal information Chickadee holds about you:
+            your profile, course enrollments, submissions (including the files you
+            uploaded), grading results, and account activity records — delivered
+            as a single zip archive. Limit one export per day.</p>
+        #if(exportCanRequest):
+        <form method="post" action="/account/export" class="inline-form">
+            #csrfFormField()
+            <button class="btn btn-primary" type="submit">Request data export</button>
+        </form>
+        #endif
+    </div>
 </section>
 
 #endexport
