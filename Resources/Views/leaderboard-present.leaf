@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="app-version" content="#appVersion()">
+    <title>#(assignmentTitle) — Leaderboard — Chickadee</title>
+    <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="32x32" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=#appVersion()">
+    <script src="/chickadee-ui.js?v=#appVersion()"></script>
+    <script src="/relative-time.js?v=#appVersion()"></script>
+</head>
+<body>
+#extend("_avatar-sprite")
+<main class="present" id="main-content">
+    <div class="toolbar">
+        <a class="btn action-btn" href="#(boardURL)">Back to leaderboard</a>
+        <button class="btn action-btn" type="button" data-ck-fullscreen>Full screen</button>
+    </div>
+    <div id="present-results"#if(pollsLive): data-poll-swap="region" data-poll-url="#(pollURL)" data-poll-interval="5000"#endif>
+    #extend("_leaderboard-present-body")
+    </div>
+</main>
+<script src="/app.js?v=#appVersion()"></script>
+<script src="/table-poll.js?v=#appVersion()"></script>
+</body>
+</html>

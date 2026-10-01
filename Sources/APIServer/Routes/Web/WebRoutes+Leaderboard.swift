@@ -36,6 +36,13 @@ extension WebRoutes {
             guard activity.leaderboardVisibleToStudents else { throw Abort(.notFound) }
         }
 
+        if req.query[String.self, at: "present"] == "1" {
+            // Present mode is for the room, and only staff start it.
+            guard isStaff else { throw Abort(.notFound) }
+            return try await leaderboardPresentPage(
+                req: req, user: user, setup: setup, activity: activity)
+        }
+
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
         let showsStandings = activity.kind.aggregation == .standings
         let showsBracket = activity.kind.aggregation == .bracket
@@ -316,6 +323,7 @@ func buildTournamentPresentation(
     let winner = run.winnerUserID.flatMap { winnerID in entrants.first { $0.userID == winnerID } }
         .flatMap { entrant($0.seed) }
     return TournamentPresentation(
+        showsNames: includeNames,
         statusText: tournamentStatusText(run: run),
         isComplete: run.status == APITournamentRun.Status.complete,
         hasWinner: winner != nil,
@@ -558,6 +566,8 @@ struct UnionDefenceRow: Encodable, Sendable {
 
 /// The latest tournament run as the page shows it.
 struct TournamentPresentation: Encodable {
+    /// Whether the bracket prints names beside handles; staff pages only.
+    let showsNames: Bool
     /// One sentence naming the schedule and where the run stands.
     let statusText: String
     let isComplete: Bool

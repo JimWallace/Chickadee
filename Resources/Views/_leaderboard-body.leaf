@@ -69,39 +69,7 @@
         </div>
     </section>
     #endif
-    <div class="table-scroll" role="region" aria-label="Bracket" tabindex="0">
-    <div class="bracket" role="list">
-        #for(round in tournament.rounds):
-        <div class="bracket-round" role="listitem">
-            <h3 class="bracket-round-label">#(round.label)</h3>
-            #for(match in round.matches):
-            <div class="bracket-match card" role="group" aria-label="#(round.label) match">
-                <div class="bracket-entrant#if(match.home.isViewer): bracket-entrant--you#endif#if(match.homeWon): bracket-entrant--won#endif">
-                    #if(match.home.hasAvatar):
-                    #extend("_avatar", match.home.avatar)
-                    #endif
-                    <span data-avatar-handle>#(match.home.handle)</span>#if(match.home.isViewer): <span class="you-pill">You</span>#endif#if(isStaff): <span class="text-muted">· #(match.home.name)</span>#endif
-                    #if(match.homeWon):<span class="tier tier-open">won</span>#endif
-                    #if(match.isLive):<span class="tier tier-preview">live</span>#endif
-                </div>
-                #if(match.hasAway):
-                <div class="bracket-entrant#if(match.away.isViewer): bracket-entrant--you#endif#if(match.awayWon): bracket-entrant--won#endif">
-                    #if(match.away.hasAvatar):
-                    #extend("_avatar", match.away.avatar)
-                    #endif
-                    <span data-avatar-handle>#(match.away.handle)</span>#if(match.away.isViewer): <span class="you-pill">You</span>#endif#if(isStaff): <span class="text-muted">· #(match.away.name)</span>#endif
-                    #if(match.awayWon):<span class="tier tier-open">won</span>#endif
-                    #if(match.isLive):<span class="tier tier-preview">live</span>#endif
-                </div>
-                #else:
-                <div class="bracket-entrant text-muted">bye</div>
-                #endif
-            </div>
-            #endfor
-        </div>
-        #endfor
-    </div>
-    </div>
+    #extend("_leaderboard-bracket", tournament)
     #else:
     <p class="empty">No tournament has been run yet.</p>
     #endif

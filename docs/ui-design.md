@@ -357,7 +357,17 @@ duplicate.
   `.you-card-kicker` line.  A tournament is a `.bracket` of `.bracket-round`
   columns (`.bracket-round-label`) of `.bracket-match` cards of two
   `.bracket-entrant` lines (`.bracket-entrant--won` bold,
-  `.bracket-entrant--you` tinted), inside a `.table-scroll`.
+  `.bracket-entrant--you` tinted), inside a `.table-scroll`.  A won tag is
+  `.tier-open`; a live tag is `.tier-preview`.
+  **Present mode** (`leaderboard-present.leaf`, staff only, dark whatever the
+  viewer prefers, no site chrome) is a `.present` page: `.present-header` with
+  `.present-kicker`, `.present-title` and `.present-clock`; a `.podium` of three
+  `.podium-place` columns (`.podium-handle`, `.podium-value`, and a
+  `.podium-plinth` whose top edge takes the place's gold, silver or bronze; every podium bird is 10rem);
+  places four to ten as `.present-rows` of `.present-row` lines (3.5rem birds;
+  `.present-row-handle`, `.present-row-value`); and a `.present-footer`.  The page
+  fits one 1080-pixel screen; it steps up by `zoom` only on wide ones, since
+  the type scale forbids a fluid font size.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the Chickadee picker).  Use it for any group
