@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.312] - 2026-10-01
+
+### Changed
+
+- **Account page uses the shared list design.** Account details, the avatar picker and the GitHub link now sit in cards. Courses use the same row shape as the other lists, with status pills and a ⋯ menu for Leave and Unlink.
+
+
 ## [0.5.311] - 2026-10-01
 
 ### Fixed
