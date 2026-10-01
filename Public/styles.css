@@ -164,6 +164,17 @@
     --avatar-border-none: transparent;
     --avatar-blush: #F2AE9F;
     --avatar-mouth: #8E3A2C;
+    /* Leaderboard: the viewer's own row, the solid You pill, and the three
+       podium disc tints. Other ranks carry no colour. */
+    --you-bg: #E6F5F7;
+    --teal-ink: #005963;
+    --teal-ink-fg: #FFFFFF;
+    --rank-gold-bg: #FFCC33;
+    --rank-gold-fg: #4A3300;
+    --rank-silver-bg: #D1D5DB;
+    --rank-silver-fg: #1F2937;
+    --rank-bronze-bg: #E0A872;
+    --rank-bronze-fg: #3B2208;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -230,6 +241,15 @@
         --kind-graded-fg: #FFFFFF;
         --state-amber: #ECC94B;
         --avatar-back-pebble: #32332F;
+        --you-bg: #0F2F35;
+        --teal-ink: #00C4D3;
+        --teal-ink-fg: #00262B;
+        --rank-gold-bg: #7A5C00;
+        --rank-gold-fg: #FFF4CC;
+        --rank-silver-bg: #5B6472;
+        --rank-silver-fg: #F3F4F6;
+        --rank-bronze-bg: #8A5A2B;
+        --rank-bronze-fg: #FCE9D4;
         /* --border inherits dark-mode --gray-200 automatically */
     }
 }
@@ -1729,6 +1749,75 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .item-details .content-item-kind[data-kind="document"] { color: var(--kind-document-fg); }
 .item-details .content-item-kind[data-kind="outline"] { color: var(--kind-outline-fg); }
 
+/* Leaderboard: the viewer's card, the rank disc, the You pill and the folded
+   rows of a windowed list. The list itself is a .section-items table. */
+.you-card {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+    background: var(--you-bg);
+}
+.you-card-who { flex: 1 1 14rem; min-width: 0; }
+.you-card-name { font-size: var(--text-xl); font-weight: 700; }
+.you-card-rank { font-size: var(--text-2xl); font-weight: 700; }
+.you-card-rank small {
+    font-size: var(--text-base);
+    font-weight: 400;
+    color: var(--gray-600);
+}
+.you-card-stats {
+    display: grid;
+    gap: .75rem;
+    margin: 0;
+    padding: 1rem;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+}
+.you-card-stats dt {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gray-600);
+}
+.you-card-stats dd { margin: 0; font-weight: 600; }
+
+.you-pill {
+    display: inline-block;
+    padding: .1rem .4rem;
+    border-radius: var(--radius-full);
+    background: var(--teal-ink);
+    color: var(--teal-ink-fg);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+.rank-disc {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    border-radius: var(--radius-full);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--gray-600);
+}
+.rank-disc[data-rank-tier="1"] { background: var(--rank-gold-bg); color: var(--rank-gold-fg); }
+.rank-disc[data-rank-tier="2"] { background: var(--rank-silver-bg); color: var(--rank-silver-fg); }
+.rank-disc[data-rank-tier="3"] { background: var(--rank-bronze-bg); color: var(--rank-bronze-fg); }
+
+.section-items .leaderboard-rank { width: 3.25rem; text-align: center; }
+.section-items .leaderboard-row--you td { background: var(--you-bg); }
+.section-items .leaderboard-gap td {
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--gray-600);
+}
+
 .section-items-heading td { background: var(--gray-100); }
 .section-items-heading strong {
     font-size: var(--text-xs);
@@ -3143,6 +3232,18 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 @media (forced-colors: active) {
     .swatch-sample { forced-color-adjust: none; }
     .swatch input:checked + .swatch-sample { outline-color: Highlight; }
+}
+
+/* The leaderboard's "you" card bird (6rem) and the Present-mode podium bird
+   (10rem). See AvatarSize.hero and AvatarSize.podium. */
+.avatar-lg {
+    width: 6rem;
+    height: 6rem;
+}
+
+.avatar-xl {
+    width: 10rem;
+    height: 10rem;
 }
 
 .av-backdrop { fill: var(--av-backdrop); }

@@ -18,7 +18,7 @@
 // hatch this codebase does not use anywhere, and would hide the style
 // attribute from the guard entirely.
 
-/// Which of the two sizes in the stylesheet a rendering wants.
+/// Which of the sizes in the stylesheet a rendering wants.
 public enum AvatarSize: String, CaseIterable, Sendable {
     /// 3rem — the account page.
     case standard
@@ -30,12 +30,19 @@ public enum AvatarSize: String, CaseIterable, Sendable {
     /// identity (the instructor Students, Slip days and LEARN lists).  Inside
     /// the 32-48px band where the wing marks and expression still read.
     case roster
+    /// 6rem — the leaderboard "you" card and the hill champion card, where one
+    /// bird stands for one student.
+    case hero
+    /// 10rem — a Present-mode podium place, read across a room.
+    case podium
 
     public var cssClass: String {
         switch self {
         case .standard: "avatar"
         case .small: "avatar avatar-sm"
         case .roster: "avatar avatar-md"
+        case .hero: "avatar avatar-lg"
+        case .podium: "avatar avatar-xl"
         }
     }
 }
@@ -84,7 +91,7 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// centre. Always a value, never empty — upright is "rotate(0 32 34)" — so
     /// the template never has to test for one.
     public let tiltTransform: String
-    /// "avatar", "avatar avatar-sm" or "avatar avatar-md".
+    /// "avatar" plus the size modifier, e.g. "avatar avatar-md".
     public let sizeClass: String
     /// Whether to announce the bird. An explicit Bool rather than testing the
     /// optional label in the template: Leaf's truthiness rules make a bare

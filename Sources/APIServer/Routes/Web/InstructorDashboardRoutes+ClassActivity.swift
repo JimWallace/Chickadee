@@ -33,8 +33,18 @@ extension InstructorDashboardRoutes {
         struct ToggleBody: Content {
             // Checkbox: "on" when checked, absent when not — absence is false.
             var visible: String?
+            // The leaderboard page's select sends "visible" or "hidden", which
+            // wins over the checkbox because a select cannot be absent.
+            var visibility: String?
+            var returnTo: String?
         }
-        let visible = ((try? req.content.decode(ToggleBody.self))?.visible) != nil
+        let body = try? req.content.decode(ToggleBody.self)
+        let visible: Bool
+        switch body?.visibility {
+        case "visible": visible = true
+        case "hidden": visible = false
+        default: visible = body?.visible != nil
+        }
         try await ActivityAuthoring.setActivity(
             setup: setup,
             to: current.withLeaderboardVisibility(visible ? .visible : .hidden),
@@ -49,6 +59,13 @@ extension InstructorDashboardRoutes {
             ],
             on: req
         )
+        // The leaderboard page asks to come back to itself. Only that one
+        // path is honoured, so the field cannot steer a redirect elsewhere.
+        if let returnTo = body?.returnTo, let setupID = setup.id,
+            returnTo == "/testsetups/\(setupID)/leaderboard"
+        {
+            return req.redirect(to: returnTo)
+        }
         return req.redirect(
             to: "/instructor/\(assignment.publicID)/edit?notice=Leaderboard+setting+saved")
     }
