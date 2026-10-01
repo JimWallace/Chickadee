@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.305] - 2026-10-01
+
+### Changed
+
+- **The per-instructor LEARN connection is a service.** Verifying a pasted Valence key, storing it, designating a course's sync identity and disconnecting moved out of the BrightSpace route extension into `BrightSpaceConnectionService`, beside the credential store. The handlers keep the form, the flash, the audit entry and the redirect. Slice 2 of #1654.
+
+### Changed
+
+- **Org-unit binding and auto-map are a service; the manual sync triggers sit beside the sweep.** `BrightSpaceCourseBinding` binds or clears a course's LEARN org unit and maps assignments to grade items by name; `requeueErroredGradePushes` and `launchBackgroundBrightSpaceSweep` moved into `BrightSpaceGradeSyncService` next to `requeueForImmediateSync`. The BrightSpace route extension now holds route handlers only. Slice 3 of #1654.
+
+### Changed
+
+- **The LEARN tab's view model is assembled by `BrightSpacePagePresenter`.** The grade-item rows, the per-student sync rollup, the roster-readiness panel and the facts card moved out of the 1,100-line BrightSpace route extension into a service over the database, so they are testable without a request. The handlers keep the request work. Slice 1 of #1654.
+
+
 ## [0.5.304] - 2026-10-01
 
 ### Changed
