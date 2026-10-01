@@ -323,5 +323,83 @@
             <path class="av-staff-ring" d="M32,3.4 A28.6,28.6 0 0 1 32,60.6 L32,58.8 A26.8,26.8 0 0 0 32,5.2 Z"/>
             <path class="av-staff-ring" d="M32,60.6 A28.6,28.6 0 0 1 32,3.4 L32,5.2 A26.8,26.8 0 0 0 32,58.8 Z"/>
         </symbol>
+        <symbol id="av-ring-snowflake" viewBox="0 0 64 64">
+            <path class="av-spectrum-lagoon" d="M32,0 A32,32 0 0 1 32,64 L32,60.8 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-spectrum-lagoon" d="M32,64 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 32,60.8 Z"/>
+            <path class="av-glint" d="M28.8,2.85 L35.2,2.85 L35.2,3.95 L28.8,3.95 Z"/>
+            <path class="av-glint" d="M30.88,0.35 L34.08,5.9 L33.12,6.45 L29.92,0.9 Z"/>
+            <path class="av-glint" d="M34.08,0.9 L30.88,6.45 L29.92,5.9 L33.12,0.35 Z"/>
+            <path class="av-glint" d="M55.64,14.65 L58.84,20.2 L57.89,20.75 L54.69,15.2 Z"/>
+            <path class="av-glint" d="M58.84,15.2 L55.64,20.75 L54.69,20.2 L57.89,14.65 Z"/>
+            <path class="av-glint" d="M59.97,18.25 L53.57,18.25 L53.57,17.15 L59.97,17.15 Z"/>
+            <path class="av-glint" d="M58.84,43.8 L55.64,49.35 L54.69,48.8 L57.89,43.25 Z"/>
+            <path class="av-glint" d="M59.97,46.85 L53.57,46.85 L53.57,45.75 L59.97,45.75 Z"/>
+            <path class="av-glint" d="M57.89,49.35 L54.69,43.8 L55.64,43.25 L58.84,48.8 Z"/>
+            <path class="av-glint" d="M35.2,61.15 L28.8,61.15 L28.8,60.05 L35.2,60.05 Z"/>
+            <path class="av-glint" d="M33.12,63.65 L29.92,58.1 L30.88,57.55 L34.08,63.1 Z"/>
+            <path class="av-glint" d="M29.92,63.1 L33.12,57.55 L34.08,58.1 L30.88,63.65 Z"/>
+            <path class="av-glint" d="M8.36,49.35 L5.16,43.8 L6.11,43.25 L9.31,48.8 Z"/>
+            <path class="av-glint" d="M5.16,48.8 L8.36,43.25 L9.31,43.8 L6.11,49.35 Z"/>
+            <path class="av-glint" d="M4.03,45.75 L10.43,45.75 L10.43,46.85 L4.03,46.85 Z"/>
+            <path class="av-glint" d="M5.16,20.2 L8.36,14.65 L9.31,15.2 L6.11,20.75 Z"/>
+            <path class="av-glint" d="M4.03,17.15 L10.43,17.15 L10.43,18.25 L4.03,18.25 Z"/>
+            <path class="av-glint" d="M6.11,14.65 L9.31,20.2 L8.36,20.75 L5.16,15.2 Z"/>
+        </symbol>
+        <symbol id="av-ring-blossom" viewBox="0 0 64 64">
+            <path class="av-spectrum-moss" d="M32,0 A32,32 0 0 1 32,64 L32,60.8 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-spectrum-moss" d="M32,64 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 32,60.8 Z"/>
+            <circle class="av-blush" cx="32" cy="1.5" r="1.35"/>
+            <circle class="av-blush" cx="33.62" cy="2.67" r="1.35"/>
+            <circle class="av-blush" cx="33" cy="4.58" r="1.35"/>
+            <circle class="av-blush" cx="31" cy="4.58" r="1.35"/>
+            <circle class="av-blush" cx="30.38" cy="2.67" r="1.35"/>
+            <circle class="av-spectrum-honey" cx="32" cy="3.2" r="1"/>
+            <circle class="av-blush" cx="56.94" cy="15.9" r="1.35"/>
+            <circle class="av-blush" cx="58.56" cy="17.07" r="1.35"/>
+            <circle class="av-blush" cx="57.94" cy="18.98" r="1.35"/>
+            <circle class="av-blush" cx="55.94" cy="18.98" r="1.35"/>
+            <circle class="av-blush" cx="55.32" cy="17.07" r="1.35"/>
+            <circle class="av-spectrum-honey" cx="56.94" cy="17.6" r="1"/>
+            <circle class="av-blush" cx="56.94" cy="44.7" r="1.35"/>
+            <circle class="av-blush" cx="58.56" cy="45.87" r="1.35"/>
+            <circle class="av-blush" cx="57.94" cy="47.78" r="1.35"/>
+            <circle class="av-blush" cx="55.94" cy="47.78" r="1.35"/>
+            <circle class="av-blush" cx="55.32" cy="45.87" r="1.35"/>
+            <circle class="av-spectrum-honey" cx="56.94" cy="46.4" r="1"/>
+            <circle class="av-blush" cx="32" cy="59.1" r="1.35"/>
+            <circle class="av-blush" cx="33.62" cy="60.27" r="1.35"/>
+            <circle class="av-blush" cx="33" cy="62.18" r="1.35"/>
+            <circle class="av-blush" cx="31" cy="62.18" r="1.35"/>
+            <circle class="av-blush" cx="30.38" cy="60.27" r="1.35"/>
+            <circle class="av-spectrum-honey" cx="32" cy="60.8" r="1"/>
+            <circle class="av-blush" cx="7.06" cy="44.7" r="1.35"/>
+            <circle class="av-blush" cx="8.68" cy="45.87" r="1.35"/>
+            <circle class="av-blush" cx="8.06" cy="47.78" r="1.35"/>
+            <circle class="av-blush" cx="6.06" cy="47.78" r="1.35"/>
+            <circle class="av-blush" cx="5.44" cy="45.87" r="1.35"/>
+            <circle class="av-spectrum-honey" cx="7.06" cy="46.4" r="1"/>
+            <circle class="av-blush" cx="7.06" cy="15.9" r="1.35"/>
+            <circle class="av-blush" cx="8.68" cy="17.07" r="1.35"/>
+            <circle class="av-blush" cx="8.06" cy="18.98" r="1.35"/>
+            <circle class="av-blush" cx="6.06" cy="18.98" r="1.35"/>
+            <circle class="av-blush" cx="5.44" cy="17.07" r="1.35"/>
+            <circle class="av-spectrum-honey" cx="7.06" cy="17.6" r="1"/>
+        </symbol>
+        <symbol id="av-ring-maple" viewBox="0 0 64 64">
+            <path class="av-spectrum-honey" d="M32,0 A32,32 0 0 1 32,64 L32,60.8 A28.8,28.8 0 0 0 32,3.2 Z"/>
+            <path class="av-spectrum-honey" d="M32,64 A32,32 0 0 1 32,0 L32,3.2 A28.8,28.8 0 0 0 32,60.8 Z"/>
+            <path class="av-spectrum-ember" d="M48,4.29 L47.88,5.8 L48.95,5.67 L47.97,6.93 L49.59,7.29 L48.58,8.03 L49.2,9.05 L47.37,8.83 L47.09,9.75 L45.97,8.52 L45.35,8.16 L43.72,7.8 L44.38,7.1 L43.27,5.63 L44.47,5.66 L44.61,4.41 L45.73,5.63 L46.33,4.15 L46.75,5.15 Z"/>
+            <path class="av-spectrum-ember" d="M45.5,8.04 L46,8.33 L45.01,10.04 L44.51,9.76 Z"/>
+            <path class="av-spectrum-ember" d="M64,32 L62.63,32.65 L63.28,33.51 L61.7,33.3 L62.2,34.88 L61.05,34.38 L60.47,35.42 L59.75,33.73 L58.82,33.94 L59.32,32.36 L59.32,31.64 L58.82,30.06 L59.75,30.27 L60.47,28.58 L61.05,29.62 L62.2,29.12 L61.7,30.7 L63.28,30.49 L62.63,31.35 Z"/>
+            <path class="av-spectrum-ember" d="M59.5,31.71 L59.5,32.29 L57.52,32.29 L57.52,31.71 Z"/>
+            <path class="av-spectrum-ember" d="M48,59.71 L46.75,58.85 L46.33,59.85 L45.73,58.37 L44.61,59.59 L44.47,58.34 L43.27,58.37 L44.38,56.9 L43.72,56.2 L45.35,55.84 L45.97,55.48 L47.09,54.25 L47.37,55.17 L49.2,54.95 L48.58,55.97 L49.59,56.71 L47.97,57.07 L48.95,58.33 L47.88,58.2 Z"/>
+            <path class="av-spectrum-ember" d="M46,55.67 L45.5,55.96 L44.51,54.24 L45.01,53.96 Z"/>
+            <path class="av-spectrum-ember" d="M16,59.71 L16.12,58.2 L15.05,58.33 L16.03,57.07 L14.41,56.71 L15.42,55.97 L14.8,54.95 L16.63,55.17 L16.91,54.25 L18.03,55.48 L18.65,55.84 L20.28,56.2 L19.62,56.9 L20.73,58.37 L19.53,58.34 L19.39,59.59 L18.27,58.37 L17.67,59.85 L17.25,58.85 Z"/>
+            <path class="av-spectrum-ember" d="M18.5,55.96 L18,55.67 L18.99,53.96 L19.49,54.24 Z"/>
+            <path class="av-spectrum-ember" d="M0,32 L1.37,31.35 L0.72,30.49 L2.3,30.7 L1.8,29.12 L2.95,29.62 L3.53,28.58 L4.25,30.27 L5.18,30.06 L4.68,31.64 L4.68,32.36 L5.18,33.94 L4.25,33.73 L3.53,35.42 L2.95,34.38 L1.8,34.88 L2.3,33.3 L0.72,33.51 L1.37,32.65 Z"/>
+            <path class="av-spectrum-ember" d="M4.5,32.29 L4.5,31.71 L6.48,31.71 L6.48,32.29 Z"/>
+            <path class="av-spectrum-ember" d="M16,4.29 L17.25,5.15 L17.67,4.15 L18.27,5.63 L19.39,4.41 L19.53,5.66 L20.73,5.63 L19.62,7.1 L20.28,7.8 L18.65,8.16 L18.03,8.52 L16.91,9.75 L16.63,8.83 L14.8,9.05 L15.42,8.03 L14.41,7.29 L16.03,6.93 L15.05,5.67 L16.12,5.8 Z"/>
+            <path class="av-spectrum-ember" d="M18,8.33 L18.5,8.04 L19.49,9.76 L18.99,10.04 Z"/>
+        </symbol>
     </defs>
 </svg>

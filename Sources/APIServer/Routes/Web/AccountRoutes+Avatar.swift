@@ -77,25 +77,40 @@ struct AvatarPickerContext: Encodable {
                 ringRef: "",
                 checked: value == spec.backdrop.rawValue,
                 isNone: false,
-                isLocked: false)
+                isLocked: false,
+                season: "")
         }
+        let season = TermSeason.current()
         borders = AvatarCustomization.options(for: .border).map { value in
             // The same token and ring the presentation would name for this
             // border, so the live preview draws exactly what a save would.
             var preview = spec
             preview.border = AvatarBorder(rawValue: value) ?? .none
             let drawn = AvatarPresentation(for: preview, size: .standard, accessibility: .decorative)
-            let isLocked = !AvatarCustomization.isOpen(value, for: .border)
-            let name = preview.border.displayName
+            // The ring a student already wears is never locked: a seasonal ring
+            // is kept after its term, and a disabled radio would not be posted.
+            let isWorn = value == spec.border.rawValue
+            let isLocked = !isWorn && !AvatarCustomization.isOpen(value, for: .border, season: season)
             return AvatarPickerOption(
                 value: value,
-                label: isLocked ? "\(name) (locked)" : name,
+                label: Self.borderLabel(preview.border, isLocked: isLocked),
                 token: drawn.borderToken,
                 ringRef: drawn.ringSymbolRef,
-                checked: value == spec.border.rawValue,
+                checked: isWorn,
                 isNone: value == AvatarBorder.none.rawValue,
-                isLocked: isLocked)
+                isLocked: isLocked,
+                season: preview.border.season?.rawValue ?? "")
         }
+    }
+}
+
+extension AvatarPickerContext {
+    /// A ring's name. A seasonal ring always names its term ("Maple (Fall)"),
+    /// open or not, so the page reads the same on every date; any other
+    /// locked ring says "locked".
+    static func borderLabel(_ border: AvatarBorder, isLocked: Bool) -> String {
+        if let season = border.season { return "\(border.displayName) (\(season.displayName))" }
+        return isLocked ? "\(border.displayName) (locked)" : border.displayName
     }
 }
 
@@ -113,6 +128,11 @@ struct AvatarPickerOption: Encodable {
     let checked: Bool
     /// The "no border" option, drawn as a dashed ring rather than a colour.
     let isNone: Bool
-    /// An earned or special ring: shown, but not selectable yet.
+    /// An earned or special ring, or a seasonal ring out of its term: shown,
+    /// but not selectable now.
     let isLocked: Bool
+    /// The term of a seasonal ring ("fall"); empty for every other option.
+    /// The visual-regression harness reads it to pin the one part of the page
+    /// that changes with the date.
+    let season: String
 }

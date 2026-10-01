@@ -75,7 +75,8 @@ import Testing
     /// Append only: the patterned rings follow the colour rings, in this order.
     @Test func patternedRingsAreAppended() {
         #expect(
-            Array(AvatarBorder.allCases.dropFirst(6)) == [.rainbow, .spectrum, .twotone, .stitched])
+            Array(AvatarBorder.allCases.dropFirst(6))
+                == [.rainbow, .spectrum, .twotone, .stitched, .snowflake, .blossom, .maple])
     }
 
     // MARK: - The chokepoint

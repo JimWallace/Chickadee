@@ -67,7 +67,7 @@ My Account
             <div class="swatch-row">
             #for(option in avatarPicker.borders):
             <label class="swatch">
-                <input type="radio" data-av-ring="#(option.ringRef)" name="border" value="#(option.value)" data-av-token="#(option.token)"#if(option.checked): checked#endif#if(option.isLocked): disabled#endif>
+                <input type="radio" data-av-season="#(option.season)" data-av-ring="#(option.ringRef)" name="border" value="#(option.value)" data-av-token="#(option.token)"#if(option.checked): checked#endif#if(option.isLocked): disabled#endif>
                 #if(option.isNone):
                 <span class="swatch-sample swatch-none" aria-hidden="true"></span>
                 #else:
@@ -78,6 +78,7 @@ My Account
             #endfor
             </div>
             <p class="field-note">Locked rings will be earned through course achievements.</p>
+            <p class="field-note">A seasonal ring can be chosen only during its term.</p>
             #endif
         </fieldset>
         <button class="btn btn-primary" type="submit">Save</button>

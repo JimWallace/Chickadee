@@ -103,6 +103,12 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
     case twotone
     /// The student's accent with a line of stitches. An earned reward.
     case stitched
+    /// Snowflakes on a lagoon band. Open to choose during the Winter term.
+    case snowflake
+    /// Blossoms on a green band. Open to choose during the Spring term.
+    case blossom
+    /// Maple leaves on a honey band. Open to choose during the Fall term.
+    case maple
 
     /// The accent this ring is drawn in; nil for `none` and the patterned rings.
     public var accent: AvatarAccent? { AvatarAccent(rawValue: rawValue) }
@@ -116,6 +122,20 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .spectrum: .spectrum
         case .twotone: .twotone
         case .stitched: .stitched
+        case .snowflake: .snowflake
+        case .blossom: .blossom
+        case .maple: .maple
+        }
+    }
+
+    /// The term during which a seasonal ring may be chosen; nil for every
+    /// other ring.
+    public var season: TermSeason? {
+        switch self {
+        case .snowflake: .winter
+        case .blossom: .spring
+        case .maple: .fall
+        default: nil
         }
     }
 
@@ -127,13 +147,15 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Who may wear it. Only `starter` rings can be chosen until unlocks exist
-    /// (docs/student-wardrobe.md, slice W3); the others show as locked.
+    /// Who may wear it. Starter rings are always open, and a seasonal ring is
+    /// open during its term. Earned and special rings stay locked until
+    /// unlocks exist (docs/student-wardrobe.md, slice W3).
     public var availability: AvatarAvailability {
         switch self {
         case .none, .ember, .orchid, .lagoon, .honey, .moss, .rainbow: .starter
         case .twotone, .stitched: .earned
         case .spectrum: .special
+        case .snowflake, .blossom, .maple: .seasonal
         }
     }
 }
@@ -146,6 +168,9 @@ public enum AvatarAvailability: String, CaseIterable, Codable, Sendable {
     case earned
     /// Unlocked by a course-level achievement, such as completing the course.
     case special
+    /// Open to every student during one term of the year (`AvatarBorder.season`).
+    /// A student who chose it keeps it after the term ends.
+    case seasonal
 }
 
 /// The drawn ring: one `<symbol>` each in the sprite (`av-ring-<rawValue>`),
@@ -157,6 +182,7 @@ public enum AvatarAvailability: String, CaseIterable, Codable, Sendable {
 /// option (docs/student-wardrobe.md, "The staff ring").
 public enum AvatarRing: String, CaseIterable, Codable, Sendable {
     case none, solid, rainbow, spectrum, twotone, stitched, staff
+    case snowflake, blossom, maple
 }
 
 /// A feather tuft on top of the head — the one axis that changes the

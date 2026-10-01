@@ -391,8 +391,9 @@ duplicate.
   `.swatch-none` (a dashed ring, for "no border").  An option that exists but
   cannot be chosen yet has a `disabled` input, which dims its swatch
   (`.swatch:has(input:disabled)`, the `.row-muted` opacity); its name says
-  "(locked)" and a note says how locked rings are earned, so the state does
-  not rest on the dimming alone.  Used by the account page's
+  "(locked)", or names the term of a seasonal ring, and a note under the row
+  says how each kind opens, so the state does not rest on the dimming alone.
+  The option a student already wears is never disabled.  Used by the account page's
   Chickadee picker, whose live preview (`avatar-picker.js`) copies the
   checked option's token onto the avatar and points its ring layer at the
   checked ring; see
