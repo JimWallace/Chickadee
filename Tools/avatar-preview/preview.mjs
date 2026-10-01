@@ -105,7 +105,7 @@ const sections = [
     label(accent, bird(88, { ...base, accessory: 'scarf', accent, back: 'straw' })))],
   ['Ring — chosen on the account page; the solid ring in the five accents', ['none', ...accents].map(border =>
     label(border, bird(88, { ...base, border, accessory: 'headband', back: 'straw' })))],
-  ['Patterned rings — rainbow is a starter; two-tone and stitched are earned; spectrum is special',
+  ['Patterned rings — rainbow is a starter; two-tone and stitched are earned; spectrum is special; snowflake, blossom and maple are seasonal',
     rings.filter(r => !['none', 'solid', 'staff'].includes(r)).map(border =>
       label(border, bird(88, { ...base, border, accent: 'lagoon', back: 'straw' })))],
   ['Staff ring — drawn from a course role, never chosen; on each backdrop', backs.map(back =>

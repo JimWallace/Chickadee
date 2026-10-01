@@ -4,10 +4,13 @@
 // (docs/student-wardrobe.md, decision 3). A route never writes a spec field
 // itself: it hands the raw form values here and stores what comes back.
 //
-// Every backdrop and every starter ring is open to every student. Earned and
-// special rings exist and are shown locked: `applying` refuses them until
-// unlocks arrive (docs/student-wardrobe.md, W3), and then only `isOpen` has to
-// learn about a student's unlocks. Course staff cannot change their ring.
+// Every backdrop and every starter ring is open to every student, and a
+// seasonal ring is open during its term. Earned and special rings exist and
+// are shown locked: `applying` refuses them until unlocks arrive
+// (docs/student-wardrobe.md, W3), and then only `isOpen` has to learn about a
+// student's unlocks. Re-choosing the ring a student already wears is always
+// allowed, so a seasonal ring is kept after its term. Course staff cannot
+// change their ring.
 
 /// A slot a student may change on the account page.
 public enum AvatarCustomizableSlot: String, CaseIterable, Sendable {
@@ -21,8 +24,8 @@ public enum AvatarCustomizationError: Error, Equatable, Sendable {
     case slotNotCustomizable(String)
     /// The value is not an option of that slot.
     case unknownOption(slot: AvatarCustomizableSlot, value: String)
-    /// The option exists but is not open to this student yet: an earned or
-    /// special ring, before unlocks exist.
+    /// The option exists but is not open to this student now: an earned or
+    /// special ring before unlocks exist, or a seasonal ring out of its term.
     case optionLocked(slot: AvatarCustomizableSlot, value: String)
     /// Course staff wear the staff ring, which they cannot change.
     case staffRingIsFixed
@@ -38,12 +41,22 @@ public enum AvatarCustomization {
         }
     }
 
-    /// Whether a student may choose `value` for `slot` now. Every backdrop is
-    /// open; a ring is open when it is a starter ring.
-    public static func isOpen(_ value: String, for slot: AvatarCustomizableSlot) -> Bool {
+    /// Whether a student may choose `value` for `slot` during `season`. Every
+    /// backdrop is open; a ring is open when it is a starter ring, or a
+    /// seasonal ring whose term is `season`.
+    public static func isOpen(
+        _ value: String, for slot: AvatarCustomizableSlot, season: TermSeason = .current()
+    ) -> Bool {
         switch slot {
-        case .backdrop: AvatarBackdrop(rawValue: value) != nil
-        case .border: AvatarBorder(rawValue: value)?.availability == .starter
+        case .backdrop:
+            return AvatarBackdrop(rawValue: value) != nil
+        case .border:
+            guard let border = AvatarBorder(rawValue: value) else { return false }
+            switch border.availability {
+            case .starter: return true
+            case .seasonal: return border.season == season
+            case .earned, .special: return false
+            }
         }
     }
 
@@ -60,9 +73,11 @@ public enum AvatarCustomization {
     /// `spec` with each chosen slot set, keyed by slot raw value. A slot not in
     /// `choices` is left as it is. Throws, and changes nothing, if any key is
     /// not a customizable slot, any value is not an option of its slot, a
-    /// chosen ring is locked, or `isStaff` and a ring was chosen at all.
+    /// chosen ring is locked during `season` (other than the ring the student
+    /// already wears), or `isStaff` and a ring was chosen at all.
     public static func applying(
-        _ choices: [String: String], to spec: AvatarSpec, isStaff: Bool
+        _ choices: [String: String], to spec: AvatarSpec, isStaff: Bool,
+        season: TermSeason = .current()
     ) throws
         -> AvatarSpec
     {
@@ -82,7 +97,7 @@ public enum AvatarCustomization {
                     throw AvatarCustomizationError.unknownOption(slot: slot, value: value)
                 }
                 if isStaff { throw AvatarCustomizationError.staffRingIsFixed }
-                guard border.availability == .starter else {
+                guard border == spec.border || isOpen(value, for: .border, season: season) else {
                     throw AvatarCustomizationError.optionLocked(slot: slot, value: value)
                 }
                 updated.border = border

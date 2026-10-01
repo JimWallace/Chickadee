@@ -2,7 +2,8 @@
 
 **Status:** slice W1 (border and backdrop colour, chosen on the account page)
 has shipped. Slice W2 (rings as sprite art, the patterned rings and the staff
-ring) is being built. Everything after W2 is a plan. The participation currency is
+ring) has shipped, and the seasonal rings (W2b) are being built. Everything
+after W2b is a plan. The participation currency is
 **shelved**: the maintainer decided that the first idea for it ("seeds") is
 not fun enough, and we will come back to it.
 
@@ -143,6 +144,9 @@ gets the ring. It is not a rank.
 | two-tone | earned | half in the bird's accent, half in its cap colour |
 | stitched | earned | the accent with 24 cream stitches |
 | spectrum | special | five bands in the five accent colours |
+| snowflake | seasonal (Winter) | white snowflakes on a lagoon band |
+| blossom | seasonal (Spring) | pink blossoms on a moss band |
+| maple | seasonal (Fall) | ember maple leaves on a honey band |
 
 Rainbow is a starter on purpose. It is also the Pride flag, and a student must
 not have to earn a way to show it.
@@ -159,7 +163,26 @@ ring. The picker shows them locked (disabled, with "(locked)" in the name), so
 that a student can see what there is to earn. `AvatarCustomization` refuses a
 locked ring, so a hand-made request cannot choose one.
 
-### 7. The staff ring
+### 7. Seasonal rings
+
+There is one seasonal ring for each Waterloo term: snowflake (Winter, January
+to April), blossom (Spring, May to August) and maple (Fall, September to
+December). `AvatarBorder.season` names the term.
+
+- **A student can choose it only during its term.** The term comes from
+  today's date on the Waterloo calendar (`TermSeason.current()`), not from a
+  course. Out of its term, the picker shows the ring disabled, with its term
+  in the name ("Maple (Fall)"), and the chokepoint refuses it.
+- **A student keeps it after the term.** The stored ring is drawn on every
+  date. The chokepoint always allows the ring the student already wears, so
+  saving the form again in Winter does not take the maple ring away. This
+  exception is for the worn ring only: it does not open any other ring.
+- **The art uses existing colours.** The bands and motifs use the accent,
+  glint and blush classes, so the rings add no palette tokens. The motifs are
+  large enough to read at 48 px; at 36 px they show as spots of colour on the
+  band, which is still different from a solid ring.
+
+### 8. The staff ring
 
 Course staff (a TA or an instructor in the course) wear the staff ring. It is
 not a choice, and staff cannot change it.
@@ -220,8 +243,7 @@ named as the right one.
 These are ideas, not commitments. Every item must obey the sprite rules: flat
 closed paths, colour from a class, no gradient, filter, mask or clip-path.
 
-**Rings.** Seasonal rings (maple leaves in the Fall term, snowflakes in the
-Winter term) and a laurel ring for course completion. Each is one new
+**Rings.** A laurel ring for course completion. Each is one new
 `AvatarBorder` case (appended), one `AvatarRing` case and one sprite symbol.
 
 **Accessories with a meaning in a programming course.**
@@ -307,7 +329,8 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | Slice | Content | Status |
 |---|---|---|
 | W1 | Border + backdrop picker on the account page; headband replaces the gradcap in the draw; existing gradcaps swapped | shipped |
-| W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | in progress |
+| W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | shipped |
+| W2b | Seasonal rings: snowflake, blossom and maple, open during their term and kept after | in progress |
 | W3 | `wardrobe_unlocks` + the `unlock(itemID)` achievement reward; the three unlockable expressions become grantable | planned |
 | W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | planned |
 | W5 | Trophy case + class-activity medals | planned |

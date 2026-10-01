@@ -127,6 +127,15 @@ async function main() {
           document.querySelectorAll("[data-avatar-handle]").forEach((el) => {
             el.textContent = "Class handle: Aaaaaaa Bbbbbb";
           });
+          // Which seasonal ring is open depends on today's Waterloo term, so
+          // one of the three swatches would lose its dimming every January,
+          // May and September. Their names already read the same on every
+          // date; disabling all three pins the dimming too.
+          document
+            .querySelectorAll('input[data-av-season]:not([data-av-season=""])')
+            .forEach((el) => {
+              el.disabled = true;
+            });
           // Only the GENERATED name is replaced. An uploaded artifact keeps
           // the student's own filename ("solution.py"), which is already
           // deterministic — rewriting it too would restage the pending page's

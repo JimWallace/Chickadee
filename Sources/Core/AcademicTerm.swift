@@ -44,6 +44,23 @@ public enum TermSeason: String, Codable, Sendable, CaseIterable {
         case .fall: 9
         }
     }
+
+    /// The term a month (1–12) falls in: January to April is Winter, May to
+    /// August is Spring, and September to December is Fall.
+    public static func containing(month: Int) -> TermSeason {
+        switch month {
+        case ..<5: .winter
+        case ..<9: .spring
+        default: .fall
+        }
+    }
+
+    /// The term that `date` falls in, on the Waterloo calendar.
+    public static func current(at date: Date = Date()) -> TermSeason {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        return containing(month: calendar.component(.month, from: date))
+    }
 }
 
 /// A year plus a season, e.g. Fall 2026.  Ordered chronologically.
