@@ -113,12 +113,13 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
 /// Rebuilds the manifest for `props` with a new suite list, carrying every
 /// other field forward.
 ///
-/// This is the overload a suite edit should call. The base builder below
-/// writes a fresh dict, so a rebuild that threads the preserved fields by hand
-/// loses whichever one it forgets — `languageDeclared`, `minimumRunnerVersion`
-/// and `activity` were each lost that way once. Here a field is preserved by
-/// default and replaced only when the caller passes it. `language` is
-/// explicit because a rebuild may be the act of changing it.
+/// This is the overload a suite edit should call. The stored manifest is
+/// copied and only what the caller passes is replaced, so a field this
+/// rebuild does not know about is preserved without being named. The old
+/// builder wrote a fresh dictionary from a list of fields, and
+/// `languageDeclared`, `minimumRunnerVersion`, `activity` and
+/// `graderOnlyFiles` were each dropped by a rebuild that forgot one.
+/// `language` is explicit because a rebuild may be the act of changing it.
 func makeWorkerManifestJSON(
     preserving props: TestProperties,
     testSuites: [ConfiguredSuiteEntry],
@@ -129,41 +130,26 @@ func makeWorkerManifestJSON(
     globalExpressions: [PersonalizationExpression]? = nil,
     language: AssignmentLanguage?
 ) throws -> String {
-    try makeWorkerManifestJSON(
-        testSuites: testSuites,
-        includeMakefile: props.makefile != nil,
-        gradingMode: props.gradingMode.rawValue,
-        submissionMode: props.submissionMode.rawValue,
-        githubSubmission: props.githubSubmission,
-        githubStatusChecks: props.githubStatusChecks,
-        requiredFiles: props.requiredFiles,
-        timeLimitSeconds: props.timeLimitSeconds,
-        starterNotebook: props.starterNotebook,
+    var next = props
+    try next.replaceSuite(
+        testSuites,
         patternFamilies: patternFamilies ?? props.patternFamilies,
-        notebookChecks: notebookChecks ?? props.notebookChecks,
-        sections: sections ?? props.sections,
-        globalVariables: globalVariables ?? props.globalVariables,
-        globalExpressions: globalExpressions ?? props.globalExpressions,
-        achievements: props.achievements,
-        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
-        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets,
-        language: language,
-        // The declared flag travels with the language: dropping it turns a
-        // deliberate "None" back into "nobody has been asked".
-        languageDeclared: props.languageDeclared == true,
-        minimumRunnerVersion: props.minimumRunnerVersion,
-        activity: props.activity
-    )
+        notebookChecks: notebookChecks ?? props.notebookChecks)
+    next.sections = sections ?? props.sections
+    next.globalVariables = globalVariables ?? props.globalVariables
+    next.globalExpressions = globalExpressions ?? props.globalExpressions
+    next.language = language
+    return try encodeManifest(next)
 }
 
+/// Builds a manifest from nothing: the assignment create paths, and the
+/// tests. A rebuild of a stored manifest goes through the `preserving:`
+/// overload above, which keeps every field it is not asked to replace.
 func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],
     includeMakefile: Bool,
     gradingMode: String = "worker",
     submissionMode: String = "notebook",
-    // The GitHub opt-in (docs/github-submissions.md slice 3). Threaded for the
-    // fresh-dict reason `activity` is: a suite edit must not turn it off.
     githubSubmission: Bool = false,
     githubStatusChecks: Bool = false,
     requiredFiles: [String] = [],
@@ -179,109 +165,83 @@ func makeWorkerManifestJSON(
     builtInAchievementsSeeded: Bool = false,
     datasets: [DatasetSpec] = [],
     language: AssignmentLanguage? = nil,
-    // Whether the assignment's author has ANSWERED the language question, which
-    // is a different fact from the answer and has to travel with it.
-    //
-    // This builder writes a fresh dict, so every field it does not know about is
-    // dropped by a rebuild. `languageDeclared` was one of them, and dropping it
-    // is what turns "the author picked None" back into "nobody has been asked" —
-    // the exact conflation the declaration rule exists to remove. Rebuild
-    // callers pass the previous manifest's value; a caller creating a manifest
-    // from nothing leaves it false and declares separately.
     languageDeclared: Bool = false,
     minimumRunnerVersion: String? = nil,
-    // The class-activity block. Threaded for the same reason as
-    // `languageDeclared`: this builder writes a fresh dict, so a suite edit on
-    // an activity that was not carried here would quietly turn a leaderboard
-    // challenge back into an ordinary lab. Rebuild callers pass the previous
-    // manifest's value; a caller creating from nothing leaves it nil.
     activity: ClassActivity? = nil
 ) throws -> String {
-    // Topologically sort so the runner can process dependencies with a single
-    // linear pass (parents always appear before children in the array).
-    let sorted = topologicallySorted(testSuites)
-    let testSuiteJSON: [[String: Any]] = sorted.map(testSuiteEntryToDict)
+    guard let grading = GradingMode(rawValue: gradingMode) else {
+        throw WebAssignmentError.invalidParameter(
+            name: "gradingMode", reason: "Unknown grading mode \"\(gradingMode)\".")
+    }
+    guard let submission = SubmissionMode(rawValue: submissionMode) else {
+        throw WebAssignmentError.invalidParameter(
+            name: "submissionMode", reason: "Unknown submission mode \"\(submissionMode)\".")
+    }
+    var props = TestProperties(
+        gradingMode: grading,
+        submissionMode: submission,
+        githubSubmission: githubSubmission,
+        githubStatusChecks: githubStatusChecks,
+        requiredFiles: requiredFiles,
+        timeLimitSeconds: timeLimitSeconds,
+        makefile: includeMakefile ? MakefileConfig(target: nil) : nil,
+        starterNotebook: starterNotebook,
+        language: language,
+        // Recorded only when true: the flag says the question was answered,
+        // so its absence is the one "not answered" state.
+        languageDeclared: languageDeclared ? true : nil,
+        minimumRunnerVersion: (minimumRunnerVersion?.isEmpty == false) ? minimumRunnerVersion : nil,
+        activity: activity,
+        sections: sections,
+        globalVariables: globalVariables,
+        globalExpressions: globalExpressions,
+        datasets: datasets,
+        achievements: achievements,
+        disabledBuiltInAwardIDs: disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: builtInAchievementsSeeded)
+    try props.replaceSuite(testSuites, patternFamilies: patternFamilies, notebookChecks: notebookChecks)
+    return try encodeManifest(props)
+}
 
-    var manifest: [String: Any] = [
-        "schemaVersion": 1,
-        "gradingMode": gradingMode,
-        "submissionMode": submissionMode,
-        // Threaded through, not hardcoded `[]`: a suite rebuild used to wipe
-        // the required-files list an instructor's uploaded manifest declared.
-        "requiredFiles": requiredFiles,
-        "testSuites": testSuiteJSON,
-        "timeLimitSeconds": timeLimitSeconds,
-        "makefile": includeMakefile ? ["target": NSNull()] : NSNull(),
-    ]
-    if let starterNotebook {
-        manifest["starterNotebook"] = starterNotebook
+extension TestProperties {
+    /// Replaces the suite with `entries` in dependency order and rebuilds the
+    /// unified `testItems` list in authored order.
+    fileprivate mutating func replaceSuite(
+        _ entries: [ConfiguredSuiteEntry],
+        patternFamilies: [PatternFamily],
+        notebookChecks: [NotebookCheck]
+    ) throws {
+        // Topologically sorted so the runner can process dependencies with a
+        // single linear pass (parents always appear before children).
+        testSuites = try topologicallySorted(entries).map(TestSuiteEntry.init(configured:))
+        testItems = orderedTestItems(
+            testSuites: entries, patternFamilies: patternFamilies, notebookChecks: notebookChecks)
     }
-    // Omitted when false, matching `TestProperties.encode`.
-    if githubSubmission {
-        manifest["githubSubmission"] = true
-    }
-    if githubStatusChecks {
-        manifest["githubStatusChecks"] = true
-    }
-    // Omitted only when the caller has nothing to record (a manifest rebuilt
-    // from one that predates the field). Callers that know the language pass
-    // it — Python included — so the answer is stated, not re-inferred later.
-    if let language {
-        manifest["language"] = language.rawValue
-    }
-    if languageDeclared {
-        manifest["languageDeclared"] = true
-    }
-    // Optional minimum-runner-version gate.  Threaded through like `language`
-    // so a suite/script/family rebuild never silently un-gates an assignment;
-    // omitted (no gate) when nil/blank, matching `TestProperties.encodeIfPresent`.
-    if let minimumRunnerVersion, !minimumRunnerVersion.isEmpty {
-        manifest["minimumRunnerVersion"] = minimumRunnerVersion
-    }
-    // Omitted when nil, matching `TestProperties.encodeIfPresent`, so an
-    // ordinary assignment's manifest bytes are unchanged.
-    if let activity {
-        try spliceEncodedObject(into: &manifest, key: "activity", value: activity)
-    }
-    try spliceEncodedArray(into: &manifest, key: "patternFamilies", values: patternFamilies)
-    try spliceEncodedArray(into: &manifest, key: "notebookChecks", values: notebookChecks)
-    // Unified, canonical test-item list.  Built in authored order by
-    // walking the (pre-topo-sort) testSuites and emitting each family /
-    // check at its first generated entry; specs not referenced by any
-    // generated entry are appended.  The `patternFamilies` /
-    // `notebookChecks` keys above stay mirrored for cross-version readers
-    // (see `TestProperties.encode`).
-    try spliceEncodedArray(
-        into: &manifest, key: "testItems",
-        values: orderedTestItems(
-            testSuites: testSuites, patternFamilies: patternFamilies, notebookChecks: notebookChecks))
-    // Route sections through JSONEncoder so all fields — including
-    // `variables` (v0.4.100+) — round-trip through the manifest.
-    // Pre-v0.4.102 we hand-rolled a minimal `[id, name]` dict that
-    // silently dropped the section's variables on every save.
-    try spliceEncodedArray(into: &manifest, key: "sections", values: sections)
-    // Slice 1 — assignment-scope variables.
-    try spliceEncodedArray(into: &manifest, key: "globalVariables", values: globalVariables)
-    // Slice 2 — assignment-scope expressions (notebook only). Each
-    // entry is `{ name, expression }`.
-    try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
-    // Phase 1 dataset specs (authoring-side only; `runnerSanitized()` strips them
-    // before sending to the runner so older workers aren't affected).
-    try spliceEncodedArray(into: &manifest, key: "datasets", values: datasets)
-    // Display/award-only fields (server-side; `runnerSanitized()` strips them).
-    // Spliced here so a suite rebuild doesn't wipe authored achievements or the
-    // instructor's built-in-award toggles — `makeWorkerManifestJSON` builds a
-    // fresh dict, so anything absent here is lost on the next suite edit.
-    try spliceEncodedArray(into: &manifest, key: "achievements", values: achievements)
-    if !disabledBuiltInAwardIDs.isEmpty {
-        manifest["disabledBuiltInAwardIDs"] = disabledBuiltInAwardIDs
-    }
-    if builtInAchievementsSeeded {
-        manifest["builtInAchievementsSeeded"] = true
-    }
+}
 
-    let data = try JSONSerialization.data(withJSONObject: manifest)
-    return String(data: data, encoding: .utf8) ?? "{}"
+extension TestSuiteEntry {
+    /// A manifest entry from an editor row. The tier string is normalized
+    /// upstream (`normalizeTier`) or read off a `TestTier`, so a value that is
+    /// not a tier is a programming error: refused here rather than stored
+    /// where every later decode of the manifest would fail.
+    fileprivate init(configured entry: ConfiguredSuiteEntry) throws {
+        guard let tier = TestTier(rawValue: entry.tier) else {
+            throw WebAssignmentError.invalidParameter(
+                name: "tier", reason: "\"\(entry.tier)\" is not a test tier.")
+        }
+        self.init(
+            tier: tier,
+            script: entry.script,
+            name: entry.displayName,
+            dependsOn: entry.dependsOn,
+            points: entry.points,
+            generatedBy: entry.generatedBy,
+            generatedByCheck: entry.generatedByCheck,
+            sectionID: entry.sectionID,
+            hint: entry.hint,
+            timeLimitSeconds: entry.timeLimitSeconds,
+            failureDetail: entry.failureDetail)
+    }
 }
 
 /// Builds the unified `[TestItem]` list in authored order for the manifest.
@@ -311,82 +271,6 @@ private func orderedTestItems(
         items.append(.check(chk))
     }
     return items
-}
-
-private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any] {
-    var dict: [String: Any] = ["tier": entry.tier, "script": entry.script]
-    if let n = entry.displayName, !n.isEmpty {
-        dict["name"] = n
-    }
-    if !entry.dependsOn.isEmpty {
-        dict["dependsOn"] = entry.dependsOn
-    }
-    // Emit any non-default points value — including 0.  The decoder
-    // defaults a missing key to 1, so a 0-point entry (e.g. an existence
-    // guard, which gates rather than grades) must be written explicitly or
-    // it round-trips back to 1 and starts counting toward the score.
-    if entry.points != 1 {
-        dict["points"] = entry.points
-    }
-    if let fid = entry.generatedBy, !fid.isEmpty {
-        dict["generatedBy"] = fid
-    }
-    if let cid = entry.generatedByCheck, !cid.isEmpty {
-        dict["generatedByCheck"] = cid
-    }
-    if let sid = entry.sectionID, !sid.isEmpty {
-        dict["sectionID"] = sid
-    }
-    if let hint = entry.hint, !hint.isEmpty {
-        dict["hint"] = hint
-    }
-    // Per-test execution time limit override (seconds). Absent = inherit the
-    // assignment-wide default. Only positive values are meaningful; a nil/0
-    // value is omitted so the decoder falls back to the default.
-    if let limit = entry.timeLimitSeconds, limit > 0 {
-        dict["timeLimitSeconds"] = limit
-    }
-    // Student-facing failure detail. Absent = full; `.full` is never written
-    // so an entry that was reset to the default reads as it did before the
-    // field existed.
-    if let detail = entry.failureDetail, detail != .full {
-        dict["failureDetail"] = detail.rawValue
-    }
-    return dict
-}
-
-/// Encodes a typed `Encodable` array with `JSONEncoder` (keys sorted for
-/// reproducibility), then reparses with `JSONSerialization` so the
-/// values splice into the dictionary-of-Any manifest under `key`.
-/// No-op when `values` is empty.
-private func spliceEncodedArray<T: Encodable>(
-    into manifest: inout [String: Any],
-    key: String,
-    values: [T]
-) throws {
-    guard !values.isEmpty else { return }
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let data = try encoder.encode(values)
-    if let parsed = try JSONSerialization.jsonObject(with: data) as? [Any] {
-        manifest[key] = parsed
-    }
-}
-
-/// The single-value twin of `spliceEncodedArray`: encodes one `Encodable`
-/// object with sorted keys and reparses it so it splices into the
-/// dictionary-of-Any manifest under `key`.
-private func spliceEncodedObject<T: Encodable>(
-    into manifest: inout [String: Any],
-    key: String,
-    value: T
-) throws {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let data = try encoder.encode(value)
-    if let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-        manifest[key] = parsed
-    }
 }
 
 /// Returns `entries` in topological order (prerequisites before dependents)

@@ -211,7 +211,9 @@ action (`replace-suite-files`, `clear-suite-files`, or the publish rebuild in
 `saveNewAssignment`) erased it. Both fields are threaded now, and both halves
 travel together: `language` alone cannot express "the author picked None", so
 carrying only it would still turn a deliberate None back into an unanswered
-question.
+question. Since #1655 the rebuild copies the decoded `TestProperties` and
+replaces only the suite, so no field has to be threaded at all; the create
+paths, which build a manifest from nothing, still pass both halves.
 
 ### Group 3 — keep the explicit default, and keep the comment
 

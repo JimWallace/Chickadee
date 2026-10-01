@@ -59,15 +59,9 @@ func autoScaffoldFromSolutionNotebook(
     zipPath: String,
     on db: Database
 ) async throws -> (sections: Int, functions: Int) {
-    // Parse the existing manifest so we know whether to scaffold.
-    guard let data = setup.manifest.data(using: .utf8),
-        var dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    else {
-        return (0, 0)
-    }
-    let existingSections = (dict["sections"] as? [[String: Any]]) ?? []
-    let existingSuites = (dict["testSuites"] as? [[String: Any]]) ?? []
-    guard existingSections.isEmpty && existingSuites.isEmpty else {
+    // Decode the existing manifest so we know whether to scaffold.
+    guard let existing = setup.decodedManifest() else { return (0, 0) }
+    guard existing.sections.isEmpty && existing.testSuites.isEmpty else {
         // Manifest already has structure — the instructor is on a
         // subsequent upload or has manually curated things.  Leave it
         // alone per the v0.4.100 scope ("create flow only, one-shot").
@@ -78,8 +72,7 @@ func autoScaffoldFromSolutionNotebook(
     // not be written for a language whose functions this scanner cannot read.
     // The SECTIONS are a different question — a `## ` header is markdown, not
     // code — and the scan now answers the two separately.
-    let scanLanguage =
-        setup.decodedManifest().flatMap { AssignmentLanguage.resolve(for: setup, manifest: $0) }
+    let scanLanguage = AssignmentLanguage.resolve(for: setup, manifest: existing)
     let scan = scanNotebookForSectionsAndFunctions(notebookData, language: scanLanguage)
     // Sections are worth scaffolding on their own. This used to bail whenever
     // no functions were found, which denied section scaffolding to every
@@ -88,15 +81,9 @@ func autoScaffoldFromSolutionNotebook(
     // organises its work in headers without defining top-level functions.
     guard !scan.functions.isEmpty || !scan.sectionNames.isEmpty else { return (0, 0) }
 
-    // 1. Assign a stable UUID per section (server-generated; clients
-    //    get it back via GET /suite).
-    var sectionIDByName: [String: String] = [:]
-    var sectionDicts: [[String: Any]] = []
-    for name in scan.sectionNames {
-        let id = UUID().uuidString
-        sectionIDByName[name] = id
-        sectionDicts.append(["id": id, "name": name])
-    }
+    // 1. One stable UUID per section (server-generated; clients get it back
+    //    via GET /suite).
+    let sections = scan.sectionNames.map { TestSuiteSection(id: UUID().uuidString, name: $0) }
 
     // 2. NO PER-FUNCTION SCRIPTS. This used to write one
     //    `publictest_exists_<fn>.py` per detected function, from the `exists`
@@ -108,17 +95,12 @@ func autoScaffoldFromSolutionNotebook(
     //
     //    Sections are still scaffolded, which is the part of this flow that was
     //    always language-neutral and always useful.
-    let newSuites: [[String: Any]] = []
 
-    // 4. Rewrite the manifest with sections + testSuites populated.
-    //    Preserve every other field the manifest already had (gradingMode,
-    //    timeLimitSeconds, etc.).
-    dict["sections"] = sectionDicts
-    dict["testSuites"] = newSuites
-    let newData = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
-    guard let newManifest = String(data: newData, encoding: .utf8) else { return (0, 0) }
-    setup.manifest = newManifest
-    try await setup.save(on: db)
+    // 3. Rewrite the manifest with the sections, keeping every other field.
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.sections = sections
+        props.testSuites = []
+    }
 
     return (scan.sectionNames.count, 0)
 }

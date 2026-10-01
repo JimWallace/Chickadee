@@ -223,8 +223,7 @@ func patternFamilySpecHash(
     sectionVariables: [FamilyVariable] = [],
     globalVariables: [FamilyVariable] = []
 ) -> String {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
+    let encoder = ManifestCodec.stableEncoder
     let familyData = (try? encoder.encode(family)) ?? Data()
     // Mix section + global variables into the hash so changing either busts
     // the manifest cache the same way changing the family itself does.
