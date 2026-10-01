@@ -1,7 +1,11 @@
 # UI ratchet — the maintainability epic, closed (2026-08)
 
+> **Archived 2026-10-01.** Closure record of the UI ratchet epic. The live
+> rules and ratchet positions are in [ui-design.md](../ui-design.md) and
+> `scripts/check-styles.sh`.
+
 **This epic is complete.** The widget-layer audit
-([ui-consistency-audit.md](ui-consistency-audit.md)) shipped as S0–S10; the
+([ui-consistency-audit.md](../ui-consistency-audit.md)) shipped as S0–S10; the
 editor-conversion pass and the inline-script pass (both 2026-08-14) closed
 the two big tracks it left open; the tail pass closed the allowlist. This
 document is now the closure record plus the standing rules for what comes
@@ -218,7 +222,7 @@ comparison cannot catch, because both sides would agree.
 The epic's end state is the starting contract for revising individual
 pages. In practice it means:
 
-- **The rulebook is [ui-design.md](ui-design.md)**, and it is enforced, not
+- **The rulebook is [ui-design.md](../ui-design.md)**, and it is enforced, not
   aspirational: tokens (palette/type/radius/spacing), the component
   vocabulary, the page archetypes, `js-` hooks, class resolution, and the
   absolute rules (no alerts, no raw confirm, no icon geometry outside the
