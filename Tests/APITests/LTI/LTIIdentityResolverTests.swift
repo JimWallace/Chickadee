@@ -110,6 +110,22 @@ import VaporTesting
             #expect(resolution.user.username.hasPrefix("lti-"))
         }
     }
+
+    @Test func twoConcurrentFirstLaunchesOfOneSubjectShareOneAccount() async throws {
+        try await withApp(app) { app in
+            let platform = try await makePlatform(trustUsername: false)
+            let validated = try launch(subject: "raced-subject")
+            let db = app.db
+            async let first = LTIIdentityResolver.resolve(
+                launch: validated, platform: platform, authMode: .local, on: db)
+            async let second = LTIIdentityResolver.resolve(
+                launch: validated, platform: platform, authMode: .local, on: db)
+            let (a, b) = try await (first, second)
+            #expect(a.user.id == b.user.id)
+            let links = try await APILTIIdentity.query(on: app.db).filter(\.$subject == "raced-subject").count()
+            #expect(links == 1)
+        }
+    }
 }
 
 /// Pure: no app. A class suite whose test never enters `withApp` leaks an

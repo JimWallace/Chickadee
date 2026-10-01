@@ -176,8 +176,8 @@ Two routes, both public and outside the CSRF group:
 2. `POST /lti/launch` — the platform posts the `id_token` and `state`. The tool:
    1. requires the state cookie to equal the posted `state`;
    2. consumes the `state` row in one atomic
-      `UPDATE … WHERE consumed = false RETURNING` (the MCP OAuth code
-      primitive, `burnConsumable`), then refuses an expired row;
+      `UPDATE … WHERE consumed = false RETURNING` (`SingleUseRecord.burn`,
+      the primitive the MCP OAuth code also uses), then refuses an expired row;
    3. verifies the signature against the platform key set
       (`LTIPlatformKeyCache`), and fetches the key set again once when a token
       does not verify, at most every 30 seconds;
@@ -197,6 +197,19 @@ window.
 Every refusal is an `LTILaunchFailure`: an `AbortError` that the existing error
 page shows as one sentence. The server log names the rule that failed and never
 the token.
+
+`/lti/login` requires `target_link_uri`, because the specification requires the
+platform to send it, and the launch decodes the matching claim. Neither routes
+on it. The assignment comes from the `custom.assignment` parameter, which Deep
+Linking puts on every returned link, so a platform that points every link at
+`/lti/launch` works, and a `target_link_uri` that names another path is not
+followed. That is deliberate: following it would let a crafted link choose
+where a verified launch lands.
+
+Two first launches of one subject at the same moment race on the `(platform,
+subject)` unique index, or on the username when both create the account. The
+loser's insert fails and `LTIIdentityResolver` runs once more, which finds what
+the winner wrote. A refusal is not retried.
 
 ### Identity
 

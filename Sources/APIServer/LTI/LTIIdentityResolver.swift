@@ -39,13 +39,29 @@ enum LTIIdentityResolver {
         on db: Database
     ) async throws -> Resolution {
         let platformID = try platform.requireID()
+        // Two first launches of one subject can race: on the (platform,
+        // subject) unique index, or on the username when both create the
+        // account. The loser's insert fails, and a second pass finds what the
+        // winner wrote. A refusal is a decision, not a race, and is not retried.
+        do {
+            return try await resolveOnce(
+                launch: launch, platform: platform, platformID: platformID, authMode: authMode, on: db)
+        } catch let failure as Failure {
+            throw failure
+        } catch {
+            return try await resolveOnce(
+                launch: launch, platform: platform, platformID: platformID, authMode: authMode, on: db)
+        }
+    }
 
-        if let identity = try await APILTIIdentity.query(on: db)
-            .filter(\.$platformID == platformID)
-            .filter(\.$subject == launch.subject)
-            .first(),
-            let user = try await APIUser.find(identity.userID, on: db)
-        {
+    private static func resolveOnce(
+        launch: LTIValidatedLaunch,
+        platform: APILTIPlatform,
+        platformID: UUID,
+        authMode: AuthMode,
+        on db: Database
+    ) async throws -> Resolution {
+        if let user = try await linkedUser(platformID: platformID, subject: launch.subject, on: db) {
             return Resolution(user: user, created: false)
         }
 
@@ -70,10 +86,30 @@ enum LTIIdentityResolver {
                 }
         }
 
-        try await APILTIIdentity(
-            platformID: platformID, subject: launch.subject, userID: try resolution.user.requireID()
-        ).save(on: db)
+        do {
+            try await APILTIIdentity(
+                platformID: platformID, subject: launch.subject, userID: try resolution.user.requireID()
+            ).save(on: db)
+        } catch {
+            // The other first launch won the (platform, subject) index: its
+            // link is the one that counts.
+            if let user = try await linkedUser(platformID: platformID, subject: launch.subject, on: db) {
+                return Resolution(user: user, created: false)
+            }
+            throw error
+        }
         return resolution
+    }
+
+    /// The account a known (platform, subject) link resolves to, or nil.
+    private static func linkedUser(platformID: UUID, subject: String, on db: Database) async throws -> APIUser? {
+        guard
+            let identity = try await APILTIIdentity.query(on: db)
+                .filter(\.$platformID == platformID)
+                .filter(\.$subject == subject)
+                .first()
+        else { return nil }
+        return try await APIUser.find(identity.userID, on: db)
     }
 
     /// The platform's `username` custom parameter, trimmed and lowercased, or
