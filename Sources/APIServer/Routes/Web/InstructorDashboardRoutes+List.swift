@@ -167,7 +167,11 @@ extension InstructorDashboardRoutes {
         for index in rows.indices {
             guard let userID = UUID(uuidString: rows[index].id), let user = usersByID[userID] else { continue }
             let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
-            rows[index].avatar = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative)
+            // Course staff on the roster wear the staff ring, from their role in
+            // THIS course (docs/student-wardrobe.md, "The staff ring").
+            rows[index].avatar = AvatarPresentation(
+                for: spec, size: .roster, accessibility: .decorative,
+                isStaff: (rolesByUserID[userID] ?? .student) >= .ta)
             rows[index].hasAvatar = true
             rows[index].learnFlag = Self.learnFlag(for: enrollmentsByUserID[userID])
         }

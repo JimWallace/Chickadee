@@ -253,9 +253,7 @@ extension GradeSyncSweep {
 
         // Best grade for this student across the test setup. nil → no submissions
         // yet (nothing to push); throws if submissions exist but yield no points.
-        guard
-            let grade = try await bestGradeForStudent(userID: userID, testSetupID: testSetupID, db: db)
-        else {
+        guard let grade = try await selectedGrade(userID: userID, testSetupID: testSetupID) else {
             try await clearPendingFlag(syncRows, on: db)
             return true
         }
@@ -392,6 +390,17 @@ extension GradeSyncSweep {
     /// sweep). A classlist read failure yields a nil index, which
     /// `resolvedBrightSpaceUserID` treats as "authority unavailable" — distinct
     /// from a successful read in which the student simply doesn't appear.
+    /// `bestGradeForStudent` reports in its own type. This transport records a
+    /// selection failure as its own `missingPoints`, so the sync log and the
+    /// retry rule read it like every other terminal failure.
+    private func selectedGrade(userID: UUID, testSetupID: String) async throws -> StudentGrade? {
+        do {
+            return try await bestGradeForStudent(userID: userID, testSetupID: testSetupID, db: db)
+        } catch is GradeSelectionError {
+            throw BrightSpaceSyncError.missingPoints
+        }
+    }
+
     func resolveBSUserID(
         for user: APIUser?,
         orgUnitID: String,

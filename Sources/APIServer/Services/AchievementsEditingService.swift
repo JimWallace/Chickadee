@@ -268,13 +268,11 @@ enum AchievementsEditing {
         let resolved = try rows.map { try achievement(from: $0) }
             .map { resolvingSectionRefs($0, againstManifest: setup.manifest) }
         try validate(resolved, againstManifest: setup.manifest)
-        try await mutateManifest(setup: setup, on: db) { dict in
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(resolved))
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.achievements = resolved
             // Saving the table means the instructor curated the full list — the
             // manifest is now authoritative (built-in defaults no longer merge in).
-            dict["builtInAchievementsSeeded"] = true
+            props.builtInAchievementsSeeded = true
         }
         return Self.rows(fromManifest: setup.manifest)
     }

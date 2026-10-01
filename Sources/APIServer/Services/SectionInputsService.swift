@@ -226,34 +226,12 @@ enum SectionInputsService {
         inputs: Inputs,
         on db: any Database
     ) async throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let varData = try encoder.encode(inputs.variables)
-        let exprData = try encoder.encode(inputs.expressions)
-        guard let parsedVars = try JSONSerialization.jsonObject(with: varData) as? [Any],
-            let parsedExprs = try JSONSerialization.jsonObject(with: exprData) as? [Any]
-        else {
-            throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise section inputs.")
-        }
-
-        try await mutateManifest(setup: setup, on: db) { dict in
-            guard var sections = dict["sections"] as? [[String: Any]] else {
+        try await mutateManifest(setup: setup, on: db) { props in
+            guard let idx = props.sections.firstIndex(where: { $0.id == sectionID }) else {
                 throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
             }
-            guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
-            }
-            if parsedVars.isEmpty {
-                sections[idx].removeValue(forKey: "variables")
-            } else {
-                sections[idx]["variables"] = parsedVars
-            }
-            if parsedExprs.isEmpty {
-                sections[idx].removeValue(forKey: "expressions")
-            } else {
-                sections[idx]["expressions"] = parsedExprs
-            }
-            dict["sections"] = sections
+            props.sections[idx].variables = inputs.variables
+            props.sections[idx].expressions = inputs.expressions
         }
     }
 }

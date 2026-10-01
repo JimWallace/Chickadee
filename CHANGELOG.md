@@ -9,6 +9,42 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.304] - 2026-10-01
+
+### Changed
+
+- **The LEARN tab's view model is assembled by `BrightSpacePagePresenter`.** The grade-item rows, the per-student sync rollup, the roster-readiness panel and the facts card moved out of the 1,100-line BrightSpace route extension into a service over the database, so they are testable without a request. The handlers keep the request work. Slice 1 of #1654.
+
+
+## [0.5.303] - 2026-10-01
+
+### Changed
+
+- **One writer for a stored manifest.** Every single-field edit (grading mode, language, sections, datasets, achievements, the activity block, the MCP tools) now edits the decoded `TestProperties` and stores it with `ManifestCodec.stableEncoder`, instead of editing a `[String: Any]` dictionary. Equal values store equal bytes, and `TestSuiteEntry` and `TestProperties` omit defaults when encoded, so a manifest's bytes no longer depend on which writer produced them. Slice 1 of #1655.
+
+### Fixed
+
+- **Deleting a support file now clears its dataset mark.** The dictionary edit looked the mark up under the wrong key, so the per-student slice survived the file it named (#1655).
+
+
+## [0.5.302] - 2026-10-01
+
+### Changed
+
+- **Grade selection has its own error type.** `bestGradeForStudent` now throws `GradeSelectionError` instead of a Valence-named error. The Valence sweep maps it to its own `missingPoints`, so the sync log reads as before, and the AGS sweep classifies it without importing the Valence error taxonomy (#1651).
+
+### Changed
+
+- **`LTIToolKeyAuthority` no longer carries a test-only `verify`.** The deep-linking test now verifies the tool's response the way a platform does, with a key set built from the published JWK. The launch test that refuses a deep-linking request on the launch endpoint is named for what it checks (#1661).
+
+
+## [0.5.301] - 2026-10-01
+
+### Added
+
+- **Avatar rings are sprite art, with a staff ring and patterned rings.** A border is now drawn as a ring layer in the avatar sprite, not as a CSS outline. Students can choose a rainbow ring as a starter. Two-tone and stitched rings (earned) and a spectrum ring (special) are shown locked until unlocks exist, and the server refuses them. Course staff wear a reserved staff ring (two thin dark rings) on the roster, the leaderboard, the account page and the admin Users page; it comes from the course role, is never stored, and staff cannot change it. See `docs/student-wardrobe.md`.
+
+
 ## [0.5.300] - 2026-10-01
 
 ### Fixed

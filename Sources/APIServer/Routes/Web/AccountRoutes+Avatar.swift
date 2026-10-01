@@ -33,9 +33,12 @@ extension AccountRoutes {
         let form = try req.content.decode(AvatarChoiceForm.self)
 
         let current = try await AvatarStore.ensureSpec(for: user, on: req.db)
+        let isStaff =
+            try await AvatarStore.courseStaff(among: [user.requireID()], on: req.db)
+            .isEmpty == false
         let updated: AvatarSpec
         do {
-            updated = try AvatarCustomization.applying(form.choices, to: current)
+            updated = try AvatarCustomization.applying(form.choices, to: current, isStaff: isStaff)
         } catch is AvatarCustomizationError {
             return req.redirect(to: "/account?avatar=invalid#chickadee")
         }
@@ -46,32 +49,52 @@ extension AccountRoutes {
 }
 
 /// The picker's two groups, built from `AvatarCustomization.options(for:)` so
-/// the page cannot offer an option the chokepoint would refuse.
+/// the page cannot offer an option the chokepoint would refuse, and marking the
+/// ones it would refuse as locked.
 struct AvatarPickerContext: Encodable {
     let backdrops: [AvatarPickerOption]
     let borders: [AvatarPickerOption]
+    /// Course staff wear the staff ring and cannot choose one: the Border group
+    /// becomes a note.
+    let isStaff: Bool
+    /// The student's own colours, so a ring sample shows the ring they would
+    /// wear: two-tone and stitched are drawn in their accent and cap colour.
+    let backdropToken: String
+    let accentToken: String
+    let capToken: String
 
-    init(for spec: AvatarSpec) {
+    init(for spec: AvatarSpec, isStaff: Bool) {
+        let own = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        self.isStaff = isStaff
+        self.backdropToken = own.backdropToken
+        self.accentToken = own.accentToken
+        self.capToken = own.capToken
         backdrops = AvatarCustomization.options(for: .backdrop).map { value in
             AvatarPickerOption(
                 value: value,
                 label: value.capitalized,
                 token: "--avatar-back-\(value)",
+                ringRef: "",
                 checked: value == spec.backdrop.rawValue,
-                isNone: false)
+                isNone: false,
+                isLocked: false)
         }
         borders = AvatarCustomization.options(for: .border).map { value in
-            // The same token the presentation would name for this border, so
-            // the live preview draws exactly what a save would.
+            // The same token and ring the presentation would name for this
+            // border, so the live preview draws exactly what a save would.
             var preview = spec
             preview.border = AvatarBorder(rawValue: value) ?? .none
+            let drawn = AvatarPresentation(for: preview, size: .standard, accessibility: .decorative)
+            let isLocked = !AvatarCustomization.isOpen(value, for: .border)
+            let name = preview.border.displayName
             return AvatarPickerOption(
                 value: value,
-                label: value.capitalized,
-                token: AvatarPresentation(for: preview, size: .standard, accessibility: .decorative)
-                    .borderToken,
+                label: isLocked ? "\(name) (locked)" : name,
+                token: drawn.borderToken,
+                ringRef: drawn.ringSymbolRef,
                 checked: value == spec.border.rawValue,
-                isNone: value == AvatarBorder.none.rawValue)
+                isNone: value == AvatarBorder.none.rawValue,
+                isLocked: isLocked)
         }
     }
 }
@@ -84,7 +107,12 @@ struct AvatarPickerOption: Encodable {
     /// A palette token name, e.g. "--avatar-back-sky". The live preview sets
     /// the avatar's custom property to it.
     let token: String
+    /// The ring symbol this border draws, e.g. "#av-ring-rainbow"; empty for
+    /// a backdrop. The live preview swaps the avatar's ring layer to it.
+    let ringRef: String
     let checked: Bool
     /// The "no border" option, drawn as a dashed ring rather than a colour.
     let isNone: Bool
+    /// An earned or special ring: shown, but not selectable yet.
+    let isLocked: Bool
 }

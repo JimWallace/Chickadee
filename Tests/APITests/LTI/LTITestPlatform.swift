@@ -8,6 +8,7 @@ import Core
 import Fluent
 import Foundation
 import JWT
+import Testing
 import Vapor
 
 @testable import APIServer
@@ -92,5 +93,19 @@ struct LTITestPlatform {
 
     func sign(_ claims: LTILaunchClaims) async throws -> String {
         try await signer.sign(claims)
+    }
+}
+
+extension LTITestPlatform {
+    /// Verifies a token the tool signed the way a platform does: with a key
+    /// set built from the tool's published JWK alone, never with the signing
+    /// key.
+    static func verifyAsPlatform<Payload: JWTPayload>(
+        _ token: String, signedBy authority: LTIToolKeyAuthority, as _: Payload.Type
+    ) async throws -> Payload {
+        let jwksJSON = try JSONEncoder().encode(["keys": [await authority.publicJWK()]])
+        let platformKeys = try await JWTKeyCollection().add(
+            jwksJSON: try #require(String(bytes: jwksJSON, encoding: .utf8)))
+        return try await platformKeys.verify(token, as: Payload.self)
     }
 }

@@ -383,6 +383,25 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
+    @Test func aGradeSelectionFailureIsRecordedAsMissingPoints() async throws {
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: #"{"outcomes":[]}"#,
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+
+            _ = try await sweep(client: FakeBrightSpaceGrading())
+
+            // The sweep maps a `GradeSelectionError` onto its own taxonomy, so
+            // the row records the Valence sentence and stays terminal.
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncError == BrightSpaceSyncError.missingPoints.localizedDescription)
+            #expect(result.brightspaceSyncPending == false)
+        }
+    }
+
     @Test func noBrightSpaceAccountRecordsSkipMessage() async throws {
         try await withApp(app) { _ in
             let scenario = try await makeConfiguredScenario(studentID: "stu-unknown")

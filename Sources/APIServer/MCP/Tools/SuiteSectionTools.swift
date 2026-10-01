@@ -82,10 +82,8 @@ struct CreateSuiteSectionTool: ContentTool {
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
         let newID = UUID().uuidString
         do {
-            try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
-                var sections = (dict["sections"] as? [[String: Any]]) ?? []
-                sections.append(["id": newID, "name": name])
-                dict["sections"] = sections
+            try await mutateManifest(setup: resolved.setup, on: context.db) { props in
+                props.sections.append(TestSuiteSection(id: newID, name: name))
             }
         } catch let error as WebAssignmentError {
             throw MCPToolError.from(error, tool: Self.name)
@@ -158,15 +156,12 @@ struct RenameSuiteSectionTool: ContentTool {
         let resolved = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
         do {
-            try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
-                guard var sections = dict["sections"] as? [[String: Any]],
-                    let idx = sections.firstIndex(where: { ($0["id"] as? String) == input.sectionID })
-                else {
+            try await mutateManifest(setup: resolved.setup, on: context.db) { props in
+                guard let idx = props.sections.firstIndex(where: { $0.id == input.sectionID }) else {
                     throw MCPToolError.invalidArguments(
                         tool: Self.name, detail: "No section with id \"\(input.sectionID)\".")
                 }
-                sections[idx]["name"] = name
-                dict["sections"] = sections
+                props.sections[idx].name = name
             }
         } catch let error as WebAssignmentError {
             throw MCPToolError.from(error, tool: Self.name)
@@ -239,22 +234,15 @@ struct DeleteSuiteSectionTool: ContentTool {
         var removed = false
         var ungrouped = 0
         do {
-            try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
-                if var sections = dict["sections"] as? [[String: Any]] {
-                    let before = sections.count
-                    sections.removeAll { ($0["id"] as? String) == input.sectionID }
-                    removed = sections.count != before
-                    dict["sections"] = sections
-                }
+            try await mutateManifest(setup: resolved.setup, on: context.db) { props in
+                let before = props.sections.count
+                props.sections.removeAll { $0.id == input.sectionID }
+                removed = props.sections.count != before
                 // Clear matching entries' sectionID so the affected items flow
                 // into the trailing Ungrouped block (mirrors the web handler).
-                if var testSuites = dict["testSuites"] as? [[String: Any]] {
-                    for i in testSuites.indices
-                    where (testSuites[i]["sectionID"] as? String) == input.sectionID {
-                        testSuites[i].removeValue(forKey: "sectionID")
-                        ungrouped += 1
-                    }
-                    dict["testSuites"] = testSuites
+                for i in props.testSuites.indices where props.testSuites[i].sectionID == input.sectionID {
+                    props.testSuites[i].sectionID = nil
+                    ungrouped += 1
                 }
             }
         } catch let error as WebAssignmentError {

@@ -193,11 +193,9 @@ enum ActivityAuthoring {
             ? []
             : BuiltInAchievements.all.filter { !authoredIDs.contains($0.id) }
         let achievements = props.achievements + builtIns + [seededRecord]
-        try await mutateManifest(setup: setup, on: db) { dict in
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(achievements))
-            dict["builtInAchievementsSeeded"] = true
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.achievements = achievements
+            props.builtInAchievementsSeeded = true
         }
     }
 
@@ -239,11 +237,9 @@ enum ActivityAuthoring {
             ? []
             : BuiltInAchievements.all.filter { !authoredIDs.contains($0.id) }
         let achievements = props.achievements + builtIns + [record]
-        try await mutateManifest(setup: setup, on: db) { dict in
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(achievements))
-            dict["builtInAchievementsSeeded"] = true
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.achievements = achievements
+            props.builtInAchievementsSeeded = true
         }
     }
 
@@ -253,10 +249,8 @@ enum ActivityAuthoring {
         // The leaderboard record was seeded first (every hill kind is a
         // leaderboard kind), so the built-ins are already curated here.
         let achievements = props.achievements + [seededChampionRecord]
-        try await mutateManifest(setup: setup, on: db) { dict in
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(achievements))
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.achievements = achievements
         }
     }
 
@@ -265,10 +259,8 @@ enum ActivityAuthoring {
             props.achievements.contains(where: { $0.id == id })
         else { return }
         let remaining = props.achievements.filter { $0.id != id }
-        try await mutateManifest(setup: setup, on: db) { dict in
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(remaining))
+        try await mutateManifest(setup: setup, on: db) { props in
+            props.achievements = remaining
         }
     }
 }

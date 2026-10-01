@@ -316,34 +316,30 @@ func jsonResponse<T: Encodable>(_ value: T, status: HTTPResponseStatus = .ok) th
         body: .init(data: data))
 }
 
-// MARK: - Manifest dictionary mutation
+// MARK: - Manifest mutation
 
-/// Reads the test setup's manifest JSON as a mutable dictionary, runs
-/// the caller's mutation closure, re-serialises with sorted keys, and
-/// saves.  Throws if the manifest can't round-trip through
-/// JSONSerialization — that would indicate a corrupted setup, not a
-/// user error.
+/// Decodes the test setup's manifest, runs the caller's mutation on the
+/// `TestProperties` value, encodes it with the stable encoder and saves.
+/// Throws if the manifest does not decode — that indicates a corrupted
+/// setup, not a user error.
 ///
-/// Used by both the assignment-scoped suite-section CRUD endpoints
-/// (`AssignmentRoutes+SuiteSections.swift`) and the draft-scoped ones
-/// (`AssignmentRoutes+DraftSections.swift`).  Lives here so both can
-/// share the same dictionary-of-Any approach — Codable round-trips
-/// through `TestProperties` would strip any unknown fields the client
-/// might add, defeating the point of forward compatibility.
+/// Every single-field edit goes through here (`ManifestFieldEdits.swift`,
+/// the suite-section CRUD, the MCP tools), so there is one writer of a
+/// stored manifest.  It used to edit a `[String: Any]` dictionary so that a
+/// key the server did not model would survive an edit; nothing ever read
+/// such a key, and the suite rebuild (`makeWorkerManifestJSON`) dropped it
+/// anyway.  A typed edit cannot misspell a key or drop a field it did not
+/// think to carry.
 func mutateManifest(
     setup: APITestSetup,
     on db: Database,
-    _ mutate: (inout [String: Any]) throws -> Void
+    _ mutate: (inout TestProperties) throws -> Void
 ) async throws {
-    guard var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any] else {
-        throw WebAssignmentError.internalFailure(reason: "Test setup manifest is not a JSON object.")
+    guard var props = setup.decodedManifest() else {
+        throw WebAssignmentError.internalFailure(reason: "Test setup manifest could not be decoded.")
     }
-    try mutate(&dict)
-    let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
-    guard let json = String(data: data, encoding: .utf8) else {
-        throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise manifest.")
-    }
-    setup.manifest = json
+    try mutate(&props)
+    setup.manifest = try encodeManifest(props)
     try await setup.save(on: db)
 }
 
@@ -362,10 +358,8 @@ func createSuiteSectionCore(setup: APITestSetup, name: String, on db: any Databa
     guard !trimmed.isEmpty else {
         throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
     }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        var sections = (dict["sections"] as? [[String: Any]]) ?? []
-        sections.append(["id": UUID().uuidString, "name": trimmed])
-        dict["sections"] = sections
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.sections.append(TestSuiteSection(id: UUID().uuidString, name: trimmed))
     }
 }
 
@@ -377,14 +371,11 @@ func renameSuiteSectionCore(
     guard !trimmed.isEmpty else {
         throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
     }
-    try await mutateManifest(setup: setup, on: db) { dict in
-        guard var sections = dict["sections"] as? [[String: Any]],
-            let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID })
-        else {
+    try await mutateManifest(setup: setup, on: db) { props in
+        guard let idx = props.sections.firstIndex(where: { $0.id == sectionID }) else {
             throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
         }
-        sections[idx]["name"] = trimmed
-        dict["sections"] = sections
+        props.sections[idx].name = trimmed
     }
 }
 
@@ -392,16 +383,10 @@ func renameSuiteSectionCore(
 /// that referenced it, so they flow into the trailing Ungrouped block (same
 /// semantics as `onDelete: .setNull` on course_sections).
 func deleteSuiteSectionCore(setup: APITestSetup, sectionID: String, on db: any Database) async throws {
-    try await mutateManifest(setup: setup, on: db) { dict in
-        if var sections = dict["sections"] as? [[String: Any]] {
-            sections.removeAll { ($0["id"] as? String) == sectionID }
-            dict["sections"] = sections
-        }
-        if var testSuites = dict["testSuites"] as? [[String: Any]] {
-            for i in testSuites.indices where (testSuites[i]["sectionID"] as? String) == sectionID {
-                testSuites[i].removeValue(forKey: "sectionID")
-            }
-            dict["testSuites"] = testSuites
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.sections.removeAll { $0.id == sectionID }
+        for i in props.testSuites.indices where props.testSuites[i].sectionID == sectionID {
+            props.testSuites[i].sectionID = nil
         }
     }
 }
@@ -411,19 +396,13 @@ func deleteSuiteSectionCore(setup: APITestSetup, sectionID: String, on db: any D
 func reorderSuiteSectionsCore(
     setup: APITestSetup, sectionIDs: [String], on db: any Database
 ) async throws {
-    try await mutateManifest(setup: setup, on: db) { dict in
-        let existing = (dict["sections"] as? [[String: Any]]) ?? []
-        let byID = Dictionary(
-            uniqueKeysWithValues: existing.compactMap { s -> (String, [String: Any])? in
-                guard let id = s["id"] as? String else { return nil }
-                return (id, s)
-            }
-        )
-        guard Set(sectionIDs) == Set(byID.keys), sectionIDs.count == existing.count else {
+    try await mutateManifest(setup: setup, on: db) { props in
+        let byID = Dictionary(props.sections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        guard Set(sectionIDs) == Set(byID.keys), sectionIDs.count == props.sections.count else {
             throw WebAssignmentError.invalidParameter(
                 name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
         }
-        dict["sections"] = sectionIDs.compactMap { byID[$0] }
+        props.sections = sectionIDs.compactMap { byID[$0] }
     }
 }
 

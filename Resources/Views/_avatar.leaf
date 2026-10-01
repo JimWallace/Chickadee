@@ -10,7 +10,7 @@
      name yields empty strings, silently, and a bird with no colours and no
      wing still renders and still returns 200.
 
-     The six use elements below are the whole bird, back to front; their
+     The seven use elements below are the whole bird, back to front; their
      symbols live in the avatar sprite partial, which the page must ALSO
      include - once per page, not once per bird. Forget it and the page still
      returns 200 and shows an empty circle; no guard can catch that.
@@ -22,8 +22,10 @@
      palette directly, because a bird whose body colour varied would stop being
      the same species as its neighbours.
 
-     The backdrop stays outside the tilt group so the disc never turns; the
-     group rotates everything else about the body centre. A transform resolves
+     The backdrop and the ring stay outside the tilt group, so the disc never
+     turns and a patterned ring keeps its orientation; the group rotates
+     everything between them about the body centre. The ring is last, on top,
+     so it frames whatever reaches the edge of the disc. A transform resolves
      no ids, so it keeps the sprite rule against url() references.
 
      Both branches below carry the SAME style attribute and differ only in how
@@ -50,4 +52,5 @@
         <use href="#(expressionSymbolRef)"/>
         <use href="#(accessorySymbolRef)"/>
     </g>
+    <use href="#(ringSymbolRef)" data-av-ring/>
 </svg>

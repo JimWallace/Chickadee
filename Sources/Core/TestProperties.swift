@@ -66,19 +66,19 @@ public enum SubmissionMode: String, Codable, Sendable, Equatable {
 /// for any given entry (validation enforces this); both nil means a
 /// hand-written script.
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
-    public let tier: TestTier
-    public let script: String  // e.g. "01_public.py"
-    public let name: String?  // optional display name shown to students
-    public let dependsOn: [String]  // script names of prerequisites; empty == no deps
-    public let points: Int  // grade weight; 1 = default (unweighted)
-    public let generatedBy: String?  // pattern family id, nil for hand-written scripts
-    public let generatedByCheck: String?  // notebook check id, nil otherwise
-    public let sectionID: String?  // id into TestProperties.sections, or nil = ungrouped
+    public var tier: TestTier
+    public var script: String  // e.g. "01_public.py"
+    public var name: String?  // optional display name shown to students
+    public var dependsOn: [String]  // script names of prerequisites; empty == no deps
+    public var points: Int  // grade weight; 1 = default (unweighted)
+    public var generatedBy: String?  // pattern family id, nil for hand-written scripts
+    public var generatedByCheck: String?  // notebook check id, nil otherwise
+    public var sectionID: String?  // id into TestProperties.sections, or nil = ungrouped
     // Optional instructor hint shown as a "💡 Hint" callout when this test
     // fails (surfaced at results-display time). For generated entries the
     // hint comes from the family case / notebook check spec instead; this
     // field carries the hint for hand-written raw scripts. nil = none.
-    public let hint: String?
+    public var hint: String?
     // Optional per-test execution time limit (seconds). When nil the entry
     // inherits the assignment-wide default `TestProperties.timeLimitSeconds`.
     // Resolution happens in each executor (the worker's NativeScriptExecutor,
@@ -87,12 +87,12 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     // default as the fallback timeLimit. Effective limit for a script is
     // `entry.timeLimitSeconds ?? manifest.timeLimitSeconds`. Back-compat:
     // absent in JSON decodes to nil (inherit the default).
-    public let timeLimitSeconds: Int?
+    public var timeLimitSeconds: Int?
     // How much of a failure the student sees (`FailureDetail`). Applied at
     // results-display time by the server, never by the script. nil = full,
     // the pre-feature behaviour; generated entries carry the value resolved
     // from their family / case / check spec.
-    public let failureDetail: FailureDetail?
+    public var failureDetail: FailureDetail?
 
     public init(
         tier: TestTier, script: String, name: String? = nil,
@@ -117,6 +117,12 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         self.failureDetail = failureDetail
     }
 
+    // Both halves of Codable are written by hand, so the keys are declared.
+    private enum CodingKeys: String, CodingKey {
+        case tier, script, name, dependsOn, points, generatedBy, generatedByCheck
+        case sectionID, hint, timeLimitSeconds, failureDetail
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         tier = try c.decode(TestTier.self, forKey: .tier)
@@ -130,6 +136,37 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
         failureDetail = try c.decodeIfPresent(FailureDetail.self, forKey: .failureDetail)
+    }
+
+    /// Writes only what differs from the defaults `init(from:)` fills in, so
+    /// an entry's bytes do not depend on which writer produced them.  `points`
+    /// is written whenever it is not 1 -- including 0, since a missing key
+    /// decodes to 1 and a 0-point gate would start counting toward the score.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(tier, forKey: .tier)
+        try c.encode(script, forKey: .script)
+        try encodeIfNonEmpty(name, forKey: .name, into: &c)
+        if !dependsOn.isEmpty { try c.encode(dependsOn, forKey: .dependsOn) }
+        if points != 1 { try c.encode(points, forKey: .points) }
+        try encodeIfNonEmpty(generatedBy, forKey: .generatedBy, into: &c)
+        try encodeIfNonEmpty(generatedByCheck, forKey: .generatedByCheck, into: &c)
+        try encodeIfNonEmpty(sectionID, forKey: .sectionID, into: &c)
+        try encodeIfNonEmpty(hint, forKey: .hint, into: &c)
+        if let timeLimitSeconds, timeLimitSeconds > 0 {
+            try c.encode(timeLimitSeconds, forKey: .timeLimitSeconds)
+        }
+        // `.full` is the default, so it is never written: an entry reset to it
+        // reads as it did before the field existed.
+        if let failureDetail, failureDetail != .full {
+            try c.encode(failureDetail, forKey: .failureDetail)
+        }
+    }
+
+    private func encodeIfNonEmpty(
+        _ value: String?, forKey key: CodingKeys, into c: inout KeyedEncodingContainer<CodingKeys>
+    ) throws {
+        if let value, !value.isEmpty { try c.encode(value, forKey: key) }
     }
 
     /// True if this entry was produced by a pattern family or a notebook
@@ -152,14 +189,14 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
 ///
 /// `id` is opaque (UUID generated in the browser), so renames are free.
 public struct TestSuiteSection: Codable, Equatable, Sendable {
-    public let id: String
-    public let name: String
+    public var id: String
+    public var name: String
     /// Variables available to every pattern family in this section.
     /// Uses the same shape as `FamilyVariable` (name + JSON-expressible
     /// value) so the `$name` resolver, validator, and auto-compute code
     /// paths stay unchanged.  Family-level variables of the same name
     /// shadow section-level ones in the generated test.
-    public let variables: [FamilyVariable]
+    public var variables: [FamilyVariable]
 
     /// Slice 4 of #461 — per-student expressions in section scope.
     /// Evaluated per-student at notebook first-open alongside global
@@ -169,7 +206,7 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
     /// per-student reference (`$name` arg / `expectedVarRef`), whose
     /// value is delivered to grading at dispatch time via
     /// `Job.personalizedInputs` / the browser seed endpoint.
-    public let expressions: [PersonalizationExpression]
+    public var expressions: [PersonalizationExpression]
 
     public init(
         id: String, name: String,
@@ -219,11 +256,11 @@ public struct PersonalizationExpression: Codable, Equatable, Sendable {
 
 /// Top-level manifest describing how to build and test a submission.
 public struct TestProperties: Codable, Equatable, Sendable {
-    public let schemaVersion: Int
-    public let gradingMode: GradingMode
+    public var schemaVersion: Int
+    public var gradingMode: GradingMode
     /// How students hand work in — see `SubmissionMode`. `.uploadOnly`
     /// forces native-worker grading via `effectiveGradingMode`.
-    public let submissionMode: SubmissionMode
+    public var submissionMode: SubmissionMode
     /// True when students may also submit a commit from a GitHub repository
     /// (docs/github-submissions.md slice 3), beside the upload form. It is
     /// offered only where the upload form is (`effectiveGradingMode ==
@@ -231,20 +268,20 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// a GitHub submission reaches the runner as an ordinary zip, so
     /// `runnerSanitized()` drops the flag via the memberwise default. Encoded
     /// only when true, so every other manifest keeps its bytes.
-    public let githubSubmission: Bool
+    public var githubSubmission: Bool
     /// True when a graded GitHub submission posts its public-tier result to
     /// the commit as a status (docs/github-submissions.md slice 6). Only with
     /// `githubSubmission`; server-side only, like it, and encoded only when true.
-    public let githubStatusChecks: Bool
-    public let requiredFiles: [String]
-    public let testSuites: [TestSuiteEntry]
-    public let timeLimitSeconds: Int
-    public let makefile: MakefileConfig?
+    public var githubStatusChecks: Bool
+    public var requiredFiles: [String]
+    public var testSuites: [TestSuiteEntry]
+    public var timeLimitSeconds: Int
+    public var makefile: MakefileConfig?
     /// Filename of the starter/template notebook bundled in the test setup zip
     /// (e.g. "assignment.ipynb").  The runner removes this file before executing
     /// tests so grading scripts don't confuse it with the student's submission.
     /// Nil when the assignment has no notebook template.
-    public let starterNotebook: String?
+    public var starterNotebook: String?
     /// The unified list of instructor-authored test-item specs — pattern
     /// families and notebook checks both — that expand into some of the
     /// entries in `testSuites`.  This is the single source of truth; the
@@ -260,7 +297,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// and `notebookChecks` arrays; `init(from:)` migrates them into
     /// `testItems` on read, and `encode(to:)` mirrors both legacy keys back
     /// out (derived from `testItems`) so cross-version readers stay happy.
-    public let testItems: [TestItem]
+    public var testItems: [TestItem]
 
     /// Pattern-family specs, derived from `testItems`.  Order follows the
     /// item list.  A save-time authoring concern only.
@@ -274,7 +311,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// reference a section by `sectionID`; the run order is still the
     /// order of `testSuites` itself (the server is responsible for
     /// keeping items with the same `sectionID` in a contiguous block).
-    public let sections: [TestSuiteSection]
+    public var sections: [TestSuiteSection]
 
     /// Assignment-scope variables, available to every pattern family,
     /// every notebook check, every raw test script, and every notebook
@@ -290,7 +327,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// this field, but it's kept in the runner payload (harmless,
     /// `FamilyVariable` is already a known type) for parity with
     /// `sections.variables`.
-    public let globalVariables: [FamilyVariable]
+    public var globalVariables: [FamilyVariable]
 
     /// Slice 2 of #461 — assignment-scope Python expressions evaluated
     /// per-student at notebook first-open with `seed` bound.  Their
@@ -307,7 +344,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `docs/personalization-pattern-families.md`).  Names cannot clash with
     /// any `globalVariables`, `sections[].variables`, or the reserved name
     /// `seed`.
-    public let globalExpressions: [PersonalizationExpression]
+    public var globalExpressions: [PersonalizationExpression]
 
     /// Per-student dataset specs (Phase 1 — see docs/datasets.md).  Each entry
     /// marks one bundled support file as a per-student dataset: the server
@@ -317,7 +354,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// receives the already-materialized file, never the spec — so
     /// `runnerSanitized()` strips it via the memberwise default (like
     /// `patternFamilies` / `globalExpressions`).
-    public let datasets: [DatasetSpec]
+    public var datasets: [DatasetSpec]
 
     /// The dataset specs keyed by the support filename each one marks, for the
     /// surfaces that ask "is *this* file a dataset, and at what sample size?"
@@ -341,7 +378,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// flags it as student-hidden.  Server-side only — the worker receives the
     /// file via the test-setup zip and needs no marker — so `runnerSanitized()`
     /// strips it via the memberwise default (like `datasets`).
-    public let graderOnlyFiles: [String]
+    public var graderOnlyFiles: [String]
 
     /// The grader-only filenames as a set, for unioning into the student-facing
     /// `reservedNames` filters at each delivery point.
@@ -426,18 +463,18 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// Server-evaluated and display-only; `runnerSanitized()` strips them so a
     /// runner never decodes an achievement shape it doesn't know (same rationale
     /// as `patternFamilies` / `notebookChecks`).
-    public let achievements: [Achievement]
+    public var achievements: [Achievement]
 
     /// IDs of built-in awards (`BuiltInAchievements`) the instructor has disabled
     /// for this assignment.  Empty = all built-ins active (the default).  The
     /// award + display paths skip any id listed here.  Stripped from the
     /// runner-facing manifest (awards are server-side) via the memberwise default.
-    public let disabledBuiltInAwardIDs: [String]
+    public var disabledBuiltInAwardIDs: [String]
     /// True once the instructor has saved the unified Achievements table.  Until
     /// then the editor merges the built-in defaults in for display; after, the
     /// manifest's `achievements` is authoritative (so a removed built-in stays
     /// removed).  Stripped from the runner manifest via the memberwise default.
-    public let builtInAchievementsSeeded: Bool
+    public var builtInAchievementsSeeded: Bool
 
     /// The language this assignment is authored and graded in.
     ///
@@ -452,7 +489,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// or "nobody has declared anything yet" — `languageDeclared` is what
     /// separates those. `AssignmentLanguage.resolve(manifest:)` falls back to
     /// sniffing when nothing is recorded.
-    public let language: AssignmentLanguage?
+    public var language: AssignmentLanguage?
 
     /// True when an author has actually answered "what language is this?" —
     /// including answering "none, it is a plain shell-script suite", which is
@@ -470,7 +507,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `.chickadee` bundle exported by an older build. Those keep deriving.
     /// Everything on disk is backfilled by `BackfillDeclaredLanguage`, so an
     /// undeclared manifest after that point came from outside this deployment.
-    public let languageDeclared: Bool?
+    public var languageDeclared: Bool?
 
     /// Optional minimum `chickadee-runner` version required to grade this
     /// assignment on the native worker path.  When set, the server only hands a
@@ -486,7 +523,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// runner never needs it, so `runnerSanitized()` strips it via the memberwise
     /// default (like `datasets` / `graderOnlyFiles`).  Does not apply to browser
     /// grading (no runner version there); it only bites the worker path.
-    public let minimumRunnerVersion: String?
+    public var minimumRunnerVersion: String?
 
     /// The optional class-activity block — see `ClassActivity` and
     /// docs/class-activities.md. Nil means an ordinary assignment at every
@@ -494,7 +531,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// what a match needs from the job), so `runnerSanitized()` drops it via
     /// the memberwise default — which is also what keeps an older runner from
     /// choking on an `ActivityKind` case it predates.
-    public let activity: ClassActivity?
+    public var activity: ClassActivity?
 
     public init(
         schemaVersion: Int = 1,
@@ -662,7 +699,10 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encodeIfPresent(minimumRunnerVersion, forKey: .minimumRunnerVersion)
         // encodeIfPresent: an ordinary assignment's bytes must not change.
         try c.encodeIfPresent(activity, forKey: .activity)
-        try c.encode(testItems, forKey: .testItems)
+        // An empty list and a false flag are omitted: `init(from:)` reads an
+        // absent key as the default, and omitting them keeps a manifest's
+        // bytes the same whichever writer produced them.
+        try encodeIfNonEmpty(testItems, forKey: .testItems, into: &c)
         // Mirror the legacy arrays (derived from `testItems`, so they can
         // never drift) for cross-version readers that predate `testItems`.
         // DEPRECATED write-side mirroring — remove in the v0.7.0 cleanup,
@@ -670,16 +710,24 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // predates `testItems`.  The read-side migration in `init(from:)`
         // stays forever: old manifests on disk / in exported bundles carry
         // only the legacy arrays and must keep decoding.
-        try c.encode(patternFamilies, forKey: .patternFamilies)
-        try c.encode(notebookChecks, forKey: .notebookChecks)
-        try c.encode(sections, forKey: .sections)
-        try c.encode(globalVariables, forKey: .globalVariables)
-        try c.encode(globalExpressions, forKey: .globalExpressions)
-        try c.encode(datasets, forKey: .datasets)
-        try c.encode(graderOnlyFiles, forKey: .graderOnlyFiles)
-        try c.encode(achievements, forKey: .achievements)
-        try c.encode(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs)
-        try c.encode(builtInAchievementsSeeded, forKey: .builtInAchievementsSeeded)
+        try encodeIfNonEmpty(patternFamilies, forKey: .patternFamilies, into: &c)
+        try encodeIfNonEmpty(notebookChecks, forKey: .notebookChecks, into: &c)
+        try encodeIfNonEmpty(sections, forKey: .sections, into: &c)
+        try encodeIfNonEmpty(globalVariables, forKey: .globalVariables, into: &c)
+        try encodeIfNonEmpty(globalExpressions, forKey: .globalExpressions, into: &c)
+        try encodeIfNonEmpty(datasets, forKey: .datasets, into: &c)
+        try encodeIfNonEmpty(graderOnlyFiles, forKey: .graderOnlyFiles, into: &c)
+        try encodeIfNonEmpty(achievements, forKey: .achievements, into: &c)
+        try encodeIfNonEmpty(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs, into: &c)
+        if builtInAchievementsSeeded {
+            try c.encode(builtInAchievementsSeeded, forKey: .builtInAchievementsSeeded)
+        }
+    }
+
+    private func encodeIfNonEmpty<T: Encodable>(
+        _ values: [T], forKey key: CodingKeys, into c: inout KeyedEncodingContainer<CodingKeys>
+    ) throws {
+        if !values.isEmpty { try c.encode(values, forKey: key) }
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook

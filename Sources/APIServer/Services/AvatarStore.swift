@@ -219,6 +219,21 @@ enum AvatarStore {
         }
     }
 
+    // MARK: - The staff ring
+
+    /// The users among `userIDs` who are course staff (TA or instructor) in at
+    /// least one course. For the pages that belong to no one course — the
+    /// account page and the admin Users list — where the staff ring means
+    /// "teaches somewhere". A page inside a course asks that course's
+    /// enrollment role instead (docs/student-wardrobe.md, "The staff ring").
+    static func courseStaff(among userIDs: [UUID], on db: Database) async throws -> Set<UUID> {
+        guard !userIDs.isEmpty else { return [] }
+        let enrollments = try await APICourseEnrollment.query(on: db)
+            .filter(\.$userID ~~ userIDs)
+            .all()
+        return Set(enrollments.filter { $0.role >= .ta }.map(\.userID))
+    }
+
     // MARK: - Coding
 
     /// A spec whose stored JSON no longer decodes — a slot renamed, a row
