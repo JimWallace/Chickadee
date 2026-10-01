@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.311] - 2026-10-01
+
+### Fixed
+
+- **Data export generation no longer outlives the server.** `DataExportManager` now owns each generation task and drains them at shutdown, before Fluent closes the database. A bare `Task {}` used to keep running through `asyncShutdown` and trap in `FluentProvider` on a cleared `app.db` (#1700). A cancelled generation is logged, not marked failed.
+
+
 ## [0.5.310] - 2026-10-01
 
 ### Fixed
