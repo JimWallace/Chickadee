@@ -31,6 +31,9 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
         PeriodicSweepLifecycleHandler { $0.auditLogReaperMonitor(maxAge: auditLogMaxAge) }
     )
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.dataExportReaperMonitor })
+    // Cancel and await in-flight export generation before Fluent closes the
+    // databases, so no generation task outlives the application (#1700).
+    app.lifecycle.use(DataExportDrainLifecycleHandler())
     // Unstick personal-data exports orphaned in `pending` by a restart mid-
     // generation, so the account page's status poll can resolve (#557).
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })

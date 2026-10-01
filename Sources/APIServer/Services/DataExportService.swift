@@ -45,24 +45,72 @@ func dataExportCanBeRequested(_ export: APIDataExport?, now: Date = Date()) -> B
 /// Serializes export generation per user on this process: a second request
 /// for a user whose generation is still in flight is a no-op (the DB row is
 /// already pending and the running task will complete it).
+///
+/// It also OWNS each generation task. The task used to be started and
+/// dropped, so it outlived the application: a test that requested an export
+/// and returned let `withApp` shut the app down while generation was still
+/// using `app.db`, the first query after shutdown failed with
+/// `ConnectionPoolError.shutdown`, and the failure path then read `app.db`
+/// again and trapped in Fluent's accessor (#1700). `drain()` cancels and
+/// awaits every task, and `DataExportDrainLifecycleHandler` calls it before
+/// Fluent closes the databases.
 actor DataExportManager {
-    private var inFlightUserIDs: Set<UUID> = []
+    private var inFlight: [UUID: Task<Void, Never>] = [:]
 
     /// Starts generation for `userID` unless one is already running here.
     /// Returns whether a new generation task was started.
     @discardableResult
     func startExport(exportID: UUID, userID: UUID, app: Application) -> Bool {
-        guard !inFlightUserIDs.contains(userID) else { return false }
-        inFlightUserIDs.insert(userID)
-        Task {
+        startWork(userID: userID) {
             await generateDataExport(exportID: exportID, userID: userID, app: app)
+        }
+    }
+
+    /// Runs `work` on a task the manager keeps until it ends, one per user.
+    /// `startExport` is the one production caller; tests drive this seam with
+    /// work of their own to pin the drain and the shutdown order.
+    @discardableResult
+    func startWork(userID: UUID, _ work: @escaping @Sendable () async -> Void) -> Bool {
+        guard inFlight[userID] == nil else { return false }
+        inFlight[userID] = Task {
+            await work()
             markFinished(userID: userID)
         }
         return true
     }
 
+    /// How many generations this process is running now.
+    var inFlightCount: Int { inFlight.count }
+
+    /// Cancels every in-flight generation and waits for each task to end.
+    /// A cancelled generation leaves its row `pending`, which is the
+    /// documented interrupted state (`dataExportStalePendingAge`): the reaper
+    /// flips it to `failed` and the user can request again.
+    func drain() async {
+        let tasks = Array(inFlight.values)
+        for task in tasks {
+            task.cancel()
+        }
+        for task in tasks {
+            await task.value
+        }
+    }
+
     private func markFinished(userID: UUID) {
-        inFlightUserIDs.remove(userID)
+        inFlight[userID] = nil
+    }
+}
+
+/// Drains in-flight export generation at shutdown.
+///
+/// Vapor runs `shutdownAsync` handlers in REVERSE registration order, and
+/// Fluent registers its handler when the database is configured, before
+/// `bootstrapAppServices` registers this one. So the drain runs while
+/// `app.db` is still open, and a generation can finish its row update or
+/// stop at a cancellation check without touching a closed database.
+struct DataExportDrainLifecycleHandler: LifecycleHandler {
+    func shutdownAsync(_ application: Application) async {
+        await application.dataExportManager.drain()
     }
 }
 
@@ -91,6 +139,13 @@ func generateDataExport(exportID: UUID, userID: UUID, app: Application) async {
         try await buildDataExport(exportID: exportID, userID: userID, app: app)
         app.logger.info("data_export complete user=\(userID.uuidString)")
     } catch {
+        // Cancelled by the shutdown drain: the database may be closing, so
+        // write nothing. The row stays `pending`, the documented interrupted
+        // state, and `failStalePendingDataExports` resolves it.
+        guard !Task.isCancelled else {
+            app.logger.info("data_export generation cancelled by shutdown user=\(userID.uuidString)")
+            return
+        }
         app.logger.error(
             "data_export generation failed user=\(userID.uuidString): \(String(reflecting: error))"
         )
@@ -99,6 +154,7 @@ func generateDataExport(exportID: UUID, userID: UUID, app: Application) async {
 }
 
 private func buildDataExport(exportID: UUID, userID: UUID, app: Application) async throws {
+    try Task.checkCancellation()
     let db = app.db
     guard let user = try await APIUser.find(userID, on: db) else {
         throw Abort(.notFound, reason: "User \(userID.uuidString) not found for data export")
@@ -106,6 +162,7 @@ private func buildDataExport(exportID: UUID, userID: UUID, app: Application) asy
 
     let generatedAt = Date()
     let content = try await gatherDataExportContent(for: user, on: db, now: generatedAt)
+    try Task.checkCancellation()
     let files = try stagedExportFiles(
         content: content, username: user.username, generatedAt: generatedAt)
     let copies = content.fileCopies.map {
@@ -128,11 +185,14 @@ private func buildDataExport(exportID: UUID, userID: UUID, app: Application) asy
         try writeDataExportStaging(
             stagingDir: stagingDir, files: files, copies: copies, logger: logger)
     }
+    try Task.checkCancellation()
     try await createZipArchive(sourceDir: stagingDir, outputPath: tempZipPath)
+    try Task.checkCancellation()
     let fileSize = try await runBlocking(app: app) {
         try installDataExportZip(tempZipPath: tempZipPath, finalZipPath: finalZipPath)
     }
 
+    try Task.checkCancellation()
     guard let row = try await APIDataExport.find(exportID, on: db) else { return }
     row.setStatus(.complete)
     row.completedAt = Date()

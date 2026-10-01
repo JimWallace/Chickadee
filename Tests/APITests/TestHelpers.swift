@@ -1416,6 +1416,13 @@ func makeTestApp(
         // registration separately.
         app.middleware.use(AssignmentVersionCaptureMiddleware())
 
+        // The data-export drain, registered here for the same reason: a test
+        // that requests an export and returns used to leave generation running
+        // past `withApp`'s shutdown, and the first query after shutdown trapped
+        // in Fluent's accessor (#1700). Production registers it in
+        // `bootstrapAppServices`; `DataExportDrainWiringTests` pins that.
+        app.lifecycle.use(DataExportDrainLifecycleHandler())
+
         // The browser-grading import check's inventory, loaded here for the same
         // reason the version-capture middleware is registered above: rejecting a
         // script whose imports the grading kernel lacks is part of what the
