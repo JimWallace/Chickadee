@@ -10,7 +10,8 @@
 #   backups/snapshot-<YYYYMMDD-HHMMSS>[-<label>]/
 #     ├── postgres.dump   (pg_dump -Fc custom format)
 #     ├── data.tar.gz     (testsetups/, submissions/, results/, .worker-secret,
-#     │                    .local-runner-autostart from the chickadee-data volume)
+#     │                    .local-runner-autostart, .mcp-signing-key, .lti-tool-key
+#     │                    and .github-app-secrets from the chickadee-data volume)
 #     └── manifest.json   (written last; its presence means snapshot is complete)
 #
 # Pairs with scripts/restore.sh for rollback.
@@ -159,7 +160,7 @@ docker run --rm \
   -v "$DATA_VOLUME":/data:ro \
   -v "$DIR":/snap \
   ubuntu:22.04 \
-  sh -c 'set -e; paths=""; for p in testsetups submissions results .worker-secret .local-runner-autostart; do [ -e "/data/$p" ] && paths="$paths $p"; done; if [ -z "$paths" ]; then echo "WARN: no artifact paths found in /data" >&2; tar czf /snap/data.tar.gz -T /dev/null; else cd /data && tar czf /snap/data.tar.gz $paths; fi'
+  sh -c 'set -e; paths=""; for p in testsetups submissions results .worker-secret .local-runner-autostart .mcp-signing-key .lti-tool-key .github-app-secrets; do [ -e "/data/$p" ] && paths="$paths $p"; done; if [ -z "$paths" ]; then echo "WARN: no artifact paths found in /data" >&2; tar czf /snap/data.tar.gz -T /dev/null; else cd /data && tar czf /snap/data.tar.gz $paths; fi'
 DATA_BYTES="$(wc -c < "$DIR/data.tar.gz" | tr -d ' ')"
 echo "    Wrote $DATA_BYTES bytes."
 
