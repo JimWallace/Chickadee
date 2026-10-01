@@ -1212,7 +1212,11 @@ greeting. The example below does so in R."
 
 ## Coding Conventions
 
-- Swift 6, strict concurrency. No `@unchecked Sendable` without a comment explaining why.
+- Swift 6, strict concurrency. No `@unchecked Sendable` without a comment
+  explaining why, except on a Fluent `Model` class, where the reason is always
+  the same (Fluent's property wrappers are what the compiler cannot check).
+  `scripts/check-unchecked-sendable.sh` fails `format-lint` on any other site
+  without a comment.
 - `async/await` throughout. No completion handlers.
 - Actors for any shared mutable state (`WorkerSecretStore`, `WorkerActivityStore`,
   `LocalRunnerAutoStartStore`, `LocalRunnerManager`).
@@ -1731,7 +1735,8 @@ shim); and archived finished-era docs under `docs/archive/`.
   represented at the collection level (`buildStatus: "failed"`).
 - Do not write a runner JSON protocol — the runner interprets exit codes directly.
 - Do not add per-language build strategies in Swift — test suites are plain shell scripts.
-- Do not use `@unchecked Sendable` without a comment.
+- Do not use `@unchecked Sendable` without a comment (Fluent `Model` classes
+  excepted; `scripts/check-unchecked-sendable.sh` enforces it).
 - **Do not introduce new environment variables.** This is a standing rule, not a
   per-case judgement, and it applies to the server (`AppConfig`) and the runner
   (`RunnerDaemonConfig`) alike. Every new env var is another thing that must be

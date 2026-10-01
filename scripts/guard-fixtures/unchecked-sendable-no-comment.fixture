@@ -1,0 +1,10 @@
+# CLAUDE.md requires a comment on every @unchecked Sendable outside a Fluent
+# model, because the attribute switches the compiler's data-race check off
+# and the comment is what replaces it.
+guard="scripts/check-unchecked-sendable.sh"
+files="Sources/APIServer/Services/PeriodicSweepMonitor.swift"
+description="an @unchecked Sendable class with no comment saying why"
+expect="without a comment"
+apply() {
+    printf '\n\n\n\nfinal class GuardFixtureBox: @unchecked Sendable {\n    var count = 0\n}\n' >> Sources/APIServer/Services/PeriodicSweepMonitor.swift
+}
