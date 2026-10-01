@@ -35,9 +35,35 @@ allowlisted infrastructure fields only; the per-tool posture and the upstream
 writer hygiene are audited in `mcp-student-data-audit-2026-07.md` §2.2–§3.
 
 There is **no** Chickadee→model-API egress edge to allowlist; the model API is
-reached by the agent. Chickadee's own outbound edges (OIDC/DUO, BrightSpace/D2L,
-UW calendar, optional alert webhook) carry no MCP content and should be
-restricted at the network layer (see `ira-audit-report.md` §5).
+reached by the agent. Chickadee's own outbound edges (OIDC/DUO, BrightSpace/D2L
+Valence, the LTI platform's token, JWKS, AGS and NRPS endpoints, UW calendar,
+optional alert webhook) carry no MCP content and should be restricted at the
+network layer (see `ira-audit-report.md` §5).
+
+## The LMS as a counterparty (LTI 1.3, 2026-09)
+
+LTI 1.3 (`docs/lti-1-3.md`) adds the LMS as a counterparty on both sides of
+the boundary. It is separate from the MCP surface and shares no token, scope
+or key with it.
+
+- **Inbound.** The LMS starts every flow with a browser redirect to
+  `/lti/login` and then posts a signed `id_token` to `/lti/launch` or the
+  deep-linking endpoint. Chickadee verifies the token against the platform's
+  published key set (fetched over HTTPS from the registered `jwks_url`, cached
+  and refetched once per 30 s on a verify failure), checks issuer, audience,
+  `azp`, expiry, nonce and the single-use `state`, and maps the roles claim to
+  a course role. Only platforms an admin registered (`lti_platforms`, in the
+  database, never in environment variables) are accepted.
+- **Outbound.** Grade pushes (AGS) and roster reads (NRPS) call the platform's
+  service URLs with a client-credentials access token. The token request is a
+  JWT assertion signed with the tool's RSA key (`.lti-tool-key`, mode 0600,
+  generated on first use); the public half is published at `GET /lti/jwks`.
+  These are the only LTI egress edges, and they are the ones to allowlist.
+- **What crosses** is listed per flow in `data-flow-inventory.md` ("LTI 1.3
+  flows"). The LMS learns an assignment's title, a grade and the student's own
+  LMS subject; Chickadee learns the launching user's name, email and roles,
+  and, on a roster check, the membership in transit only.
+- **No model involvement.** No LTI flow reaches an agent or a model API.
 
 ## Figure
 
