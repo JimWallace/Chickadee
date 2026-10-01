@@ -2066,6 +2066,68 @@ code { font-family: var(--font-mono); font-size: .9em; }
     gap: .4rem;
     margin: 1rem 1.25rem 0 0;
 }
+
+/* Phone: a .section-items row stops being a table row and becomes a wrapping
+   flex line: tile, title and actions on one line, the state under the title. Only `display` changes; browsers that keep a table's implicit roles
+   still announce a table. The hidden "Actions" header goes with its column; the
+   buttons carry their own labels. Desktop is untouched: nothing here applies
+   above 640px. */
+@media (max-width: 640px) {
+    .section-items, .section-items tbody { display: block; }
+    .section-items colgroup { display: none; }
+    .section-items tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: .75rem;
+        row-gap: .5rem;
+        padding: .75rem .9rem;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .section-items tr:last-child { border-bottom: none; }
+    .section-items.results-table td { display: block; padding: 0; border: 0; }
+    .section-items.results-table thead th { display: block; padding: 0; border: 0; }
+    .section-items thead th:has(> .visually-hidden:only-child) { display: none; }
+    .section-items td:empty,
+    .section-items td.col-hide-phone,
+    .section-items td.section-items-handle { display: none; }
+    /* One line: tile, title, a value if the row has one, the actions at the
+       right. The state (a select) drops under the title. If the actions do not
+       fit beside a title of at least 8rem they wrap to their own line. */
+    .section-items .item-tile-cell,
+    .section-items .leaderboard-rank { flex: none; order: 0; }
+    .section-items .item-main { flex: 1 1 8rem; min-width: 8rem; order: 1; }
+    .section-items td.item-status.item-grade { flex: none; order: 2; }
+    .section-items td.item-actions-td { flex: none; order: 3; }
+    .section-items td.item-status:not(.item-grade) {
+        flex: 1 0 100%;
+        order: 4;
+        padding-left: 3rem;
+    }
+    .section-items td.item-status:not(.item-grade) .state-select { max-width: 12rem; }
+    .section-items .assignment-actions-cell,
+    .section-items .row-actions-tight { flex-wrap: nowrap; justify-content: flex-end; }
+    .section-items-heading td { flex: 1 0 100%; }
+    .section-items .leaderboard-row--you { background: var(--you-bg); }
+}
+
+/* Phone: wide things that were wider than the screen — the leaderboard card's
+   stats, the facts buttons, the tab bar, a page title with its action, the
+   secret-test summary row. (The list rows are the block above.) */
+@media (max-width: 640px) {
+    .you-card-stats { flex: 1 0 100%; }
+    .facts-actions { float: none; margin: 1rem 1.25rem 0; }
+    .course-tabs { flex-wrap: nowrap; }
+    .course-tab { flex: none; white-space: nowrap; }
+    .page-titlebar .toolbar { margin-left: auto; }
+    .tier-summary-row { flex-wrap: wrap; }
+    /* The account menu opens against the nav bar's right edge, not its toggle:
+       the nav wraps on a phone, so the toggle can sit anywhere, and a panel
+       right-aligned to a toggle near the left edge ran off the screen. */
+    .nav { position: relative; }
+    .nav-user { position: static; }
+    .nav-user .nav-dropdown-menu { top: 100%; left: auto; right: .75rem; }
+}
 /* An editor beside its facts panel; one column on a phone. */
 .editor-split {
     display: grid;

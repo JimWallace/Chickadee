@@ -96,11 +96,11 @@ MCP
         #for(account in accounts):
             <tr>
                 <td class="item-tile-cell"><span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title"><code>#(account.username)</code></div>
                     <div class="item-details#if(account.coursesText == ""): item-details--danger#endif">created <span class="js-relative-time" data-iso="#(account.createdAt)">#(account.createdAt)</span> · #if(account.coursesText == ""):No course access#else:<code>#(account.coursesText)</code>#endif</div>
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         #if(enabled):
                         #if(writeAllowed):
@@ -186,14 +186,14 @@ MCP
         #for(grant in grants):
             <tr#if(!grant.canRevoke): class="row-muted"#endif>
                 <td class="item-tile-cell"><span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(grant.agentName)</div>
                     <div class="item-details">authorized by <code>#(grant.owner)</code> · last used #if(grant.lastUsedAt):<span class="js-relative-time" data-iso="#(grant.lastUsedAt)">#(grant.lastUsedAt)</span>#else:never#endif · expires <span class="js-relative-time" data-iso="#(grant.expiresAt)">#(grant.expiresAt)</span> · <code>#(grant.scope)</code></div>
                 </td>
-                <td>
+                <td class="item-status">
                     <span class="tier #if(grant.canRevoke):tier-open#elseif(grant.revoked):tier-closed#else:tier-preview#endif">#(grant.statusLabel)</span>
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         #if(grant.canRevoke):
                         <details class="ext-details row-menu">

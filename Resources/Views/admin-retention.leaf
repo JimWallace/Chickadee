@@ -28,18 +28,18 @@ Retention
             #for(row in rows):
             <tr>
                 <td class="item-tile-cell"><span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title"><a href="/admin/courses/#(row.id)"><strong>#(row.code)</strong></a> — #(row.name)</div>
                     <div class="item-details">#if(row.termLabel):#(row.termLabel) · #endif archived #(row.archivedAt) · #(row.submissionCount) submissions</div>
                 </td>
-                <td>
+                <td class="item-status">
                     #if(row.isDeletable):
                     <span class="tier tier-danger">Eligible to delete</span>
                     #else:
                     <span class="tier tier-closed">Deletable #(row.purgeEligibleAt)</span>
                     #endif
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         <form method="post" action="/admin/courses/#(row.id)/archive" class="inline-form">
                             #csrfFormField()

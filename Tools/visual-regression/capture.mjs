@@ -20,7 +20,7 @@ import { chromium } from "playwright";
 import fs from "node:fs";
 import path from "node:path";
 import { seed } from "./seed.mjs";
-import { pageList } from "./pages.mjs";
+import { pageList, PHONE_PAGE_NAMES } from "./pages.mjs";
 
 const baseURL = process.argv[2];
 const outDir = process.argv[3];
@@ -61,12 +61,72 @@ async function main() {
 
   const browser = await chromium.launch();
   let failures = 0;
+
+  // The phone check: no page may scroll sideways at 320px (the narrowest
+  // phone in use). Not a screenshot — a layout assertion — so it covers every
+  // page in the list, not only the ones with a phone baseline.
+  for (const p of PAGES) {
+    const context = await browser.newContext({
+      baseURL,
+      viewport: { width: 320, height: 640 },
+      locale: "en-CA",
+      timezoneId: "America/Toronto",
+      storageState: p.state || undefined,
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(p.path, { waitUntil: "networkidle", timeout: 30_000 });
+      await page.waitForTimeout(300);
+      const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+      }));
+      if (scrollWidth > innerWidth) {
+        failures++;
+        // Name the widest offenders, so the failure says what to fix.
+        const culprits = await page.evaluate(() =>
+          [...document.querySelectorAll("body *")]
+            .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1)
+            // Inside a scroll container the overflow is contained, not the page's.
+            .filter((el) => {
+              for (let a = el.parentElement; a; a = a.parentElement) {
+                const o = getComputedStyle(a).overflowX;
+                if (o === "auto" || o === "scroll" || o === "hidden") return false;
+              }
+              return true;
+            })
+            .slice(0, 6)
+            .map((el) => `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}` +
+              `${el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).join(".") : ""}`));
+        console.error(
+          `OVERFLOW ${p.name} at 320px: scrollWidth ${scrollWidth} > innerWidth ${innerWidth}` +
+          `\n    first elements past the edge: ${culprits.join(", ")}`);
+      } else {
+        console.log(`no overflow at 320px: ${p.name}`);
+      }
+    } catch (err) {
+      failures++;
+      console.error(`FAILED overflow check ${p.name}: ${err.message}`);
+    } finally {
+      await context.close();
+    }
+  }
+
+  // Desktop captures keep their historic names; the phone width adds a
+  // suffix and covers the pages built from the shared list rows.
+  const PHONE_PAGES = new Set(PHONE_PAGE_NAMES);
+  const VIEWPORTS = [
+    { suffix: "", width: 1280, height: 900, only: null },
+    { suffix: "--w375", width: 375, height: 812, only: PHONE_PAGES },
+  ];
   for (const scheme of ["light", "dark"]) {
+   for (const vp of VIEWPORTS) {
     for (const p of PAGES) {
+      if (vp.only && !vp.only.has(p.name)) continue;
       const context = await browser.newContext({
         baseURL,
         colorScheme: scheme,
-        viewport: { width: 1280, height: 900 },
+        viewport: { width: vp.width, height: vp.height },
         deviceScaleFactor: 1,
         reducedMotion: "reduce",
         locale: "en-CA",
@@ -150,7 +210,7 @@ async function main() {
             });
         });
         await page.waitForTimeout(300); // let post-load JS (tables, badges) settle
-        const file = path.join(outDir, `${p.name}--${scheme}.png`);
+        const file = path.join(outDir, `${p.name}${vp.suffix}--${scheme}.png`);
         await page.screenshot({
           path: file,
           fullPage: true,
@@ -162,14 +222,15 @@ async function main() {
           mask: MASKS.map((sel) => page.locator(sel).filter({ visible: true })),
           maskColor: "#FF00FF",
         });
-        console.log(`captured ${p.name}--${scheme}`);
+        console.log(`captured ${p.name}${vp.suffix}--${scheme}`);
       } catch (err) {
         failures++;
-        console.error(`FAILED to capture ${p.name}--${scheme}: ${err.message}`);
+        console.error(`FAILED to capture ${p.name}${vp.suffix}--${scheme}: ${err.message}`);
       } finally {
         await context.close();
       }
     }
+   }
   }
   await browser.close();
   if (failures > 0) {

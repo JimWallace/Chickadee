@@ -2,11 +2,11 @@
                 <tr data-load="#(worker.assignedJobs)"
                     data-max-jobs="#(worker.maxConcurrentJobs)"#if(worker.isOffline): class="runner-row-offline"#endif>
                     <td class="item-tile-cell"><span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg></span></td>
-                    <td data-sort-value="#(worker.workerID)">
+                    <td class="item-main" data-sort-value="#(worker.workerID)">
                         <div class="item-title"><a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a></div>
                         <div class="item-details">#(worker.detailsText)</div>
                     </td>
-                    <td data-sort-value="#(worker.assignedJobs)">
+                    <td class="item-status" data-sort-value="#(worker.assignedJobs)">
                         #if(worker.isOffline):
                         <span class="tier">Offline</span>
                         #elseif(worker.hasSlots):
@@ -20,7 +20,7 @@
                         <span class="js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</span>
                         <div class="item-details">last active</div>
                     </td>
-                    <td>
+                    <td class="item-actions-td">
                         <a class="btn action-btn action-btn-icon" href="/admin/runners/#(worker.workerID)"
                            title="Open runner" aria-label="Open runner #(worker.workerID)">
                             <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>

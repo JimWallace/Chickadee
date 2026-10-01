@@ -5,7 +5,7 @@
                     #extend("_avatar", user.avatar)
                     #endif
                 </td>
-                <td data-sort-value="#if(user.displayName):#(user.displayName)#else:#(user.username)#endif">
+                <td class="item-main" data-sort-value="#if(user.displayName):#(user.displayName)#else:#(user.username)#endif">
                     #if(user.displayName):
                     <div class="item-title">#(user.displayName)</div>
                     #else:
@@ -13,7 +13,7 @@
                     #endif
                     <div class="item-details">#if(user.displayName):<code>#(user.username)</code> · #endif joined <span class="js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</span></div>
                 </td>
-                <td data-sort-value="#(user.role)">
+                <td class="item-status" data-sort-value="#(user.role)">
                     #if(user.role == "mcp"):
                     <span class="tier tier-preview">MCP service</span>
                     #else:
@@ -37,7 +37,7 @@
                         —
                     #endif
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         <a href="/admin/users/#(user.id)"
                            class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">

@@ -65,11 +65,11 @@ LTI
         #for(platform in platforms):
             <tr#if(!platform.enabled): class="row-muted"#endif>
                 <td class="item-tile-cell"><span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title">#(platform.displayName)</div>
                     <div class="item-details">#(platform.deploymentCount) deployments · <code>#(platform.issuer)</code> · client <code>#(platform.clientID)</code></div>
                 </td>
-                <td>
+                <td class="item-status">
                     <form method="post" action="/admin/lti/platforms/#(platform.id)/enabled" class="inline-form form-flush">
                         #csrfFormField()
                         <label class="visually-hidden" for="lti-enabled-#(platform.id)">Status of #(platform.displayName)</label>
@@ -81,7 +81,7 @@ LTI
                         </span>
                     </form>
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         <a class="btn action-btn action-btn-icon" href="#edit-platform-#(platform.id)"
                            data-add-target="edit-platform-#(platform.id)"

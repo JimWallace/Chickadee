@@ -119,12 +119,12 @@ Admin
         #for(course in courses):
             <tr>
                 <td class="item-tile-cell"><span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg></span></td>
-                <td>
+                <td class="item-main">
                     <div class="item-title"><a href="/admin/courses/#(course.id)">#(course.code) — #(course.name)</a></div>
                     <div class="item-details">#if(course.termLabel):#(course.termLabel) · #endif#(course.submissionCount) submissions</div>
                 </td>
-                <td class="item-grade"><strong>#(course.enrollmentCount)</strong><div class="item-details">students</div></td>
-                <td>
+                <td class="item-status item-grade"><strong>#(course.enrollmentCount)</strong><div class="item-details">students</div></td>
+                <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         <a class="btn action-btn action-btn-icon" href="/admin/courses/#(course.id)#clone-course"
                            title="Clone course" aria-label="Clone course">

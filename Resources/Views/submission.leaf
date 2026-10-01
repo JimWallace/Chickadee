@@ -135,6 +135,7 @@ Submission #(submissionID)
     <h3 class="submission-section-heading">#(sec.sectionName)</h3>
     #endif
     #if(count(sec.outcomes) > 0):
+    <div class="table-scroll">
     <table class="results-table">
         <thead>
             <tr>
@@ -195,6 +196,7 @@ Submission #(submissionID)
         #endfor
         </tbody>
     </table>
+    </div>
     #endif
     #if(sec.secretStake):
     <div class="tier-summary-row tier-summary-secret">
@@ -210,6 +212,7 @@ Submission #(submissionID)
         </form>
         #endif
     </div>
+    <div class="table-scroll">
     <table class="results-table">
         <thead>
             <!-- No delta column here: a masked row carries no arrows, because
@@ -231,6 +234,7 @@ Submission #(submissionID)
         #endfor
         </tbody>
     </table>
+    </div>
     #endif
 </section>
 #endfor

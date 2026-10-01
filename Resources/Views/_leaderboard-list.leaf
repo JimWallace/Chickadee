@@ -25,11 +25,11 @@
         <tr#if(item.row.isViewer): class="leaderboard-row--you"#endif>
             <td class="leaderboard-rank"><span class="rank-disc" data-rank-tier="#(item.row.rankTier)">#(item.row.rankText)</span></td>
             <td class="item-tile-cell">#extend("_avatar", item.row.avatar)</td>
-            <td>
+            <td class="item-main">
                 <div class="item-title"><span data-avatar-handle>#(item.row.handle)</span>#if(item.row.isViewer): <span class="you-pill">You</span>#endif</div>
                 <div class="item-details">#if(isStaff):#(item.row.name) · #endif#(item.row.detailsText)</div>
             </td>
-            <td class="item-grade">#(item.row.valueText)</td>
+            <td class="item-status item-grade">#(item.row.valueText)</td>
         </tr>
     #endif
     #endfor

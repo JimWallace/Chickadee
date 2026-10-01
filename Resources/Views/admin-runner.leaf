@@ -154,7 +154,7 @@ Runner #(runner.workerID)
                     <span class="item-tile"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span>
                     #endif
                 </td>
-                <td data-sort-value="#if(job.username):#(job.username)#else:~#endif">
+                <td class="item-main" data-sort-value="#if(job.username):#(job.username)#else:~#endif">
                     #if(job.username):
                     <div class="item-title">#(job.username)</div>
                     #else:
@@ -162,7 +162,7 @@ Runner #(runner.workerID)
                     #endif
                     <div class="item-details">#if(job.detailsText != ""):#(job.detailsText) · #endif<code>#(job.submissionID)</code></div>
                 </td>
-                <td data-sort-value="#(job.finalStatus)">
+                <td class="item-status" data-sort-value="#(job.finalStatus)">
                     <span class="tier tier-#(job.statusTier)">#(job.statusLabel)</span>
                     #if(job.limitText != ""):
                     <div class="item-details item-details--danger">#(job.limitText)</div>
@@ -171,7 +171,7 @@ Runner #(runner.workerID)
                 <td class="col-hide-phone js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)" data-sort-value="#(job.completedAt)"#else:data-sort-value=""#endif>
                     #if(job.completedAt):#(job.completedAt)#else:—#endif
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <a class="btn action-btn action-btn-icon" href="/submissions/#(job.submissionID)"
                        title="Open submission" aria-label="Open submission #(job.submissionID)">
                         <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
