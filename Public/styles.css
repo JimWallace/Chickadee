@@ -162,6 +162,18 @@
     /* "No border": a ring that paints nothing, so a bird with no border is
        exactly the bird it was before borders existed. */
     --avatar-border-none: transparent;
+    /* The rainbow ring: six flat bands held near the palette's own saturation,
+       so it sits beside the accents rather than shouting over them. */
+    --avatar-rainbow-red: #D9483B;
+    --avatar-rainbow-orange: #E88A2E;
+    --avatar-rainbow-yellow: #E8C23A;
+    --avatar-rainbow-green: #4FA05A;
+    --avatar-rainbow-blue: #3F7FC7;
+    --avatar-rainbow-violet: #7B55B0;
+    /* The staff ring: a colour no student ring uses, in a double shape no
+       student ring has. The one part of the bird with a dark-mode mirror
+       beside the backdrop, because it must read against a dark backdrop. */
+    --avatar-staff-ring: #1F2937;
     --avatar-blush: #F2AE9F;
     --avatar-mouth: #8E3A2C;
     /* Leaderboard: the viewer's own row, the solid You pill, and the three
@@ -241,6 +253,7 @@
         --kind-graded-fg: #FFFFFF;
         --state-amber: #ECC94B;
         --avatar-back-pebble: #32332F;
+        --avatar-staff-ring: #E5E7EB;
         --you-bg: #0F2F35;
         --teal-ink: #00C4D3;
         --teal-ink-fg: #00262B;
@@ -320,6 +333,7 @@
     --kind-graded-fg: #FFFFFF;
     --state-amber: #ECC94B;
     --avatar-back-pebble: #32332F;
+    --avatar-staff-ring: #E5E7EB;
     --you-bg: #0F2F35;
     --teal-ink: #00C4D3;
     --teal-ink-fg: #00262B;
@@ -3313,7 +3327,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .account-identity .text-muted { font-size: var(--text-sm); }
 
 /* The generated student chickadee.  One svg carrying the size class wraps the
-   six use elements that stack into a bird (see _avatar-sprite.leaf); the spec
+   seven use elements that stack into a bird (see _avatar-sprite.leaf); the spec
    picks the varying colours by assigning palette tokens to the --av-* custom
    properties on that element, which is the sanctioned inline form.
 
@@ -3331,15 +3345,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     --av-wing: var(--avatar-slate-wing);
     --av-accent: var(--avatar-accent-ember);
     --av-backdrop: var(--avatar-back-sky);
-    /* The border ring (docs/student-wardrobe.md, decision 2): an outline
-       inside the disc, so it follows the radius and needs no sprite layer.
-       With no border chosen the presentation passes --avatar-border-none,
-       which is transparent. The bird is decorative and its colours are the
-       student's, so forced-colors mode leaves them as they are (and does
-       not paint the transparent ring). */
+    /* The colour of a solid ring (docs/student-wardrobe.md, "Rings"). The ring
+       is the top sprite layer; the presentation passes --avatar-border-none,
+       which is transparent, for every ring that colours itself. The bird is
+       decorative and its colours are the student's, so forced-colors mode
+       leaves them as they are. */
     --av-border: var(--avatar-border-none);
-    outline: 3px solid var(--av-border);
-    outline-offset: -3px;
     forced-color-adjust: none;
 }
 
@@ -3352,8 +3363,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     width: 1.5rem;
     height: 1.5rem;
     margin-right: .5rem;
-    outline-width: 2px;
-    outline-offset: -2px;
 }
 
 /* The 2.25rem form for a roster row where the name beside the bird carries the
@@ -3362,8 +3371,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .avatar-md {
     width: 2.25rem;
     height: 2.25rem;
-    outline-width: 2px;
-    outline-offset: -2px;
 }
 
 /* Swatch choice: radio inputs shown as round colour samples with a name
@@ -3418,13 +3425,21 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .swatch input:focus-visible + .swatch-sample { outline: 2px solid var(--blue); }
 
-/* A backdrop sample is a filled disc and a border sample is a ring, each in
-   the avatar property the option sets; "no border" is a dashed grey ring. */
+/* A backdrop sample is a filled disc in the avatar property the option sets.
+   A ring sample is a small svg drawing the backdrop and the ring symbol from
+   the avatar sprite, so it shows the ring the student would wear. It inherits
+   --av-backdrop from the form, which the live preview updates, so the samples
+   follow a backdrop change before it is saved. "No border" is a dashed grey
+   ring. A locked ring's input is disabled: it is shown dimmed, and its name
+   says so. */
 .swatch-backdrop { background: var(--av-backdrop); }
 
-.swatch-border { border: 5px solid var(--av-border); }
-
 .swatch-none { border: 2px dashed var(--muted); }
+
+.swatch:has(input:disabled) {
+    opacity: .6;
+    cursor: not-allowed;
+}
 
 /* Forced colors would paint every sample the same. Keep the samples' own
    colours, and draw the checked ring in the system highlight colour. */
@@ -3459,6 +3474,19 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-brow { fill: none; stroke: var(--avatar-body); }
 .av-blush { fill: var(--avatar-blush); opacity: .85; }
 .av-mouth { fill: var(--avatar-mouth); }
+.av-ring { fill: var(--av-border); }
+.av-staff-ring { fill: var(--avatar-staff-ring); }
+.av-rainbow-red { fill: var(--avatar-rainbow-red); }
+.av-rainbow-orange { fill: var(--avatar-rainbow-orange); }
+.av-rainbow-yellow { fill: var(--avatar-rainbow-yellow); }
+.av-rainbow-green { fill: var(--avatar-rainbow-green); }
+.av-rainbow-blue { fill: var(--avatar-rainbow-blue); }
+.av-rainbow-violet { fill: var(--avatar-rainbow-violet); }
+.av-spectrum-ember { fill: var(--avatar-accent-ember); }
+.av-spectrum-honey { fill: var(--avatar-accent-honey); }
+.av-spectrum-moss { fill: var(--avatar-accent-moss); }
+.av-spectrum-lagoon { fill: var(--avatar-accent-lagoon); }
+.av-spectrum-orchid { fill: var(--avatar-accent-orchid); }
 .av-gear { fill: var(--avatar-gear); }
 .av-gear-line { fill: none; stroke: var(--avatar-gear); }
 .av-bloom-eye { fill: var(--avatar-beak); }

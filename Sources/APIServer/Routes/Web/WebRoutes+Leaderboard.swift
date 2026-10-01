@@ -362,7 +362,8 @@ func buildChampionPresentation(
         crownedAtText: waterlooDateTimeFormatter().string(from: crownedAt),
         defencesText: champion.defences == 1 ? "1 defence" : "\(champion.defences) defences",
         isViewer: champion.userID == viewerID,
-        avatar: AvatarPresentation(for: spec, size: .hero, accessibility: accessibility))
+        avatar: AvatarPresentation(
+            for: spec, size: .hero, accessibility: accessibility, isStaff: enrollment.role >= .ta))
 }
 
 // MARK: - Context
@@ -900,7 +901,8 @@ struct ViewerIdentity {
             handle: handle,
             avatar: AvatarPresentation(
                 for: spec, size: .hero,
-                accessibility: handle.isEmpty ? .labelled("You") : .decorative),
+                accessibility: handle.isEmpty ? .labelled("You") : .decorative,
+                isStaff: enrollment.role >= .ta),
             privacyLine: handle.isEmpty
                 ? "" : "Only you and course staff can link \(handle) to you. It stays the same all term.",
             submitURL: "/testsetups/\(setup.id ?? "")/submit")
@@ -1111,7 +1113,8 @@ struct RankedIdentities {
         return Presentation(
             handle: handle,
             name: includeName ? staffFacingName(user) : "",
-            avatar: AvatarPresentation(for: spec, size: size, accessibility: accessibility))
+            avatar: AvatarPresentation(
+                for: spec, size: size, accessibility: accessibility, isStaff: enrollment.role >= .ta))
     }
 }
 

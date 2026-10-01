@@ -85,17 +85,78 @@ public enum AvatarWing: String, CaseIterable, Codable, Sendable {
     case plain, barred, tipped, speckled, edged, twotone
 }
 
-/// A ring around the disc, in one of the accent colours. Chosen by the student
-/// on the account page and never drawn: every bird starts with `none`
+/// The ring a student chose to wear around the disc. Chosen on the account
+/// page and never drawn: every bird starts with `none`
 /// (docs/student-wardrobe.md, decisions 1 and 2).
 ///
-/// A raw value other than `none` names an `AvatarAccent`, whose palette token
-/// colours the ring, so the border adds no colour of its own.
+/// Append only. The five colour cases name an `AvatarAccent`, whose palette
+/// token colours a solid ring. The cases after them are patterned rings, each
+/// with its own art (`ring`). The staff ring is deliberately NOT a case: it is
+/// drawn from a course role, so no student can store it.
 public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
     case none, ember, orchid, lagoon, honey, moss
+    /// Six flat bands, red to violet. A starter ring anyone may choose.
+    case rainbow
+    /// Five flat bands in the accessory accents. A special reward.
+    case spectrum
+    /// The student's accent and cap colour, half each. An earned reward.
+    case twotone
+    /// The student's accent with a line of stitches. An earned reward.
+    case stitched
 
-    /// The accent this ring is drawn in; nil for `none`.
+    /// The accent this ring is drawn in; nil for `none` and the patterned rings.
     public var accent: AvatarAccent? { AvatarAccent(rawValue: rawValue) }
+
+    /// The art this choice draws.
+    public var ring: AvatarRing {
+        switch self {
+        case .none: .none
+        case .ember, .orchid, .lagoon, .honey, .moss: .solid
+        case .rainbow: .rainbow
+        case .spectrum: .spectrum
+        case .twotone: .twotone
+        case .stitched: .stitched
+        }
+    }
+
+    /// The name a student reads in the picker.
+    public var displayName: String {
+        switch self {
+        case .twotone: "Two-tone"
+        default: rawValue.capitalized
+        }
+    }
+
+    /// Who may wear it. Only `starter` rings can be chosen until unlocks exist
+    /// (docs/student-wardrobe.md, slice W3); the others show as locked.
+    public var availability: AvatarAvailability {
+        switch self {
+        case .none, .ember, .orchid, .lagoon, .honey, .moss, .rainbow: .starter
+        case .twotone, .stitched: .earned
+        case .spectrum: .special
+        }
+    }
+}
+
+/// How a wardrobe option is obtained (docs/student-wardrobe.md, "Rings").
+public enum AvatarAvailability: String, CaseIterable, Codable, Sendable {
+    /// Open to every student.
+    case starter
+    /// Unlocked by a lab achievement.
+    case earned
+    /// Unlocked by a course-level achievement, such as completing the course.
+    case special
+}
+
+/// The drawn ring: one `<symbol>` each in the sprite (`av-ring-<rawValue>`),
+/// drawn on top of the bird and outside the tilt, so a patterned ring keeps its
+/// orientation. Append only.
+///
+/// `staff` is reserved: it is drawn for course staff from their role, it is no
+/// `AvatarBorder`'s ring, and its double shape and colour belong to no student
+/// option (docs/student-wardrobe.md, "The staff ring").
+public enum AvatarRing: String, CaseIterable, Codable, Sendable {
+    case none, solid, rainbow, spectrum, twotone, stitched, staff
 }
 
 /// A feather tuft on top of the head — the one axis that changes the

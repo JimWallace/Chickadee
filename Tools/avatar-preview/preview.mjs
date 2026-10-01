@@ -33,6 +33,7 @@ const wings = sym('wing')
 const expressions = sym('expression')
 const accessories = sym('accessory')
 const tufts = sym('tuft')
+const rings = sym('ring')
 
 // The first-use draw picks from AvatarExpression.starterCases, the first six.
 // Everything the sprite draws past those is a wardrobe unlock.
@@ -52,12 +53,18 @@ const TUFT_HIDING_HATS = new Set(['beanie', 'gradcap'])
 // These mirror AvatarTilt.degrees.
 const tilts = [['upright', 0], ['left', -9], ['right', 9]]
 
-// A border of 'none' is the transparent --avatar-border-none, as
-// AvatarPresentation.borderToken names it.
+// A border is a ring symbol plus, for the solid ring, the accent it is drawn
+// in. Mirrors AvatarBorder.ring: an accent name draws the solid ring, 'none'
+// draws nothing, and any other name is that ring's own art. 'staff' is never a
+// student's border; AvatarPresentation draws it from a course role.
+const ringOf = (border) => (accents.includes(border) ? 'solid' : border)
+
+// A border that is not an accent uses the transparent --avatar-border-none,
+// as AvatarPresentation.borderToken names it.
 const style = (cap, accent, back, border = 'none') =>
   `--av-cap:var(--avatar-${cap}-cap);--av-wing:var(--avatar-${cap}-wing);` +
   `--av-accent:var(--avatar-accent-${accent});--av-backdrop:var(--avatar-back-${back});` +
-  `--av-border:var(${border === 'none' ? '--avatar-border-none' : `--avatar-accent-${border}`})`
+  `--av-border:var(${accents.includes(border) ? `--avatar-accent-${border}` : '--avatar-border-none'})`
 
 const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'none', tilt = 0,
                       border = 'none' }) =>
@@ -65,7 +72,8 @@ const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'no
         viewBox="0 0 64 64" role="img" aria-label="chickadee avatar">
      <use href="#av-backdrop"/><g transform="rotate(${tilt} 32 34)">
      <use href="#av-tuft-${TUFT_HIDING_HATS.has(accessory) ? 'none' : tuft}"/><use href="#av-plumage"/><use href="#av-wing-${wing}"/>
-     <use href="#av-expression-${expression}"/><use href="#av-accessory-${accessory}"/></g></svg>`
+     <use href="#av-expression-${expression}"/><use href="#av-accessory-${accessory}"/></g>
+     <use href="#av-ring-${ringOf(border)}"/></svg>`
 
 const label = (t, inner) => `<figure><div>${inner}</div><figcaption>${t}</figcaption></figure>`
 const at = (list, i) => list[i % list.length]
@@ -95,10 +103,15 @@ const sections = [
                                 back: 'straw' })))],
   ['Accent — the accessory\'s colour', accents.map(accent =>
     label(accent, bird(88, { ...base, accessory: 'scarf', accent, back: 'straw' })))],
-  ['Border — chosen on the account page, never drawn; the five accents', ['none', ...accents].map(border =>
+  ['Ring — chosen on the account page; the solid ring in the five accents', ['none', ...accents].map(border =>
     label(border, bird(88, { ...base, border, accessory: 'headband', back: 'straw' })))],
-  ['Border at 36px', ['none', ...accents].map(border =>
-    label(border, bird(36, { ...base, border, back: 'sky' })))],
+  ['Patterned rings — rainbow is a starter; two-tone and stitched are earned; spectrum is special',
+    rings.filter(r => !['none', 'solid', 'staff'].includes(r)).map(border =>
+      label(border, bird(88, { ...base, border, accent: 'lagoon', back: 'straw' })))],
+  ['Staff ring — drawn from a course role, never chosen; on each backdrop', backs.map(back =>
+    label(back, bird(64, { ...base, border: 'staff', back })))],
+  ['Rings at 36px and 24px', [...rings.filter(r => r !== 'solid'), 'ember'].flatMap(border =>
+    [36, 24].map(s => label(`${border} ${s}`, bird(s, { ...base, border, back: 'sky' }))))],
   ['Backdrop — all near the same lightness so no bird shouts', backs.map(back =>
     label(back, bird(88, { ...base, cap: 'ink', back })))],
   ['At size — the bird earns its detail at 48px and up', [96, 64, 48, 40, 36, 32, 24].map((s, i) =>

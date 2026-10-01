@@ -1,7 +1,8 @@
 # Student wardrobe — design note
 
-**Status:** slice W1 is being built (border and backdrop colour, chosen on the
-account page). Everything after W1 is a plan. The participation currency is
+**Status:** slice W1 (border and backdrop colour, chosen on the account page)
+has shipped. Slice W2 (rings as sprite art, the patterned rings and the staff
+ring) is being built. Everything after W2 is a plan. The participation currency is
 **shelved**: the maintainer decided that the first idea for it ("seeds") is
 not fun enough, and we will come back to it.
 
@@ -51,28 +52,34 @@ border. The options are the five accent colours. Because nobody is drawn a
 border, the border is not in `AvatarSpec.combinationCount`, which counts the
 birds a draw can produce.
 
-### 2. The border is a CSS outline, not a sprite layer
+### 2. The ring is a sprite layer
 
-The ring is `outline` on the avatar element with a negative `outline-offset`,
-coloured by a per-student custom property, `--av-border`. This has three
-advantages:
+The border is drawn as a ring: the seventh `<use>` of the bird, the symbol
+`av-ring-<ring>`, after the tilt group so that it does not tilt. W1 drew it as
+a CSS `outline` on the avatar element. W2 replaced the outline, because the
+rings we plan next (patterned, seasonal, a laurel) are art, and `outline-style`
+cannot draw any of them. One mechanism for every ring is simpler than a CSS
+ring for plain colours and art for the rest.
 
-- There is no new geometry, so the sprite rules and the layer order do not
-  change.
-- An outline follows `border-radius` on current engines, so the ring is round.
-- `outline-style` already has `dashed`, `dotted` and `double`. A later
-  "stitched" or "double" ring is one CSS rule, not new art.
+- `AvatarBorder` is what a student stores. `AvatarRing` is the art. Each
+  border maps to one ring: the five colours map to `solid`, and each patterned
+  border maps to its own ring. `staff` is a ring that no border maps to (see
+  "The staff ring").
+- Every ring obeys the sprite rules. The rings are closed annulus sectors
+  between radius 28.8 and 32 (the disc is 32), so no fill-rule and no stroke
+  is needed.
+- The solid ring is filled from `--av-border`, the per-student custom property
+  from W1. The patterned rings use their own classes or the bird's own
+  `--av-accent` and `--av-cap`.
+- "No border" is the ring `none`, an empty symbol. A bird with no border is
+  exactly the bird it was before borders existed. (A first version used the
+  backdrop colour for "none". That was wrong: an opaque ring in the backdrop
+  colour covers the outer band of the disc, and the scarf tail and the beanie
+  pom reach into it.)
 
-"No border" is not a special case. The presentation sets `--av-border` to
-`--avatar-border-none`, which is transparent, so the ring paints nothing and
-a bird with no border is exactly the bird it was before borders existed. The
-template has no condition. (A first version used the backdrop colour for
-"none". That was wrong: an opaque ring in the backdrop colour covers the outer
-band of the disc, and the scarf tail and the beanie pom reach into it.)
-
-A chosen ring is inside the disc, so it paints over the outer band. A hat or a
-scarf that reaches the edge goes under the ring. This looks like the bird is in
-a frame.
+A ring is inside the disc and is drawn last, so it paints over the outer band.
+A hat or a scarf that reaches the edge goes under the ring. This looks like the
+bird is in a frame.
 
 `.avatar` sets `forced-color-adjust: none`. The bird is decorative and its
 colours are the student's; without this, forced-colors mode repaints the bird
@@ -121,6 +128,59 @@ differ mainly by eye shape.
 Both are lateral: a moss ring is not better than a honey ring. So both may show
 anywhere. A trophy never shows outside the account page.
 
+On the roster and the leaderboard, course staff wear the staff ring in place
+of their chosen ring (see "The staff ring").
+
+### 6. Rings have tiers: starter, earned and special
+
+`AvatarBorder.availability` gives each ring a tier. The tier says how a student
+gets the ring. It is not a rank.
+
+| Ring | Tier | Art |
+|---|---|---|
+| none, and the five solid colours | starter | one band in the chosen accent |
+| rainbow | starter | six bands, red to violet |
+| two-tone | earned | half in the bird's accent, half in its cap colour |
+| stitched | earned | the accent with 24 cream stitches |
+| spectrum | special | five bands in the five accent colours |
+
+Rainbow is a starter on purpose. It is also the Pride flag, and a student must
+not have to earn a way to show it.
+
+Two-tone uses the bird's own colours. When the accent and the cap are near the
+same hue, the ring reads as one colour. The student chooses the accent, so the
+student can fix this. We tried two other shapes (cream segments, and a cream
+stripe inside the accent). The segments lost the edge of the disc on a pale
+backdrop, and the stripe made two thin lines, which is the shape of the staff
+ring.
+
+Until the unlocks slice (W3) exists, no student can get an earned or special
+ring. The picker shows them locked (disabled, with "(locked)" in the name), so
+that a student can see what there is to earn. `AvatarCustomization` refuses a
+locked ring, so a hand-made request cannot choose one.
+
+### 7. The staff ring
+
+Course staff (a TA or an instructor in the course) wear the staff ring. It is
+not a choice, and staff cannot change it.
+
+- **Where the role comes from.** On a course page (the roster, the
+  leaderboard), the ring comes from the person's role in THAT course. On the
+  account page and on the admin Users page there is no one course, so the ring
+  means "staff in at least one course" (`AvatarStore.courseStaff`).
+- **It is never stored.** `AvatarPresentation(for:size:accessibility:isStaff:)`
+  draws it in place of the stored ring. The stored border is kept, so a TA who
+  is a student in a later course gets their own ring back there.
+- **It is reserved.** No `AvatarBorder` maps to `AvatarRing.staff`, and the
+  chokepoint refuses every ring change from staff with `staffRingIsFixed`. Staff
+  can still choose a backdrop.
+- **It is visually distinct.** It is the only ring with two separate thin
+  bands, and the only ring in `--avatar-staff-ring`: a dark ink that is none of
+  the student colours, with a light mirror in dark mode. A test checks both
+  facts.
+- **It does not replace the role chip.** The chip is searchable and a screen
+  reader reads it. The ring is a second, visual signal.
+
 ---
 
 ## The picker (W1)
@@ -128,9 +188,12 @@ anywhere. A trophy never shows outside the account page.
 One page section on the account page, "Your chickadee":
 
 - The bird at the standard size, as a preview.
-- Two groups of colour choices: **Backdrop** (eight) and **Border** (none plus
-  five). Each choice is a radio input with a round colour swatch, so the form
-  works with the keyboard and with no JavaScript.
+- Two groups of choices: **Backdrop** (eight) and **Border** (none, the five
+  colours and the four patterned rings). Each choice is a radio input with a
+  round sample, so the form works with the keyboard and with no JavaScript. A
+  ring's sample is the ring itself, drawn from the sprite on the student's
+  backdrop. A locked ring is disabled and shown dimmed. Staff see a one-line
+  note in place of the Border group.
 - One **Save** button. The form posts to `POST /account/avatar`.
 
 Each choice shows its name under the sample, so a reader who cannot tell two
@@ -139,8 +202,10 @@ colours apart can still choose. The checked choice has a ring and a bold name.
 With JavaScript, `Public/avatar-picker.js` updates the bird in the Account
 info section as soon as a choice changes (a live preview). It sets only the two
 custom properties, `--av-backdrop` and `--av-border`, which the UI rules allow
-("JS does not make styling decisions"). Each radio input carries the token name
-in a data attribute, so the script holds no palette. Nothing is saved until the
+("JS does not make styling decisions"), and points the ring layer (the `use`
+element marked `data-av-ring`) at the checked ring symbol. Each radio input
+carries the token name and the ring symbol in data attributes, so the script
+holds no palette and no ring list. Nothing is saved until the
 student presses Save.
 
 The style guard counted every `.style.<property>` write, including a
@@ -155,9 +220,9 @@ named as the right one.
 These are ideas, not commitments. Every item must obey the sprite rules: flat
 closed paths, colour from a class, no gradient, filter, mask or clip-path.
 
-**Borders.** Ring styles (dashed "stitched", double), seasonal rings (maple
-leaves in the Fall term, snowflakes in the Winter term), and a laurel ring for
-course completion.
+**Rings.** Seasonal rings (maple leaves in the Fall term, snowflakes in the
+Winter term) and a laurel ring for course completion. Each is one new
+`AvatarBorder` case (appended), one `AvatarRing` case and one sprite symbol.
 
 **Accessories with a meaning in a programming course.**
 
@@ -241,8 +306,8 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 
 | Slice | Content | Status |
 |---|---|---|
-| W1 | Border + backdrop picker on the account page; headband replaces the gradcap in the draw; existing gradcaps swapped | in progress |
-| W2 | Ring styles (dashed, double) | planned |
+| W1 | Border + backdrop picker on the account page; headband replaces the gradcap in the draw; existing gradcaps swapped | shipped |
+| W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | in progress |
 | W3 | `wardrobe_unlocks` + the `unlock(itemID)` achievement reward; the three unlockable expressions become grantable | planned |
 | W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | planned |
 | W5 | Trophy case + class-activity medals | planned |
