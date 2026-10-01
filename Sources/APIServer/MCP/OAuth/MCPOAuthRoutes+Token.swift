@@ -3,8 +3,7 @@
 // POST /oauth/token — exchange a single-use PKCE code for an access + refresh
 // token pair, or rotate a refresh token for a fresh pair (with prior-hash theft
 // detection and re-authorization of the human's role).  Also owns the atomic
-// single-use primitives: `burnConsumable` (conditional UPDATE compare-and-set,
-// shared with the consent submit) and `rotateRefreshHash`.
+// `rotateRefreshHash`; the single-use burn is `SingleUseRecord.burn`.
 //
 // Split out of MCPOAuthRoutes.swift along its MARK seams (#1122, following the
 // v0.4.37 large-source splits).  No logic change.
@@ -56,7 +55,7 @@ extension MCPOAuthRoutes {
         // code loses the conditional UPDATE and is rejected (the prior in-process
         // read-modify-write could otherwise mint two token pairs from one code).
         guard
-            try await Self.burnConsumable(
+            try await SingleUseRecord.burn(
                 on: req.db, table: MCPAuthorizationCode.schema, hashColumn: "code_hash", hash: codeHash)
         else {
             return Self.tokenError(.badRequest, "invalid_grant")
@@ -237,25 +236,6 @@ extension MCPOAuthRoutes {
         Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncodedString() == challenge
     }
 
-    /// Atomically flips a single-use `consumed` flag from false→true for the row
-    /// whose `hashColumn` equals `hash`, returning true iff *this* call won the
-    /// flip.  One conditional `UPDATE … WHERE consumed = false RETURNING`
-    /// statement is atomic on both SQLite (WAL) and Postgres, so two concurrent
-    /// `/token` (or `/authorize`) submits of the same code/consent token can
-    /// never both win — closing the OAuth code-replay race that the prior
-    /// read-check-then-save left open.  `table`/`hashColumn` are compile-time
-    /// schema constants (no injection surface); only the hash is bound.
-    /// Internal (not private): the consent submit in
-    /// MCPOAuthRoutes+Authorize.swift burns its token through the same primitive.
-    static func burnConsumable(
-        on db: Database, table: String, hashColumn: String, hash: String
-    ) async throws -> Bool {
-        guard let sql = db as? SQLDatabase else { return true }
-        let rows = try await sql.raw(
-            "UPDATE \(unsafeRaw: table) SET consumed = true WHERE \(unsafeRaw: hashColumn) = \(bind: hash) AND consumed = false RETURNING id"
-        ).all()
-        return !rows.isEmpty
-    }
 
     /// Atomically rotates a grant's refresh-token hash, gated on the *current*
     /// hash so two concurrent rotations of the same refresh token can't both

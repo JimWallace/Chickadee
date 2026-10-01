@@ -162,7 +162,7 @@ extension LTIRoutes {
         // both get past this line.
         let stateHash = LTILaunchSecrets.hash(state)
         guard
-            try await MCPOAuthRoutes.burnConsumable(
+            try await SingleUseRecord.burn(
                 on: req.db, table: APILTILoginState.schema, hashColumn: "state_hash", hash: stateHash)
         else { throw LTILaunchFailure.stateUnknown }
         guard
