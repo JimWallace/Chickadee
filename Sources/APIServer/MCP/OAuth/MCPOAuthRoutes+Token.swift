@@ -236,7 +236,6 @@ extension MCPOAuthRoutes {
         Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncodedString() == challenge
     }
 
-
     /// Atomically rotates a grant's refresh-token hash, gated on the *current*
     /// hash so two concurrent rotations of the same refresh token can't both
     /// succeed (the loser matches zero rows).  Returns true iff this call won the
