@@ -159,3 +159,101 @@ func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: Database) a
         try await row.save(on: db)
     }
 }
+
+// MARK: - Manual triggers ("Sync now", "Push all")
+
+/// Clears the recorded error and re-flags as pending every grade-sync row in
+/// the course (result rows, override-only rows, and queued grade clears)
+/// that previously errored, back-dating `pendingSince` so the next sweep
+/// retries it immediately. The "hard reset" half of "Sync now".
+func requeueErroredGradePushes(courseUUID: UUID, on db: Database) async throws {
+    let resultKeys = try await courseStudentResultIDs(courseUUID: courseUUID, on: db)
+    let results =
+        resultKeys.isEmpty
+        ? []
+        : try await APIResult.query(on: db)
+            .filter(\.$submissionID ~~ resultKeys)
+            .all()
+    try await requeueForImmediateSync(
+        results.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: db)
+    // Errored override-only pushes (no-submission students) live on the
+    // override row, not a result row — re-queue those too.
+    let setupIDs = try await courseSetupIDs(courseUUID: courseUUID, on: db)
+    let overrides =
+        setupIDs.isEmpty
+        ? []
+        : try await APIGradeOverride.query(on: db)
+            .filter(\.$testSetupID ~~ setupIDs)
+            .all()
+    try await requeueForImmediateSync(
+        overrides.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: db)
+    // Errored grade CLEARS (queued removals) are re-queued too — nothing
+    // else touches `brightspace_grade_clears` after a terminal failure, so
+    // before this an errored clear lingered forever with an error nobody
+    // could see (#1105).
+    let clears =
+        setupIDs.isEmpty
+        ? []
+        : try await APIBrightSpaceGradeClear.query(on: db)
+            .filter(\.$testSetupID ~~ setupIDs)
+            .all()
+    try await requeueForImmediateSync(
+        clears.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: db)
+}
+
+/// Submission IDs (used as result-query keys) for all student submissions
+/// in the active course's test setups.
+private func courseStudentResultIDs(courseUUID: UUID, on db: Database) async throws -> [String] {
+    let setupIDs = try await courseSetupIDs(courseUUID: courseUUID, on: db)
+    guard !setupIDs.isEmpty else { return [] }
+    return try await APISubmission.query(on: db)
+        .filter(\.$testSetupID ~~ setupIDs)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .all()
+        .compactMap(\.id)
+}
+
+/// Distinct test setup IDs for the active course's assignments.  Used to
+/// scope override-row queries (override-only grade pushes) by course.
+private func courseSetupIDs(courseUUID: UUID, on db: Database) async throws -> [String] {
+    let setupIDs = try await APIAssignment.query(on: db)
+        .filter(\.$courseID == courseUUID)
+        .all()
+        .map(\.testSetupID)
+    return Array(Set(setupIDs))
+}
+
+/// Kicks off a grade-sync sweep in a detached background task and returns
+/// immediately, so a manual "Sync now" / "Push all" click never holds the
+/// HTTP request open for the duration of every D2L push — a large class is
+/// dozens of sequential round-trips, which would otherwise risk a
+/// reverse-proxy timeout and leave the instructor staring at a spinner.
+/// The rows are already flagged pending by the caller (a fast local
+/// write), so even if this task dies the 60-second periodic monitor picks
+/// them up. Uses `application.db` (NOT a request's `db`, which is request-scoped)
+/// since the task outlives the request, and bypasses the debounce so every
+/// pending row pushes immediately. Failures are recorded per-row by the
+/// sweep itself; a sweep-level throw is logged (it used to be silently
+/// swallowed, #1117). No-op when BrightSpace isn't configured.
+func launchBackgroundBrightSpaceSweep(_ application: Application) {
+    guard let app = application.brightSpaceAppCredentials else { return }
+    let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
+    Task {
+        // Each course resolves its designated identity (or the fallback).
+        do {
+            _ = try await sweepBrightSpaceGradeSync(
+                on: application.db,
+                debounceSecs: debounce,
+                resolveClient: { course in
+                    try await application.brightSpaceClient(forCourse: course)
+                },
+                logger: application.logger,
+                application: application,
+                bypassDebounce: true
+            )
+        } catch {
+            application.logger.warning(
+                "BrightSpace background sweep failed: \(error)")
+        }
+    }
+}
