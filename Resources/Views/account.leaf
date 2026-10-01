@@ -23,7 +23,7 @@ My Account
                 #endif
             </div>
         </div>
-        <dl class="detail-grid detail-grid--cells">
+        <dl class="detail-grid">
             <div><dt>Username</dt>
             <dd><strong>#(username)</strong></dd></div>
             #if(preferredName):
@@ -97,11 +97,11 @@ My Account
     <div class="card section-gap">
         <div class="toolbar toolbar--end">
             <span class="tier tier-open">Linked</span>
-            <details class="add-section-details popup-anchor">
-                <summary class="btn action-btn action-btn-icon summary-btn" title="More actions" aria-label="More actions for your GitHub link">
+            <details class="ext-details row-menu">
+                <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for your GitHub link">
                     <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
                 </summary>
-                <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                <div class="popover-panel row-menu-panel" role="menu">
                     <form method="post" action="/account/github/unlink">
                         #csrfFormField()
                         <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem"
@@ -112,7 +112,7 @@ My Account
                 </div>
             </details>
         </div>
-        <dl class="detail-grid detail-grid--cells">
+        <dl class="detail-grid">
             <div><dt>GitHub login</dt>
             <dd><strong>#(github.login)</strong></dd></div>
         </dl>
@@ -162,6 +162,11 @@ My Account
                     #endif
                     #if(course.slipDaysText):
                     <div class="item-details">#(course.slipDaysText)</div>
+                    #endif
+                    #if(course.enrollmentMode == "auto"):
+                    <div class="item-details">Auto-enrolled. Contact your instructor to be removed.</div>
+                    #elseif(course.enrollmentMode != "open"):
+                    <div class="item-details">Managed by your instructor. Contact them to be removed.</div>
                     #endif
                 </td>
                 <td class="item-status">
