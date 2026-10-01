@@ -49,7 +49,7 @@ Storage
                     <span class="share-bar" style="--share:#(row.barPercent)%"></span>
                     <div class="item-details item-grade">#(row.shareLabel)</div>
                 </td>
-                <td class="item-grade"><strong>#(row.totalFormatted)</strong></td>
+                <td class="item-status item-grade"><strong>#(row.totalFormatted)</strong></td>
             </tr>
         #endfor
         </tbody>

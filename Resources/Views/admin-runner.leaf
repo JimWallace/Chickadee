@@ -171,7 +171,7 @@ Runner #(runner.workerID)
                 <td class="col-hide-phone js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)" data-sort-value="#(job.completedAt)"#else:data-sort-value=""#endif>
                     #if(job.completedAt):#(job.completedAt)#else:—#endif
                 </td>
-                <td>
+                <td class="item-actions-td">
                     <a class="btn action-btn action-btn-icon" href="/submissions/#(job.submissionID)"
                        title="Open submission" aria-label="Open submission #(job.submissionID)">
                         <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>

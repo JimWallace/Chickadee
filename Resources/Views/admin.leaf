@@ -123,7 +123,7 @@ Admin
                     <div class="item-title"><a href="/admin/courses/#(course.id)">#(course.code) — #(course.name)</a></div>
                     <div class="item-details">#if(course.termLabel):#(course.termLabel) · #endif#(course.submissionCount) submissions</div>
                 </td>
-                <td class="item-grade"><strong>#(course.enrollmentCount)</strong><div class="item-details">students</div></td>
+                <td class="item-status item-grade"><strong>#(course.enrollmentCount)</strong><div class="item-details">students</div></td>
                 <td class="item-actions-td">
                     <div class="assignment-actions-cell">
                         <a class="btn action-btn action-btn-icon" href="/admin/courses/#(course.id)#clone-course"

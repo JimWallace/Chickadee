@@ -20,7 +20,7 @@
                         <span class="js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</span>
                         <div class="item-details">last active</div>
                     </td>
-                    <td>
+                    <td class="item-actions-td">
                         <a class="btn action-btn action-btn-icon" href="/admin/runners/#(worker.workerID)"
                            title="Open runner" aria-label="Open runner #(worker.workerID)">
                             <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>

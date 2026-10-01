@@ -190,7 +190,7 @@ MCP
                     <div class="item-title">#(grant.agentName)</div>
                     <div class="item-details">authorized by <code>#(grant.owner)</code> · last used #if(grant.lastUsedAt):<span class="js-relative-time" data-iso="#(grant.lastUsedAt)">#(grant.lastUsedAt)</span>#else:never#endif · expires <span class="js-relative-time" data-iso="#(grant.expiresAt)">#(grant.expiresAt)</span> · <code>#(grant.scope)</code></div>
                 </td>
-                <td>
+                <td class="item-status">
                     <span class="tier #if(grant.canRevoke):tier-open#elseif(grant.revoked):tier-closed#else:tier-preview#endif">#(grant.statusLabel)</span>
                 </td>
                 <td class="item-actions-td">
