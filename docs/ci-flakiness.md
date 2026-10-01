@@ -1485,16 +1485,24 @@ Then:
    frame, is not this family. A crash in `swift-frontend` after `Compiling`
    lines is a compiler crash and is the PR's to root-cause.
 
-**Mitigations considered, none shipped.** Record the measurement before
-choosing one; the rate above is the input.
+**Mitigations considered; the first shipped (#1698, 2026-10-01).** The rate
+above was the input, and the retry costs nothing when the crash does not
+happen.
 
 1. **Retry the build step inside the job when it exits 139 with this
-   signature.** Cheapest by far: the fetched checkouts stay in `.build`, so a
-   retry repeats only the 60 s of manifest load and planning, the default
-   engine stays, and the cache logic is untouched. Gate it on the signature
-   (grep the step log for `_dispatch_event_loop_drain`) so a real crash is not
-   retried blindly, and emit a `::warning` so the rate stays visible, as the
-   webkit tolerances do.
+   signature. SHIPPED.** `scripts/ci-build-retry.sh` runs
+   `swift build --build-tests` and runs it once more only when the first
+   attempt exited 139 with `_dispatch_event_loop_drain` in its output; any
+   other failure, including a 139 without the signature, fails the step on
+   the first attempt. It prints a `::warning` named "Family 7 retry" so the
+   rate stays visible in the Actions UI, as the webkit tolerances do. The
+   fetched checkouts stay in `.build`, so the retry repeats only the 60 s of
+   manifest load and planning; the default engine and the cache logic are
+   untouched. `scripts/ci-build-retry.sh --self-test` proves the gate with a
+   stub `swift` (five cases: success, compile error, a 139 without the
+   signature, the signature once, the signature twice) and runs in
+   `format-lint`. A hit now reads as a warning on a green job; two hits on one
+   attempt still fail it, and the handling above applies.
 2. **`--build-system native` on the `build` job and the four lanes.** Removes
    the trigger outright, and it is the engine the release image already
    builds with. Costs: `native` is deprecated and warns on every build; the
