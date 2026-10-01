@@ -107,6 +107,26 @@ Every result above that names a course also returns the course key and term
 (`courseKey`, `courseTerm`). These are course metadata, the same values that
 `list_courses` returns. They contain no student data.
 
+## LTI 1.3 flows (2026-09)
+
+LTI is a second inbound source of student identity and a second outbound
+grade transport beside Valence (`docs/lti-1-3.md`). It is not part of the
+MCP surface; it is listed here because the LTI design note requires the
+launch claims, AGS and NRPS to be in this inventory before a production
+registration. Direction is relative to Chickadee.
+
+| Flow | Direction | Data that crosses | What Chickadee stores | Student PII? | Classification |
+|------|-----------|-------------------|-----------------------|--------------|----------------|
+| Login (`POST /lti/login`) | LMS → Chickadee | issuer, client ID, `login_hint`, `lti_message_hint`, `target_link_uri` | `lti_login_states`: a SHA-256 of the `state` value, the nonce, the platform ID, a 5-minute expiry; reaped hourly | `login_hint` is an opaque LMS value and is not stored | Confidential |
+| Launch (`POST /lti/launch`) | LMS → Chickadee, as a signed `id_token` verified against the platform's JWKS | subject, name, email, roles, deployment ID, context (ID, label, title), resource link, `custom` (`assignment`, optionally `username`), the AGS and NRPS endpoint claims | `lti_identities`: (platform, subject) → account. A created account carries the username (an opaque `lti-` hash, or the trusted `username` custom parameter), the display name and the email from the claims. The course records `lti_context_id`, `lti_line_items_url` and `lti_memberships_url`. Roles are mapped to the course role and not stored | **Yes** (name, email, LMS subject) | Restricted |
+| Deep Linking (`/lti/deep-link`) | LMS → Chickadee (request), Chickadee → LMS (signed response) | request: the launch claims above plus the return URL and `data`; response: the chosen assignments' titles, launch URLs and `custom.assignment` | `lti_deep_link_requests`: a SHA-256 of the picker ticket, platform, course, the staff account, return URL, `data`, a 30-minute expiry; reaped hourly | No (instructor content) | Confidential |
+| Grades through AGS | Chickadee → LMS, authenticated by a client-credentials JWT signed with `.lti-tool-key` | line item: `resourceId` (assignment public ID), label (title), `scoreMaximum`; score: the student's LMS subject, `scoreGiven`, `scoreMaximum`, activity and grading progress, timestamp | `lti_grade_syncs`: (student, test setup), pending flag, last synced time, last failure sentence. No grade is stored on the row; the sweep computes it when it sends. `assignments.lti_line_item_url` | The LMS subject and the grade | Restricted |
+| Roster through NRPS | LMS → Chickadee, same client-credentials token | membership: each member's LMS subject, roles, name, email, `lis_person_sourcedid` (student number when the platform sends it) | Nothing. The membership is read per "Check against LEARN" request, reduced to the identity index, and discarded | **Yes**, in transit only | Restricted |
+
+The platform registration itself (`lti_platforms`: issuer, client ID,
+deployment IDs, the platform's auth, token and JWKS URLs, an optional token
+audience) is operator configuration and holds no personal data.
+
 ## Models the MCP surface touches vs. never touches
 
 **Touched (authoring + authz):** `APICourse`, `APICourseEnrollment` (authz read
