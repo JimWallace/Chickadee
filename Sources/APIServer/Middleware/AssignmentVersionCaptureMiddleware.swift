@@ -21,36 +21,30 @@
 
 import Fluent
 import Foundation
+import Synchronization
 import Vapor
 
 /// Per-request collection of setups resolved for write, plus the seeding of
 /// their baselines. Lives in `Request.storage`.
-final class AssignmentVersionCaptureScope: @unchecked Sendable {
-    // @unchecked Sendable: the only mutable state is `pending`, guarded by
-    // `lock` on every access. Shared between the handler and the middleware
-    // that awaits it.
-    private let lock = NSLock()
-    private var pending: [String: APITestSetup] = [:]
+final class AssignmentVersionCaptureScope: Sendable {
+    /// Shared between the handler and the middleware that awaits it.
+    private let pending = Mutex<[String: APITestSetup]>([:])
 
     func register(_ setup: APITestSetup) {
         guard let id = setup.id else { return }
-        lock.lock()
-        defer { lock.unlock() }
-        pending[id] = setup
+        pending.withLock { $0[id] = setup }
     }
 
     func drain() -> [APITestSetup] {
-        lock.lock()
-        defer { lock.unlock() }
-        let setups = Array(pending.values)
-        pending.removeAll()
-        return setups
+        pending.withLock { pending in
+            let setups = Array(pending.values)
+            pending.removeAll()
+            return setups
+        }
     }
 
     var isEmpty: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return pending.isEmpty
+        pending.withLock { $0.isEmpty }
     }
 }
 

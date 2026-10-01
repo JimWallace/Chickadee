@@ -24,6 +24,7 @@
 
 import Fluent
 import Foundation
+import Synchronization
 import Vapor
 
 /// Collects the setups an MCP call resolved for write, so the dispatcher can
@@ -31,29 +32,25 @@ import Vapor
 ///
 /// Reference type held by the per-request `ToolContext` (a struct), so a tool
 /// registering a setup is visible to the dispatcher that invoked it.
-final class MCPVersionCaptureScope: @unchecked Sendable {
-    // @unchecked Sendable: the only mutable state is `pending`, and every
-    // access is inside `lock`. The box is shared between the tool body and the
-    // dispatcher that awaits it, so it crosses no isolation domain unguarded.
-    private let lock = NSLock()
-    private var pending: [String: APITestSetup] = [:]
+final class MCPVersionCaptureScope: Sendable {
+    /// The box is shared between the tool body and the dispatcher that
+    /// awaits it.
+    private let pending = Mutex<[String: APITestSetup]>([:])
 
     /// Registers a setup as touched by the current call. Idempotent per setup.
     func register(_ setup: APITestSetup) {
         guard let id = setup.id else { return }
-        lock.lock()
-        defer { lock.unlock() }
-        pending[id] = setup
+        pending.withLock { $0[id] = setup }
     }
 
     /// Returns the registered setups and clears the scope, so a batched second
     /// call can't re-snapshot the first call's setups.
     func drain() -> [APITestSetup] {
-        lock.lock()
-        defer { lock.unlock() }
-        let setups = Array(pending.values)
-        pending.removeAll()
-        return setups
+        pending.withLock { pending in
+            let setups = Array(pending.values)
+            pending.removeAll()
+            return setups
+        }
     }
 }
 
