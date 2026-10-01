@@ -342,8 +342,21 @@ duplicate.
   with no text beside it would want a monogram chip instead.  **`.avatar-md`**
   (2.25rem) is the roster size: a row on the instructor Students, Slip days or
   LEARN list, where the name beside the bird carries the identity and the bird
-  is the student's own seeded one, the same as on their account page.  See
+  is the student's own seeded one, the same as on their account page.
+  **`.avatar-lg`** (6rem, `AvatarSize.hero`) is the leaderboard "you" card and
+  **`.avatar-xl`** (10rem, `AvatarSize.podium`) a Present-mode podium place.
+  Nothing is drawn on the bird to mark a rank.  See
   [student-avatars.md](student-avatars.md).
+- **Leaderboard classes.**  `.you-card` (the viewer's card: bird, handle, place,
+  best and next place) with `.you-card-who`, `.you-card-name`, `.you-card-rank`
+  and `.you-card-stats`; `.you-pill` (the solid **You** mark, never a
+  left-border accent); `.rank-disc` (the place number, with a gold, silver or
+  bronze tint only for ranks 1 to 3 through `data-rank-tier`; every other rank
+  is a plain numeral); and on the `.section-items` list `.leaderboard-rank`,
+  `.leaderboard-row--you` (the viewer's row, tinted `--you-bg`) and
+  `.leaderboard-gap` (a run of rows folded away, linking to the full list).
+  The tokens are `--you-bg`, `--teal-ink`, `--teal-ink-fg` and the
+  `--rank-gold|silver|bronze-bg|fg` pairs, each with a dark-mode value.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the Chickadee picker).  Use it for any group

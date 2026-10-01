@@ -73,7 +73,7 @@ import VaporTesting
             #expect(!html.contains(seeded.classmate.username))
             #expect(!html.contains("<th>Name</th>"))
             // The viewer's own row is marked, and the metric prints cleanly.
-            #expect(html.contains(">you<"))
+            #expect(html.contains(">You<"))
             #expect(html.contains(">42<"))
             #expect(html.contains(">7.5<"))
             #expect(!html.contains("Hidden from students"))
@@ -102,7 +102,7 @@ import VaporTesting
             #expect(res.status == .ok)
             let html = res.body.string
             #expect(html.contains("Hidden from students"))
-            #expect(html.contains("<th>Name</th>"))
+            #expect(html.contains("<code>\(seeded.classmate.username)</code>"))
             #expect(html.contains(seeded.classmate.username))
             #expect(html.contains(seeded.viewer.username))
         }

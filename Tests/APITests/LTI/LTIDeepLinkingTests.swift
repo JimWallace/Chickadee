@@ -86,7 +86,9 @@ import VaporTesting
         messageType: String = "LtiDeepLinkingRequest",
         settings: LTIDeepLinkingSettings? = LTIDeepLinkingTests.settings(),
         custom: [String: JSONValue] = [:],
-        cookie priorSession: String? = nil
+        cookie priorSession: String? = nil,
+        stateCookieOverride: String? = nil,
+        sendStateCookie: Bool = true
     ) async throws -> Launched {
         var state = ""
         var nonce = ""
@@ -109,8 +111,11 @@ import VaporTesting
         try await app.asyncTest(
             .POST, "/lti/launch",
             beforeRequest: { req in
-                req.headers.add(
-                    name: .cookie, value: [stateCookie, priorSession].compactMap { $0 }.joined(separator: "; "))
+                let sentState =
+                    sendStateCookie
+                    ? (stateCookieOverride.map { "\(LTIRoutes.stateCookieName)=\($0)" } ?? stateCookie) : nil
+                let cookies = [sentState, priorSession].compactMap { $0 }.filter { !$0.isEmpty }
+                if !cookies.isEmpty { req.headers.add(name: .cookie, value: cookies.joined(separator: "; ")) }
                 try req.content.encode(["id_token": token, "state": state], as: .urlEncodedForm)
             },
             afterResponse: { res in
@@ -326,6 +331,37 @@ import VaporTesting
     }
 
     // MARK: - The LMS frame
+
+    /// The LMS frame can drop the state cookie even where the browser supports
+    /// partitioned cookies. A deep-linking launch signs nobody in, so it does
+    /// not need the cookie, and the picker still works.
+    @Test func aDeepLinkingLaunchWorksWithoutTheStateCookieAndSignsNobodyIn() async throws {
+        try await withApp(app) { app in
+            let fixture = try await fixture()
+            let launched = try await launch(sendStateCookie: false)
+            #expect(launched.status == .ok)
+            #expect(launched.headers.setCookie?["vapor-session"] == nil)
+            let ticket = try #require(Self.ticket(in: launched.html))
+            try await choose([fixture.lab1.publicID], ticket: ticket) { res in
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("name=\"JWT\""))
+            }
+            let actions = try await APIAuditLogEntry.query(on: app.db).all().map(\.action)
+            #expect(!actions.contains(AuditAction.loginSuccess.rawValue))
+        }
+    }
+
+    /// A cookie that names another login's state can only come from tampering
+    /// or a crossed login, so it is refused even on a deep-linking launch.
+    @Test func aDeepLinkingLaunchWithAnotherLoginsStateCookieIsRefused() async throws {
+        try await withApp(app) { app in
+            _ = try await fixture()
+            let launched = try await launch(stateCookieOverride: "another-login")
+            #expect(launched.status == .unauthorized)
+            let count = try await APILTIDeepLinkRequest.query(on: app.db).count()
+            #expect(count == 0)
+        }
+    }
 
     @Test func thePickerAndItsReturnPageMayBeFramedByThePlatformOnly() async throws {
         try await withApp(app) { _ in

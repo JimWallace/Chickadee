@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.292] - 2026-10-01
+
+### Changed
+
+- **Leaderboard: your card and a windowed list.** A student sees their own card (bird, handle, place, best and the gap to the next place) above a list of the top three places and the places around their own, with the rest folded into rows that link to the full list (`?all=1`). Ranks 1 to 3 get a gold, silver or bronze disc. Staff see every row with name, username, submission count and a link to the best submission, and change the leaderboard visibility from the page. Ranks no longer skip the places of students who have dropped.
+
+
+## [0.5.291] - 2026-09-30
+
+### Fixed
+
+- **The LTI assignment picker no longer depends on a cookie.** Brightspace's picker frame still lost the launch-state cookie in Safari 26.6, which supports partitioned cookies, so the picker stayed empty. A deep-linking launch now signs nobody in and does not need the cookie; the platform's signature, the single-use state, the nonce, the staff role and the picker's own single-use ticket still guard it. A launch that signs someone in still requires the cookie, and a cookie that names another login's state is refused on every launch.
+
+
 ## [0.5.290] - 2026-09-30
 
 ### Changed
