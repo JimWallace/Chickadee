@@ -57,7 +57,7 @@ extension InstructorDashboardRoutes {
                     filtered: actorFilter != nil))
         }
 
-        let rows = try await CourseActivityService.timeline(
+        let rows = try await CourseTimelineService.timeline(
             courseID: courseID, actorFilter: actorFilter, on: req.db)
         staffOptions = try await Self.activityStaffOptions(
             courseID: courseID, selected: actorFilter, db: req.db)

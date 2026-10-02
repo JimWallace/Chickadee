@@ -5,7 +5,7 @@
 // comparing the `timestamp` column to a text-bound cutoff, which SQLite
 // accepted but Postgres rejected (`timestamp < text`), so the sweep threw every
 // hour and sessions never got reaped.  The fix moved it onto a Fluent typed
-// query (matching AuditLogReaperService / ActivityEventReaperService); these
+// query (matching AuditLogReaperService / UserActivityEventReaperService); these
 // tests pin the deletion semantics AND, when run under the Postgres CI job,
 // prove the sweep no longer throws on Postgres.
 

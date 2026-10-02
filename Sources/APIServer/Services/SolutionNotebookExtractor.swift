@@ -217,6 +217,43 @@ enum SolutionNotebookExtractor {
         }
     }
 
+    /// Writes the shared-directory solution source for a solution that
+    /// arrived as a COPIED validation submission: a clone, or a bundle import
+    /// (#1742). The solution-save path writes `solution.<ext>` into the shared
+    /// directory and never into the setup zip, and every copy path rebuilds
+    /// the shared directory from the zip alone, so a copy of an assignment
+    /// whose expressions `import solution` failed until the next solution
+    /// save. The submission file is the notebook itself, or a zip holding one.
+    /// Best effort, like the save path: a failure leaves `import solution`
+    /// unavailable, as before, and never fails the copy.
+    static func writeSolutionSource(
+        fromCopiedSolution solution: APISubmission, setup: APITestSetup, testSetupsDirectory: String
+    ) async {
+        guard let setupID = setup.id else { return }
+        let notebookData: Data
+        if solution.zipPath.lowercased().hasSuffix(".ipynb"),
+            let data = FileManager.default.contents(atPath: solution.zipPath)
+        {
+            notebookData = data
+        } else if let data = await extractNotebookFromZip(zipPath: solution.zipPath) {
+            notebookData = data
+        } else {
+            return
+        }
+        let sharedDirectory = testSetupsDirectory + "shared/\(setupID)/"
+        // The same language rule as the save path: the assignment's own
+        // language, and the historical Python file when it declares none.
+        if let manifest = setup.decodedManifest(),
+            let language = AssignmentLanguage.resolve(manifest: manifest)
+        {
+            writeSolutionSource(
+                notebookData: notebookData, sharedDirectory: sharedDirectory, language: language,
+                overwrite: true)
+        } else {
+            writeSolutionPy(notebookData: notebookData, sharedDirectory: sharedDirectory, overwrite: true)
+        }
+    }
+
     // Cell-source reading (`readCellSource`) moved to
     // `Core/NotebookCellSources.swift` (`cellSource(_:)`) in v0.4.181.
 }

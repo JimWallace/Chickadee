@@ -309,7 +309,7 @@ import VaporTesting
         for _ in 0..<3 { url.deleteLastPathComponent() }
         let source = try String(
             contentsOf: url.appendingPathComponent(
-                "Sources/APIServer/Routes/Web/SuiteEditHelpers.swift"),
+                "Sources/APIServer/Routes/Web/AssignmentHelpers.swift"),
             encoding: .utf8)
         let seam = try #require(
             source.components(separatedBy: "func loadAssignmentAndSetupForWrite").last)

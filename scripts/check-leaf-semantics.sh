@@ -45,7 +45,7 @@ set -uo pipefail
 #   bar.isEmpty     SparklineBar.isEmpty (AssignmentListContexts.swift) marks a
 #                   zero-count bucket so the sparkline draws a faint baseline
 #                   tick instead of nothing.
-#   bucket.count    ActivityBucket.count (ActivityChartService.swift) is the
+#   bucket.count    ActivityBucket.count (UserActivityChartService.swift) is the
 #                   distinct-active-users number for that bucket.
 #
 # Both are indistinguishable to a reader from the broken form, which is exactly

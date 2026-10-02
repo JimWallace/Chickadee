@@ -88,8 +88,8 @@ compile. Every seam that depends on an opponent — the worker's
 opponent picker — asks `stagesAnOpponent`, never the kind. The aggregation
 axis is a type too since slice 4: `ActivityAggregation` (`leaderboard` |
 `standings` | `bracket` | `union`), read off the kind by the exhaustive
-`aggregation`; `aggregatesToLeaderboard` is the one-line derived fact the
-leaderboard page keeps.
+`aggregation`. Every kind has a ranking page, so the leaderboard route asks
+only whether the viewer may see it.
 
 ### Manifest block (Core, `TestProperties.activity`)
 
@@ -490,9 +490,8 @@ to the latest run: its schedule and status, the winner once there is one,
 and every round's matches by handle and bird (staff also see names). The
 submissions page carries the control — the schedule select, the button, one
 line on where the latest run stands — and links the bracket rather than
-repeating it. `get_server_info` still reports every kind's aggregation as
-"leaderboard": `SetActivityToolTests.serverInfoListsEveryKind` pins that
-value, and changing it is a decision for that test's owner.
+repeating it. `get_server_info` reports each kind's `aggregation` token, and
+its schema enum is derived from the same `ActivityAggregation` cases (#1746).
 
 ### Tests and code (slice 6)
 

@@ -5,7 +5,7 @@
 // carries every selectable window (24h / 7d / 30d) for every card so the
 // client can cycle windows instantly without extra round-trips.
 //
-// Mirrors the design of ActivityChartService: fixed-duration buckets rolling
+// Mirrors the design of UserActivityChartService: fixed-duration buckets rolling
 // back from `now`, aggregated in Swift so SQLite (dev) and Postgres (prod)
 // behave identically, labels formatted in America/Toronto.
 

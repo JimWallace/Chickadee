@@ -105,7 +105,7 @@ func enqueueRunnerValidationSubmission(
     // `writeSolutionPy` for it.
     if let setup = try? await APITestSetup.find(setupID, on: req.db),
         let manifest = setup.decodedManifest(),
-        let language = AssignmentLanguage.resolve(for: setup, manifest: manifest)
+        let language = AssignmentLanguage.resolve(manifest: manifest)
     {
         SolutionNotebookExtractor.writeSolutionSource(
             notebookData: solutionNotebookData,
@@ -316,7 +316,7 @@ private func resolveAndCacheValidationMaterialization(
         }
 
         let supportDir = testSetupsDirectory + "shared/\(setupID)/"
-        let language = AssignmentLanguage.resolve(for: setup, manifest: manifest)
+        let language = AssignmentLanguage.resolve(manifest: manifest)
         let resolution = await PersonalizationSubstitution.resolve(
             manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir,
             language: language)

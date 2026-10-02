@@ -97,6 +97,15 @@ LMS grades
     <p class="section-note">Showing the first #(count(failures)).</p>
     #endif
     #endif
+    #if(canLinkStudents):
+    <form method="post" action="/instructor/lti-grades/link-students" class="form-stack">
+        #csrfFormField()
+        <div class="toolbar">
+            <button class="btn action-btn" type="submit">Link students</button>
+        </div>
+        <p class="field-note">Links students who have not opened Chickadee from the LMS, by student number.</p>
+    </form>
+    #endif
 </section>
 #endif
 #endif

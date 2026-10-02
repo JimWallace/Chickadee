@@ -78,7 +78,7 @@ enum SectionInputsService {
         // not the content `db`, so it never needs a grant on the `.mcp` role.
         try await evaluateForActingSeed(
             manifest: manifest, sectionID: sectionID, inputs: inputs, seed: seed,
-            language: AssignmentLanguage.resolve(for: setup, manifest: manifest), seedDB: seedDB)
+            language: AssignmentLanguage.resolve(manifest: manifest), seedDB: seedDB)
         // 4. Persist onto the manifest's section list.
         try await persist(setup: setup, sectionID: sectionID, inputs: inputs, on: db)
     }

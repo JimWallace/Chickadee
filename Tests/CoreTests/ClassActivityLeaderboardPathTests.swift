@@ -14,7 +14,7 @@ import Testing
         let hidden = ClassActivity(kind: kind, leaderboardVisibility: .hidden)
         #expect(
             hidden.leaderboardPath(testSetupID: "setup_1", viewerIsStaff: true)
-                == (kind.aggregatesToLeaderboard ? "/testsetups/setup_1/leaderboard" : nil))
+                == "/testsetups/setup_1/leaderboard")
     }
 
     @Test func aStudentGetsThePathOnlyWhenTheBoardIsVisible() {

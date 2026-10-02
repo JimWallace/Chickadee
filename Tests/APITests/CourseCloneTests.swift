@@ -73,6 +73,11 @@ import VaporTesting
             dueAt: Date(timeIntervalSince1970: 1_790_000_000))
         lab.sectionID = try labs.requireID()
         lab.sortOrder = 5
+        // Every date and deadline field is set on the source, so each reset the
+        // clone makes is asserted against a value, not against a nil that was
+        // nil already (#1785).
+        lab.startsAt = Date(timeIntervalSince1970: 1_789_000_000)
+        lab.deadlineOverrideActive = true
         lab.solutionVisibilityRaw = SolutionVisibility.afterDue.rawValue
         lab.passingThresholdPercent = 60
         lab.brightspaceGradeObjectID = "999"
@@ -141,6 +146,7 @@ import VaporTesting
             #expect(lab.validationStatus == nil)
             #expect(lab.dueAt == nil)
             #expect(lab.startsAt == nil)
+            #expect(lab.deadlineOverrideActive != true)
             #expect(lab.solutionVisibilityRaw == nil)
             #expect(lab.passingThresholdPercent == 60)
             #expect(lab.brightspaceGradeObjectID == nil)

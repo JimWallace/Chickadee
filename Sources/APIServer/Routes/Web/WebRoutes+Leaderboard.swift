@@ -26,8 +26,7 @@ extension WebRoutes {
         let user = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db),
-            let activity = setup.decodedManifest()?.activity,
-            activity.kind.aggregatesToLeaderboard
+            let activity = setup.decodedManifest()?.activity
         else { throw Abort(.notFound) }
 
         let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)

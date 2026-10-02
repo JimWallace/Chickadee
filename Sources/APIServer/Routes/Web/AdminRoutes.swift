@@ -110,7 +110,7 @@ struct AdminRoutes: RouteCollection {
 
         // Default activity series (24h) so the chart renders server-side on
         // first paint; the client swaps windows / polls via GET /admin/activity.
-        let activityChart = try await ActivityChartService.chartData(
+        let activityChart = try await UserActivityChartService.chartData(
             window: .day, on: req.db)
 
         let ctx = AdminContext(
@@ -135,7 +135,7 @@ struct AdminRoutes: RouteCollection {
         let window =
             (try? req.query.get(String.self, at: "window"))
             .flatMap(ActivityWindow.init(rawValue:)) ?? .day
-        return try await ActivityChartService.chartData(window: window, on: req.db)
+        return try await UserActivityChartService.chartData(window: window, on: req.db)
     }
 
     // MARK: - GET /admin/users
@@ -610,31 +610,33 @@ struct AdminRoutes: RouteCollection {
         let deletedUsername = user.username
         let deletedRole = user.role
 
-        // Application-layer enforcement of the FK cascade behaviour
-        // documented in docs/operational-diagnostics.md ("User-row FK
-        // cascade").  Two rows here lack a DB-level constraint on
-        // SQLite (the AddUserFKConstraints migration only adds the
-        // constraints on Postgres because SQLite can't `ALTER TABLE
-        // ADD CONSTRAINT FOREIGN KEY` post-hoc), so we enforce them
-        // explicitly here.  Same logic runs on Postgres too — it just
-        // becomes a no-op because the DB-level cascade already cleared
-        // the same rows.
+        // The columns that name a user with NO foreign key on either backend
+        // are cleared here, before the row goes (docs/operational-diagnostics.md
+        // "User-row foreign-key cascade"). Every other reference is a declared
+        // FK, which both backends enforce: SQLite because `configureDatabase`
+        // turns foreign keys on. `UserReferenceScanTests` lists the FK-less
+        // columns, so a new one must be cleared here or kept on purpose there
+        // (#1808).
+        //
+        // `class_achievements.user_id` and `submissions.retested_by_user_id`
+        // gained an FK on Postgres only (`AddUserFKConstraints`); SQLite cannot
+        // add one after the fact, so both are cleared here for both backends.
         try await APIClassAchievement.query(on: req.db)
-            .filter(\.$userID == uuid)
-            .delete()
-        try await APILeaderboardEntry.query(on: req.db)
-            .filter(\.$userID == uuid)
-            .delete()
-        try await APIGitHubAccountLink.query(on: req.db)
-            .filter(\.$userID == uuid)
-            .delete()
-        // The repository on GitHub stays: it holds the commits a grade points at.
-        try await APIGitHubCourseRepository.query(on: req.db)
             .filter(\.$userID == uuid)
             .delete()
         try await APISubmission.query(on: req.db)
             .filter(\.$retestedByUserID == uuid)
             .set(\.$retestedByUserID, to: nil)
+            .update()
+        // A tournament run is history and stays; who started it and who won
+        // it drop, as the retest attribution does.
+        try await APITournamentRun.query(on: req.db)
+            .filter(\.$startedBy == uuid)
+            .set(\.$startedBy, to: nil)
+            .update()
+        try await APITournamentRun.query(on: req.db)
+            .filter(\.$winnerUserID == uuid)
+            .set(\.$winnerUserID, to: nil)
             .update()
 
         try await APICourseEnrollment.query(on: req.db)

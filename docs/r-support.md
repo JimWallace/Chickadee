@@ -24,11 +24,11 @@ see "How the language is resolved and remembered" below.
 
 `AssignmentLanguage.resolve(manifest:notebookKernelName:notebookLanguageInfoName:)`
 is the single resolver, and since the docs/language-handling-review.md §3
-hardening it is internal to Core — server-side callers *cannot* reach for it
-directly, which retires the silently-dangerous `resolve(manifest:)` spelling
-that skipped the notebook sniff. Use `AssignmentLanguage.resolve(for: setup,
-manifest:)` (`Sources/APIServer/Utilities/AssignmentLanguageResolution.swift`),
-which reads the kernelspec out of `setup.notebookPath`, or the Core
+hardening it is internal to Core. Server-side callers read
+`AssignmentLanguage.resolve(manifest:)`, which returns the declared language and
+nothing else: the kernelspec sniff this section once described is gone
+(docs/language-declaration.md), and the `resolve(for: setup, manifest:)`
+wrapper that carried a setup it never read went with it (#1733). Or the Core
 `resolve(manifest:notebookData:)` overload when you hold notebook bytes.
 
 That distinction is not cosmetic. A **brand-new** R notebook assignment has an
@@ -193,7 +193,7 @@ Two behaviours worth knowing:
 
 ### How the language is resolved and remembered
 
-`AssignmentLanguage.resolve(for: setup, manifest:)` answers in this order:
+`AssignmentLanguage.resolve(manifest:)` answers in this order:
 
 1. the manifest's recorded `language`, when it has one;
 2. any `.R` graded test script;
