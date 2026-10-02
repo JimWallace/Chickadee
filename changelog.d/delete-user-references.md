@@ -1,3 +1,0 @@
-### Fixed
-
-- **Deleting a user clears the two tournament columns that name one, and no longer repeats three cascades.** `tournament_runs.started_by` and `winner_user_id` have no foreign key on either backend and were left dangling; they are nulled now, the run itself stays. The explicit deletes of `leaderboard_entries`, `github_account_links` and `github_course_repositories` rows are gone, because each declares an `ON DELETE CASCADE` that both backends enforce. A new test reads the `Create*` migrations for every user column with no foreign key and fails until it is cleared or kept on purpose (#1808).

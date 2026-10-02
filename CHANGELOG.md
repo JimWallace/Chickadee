@@ -9,6 +9,33 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.333] - 2026-10-02
+
+### Fixed
+
+- **A course bundle carries the starter notebook.** The export copied only the setup zip, but the starter lives beside it: the web publish and the MCP create build the zip without it, and an edit never rebuilds the zip. A web- or MCP-created assignment exported with no starter, and an uploaded one exported the original rather than the edited file. The bundle now carries the flat notebook under `testsetups/<id>.ipynb`, and import prefers it over the zip entry; an older bundle still falls back to the zip (#1736).
+
+### Changed
+
+- **The course clone tests pin every reset against a set value.** The admin clone source had no start date or deadline override, so two of its reset assertions could not fail, and the instructor New term test asserted only an assignment count. Both sources now carry a due date, a start date, an active override and an after-due reveal, and both tests assert each reset (#1785).
+
+### Changed
+
+- **`RunnerResult.swift` is deleted.** It described a JSON document that runner scripts write and the worker parses, which is the runner JSON protocol CLAUDE.md forbids and which nothing has ever used: `RunnerResult` and `RunnerOutcome` had no reference outside one Core test block, now gone with them (#1722).
+
+### Fixed
+
+- **Deleting a user clears the two tournament columns that name one, and no longer repeats three cascades.** `tournament_runs.started_by` and `winner_user_id` have no foreign key on either backend and were left dangling; they are nulled now, the run itself stays. The explicit deletes of `leaderboard_entries`, `github_account_links` and `github_course_repositories` rows are gone, because each declares an `ON DELETE CASCADE` that both backends enforce. A new test reads the `Create*` migrations for every user column with no foreign key and fails until it is cleared or kept on purpose (#1808).
+
+### Changed
+
+- **The runner-sanitized key-set pin now sees every field.** Its fixture left `activity`, `language`, `languageDeclared`, `submissionMode`, `githubSubmission` and `githubStatusChecks` at their defaults, and a default is omitted from the encoding, so the pin could not catch any of the six shipping to runners by mistake. The fixture populates all six, and the pinned set names `language` and `languageDeclared`, which `runnerSanitized` forwards on purpose (#1747).
+
+### Changed
+
+- **The course-terms doc says what the create form does.** It said the form suggests nothing because a date-derived default would move the visual baseline every term; the year select has always started on the current year, and its window of options is built from the date in any case, so the baseline moves every January either way. The doc now says the year is suggested and the season is not, and why the baseline argument did not hold (#1784).
+
+
 ## [0.5.332] - 2026-10-02
 
 ### Changed
