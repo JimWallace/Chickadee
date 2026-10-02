@@ -244,7 +244,7 @@ enum SolutionNotebookExtractor {
         // The same language rule as the save path: the assignment's own
         // language, and the historical Python file when it declares none.
         if let manifest = setup.decodedManifest(),
-            let language = AssignmentLanguage.resolve(for: setup, manifest: manifest)
+            let language = AssignmentLanguage.resolve(manifest: manifest)
         {
             writeSolutionSource(
                 notebookData: notebookData, sharedDirectory: sharedDirectory, language: language,
