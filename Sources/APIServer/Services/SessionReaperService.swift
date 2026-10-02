@@ -24,11 +24,19 @@
 // sessions never got reaped.  Keeping all three reapers on the one Fluent
 // pattern is the fix for that divergence.
 //
+// SQLite is the one exception, and it is the opposite problem (#1810). SQLite
+// stores the column DEFAULT, `CURRENT_TIMESTAMP`, as TEXT, while a bound `Date`
+// is a REAL, and SQLite orders every REAL below every TEXT. So the typed filter
+// never matched a row Vapor wrote, and a dev database's sessions were never
+// reaped. On SQLite the sweep compares both encodings as seconds since 1970.
+// Postgres keeps the typed query.
+//
 // Periodic scaffolding lives in `PeriodicSweepMonitor`; this file keeps only
 // the sweep itself, the minimal model it queries, and the storage key/accessor.
 
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// Sessions older than this default are considered stale and reaped.  8 days
@@ -48,9 +56,23 @@ func reapStaleSessions(
     now: Date = Date()
 ) async throws {
     let cutoff = now.addingTimeInterval(-maxAge)
-    try await ReapableSession.query(on: db)
-        .filter(\.$createdAt < cutoff)
-        .delete()
+    if let sql = db as? SQLDatabase, sql.dialect.name == "sqlite" {
+        // A TEXT value is the column default; anything else is a bound Date
+        // (REAL seconds). A NULL matches neither branch's comparison.
+        try await sql.raw(
+            """
+            DELETE FROM _fluent_sessions WHERE
+                (CASE typeof(created_at)
+                    WHEN 'text' THEN (julianday(created_at) - 2440587.5) * 86400.0
+                    ELSE created_at
+                END) < \(bind: cutoff.timeIntervalSince1970)
+            """
+        ).run()
+    } else {
+        try await ReapableSession.query(on: db)
+            .filter(\.$createdAt < cutoff)
+            .delete()
+    }
     logger.debug("Session reaper sweep complete (cutoff=\(cutoff))")
 }
 

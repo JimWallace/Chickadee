@@ -73,4 +73,25 @@ import VaporTesting
             #expect(try await ReapableSession.find(recentID, on: app.db) != nil)
         }
     }
+
+    /// A row Vapor writes takes `created_at` from the column default, which
+    /// SQLite stores as text. The sweep must age it out like any other row
+    /// (#1810); on SQLite it used to keep every such row for ever.
+    @Test func reapsASessionThatTookItsTimestampFromTheColumnDefault() async throws {
+        try await withApp(app) { _ in
+            let record = SessionRecord(key: SessionID(string: "reaper-default"), data: SessionData())
+            try await record.create(on: app.db)
+            let id = try record.requireID()
+            #expect(try await ReapableSession.find(id, on: app.db)?.createdAt != nil)
+
+            // Inside the window, the row stays.
+            try await reapStaleSessions(on: app.db, logger: app.logger, now: Date())
+            #expect(try await ReapableSession.find(id, on: app.db) != nil)
+
+            // Nine days later it is past the eight-day window, and goes.
+            try await reapStaleSessions(
+                on: app.db, logger: app.logger, now: Date(timeIntervalSinceNow: 9 * 24 * 60 * 60))
+            #expect(try await ReapableSession.find(id, on: app.db) == nil)
+        }
+    }
 }
