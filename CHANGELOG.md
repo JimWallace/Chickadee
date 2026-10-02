@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.331] - 2026-10-02
+
+### Changed
+
+- **The architecture doc and two comments name what exists.** The database section describes `DATABASE_BACKEND` and the per-backend variables the code reads, not a `DATABASE_URL` it never did; its non-additive-migration example is `CreateResultCollections`, since the other was folded away; the FK migration and the admin user deletion cite the operations doc's "User-row foreign-key cascade" heading by its real name; and the FK migration says `users`, not `api_users` (#1807).
+
+### Fixed
+
+- **A copied assignment gets its solution source.** The solution-save path writes `solution.py` (or the language's own file) into the shared directory and never into the setup zip, and every copy path rebuilt the shared directory from the zip alone, so a clone or an imported course whose expressions `import solution` failed until the next solution save. The clone and the bundle import now write the source from the copied solution (#1742).
+
+### Changed
+
+- **A test asserts that every migration index exists.** The migrations hold 45 raw `CREATE INDEX` statements and one SQLKit builder call, each behind a guard that cannot fail loudly, and no test read the catalog back. `MigrationIndexCoverageTests` derives the expected `idx_*` set from the migration sources, asserts the derivation is complete, and compares it to `sqlite_master` or `pg_indexes` after migration (#1809).
+
+
 ## [0.5.330] - 2026-10-02
 
 ### Added
