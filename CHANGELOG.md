@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.342] - 2026-10-02
+
+### Fixed
+
+- **The data migrations sit at the true end of the migration list, and a test keeps them there.** Five comments in `registerMigrations` claimed a list position that no longer held: two backfills that full-query `APITestSetup` said they were registered last, with 20 migrations after them, and two raw-SQL avatar migrations said their place did not matter, though both read a column a specific migration adds. The four data migrations now form one block at the end, the comments are correct, and `MigrationOrderTests` reads the list and fails when a model-querying migration precedes a change to its table, or a raw-SQL migration precedes the migration that adds a column it reads (#1805).
+
+
 ## [0.5.341] - 2026-10-02
 
 ### Fixed
