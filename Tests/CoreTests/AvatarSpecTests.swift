@@ -84,7 +84,7 @@ import Testing
         let spec = AvatarSpec(
             cap: .teal, wing: .edged, expression: .keen, accessory: .glasses, accent: .lagoon,
             backdrop: .sage)
-        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         #expect(p.capToken == "--avatar-teal-cap")
         #expect(p.wingToken == "--avatar-teal-wing")
         #expect(p.backdropToken == "--avatar-back-sage")
@@ -99,12 +99,12 @@ import Testing
 
     @Test func presentationIsDecorativeOrLabelledButNeverBoth() {
         let spec = AvatarSpec.drawn(fromSeed: 3)
-        let plain = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let plain = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         #expect(plain.isLabelled == false)
         #expect(plain.label.isEmpty)
 
         let named = AvatarPresentation(
-            for: spec, size: .standard, accessibility: .labelled("Quiet Cedar"))
+            for: spec, size: .standard, accessibility: .labelled("Quiet Cedar"), isStaff: false)
         #expect(named.isLabelled)
         #expect(named.label == "Quiet Cedar")
     }
@@ -168,7 +168,7 @@ import Testing
             cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
             backdrop: .sky)
         let presentation = AvatarPresentation(
-            for: spec, size: .standard, accessibility: .decorative)
+            for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         // The four varying layers are interpolated; the two fixed ones are
         // literal fragments.
         let expected = [
@@ -231,7 +231,7 @@ import Testing
                         cap: cap, wing: .plain, expression: .bright, accessory: .none,
                         accent: accent, backdrop: backdrop)
                     expected.formUnion(
-                        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+                        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
                             .tokens)
                 }
             }

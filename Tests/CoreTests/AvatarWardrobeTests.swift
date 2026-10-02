@@ -72,7 +72,7 @@ import Testing
         let spec = AvatarSpec(
             cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
             backdrop: .straw, border: border)
-        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         let expected =
             border.ring == .solid ? "--avatar-accent-\(border.rawValue)" : "--avatar-border-none"
         #expect(p.borderToken == expected)

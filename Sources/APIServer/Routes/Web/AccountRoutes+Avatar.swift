@@ -64,7 +64,7 @@ struct AvatarPickerContext: Encodable {
     let capToken: String
 
     init(for spec: AvatarSpec, isStaff: Bool) {
-        let own = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let own = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
         self.backdropToken = own.backdropToken
         self.accentToken = own.accentToken
@@ -86,7 +86,10 @@ struct AvatarPickerContext: Encodable {
             // border, so the live preview draws exactly what a save would.
             var preview = spec
             preview.border = AvatarBorder(rawValue: value) ?? .none
-            let drawn = AvatarPresentation(for: preview, size: .standard, accessibility: .decorative)
+            // A sample is the ring a STUDENT would wear: staff never see the
+            // samples, only the note, so the staff ring has no sample.
+            let drawn = AvatarPresentation(
+                for: preview, size: .standard, accessibility: .decorative, isStaff: false)
             // The ring a student already wears is never locked: a seasonal ring
             // is kept after its term, and a disabled radio would not be posted.
             let isWorn = value == spec.border.rawValue
