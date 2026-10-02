@@ -60,16 +60,6 @@ public enum AvatarCustomization {
         }
     }
 
-    /// `spec` with each chosen slot set, keyed by slot raw value — for a
-    /// student. See `applying(_:to:isStaff:)`.
-    public static func applying(
-        _ choices: [String: String], to spec: AvatarSpec
-    ) throws
-        -> AvatarSpec
-    {
-        try applying(choices, to: spec, isStaff: false)
-    }
-
     /// `spec` with each chosen slot set, keyed by slot raw value. A slot not in
     /// `choices` is left as it is. Throws, and changes nothing, if any key is
     /// not a customizable slot, any value is not an option of its slot, a

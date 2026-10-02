@@ -183,6 +183,32 @@ import VaporTesting
         }
     }
 
+    /// A pick that arrives after the handle was locked (a stale tab, or a
+    /// second submit) changes nothing, and the row says so (#1763).
+    @Test func aPickAfterTheLockIsReportedAsLocked() async throws {
+        try await withWebRoutesApp { app in
+            let (cookie, enrollment) = try await loggedInStudent(on: app)
+            let form = try await csrfFields(for: "/account", cookie: cookie, on: app)
+            let offered = offeredHandles(in: try await get("/account", cookie: form.cookie, on: app).body.string)
+            let pick = try #require(offered.first)
+            // The lock lands between the page and the post.
+            let locked = try await storedEnrollment(enrollment, on: app)
+            locked.avatarHandleLockedAt = Date()
+            try await locked.save(on: app.db)
+            let before = locked.avatarHandle
+
+            let res = try await choose(pick, courseID: enrollment.$course.id, form: form, on: app)
+            #expect(res.status == .seeOther)
+            let location = res.headers.first(name: .location) ?? ""
+            #expect(location.contains("handleLocked="))
+            #expect(try await storedEnrollment(enrollment, on: app).avatarHandle == before)
+
+            let html = try await get(location, cookie: form.cookie, on: app).body.string
+            #expect(html.contains("Your handle is set for this course."))
+            #expect(html.contains("It was set before your last choice arrived."))
+        }
+    }
+
     /// Alternates are not reserved. When a classmate stores the one picked
     /// first, nothing changes, and the page says so and deals two new ones.
     @Test func aPickTakenByAClassmateDealsTwoNewAlternates() async throws {

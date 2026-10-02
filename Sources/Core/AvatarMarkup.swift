@@ -160,26 +160,15 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     public var tokens: [String] { inlineProperties.map(\.token) }
 
     /// Every symbol this presentation names, in the order the partial stacks
-    /// them — with the two that never vary.
+    /// them — with the two that never vary. Seven, not one per feature: body,
+    /// cap, cheek, beak and bib never vary, so they are baked into one plumage
+    /// symbol. A slot is split out only when it varies. Tilt is not a layer; it
+    /// is a transform on everything between the backdrop and the ring.
     public var layerRefs: [String] {
         [
             "#av-backdrop", tuftSymbolRef, "#av-plumage", wingSymbolRef, expressionSymbolRef,
             accessorySymbolRef, ringSymbolRef,
         ]
-    }
-}
-
-public enum AvatarMarkup {
-    /// The symbol ids stacked to draw `spec`, back to front.
-    ///
-    /// Seven, not one per feature: body, cap, cheek, beak and bib never vary, so
-    /// they are baked into one plumage symbol. A slot is split out only when it
-    /// varies. Tilt is not a layer; it is a transform on everything between the
-    /// backdrop and the ring.
-    public static func layerSymbolIDs(for spec: AvatarSpec) -> [String] {
-        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
-            .layerRefs
-            .map { String($0.dropFirst()) }
     }
 }
 

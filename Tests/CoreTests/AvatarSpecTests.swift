@@ -73,10 +73,13 @@ import Testing
         let spec = AvatarSpec(
             cap: .plum, wing: .barred, expression: .wink, accessory: .scarf, accent: .ember,
             backdrop: .sky)
+        let layers = AvatarPresentation(
+            for: spec, size: .standard, accessibility: .decorative, isStaff: false
+        ).layerRefs
         #expect(
-            AvatarMarkup.layerSymbolIDs(for: spec) == [
-                "av-backdrop", "av-tuft-none", "av-plumage", "av-wing-barred",
-                "av-expression-wink", "av-accessory-scarf", "av-ring-none",
+            layers == [
+                "#av-backdrop", "#av-tuft-none", "#av-plumage", "#av-wing-barred",
+                "#av-expression-wink", "#av-accessory-scarf", "#av-ring-none",
             ])
     }
 
@@ -159,8 +162,8 @@ import Testing
     ///
     /// The five `use` elements are hard-coded in `_avatar.leaf` — a template
     /// cannot loop them, since four are literal fragments and one is an
-    /// interpolation — so this is what stops the template and
-    /// `layerSymbolIDs` drifting apart.
+    /// interpolation — so this is what stops the template and `layerRefs`
+    /// drifting apart.
     @Test func partialStacksTheModelsLayers() throws {
         let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
         let refs = Self.attributeValues(in: partial, attribute: "href")
@@ -178,7 +181,8 @@ import Testing
         #expect(refs == expected, "partial layers \(refs) do not match the model's")
         // And the interpolated one really is the wing, marker included.
         #expect(presentation.layerRefs.count == 7)
-        #expect(presentation.wingSymbolRef == "#" + AvatarMarkup.layerSymbolIDs(for: spec)[3])
+        #expect(presentation.layerRefs[3] == "#av-wing-plain")
+        #expect(presentation.wingSymbolRef == "#av-wing-plain")
     }
 
     /// Every `--av-*` the partial assigns is one the presentation supplies, and
