@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.341] - 2026-10-02
+
+### Fixed
+
+- **An assignment made on the create page keeps the upload-only mode its language set.** Declaring C++, Racket or Java on the create page sets `uploadOnly` and `worker`, but the draft's suite rebuilds and the publish rebuilt the manifest from scratch and stored `notebook` and the section's grading mode, the pair every authoring door refuses. Grading was not affected, but `get_assignment` reported the stored values. The three rebuilds now start from the draft's own manifest, so every field the create page recorded survives without being named (#1720).
+
+
 ## [0.5.340] - 2026-10-02
 
 ### Fixed
