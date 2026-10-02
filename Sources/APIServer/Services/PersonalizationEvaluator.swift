@@ -386,10 +386,15 @@ enum PersonalizationEvaluator {
     ) -> [String] {
         guard let dir = supportFilesDirectory,
             fm.fileExists(atPath: dir),
-            let entries = try? fm.contentsOfDirectory(atPath: dir)
+            let allEntries = try? fm.contentsOfDirectory(atPath: dir)
         else {
             return []
         }
+        // The C++ and Java drivers used to build in this directory (#1788).
+        // A hidden file was never a support file, and the Java driver's
+        // source is the driver's, not the instructor's, so a leftover of
+        // either stays out of the next evaluation.
+        let entries = allEntries.filter { !$0.hasPrefix(".") && $0 != "CkPersonalizeDriver.java" }
         // The five "loaded by FILE" languages differ only in WHICH extension,
         // and each used to spell it as a literal — four hand-written copies of a
         // fact `LanguageDescriptor` already owns, in a function whose whole job
