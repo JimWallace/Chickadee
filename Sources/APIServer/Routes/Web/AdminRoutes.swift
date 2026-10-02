@@ -611,7 +611,7 @@ struct AdminRoutes: RouteCollection {
         let deletedRole = user.role
 
         // Application-layer enforcement of the FK cascade behaviour
-        // documented in docs/operational-diagnostics.md ("User-row FK
+        // documented in docs/operational-diagnostics.md ("User-row foreign-key
         // cascade").  Two rows here lack a DB-level constraint on
         // SQLite (the AddUserFKConstraints migration only adds the
         // constraints on Postgres because SQLite can't `ALTER TABLE
