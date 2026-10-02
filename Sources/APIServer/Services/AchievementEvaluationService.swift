@@ -490,8 +490,10 @@ private func requeueFrozenClassGoalBonusPushes(
     )
 }
 
-/// Per-student best whole-assignment grade (`0...1`) for a setup, from
-/// worker-authoritative results (browser previews lose to a worker result).
+/// Per-student best whole-assignment grade (`0...1`) for a setup, under the
+/// same "highest grade wins" fold as every grade-of-record surface (#1709):
+/// a worker regrade below a browser 100 % never removes a student from the
+/// numerator of a goal the dashboard shows them meeting.
 ///
 /// `classGoal` currently grades on the whole-assignment metric; per-item /
 /// per-section targets are a follow-up (there is no way to author one until the
@@ -506,13 +508,11 @@ func bestAssignmentGradeByStudent(testSetupID: String, on db: Database) async th
         return (id, userID)
     }
     // Blob-free (#1160): the fold only reads gradePercentValue.
-    let preferred = try await preferredGradeSummariesBySubmissionID(for: identified.map(\.id), on: db)
+    let percentBySubmissionID = try await bestGradePercentBySubmissionID(for: identified.map(\.id), on: db)
 
     var best: [UUID: Double] = [:]
     for sub in identified {
-        guard let result = preferred[sub.id],
-            let percent = result.gradePercentValue
-        else { continue }
+        guard let percent = percentBySubmissionID[sub.id] else { continue }
         let value = Double(percent) / 100
         if value > (best[sub.userID] ?? -1) { best[sub.userID] = value }
     }

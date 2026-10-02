@@ -93,6 +93,17 @@ func bestGradeResult<T: GradeValueCarrying>(of results: some Sequence<T>) -> T? 
         .max(by: { ($0.gradePercentValue ?? 0) < ($1.gradePercentValue ?? 0) })
 }
 
+/// The result row each submission's grade comes from: the highest-grade
+/// row, or the newest row when none carries a parseable percent. `rows`
+/// arrive newest-first, as the loaders return them. For the surfaces that
+/// read a result ROW rather than a percent (the badge path needs the row's
+/// collection), so a badge and the grade beside it read the same row (#1709).
+func bestGradeResultBySubmissionID(_ rows: [APIResult]) -> [String: APIResult] {
+    var grouped: [String: [APIResult]] = [:]
+    for row in rows { grouped[row.submissionID, default: []].append(row) }
+    return grouped.compactMapValues { bestGradeResult(of: $0) ?? $0.first }
+}
+
 // MARK: - Loaders (I/O)
 
 /// Loads every `APIResult` for the given submission IDs, grouped by
@@ -112,9 +123,9 @@ func allResultsBySubmissionID(
         let end =
             ids.index(index, offsetBy: chunkSize, limitedBy: ids.endIndex)
             ?? ids.endIndex
-        // Newest-first within each submission: the preferred-result fold
-        // (PreferredResultsBySubmissionID) depends on this order; the
-        // highest-grade fold is order-independent.
+        // Newest-first within each submission: the highest-grade fold is
+        // order-independent, but `bestGradeResultBySubmissionID` falls back to
+        // the first row for a submission with no graded result.
         let page = try await APIResult.query(on: db)
             .filter(\.$submissionID ~~ Array(ids[index..<end]))
             .sort(\.$receivedAt, .descending)
@@ -223,4 +234,14 @@ func bestGradePercentBySubmissionID(
 ) async throws -> [String: Int] {
     try await gradeSummariesBySubmissionID(for: submissionIDs, on: db)
         .compactMapValues { bestGradePercent(of: $0) }
+}
+
+/// `bestGradeResultBySubmissionID` over every result of the given
+/// submissions, loaded in one chunked query.
+func bestGradeResultBySubmissionID(
+    for submissionIDs: some Collection<String>,
+    on db: Database
+) async throws -> [String: APIResult] {
+    bestGradeResultBySubmissionID(
+        try await allResultsBySubmissionID(for: submissionIDs, on: db).values.flatMap { $0 })
 }
