@@ -7,9 +7,11 @@
 // RunnerCore's bare-filename, Foundation-free interface into the worker's
 // `URL`-based subprocess calls.
 //
-// This is the *first* conformance: the browser runner's `BrowserScriptExecutor`
-// (Pyodide via JavaScriptKit) is a drop-in second one. The protocol was born
-// exercised by a real caller, never a floating speculative interface.
+// This was the first conformance, and the browser runner is the second
+// substrate the same loop drives: its `RoutingExecutor` in
+// `Public/browser-runner.js` hands each script to a xeus kernel. The protocol
+// was born exercised by a real caller, never a floating speculative
+// interface.
 
 import Core
 import Foundation
@@ -27,7 +29,9 @@ struct NativeScriptExecutor: ScriptExecutor, Sendable {
     /// and it is the subprocess working directory.
     let workDir: URL
     /// Environment overrides merged into every script run (e.g. the
-    /// `CHICKADEE_ASSIGNMENT_SEED`). Empty = inherit the parent env verbatim.
+    /// `CHICKADEE_ASSIGNMENT_SEED`), over the allowlisted parent environment
+    /// `mergedScriptEnvironment` builds. Empty adds nothing; it never widens
+    /// the allowlist.
     let env: [String: String]
     /// Per-script execution time-limit overrides (script name → seconds). A
     /// script listed here runs with its own limit; everything else uses the

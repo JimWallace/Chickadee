@@ -237,8 +237,8 @@ func stagedSubmissionDestination(
 /// Detection is `AssignmentLanguage.fromNotebookMetadata` — the same call
 /// `extractNotebooksToCode` makes, so routing and extraction cannot disagree
 /// about what a notebook is. Resolves the named submission when it is an
-/// `.ipynb`, otherwise the first `.ipynb` staged in `submissionDirectory`
-/// (zip submissions). Any read/parse failure returns nil, so the caller keeps
+/// `.ipynb`, otherwise the `.ipynb` with the alphabetically first name staged
+/// in `submissionDirectory` (zip submissions). Any read/parse failure returns nil, so the caller keeps
 /// its existing (Python) behaviour.
 ///
 /// Generalised from `submissionIsRNotebook`, whose Bool could only mean "R, or
@@ -256,7 +256,12 @@ func submissionNotebookLanguage(
         let entries =
             (try? FileManager.default.contentsOfDirectory(
                 at: submissionDirectory, includingPropertiesForKeys: nil)) ?? []
-        return entries.first { $0.pathExtension.lowercased() == "ipynb" }
+        // By name, not by enumeration order: a zip with two notebooks that
+        // declare different kernels routed by whichever the filesystem
+        // listed first (#1795). `studentModuleFromSubmittedFiles` sorts for
+        // the same reason.
+        return entries.filter { $0.pathExtension.lowercased() == "ipynb" }
+            .min { $0.lastPathComponent < $1.lastPathComponent }
     }()
 
     guard let notebookURL,

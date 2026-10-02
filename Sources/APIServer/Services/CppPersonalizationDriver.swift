@@ -29,14 +29,20 @@ enum CppPersonalizationDriver {
             staticVariables: staticVariables,
             expressions: expressions,
             supportFiles: supportFiles)
+        // Build beside the driver script, in the evaluator's private temp
+        // directory, never in the support directory this runs in: a source
+        // or binary left there was included into the NEXT evaluation as a
+        // support file, and two students' evaluations raced on one binary
+        // (#1788). `-I.` keeps the support files reachable by name.
         return """
             #!/bin/sh
             # Auto-generated personalization driver. Do not edit.
-            cat > .ck_personalize_driver.cpp <<'CHICKADEE_GENERATED_SOURCE'
+            ck_build="$(dirname "$0")"
+            cat > "$ck_build/.ck_personalize_driver.cpp" <<'CHICKADEE_GENERATED_SOURCE'
             \(program)
             CHICKADEE_GENERATED_SOURCE
-            g++ -std=c++20 -O0 .ck_personalize_driver.cpp -o .ck_personalize_driver 1>&2 || exit 3
-            exec ./.ck_personalize_driver
+            g++ -std=c++20 -O0 -I. "$ck_build/.ck_personalize_driver.cpp" -o "$ck_build/.ck_personalize_driver" 1>&2 || exit 3
+            exec "$ck_build/.ck_personalize_driver"
             """ + "\n"
     }
 

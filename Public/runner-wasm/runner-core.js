@@ -1979,7 +1979,7 @@ async function createInstantiator(options, swift) {
 }
 
 // .build/plugins/PackageToJS/outputs/Package/instantiate.js
-var MODULE_PATH = "RunnerWasm.f3ccac014eb2.wasm";
+var MODULE_PATH = "RunnerWasm.ecd136344b79.wasm";
 async function instantiate(options) {
   const { instantiator, ...result } = await _instantiate(options);
   options.wasi.initialize(result.instance);
@@ -3387,7 +3387,7 @@ async function initBrowser(_options) {
   };
   let module = options.module;
   if (!module) {
-    module = fetch(new URL("RunnerWasm.f3ccac014eb2.wasm", import.meta.url));
+    module = fetch(new URL("RunnerWasm.ecd136344b79.wasm", import.meta.url));
   }
   const instantiateOptions = await defaultBrowserSetup({
     module,

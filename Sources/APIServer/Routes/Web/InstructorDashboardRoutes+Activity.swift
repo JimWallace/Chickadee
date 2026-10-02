@@ -78,7 +78,7 @@ extension InstructorDashboardRoutes {
 
 /// Activity tab (`GET /instructor/activity`): the merged content-edit +
 /// course-event timeline for the active course.
-struct InstructorActivityContext: Encodable {
+private struct InstructorActivityContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
     /// The rows grouped under Today / Yesterday / date headings.
@@ -93,7 +93,7 @@ struct InstructorActivityContext: Encodable {
 }
 
 /// One entry in the Activity tab's person select.
-struct ActivityStaffOption: Encodable, Equatable {
+private struct ActivityStaffOption: Encodable, Equatable {
     /// The `actor` query value; empty for "Everyone".
     let username: String
     let displayName: String
@@ -104,7 +104,7 @@ extension InstructorDashboardRoutes {
     /// "Everyone", then the course's instructors and TAs by name. If `selected`
     /// names someone not in that list it is added, so the select never shows
     /// "Everyone" while a filter is applied.
-    static func activityStaffOptions(
+    private static func activityStaffOptions(
         courseID: UUID, selected: String?, db: any Database
     ) async throws -> [ActivityStaffOption] {
         let enrollments = try await APICourseEnrollment.query(on: db)

@@ -231,6 +231,8 @@ extension CourseBundleRoutes {
             newCourse.slipDaysPerStudent = slipDayPolicy.daysPerStudent
             newCourse.slipDayExtensionHours = slipDayPolicy.extensionHours
             newCourse.slipDayReleaseRevealHold = slipDayPolicy.releaseRevealHold
+            // The course's own authoring guide, when it has one (#1737).
+            newCourse.mcpInstructions = manifest.course.mcpInstructions
             try await newCourse.save(on: db)
             guard let newCourseID = newCourse.id else {
                 throw AppError.internalFailure(reason: "Created course missing id after save")
@@ -277,7 +279,8 @@ extension CourseBundleRoutes {
             // reference solution. The submissions above landed on the NEW
             // setup ids, so this is what turns a carried solution into one the
             // assignment can actually resolve.
-            try await linkImportedValidationSubmissions(courseID: t.courseID, db: db)
+            try await linkImportedValidationSubmissions(
+                courseID: t.courseID, setupsDir: dirs.setupsDir, db: db)
 
             // 6h-ter. Seed each imported assignment's v1, as clone and create
             // do, so it has a starting point to roll back to and the timeline
@@ -627,6 +630,14 @@ private func importBundledAssignments(
             sectionID: bundledAssign.sectionBundleID.flatMap { sectionIDMap[$0] },
             courseID: courseID
         )
+        // The four per-assignment policies (#1737). A bundle written before
+        // they were carried leaves each at its column default.
+        newAssign.secretRevealEnabled = bundledAssign.secretRevealEnabled
+        newAssign.passingThresholdPercent = bundledAssign.passingThresholdPercent
+        if let solutionVisibility = bundledAssign.solutionVisibility {
+            newAssign.solutionVisibility = solutionVisibility
+        }
+        newAssign.brightspaceSyncExcluded = bundledAssign.brightspaceSyncExcluded
         try await newAssign.save(on: db)
         tally.assignmentsImported += 1
     }
@@ -698,8 +709,11 @@ private func importBundledSubmissions(
 /// newest validation submission for the assignment's setup — but the stored
 /// pointer is what the authoring pages read to decide an assignment HAS a
 /// solution, so leaving it nil shows an imported assignment as having none.
+/// Also writes each linked solution's source into the setup's shared
+/// directory, which the import built from the zip alone (#1742).
 private func linkImportedValidationSubmissions(
     courseID: UUID,
+    setupsDir: String,
     db: Database
 ) async throws {
     let assignments = try await APIAssignment.query(on: db)
@@ -716,6 +730,10 @@ private func linkImportedValidationSubmissions(
         else { continue }
         assignment.validationSubmissionID = solutionID
         try await assignment.save(on: db)
+        if let setup = try await APITestSetup.find(assignment.testSetupID, on: db) {
+            await SolutionNotebookExtractor.writeSolutionSource(
+                fromCopiedSolution: solution, setup: setup, testSetupsDirectory: setupsDir)
+        }
     }
 }
 

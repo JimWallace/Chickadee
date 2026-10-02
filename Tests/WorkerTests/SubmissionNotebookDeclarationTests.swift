@@ -47,6 +47,34 @@ import Testing
                 == .r)
     }
 
+    private static let luaNotebook = #"""
+        {"cells":[{"cell_type":"code","metadata":{},"source":["x = 1\n"]}],"metadata":{"kernelspec":{"name":"xlua","display_name":"Lua (xeus-lua)","language":"lua"},"language_info":{"name":"lua"}},"nbformat":4,"nbformat_minor":5}
+        """#
+
+    /// A zip with two notebooks declaring different kernels routes by the
+    /// alphabetically first name, not by the order the filesystem lists
+    /// them (#1795). The second file is written first so that an
+    /// enumeration-order pick would differ from a name-order pick.
+    @Test func twoNotebooksAreChosenByName() throws {
+        try Self.rNotebook.write(
+            to: directory.appendingPathComponent("b.ipynb"), atomically: true, encoding: .utf8)
+        try Self.luaNotebook.write(
+            to: directory.appendingPathComponent("a.ipynb"), atomically: true, encoding: .utf8)
+        #expect(
+            submissionNotebookLanguage(submissionDirectory: directory, submissionFilename: "submission.zip")
+                == .lua)
+    }
+
+    @Test func twoNotebooksAreChosenByNameWhicheverIsFirst() throws {
+        try Self.luaNotebook.write(
+            to: directory.appendingPathComponent("b.ipynb"), atomically: true, encoding: .utf8)
+        try Self.rNotebook.write(
+            to: directory.appendingPathComponent("a.ipynb"), atomically: true, encoding: .utf8)
+        #expect(
+            submissionNotebookLanguage(submissionDirectory: directory, submissionFilename: "submission.zip")
+                == .r)
+    }
+
     @Test func aDeclaredNonPythonNotebookIsExtractedInItsOwnLanguage() throws {
         try Self.rNotebook.write(
             to: directory.appendingPathComponent("solution.ipynb"), atomically: true, encoding: .utf8)

@@ -242,23 +242,32 @@ extension GitHubRepoClient {
 
         func get(_ path: String, token: String) async throws -> ClientResponse {
             let client = app.client
-            return try await app.recordingReachability(.github) {
+            let response = try await app.recordingReachability(.github) {
                 try await client.get(URI(string: api + path), headers: headers(token: token)) { request in
                     request.timeout = callTimeout
                 }
             }
+            return try refusingAStaleToken(response)
+        }
+
+        /// A 401 means the token's installation is gone or re-made. The access
+        /// layer drops the cached token and resolves once more (#1768).
+        func refusingAStaleToken(_ response: ClientResponse) throws -> ClientResponse {
+            guard response.status != .unauthorized else { throw GitHubSubmitError.tokenRejected }
+            return response
         }
 
         func send(
             _ method: HTTPMethod, _ path: String, token: String, body: some Content & Sendable
         ) async throws -> ClientResponse {
             let client = app.client
-            return try await app.recordingReachability(.github) {
+            let response = try await app.recordingReachability(.github) {
                 try await client.send(method, headers: headers(token: token), to: URI(string: api + path)) { req in
                     req.timeout = callTimeout
                     try req.content.encode(body, as: .json)
                 }
             }
+            return try refusingAStaleToken(response)
         }
 
         func decode<T: Decodable>(_: T.Type, from response: ClientResponse) throws -> T {
@@ -285,6 +294,9 @@ extension GitHubRepoClient {
                         URI(string: api + "/app/installations/\(installationID)/access_tokens"),
                         headers: headers(token: appJWT))
                 }
+                // The installation ID no longer exists: removed, or re-made
+                // under a new ID (#1768).
+                if response.status == .notFound { throw GitHubSubmitError.notInstalled }
                 guard response.status == .created, let body = response.body else {
                     throw GitHubSubmitError.githubFailed
                 }

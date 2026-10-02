@@ -8,6 +8,8 @@
 //   GET  /instructor/lti-grades            → instructor-lti-grades.leaf
 //   POST /instructor/lti-grades/transport  → choose Valence or AGS (instructor)
 //   POST /instructor/lti-grades/push-all   → "Sync now": queue every student's grade (TA+)
+//   POST /instructor/lti-grades/link-students → link students to the LMS by
+//                                               student number (instructor)
 
 import Core
 import Fluent
@@ -20,7 +22,7 @@ enum LTIGradeTransport: String, Sendable {
     case ags
 }
 
-struct InstructorLTIGradesContext: Encodable {
+private struct InstructorLTIGradesContext: Encodable {
     struct Failure: Encodable {
         let student: String
         let assignment: String
@@ -41,6 +43,9 @@ struct InstructorLTIGradesContext: Encodable {
     let canChooseTransport: Bool
     /// Course staff on a course that uses AGS and is not archived.
     let canPushAll: Bool
+    /// An instructor on a course that uses AGS, is not archived, and has an
+    /// NRPS membership URL.
+    let canLinkStudents: Bool
     let sentCount: Int
     let waitingCount: Int
     let failedCount: Int
@@ -84,12 +89,14 @@ extension InstructorLMSRoutes {
             usesAGS: usesAGS,
             canChooseTransport: isInstructor && writable && platform != nil && hasGradeService,
             canPushAll: writable && usesAGS,
+            canLinkStudents: isInstructor && writable && usesAGS && course?.ltiMembershipsURL != nil,
             sentCount: rows.filter { !$0.pending && $0.error == nil && $0.syncedAt != nil }.count,
             waitingCount: rows.filter(\.pending).count,
             failedCount: failedCount,
             failures: try await ltiFailures(rows: rows, on: req.db),
             failuresTruncated: failedCount > Self.ltiFailureListLimit,
-            flashSuccess: Self.ltiGradesNotice(req.query[String.self, at: "done"]),
+            flashSuccess: Self.ltiGradesNotice(
+                req.query[String.self, at: "done"], linked: req.query[Int.self, at: "linked"]),
             flashError: Self.ltiGradesProblem(req.query[String.self, at: "error"]))
         return try await req.view.render("instructor-lti-grades", ctx)
     }
@@ -149,6 +156,85 @@ extension InstructorLMSRoutes {
         return req.redirect(to: "/instructor/lti-grades?done=push")
     }
 
+    // MARK: - POST /instructor/lti-grades/link-students
+
+    /// Links the course's students to their LMS subjects by student number
+    /// (`LTIRoster.preLinks`), so the AGS sweep can send the grades of a
+    /// student who has not opened Chickadee from the LMS. Instructors only: a
+    /// link also decides which account that student's later launches sign in
+    /// to, as a first launch does.
+    @Sendable
+    func linkLTIStudents(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let courseID = try await req.resolveActiveCourse(for: user).activeCourseUUID,
+            let course = try await APICourse.find(courseID, on: req.db)
+        else { return req.redirect(to: "/instructor/lti-grades?error=course") }
+        try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
+        guard course.usesLTIGrades else { return req.redirect(to: "/instructor/lti-grades?error=transport") }
+        guard let membershipsURL = course.ltiMembershipsURL, let platformID = course.ltiPlatformID,
+            let platform = try await APILTIPlatform.find(platformID, on: req.db), platform.enabled
+        else { return req.redirect(to: "/instructor/lti-grades?error=roster") }
+
+        let members: [LTIMember]
+        do {
+            members = try await req.application.ltiServiceClient.members(
+                membershipsURL: membershipsURL,
+                platform: .init(id: platformID, registration: platform),
+                keys: try await req.application.ltiToolKeyAuthority())
+        } catch {
+            req.logger.warning("LTI membership read failed: \(error)")
+            return req.redirect(to: "/instructor/lti-grades?error=roster")
+        }
+        guard LTIRoster.sendsStudentNumbers(members) else {
+            return req.redirect(to: "/instructor/lti-grades?error=numbers")
+        }
+
+        let studentIDs = Array(try await studentUserIDsInCourse(courseID, on: req.db))
+        var students: [APIUser] = []
+        var linkedUserIDs = Set<UUID>()
+        for chunk in chunkedForInFilter(studentIDs) {
+            students += try await APIUser.query(on: req.db).filter(\.$id ~~ chunk).all()
+            linkedUserIDs.formUnion(
+                try await APILTIIdentity.query(on: req.db)
+                    .filter(\.$platformID == platformID)
+                    .filter(\.$userID ~~ chunk)
+                    .all()
+                    .map(\.userID))
+        }
+        var linkedSubjects = Set<String>()
+        for chunk in chunkedForInFilter(members.map(\.userID)) {
+            linkedSubjects.formUnion(
+                try await APILTIIdentity.query(on: req.db)
+                    .filter(\.$platformID == platformID)
+                    .filter(\.$subject ~~ chunk)
+                    .all()
+                    .map(\.subject))
+        }
+        // The resolver's rule: an LMS link never reaches an admin or MCP account.
+        let candidates = students.filter { !$0.isAdmin && !$0.isMCPAgent }.compactMap { student in
+            student.id.map { LTIRoster.Candidate(userID: $0, studentID: student.studentID) }
+        }
+
+        var linked = 0
+        for link in LTIRoster.preLinks(
+            members: members, students: candidates, linkedSubjects: linkedSubjects, linkedUserIDs: linkedUserIDs)
+        {
+            do {
+                try await APILTIIdentity(platformID: platformID, subject: link.subject, userID: link.userID)
+                    .save(on: req.db)
+            } catch {
+                // A launch of the same subject won the unique index: its link counts.
+                continue
+            }
+            linked += 1
+            try await LTIGradeSyncQueue.retryFailed(userID: link.userID, courseID: courseID, on: req.db)
+        }
+        await AuditLogger.record(
+            action: .ltiStudentsLinked, targetType: .course, targetID: courseID.uuidString,
+            metadata: ["linked": String(linked)], courseID: courseID, on: req)
+        return req.redirect(to: "/instructor/lti-grades?done=link&linked=\(linked)")
+    }
+
     // MARK: - Helpers
 
     private func ltiGradeSyncRows(course: APICourse, on db: Database) async throws -> [APILTIGradeSync] {
@@ -185,12 +271,18 @@ extension InstructorLMSRoutes {
         }
     }
 
-    static func ltiGradesNotice(_ key: String?) -> String? {
+    static func ltiGradesNotice(_ key: String?, linked: Int? = nil) -> String? {
         switch key {
         case LTIGradeTransport.ags.rawValue: "Grades for this course now go to the LMS through the LTI grade service."
         case LTIGradeTransport.valence.rawValue:
             "Grades for this course now go to the LMS through the LEARN grade sync."
         case "push": "Every grade is queued, and the LMS receives them within a minute."
+        case "link":
+            switch linked ?? 0 {
+            case 0: "No students could be linked by student number."
+            case 1: "1 student is now linked to the LMS."
+            case let count: "\(count) students are now linked to the LMS."
+            }
         default: nil
         }
     }
@@ -201,6 +293,9 @@ extension InstructorLMSRoutes {
         case "service":
             "Open Chickadee from the LMS course once so that the LMS sends its grade service URL, then try again."
         case "transport": "This course does not send its grades through the LTI grade service."
+        case "roster": "Chickadee could not read the class list from the LMS. Try again later."
+        case "numbers":
+            "The LMS does not send student numbers, so each student is linked when they open Chickadee from the LMS."
         default: nil
         }
     }

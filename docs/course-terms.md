@@ -194,6 +194,12 @@ The Core type, the migration, the model accessor, and tests
   again, for the new term. A shift of the dates by one term length was
   rejected: term lengths and weekdays are different, so a shifted date is a
   guess.
+- **The bundle is the other copy, and it is a faithful restore.** A
+  `.chickadee` bundle carries the dates, the open state, the four
+  per-assignment policies (secret reveal, passing threshold, solution
+  reveal, LMS sync exclusion) and the course authoring guide exactly as they
+  were (#1737). The clone clears the dates, the open state and the solution
+  reveal because it starts a new term; the bundle restores one.
 - The clone does not archive the source. The instructor can still be
   exporting grades.
 
@@ -227,8 +233,9 @@ document. `docs/multi-course-roles.md` no longer says there is no term,
 `docs/slip-days.md` says what a clone does with the slip-day policy, and the
 compliance inventories list the term and key that `list_courses` now returns.
 `clone-course-for-new-term.md` is marked superseded (slice 1) and archived.
-`docs/admin-mcp.md` needed no change: `get_instructor_card_series` resolves
-its `courseCode` through the shared resolver, so it also accepts a key.
+`get_instructor_card_series` resolves its `courseCode` through the shared
+resolver, so it also accepts a key, and its result names the offering it
+used (`courseCode`, `courseKey`, `courseTerm`), as the content tools do (#1781).
 
 ---
 
