@@ -97,6 +97,18 @@ import VaporTesting
         }
     }
 
+    /// The duplicate check folds case the way `coursesMatching` does when it
+    /// resolves a key, so "cs139" and "CS139" cannot both be active in one
+    /// term and both answer the same URL key (#1779).
+    @Test func duplicateCheckIgnoresCase() async throws {
+        try await withApp(app) { app in
+            try await course("CS140", fall26)
+            #expect(try await activeCourseCodeIsTaken("cs140", term: fall26, excluding: nil, on: app.db))
+            #expect(try await activeCourseCodeIsTaken("Cs140", term: fall26, excluding: nil, on: app.db))
+            #expect(!(try await activeCourseCodeIsTaken("cs140", term: winter27, excluding: nil, on: app.db)))
+        }
+    }
+
     // MARK: - URL key
 
     @Test func urlKeyIsTheCodeAloneWithoutATerm() async throws {
