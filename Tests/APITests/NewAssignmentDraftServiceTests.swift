@@ -298,6 +298,25 @@ import VaporTesting
         }
     }
 
+    /// An upload-only declaration keeps `uploadOnly` + `worker` through a
+    /// suite action. The rebuild used to write `notebook` and the section's
+    /// grading mode over it (#1720).
+    @Test func clearingSuiteFilesKeepsAnUploadOnlyDeclaration() async throws {
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_lang_cpp")
+            try await declareManifestLanguage(setup: setup, to: .cpp, on: app.db)
+
+            var service = makeService(
+                courseID: courseID, setup: setup, payload: makePayload(action: "clear-suite-files"))
+            #expect(try await service.perform() == .applied)
+
+            let props = try #require(setup.decodedManifest())
+            #expect(props.language == .cpp)
+            #expect(props.submissionMode == .uploadOnly)
+            #expect(props.gradingMode == .worker)
+        }
+    }
+
     // MARK: - Unknown / empty action
 
     @Test func unknownActionIsNoOpReturningApplied() async throws {

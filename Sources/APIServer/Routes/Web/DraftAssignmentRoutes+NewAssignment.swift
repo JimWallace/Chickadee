@@ -320,24 +320,15 @@ extension DraftAssignmentRoutes {
         // checks across the manifest rebuild.
         let preserved = preservedDraftDescriptors(draftSetup: validated.draftSetup)
 
-        let manifest = try makeWorkerManifestJSON(
+        // The draft's manifest is the base, so the declared language, the
+        // upload-only mode it set, the activity, families, checks and sections
+        // all survive the publish without being named (#1720).
+        let manifest = try rebuildDraftManifestJSON(
+            preserved.props,
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
-            gradingMode: sectionGradingMode,
-            patternFamilies: preserved.families,
-            notebookChecks: preserved.checks,
-            sections: preserved.sections,
-            // The draft already carries the author's language — the select on
-            // the create page is `required` and `updateNewAssignmentDraft`
-            // records it before this save runs. Preserving it here is not
-            // belt-and-braces: this builder writes a fresh dict, so leaving it
-            // out silently discarded the declaration at the moment of publish,
-            // and the assignment came out with the language the author picked
-            // erased.
-            language: preserved.props?.language,
-            languageDeclared: preserved.props?.languageDeclared == true,
-            // The draft's activity block, for the same fresh-dict reason.
-            activity: preserved.props?.activity
+            sectionGradingMode: sectionGradingMode,
+            starterNotebook: "assignment.ipynb"
         )
         let setup = try await persistNewAssignmentSetup(
             req: req,

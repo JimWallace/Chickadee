@@ -325,19 +325,15 @@ struct NewAssignmentDraftService {
         let starterNotebook =
             setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent }
             ?? "assignment.ipynb"
-        // The declaration survives a suite replacement. Uploading test files
-        // says nothing about which language the author chose, and this builder
-        // writes a fresh dict — so not threading these two erased the choice
-        // the create page had already recorded.
-        let declared = declaredLanguage()
-        setup.manifest = try makeWorkerManifestJSON(
+        // Uploading test files says nothing about the language the author
+        // declared, or the upload-only mode it set: the draft's manifest is
+        // the base (#1720).
+        setup.manifest = try rebuildDraftManifestJSON(
+            setup.decodedManifest(),
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
-            gradingMode: sectionGradingMode,
-            starterNotebook: starterNotebook,
-            language: declared.language,
-            languageDeclared: declared.declared,
-            activity: setup.decodedManifest()?.activity
+            sectionGradingMode: sectionGradingMode,
+            starterNotebook: starterNotebook
         )
         try await setup.save(on: req.db)
         await extractSupportFilesToSharedDirectory(
@@ -355,27 +351,14 @@ struct NewAssignmentDraftService {
         _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: setup.zipPath)
         // Clearing the suite empties the test files, not the author's choice of
         // language — see `replaceSuiteFiles`.
-        let declared = declaredLanguage()
-        setup.manifest = try makeWorkerManifestJSON(
+        setup.manifest = try rebuildDraftManifestJSON(
+            setup.decodedManifest(),
             testSuites: [],
             includeMakefile: false,
-            gradingMode: try await newAssignmentSectionGradingMode(
+            sectionGradingMode: try await newAssignmentSectionGradingMode(
                 req: req, courseID: courseID, sectionIDRaw: payload.sectionIDRaw),
-            starterNotebook: starterNotebook,
-            language: declared.language,
-            languageDeclared: declared.declared,
-            activity: setup.decodedManifest()?.activity
+            starterNotebook: starterNotebook
         )
         try await setup.save(on: req.db)
-    }
-
-    /// The draft's recorded declaration, read back off its own manifest.
-    ///
-    /// Both halves travel together on purpose: `language` alone cannot express
-    /// "the author picked None", so a rebuild that carried only the language
-    /// would still turn a deliberate None back into an unanswered question.
-    private func declaredLanguage() -> (language: AssignmentLanguage?, declared: Bool) {
-        guard let props = setup.decodedManifest() else { return (nil, false) }
-        return (props.language, props.languageDeclared == true)
     }
 }
