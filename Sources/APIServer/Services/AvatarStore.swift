@@ -76,12 +76,18 @@ enum AvatarStore {
         if let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) {
             return handle
         }
-        let courseID = enrollment.$course.id
-        let taken = Set(
-            try await APICourseEnrollment.query(on: db)
-                .filter(\.$course.$id == courseID)
-                .all()
-                .compactMap(\.avatarHandle))
+        return try await ensureHandle(
+            for: enrollment, taken: takenHandles(inCourse: enrollment.$course.id, on: db), on: db)
+    }
+
+    /// `ensureHandle(for:on:)` with the course's taken handles already
+    /// loaded, for a page that draws more than once per enrollment (#1759).
+    static func ensureHandle(
+        for enrollment: APICourseEnrollment, taken: Set<String>, on db: Database
+    ) async throws -> String? {
+        if let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) {
+            return handle
+        }
         guard let handle = AvatarHandle.make(excluding: taken) else { return nil }
 
         enrollment.avatarHandle = handle
@@ -115,12 +121,7 @@ enum AvatarStore {
     static func redrawHandle(
         for enrollment: APICourseEnrollment, on db: Database
     ) async throws -> String? {
-        let courseID = enrollment.$course.id
-        var taken = Set(
-            try await APICourseEnrollment.query(on: db)
-                .filter(\.$course.$id == courseID)
-                .all()
-                .compactMap(\.avatarHandle))
+        var taken = try await takenHandles(inCourse: enrollment.$course.id, on: db)
         let previous = enrollment.avatarHandle
         for _ in 0..<3 {
             guard let handle = AvatarHandle.make(excluding: taken) else { break }
@@ -138,13 +139,16 @@ enum AvatarStore {
 
     // MARK: - The student's one choice (docs/student-avatars.md §3)
 
-    /// Every handle already stored in this course.
+    /// Every handle already stored in this course. The one query behind every
+    /// draw and check: one column, rows with a handle only, never the full
+    /// enrollment rows (#1759).
     static func takenHandles(inCourse courseID: UUID, on db: Database) async throws -> Set<String> {
         Set(
             try await APICourseEnrollment.query(on: db)
                 .filter(\.$course.$id == courseID)
-                .all()
-                .compactMap(\.avatarHandle))
+                .filter(\.$avatarHandle != nil)
+                .all(\.$avatarHandle)
+                .compactMap { $0 })
     }
 
     /// Two unused handles from the current lists, for the account page's
@@ -154,7 +158,12 @@ enum AvatarStore {
     static func drawAlternates(
         for enrollment: APICourseEnrollment, count: Int = 2, on db: Database
     ) async throws -> [String] {
-        var taken = try await takenHandles(inCourse: enrollment.$course.id, on: db)
+        drawAlternates(taken: try await takenHandles(inCourse: enrollment.$course.id, on: db), count: count)
+    }
+
+    /// `drawAlternates(for:count:on:)` from a set the caller already loaded.
+    static func drawAlternates(taken: Set<String>, count: Int = 2) -> [String] {
+        var taken = taken
         var alternates: [String] = []
         while alternates.count < count, let handle = AvatarHandle.make(excluding: taken) {
             alternates.append(handle)

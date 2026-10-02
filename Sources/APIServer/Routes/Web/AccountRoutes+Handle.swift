@@ -49,16 +49,15 @@ extension AccountRoutes {
     /// available so that reloading the page does not deal a new pair, and
     /// drawn again when either has gone.
     static func handleOffer(
-        for enrollment: APICourseEnrollment, req: Request
-    ) async throws -> [String] {
+        for enrollment: APICourseEnrollment, taken: Set<String>, req: Request
+    ) -> [String] {
         guard let enrollmentID = enrollment.id else { return [] }
         let key = handleOfferKey(enrollmentID)
-        let taken = try await AvatarStore.takenHandles(inCourse: enrollment.$course.id, on: req.db)
         let stored = (req.session.data[key] ?? "").split(separator: "|").map(String.init)
         if stored.count == 2, stored.allSatisfy({ AvatarStore.isStillAvailable($0, taken: taken) }) {
             return stored
         }
-        let fresh = try await AvatarStore.drawAlternates(for: enrollment, on: req.db)
+        let fresh = AvatarStore.drawAlternates(taken: taken)
         req.session.data[key] = fresh.isEmpty ? nil : fresh.joined(separator: "|")
         return fresh
     }
@@ -72,12 +71,16 @@ extension AccountRoutes {
         var choices: [UUID: AccountHandleChoice] = [:]
         let takenCourseID = req.query[String.self, at: "handleTaken"]
         for enrollment in enrollments where enrollment.role == .student {
-            guard let courseID = enrollment.course.id,
-                let handle = try await AvatarStore.ensureHandle(for: enrollment, on: req.db)
+            // One roster read per enrollment, shared by the draw and the
+            // alternates (#1759).
+            guard let courseID = enrollment.course.id else { continue }
+            var taken = try await AvatarStore.takenHandles(inCourse: courseID, on: req.db)
+            guard let handle = try await AvatarStore.ensureHandle(for: enrollment, taken: taken, on: req.db)
             else { continue }
+            taken.insert(handle)
             handles[courseID] = handle
-            choices[courseID] = try await handleChoice(
-                for: enrollment, handle: handle, spec: spec,
+            choices[courseID] = handleChoice(
+                for: enrollment, handle: handle, spec: spec, taken: taken,
                 wasTaken: takenCourseID == courseID.uuidString, req: req)
         }
         return (handles, choices)
@@ -85,13 +88,13 @@ extension AccountRoutes {
 
     /// The handle part of a course row on the account page.
     static func handleChoice(
-        for enrollment: APICourseEnrollment, handle: String, spec: AvatarSpec,
+        for enrollment: APICourseEnrollment, handle: String, spec: AvatarSpec, taken: Set<String>,
         wasTaken: Bool, req: Request
-    ) async throws -> AccountHandleChoice {
+    ) -> AccountHandleChoice {
         guard enrollment.avatarHandleLockedAt == nil else {
             return AccountHandleChoice(isLocked: true, options: [], canChoose: false, wasTaken: false)
         }
-        let alternates = try await handleOffer(for: enrollment, req: req)
+        let alternates = handleOffer(for: enrollment, taken: taken, req: req)
         let avatar = AvatarPresentation(for: spec, size: .small, accessibility: .decorative)
         let options =
             [AccountHandleOption(handle: handle, isCurrent: true, avatar: avatar)]
