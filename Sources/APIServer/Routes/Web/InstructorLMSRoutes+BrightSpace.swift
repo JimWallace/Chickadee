@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/InstructorDashboardRoutes+BrightSpace.swift
+// APIServer/Routes/Web/InstructorLMSRoutes+BrightSpace.swift
 //
 // The instructor BrightSpace tab: connection status, the assignment→grade-
 // item mapping, the sync-activity log, manual sync actions, and the LEARN
@@ -22,7 +22,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension InstructorDashboardRoutes {
+extension InstructorLMSRoutes {
 
     // MARK: - GET /instructor/brightspace
 
@@ -446,7 +446,7 @@ struct BrightspaceTestResult: Content {
     let message: String
 }
 
-extension InstructorDashboardRoutes {
+extension InstructorLMSRoutes {
     /// Sets the flash the BrightSpace page shows on its next load and sends
     /// the browser back to it. Every mutating handler on the page ends here
     /// (#1714); the page reads and clears the two keys.

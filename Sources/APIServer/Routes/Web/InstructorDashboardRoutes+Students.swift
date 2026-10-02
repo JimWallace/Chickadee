@@ -209,3 +209,13 @@ struct StudentRowsFragmentContext: Encodable {
     let enrolledStudents: [EnrolledStudentRow]
     let rosterReadOnly: Bool
 }
+
+extension InstructorDashboardRoutes {
+    /// True when the roster check reads the LMS membership instead of the
+    /// Valence classlist. The Students tab's decision, asked here and by
+    /// `InstructorLMSRoutes.studentsLearnCheck`.
+    static func rosterCheckUsesLTI(course: APICourse, valenceConfigured: Bool) -> Bool {
+        guard course.ltiMembershipsURL != nil, course.ltiPlatformID != nil else { return false }
+        return course.usesLTIGrades || !valenceConfigured || (course.brightspaceOrgUnitID ?? "").isEmpty
+    }
+}
