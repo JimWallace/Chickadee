@@ -59,10 +59,10 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     }
 
     let lines = splitLines(output.stdout)
-    let lastLine = lines.map(trimHorizontal).last { !$0.isEmpty }
+    let lastLine = lines.map(trimHorizontalWhitespace).last { !$0.isEmpty }
 
     // The footer is the last non-empty line iff it's a JSON object.
-    let footer: [String: JSONValue]? = {
+    let footer: [String: FooterValue]? = {
         guard let line = lastLine, case .object(let dict) = parseJSON(line) else { return nil }
         return dict
     }()
@@ -90,7 +90,7 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     let strippedStdout: String
     if footer != nil {
         var stdoutLines = lines
-        if let lastIdx = stdoutLines.indices.last(where: { !trimHorizontal(stdoutLines[$0]).isEmpty }) {
+        if let lastIdx = stdoutLines.indices.last(where: { !trimHorizontalWhitespace(stdoutLines[$0]).isEmpty }) {
             stdoutLines.remove(at: lastIdx)
         }
         strippedStdout = stdoutLines.joined(separator: "\n")
@@ -125,7 +125,7 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
 /// report ("tour length 1234"), and a script that reports none has no ranking
 /// position rather than a default one. It is also orthogonal to `score` — a
 /// failing run may still report the distance it reached.
-private func rankingMetric(footer: [String: JSONValue]?) -> Double? {
+private func rankingMetric(footer: [String: FooterValue]?) -> Double? {
     guard let footer, case .number(let m)? = footer["metric"] else { return nil }
     return m
 }
@@ -135,7 +135,7 @@ private func rankingMetric(footer: [String: JSONValue]?) -> Double? {
 /// `score` drives the credit, and the two are orthogonal (a script may report a
 /// `score` on either). With no footer `score` it's full credit on a pass and
 /// none otherwise, so scripts that don't opt into partial credit grade as before.
-private func partialCreditScore(footer: [String: JSONValue]?, status: TestStatus) -> Double {
+private func partialCreditScore(footer: [String: FooterValue]?, status: TestStatus) -> Double {
     if let footer, case .number(let s)? = footer["score"] {
         return min(1, max(0, s))
     }
@@ -146,21 +146,9 @@ private func partialCreditScore(footer: [String: JSONValue]?, status: TestStatus
 /// footer carries a matching `test` field, so the one-line summary doesn't
 /// repeat the test name shown as the row heading. Returns the input unchanged
 /// when there's no `test` field or no matching prefix.
-private func stripTestLabelPrefix(_ shortResult: String, footer: [String: JSONValue]) -> String {
+private func stripTestLabelPrefix(_ shortResult: String, footer: [String: FooterValue]) -> String {
     guard case .string(let label)? = footer["test"], !label.isEmpty else { return shortResult }
     let prefix = "\(label): "
     guard shortResult.hasPrefix(prefix) else { return shortResult }
     return String(shortResult.dropFirst(prefix.count))
-}
-
-// MARK: - Embedded-safe string helpers (file-private to avoid collisions)
-
-private func trimHorizontal(_ s: String) -> String {
-    let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
-    return String(s.drop(while: isHWS).reversed().drop(while: isHWS).reversed())
-}
-
-private func trimWhitespaceAndNewlines(_ s: String) -> String {
-    let isWS: (Character) -> Bool = isWhitespaceOrLineBreak
-    return String(s.drop(while: isWS).reversed().drop(while: isWS).reversed())
 }

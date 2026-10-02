@@ -259,7 +259,7 @@ private func assembleExtractedSource(
         // A switch rather than the `== .lua ? … : …` ternary this used to
         // be: the ternary compiles forever and would have routed Octave to
         // the R extractor (runbook item 5's shape, one size smaller).
-        let extracted: ExtractedRNotebook
+        let extracted: ExtractedVerbatimNotebook
         switch language {
         case .lua: extracted = extractLua(cells: inputCells, filename: filename)
         case .octave: extracted = extractOctave(cells: inputCells, filename: filename)
