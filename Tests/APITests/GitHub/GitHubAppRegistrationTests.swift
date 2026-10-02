@@ -101,8 +101,9 @@ import VaporTesting
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     #expect(res.status == .ok)
-                    #expect(res.body.string.contains("secrets file at"))
-                    #expect(res.body.string.contains(secretsPath))
+                    #expect(res.body.string.contains("Secrets file missing."))
+                    #expect(res.body.string.contains("<code>\(secretsPath)</code>"))
+                    #expect(res.body.string.contains("tier-danger\">Unavailable"))
                 })
         }
     }

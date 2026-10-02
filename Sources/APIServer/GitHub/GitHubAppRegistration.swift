@@ -26,13 +26,19 @@ enum GitHubAppRegistration {
             }
         }
 
-        /// The sentence the admin page shows.
-        var sentence: String {
+        /// True for a file that is absent; false for one that will not decode.
+        var isMissing: Bool {
+            if case .missing = self { return true }
+            return false
+        }
+
+        /// The one-line description for the log. The admin page writes its
+        /// own copy from `isMissing` and `path`, so no decoder description
+        /// reaches the page.
+        var logDescription: String {
             switch self {
-            case .missing(let path):
-                "The App's secrets file at \(path) is missing. Restore it, or remove the App and register it again."
-            case .unreadable(let path, let reason):
-                "The App's secrets file at \(path) could not be read (\(reason)). Restore it, or remove the App and register it again."
+            case .missing(let path): "secrets file missing at \(path)"
+            case .unreadable(let path, let reason): "secrets file unreadable at \(path): \(reason)"
             }
         }
     }
@@ -84,7 +90,7 @@ enum GitHubAppRegistration {
         case .secretsUnavailable(_, let problem):
             req.logger.error(
                 "GitHub App secrets unavailable",
-                metadata: ["path": "\(problem.path)", "problem": "\(problem.sentence)"])
+                metadata: ["path": "\(problem.path)", "problem": "\(problem.logDescription)"])
             return nil
         }
     }
