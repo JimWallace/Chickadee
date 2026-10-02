@@ -208,21 +208,7 @@ extension GitHubRepoClient {
         let commit: Details
     }
 
-    private static let api = "https://api.github.com"
-
-    /// How long one API call may take. Vapor's shared client sets no read
-    /// timeout of its own, so without this a GitHub connection that stops
-    /// answering holds the caller for as long as the socket lives (#1773).
-    static let callTimeout: TimeAmount = .seconds(30)
-
-    private static func headers(token: String) -> HTTPHeaders {
-        var headers = HTTPHeaders()
-        headers.replaceOrAdd(name: .accept, value: "application/vnd.github+json")
-        headers.replaceOrAdd(name: "X-GitHub-Api-Version", value: "2022-11-28")
-        headers.replaceOrAdd(name: .userAgent, value: "Chickadee")
-        headers.bearerAuthorization = BearerAuthorization(token: token)
-        return headers
-    }
+    private static let api = GitHubTransport.api
 
     /// Escapes one path segment. `/` is escaped too, so a branch name such as
     /// `feature/x` stays one segment.
@@ -245,19 +231,14 @@ extension GitHubRepoClient {
         return decoder
     }
 
-    /// The calls every live closure makes. Only the transport call is
-    /// wrapped in the reachability record: a non-2xx answer means GitHub was
-    /// reached, which the rule must not report as an outage.
+    /// The calls every live closure makes, on `GitHubTransport`, which sets
+    /// the headers and the timeout and records reachability.
     private struct LiveTransport: Sendable {
-        let app: Application
+        let transport: GitHubTransport
 
         func get(_ path: String, token: String) async throws -> ClientResponse {
-            let client = app.client
-            let response = try await app.recordingReachability(.github) {
-                try await client.get(URI(string: api + path), headers: headers(token: token)) { request in
-                    request.timeout = callTimeout
-                }
-            }
+            let response = try await transport.send(
+                .GET, api + path, headers: GitHubTransport.apiHeaders(bearer: token))
             return try refusingAStaleToken(response)
         }
 
@@ -271,12 +252,10 @@ extension GitHubRepoClient {
         func send(
             _ method: HTTPMethod, _ path: String, token: String, body: some Content & Sendable
         ) async throws -> ClientResponse {
-            let client = app.client
-            let response = try await app.recordingReachability(.github) {
-                try await client.send(method, headers: headers(token: token), to: URI(string: api + path)) { req in
-                    req.timeout = callTimeout
-                    try req.content.encode(body, as: .json)
-                }
+            let response = try await transport.send(
+                method, api + path, headers: GitHubTransport.apiHeaders(bearer: token)
+            ) { request in
+                try request.content.encode(body, as: .json)
             }
             return try refusingAStaleToken(response)
         }
@@ -289,9 +268,9 @@ extension GitHubRepoClient {
 
     /// The client that calls api.github.com.
     static func live(app: Application) -> GitHubRepoClient {
-        let client = app.client
         let http = app.http.client.shared
-        let transport = LiveTransport(app: app)
+        let github = GitHubTransport(app: app)
+        let transport = LiveTransport(transport: github)
         var live = GitHubRepoClient(
             findInstallation: { appJWT, login in
                 let response = try await transport.get("/users/\(pathSegment(login))/installation", token: appJWT)
@@ -300,11 +279,9 @@ extension GitHubRepoClient {
                 return GitHubInstallation(id: body.id, accountID: body.account.id)
             },
             createInstallationToken: { appJWT, installationID in
-                let response = try await app.recordingReachability(.github) {
-                    try await client.post(
-                        URI(string: api + "/app/installations/\(installationID)/access_tokens"),
-                        headers: headers(token: appJWT))
-                }
+                let response = try await github.send(
+                    .POST, api + "/app/installations/\(installationID)/access_tokens",
+                    headers: GitHubTransport.apiHeaders(bearer: appJWT))
                 // The installation ID no longer exists: removed, or re-made
                 // under a new ID (#1768).
                 if response.status == .notFound { throw GitHubSubmitError.notInstalled }
@@ -339,7 +316,7 @@ extension GitHubRepoClient {
                 // GitHub answers with a redirect to a short-lived download URL,
                 // which the HTTP client follows.
                 var request = HTTPClientRequest(url: api + "/repos/\(repoPath(fullName))/tarball/\(pathSegment(sha))")
-                request.headers = headers(token: token)
+                request.headers = GitHubTransport.apiHeaders(bearer: token)
                 let response = try await app.recordingReachability(.github) {
                     try await http.execute(request, timeout: .seconds(60))
                 }

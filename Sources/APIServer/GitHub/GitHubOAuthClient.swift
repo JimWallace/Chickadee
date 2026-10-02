@@ -6,7 +6,8 @@
 // discards the token, so revoking it right away leaves nothing usable behind.
 //
 // The calls are closures on the Application, so tests swap in fakes and never
-// reach the network (the `GitHubManifestConverter` seam).
+// reach the network (the `GitHubManifestConverter` seam). The live closures go
+// through `GitHubTransport`, so each one records GitHub's reachability.
 
 import Foundation
 import Vapor
@@ -122,27 +123,26 @@ extension GitHubOAuthClient {
         let role: String
     }
 
-    private static func apiHeaders(_ headers: inout HTTPHeaders) {
-        headers.replaceOrAdd(name: .accept, value: "application/vnd.github+json")
-        headers.replaceOrAdd(name: "X-GitHub-Api-Version", value: "2022-11-28")
-        headers.replaceOrAdd(name: .userAgent, value: "Chickadee")
-    }
-
-    /// The client that calls github.com and api.github.com.
-    static func live(client: any Client) -> GitHubOAuthClient {
-        GitHubOAuthClient(
+    /// The client that calls github.com and api.github.com, through
+    /// `GitHubTransport`.
+    static func live(app: Application) -> GitHubOAuthClient {
+        let github = GitHubTransport(app: app)
+        let api = GitHubTransport.api
+        return GitHubOAuthClient(
             exchangeCode: { exchange in
-                let response = try await client.post(
-                    URI(string: "https://github.com/login/oauth/access_token")
+                // The token endpoint is on github.com, not the REST API, and
+                // answers JSON only when asked to.
+                var headers = HTTPHeaders()
+                headers.replaceOrAdd(name: .accept, value: "application/json")
+                headers.replaceOrAdd(name: .userAgent, value: GitHubTransport.userAgent)
+                let request = TokenRequest(
+                    clientID: exchange.clientID, clientSecret: exchange.clientSecret,
+                    code: exchange.code, codeVerifier: exchange.codeVerifier,
+                    redirectURI: exchange.redirectURI)
+                let response = try await github.send(
+                    .POST, "https://github.com/login/oauth/access_token", headers: headers
                 ) { req in
-                    req.headers.replaceOrAdd(name: .accept, value: "application/json")
-                    req.headers.replaceOrAdd(name: .userAgent, value: "Chickadee")
-                    try req.content.encode(
-                        TokenRequest(
-                            clientID: exchange.clientID, clientSecret: exchange.clientSecret,
-                            code: exchange.code, codeVerifier: exchange.codeVerifier,
-                            redirectURI: exchange.redirectURI),
-                        as: .urlEncodedForm)
+                    try req.content.encode(request, as: .urlEncodedForm)
                 }
                 // GitHub answers 200 with an `error` field for a bad code.
                 let body = try response.content.decode(TokenResponse.self)
@@ -151,20 +151,18 @@ extension GitHubOAuthClient {
                 return token
             },
             fetchUser: { token in
-                let response = try await client.get(URI(string: "https://api.github.com/user")) { req in
-                    apiHeaders(&req.headers)
-                    req.headers.bearerAuthorization = BearerAuthorization(token: token)
-                }
+                let response = try await github.send(
+                    .GET, api + "/user", headers: GitHubTransport.apiHeaders(bearer: token))
                 guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
                 return try response.content.decode(GitHubUser.self)
             },
             revokeToken: { token, clientID, clientSecret in
-                let response = try await client.delete(
-                    URI(string: "https://api.github.com/applications/\(clientID)/token")
+                var headers = GitHubTransport.apiHeaders()
+                headers.basicAuthorization = BasicAuthorization(username: clientID, password: clientSecret)
+                let response = try await github.send(
+                    .DELETE, api + "/applications/\(GitHubRepoClient.pathSegment(clientID))/token",
+                    headers: headers
                 ) { req in
-                    apiHeaders(&req.headers)
-                    req.headers.basicAuthorization = BasicAuthorization(
-                        username: clientID, password: clientSecret)
                     try req.content.encode(["access_token": token], as: .json)
                 }
                 guard response.status == .noContent || response.status == .ok else {
@@ -172,12 +170,9 @@ extension GitHubOAuthClient {
                 }
             },
             userInstallations: { token in
-                let response = try await client.get(
-                    URI(string: "https://api.github.com/user/installations?per_page=100")
-                ) { req in
-                    apiHeaders(&req.headers)
-                    req.headers.bearerAuthorization = BearerAuthorization(token: token)
-                }
+                let response = try await github.send(
+                    .GET, api + "/user/installations?per_page=100",
+                    headers: GitHubTransport.apiHeaders(bearer: token))
                 guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
                 return try response.content.decode(InstallationList.self).installations.map {
                     GitHubUserInstallation(
@@ -186,15 +181,9 @@ extension GitHubOAuthClient {
                 }
             },
             organizationRole: { token, organization in
-                let response = try await client.get(
-                    URI(
-                        string:
-                            "https://api.github.com/user/memberships/orgs/\(GitHubRepoClient.pathSegment(organization))"
-                    )
-                ) { req in
-                    apiHeaders(&req.headers)
-                    req.headers.bearerAuthorization = BearerAuthorization(token: token)
-                }
+                let response = try await github.send(
+                    .GET, api + "/user/memberships/orgs/\(GitHubRepoClient.pathSegment(organization))",
+                    headers: GitHubTransport.apiHeaders(bearer: token))
                 if response.status == .notFound || response.status == .forbidden { return nil }
                 guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
                 let membership = try response.content.decode(Membership.self)
@@ -210,7 +199,7 @@ private struct GitHubOAuthClientKey: StorageKey {
 extension Application {
     /// The live client calls GitHub; tests replace it.
     var githubOAuthClient: GitHubOAuthClient {
-        get { storage[GitHubOAuthClientKey.self] ?? .live(client: client) }
+        get { storage[GitHubOAuthClientKey.self] ?? .live(app: self) }
         set { storage[GitHubOAuthClientKey.self] = newValue }
     }
 }
