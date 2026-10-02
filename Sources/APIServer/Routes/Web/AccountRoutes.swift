@@ -65,44 +65,18 @@ struct AccountRoutes: RouteCollection {
 
         let enrolledRows =
             enrollments
-            .compactMap { e -> AccountCourseRow? in
-                guard let id = e.course.id else { return nil }
-                // "N of M slip days left" only where it means something: the
-                // course has slip days on and this enrollment is a student
-                // (staff never hold a balance). The phrase carries its own
-                // noun so the row needs no "Slip days:" label beside it.
-                let policy = e.course.slipDayPolicy
-                let slipDaysText: String?
-                if policy.enabled, e.role == .student {
-                    let total = policy.daysPerStudent + (e.slipDaysAdjustment ?? 0)
-                    let used = spendCountByCourseID[id] ?? 0
-                    slipDaysText = "\(max(total - used, 0)) of \(total) slip days left"
-                } else {
-                    slipDaysText = nil
+            .compactMap { e in
+                e.course.id.map { id in
+                    Self.enrolledCourseRow(
+                        for: e, courseID: id, slipDaysUsed: spendCountByCourseID[id] ?? 0,
+                        handle: handlesByCourseID[id], handleChoice: handleChoicesByCourseID[id])
                 }
-                return AccountCourseRow(
-                    id: id.uuidString,
-                    code: e.course.code,
-                    name: e.course.name, termLabel: e.course.term?.displayName,
-                    enrollmentMode: e.course.enrollmentMode.rawValue,
-                    slipDaysText: slipDaysText,
-                    handle: handlesByCourseID[id],
-                    handleChoice: handleChoicesByCourseID[id]
-                )
             }
             .sorted { $0.code < $1.code }
 
-        let availableRows =
-            allCourses
-            .compactMap { c -> AccountCourseRow? in
-                guard let id = c.id, !enrolledIDs.contains(id),
-                    c.enrollmentMode == .open
-                else { return nil }
-                return AccountCourseRow(
-                    id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName,
-                    enrollmentMode: c.enrollmentMode.rawValue,
-                    slipDaysText: nil, handle: nil, handleChoice: nil)
-            }
+        let availableRows = allCourses.compactMap { c in
+            Self.availableCourseRow(c, enrolledIDs: enrolledIDs)
+        }
 
         // Personal-data export state (#557) for the "Your data" section.
         let export = try await APIDataExport.query(on: req.db)
@@ -319,23 +293,4 @@ private struct AccountGitHubContext: Encodable {
     /// The linked login, or nil when no account is linked. The section is
     /// built without a login only when the Link button works.
     let login: String?
-}
-
-private struct AccountCourseRow: Encodable {
-    let id: String
-    let code: String
-    let name: String
-    /// "Fall 2026", or nil when the course records no term.
-    let termLabel: String?
-    let enrollmentMode: String
-    /// "1 of 2 remaining" — the slip-day balance for a student enrollment in
-    /// a course with the policy on; nil hides the line (#1228).
-    let slipDaysText: String?
-    /// This student's pseudonym in this course, "Hazy Cedar". nil hides the
-    /// line — a course whose word lists are exhausted, which is a real state
-    /// rather than an error: the avatar still shows.
-    let handle: String?
-    /// Whether the student can still choose a different handle, and the
-    /// options if so.  nil wherever `handle` is nil.
-    let handleChoice: AccountHandleChoice?
 }
