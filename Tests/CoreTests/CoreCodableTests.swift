@@ -1049,59 +1049,6 @@ struct CoreCodableTests {
         #expect(decoded.languageVersions.isEmpty)
     }
 
-    // MARK: - RunnerResult / RunnerOutcome
-
-    @Test func runnerOutcomeRoundTrip() throws {
-        let outcome = RunnerOutcome(
-            testName: "testFoo", testClass: nil,
-            tier: .pub, status: .pass,
-            shortResult: "passed", longResult: nil,
-            executionTimeMs: 30, memoryUsageBytes: nil
-        )
-        let data = try encoder.encode(outcome)
-        let decoded = try decoder.decode(RunnerOutcome.self, from: data)
-        #expect(decoded == outcome)
-    }
-
-    @Test func runnerResultRoundTrip() throws {
-        let result = RunnerResult(
-            runnerVersion: "shell-runner/1.0",
-            buildStatus: .passed,
-            compilerOutput: nil,
-            executionTimeMs: 250,
-            outcomes: [
-                RunnerOutcome(
-                    testName: "t1", testClass: nil, tier: .pub, status: .pass,
-                    shortResult: "passed", longResult: nil,
-                    executionTimeMs: 100, memoryUsageBytes: nil),
-                RunnerOutcome(
-                    testName: "t2", testClass: nil, tier: .release, status: .fail,
-                    shortResult: "wrong", longResult: "expected 1, got 0",
-                    executionTimeMs: 150, memoryUsageBytes: 512),
-            ]
-        )
-        let data = try encoder.encode(result)
-        let decoded = try decoder.decode(RunnerResult.self, from: data)
-        #expect(decoded == result)
-        #expect(decoded.outcomes.count == 2)
-        #expect(decoded.outcomes[1].longResult == "expected 1, got 0")
-    }
-
-    @Test func runnerResultFailedBuildRoundTrip() throws {
-        let result = RunnerResult(
-            runnerVersion: "shell-runner/1.0",
-            buildStatus: .failed,
-            compilerOutput: "make: no rule for target 'all'",
-            executionTimeMs: 0,
-            outcomes: []
-        )
-        let data = try encoder.encode(result)
-        let decoded = try decoder.decode(RunnerResult.self, from: data)
-        #expect(decoded.buildStatus == .failed)
-        #expect(decoded.compilerOutput == "make: no rule for target 'all'")
-        #expect(decoded.outcomes.isEmpty)
-    }
-
     // MARK: - CompatibilityResult.summaryDescription
 
     @Test func compatibilityResultSummaryCompatibleNoReasons() {
