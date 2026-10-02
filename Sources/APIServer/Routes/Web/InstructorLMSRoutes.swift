@@ -32,6 +32,7 @@ struct InstructorLMSRoutes: RouteCollection {
         r.get("lti-grades", use: ltiGradesPage)
         r.post("lti-grades", "transport", use: saveLTIGradeTransport)
         r.post("lti-grades", "push-all", use: pushAllLTIGrades)
+        r.post("lti-grades", "link-students", use: linkLTIStudents)
         // Push one assignment's grades to BrightSpace.
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
     }

@@ -55,6 +55,20 @@ extension MCPServerInstructions {
 /// `isCustomized == false`.  An unknown subject resolves to nothing rather than
 /// an error — initialize must succeed regardless.
 func mcpCourseGuidance(forSubject subject: String, db: any Database) async throws -> [MCPCourseGuidance] {
+    try await mcpAuthorableCourses(forSubject: subject, db: db).map { course in
+        MCPCourseGuidance(
+            courseCode: course.urlKey,
+            text: courseAuthoringVoice(course),
+            isCustomized: courseHasCustomAuthoringVoice(course))
+    }
+}
+
+/// The courses the token subject can author in, as `mcpCourseGuidance`
+/// scopes them: the non-archived enrolled courses where the account holds a
+/// per-course role of TA or higher (admins qualify through any enrollment),
+/// in course-code order. The guidance resource resolves its course segment
+/// against this list, so the read and the listing agree (#1782).
+func mcpAuthorableCourses(forSubject subject: String, db: any Database) async throws -> [APICourse] {
     guard
         let user = try await APIUser.query(on: db)
             .filter(\.$username == subject)
@@ -63,12 +77,7 @@ func mcpCourseGuidance(forSubject subject: String, db: any Database) async throw
     else { return [] }
     return try await enrolledCoursesWithRoles(for: userID, on: db)
         .filter { user.isAdmin || $0.role >= .ta }
-        .map { enrolled in
-            MCPCourseGuidance(
-                courseCode: enrolled.course.urlKey,
-                text: courseAuthoringVoice(enrolled.course),
-                isCustomized: courseHasCustomAuthoringVoice(enrolled.course))
-        }
+        .map(\.course)
 }
 
 /// The voice guide in force for `course`: its own text when customized, else

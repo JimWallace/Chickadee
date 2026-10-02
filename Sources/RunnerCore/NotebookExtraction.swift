@@ -62,7 +62,7 @@ public func extractPython(cells: [NotebookCell], filename: String) -> ExtractedN
         guard !trimmedSource.isEmpty else { continue }
 
         let cellSource = sanitizeCellForModule(trimmedSource)
-        guard !trimmedString(cellSource).isEmpty else { continue }
+        guard !trimWhitespaceAndNewlines(cellSource).isEmpty else { continue }
 
         codeCellCount += 1
         let label = "cell \(index + 1)"
@@ -83,15 +83,17 @@ public func extractPython(cells: [NotebookCell], filename: String) -> ExtractedN
     )
 }
 
-// MARK: - R extraction (shared by both runners)
+// MARK: - Verbatim extraction (R, Lua, Octave, C++, Racket, Java; shared by both runners)
 
-/// One R notebook flattened to a `.R` module. Unlike `ExtractedNotebook` there
-/// is no separate introspectable view: R cells are emitted verbatim (no
-/// exec-wrap), so the one output serves both execution and source-level checks.
-public struct ExtractedRNotebook: Sendable, Equatable {
+/// One notebook flattened to a single source file in a language whose cells
+/// are emitted verbatim. Unlike `ExtractedNotebook` (Python) there is no
+/// separate introspectable view: no cell is exec-wrapped, so the one output
+/// serves both execution and source-level checks. R was the first language
+/// to use it; the other five share it unchanged.
+public struct ExtractedVerbatimNotebook: Sendable, Equatable {
     /// Header + a boundary marker per kept cell + the cell's source. Markers
-    /// are inert R comments; the grading runtime's `chickadee_student_cells()`
-    /// splits on them to recover cell granularity.
+    /// are inert comments in the language; the grading runtime's
+    /// `chickadee_student_cells()` splits on them to recover cell granularity.
     public let source: String
     public let codeCellCount: Int
 
@@ -108,7 +110,7 @@ public struct ExtractedRNotebook: Sendable, Equatable {
 /// than silently renumbering. Byte-identical to the extraction the native
 /// worker performed inline before the hoist (PR #1235), including the
 /// header-only output for a notebook with no code cells.
-public func extractR(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+public func extractR(cells: [NotebookCell], filename: String) -> ExtractedVerbatimNotebook {
     extractWithCellMarkers(cells: cells, filename: filename, comment: "#")
 }
 
@@ -122,7 +124,7 @@ public func extractR(cells: [NotebookCell], filename: String) -> ExtractedRNoteb
 /// Python is genuinely different and keeps its own implementation: it labels
 /// cells via `wrapCellForResilientLoad` rather than by comment, so a failing
 /// cell does not take the rest of the module with it.
-public func extractLua(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+public func extractLua(cells: [NotebookCell], filename: String) -> ExtractedVerbatimNotebook {
     extractWithCellMarkers(cells: cells, filename: filename, comment: "--")
 }
 
@@ -132,7 +134,7 @@ public func extractLua(cells: [NotebookCell], filename: String) -> ExtractedRNot
 /// `chickadee.load_student()`, which evaluates the text with the guard
 /// prepended, so the file on disk stays exactly the cells a `cellContains`
 /// check reads.
-public func extractOctave(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+public func extractOctave(cells: [NotebookCell], filename: String) -> ExtractedVerbatimNotebook {
     extractWithCellMarkers(cells: cells, filename: filename, comment: "%")
 }
 
@@ -141,7 +143,7 @@ public func extractOctave(cells: [NotebookCell], filename: String) -> ExtractedR
 /// notebook workflow, so this path is rare (a student uploading an `.ipynb`
 /// through the upload form), but the submission guarantees hold uniformly:
 /// a notebook that arrives extracts or errors, never silently vanishes.
-public func extractCpp(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+public func extractCpp(cells: [NotebookCell], filename: String) -> ExtractedVerbatimNotebook {
     extractWithCellMarkers(cells: cells, filename: filename, comment: "//")
 }
 
@@ -157,7 +159,7 @@ public func extractCpp(cells: [NotebookCell], filename: String) -> ExtractedRNot
 /// and a BSL submission flattened under `#lang racket` would grade against
 /// different semantics than the student wrote. The guarantee that holds is the
 /// universal one: the notebook extracts or errors, never silently vanishes.
-public func extractRacket(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+public func extractRacket(cells: [NotebookCell], filename: String) -> ExtractedVerbatimNotebook {
     extractWithCellMarkers(cells: cells, filename: filename, comment: ";")
 }
 
@@ -173,7 +175,7 @@ public func extractRacket(cells: [NotebookCell], filename: String) -> ExtractedR
 /// silent-wrong-answer shape, and a submission wrapped in a guessed class would
 /// compile to something the student did not write. The guarantee that holds is
 /// the universal one: the notebook extracts or errors, never silently vanishes.
-public func extractJava(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+public func extractJava(cells: [NotebookCell], filename: String) -> ExtractedVerbatimNotebook {
     extractWithCellMarkers(cells: cells, filename: filename, comment: "//")
 }
 
@@ -187,7 +189,7 @@ public func extractJava(cells: [NotebookCell], filename: String) -> ExtractedRNo
 /// no code cells.
 private func extractWithCellMarkers(
     cells: [NotebookCell], filename: String, comment: String
-) -> ExtractedRNotebook {
+) -> ExtractedVerbatimNotebook {
     var output = "\(comment) Generated from \(filename)\n\n"
     var codeCellCount = 0
     for (index, cell) in cells.enumerated() {
@@ -199,7 +201,7 @@ private func extractWithCellMarkers(
         output += cellBoundaryMarker(cellNumber: index + 1, comment: comment) + "\n"
         output += src + "\n\n"
     }
-    return ExtractedRNotebook(source: output, codeCellCount: codeCellCount)
+    return ExtractedVerbatimNotebook(source: output, codeCellCount: codeCellCount)
 }
 
 private func cellBoundaryMarker(cellNumber: Int, comment: String) -> String {
@@ -253,7 +255,7 @@ public let luaCellBoundaryMarkerPattern = "^%-%- ---- chickadee:cell %d+ ----$"
 public func sanitizeCellForModule(_ source: String) -> String {
     // Strip magic/shell lines first.
     let lines = splitLines(source).filter { line in
-        let s = trimSpacesAndTabs(line)
+        let s = trimHorizontalWhitespace(line)
         return !s.hasPrefix("%") && !s.hasPrefix("!")
     }
 
@@ -263,7 +265,7 @@ public func sanitizeCellForModule(_ source: String) -> String {
     var lex = CellLexState()
 
     for line in lines {
-        let trimmed = trimSpacesAndTabs(line)
+        let trimmed = trimHorizontalWhitespace(line)
         // A new top-level statement begins only when we are NOT inside open
         // brackets AND NOT inside a triple-quoted string opened on an earlier
         // line (otherwise the line is a continuation), and the line itself
@@ -290,12 +292,12 @@ public func sanitizeCellForModule(_ source: String) -> String {
 
     var parts: [String] = []
 
-    let defBlock = trimmedString(defLines.joined(separator: "\n"))
+    let defBlock = trimWhitespaceAndNewlines(defLines.joined(separator: "\n"))
     if !defBlock.isEmpty {
         parts.append(defBlock)
     }
 
-    let usageBlock = trimmedString(usageLines.joined(separator: "\n"))
+    let usageBlock = trimWhitespaceAndNewlines(usageLines.joined(separator: "\n"))
     if !usageBlock.isEmpty {
         let indented =
             splitLines(usageBlock)
@@ -316,7 +318,7 @@ public func wrapCellForResilientLoad(_ body: String, label: String) -> String {
     // (hasPrefix) rather than `String.contains(_: String)`, which Embedded Swift
     // lacks (no string-processing module) — RunnerCore compiles to wasm32.
     let hasFutureImport = splitLines(body).contains { line in
-        trimSpacesAndTabs(line).hasPrefix("from __future__")
+        trimHorizontalWhitespace(line).hasPrefix("from __future__")
     }
     if hasFutureImport {
         return body
@@ -442,7 +444,7 @@ func isSafeTopLevelStatement(_ rawTrimmed: String) -> Bool {
     // Strip any trailing `#` comment first, so comment text (which may contain
     // `=` or `(`) can't be mistaken for assignment or call syntax below
     // (e.g. `print(x)  # a = b` must not look like an assignment).
-    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))
+    let trimmed = trimHorizontalWhitespace(strippingTrailingComment(from: rawTrimmed))
 
     // A line that was nothing but a comment is harmless at module level.
     if trimmed.isEmpty {
@@ -480,7 +482,7 @@ func isSafeTopLevelStatement(_ rawTrimmed: String) -> Bool {
     // Assignments: module level only when the RHS has no function calls. Keeps
     // module-level constants while quarantining `p = Patient(...)`-style code.
     if let rhsStart = findAssignmentRHS(in: trimmed) {
-        let rhs = trimSpacesAndTabs(String(trimmed[rhsStart...]))
+        let rhs = trimHorizontalWhitespace(String(trimmed[rhsStart...]))
         return !rhsContainsFunctionCall(rhs)
     }
 
@@ -558,22 +560,6 @@ func rhsContainsFunctionCall(_ rhs: String) -> Bool {
 }
 
 // MARK: - Stdlib-only string helpers (Foundation-free for WASM)
-
-/// Trim leading/trailing spaces and tabs only (matches `.whitespaces`).
-private func trimSpacesAndTabs(_ s: String) -> String {
-    let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
-    return String(s.drop(while: isHWS).reversed().drop(while: isHWS).reversed())
-}
-
-/// Trim leading/trailing whitespace and newlines (matches `.whitespacesAndNewlines`).
-private func trimWhitespaceAndNewlines(_ s: String) -> String {
-    let isWS: (Character) -> Bool = isWhitespaceOrLineBreak
-    return String(s.drop(while: isWS).reversed().drop(while: isWS).reversed())
-}
-
-private func trimmedString(_ s: String) -> String {
-    trimWhitespaceAndNewlines(s)
-}
 
 /// Two-digit lowercase hex for a control-character scalar (< 0x20).
 private func hex2(_ value: UInt32) -> String {

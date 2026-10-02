@@ -1,10 +1,15 @@
 // A tiny, dependency-free JSON value parser — enough to recognise a script's
 // optional last-line result footer and read its fields, without Foundation's
 // JSONDecoder (unavailable in Embedded Swift). Stdlib only.
+//
+// The value type is `FooterValue`, not `JSONValue`: Core declares a public
+// `JSONValue`, and Core re-exports this module, so a test target that imports
+// RunnerCore with `@testable` would see both under one name.
 
-enum JSONValue: Equatable {
-    case object([String: JSONValue])
-    case array([JSONValue])
+/// One parsed value of a script's result footer.
+enum FooterValue: Equatable {
+    case object([String: FooterValue])
+    case array([FooterValue])
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -13,7 +18,7 @@ enum JSONValue: Equatable {
 
 /// Parse a complete JSON document. Returns nil if `text` is not well-formed
 /// JSON or has trailing non-whitespace.
-func parseJSON(_ text: String) -> JSONValue? {
+func parseJSON(_ text: String) -> FooterValue? {
     var parser = JSONParser(Array(text))
     parser.skipWhitespace()
     guard let value = parser.parseValue() else { return nil }
@@ -35,12 +40,12 @@ private struct JSONParser {
         while let c = current, c == " " || c == "\t" || c == "\n" || c == "\r" { pos += 1 }
     }
 
-    mutating func parseValue() -> JSONValue? {
+    mutating func parseValue() -> FooterValue? {
         skipWhitespace()
         switch current {
         case "{": return parseObject()
         case "[": return parseArray()
-        case "\"": return parseString().map(JSONValue.string)
+        case "\"": return parseString().map(FooterValue.string)
         case "t", "f": return parseBool()
         case "n": return parseNull()
         case .some(let c) where c == "-" || (c >= "0" && c <= "9"): return parseNumber()
@@ -48,9 +53,9 @@ private struct JSONParser {
         }
     }
 
-    private mutating func parseObject() -> JSONValue? {
+    private mutating func parseObject() -> FooterValue? {
         pos += 1  // consume '{'
-        var dict: [String: JSONValue] = [:]
+        var dict: [String: FooterValue] = [:]
         skipWhitespace()
         if current == "}" { pos += 1; return .object(dict) }
         while true {
@@ -70,9 +75,9 @@ private struct JSONParser {
         }
     }
 
-    private mutating func parseArray() -> JSONValue? {
+    private mutating func parseArray() -> FooterValue? {
         pos += 1  // consume '['
-        var items: [JSONValue] = []
+        var items: [FooterValue] = []
         skipWhitespace()
         if current == "]" { pos += 1; return .array(items) }
         while true {
@@ -152,7 +157,7 @@ private struct JSONParser {
         }
     }
 
-    private mutating func parseNumber() -> JSONValue? {
+    private mutating func parseNumber() -> FooterValue? {
         let start = pos
         if current == "-" { pos += 1 }
         while let c = current, (c >= "0" && c <= "9") || c == "." || c == "e" || c == "E" || c == "+" || c == "-" {
@@ -192,13 +197,13 @@ private struct JSONParser {
         return Double(String(slice))
     }
 
-    private mutating func parseBool() -> JSONValue? {
+    private mutating func parseBool() -> FooterValue? {
         if matchLiteral("true") { return .bool(true) }
         if matchLiteral("false") { return .bool(false) }
         return nil
     }
 
-    private mutating func parseNull() -> JSONValue? {
+    private mutating func parseNull() -> FooterValue? {
         matchLiteral("null") ? .null : nil
     }
 

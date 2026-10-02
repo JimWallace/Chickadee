@@ -183,7 +183,7 @@ func diffLines(_ text: String) -> [String] {
 
 // MARK: - Template context
 
-struct SubmissionDiffContext: Encodable {
+private struct SubmissionDiffContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
     let assignmentTitle: String
@@ -200,7 +200,7 @@ struct SubmissionDiffContext: Encodable {
 
 /// One listing row, with its kind spelled as flags the template branches on
 /// (Leaf cannot compare an enum's raw value in a class attribute safely).
-struct SubmissionDiffRowView: Encodable {
+private struct SubmissionDiffRowView: Encodable {
     let isAdded: Bool
     let isRemoved: Bool
     let isFold: Bool

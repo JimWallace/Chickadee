@@ -429,12 +429,10 @@ struct SubmissionHistoryContext: Encodable {
     let currentUser: CurrentUserContext?
 }
 
+/// One row of the student's own history page: the row the two staff history
+/// pages show, plus the notebook link only the student's page offers.
 struct SubmissionHistoryRow: Encodable {
-    let submissionID: String
-    let attemptNumber: Int
-    let status: String
-    let submittedAt: String
-    let gradeText: String
+    let history: AssignmentSubmissionHistoryRow
     let submissionFilename: String?
     let canOpenInNotebook: Bool
     let openInNotebookURL: String?

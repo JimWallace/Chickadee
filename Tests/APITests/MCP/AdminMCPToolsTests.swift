@@ -434,6 +434,44 @@ import VaporTesting
         }
     }
 
+    /// Two offerings share a code. A bare code reads the newest term and the
+    /// result says so; a key names the older one, and the counts follow the
+    /// offering, not the argument (#1781).
+    @Test func getInstructorCardSeriesNamesTheOfferingItDescribes() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "ics-admin3", role: "admin")
+            let older = APICourse(
+                code: "MCP202", name: "Older", enrollmentMode: .closed,
+                term: AcademicTerm(year: 2026, season: .fall))
+            try await older.save(on: app.db)
+            let newer = APICourse(
+                code: "MCP202", name: "Newer", enrollmentMode: .closed,
+                term: AcademicTerm(year: 2027, season: .winter))
+            try await newer.save(on: app.db)
+            let olderID = try older.requireID()
+            let setup = try await makeTestSetup(on: app, id: "ics_setup_older", courseID: olderID)
+            let student = try await makeTestUser(on: app, username: "ics-student3", role: "student")
+            try await makeTestEnrollment(on: app, userID: try student.requireID(), courseID: olderID)
+            _ = try await makeTestSubmission(
+                on: app, id: "ics_sub_older", setupID: try setup.requireID(), userID: try student.requireID())
+
+            let byCode = try await GetInstructorCardSeriesTool().execute(
+                .init(courseCode: "mcp202"), context(subject: "ics-admin3"))
+            #expect(byCode.courseCode == "MCP202")
+            #expect(byCode.courseKey == "MCP202-W27")
+            #expect(byCode.courseTerm == "Winter 2027")
+            let newerDay = try #require(byCode.windows.first { $0.window == "24h" })
+            #expect(newerDay.submissions.headline == 0)
+
+            let byKey = try await GetInstructorCardSeriesTool().execute(
+                .init(courseCode: "MCP202-F26"), context(subject: "ics-admin3"))
+            #expect(byKey.courseKey == "MCP202-F26")
+            #expect(byKey.courseTerm == "Fall 2026")
+            let olderDay = try #require(byKey.windows.first { $0.window == "24h" })
+            #expect(olderDay.submissions.headline == 1)
+        }
+    }
+
     @Test func getInstructorCardSeriesRejectsUnknownCourse() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "ics-admin2", role: "admin")

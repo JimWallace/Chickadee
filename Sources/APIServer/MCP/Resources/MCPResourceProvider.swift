@@ -75,7 +75,9 @@ struct MCPResourceProvider: Sendable {
             text: MCPServerInstructions.authoringVoice)
     ]
 
-    /// `chickadee://course/<code>/authoring-guidance` — the per-course guidance
+    /// `chickadee://course/<key>/authoring-guidance` — the per-course guidance
+    /// (the listing writes the course `urlKey`; a read also takes the bare
+    /// code, in any case). It is the guidance
     /// a course's instructors set on the instructor MCP panel. Unlike the
     /// initialize embedding (frozen per connection), the resource re-reads the
     /// live value, so an agent can pick up edits mid-session.
@@ -227,21 +229,27 @@ struct MCPResourceProvider: Sendable {
         return Self.textContents(uri: uri, text: text)
     }
 
-    /// Reads a course's authoring guidance. Resolved through the same
-    /// `mcpCourseGuidance` scoping the listing and the initialize embedding
-    /// use, so "not enrolled", "no authoring authority", "archived", and "no
-    /// guidance set" all collapse into the manifest path's anti-enumeration
-    /// "unknown resource" answer.
+    /// Reads a course's authoring guidance. Resolved against the same
+    /// authorable courses the listing and the initialize embedding use, so
+    /// "not enrolled", "no authoring authority", "archived", and "no guidance
+    /// set" all collapse into the manifest path's anti-enumeration "unknown
+    /// resource" answer.
+    ///
+    /// The segment is a course key as every MCP course argument is
+    /// (docs/course-terms.md): the listing advertises the `urlKey`, and a read
+    /// also accepts the bare code and either in any case. A bare code that
+    /// several offerings share reads the newest term, as every MCP read does
+    /// (#1782).
     private func readCourseGuidance(
         courseCode: String, uri: String, context: ToolContext
     ) async throws -> JSONValue {
         try await context.requireEligibleSubject(tool: "resources/read")
-        let guidance = try await mcpCourseGuidance(forSubject: context.subject, db: context.db)
-        guard let match = guidance.first(where: { $0.courseCode == courseCode }) else {
+        let courses = try await mcpAuthorableCourses(forSubject: context.subject, db: context.db)
+        guard let course = coursesMatching(key: courseCode, in: courses).min(by: courseListPrecedes) else {
             throw MCPToolError.invalidArguments(
                 tool: "resources/read", detail: "Unknown or inaccessible resource: \(uri)")
         }
-        return Self.textContents(uri: uri, text: match.text)
+        return Self.textContents(uri: uri, text: courseAuthoringVoice(course))
     }
 
     /// The `resources/read` result envelope for a single markdown/text body.

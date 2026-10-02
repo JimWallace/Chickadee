@@ -158,20 +158,22 @@ metadata-only edit — no regrade or close), or include it in the uploaded manif
 
 **An assignment's language is gated automatically. There is nothing to
 remember.** `RunnerLanguageGate` runs at the claim seam beside the two gates
-above: it resolves the assignment's language from its manifest, and a runner
-whose advertised profile does not list that language does not claim the job —
-it leaves it for one that does.
+above: it asks `languagesRequiredToGrade` for every language the job needs —
+the declared one plus every language the suite's own script extensions imply
+— and a runner whose advertised profile lacks any of them does not claim the
+job. It leaves it for one that does.
 
 This needs no authoring step because both halves were already there. The
-manifest knows the language (`AssignmentLanguage.resolve`), and
+manifest knows the languages (`AssignmentLanguage.languagesRequiredToGrade`), and
 `RunnerProfileDetector` discovers its probes from `AssignmentLanguage.allCases`,
 so every runner already advertises every language it has, and a runner whose
 *build* predates a language advertises a profile without it.
 
 Two fail-open cases, both deliberate:
 
-- **The assignment names no language** — a suite of plain `.sh` scripts. There
-  is no interpreter to require, and that is the system's original mode.
+- **The job requires no language** — a suite of plain `.sh` scripts, or one
+  whose only interpreters have no capability token. There is no interpreter
+  to require, and that is the system's original mode.
 - **The runner advertises no profile at all** — capability discovery is off
   (`RUNNER_CAPABILITY_DISCOVERY_ENABLED=false`), an explicit operator choice.
   Blocking it would stop that runner claiming anything. It costs nothing here:
