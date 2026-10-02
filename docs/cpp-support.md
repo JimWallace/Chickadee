@@ -108,8 +108,9 @@ a **C++ literal**, written verbatim into `_ck_inputs.hpp` — one
 natural type and a missing input is a compile error (the fail-closed check
 the other runtimes do with `isKey`, earlier and louder). The seed is the
 shared Horner fold (base-16 over the hex digits, mod 2³¹−1), digit-for-digit
-the same as R/Lua/Octave, so a student's seed is one number in every
-language.
+the same as every other language, so a student's seed is one number in every
+language. A hand-written test reads it with `ck::seed()` from
+`test_runtime.hpp` (#1796).
 
 ## What an instructor does today
 

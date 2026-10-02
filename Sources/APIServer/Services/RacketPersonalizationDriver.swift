@@ -14,9 +14,10 @@ import Foundation
 enum RacketPersonalizationDriver {
 
     /// The shared seed fold — Horner base-16 over the hex digits of
-    /// CHICKADEE_ASSIGNMENT_SEED, mod 2^31−1 — matching `chickadee_seed()` in
-    /// the R/Lua/Octave runtimes and `ck_seed()` in the C++ driver digit for
-    /// digit, so a student's seed is one number in every language.
+    /// CHICKADEE_ASSIGNMENT_SEED, mod 2^31−1 — matching `chickadee-seed` in
+    /// `test_runtime.rkt` and the other runtimes digit for digit, so a
+    /// student's seed is one number in every language.
+    /// `RacketPersonalizationDriverTests` runs both copies and compares them.
     static let seedSource = #"""
         (define (ck-seed)
           (define raw (getenv "CHICKADEE_ASSIGNMENT_SEED"))

@@ -401,4 +401,28 @@ std::string type_name() {
     else return "(another type)";
 }
 
+// ---- the per-student seed ----
+//
+// Base-16 Horner fold over the hex digits of CHICKADEE_ASSIGNMENT_SEED, mod
+// 2^31-1: the reduction the server's C++ driver binds as `seed`
+// (CppPersonalizationDriver.seedSource) and every other runtime uses, so a
+// student's seed is one number in every language. Non-hex characters are
+// skipped; an absent or digitless value is 0. CppPersonalizationDriverTests
+// runs both and compares them.
+inline long long seed() {
+    const char* raw = std::getenv("CHICKADEE_ASSIGNMENT_SEED");
+    if (!raw) return 0;
+    long long acc = 0;
+    for (const char* p = raw; *p; ++p) {
+        const char c = *p;
+        int digit;
+        if (c >= '0' && c <= '9') digit = c - '0';
+        else if (c >= 'a' && c <= 'f') digit = 10 + (c - 'a');
+        else if (c >= 'A' && c <= 'F') digit = 10 + (c - 'A');
+        else continue;
+        acc = (acc * 16 + digit) % 2147483647;
+    }
+    return acc;
+}
+
 }  // namespace ck
