@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.319] - 2026-10-02
+
+### Security
+
+- **`.lti-tool-key` and `.github-app-secrets` are git-ignored.** Both are written to the working directory by default and were absent from `.gitignore`, so a developer running the server from a checkout could commit an App private key. A new guard reads the secret file names from `SecretFile.swift` and asserts each is ignored, with a fixture proving it fails (#1772).
+
+
 ## [0.5.318] - 2026-10-02
 
 ### Fixed
