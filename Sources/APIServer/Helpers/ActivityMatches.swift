@@ -262,12 +262,17 @@ private func recordMatrixMatches(
     var reportByIdentity: [String: MatchReport] = [:]
     for report in matches ?? [] { reportByIdentity[report.opponentIdentity] = report }
     let single = matchOutcome(from: outcomes)
+    // A report with no per-match rows completes one row, and only the bot or
+    // empty one: a claim can open a row per classmate, and completing every
+    // one from a single outcome would record a result against students the
+    // job never played (#1749). Any other unreported row stays open.
+    let completesFromCollection = matches == nil && open.count == 1 && open[0].opponentSubmissionID == nil
     for row in open {
         if let report = reportByIdentity[row.opponentIdentity] {
             row.score = report.score
             row.metric = report.metric
             row.won = report.won
-        } else if matches == nil {
+        } else if completesFromCollection {
             row.score = single?.score
             row.metric = single?.metric
             row.won = single?.status == .pass
