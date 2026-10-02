@@ -428,9 +428,11 @@ a three-word EFF diceware passphrase on first startup and persisted to
 ## Database & Migrations
 
 `DatabaseConfiguration` (`Sources/APIServer/Utilities/DatabaseConfiguration.swift`)
-selects the backend from `DATABASE_URL`:
-- `postgres://…` → Fluent PostgreSQL driver
-- absent / `sqlite://…` → Fluent SQLite driver (default for development)
+selects the backend from `DATABASE_BACKEND` (`DatabaseSettings.fromEnvironment`):
+- `postgres` → Fluent PostgreSQL driver, connected from `DATABASE_HOST`,
+  `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` and `DATABASE_PORT`
+- absent / `sqlite` → Fluent SQLite driver (default for development), at
+  `SQLITE_PATH` or the default file under the working directory
 
 SQLite deployments enable WAL journaling and foreign key enforcement at startup.
 
@@ -451,11 +453,11 @@ file. The steady-state convention:
   standalone migrations: `AddUserFKConstraints`, `AddSessionsCreatedAt` (it targets
   Vapor's own sessions table, which no `Create*` file owns), and
   `CollapseUserRoles` (a pure data rewrite with no schema home).
-- **Not every migration is additive.** `ChangeAssignmentIsOpenToVisibility`
-  converted the boolean `is_open` into the three-state `visibility` column
-  and dropped `is_open`; `CreateResultCollections` moved
+- **Not every migration is additive.** `CreateResultCollections` moved
   `results.collection_json` into a side table and dropped the original
-  column. Treat column existence as migration-order-dependent.
+  column, and the assignment table's boolean `is_open` became the three-state
+  `visibility` column in a migration since folded into `CreateAssignments`.
+  Treat column existence as migration-order-dependent.
 - **`MigrationNamespaceReconciler`** runs after registration and before
   `autoMigrate`: it rewrites `_fluent_migrations` rows recorded under legacy
   module-derived name prefixes (`chickadee_server.`, `APIServer.`) to the

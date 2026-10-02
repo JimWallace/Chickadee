@@ -1,12 +1,12 @@
 // APIServer/Migrations/AddUserFKConstraints.swift
 //
-// Adds the two missing foreign-key constraints from `api_users.id`
+// Adds the two missing foreign-key constraints from `users.id`
 // that were originally created as bare UUID columns (#562 audit):
 //
 //   submissions.retested_by_user_id  → users.id  ON DELETE SET NULL
 //   class_achievements.user_id       → users.id  ON DELETE CASCADE
 //
-// Rationale (see docs/operational-diagnostics.md "User-row FK cascade"
+// Rationale (see docs/operational-diagnostics.md "User-row foreign-key cascade"
 // table for the full enumeration):
 //
 //   * `submissions.retested_by_user_id` records "which instructor
