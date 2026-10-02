@@ -347,7 +347,10 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `submissions` | `retested_by_user_id` | SET NULL | Submission row preserved; retest attribution drops. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
 | `course_enrollments` | `user_id` | CASCADE | Enrollment row goes when the user goes. |
 | `class_achievements` | `user_id` | CASCADE | Derived per-user row; goes with the user. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
-| `leaderboard_entries` | `user_id` | CASCADE | Derived per-user ranking row (class activities); goes with the user. DB-level cascade on both engines (the FK is declared at create time); `AdminRoutes.deleteUser` also clears it explicitly for symmetry with `class_achievements`. |
+| `leaderboard_entries` | `user_id` | CASCADE | Derived per-user ranking row (class activities); goes with the user. DB-level cascade on both engines (the FK is declared at create time). |
+| `tournament_runs` | `started_by`, `winner_user_id` | SET NULL | Run row preserved (it is the bracket's history); who started it and who won it drop. No FK on either backend; **enforced by `AdminRoutes.deleteUser`** (#1808). |
+| `class_item_coverage` | `user_id` | **preserved** | Coverage never retreats when a student drops (docs/collaborative-class-assignments.md). No FK on either backend, on purpose. |
+| `brightspace_credentials`, `brightspace_sync_log`, `courses` | `user_id`, `captured_by_user_id`, `brightspace_sync_user_id` | **preserved** | A BrightSpace binding and its sync history outlive the instructor who made them. No FK on either backend. |
 | `client_diagnostics` | `user_id` | CASCADE | Browser-error breadcrumb; tied to the user. |
 | `assignment_personalization_seeds` | `user_id` | CASCADE | Per-user seed; gone with the user. |
 | `job_execution_metrics` | `user_id` | SET NULL | Metric row preserved for capacity reporting; user attribution drops. |
@@ -365,4 +368,6 @@ column without recreating the table, so on SQLite the same semantics are
 enforced by application code in `AdminRoutes.deleteUser` — it explicitly
 clears `class_achievements` rows and nulls `retested_by_user_id`
 references before deleting the user row. Both backends end up with the
-same observable behaviour.
+same observable behaviour. `UserReferenceScanTests` reads the `Create*`
+migrations for every user column with no FK, so a new one fails CI until
+it is cleared in `deleteUser` or named in the kept-on-purpose list.
