@@ -78,20 +78,13 @@ struct SetSubmissionModeTool: ContentTool {
         // matching set_grading_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
-        // Surface both of the shared helper's refusals as arguments errors, so
-        // an agent reads a fixable message rather than a 400. The helper keeps
-        // its own guards as the backstop for any path that skips this.
-        if parsed == .uploadOnly,
-            currentManifestGradingMode(setup.manifest) == GradingMode.browser.rawValue
+        // Surface a coherence violation as an arguments error, so an agent
+        // reads a fixable message rather than a 400. The shared helper keeps
+        // its own guard as the backstop for any path that skips this.
+        if let violation = ManifestCoherence.violation(
+            introducedBy: { $0.submissionMode = parsed }, in: setup.manifest)
         {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: uploadModeGradingConflictMessage)
-        }
-        if parsed == .notebook,
-            let language = manifestRequiresUploadOnlySubmission(setup.manifest)
-        {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: requiresUploadOnlyMessage(language))
+            throw MCPToolError.invalidArguments(tool: Self.name, detail: violation)
         }
         let effective = try await setManifestSubmissionMode(
             setup: setup, to: mode, on: context.db)
