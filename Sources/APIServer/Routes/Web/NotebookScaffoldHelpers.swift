@@ -72,7 +72,7 @@ func autoScaffoldFromSolutionNotebook(
     // not be written for a language whose functions this scanner cannot read.
     // The SECTIONS are a different question — a `## ` header is markdown, not
     // code — and the scan now answers the two separately.
-    let scanLanguage = AssignmentLanguage.resolve(for: setup, manifest: existing)
+    let scanLanguage = AssignmentLanguage.resolve(manifest: existing)
     let scan = scanNotebookForSectionsAndFunctions(notebookData, language: scanLanguage)
     // Sections are worth scaffolding on their own. This used to bail whenever
     // no functions were found, which denied section scaffolding to every

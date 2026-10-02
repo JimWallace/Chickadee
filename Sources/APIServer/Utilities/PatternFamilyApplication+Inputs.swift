@@ -227,7 +227,7 @@ func resolveAuthoringLanguage(
     setup: APITestSetup,
     props: TestProperties
 ) -> AuthoringLanguageResolution {
-    let declared = AssignmentLanguage.resolve(for: setup, manifest: props)
+    let declared = AssignmentLanguage.resolve(manifest: props)
     // `previous` is retained as a separate field even though it now always
     // equals `language`: the deletion diff consumes it to find generated
     // scripts written under a DIFFERENT extension, which is still reachable

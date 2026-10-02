@@ -377,7 +377,7 @@ private func applyNotebookSubstitutionsIfNeeded(
 
     let resolution = await PersonalizationSubstitution.resolve(
         manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportFilesDirectory,
-        language: AssignmentLanguage.resolve(for: setup, manifest: manifest))
+        language: AssignmentLanguage.resolve(manifest: manifest))
     if let evalError = resolution.evaluationError {
         logger.warning(
             Logger.Message(

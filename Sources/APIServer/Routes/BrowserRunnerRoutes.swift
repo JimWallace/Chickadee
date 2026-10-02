@@ -191,7 +191,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             // nil language yields no grading inputs (there is no syntax to
             // render them in); datasets below are language-independent and
             // still resolve.
-            let resolved = AssignmentLanguage.resolve(for: setup, manifest: manifest)
+            let resolved = AssignmentLanguage.resolve(manifest: manifest)
             language = resolved
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
                 manifest: manifest, seedHex: seed,

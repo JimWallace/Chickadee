@@ -57,7 +57,7 @@ extension DraftAssignmentRoutes {
         }
         // Resolved once and handed to both language-bearing seeds below.
         let resolvedLanguage = setup.flatMap { s in
-            s.decodedManifest().flatMap { AssignmentLanguage.resolve(for: s, manifest: $0) }
+            s.decodedManifest().flatMap { AssignmentLanguage.resolve(manifest: $0) }
         }
         let supportFileRows = newAssignmentSupportFileRows(setup: setup, suiteRows: suiteRows)
         let detected = await newAssignmentRequirementSuggestions(req: req, userID: userID, setup: setup)
