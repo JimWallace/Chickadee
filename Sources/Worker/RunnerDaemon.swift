@@ -281,10 +281,9 @@ actor WorkerDaemon {
 
     // MARK: - Subprocess helpers
 
-    func download(url: URL, to destination: URL) async throws {
-        let stage: RunnerRetryStage =
-            destination.lastPathComponent == "submission.zip" ? .downloadSubmission : .downloadTestSetup
-
+    /// `stage` names the download in every retry log line and connection-lost
+    /// event. The caller says which one it is; the filename does not (#1793).
+    func download(url: URL, to destination: URL, stage: RunnerRetryStage) async throws {
         try await withRunnerRetry(
             stage: stage,
             policy: downloadRetryPolicy,
