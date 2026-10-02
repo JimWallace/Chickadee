@@ -306,7 +306,7 @@ extension AdminRoutes {
 }
 
 /// Render context for `admin-brightspace.leaf`.
-struct AdminBrightspaceContext: Encodable {
+private struct AdminBrightspaceContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let configured: Bool

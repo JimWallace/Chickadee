@@ -20,7 +20,7 @@ enum LTIGradeTransport: String, Sendable {
     case ags
 }
 
-struct InstructorLTIGradesContext: Encodable {
+private struct InstructorLTIGradesContext: Encodable {
     struct Failure: Encodable {
         let student: String
         let assignment: String
