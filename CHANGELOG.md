@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.318] - 2026-10-02
+
+### Fixed
+
+- **Un-archiving a course checks the per-term duplicate rule first.** The toggle saved straight into the unique index over active courses, which rejected the save as an unhandled error once an active course held the same code and term. It now reports the duplicate the way the edit form does (#1777).
+
+
 ## [0.5.317] - 2026-10-02
 
 ### Fixed
