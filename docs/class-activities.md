@@ -726,35 +726,35 @@ errors rather than passes.
 
 - `Sources/Core/ClassActivity.swift`, `Sources/Core/TestProperties.swift`
   (`activity`), `Sources/RunnerCore/OutputInterpretation.swift` (`metric`)
-- `Sources/APIServer/Helpers/LeaderboardEntries.swift`,
+- `Sources/APIServer/Services/LeaderboardEntries.swift`,
   `Sources/APIServer/Models/APILeaderboardEntry.swift`,
   `Sources/APIServer/Routes/Web/WebRoutes+Leaderboard.swift`,
   `Resources/Views/leaderboard.leaf`
 - `Sources/APIServer/Services/ActivityAuthoring.swift` (the lock and the
   seeded record, shared by the web edit page and `set_activity`)
-- `Sources/APIServer/Helpers/ClassAchievements.swift`
+- `Sources/APIServer/Services/ClassAchievements.swift`
   (`awardHighestMetricRecords`, `awardChampionRecords`,
   `awardTournamentWinnerRecords`), `Sources/Core/Achievement.swift`
-- `Sources/APIServer/Helpers/ActivityMatches.swift` (`chooseOpponent`,
+- `Sources/APIServer/Services/ActivityMatches.swift` (`chooseOpponent`,
   `chooseClassmates`, `openMatch`, `recordActivityMatch`, the standings),
   `Sources/APIServer/Models/APIMatchResult.swift`, `APIActivityChampion.swift`,
   `APIActivityStanding.swift`
 - `Sources/Core/JobOpponent.swift` (`JobOpponent`, `MatchReport`,
   `matchOutcome`), `Sources/Worker/OpponentStaging.swift`,
   `Sources/Worker/MatrixAggregation.swift`
-- `Sources/APIServer/Helpers/ActivityUnion.swift` (`unionTally`, both halves
+- `Sources/APIServer/Services/ActivityUnion.swift` (`unionTally`, both halves
   of a union kind's reading)
 - `Sources/Core/Tournament.swift` (`TournamentSchedule`, `TournamentPairing`),
-  `Sources/APIServer/Helpers/Tournaments.swift` (start, enqueue, pair, land,
+  `Sources/APIServer/Services/Tournaments.swift` (start, enqueue, pair, land,
   advance), `Sources/APIServer/Models/APITournamentRun.swift`,
   `Sources/APIServer/MCP/Tools/RunTournamentTool.swift`
 - `docs/collaborative-class-assignments.md`,
-  `Sources/APIServer/Helpers/ClassItemCoverage.swift` (the ingest-time
+  `Sources/APIServer/Services/ClassItemCoverage.swift` (the ingest-time
   pattern this follows)
 - `docs/student-avatars.md`, `Sources/APIServer/Services/AvatarStore.swift`
 - `Sources/Core/JobOpponent.swift`, `Sources/Worker/OpponentStaging.swift`,
   `Sources/APIServer/Compatibility/RunnerActivityGate.swift` (slice 2)
-- `Sources/APIServer/Helpers/ActivityMatches.swift`,
+- `Sources/APIServer/Services/ActivityMatches.swift`,
   `Sources/APIServer/Models/APIMatchResult.swift`,
   `Sources/APIServer/Models/APIActivityChampion.swift` (slice 3)
 - `docs/runner-capability-profiles.md`,
