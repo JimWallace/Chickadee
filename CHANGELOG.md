@@ -9,6 +9,45 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.329] - 2026-10-02
+
+### Fixed
+
+- **A course bundle carries the four per-assignment policies and the course authoring guide.** Secret reveal, passing threshold, solution reveal and LMS sync exclusion, and the course's own MCP guide, were dropped on export, so an imported course lost settings the clone keeps. Each is optional in the manifest, so an older bundle still imports with the column defaults. The bundle is a faithful restore: unlike the clone, it carries the solution reveal, the dates and the open state as they were (#1737).
+
+### Fixed
+
+- **`get_instructor_card_series` names the offering it describes.** A bare course code shared by several offerings resolves to the newest term, and the result gave no way to see which one answered. The payload now carries `courseCode`, `courseKey` and `courseTerm` beside the windows, as every content tool that names a course does (#1781).
+
+### Fixed
+
+- **The C++ and Java personalization drivers build in a private directory.** Each compiled in the shared support directory it ran in, so its own source and binary were listed as support files on the next evaluation: the C++ driver included an earlier copy of itself, the Java driver named its own source twice, and both failed with exit 3. Two students' evaluations also raced on one binary. Both now build beside the driver script in the evaluator's temp directory, and a leftover from before is ignored (#1788).
+
+### Fixed
+
+- **The runner's downloads keep the session's timeouts.** Every download request set its own 5 s timeout, which overrode the session's 15 s idle interval and 10 min whole-transfer cap and could stop a large setup zip on a slow link from ever finishing. The request no longer sets one (#1793).
+
+### Fixed
+
+- A cached GitHub installation token that GitHub refuses is dropped and resolved once more, and an `installation` webhook that removes or suspends the App drops the token at once. Before, a removed or re-made installation read as "GitHub did not respond" for up to an hour (#1768).
+
+### Fixed
+
+- **The course-guidance MCP resource resolves its course segment like every other MCP course argument.** `chickadee://course/<key>/authoring-guidance` matched the course key exactly and case-sensitively, so a termed course read as "unknown resource" under its bare code or a lower-case key. The read now resolves the segment with the shared key matcher over the subject's authorable courses, and a bare code that several offerings share reads the newest term (#1782).
+
+### Fixed
+
+- **A zip with two notebooks routes by name.** The worker took the first `.ipynb` the filesystem listed, so a zip holding two notebooks that declare different kernels routed nondeterministically. It now takes the alphabetically first, as the student-module pick already did (#1795).
+
+### Changed
+
+- **Six worker and evaluator comments say what the code does now.** The zip note that described a lock the subprocess layer no longer has is gone, as is the Pyodide name in the native executor's header. The evaluator header names all seven drivers, the executor's environment field says it merges over the allowlist, the test-setup cache describes its real key and root, and the capability-profiles doc says the gate asks `languagesRequiredToGrade` (#1798).
+
+### Changed
+
+- **View models live with the other contexts, or stay private to their one reader.** The sixteen leaderboard contexts and the four slip-day contexts that sat in their route files now sit in `LeaderboardContexts.swift` and `SlipDayContexts.swift` beside the other context files. The six contexts with one reader (the submission diff, the Activity tab, the LTI grades page and the admin BrightSpace page) are private to that file. Placement only; no behaviour changed (#1716).
+
+
 ## [0.5.328] - 2026-10-02
 
 ### Fixed
