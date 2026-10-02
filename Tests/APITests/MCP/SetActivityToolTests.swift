@@ -173,7 +173,7 @@ import Vapor
             #expect(out.activityKinds.map(\.name) == ActivityKind.allCases.map(\.rawValue))
             for kind in out.activityKinds {
                 #expect(!kind.summary.isEmpty)
-                #expect(kind.aggregation == "leaderboard")
+                #expect(kind.aggregation == ActivityKind(rawValue: kind.name)?.aggregation.rawValue)
             }
         }
     }
