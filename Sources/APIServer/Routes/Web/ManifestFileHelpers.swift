@@ -203,6 +203,49 @@ func makeWorkerManifestJSON(
     return try encodeManifest(props)
 }
 
+/// A new-assignment draft's manifest, rebuilt with a new suite.
+///
+/// The draft's own manifest is the base, through the `preserving:` overload,
+/// so everything the create page recorded on it (the declared language, the
+/// activity, families, checks and sections) survives without being named.
+/// Only what the create page owns is set: the makefile, the starter notebook
+/// and the two modes. The modes follow the declared language. An upload-only
+/// language gets `uploadOnly` + `worker`, the pair `declareManifestLanguage`
+/// writes; any other gets `notebook` and the section's grading mode. These
+/// rebuilds used to call the fresh builder, which wrote `notebook` and the
+/// section's mode over an upload-only declaration: the pair every authoring
+/// door refuses to store (#1720).
+///
+/// With no readable draft manifest there is nothing to carry forward, and the
+/// fresh builder runs with the same inputs.
+func rebuildDraftManifestJSON(
+    _ draft: TestProperties?,
+    testSuites: [ConfiguredSuiteEntry],
+    includeMakefile: Bool,
+    sectionGradingMode: String,
+    starterNotebook: String
+) throws -> String {
+    guard var next = draft else {
+        return try makeWorkerManifestJSON(
+            testSuites: testSuites, includeMakefile: includeMakefile, gradingMode: sectionGradingMode,
+            starterNotebook: starterNotebook)
+    }
+    if let language = next.language, requiresUploadOnlySubmission(language) {
+        next.submissionMode = .uploadOnly
+        next.gradingMode = .worker
+    } else {
+        guard let grading = GradingMode(rawValue: sectionGradingMode) else {
+            throw WebAssignmentError.invalidParameter(
+                name: "gradingMode", reason: "Unknown grading mode \"\(sectionGradingMode)\".")
+        }
+        next.submissionMode = .notebook
+        next.gradingMode = grading
+    }
+    next.makefile = includeMakefile ? MakefileConfig(target: nil) : nil
+    next.starterNotebook = starterNotebook
+    return try makeWorkerManifestJSON(preserving: next, testSuites: testSuites, language: next.language)
+}
+
 extension TestProperties {
     /// Replaces the suite with `entries` in dependency order and rebuilds the
     /// unified `testItems` list in authored order.
