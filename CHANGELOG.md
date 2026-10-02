@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.313] - 2026-10-02
+
+### Fixed
+
+- **The REST zip upload stores its manifest with the stable encoder.** It was the last production caller of the plain `JSONEncoder` on `ManifestCodec`, whose key order is not stable. That encoder is deleted, so a stored or hashed manifest can only go through `stableEncoder` (#1719).
+
+
 ## [0.5.312] - 2026-10-01
 
 ### Changed
