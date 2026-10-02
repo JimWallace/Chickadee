@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.330] - 2026-10-02
+
+### Added
+
+- **Link students to LEARN by student number for LTI grades.** The LTI grade service can send a grade only for a student whose LEARN identity Chickadee knows, and until now Chickadee learned it only when the student opened a Chickadee link from LEARN. An instructor can now press "Link students" on the LMS grades page: Chickadee reads the LEARN class list through NRPS and links each course student whose student number matches exactly one LEARN learner. Grades that waited for those students are sent again. A student number shared by two people links nobody, existing links are not changed, and admin accounts are never linked.
+
+
 ## [0.5.329] - 2026-10-02
 
 ### Fixed
