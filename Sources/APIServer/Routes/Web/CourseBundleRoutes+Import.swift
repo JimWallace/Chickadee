@@ -279,6 +279,13 @@ extension CourseBundleRoutes {
             // assignment can actually resolve.
             try await linkImportedValidationSubmissions(courseID: t.courseID, db: db)
 
+            // 6h-ter. Seed each imported assignment's v1, as clone and create
+            // do, so it has a starting point to roll back to and the timeline
+            // can say it arrived by import (#1741). After 6g and 6h-bis: the
+            // version store records only a published assignment, and the
+            // snapshot should see the linked solution.
+            await seedImportedVersions(setupIDs: setupIDMap.values, setupsDir: dirs.setupsDir, db: db)
+
             // 6i. Create results
             try await importBundledResults(
                 manifest: manifest, subIDMap: subIDMap, db: db, tally: &t)
@@ -466,13 +473,6 @@ private func importBundledTestSetups(
         // The zip copy above carries the support files, but students and
         // personalization expressions read them from the shared directory.
         await extractSupportFilesToSharedDirectory(for: setup, testSetupsDirectory: setupsDir)
-        // Seed the imported assignment's v1, as clone and create do, so it
-        // has a starting point to roll back to and the timeline can say it
-        // arrived by import (#1741). Best effort, like the other seeds.
-        await AssignmentVersionStore.seedInitialVersion(
-            setup: setup, origin: AssignmentVersionOrigin.bundleImport,
-            testSetupsDirectory: setupsDir, on: db)
-
         // A bundle exported by an older build carries no language declaration,
         // so declare one on the way in — the same thing
         // `BackfillDeclaredLanguage` does for content already on disk, applied
@@ -604,6 +604,17 @@ private func importBundledAssignments(
         )
         try await newAssign.save(on: db)
         tally.assignmentsImported += 1
+    }
+}
+
+/// Seeds `v1` for every imported setup. Best effort, like the other seeds:
+/// an assignment with no history is what the store already copes with.
+private func seedImportedVersions(setupIDs: some Sequence<String>, setupsDir: String, db: Database) async {
+    for setupID in setupIDs {
+        guard let setup = try? await APITestSetup.find(setupID, on: db) else { continue }
+        await AssignmentVersionStore.seedInitialVersion(
+            setup: setup, origin: AssignmentVersionOrigin.bundleImport,
+            testSetupsDirectory: setupsDir, on: db)
     }
 }
 
