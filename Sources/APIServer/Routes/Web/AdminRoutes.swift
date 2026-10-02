@@ -208,20 +208,24 @@ struct AdminRoutes: RouteCollection {
         var rows: [AdminUserRow] = []
         for user in users {
             // Each person's own seeded bird, the one their account page shows.
-            // A user seen here for the first time gets one written.
-            let spec = try await AvatarStore.ensureSpec(for: user, on: db)
-            rows.append(
-                AdminUserRow(
-                    id: user.id?.uuidString ?? "",
-                    displayName: user.displayName,
-                    username: user.username,
-                    role: user.role,
-                    createdAt: user.createdAt.map { iso.string(from: $0) } ?? "—",
-                    lastSeenAt: user.lastSeenAt.map { iso.string(from: $0) },
-                    avatar: AvatarPresentation(
-                        for: spec, size: .roster, accessibility: .decorative,
-                        isStaff: user.id.map(staff.contains) ?? false),
-                    hasAvatar: true))
+            // A user seen here for the first time gets one written. An MCP
+            // service account is not a person and never opens an account
+            // page, so it gets no bird and no row written for one (#1764).
+            var row = AdminUserRow(
+                id: user.id?.uuidString ?? "",
+                displayName: user.displayName,
+                username: user.username,
+                role: user.role,
+                createdAt: user.createdAt.map { iso.string(from: $0) } ?? "—",
+                lastSeenAt: user.lastSeenAt.map { iso.string(from: $0) })
+            if user.roleValue != .mcp {
+                let spec = try await AvatarStore.ensureSpec(for: user, on: db)
+                row.avatar = AvatarPresentation(
+                    for: spec, size: .roster, accessibility: .decorative,
+                    isStaff: user.id.map(staff.contains) ?? false)
+                row.hasAvatar = true
+            }
+            rows.append(row)
         }
         return rows
     }
