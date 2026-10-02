@@ -158,9 +158,10 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.unprocessable(reason: String(describing: error))
         }
 
-        // Store metadata in DB.
-        let storedManifest =
-            String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
+        // Store metadata in DB. `encodeManifest` is the one way a manifest
+        // becomes the stored string: the stable encoder, so equal values
+        // store equal bytes (#1719).
+        let storedManifest = try encodeManifest(manifest)
 
         let setup = APITestSetup(
             id: setupID,
