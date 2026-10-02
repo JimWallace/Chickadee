@@ -68,9 +68,9 @@ struct DataExportEnrollment: Codable, Sendable {
     let role: String
     let enrolledAt: Date?
     let learnSection: String?
-    /// The per-course handle reserved for this student. Nothing displays it to
-    /// anyone else yet; it is stored so it is stable when something does. nil
-    /// before one has been materialized, and never set for a staff enrollment.
+    /// The per-course handle this student is shown under on the class-facing
+    /// pages (the leaderboards; docs/student-avatars.md). nil before one has
+    /// been materialized, and never set for a staff enrollment.
     let avatarHandle: String?
 }
 

@@ -1,0 +1,3 @@
+### Changed
+
+- **The avatar and wardrobe design notes describe the shipped feature.** `docs/student-avatars.md` said nothing displays a bird or handle to anyone else and that nothing is wired; eleven templates render them, to classmates on the leaderboards and to staff on the rosters. It also said `.avatar-sm` was removed and the visual baseline was still owed; both exist. `docs/student-wardrobe.md` said the seasonal rings were in progress (they shipped in 0.5.309) and counted four patterned rings (there are seven); `docs/ui-design.md` said three sizes where it lists five; and the export comment said nothing shows the handle to anyone else (#1760).
