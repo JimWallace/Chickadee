@@ -392,12 +392,13 @@ func registerMigrations(on app: Application) {
     // Append-only assignment content-snapshot history. FK references `courses`
     // and `users`; deliberately none on `test_setups` (see the migration).
     app.migrations.add(CreateAssignmentVersions())
-    // Index migrations run last: they reference tables created above
-    // (runner_snapshots, job_execution_metrics) and only add indexes.
+    // Index-only: it must follow the migrations that create the tables it
+    // names (runner_snapshots, job_execution_metrics).
     app.migrations.add(CreateHotPathIndexes())
 
     // Audit-followup indexes (June 2026): request_metrics(finished_at) and
-    // other uncovered hot-path filters. Index-only, runs last.
+    // other uncovered hot-path filters. Index-only; it must follow the
+    // migrations that create the tables it names.
     app.migrations.add(CreateAuditFollowupIndexes())
 
     // Collapse the deployment-global role to user|admin (#417 Slice G2):
@@ -482,12 +483,6 @@ func registerMigrations(on app: Application) {
     // Observability prune sweep over submission_diagnostics (#1382 item 8).
     // Index-only; the table is created far above.
     app.migrations.add(CreateSubmissionDiagnosticsPruneIndex())
-
-    // Data backfill, registered LAST on purpose: it full-queries `APITestSetup`,
-    // which is only safe once every migration that adds a column to
-    // `test_setups` has already run (the #1077 boot-order hazard, inverted —
-    // here the model query is the late one rather than the column).
-    app.migrations.add(BackfillDeclaredLanguage())
 
     // Generated student avatars: the spec column, the per-course handle, and
     // the partial unique index that makes lazy materialization safe.
@@ -574,18 +569,35 @@ func registerMigrations(on app: Application) {
     // choose once.
     app.migrations.add(AddAvatarHandleLock())
 
-    // Data repair, registered LAST for the same reason as
-    // `BackfillDeclaredLanguage`: it full-queries `APITestSetup`. It gives every
-    // copied setup the shared support directory the copy paths never wrote.
+    // ---------------------------------------------------------------------
+    // DATA MIGRATIONS. Keep these at the end, and add every new schema
+    // migration ABOVE this block (#1805).
+    //
+    // A migration that full-queries a model selects every column the model
+    // declares, so it must follow every migration that changes the model's
+    // table, or a fresh boot selects a column that does not exist yet (the
+    // #1077 boot-order hazard, inverted). A raw-SQL migration must follow the
+    // migration that adds each column it reads. `MigrationOrderTests` reads
+    // this list and checks both rules. Moving an applied migration does not
+    // re-run it: Fluent records each by name.
+    // ---------------------------------------------------------------------
+
+    // Records the derived language on every setup that predates the rule that
+    // an assignment declares one. Full-queries `APITestSetup`.
+    app.migrations.add(BackfillDeclaredLanguage())
+
+    // Gives every copied setup the shared support directory the copy paths
+    // never wrote. Full-queries `APITestSetup`.
     app.migrations.add(BackfillSharedSupportFiles(testSetupsDirectory: app.testSetupsDirectory))
 
     // One-time swap of every drawn gradcap for the headband: the gradcap is
     // now kept as a completion item (docs/student-wardrobe.md, decision 4).
-    // Raw SQL, so its place in the list is not load-bearing.
+    // Raw SQL that reads `users.avatar_spec`, so it must follow
+    // `AddAvatarIdentity`.
     app.migrations.add(SwapStarterGradcapForHeadband())
 
     // One-time fill of the tuft and tilt axes for birds stored before the
-    // axes existed; a draw into the empty slots only (#1762). Raw SQL, so its
-    // place in the list is not load-bearing.
+    // axes existed; a draw into the empty slots only (#1762). Raw SQL that
+    // reads `users.avatar_spec`, so it must follow `AddAvatarIdentity`.
     app.migrations.add(FillLateAvatarAxes())
 }

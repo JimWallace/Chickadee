@@ -31,8 +31,10 @@ struct BackfillDeclaredLanguage: ChickadeeMigration {
 
     func prepare(on database: Database) async throws {
         // A full model query is safe HERE specifically because this migration is
-        // registered last, after every `Create*` — the #1077 hazard is a
+        // in the data block at the end of `registerMigrations`, after every
+        // migration that changes `test_setups` — the #1077 hazard is a
         // migration full-querying a model whose columns a LATER migration adds.
+        // `MigrationOrderTests` checks the order.
         let setups = try await APITestSetup.query(on: database).all()
         var declared = 0
         var withoutLanguage = 0
