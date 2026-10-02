@@ -151,8 +151,10 @@ struct UpdateSolutionTool: ContentTool {
 
         // Content versioning: this tool reaches its setup by id rather than
         // through `authorizedAssignmentAndSetupForWrite`, so it registers for a
-        // snapshot by hand. Replacing the reference solution rewrites the
-        // solution file inside the setup zip, which is versioned content.
+        // snapshot by hand. The reference solution itself lives in the
+        // submissions directory, not in the versioned setup zip, so a restore
+        // cannot roll it back; the registration snapshots whatever else this
+        // write changes on the setup, and dedupes to no row otherwise.
         let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db)
         if let setup {
             await context.beginContentWrite(setup: setup)

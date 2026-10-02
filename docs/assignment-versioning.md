@@ -32,8 +32,7 @@ A snapshot therefore needs the three artifacts and nothing more.
 
 Assignment **metadata** — title, due date, visibility, slug, course section,
 BrightSpace grade-item mapping — lives on `assignments` and is deliberately *not*
-content. It is recorded in a snapshot for reference but never written back by a
-restore (see §5).
+content. A snapshot does not record it, and a restore never writes it (see §5).
 
 Student data is never involved. Snapshots hold instructor-authored content only.
 
@@ -211,9 +210,9 @@ it.
 **Restores put back content only.** Title, due date, visibility, course section,
 and BrightSpace mapping are left alone; the assignment lands closed, as any
 content edit leaves it. A recovery action must never silently reopen an
-assignment or move a deadline students have already seen. The snapshot still
-records metadata, so the tool response can report what the title and due date
-were at the time and the instructor can reapply them deliberately.
+assignment or move a deadline students have already seen. The snapshot holds
+no metadata, so a restore cannot report what the title or due date were; the
+instructor reapplies them deliberately from their own record.
 
 The response reports `submissionsRequeued` so the caller sees the blast radius:
 restoring a suite regrades every existing submission on that setup.
@@ -267,9 +266,10 @@ clone inherits no history for free. Each creation path then seeds a single `v1`
 current content, clean slate — and a starting point to roll back to before
 anyone edits the copy.
 
-Bundle import is not seeded explicitly; the lazy baseline covers it on first
-edit. `.chickadee` bundle *export* stays history-free; bundles are large enough
-already.
+Bundle import seeds `v1` too (`origin: import`, #1741), so an imported
+assignment has a starting point before anyone edits it and the timeline can say
+how it arrived. `.chickadee` bundle *export* stays history-free; bundles are
+large enough already.
 
 ### 7.3 Notebook working copies are deliberately left alone
 

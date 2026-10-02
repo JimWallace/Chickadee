@@ -519,6 +519,41 @@ import VaporTesting
         }
     }
 
+    /// An imported assignment starts with a `v1` whose origin says it
+    /// arrived by import (#1741), as a clone or a creation does.
+    @Test func importSeedsAnInitialVersion() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "VERS_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_vers_rt", courseID: courseID)
+            _ = try await insertAssignment(testSetupID: try setup.requireID(), courseID: courseID)
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in zipData = Data(res.body.readableBytesView) }
+            )
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "VERS_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let versions = try await APIAssignmentVersion.query(on: app.db)
+                .filter(\.$testSetupID == assignment.testSetupID)
+                .all()
+            #expect(versions.count == 1)
+            #expect(versions.first?.origin == AssignmentVersionOrigin.bundleImport)
+        }
+    }
+
     /// Import keeps each submission's `submittedAt` and each result's
     /// `receivedAt` from the bundle (#1739), not the import time.
     @Test func bundleRoundTripCarriesTimestamps() async throws {
