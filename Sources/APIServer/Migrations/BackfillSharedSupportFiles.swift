@@ -25,6 +25,7 @@ struct BackfillSharedSupportFiles: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         // A full model query is safe here because this migration is registered
         // after every migration that adds a column to `test_setups` (#1077).
+        // `MigrationOrderTests` checks the order.
         let setups = try await APITestSetup.query(on: database).all()
         let fm = FileManager.default
         var repaired = 0
