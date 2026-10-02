@@ -156,6 +156,9 @@ My Account
                     <div class="item-details" data-avatar-handle>Class handle: #(course.handle)</div>
                     #if(course.handleChoice.isLocked):
                     <div class="item-details">Your handle is set for this course.</div>
+                    #if(course.handleChoice.wasLocked):
+                    <div class="item-details" role="status">It was set before your last choice arrived.</div>
+                    #endif
                     #endif
                     #endif
                     #if(course.slipDaysText):

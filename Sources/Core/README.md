@@ -28,7 +28,7 @@ from 33 files here, 5,021 lines, none of them a member of `TestProperties`,
 is a move to `APIServer`, one PR per group, each with a struct test suite that
 needs no app; do not add a sixth group. The owning audit sweep is named.
 
-- **Avatars**, 838 lines: `AvatarSpec`, `AvatarMarkup`, `AvatarHandle`,
+- **Avatars**, 838 lines: `AvatarSpec`, `AvatarPresentation`, `AvatarHandle`,
   `AvatarCustomization` (sweep 8, #1689).
 - **Dataset materialization and diagnostics**, 1,155 lines:
   `DatasetMaterializer`, `DatasetDivergence`, `DatasetDiagnostics`,

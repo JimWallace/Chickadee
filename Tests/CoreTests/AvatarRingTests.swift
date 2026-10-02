@@ -82,7 +82,7 @@ import Testing
     // MARK: - The chokepoint
 
     @Test func aStarterRingCanBeChosen() throws {
-        let updated = try AvatarCustomization.applying(["border": "rainbow"], to: Self.base)
+        let updated = try AvatarCustomization.applying(["border": "rainbow"], to: Self.base, isStaff: false)
         #expect(updated.border == .rainbow)
         #expect(AvatarCustomization.isOpen("rainbow", for: .border))
     }
@@ -91,7 +91,7 @@ import Testing
     func aLockedRingIsRefusedAndChangesNothing(value: String) {
         #expect(!AvatarCustomization.isOpen(value, for: .border))
         #expect(throws: AvatarCustomizationError.optionLocked(slot: .border, value: value)) {
-            try AvatarCustomization.applying(["backdrop": "rose", "border": value], to: Self.base)
+            try AvatarCustomization.applying(["backdrop": "rose", "border": value], to: Self.base, isStaff: false)
         }
     }
 

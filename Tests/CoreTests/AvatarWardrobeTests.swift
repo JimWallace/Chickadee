@@ -87,28 +87,28 @@ import Testing
 
     @Test func applyingSetsOnlyTheChosenSlots() throws {
         let updated = try AvatarCustomization.applying(
-            ["backdrop": "rose", "border": "honey"], to: Self.base)
+            ["backdrop": "rose", "border": "honey"], to: Self.base, isStaff: false)
         var expected = Self.base
         expected.backdrop = .rose
         expected.border = .honey
         #expect(updated == expected)
 
-        let backdropOnly = try AvatarCustomization.applying(["backdrop": "sky"], to: Self.base)
+        let backdropOnly = try AvatarCustomization.applying(["backdrop": "sky"], to: Self.base, isStaff: false)
         #expect(backdropOnly.border == Self.base.border)
         #expect(backdropOnly.backdrop == .sky)
-        #expect(try AvatarCustomization.applying([:], to: Self.base) == Self.base)
+        #expect(try AvatarCustomization.applying([:], to: Self.base, isStaff: false) == Self.base)
     }
 
     @Test func applyingRefusesAnUnknownOptionOrSlot() {
         #expect(throws: AvatarCustomizationError.unknownOption(slot: .border, value: "gold")) {
-            try AvatarCustomization.applying(["backdrop": "rose", "border": "gold"], to: Self.base)
+            try AvatarCustomization.applying(["backdrop": "rose", "border": "gold"], to: Self.base, isStaff: false)
         }
         #expect(throws: AvatarCustomizationError.unknownOption(slot: .backdrop, value: "Sky")) {
-            try AvatarCustomization.applying(["backdrop": "Sky"], to: Self.base)
+            try AvatarCustomization.applying(["backdrop": "Sky"], to: Self.base, isStaff: false)
         }
         // A drawn slot is not the student's to set.
         #expect(throws: AvatarCustomizationError.slotNotCustomizable("accessory")) {
-            try AvatarCustomization.applying(["accessory": "gradcap"], to: Self.base)
+            try AvatarCustomization.applying(["accessory": "gradcap"], to: Self.base, isStaff: false)
         }
     }
 

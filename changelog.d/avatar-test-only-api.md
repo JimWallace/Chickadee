@@ -1,0 +1,3 @@
+### Changed
+
+- **Three avatar conveniences that existed only for tests are gone, and a stale handle pick is told so.** `AvatarMarkup.layerSymbolIDs`, `AvatarRing: Codable` and the `AvatarCustomization.applying(_:to:)` overload had no production caller; the tests read `AvatarPresentation.layerRefs` and pass `isStaff` instead. `AvatarSpec` stays `Hashable`: the draw tests count distinct birds with a set, which is the use its comment named. A handle choice that arrives after the handle was locked (a stale tab) used to redirect silently; the account page now says the handle was set before the choice arrived (#1763).

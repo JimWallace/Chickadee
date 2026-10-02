@@ -36,6 +36,9 @@ struct AccountHandleChoice: Encodable {
     /// The student's pick was taken by somebody else first; the panel opens
     /// with two new alternates.
     let wasTaken: Bool
+    /// The student's pick arrived after the handle was locked (a stale tab);
+    /// nothing changed, and the row says so (#1763).
+    let wasLocked: Bool
 }
 
 extension AccountRoutes {
@@ -91,10 +94,13 @@ extension AccountRoutes {
         for enrollment: APICourseEnrollment, handle: String, spec: AvatarSpec, taken: Set<String>,
         isStaff: Bool, req: Request
     ) -> AccountHandleChoice {
-        // The notice the POST redirects back with, naming its course.
-        let wasTaken = req.query[String.self, at: "handleTaken"] == enrollment.course.id?.uuidString
+        // The two notices the POST redirects back with, each naming its course.
+        let courseID = enrollment.course.id?.uuidString
+        let wasTaken = req.query[String.self, at: "handleTaken"] == courseID
+        let wasLocked = req.query[String.self, at: "handleLocked"] == courseID
         guard enrollment.avatarHandleLockedAt == nil else {
-            return AccountHandleChoice(isLocked: true, options: [], canChoose: false, wasTaken: false)
+            return AccountHandleChoice(
+                isLocked: true, options: [], canChoose: false, wasTaken: false, wasLocked: wasLocked)
         }
         let alternates = handleOffer(for: enrollment, taken: taken, req: req)
         let avatar = AvatarPresentation(for: spec, size: .small, accessibility: .decorative, isStaff: isStaff)
@@ -102,7 +108,8 @@ extension AccountRoutes {
             [AccountHandleOption(handle: handle, isCurrent: true, avatar: avatar)]
             + alternates.map { AccountHandleOption(handle: $0, isCurrent: false, avatar: avatar) }
         return AccountHandleChoice(
-            isLocked: false, options: options, canChoose: !alternates.isEmpty, wasTaken: wasTaken)
+            isLocked: false, options: options, canChoose: !alternates.isEmpty, wasTaken: wasTaken,
+            wasLocked: false)
     }
 
     // MARK: - POST /account/handle/:courseID
@@ -143,8 +150,10 @@ extension AccountRoutes {
             req.session.data[key] = nil
             return req.redirect(to: "/account")
         case .locked:
+            // A stale tab: the handle was locked after this page offered its
+            // alternates. Nothing changed, and the row says so.
             req.session.data[key] = nil
-            return req.redirect(to: "/account")
+            return req.redirect(to: "/account?handleLocked=\(courseIDString)")
         case .taken:
             // Drop the offer so the page deals two new alternates.
             req.session.data[key] = nil

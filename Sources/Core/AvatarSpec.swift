@@ -180,7 +180,7 @@ public enum AvatarAvailability: String, CaseIterable, Codable, Sendable {
 /// `staff` is reserved: it is drawn for course staff from their role, it is no
 /// `AvatarBorder`'s ring, and its double shape and colour belong to no student
 /// option (docs/student-wardrobe.md, "The staff ring").
-public enum AvatarRing: String, CaseIterable, Codable, Sendable {
+public enum AvatarRing: String, CaseIterable, Sendable {
     case none, solid, rainbow, spectrum, twotone, stitched, staff
     case snowflake, blossom, maple
 }
@@ -215,9 +215,10 @@ public enum AvatarTilt: String, CaseIterable, Codable, Sendable {
 /// `Codable` with string raw values so the stored form is legible in a JSON
 /// column and survives a slot gaining options.  `var` rather than `let`
 /// throughout because customization mutates one slot at a time.  `Hashable`
-/// so a set of specs is expressible — useful for counting distinct birds, and
-/// deliberately NOT used as a uniqueness key: see docs/student-avatars.md on
-/// why uniqueness is carried by a per-course handle instead.
+/// so a set of specs is expressible — the draw tests count distinct birds that
+/// way — and deliberately NOT used as a uniqueness key: see
+/// docs/student-avatars.md on why uniqueness is carried by a per-course handle
+/// instead.
 public struct AvatarSpec: Codable, Sendable, Hashable {
     public var cap: AvatarCap
     public var wing: AvatarWing
