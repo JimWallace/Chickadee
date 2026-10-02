@@ -374,7 +374,9 @@ private func importBundledUsers(
             let newUser = APIUser(
                 username: bundledUser.username,
                 passwordHash: "",  // inert placeholder
-                role: bundledUser.role,
+                // A bundle from before the per-course roles (#417) says
+                // `student` or `instructor` here; both are plain users now.
+                role: (UserRole(rawValue: bundledUser.role) ?? .user).rawValue,
                 authProvider: nil,
                 email: bundledUser.email,
                 displayName: bundledUser.displayName
@@ -396,15 +398,28 @@ private func importBundledEnrollments(
     courseID: UUID,
     db: Database
 ) async throws {
-    for bundleID in manifest.enrolledUserBundleIDs {
-        guard let uid = userIDMap[bundleID] else { continue }
+    // A bundle that carries roles (#1740) enrolls each user in the role it
+    // held. An older bundle lists only who was enrolled, and the seeded
+    // enrollment decides the role as it always has.
+    let entries: [(bundleID: String, role: CourseRole?)]
+    if let enrollments = manifest.enrollments {
+        entries = enrollments.map { ($0.userBundleID, $0.role) }
+    } else {
+        entries = manifest.enrolledUserBundleIDs.map { ($0, nil) }
+    }
+    for entry in entries {
+        guard let uid = userIDMap[entry.bundleID] else { continue }
         // Skip if already enrolled (matched user already in another course).
         let alreadyEnrolled = try await APICourseEnrollment.query(on: db)
             .filter(\.$userID == uid)
             .filter(\.$course.$id == courseID)
             .first()
         if alreadyEnrolled == nil {
-            try await saveSeededEnrollment(userID: uid, courseID: courseID, on: db)
+            if let role = entry.role {
+                try await APICourseEnrollment(userID: uid, courseID: courseID, role: role).save(on: db)
+            } else {
+                try await saveSeededEnrollment(userID: uid, courseID: courseID, on: db)
+            }
         }
     }
 }
