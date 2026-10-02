@@ -25,8 +25,6 @@
 
 import Core
 import Foundation
-import Subprocess
-import SystemPackage
 
 #if canImport(Glibc)
 import Glibc
@@ -713,78 +711,28 @@ enum PersonalizationEvaluator {
         // overlay the caller-supplied vars (the assignment seed and an optional
         // PYTHONPATH into the support-files dir).
         //
-        // `Environment.only` is what carries that guarantee to Subprocess: its default
-        // is `.inherit`, so this must never be left off.
+        // Passing the dictionary is what carries that guarantee: `runBounded`
+        // gives the child exactly it, and a nil environment would inherit, so
+        // this must never be left off.
         let parentEnv = EnvironmentSource.all
         var mergedEnv: [String: String] = [:]
         for key in ["PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "PYTHONHOME"] {
             if let value = parentEnv[key] { mergedEnv[key] = value }
         }
         for (k, v) in env { mergedEnv[k] = v }
-        // Bound as a `let` before the task group: the group's closure is a
-        // `sending` parameter, so capturing the mutable locals directly is a
-        // data race the compiler rejects.
-        let childEnvironment = Subprocess::Environment.only(mergedEnv)
 
-        var options = PlatformOptions()
-        // setsid(2) in the child: its own session and process group, so the
-        // group-wide teardown below reaches anything the expression
-        // backgrounded and nothing else.
-        options.createSession = true
-        // SIGTERM first so the interpreter can unwind, then the SIGKILL
-        // `teardownSequence` always appends — the escalation the old
-        // terminate/sleep/kill ladder performed by hand. It runs on
-        // cancellation, which is how the watchdog below stops the child.
-        options.teardownSequence = [
-            .send(signal: .terminate, toProcessGroup: true, allowedDurationToNextStep: .seconds(2))
-        ]
-        let platformOptions = options
-
-        let outcome = try await withThrowingTaskGroup(of: SpawnOutcome.self) { group in
-            group.addTask {
-                let result = try await Subprocess.run(
-                    .path(FilePath(executableURL.path)),
-                    arguments: Arguments(arguments),
-                    environment: childEnvironment,
-                    workingDirectory: FilePath(cwd.path),
-                    platformOptions: platformOptions,
-                    output: .string(limit: outputCaptureLimitBytes),
-                    error: .string(limit: outputCaptureLimitBytes)
-                )
-                return .finished(
-                    stdout: result.standardOutput,
-                    stderr: result.standardError,
-                    exitCode: exitCode(of: result.terminationStatus)
-                )
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(timeoutSeconds))
-                return .timedOut
-            }
-            let first = try await group.next()
-            // Cancelling the run task is what runs `teardownSequence` against
-            // the child; cancelling the sleep merely ends it. The drain below
-            // swallows the cancelled sibling's error so it cannot surface as
-            // the result of a run that already finished.
-            group.cancelAll()
-            while (try? await group.next()) != nil {}
-            return first ?? .timedOut
-        }
-
-        switch outcome {
-        case .timedOut:
-            throw PersonalizationEvaluatorError.timedOut
-        case .finished(let stdout, let stderr, let exitCode):
-            return (stdout, stderr, exitCode)
-        }
-    }
-
-    /// Which of the two racers finished first.  A flat enum rather than the
-    /// generic `ExecutionResult`, so the task group has one concrete element
-    /// type to be generic over.
-    private enum SpawnOutcome: Sendable {
-        case finished(stdout: String, stderr: String, exitCode: Int32)
-        case timedOut
+        // SIGTERM to the child's own process group first, so the interpreter
+        // can unwind, then SIGKILL two seconds later.
+        let run = try await runBounded(
+            executable: executableURL.path,
+            arguments: arguments,
+            environment: mergedEnv,
+            workingDirectory: cwd.path,
+            limits: BoundedRunLimits(
+                timeout: .seconds(timeoutSeconds), outputLimit: outputCaptureLimitBytes,
+                teardownGrace: .seconds(2)))
+        guard let run else { throw PersonalizationEvaluatorError.timedOut }
+        return (run.standardOutput, run.standardError, run.exitCode)
     }
 
     /// Hard cap on captured output.  `Subprocess.string(limit:)` throws once a
@@ -793,17 +741,4 @@ enum PersonalizationEvaluator {
     /// server buying its memory.  Generous enough that no honest `repr` of a
     /// personalized value comes close.
     private static let outputCaptureLimitBytes = 4 * 1024 * 1024
-
-    /// Flattens a `TerminationStatus` to the `Int32` the caller compares
-    /// against 0.  A signalled child reports `128 + signal`, the shell
-    /// convention, so a killed interpreter is distinguishable in the
-    /// `nonZeroExit` error rather than colliding with a real exit code.
-    private static func exitCode(of status: TerminationStatus) -> Int32 {
-        switch status {
-        case .exited(let code):
-            return Int32(code)
-        case .signaled(let signal):
-            return 128 + Int32(signal)
-        }
-    }
 }
