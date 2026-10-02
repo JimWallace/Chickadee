@@ -194,18 +194,11 @@ struct GitHubCourseRoutes: RouteCollection {
             req.logger.warning("GitHub course binding exchange failed", metadata: ["error": "\(error)"])
             throw GitHubCourseBindError.exchangeFailed
         }
-        let lookup: Result<([GitHubUserInstallation], String?), any Error>
-        do {
-            lookup = .success(
-                (try await client.userInstallations(token), try await client.organizationRole(token, organization)))
-        } catch {
-            lookup = .failure(error)
-        }
         // Revoked before any answer is used, so no path keeps the token.
-        do {
-            try await client.revokeToken(token, app.clientID, secrets.clientSecret)
-        } catch {
-            req.logger.warning("GitHub user token not revoked", metadata: ["error": "\(error)"])
+        let lookup = await client.withRevokedUserToken(
+            token, clientID: app.clientID, clientSecret: secrets.clientSecret, logger: req.logger
+        ) { token in
+            (try await client.userInstallations(token), try await client.organizationRole(token, organization))
         }
         guard case .success(let (installations, role)) = lookup else {
             req.logger.warning("GitHub course binding check failed")
@@ -263,6 +256,16 @@ struct GitHubCourseRoutes: RouteCollection {
         let existing = try await APIGitHubAssignmentTemplate.query(on: req.db)
             .filter(\.$testSetupID == body.testSetupID).first()
         let templateID = body.templateID.flatMap { Int64($0) }
+        // Clearing or changing the template once repositories exist would
+        // give later students a different start, and would send a student
+        // whose repository exists to owned-repository mode, which refuses the
+        // organization's repository as not theirs (#1767). The same gate as
+        // the LTI platform delete: refuse while rows depend on it.
+        if let existing, existing.templateRepoID != templateID {
+            let made = try await APIGitHubCourseRepository.query(on: req.db)
+                .filter(\.$testSetupID == body.testSetupID).count()
+            if made > 0 { return Self.redirect(req, error: .templateInUse) }
+        }
         if let templateID {
             // Only a template the organization's installation grants.
             let access: GitHubCourseAccess

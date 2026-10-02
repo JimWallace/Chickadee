@@ -52,12 +52,8 @@ struct ActivityEventThrottleKey: StorageKey {
 extension Application {
     /// Process-wide throttle gating `user_activity_events` inserts.
     var activityEventThrottle: ActivityEventThrottle {
-        get {
-            if let existing = storage[ActivityEventThrottleKey.self] { return existing }
-            let created = ActivityEventThrottle()
-            storage[ActivityEventThrottleKey.self] = created
-            return created
+        lazyStored(ActivityEventThrottleKey.self) {
+            ActivityEventThrottle()
         }
-        set { storage[ActivityEventThrottleKey.self] = newValue }
     }
 }

@@ -171,13 +171,9 @@ struct NotebookBytesCacheKey: StorageKey {
 
 extension Application {
     var notebookBytesCache: NotebookBytesCache {
-        get {
-            if let existing = storage[NotebookBytesCacheKey.self] { return existing }
-            let created = NotebookBytesCache(
+        lazyStored(NotebookBytesCacheKey.self) {
+            NotebookBytesCache(
                 threadPool: threadPool, eventLoopGroup: eventLoopGroup)
-            storage[NotebookBytesCacheKey.self] = created
-            return created
         }
-        set { storage[NotebookBytesCacheKey.self] = newValue }
     }
 }
