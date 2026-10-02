@@ -17,7 +17,13 @@
 // session too: it is unguessable, names one request, and dies when used. The
 // route is therefore public and outside the CSRF group, like the launch.
 //
-// Both responses may be framed by the platform's origins; every other page
+// A launch from an LMS course that is not linked yet shows an instructor
+// "Link this LMS course" first (`startBind`, lti-deep-link-bind.leaf). The
+// request travels to `POST /lti/deep-link/bind` in a short-lived token the
+// tool key signed (`LTIDeepLinkBindToken`); that route applies the same rules
+// as `/lti/bind`, links the course, and continues to the picker.
+//
+// Every response may be framed by the platform's origins; every other page
 // keeps `frame-ancestors 'self'`. Each returned link launches `/lti/launch`
 // with the assignment's public ID as a custom parameter.
 
@@ -28,6 +34,7 @@ import Vapor
 struct LTIDeepLinkRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         routes.post("lti", "deep-link", use: returnSelection)
+        routes.post("lti", "deep-link", "bind", use: bindSelection)
     }
 
     struct Pending {
@@ -64,6 +71,82 @@ struct LTIDeepLinkRoutes: RouteCollection {
         return try await renderPicker(
             ticket: ticket, course: course, acceptMultiple: request.acceptMultiple, error: nil, req: req
         ).encodeResponse(for: req)
+    }
+
+    // MARK: - Link the LMS course first
+
+    /// Renders the course choice for an instructor's deep-linking launch from
+    /// an LMS course that is not linked yet.
+    static func startBind(
+        _ request: LTIPendingDeepLink, platform: APILTIPlatform, contextID: String, contextTitle: String,
+        user: APIUser, req: Request
+    ) async throws -> Response {
+        let token = LTIDeepLinkBindToken(
+            userID: try user.requireID(), platformID: try platform.requireID(), contextID: contextID,
+            contextTitle: contextTitle, request: request)
+        allowFraming(platform: platform, returnURL: request.returnURL, on: req)
+        return try await renderBind(
+            token: try await req.application.ltiToolKeyAuthority().sign(token), contextTitle: contextTitle,
+            user: user, error: nil, req: req
+        ).encodeResponse(for: req)
+    }
+
+    // MARK: - POST /lti/deep-link/bind
+
+    /// Links the LMS course to the chosen Chickadee course, then shows the
+    /// picker. The rules are those of `/lti/bind`: a course the instructor
+    /// teaches that is not linked yet, and an LMS course not linked to another.
+    @Sendable
+    func bindSelection(req: Request) async throws -> Response {
+        struct Body: Content {
+            var token: String?
+            var courseID: String?
+        }
+        let body = try? req.content.decode(Body.self)
+        guard let raw = body?.token,
+            let token = try? await req.application.ltiToolKeyAuthority().verify(raw, as: LTIDeepLinkBindToken.self),
+            let userID = token.userID,
+            let user = try await APIUser.find(userID, on: req.db),
+            let platform = try await APILTIPlatform.find(token.platformID, on: req.db), platform.enabled
+        else { throw Self.requestGone }
+        let request = token.request
+        Self.allowFraming(platform: platform, returnURL: request.returnURL, on: req)
+
+        // A second post of the same choice (a double click) finds the course
+        // already linked and goes on to its picker, which checks the role.
+        if let bound = try await APICourse.query(on: req.db)
+            .filter(\.$ltiPlatformID == token.platformID)
+            .filter(\.$ltiContextID == token.contextID)
+            .first()
+        {
+            return try await Self.startPicker(request, course: bound, platform: platform, user: user, req: req)
+        }
+        guard let courseID = body?.courseID.flatMap(UUID.init(uuidString:)),
+            let course = try await LTIBindRoutes.bindableCourses(for: user, on: req.db)
+                .first(where: { $0.id == courseID })
+        else {
+            return try await Self.renderBind(
+                token: raw, contextTitle: token.contextTitle, user: user,
+                error: "Choose a course you teach that is not linked yet.", req: req
+            ).encodeResponse(for: req)
+        }
+        try await LTICourseBinding.bind(course, platformID: token.platformID, contextID: token.contextID, on: req.db)
+        await AuditLogger.record(
+            action: .ltiCourseBound, targetType: .course, targetID: courseID.uuidString,
+            metadata: ["course": course.code, "context_id": token.contextID], actorOverride: user,
+            courseID: courseID, on: req)
+        return try await Self.startPicker(request, course: course, platform: platform, user: user, req: req)
+    }
+
+    private static func renderBind(
+        token: String, contextTitle: String, user: APIUser, error: String?, req: Request
+    ) async throws -> View {
+        try await req.view.render(
+            "lti-deep-link-bind",
+            LTIDeepLinkBindContext(
+                currentUser: nil, embedded: true, token: token, contextTitle: contextTitle,
+                courses: LTIBindRoutes.options(try await LTIBindRoutes.bindableCourses(for: user, on: req.db)),
+                error: error))
     }
 
     // MARK: - POST /lti/deep-link
@@ -190,6 +273,15 @@ struct LTIDeepLinkContext: Encodable {
     let courseCode: String
     let acceptMultiple: Bool
     let assignments: [LTIDeepLinkOption]
+    let error: String?
+}
+
+struct LTIDeepLinkBindContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let embedded: Bool
+    let token: String
+    let contextTitle: String
+    let courses: [LTIBindCourseOption]
     let error: String?
 }
 
