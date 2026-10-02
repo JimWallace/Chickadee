@@ -231,14 +231,18 @@ enum AvatarStore {
     // MARK: - The staff ring
 
     /// The users among `userIDs` who are course staff (TA or instructor) in at
-    /// least one course. For the pages that belong to no one course — the
-    /// account page and the admin Users list — where the staff ring means
-    /// "teaches somewhere". A page inside a course asks that course's
-    /// enrollment role instead (docs/student-wardrobe.md, "The staff ring").
+    /// least one course that is not archived. For the pages that belong to no
+    /// one course — the account page and the admin Users list — where the
+    /// staff ring means "teaches somewhere". A page inside a course asks that
+    /// course's enrollment role instead (docs/student-wardrobe.md, "The staff
+    /// ring"). An archived offering does not count: a student who was a TA in
+    /// a past term is a student now, and gets their own ring back (#1756).
     static func courseStaff(among userIDs: [UUID], on db: Database) async throws -> Set<UUID> {
         guard !userIDs.isEmpty else { return [] }
         let enrollments = try await APICourseEnrollment.query(on: db)
             .filter(\.$userID ~~ userIDs)
+            .join(APICourse.self, on: \APICourseEnrollment.$course.$id == \APICourse.$id)
+            .filter(APICourse.self, \.$isArchived == false)
             .all()
         return Set(enrollments.filter { $0.role >= .ta }.map(\.userID))
     }
