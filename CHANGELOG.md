@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.321] - 2026-10-02
+
+### Fixed
+
+- **Two first hill crownings landing together name one champion.** Both winners could reach the first insert; the unique index kept the first row while the champion record went to the second writer. The record is now awarded only when this call's insert is the row the hill keeps (#1752).
+
+### Fixed
+
+- **A round-robin match against nobody counts nothing in the standings.** The first submitter, with no classmate and no bundled bot, played a match whose row completed as a loss and sat them last on an average score of zero until they resubmitted. The row still completes, but the standings skip it, so the student has no standings row until they play someone (#1748).
+
+
 ## [0.5.320] - 2026-10-02
 
 ### Changed
