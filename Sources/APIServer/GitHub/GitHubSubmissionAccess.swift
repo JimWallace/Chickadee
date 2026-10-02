@@ -14,6 +14,11 @@ struct GitHubSubmissionAccess: Sendable {
     let link: APIGitHubAccountLink
     let token: String
     let client: GitHubRepoClient
+    /// The GitHub account the token's installation is on: the cache entry to
+    /// drop when GitHub refuses the token (#1768).
+    let tokenAccountID: Int64
+    /// A fresh token for that account, once the cached one is dropped.
+    let renewToken: @Sendable (Request) async throws -> String
     /// Set in course-repository mode (slice 4): the only repository this
     /// student may submit from, read with the course organization's token.
     /// Nil means the student submits from a repository they own (slice 3).
@@ -37,17 +42,21 @@ struct GitHubSubmissionAccess: Sendable {
         else { throw GitHubSubmitError.notLinked }
 
         let client = req.application.githubRepoClient
-        let token = try await installationToken(
-            accountID: link.githubUserID, app: app, secrets: secrets, req: req
-        ) { jwt in
-            // The installation must be on the linked account itself: a login
-            // that has since moved to another GitHub account fails here.
-            guard let installation = try await client.findInstallation(jwt, link.githubLogin),
-                installation.accountID == link.githubUserID
-            else { throw GitHubSubmitError.notInstalled }
-            return installation.id
+        let accountID = link.githubUserID
+        let login = link.githubLogin
+        let renew: @Sendable (Request) async throws -> String = { req in
+            try await installationToken(accountID: accountID, app: app, secrets: secrets, req: req) { jwt in
+                // The installation must be on the linked account itself: a login
+                // that has since moved to another GitHub account fails here.
+                guard let installation = try await client.findInstallation(jwt, login),
+                    installation.accountID == accountID
+                else { throw GitHubSubmitError.notInstalled }
+                return installation.id
+            }
         }
-        return GitHubSubmissionAccess(link: link, token: token, client: client)
+        let token = try await renew(req)
+        return GitHubSubmissionAccess(
+            link: link, token: token, client: client, tokenAccountID: accountID, renewToken: renew)
     }
 
     /// Course-repository mode (slice 4): the student's own course repository
@@ -66,6 +75,7 @@ struct GitHubSubmissionAccess: Sendable {
         let organization = try await GitHubCourseAccess.resolve(courseID: courseID, req: req)
         return GitHubSubmissionAccess(
             link: link, token: organization.token, client: organization.client,
+            tokenAccountID: organization.organization.orgID, renewToken: organization.renewToken,
             courseRepositoryID: repository.repoID)
     }
 
@@ -93,7 +103,7 @@ struct GitHubSubmissionAccess: Sendable {
         if let courseRepositoryID {
             return [try await ownedRepository(id: courseRepositoryID, req: req)]
         }
-        return try await Self.calling(req) {
+        return try await call(req) { token in
             try await client.repositories(token)
                 .filter { $0.ownerID == githubUserID }
                 .sorted { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
@@ -107,7 +117,7 @@ struct GitHubSubmissionAccess: Sendable {
     /// repository made for this student.
     func ownedRepository(id: Int64, req: Request) async throws -> GitHubRepository {
         if let courseRepositoryID, id != courseRepositoryID { throw GitHubSubmitError.notOwner }
-        let repository = try await Self.calling(req) { try await client.repository(token, id) }
+        let repository = try await call(req) { token in try await client.repository(token, id) }
         guard let repository else { throw GitHubSubmitError.repositoryNotFound }
         guard courseRepositoryID != nil || repository.ownerID == githubUserID else {
             throw GitHubSubmitError.notOwner
@@ -116,20 +126,53 @@ struct GitHubSubmissionAccess: Sendable {
     }
 
     func branches(of repository: GitHubRepository, req: Request) async throws -> [String] {
-        try await Self.calling(req) { try await client.branches(token, repository.fullName).sorted() }
+        try await call(req) { token in try await client.branches(token, repository.fullName).sorted() }
     }
 
     /// The commit `ref` points to now. Resolved once; everything after uses the SHA.
     func commit(_ ref: String, in repository: GitHubRepository, req: Request) async throws -> GitHubCommit {
-        let commit = try await Self.calling(req) { try await client.commit(token, repository.fullName, ref) }
+        let commit = try await call(req) { token in try await client.commit(token, repository.fullName, ref) }
         guard let commit else { throw GitHubSubmitError.commitNotFound }
         return commit
     }
 
     /// The gzipped tarball of `sha`, no larger than the tar cap allows.
     func tarball(of repository: GitHubRepository, sha: String, req: Request) async throws -> Data {
-        try await Self.calling(req) {
+        try await call(req) { token in
             try await client.tarball(token, repository.fullName, sha, GitHubTarball.maxTarBytes)
+        }
+    }
+
+    /// Runs a GitHub call with the token, and once more with a fresh one when
+    /// GitHub refuses it.
+    func call<T: Sendable>(_ req: Request, _ body: (_ token: String) async throws -> T) async throws -> T {
+        try await Self.calling(req, accountID: tokenAccountID, token: token, renew: renewToken, body)
+    }
+
+    /// `calling(_:_:)` with one retry on a refused token. A refusal means the
+    /// token's installation was removed or re-made after the token was
+    /// cached, so the cached entry is dropped and `renew` resolves a fresh
+    /// one; a second refusal means the App is not installed (#1768).
+    static func calling<T: Sendable>(
+        _ req: Request, accountID: Int64, token: String,
+        renew: @Sendable (Request) async throws -> String,
+        _ body: (_ token: String) async throws -> T
+    ) async throws -> T {
+        do {
+            return try await calling(req) { try await body(token) }
+        } catch GitHubSubmitError.tokenRejected {
+            let cache = req.application.githubInstallationTokens
+            await cache.remove(account: accountID)
+            req.logger.info(
+                "GitHub refused an installation token; resolving once more",
+                metadata: ["account": "\(accountID)"])
+            let fresh = try await renew(req)
+            do {
+                return try await calling(req) { try await body(fresh) }
+            } catch GitHubSubmitError.tokenRejected {
+                await cache.remove(account: accountID)
+                throw GitHubSubmitError.notInstalled
+            }
         }
     }
 

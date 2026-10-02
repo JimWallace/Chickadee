@@ -20,6 +20,10 @@ enum GitHubSubmitError: String, Error, Equatable {
     case commitNotFound
     /// GitHub did not answer, or its answer could not be read.
     case githubFailed
+    /// GitHub refused the installation token: its installation was removed or
+    /// re-made after the token was cached. The access layer drops the token
+    /// and resolves once more before a student sees this (#1768).
+    case tokenRejected
     /// The commit is larger than the submission size limit.
     case tooLarge
     /// The commit has no files to submit.
@@ -49,6 +53,8 @@ enum GitHubSubmitError: String, Error, Equatable {
             "That branch or commit was not found. Choose it again."
         case .githubFailed:
             "GitHub did not respond. Try again later, or use the upload form."
+        case .tokenRejected:
+            "GitHub refused the App's access. Try again, or use the upload form."
         case .tooLarge:
             "The commit is larger than \(GitHubTarball.maxFileBytes / 1_048_576) MB. "
                 + "Remove large files, or use the upload form."

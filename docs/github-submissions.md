@@ -580,7 +580,10 @@ addresses reach the server and are dropped at decoding.
   transport error counts, so a 404 for a missing installation is not an outage.
 - Cache installation tokens for their one-hour life. Do not get a new token for
   each request. Built in slice 3: kept in memory per GitHub account, and not
-  used in the last five minutes before it expires.
+  used in the last five minutes before it expires. A token GitHub refuses is
+  dropped and resolved once more, because the installation behind it may have
+  been removed or re-made; an `installation` webhook that removes or suspends
+  the App drops the token at once (#1768).
 - A GitHub outage stops GitHub submission only. The upload form still works.
   The submit panel must say this, and point the student to the upload form.
 - Log the repository ID and the SHA on each GitHub submission. Do not log
