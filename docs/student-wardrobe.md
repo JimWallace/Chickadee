@@ -190,7 +190,9 @@ not a choice, and staff cannot change it.
 - **Where the role comes from.** On a course page (the roster, the
   leaderboard), the ring comes from the person's role in THAT course. On the
   account page and on the admin Users page there is no one course, so the ring
-  means "staff in at least one course" (`AvatarStore.courseStaff`).
+  means "staff in at least one course that is not archived"
+  (`AvatarStore.courseStaff`): a TA whose offering has ended is a student again
+  and chooses their own ring (#1756).
 - **It is never stored.** `AvatarPresentation(for:size:accessibility:isStaff:)`
   draws it in place of the stored ring. The stored border is kept, so a TA who
   is a student in a later course gets their own ring back there.

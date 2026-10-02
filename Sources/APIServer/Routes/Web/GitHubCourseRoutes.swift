@@ -178,8 +178,7 @@ struct GitHubCourseRoutes: RouteCollection {
         code: String, verifier: String, organization: String, req: Request
     ) async throws -> GitHubUserInstallation {
         guard
-            let app = try await APIGitHubApp.query(on: req.db).first(),
-            let secrets = try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath),
+            let (app, secrets) = try await GitHubAppRegistration.resolve(req: req),
             let redirectURI = GitHubUserAuthorization.redirectURI(
                 publicBaseURL: req.application.securityConfiguration.publicBaseURL)
         else { throw GitHubCourseBindError.unavailable }

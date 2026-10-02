@@ -9,6 +9,66 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.327] - 2026-10-02
+
+### Changed
+
+- **The seven activity and achievement persistence files live in `Services/`.** `ActivityMatches`, `Tournaments`, `ClassCorpus`, `ClassAchievements`, `ClassItemCoverage`, `LeaderboardEntries` and `ActivityUnion` are ingest-time persistence with no second surface, which is the Services rule. A move only (#1729).
+
+
+## [0.5.326] - 2026-10-02
+
+### Fixed
+
+- A course bundle now carries each enrollment with its per-course role, so a TA or an instructor imports as one rather than as a student. A bundle from before this field enrolls as before, and a user whose bundled deployment role uses the pre-#417 vocabulary imports as a plain user (#1740).
+
+### Fixed
+
+- The staff ring on the account page and the admin Users list now counts only courses that are not archived. A student who was a TA in a past offering no longer wears the staff ring everywhere, and can choose their own ring again (#1756).
+
+
+## [0.5.325] - 2026-10-02
+
+### Fixed
+
+- **Bundle import keeps each submission's `submittedAt` and each result's `receivedAt`.** The export wrote both; the import let the create stamp set them to import time, so student history showed the import date and two carried solutions tied on their timestamp. Each row is stamped from the bundle after it is created (#1739).
+
+### Fixed
+
+- **`clone_assignment` carries the secret-reveal, passing-threshold and sync-exclusion policies.** The course clone set the three after `cloneAssignment` returned and the MCP tool set nothing. `cloneAssignment` now copies them itself, so the two clones agree; section and sort order stay with the course clone, since sections map per course (#1738).
+
+### Changed
+
+- `docs/github-submissions.md` gains a "What Chickadee keeps, and for how long" table beside the crossing table, and its Privacy prose now matches the table: slices 1 to 3 send GitHub no student data, rather than nothing at all (#1774).
+
+### Changed
+
+- **The instructor LMS routes live on `InstructorLMSRoutes`.** The LEARN roster check, the BrightSpace tab and its actions, the LTI grades page and the per-assignment push, 16 registrations in four files, are carved out of `InstructorDashboardRoutes`. Same `/instructor` group and the same staff gate; no URL changed (#1718).
+
+### Fixed
+
+- **Leaderboard Present mode locks no handle.** The projected page reused the nameless rendering through `isStaff: false`, and that flag also decided whose view locks handles, so a staff member opening Present mode to check it spent every student's one handle change. The three board builders now take an explicit `lockingFor:`, and the Present page passes none (#1757).
+
+### Fixed
+
+- **A round-robin retest after a classmate resubmitted no longer inflates the standings.** The re-claim chose the classmate's newer entry under a new identity, so the old completed row stayed beside the new one and `played`, `wins` and the average counted both. The matrix claim now voids the submission's completed rows before it opens the current set (#1744).
+
+### Fixed
+
+- **A match report with no per-match rows completes one row, never several.** `recordMatrixMatches` completed every open row from the collection's single outcome when the report carried no `matches`. A claim can open one row per classmate, so that would have recorded a result against students the job never played. Only a lone bot or empty row completes that way; any other unreported row stays open (#1749).
+
+### Changed
+
+- **`zipContainsNotebook` reads the archive through `listZipEntries`.** It ran its own `unzip -l` with a private parse of the listing; it now writes the bytes to a temporary file and asks the one zip lister, so four spawn sites share one parse (#1731).
+
+
+## [0.5.324] - 2026-10-02
+
+### Fixed
+
+- **A missing or corrupt GitHub App secrets file is reported, not read as "no App".** Five callers loaded the file beside the row with `try?`, so a lost file left the admin page saying registered, students seeing GitHub submission as unavailable, and GitHub seeing 404 on every delivery, with no log line. `GitHubAppRegistration` reads the row and the file together, logs the problem, and the admin page names the file (#1771).
+
+
 ## [0.5.323] - 2026-10-02
 
 ### Changed

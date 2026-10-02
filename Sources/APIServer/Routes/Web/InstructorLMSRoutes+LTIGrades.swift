@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/InstructorDashboardRoutes+LTIGrades.swift
+// APIServer/Routes/Web/InstructorLMSRoutes+LTIGrades.swift
 //
 // The LMS grades page (docs/lti-1-3.md "Grades through AGS"): where an
 // instructor sends the active course's grades through the LTI grade service
@@ -51,7 +51,7 @@ struct InstructorLTIGradesContext: Encodable {
     let flashError: String?
 }
 
-extension InstructorDashboardRoutes {
+extension InstructorLMSRoutes {
     /// The most failures the page lists; the counts cover the rest.
     static let ltiFailureListLimit = 50
 

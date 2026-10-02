@@ -43,9 +43,36 @@ enum GitHubCommitStatusPoster {
         "chickadee/" + (assignmentSlug ?? "assignment")
     }
 
+    /// How long the post may hold the worker's result report. The result is
+    /// already committed when this runs, so a GitHub that stops answering
+    /// must not keep the runner waiting for its acknowledgement: the post is
+    /// abandoned, and a status is advisory (#1773).
+    static let deadline: Duration = .seconds(20)
+
     /// Posts the status when the submission, the assignment and the
-    /// repository all allow it.
-    static func postIfEnabled(submission: APISubmission, collection: TestOutcomeCollection, req: Request) async {
+    /// repository all allow it, and gives up after `deadline`. Never throws.
+    static func postIfEnabled(
+        submission: APISubmission, collection: TestOutcomeCollection, req: Request,
+        deadline: Duration = deadline
+    ) async {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await post(submission: submission, collection: collection, req: req)
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(for: deadline)
+                return false
+            }
+            if await group.next() == false {
+                req.logger.warning(
+                    "GitHub status abandoned", metadata: ["deadline": "\(deadline)"])
+            }
+            group.cancelAll()
+        }
+    }
+
+    private static func post(submission: APISubmission, collection: TestOutcomeCollection, req: Request) async {
         guard submission.kind == APISubmission.Kind.student,
             submission.sourceKind == SubmissionSource.github.rawValue,
             let sha = submission.sourceCommit, let repositoryID = submission.sourceRepoID,

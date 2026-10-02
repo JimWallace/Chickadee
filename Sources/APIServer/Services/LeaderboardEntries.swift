@@ -1,4 +1,4 @@
-// APIServer/Helpers/LeaderboardEntries.swift
+// APIServer/Services/LeaderboardEntries.swift
 //
 // Materialises a class activity's leaderboard at result ingest — one row per
 // (assignment, student) carrying the best `metric` reported so far — and

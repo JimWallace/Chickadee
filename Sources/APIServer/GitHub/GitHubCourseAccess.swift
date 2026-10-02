@@ -22,8 +22,7 @@ struct GitHubCourseAccess: Sendable {
     /// the course has no organization bound.
     static func resolve(courseID: UUID, req: Request) async throws -> GitHubCourseAccess {
         guard
-            let app = try await APIGitHubApp.query(on: req.db).first(),
-            let secrets = try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath),
+            let (app, secrets) = try await GitHubAppRegistration.resolve(req: req),
             let organization = try await APIGitHubCourseOrganization.query(on: req.db)
                 .filter(\.$courseID == courseID).first()
         else { throw GitHubSubmitError.unavailable }

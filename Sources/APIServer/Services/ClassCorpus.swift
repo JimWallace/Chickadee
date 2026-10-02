@@ -1,4 +1,4 @@
-// APIServer/Helpers/ClassCorpus.swift
+// APIServer/Services/ClassCorpus.swift
 //
 // The synthetic class corpus (docs/collaborative-class-assignments.md, Phase
 // 4): every contributor's slot cells assembled into ONE notebook, owned by no

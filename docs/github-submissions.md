@@ -522,9 +522,11 @@ What changes:
   organization that other staff can see.
 - Slice 6 puts a result on GitHub.
 
-What does **not** change: Chickadee sends nothing to GitHub in slices 1 to 3.
-It only reads a repository that the student chose to grant, at a time the
-student chose.
+What does **not** change: in slices 1 to 3 Chickadee sends GitHub no data
+about a student. The slice-1 manifest carries the deployment's URLs and the
+App's name, and the slice-2 authorization request carries only the request
+itself; both are the "Out" rows of the crossing table. Chickadee reads a
+repository that the student chose to grant, at a time the student chose.
 
 Questions for the privacy office:
 
@@ -572,6 +574,28 @@ test result, and it sends only the public-tier count, which the student
 already sees at once, and only to a private repository. Slice 5 is the one slice that receives
 personal data Chickadee does not want: the push payload's names and email
 addresses reach the server and are dropped at decoding.
+
+### What Chickadee keeps, and for how long
+
+The table above lists what crosses. This one lists what stays on the server
+afterwards, so the review can see what an unlink or a deletion removes, and
+what it leaves.
+
+| Item | Where | Kept until |
+|---|---|---|
+| The GitHub user ID, login and link time | `github_account_links`, one row per user | The student unlinks on the account page, which deletes the row, or the account is deleted, which takes the row with it. The data export shows the row while it exists. |
+| The link and unlink events | `audit_log`: `github.account_linked` carries the GitHub user ID and login; `github.account_unlinked` carries the user ID | The audit log's retention window, `AUDIT_LOG_RETENTION_DAYS`, 90 days by default. The login outlives the link by up to that window, and the data export includes the entries. |
+| The repository ID, `owner/name` and commit SHA of a GitHub submission | `submissions.source_repo_id`, `source_repo_name` and `source_commit` | The submission is deleted, with its course. The results page shows the short SHA to the student; the staff submission page shows the repository name and the SHA. An unlink does not clear these columns. |
+| The organization ID and login, and the installation ID | `github_course_organizations`, one row per bound course | The instructor unbinds the organization, or the course is deleted. |
+| The repository ID and `owner/name`, whether the invitation succeeded, the archived time, and the last push time and SHA | `github_course_repositories`, one row per student repository | The course, its assignment or the user is deleted; the rows cascade. Archiving the course leaves them. The data export lists the user's rows. |
+| The App ID, slug, name, client ID and owner login | `github_apps`, one row | The admin removes the App on `/admin/github`. |
+| The client secret, private key and webhook secret | `.github-app-secrets`, a 0600 file beside the data | The admin removes the App, which deletes the file. `scripts/snapshot.sh` copies the file into every host snapshot, so a snapshot holds it for as long as the snapshot is kept. |
+| Installation tokens | Memory only, `GitHubInstallationTokenCache` | The token's one-hour life, or the next restart. Never written to disk. |
+| A student's or an instructor's user token | Nowhere | Revoked in the request that obtained it, before the answer it fetched is used. |
+
+A course deletion removes the course's submissions and, through the cascades,
+its organization and repository rows. The account-link row and the audit
+entries belong to the user, not to the course, and stay.
 
 ## Operations
 
