@@ -196,6 +196,19 @@ async function main() {
             .forEach((el) => {
               el.disabled = true;
             });
+          // The Users table sorts by last seen, and last_seen_at refreshes at
+          // most once a minute per user. So which of the two seeded users was
+          // seen last depends on where those refreshes fall in the capture
+          // passes, and the two rows swapped in one pass of a run and not the
+          // others. Pin the order the baselines hold: the student, whom the
+          // seed logs in last, first. Ordering by name, descending, gives that
+          // order without reading the timestamps that move.
+          document.querySelectorAll("#users-table tbody").forEach((body) => {
+            const name = (row) => row.querySelector(".item-main")?.dataset.sortValue ?? "";
+            [...body.rows]
+              .sort((a, b) => name(b).localeCompare(name(a)))
+              .forEach((row) => body.appendChild(row));
+          });
           // Only the GENERATED name is replaced. An uploaded artifact keeps
           // the student's own filename ("solution.py"), which is already
           // deterministic — rewriting it too would restage the pending page's
