@@ -519,6 +519,66 @@ import VaporTesting
         }
     }
 
+    /// Import keeps each submission's `submittedAt` and each result's
+    /// `receivedAt` from the bundle (#1739), not the import time.
+    @Test func bundleRoundTripCarriesTimestamps() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "TIME_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_time_rt", courseID: courseID)
+            let setupID = try setup.requireID()
+            _ = try await insertAssignment(testSetupID: setupID, courseID: courseID)
+            let student = try await makeTestUser(on: app, username: "time_student", role: "student")
+            try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
+            let submittedAt = Date(timeIntervalSince1970: 1_700_000_000)
+            let receivedAt = Date(timeIntervalSince1970: 1_700_000_060)
+            let submission = try await makeTestSubmission(
+                on: app, id: "sub_time_rt", setupID: setupID, userID: try student.requireID(),
+                filename: "warmup.py")
+            submission.submittedAt = submittedAt
+            try await submission.save(on: app.db)
+            let result = try await makeTestResult(on: app, submissionID: "sub_time_rt")
+            result.receivedAt = receivedAt
+            try await result.save(on: app.db)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                }
+            )
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "TIME_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedAssignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let importedSubmission = try #require(
+                try await APISubmission.query(on: app.db)
+                    .filter(\.$testSetupID == importedAssignment.testSetupID)
+                    .filter(\.$kind == APISubmission.Kind.student)
+                    .first())
+            let importedSubmittedAt = try #require(importedSubmission.submittedAt)
+            #expect(abs(importedSubmittedAt.timeIntervalSince(submittedAt)) < 1)
+            let importedResult = try #require(
+                try await APIResult.query(on: app.db)
+                    .filter(\.$submissionID == (try importedSubmission.requireID()))
+                    .first())
+            let importedReceivedAt = try #require(importedResult.receivedAt)
+            #expect(abs(importedReceivedAt.timeIntervalSince(receivedAt)) < 1)
+        }
+    }
+
     /// A bundle exported by an older build carries no language declaration.
     /// Import must supply one, because import is otherwise a permanent source of
     /// undeclared assignments — and "undeclared" is precisely the state the

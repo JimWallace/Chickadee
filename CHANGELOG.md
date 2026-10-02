@@ -9,6 +9,74 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.324] - 2026-10-02
+
+### Fixed
+
+- **A missing or corrupt GitHub App secrets file is reported, not read as "no App".** Five callers loaded the file beside the row with `try?`, so a lost file left the admin page saying registered, students seeing GitHub submission as unavailable, and GitHub seeing 404 on every delivery, with no log line. `GitHubAppRegistration` reads the row and the file together, logs the problem, and the admin page names the file (#1771).
+
+
+## [0.5.323] - 2026-10-02
+
+### Changed
+
+- **The account page builds its course rows outside the handler.** `enrolledCourseRow` and `availableCourseRow` in `AccountRoutes+Rows.swift` carry the slip-day arithmetic and the self-enroll gate, so the handler is loads plus render (#1715).
+
+### Changed
+
+- **`Sources/Core/README.md` states the rule for what belongs in Core.** A type belongs there when the runner links or decodes it; "anything Vapor-free" is not the rule. The 33 server-only files that compile into the runner for nothing are listed as debt by group, with the audit sweep that owns each move (#1723).
+
+### Changed
+
+- **Every sweep monitor and cache accessor on `Application` uses `lazyStored`.** Eighteen accessors in `Services/` still spelled the four-line get-or-create by hand, most with a setter nothing called. They now read like the LTI adopters, and the unused setters are gone (#1727).
+
+
+## [0.5.322] - 2026-10-02
+
+### Fixed
+
+- **The admin Users page no longer writes an avatar for MCP service accounts.** It materialized a bird for every account on first view, service accounts included, which never open an account page (#1764).
+
+### Changed
+
+- **One `brightspaceRedirect` helper for the BrightSpace instructor routes.** The 32 flash writes and 24 redirects to the page each spelled the same two lines; every mutating handler now ends in one call that sets the flash and redirects (#1714).
+
+### Changed
+
+- **The compliance inventory and trust-boundary note list GitHub.** `data-flow-inventory.md` gains a per-flow table for the six GitHub flows, and `trust-boundary.md` names GitHub as a counterparty with its inbound webhook and callbacks, its two outbound hosts, and the rule that grading never leaves Chickadee's runners (#1770).
+
+### Fixed
+
+- **An assignment's GitHub template cannot be cleared or changed while course repositories exist.** Clearing it sent a student whose repository exists to owned-repository mode, which refused the organization's repository as not theirs; changing it gave later students a different start. The page now refuses with a sentence, the same gate the LTI platform delete uses (#1767).
+
+### Security
+
+- **The GitHub account-link callback revokes the user token when the user read fails.** The revoke ran after `GET /user`, so a throw there rethrew past it and left the token live. Both user-authorization callbacks now run their lookups through one helper, `withRevokedUserToken`, which revokes before any outcome is read (#1765).
+
+### Security
+
+- **The GitHub tarball reader's `gzip` child gets an explicit environment.** It inherited the server's whole environment, the one exception to the rule that every server child is launched with `Environment.only`. A new guard asserts every `Subprocess.run` under the server passes `environment:`, with a fixture proving it fails (#1797).
+
+### Changed
+
+- **One `ManifestCoherence` check for the manifest rules every authoring door enforces.** The zip upload, the three `setManifest*` edits and the two MCP mode tools each restated the upload-and-browser, grader-only-and-browser, opponent-and-browser and upload-only-language rules. They now ask one function, and an edit is refused only for the incoherence it introduces, never for one a legacy manifest inherits (#1713).
+
+### Changed
+
+- **The account page loads a course's taken handles once per enrollment.** `takenHandles` is the one query behind every handle draw and check, and it reads only the handle column of rows that have one. The account page passes the set to the draw and the alternates instead of loading the roster twice (#1759).
+
+
+## [0.5.321] - 2026-10-02
+
+### Fixed
+
+- **Two first hill crownings landing together name one champion.** Both winners could reach the first insert; the unique index kept the first row while the champion record went to the second writer. The record is now awarded only when this call's insert is the row the hill keeps (#1752).
+
+### Fixed
+
+- **A round-robin match against nobody counts nothing in the standings.** The first submitter, with no classmate and no bundled bot, played a match whose row completed as a loss and sat them last on an average score of zero until they resubmitted. The row still completes, but the standings skip it, so the student has no standings row until they play someone (#1748).
+
+
 ## [0.5.320] - 2026-10-02
 
 ### Changed

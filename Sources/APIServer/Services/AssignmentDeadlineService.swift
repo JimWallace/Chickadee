@@ -564,9 +564,8 @@ struct AssignmentDeadlineMonitorKey: StorageKey {
 
 extension Application {
     var assignmentDeadlineMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[AssignmentDeadlineMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(AssignmentDeadlineMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "Assignment deadline",
                 interval: assignmentDeadlineSweepInterval,
                 minimumInterval: 1,
@@ -581,11 +580,6 @@ extension Application {
                     logger: application.logger
                 )
             }
-            storage[AssignmentDeadlineMonitorKey.self] = created
-            return created
-        }
-        set {
-            storage[AssignmentDeadlineMonitorKey.self] = newValue
         }
     }
 }

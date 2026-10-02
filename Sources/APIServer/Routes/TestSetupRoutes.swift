@@ -90,40 +90,11 @@ struct TestSetupRoutes: RouteCollection {
         // Validate the dependency graph (reference integrity + cycle detection).
         try validateManifestDependencies(manifest)
 
-        // The upload + browser combination is incoherent — an upload-only
-        // assignment has no notebook page to host the browser runner — and is
-        // refused here like it is on every authoring surface, so a zip-borne
-        // manifest can't smuggle it in.
-        if manifest.submissionMode == .uploadOnly, manifest.gradingMode == .browser {
-            throw AppError.unprocessable(reason: uploadModeGradingConflictMessage)
-        }
-
-        // Grader-only files under browser grading would deliver the withheld
-        // bytes to every student's kernel — refused at every authoring door
-        // (`author_script` from the marking side, `set_grading_mode` from the
-        // mode side) and here so a zip-borne manifest can't smuggle the
-        // combination in either.
-        if manifest.gradingMode == .browser, !manifest.graderOnlyFiles.isEmpty {
-            throw AppError.unprocessable(reason: graderOnlyGradingConflictMessage)
-        }
-
-        // An activity that stages an opponent is worker-only for the same
-        // reason (only the native worker builds the opponent directory), and
-        // is refused here so a zip-borne manifest cannot smuggle it in.
-        if manifest.gradingMode == .browser, manifest.activity?.stagesAnOpponent == true {
-            throw AppError.unprocessable(reason: activityOpponentGradingConflictMessage)
-        }
-
-        // An assignment in a language with no editor kernel is upload-only
-        // by construction (EditorSupport.uploadOnly), so a notebook submission
-        // mode would promise students an editor that cannot serve them.  Asked
-        // of `editorSupport`, not `== .cpp`: this is the zip-borne path, and
-        // spelling it as one language is how a Racket manifest declaring
-        // `notebook` was smuggled past the check this comment claims to be.
-        if let language = manifest.language, requiresUploadOnlySubmission(language),
-            manifest.submissionMode != .uploadOnly
-        {
-            throw AppError.unprocessable(reason: requiresUploadOnlyMessage(language))
+        // The rules every authoring door enforces (`ManifestCoherence`),
+        // checked here so a zip-borne manifest cannot smuggle a combination
+        // in that no editor would accept.
+        if let violation = ManifestCoherence.violation(in: manifest) {
+            throw AppError.unprocessable(reason: violation)
         }
 
         // Mode-specific validation.

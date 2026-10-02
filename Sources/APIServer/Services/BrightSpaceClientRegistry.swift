@@ -66,13 +66,9 @@ struct BrightSpaceClientRegistryKey: StorageKey {
 
 extension Application {
     var brightSpaceClientRegistry: BrightSpaceClientRegistry {
-        get {
-            if let existing = storage[BrightSpaceClientRegistryKey.self] { return existing }
-            let created = BrightSpaceClientRegistry()
-            storage[BrightSpaceClientRegistryKey.self] = created
-            return created
+        lazyStored(BrightSpaceClientRegistryKey.self) {
+            BrightSpaceClientRegistry()
         }
-        set { storage[BrightSpaceClientRegistryKey.self] = newValue }
     }
 
     /// Resolves the grade-sync client for a course's designated identity (or the

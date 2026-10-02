@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/InstructorDashboardRoutes+LearnCheck.swift
+// APIServer/Routes/Web/InstructorLMSRoutes+LearnCheck.swift
 //
 // GET /instructor/students/learn-check — reconciles the active course's
 // Chickadee roster against the LEARN (D2L) classlist and returns the row IDs
@@ -16,7 +16,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension InstructorDashboardRoutes {
+extension InstructorLMSRoutes {
 
     // MARK: - GET /instructor/students/learn-check
 
@@ -30,7 +30,7 @@ extension InstructorDashboardRoutes {
         else {
             return .unavailable("No active course selected.")
         }
-        if Self.rosterCheckUsesLTI(
+        if InstructorDashboardRoutes.rosterCheckUsesLTI(
             course: course, valenceConfigured: req.application.brightSpaceAppCredentials != nil)
         {
             return try await ltiRosterCheck(course: course, courseID: courseUUID, req: req)

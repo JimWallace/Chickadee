@@ -1,0 +1,9 @@
+# A server child launched without an explicit environment inherits every
+# secret the server holds.
+guard="scripts/check-subprocess-environment.sh"
+files="Sources/APIServer/GitHub/GitHubTarball.swift"
+description="a Subprocess.run call with no environment: argument"
+expect="no environment:"
+apply() {
+    sed -i '/environment: .only(\["PATH"/d' Sources/APIServer/GitHub/GitHubTarball.swift
+}

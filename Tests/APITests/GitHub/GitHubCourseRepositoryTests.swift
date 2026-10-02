@@ -337,6 +337,38 @@ import VaporTesting
         }
     }
 
+    /// Once a student has a repository from the template, the template can
+    /// be neither cleared nor changed; choosing it again is fine (#1767).
+    @Test func aTemplateWithRepositoriesCannotBeClearedOrChanged() async throws {
+        try await withApp(app) { app in
+            try await registerApp()
+            try await bindOrganization()
+            _ = try await studentWithTemplate()
+            let student = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gh_student").first())
+            try await APIGitHubCourseRepository(
+                testSetupID: "gh_setup", userID: try student.requireID(), repoID: Self.made.id,
+                repoFullName: Self.made.fullName, invited: true
+            ).save(on: app.db)
+            let cookie = try await instructor()
+
+            try await post(
+                "/instructor/github/templates", form: ["testSetupID": "gh_setup", "templateID": ""], cookie: cookie
+            ) { res in #expect(res.headers.first(name: .location)?.contains("error=templateInUse") == true) }
+            try await post(
+                "/instructor/github/templates", form: ["testSetupID": "gh_setup", "templateID": "301"], cookie: cookie
+            ) { res in #expect(res.headers.first(name: .location)?.contains("error=templateInUse") == true) }
+            let kept = try #require(try await APIGitHubAssignmentTemplate.query(on: app.db).first())
+            #expect(kept.templateRepoID == Self.template.id)
+
+            try await post(
+                "/instructor/github/templates", form: ["testSetupID": "gh_setup", "templateID": "300"], cookie: cookie
+            ) { res in #expect(res.headers.first(name: .location) == "/instructor/github?ok=template") }
+            try await get("/instructor/github?error=templateInUse", cookie: cookie) { res in
+                #expect(res.body.string.contains(GitHubCourseBindError.templateInUse.message))
+            }
+        }
+    }
+
     @Test func thePageWarnsWhenPrivateForksAreAllowed() async throws {
         useRepos(forksAllowed: true)
         try await withApp(app) { _ in
