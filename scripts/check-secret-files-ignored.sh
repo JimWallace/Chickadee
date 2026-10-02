@@ -24,11 +24,15 @@ if [ -z "$names" ]; then
     exit 1
 fi
 
+# The CI container runs as a different user than the one that owns the
+# checkout, and git refuses to read a repository with "dubious ownership".
+# Trusting the working directory on the command line is enough; nothing here
+# writes to the repository.
 status=0
 count=0
 for name in $names; do
     count=$((count + 1))
-    if ! git check-ignore -q "$name"; then
+    if ! git -c safe.directory='*' check-ignore -q -- "$name"; then
         echo "check-secret-files-ignored: $name is not ignored by .gitignore" >&2
         status=1
     fi
