@@ -67,14 +67,11 @@ extension Application {
     var githubManifestConverter: GitHubManifestConverter {
         get {
             if let converter = storage[GitHubManifestConverterKey.self] { return converter }
-            let client = self.client
+            let github = GitHubTransport(app: self)
             return { code in
-                let uri = URI(string: "https://api.github.com/app-manifests/\(code)/conversions")
-                let response = try await client.post(uri) { req in
-                    req.headers.replaceOrAdd(name: .accept, value: "application/vnd.github+json")
-                    req.headers.replaceOrAdd(name: "X-GitHub-Api-Version", value: "2022-11-28")
-                    req.headers.replaceOrAdd(name: .userAgent, value: "Chickadee")
-                }
+                let response = try await github.send(
+                    .POST, GitHubTransport.api + "/app-manifests/\(GitHubRepoClient.pathSegment(code))/conversions",
+                    headers: GitHubTransport.apiHeaders())
                 guard response.status == .created || response.status == .ok else {
                     throw GitHubAppRegistrationError.conversionFailed
                 }
