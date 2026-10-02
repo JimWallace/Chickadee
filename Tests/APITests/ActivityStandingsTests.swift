@@ -173,6 +173,44 @@ import VaporTesting
         }
     }
 
+    /// A retest after a classmate resubmitted plays the classmate's newer
+    /// entry; the old row against their earlier entry must not stay in the
+    /// count (#1744). The claim voids the completed rows before it opens
+    /// the current set, so `played` is the number of classmates, not the
+    /// number of entries they have had.
+    @Test func aRetestAfterAResubmissionCountsEachClassmateOnce() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "retest", manifest: try robinManifest())
+            _ = try await arInsertSubmission(
+                id: "retest_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
+            let first = try await claim(app, fx: fx, user: fx.a, submissionID: "retest_a1")
+            let vsB1 = try #require(first.first)
+            try await recordActivityMatch(
+                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "retest_a1",
+                outcomes: [outcome("match", metric: 1)],
+                matches: [report(vsB1, submissionID: "retest_a1", won: true, score: 1)], on: app.db)
+
+            // b resubmits, and a is retested against b's newer entry.
+            _ = try await arInsertSubmission(
+                id: "retest_b2", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
+            try await voidCompletedMatrixRows(submissionID: "retest_a1", on: app.db)
+            let second = try await claim(app, fx: fx, user: fx.a, submissionID: "retest_a1")
+            let vsB2 = try #require(second.first)
+            #expect(vsB2.identity != vsB1.identity)
+            try await recordActivityMatch(
+                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "retest_a1",
+                outcomes: [outcome("match", metric: 1)],
+                matches: [report(vsB2, submissionID: "retest_a1", won: false, score: 0)], on: app.db)
+
+            let rows = try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "retest_a1").all()
+            #expect(rows.map(\.opponentIdentity) == [vsB2.identity])
+            let a = try #require(try await standing(app, fx: fx, user: fx.a))
+            #expect(a.played == 1)
+            #expect(a.wins == 0)
+            #expect(a.losses == 1)
+        }
+    }
+
     // MARK: - Landing a matrix result
 
     /// The worker's reports complete the rows by identity; the challenger's
