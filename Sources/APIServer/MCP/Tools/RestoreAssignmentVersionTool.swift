@@ -217,9 +217,9 @@ struct RestoreAssignmentVersionTool: ContentTool {
         setup.manifest = target.manifest
     }
 
-    /// Re-runs the derivations that hang off the zip's contents. (Named to
-    /// stay clear of `AssignmentLanguage.rederive`, which re-derives the
-    /// assignment *language* — an unrelated operation.)
+    /// Re-runs the derivations that hang off the zip's contents. The language
+    /// is not one of them: it is declared, and the restore brought the
+    /// declaration back with the manifest.
     private static func rederiveZipDerivedContent(setup: APITestSetup, testSetupsDirectory: String) async {
         let setupID = setup.id ?? ""
         let props = setup.decodedManifest()
