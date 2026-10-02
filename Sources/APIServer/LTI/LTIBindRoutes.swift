@@ -36,13 +36,7 @@ struct LTIBindRoutes: RouteCollection {
             LTIBindContext(
                 currentUser: req.currentUserContext,
                 contextTitle: pending.contextTitle,
-                courses: courses.compactMap { course in
-                    course.id.map {
-                        LTIBindCourseOption(
-                            id: $0.uuidString, code: course.code, name: course.name,
-                            termLabel: course.term?.displayName)
-                    }
-                }))
+                courses: Self.options(courses)))
     }
 
     @Sendable
@@ -83,6 +77,16 @@ struct LTIBindRoutes: RouteCollection {
         return Pending(
             platformID: platform, contextID: context,
             contextTitle: req.session.data[LTIRoutes.pendingContextTitleKey] ?? context)
+    }
+
+    /// The courses as the choices both binding pages list.
+    static func options(_ courses: [APICourse]) -> [LTIBindCourseOption] {
+        courses.compactMap { course in
+            course.id.map {
+                LTIBindCourseOption(
+                    id: $0.uuidString, code: course.code, name: course.name, termLabel: course.term?.displayName)
+            }
+        }
     }
 
     /// Unarchived courses `user` teaches (every unarchived course for an

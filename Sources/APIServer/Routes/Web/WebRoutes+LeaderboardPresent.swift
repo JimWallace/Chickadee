@@ -50,7 +50,9 @@ extension WebRoutes {
         case .bracket:
             tournament = try await buildTournamentPresentation(
                 setup: setup, viewerID: nil, includeNames: false, on: req.db)
-        default:
+        case .leaderboard:
+            // Named rather than left to a catch-all arm, so a fifth
+            // aggregation does not render the metric board silently (#1745).
             let board = try await buildLeaderboard(
                 setup: setup, viewer: user, isStaff: false, showAll: true, on: req.db)
             places = board.rows.map {

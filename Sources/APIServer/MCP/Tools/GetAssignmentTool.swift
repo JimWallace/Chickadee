@@ -82,17 +82,45 @@ struct GetAssignmentTool: ContentTool {
     }
 
     /// The activity block as reported: its kind, the leaderboard's visibility,
-    /// and where students find the leaderboard.
+    /// where students find the leaderboard, and the live-session window.
     struct ActivityOutput: Encodable, Sendable {
         let kind: String
         let kindDisplayName: String
         let leaderboardVisibility: String
         let leaderboardPath: String
+        /// How the class's results combine: the kind's aggregation axis.
+        let aggregation: String
         /// The kind's opponent source (\(MCPActivityProse.opponentSourceTokens)).
         let opponentSource: String
         /// The support file staged as the opponent; nil when the kind has no
         /// opponent or none is chosen yet.
         let opponentFile: String?
+        /// The live-session window `set_activity` accepts, as the stored
+        /// ISO-8601 instants; nil when that bound is not set.
+        let opensAt: String?
+        let closesAt: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case kind, kindDisplayName, leaderboardVisibility, leaderboardPath, aggregation
+            case opponentSource, opponentFile, opensAt, closesAt
+        }
+
+        /// The three nullable keys are always present, explicitly null when
+        /// unset, for the reason `SetActivityTool.Output` gives: an agent that
+        /// set a window must be able to read it back and tell "no window" from
+        /// "a server that predates the field" (#1753).
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(kind, forKey: .kind)
+            try c.encode(kindDisplayName, forKey: .kindDisplayName)
+            try c.encode(leaderboardVisibility, forKey: .leaderboardVisibility)
+            try c.encode(leaderboardPath, forKey: .leaderboardPath)
+            try c.encode(aggregation, forKey: .aggregation)
+            try c.encode(opponentSource, forKey: .opponentSource)
+            try c.encode(opponentFile, forKey: .opponentFile)
+            try c.encode(opensAt, forKey: .opensAt)
+            try c.encode(closesAt, forKey: .closesAt)
+        }
     }
 
     static let name = "get_assignment"
@@ -114,8 +142,10 @@ struct GetAssignmentTool: ContentTool {
         + "only), and language (\(MCPLanguageProse.quotedTokenAlternatives), null for a plain "
         + "shell-script suite; get_server_info reports what each language supports), and activity "
         + "(null for an ordinary assignment; otherwise the class-activity kind — "
-        + "\(MCPActivityProse.quotedTokenAlternatives) — with leaderboardVisibility and the "
-        + "leaderboard path) — which together decide what may be authored here."
+        + "\(MCPActivityProse.quotedTokenAlternatives) — with leaderboardVisibility, the "
+        + "leaderboard path, the aggregation, the opponent source and file, and the live-session "
+        + "window as opensAt and closesAt, null when unset) — which together decide what may be "
+        + "authored here."
     static let inputSchema: JSONValue = MCPSchema.assignmentPublicIDOnlyInput
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
@@ -161,15 +191,23 @@ struct GetAssignmentTool: ContentTool {
                         "enum": .array(LeaderboardVisibility.allCases.map { .string($0.rawValue) }),
                     ]),
                     "leaderboardPath": MCPSchema.string,
+                    "aggregation": .object([
+                        "type": .string("string"),
+                        "enum": .array(ActivityAggregation.allCases.map { .string($0.rawValue) }),
+                    ]),
                     "opponentSource": .object([
                         "type": .string("string"),
                         "enum": .array(ActivityOpponentSource.allCases.map { .string($0.rawValue) }),
                     ]),
-                    "opponentFile": MCPSchema.string,
+                    // Always encoded (see `ActivityOutput.encode(to:)`), so null
+                    // is a value these three keys carry, not an absence.
+                    "opponentFile": MCPSchema.nullableString,
+                    "opensAt": MCPSchema.nullableString,
+                    "closesAt": MCPSchema.nullableString,
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
-                    .string("leaderboardPath"), .string("opponentSource"),
+                    .string("leaderboardPath"), .string("aggregation"), .string("opponentSource"),
                 ]),
             ]),
         ]),
@@ -237,8 +275,11 @@ struct GetAssignmentTool: ContentTool {
                     kindDisplayName: activity.kind.displayName,
                     leaderboardVisibility: activity.leaderboardVisibility.rawValue,
                     leaderboardPath: "/testsetups/\(assignment.testSetupID)/leaderboard",
+                    aggregation: activity.kind.aggregation.rawValue,
                     opponentSource: activity.kind.opponentSource.rawValue,
-                    opponentFile: activity.opponentFile)
+                    opponentFile: activity.opponentFile,
+                    opensAt: activity.window?.opensAtISO,
+                    closesAt: activity.window?.closesAtISO)
             }
         )
     }
