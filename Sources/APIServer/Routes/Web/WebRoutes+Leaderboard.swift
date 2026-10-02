@@ -55,20 +55,16 @@ extension WebRoutes {
         // Staff always read the whole list; a student reads a window of it
         // unless they ask for the rest.
         let showingAll = isStaff || req.query[String.self, at: "all"] == "1"
-        // A classmate reading the page locks every handle it shows; a staff
-        // view locks nothing (docs/student-avatars.md §3).
-        let lockingFor: UUID? = isStaff ? nil : user.id
+        let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
         let board =
             showsMetricBoard
             ? try await buildLeaderboard(
-                setup: setup, viewer: user, isStaff: isStaff, lockingFor: lockingFor, showAll: showingAll,
-                on: req.db)
+                setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : LeaderboardBoard.empty
         let standingsBoard =
             showsStandings
             ? try await buildStandingsBoard(
-                setup: setup, viewer: user, isStaff: isStaff, lockingFor: lockingFor, showAll: showingAll,
-                on: req.db)
+                setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
@@ -80,7 +76,7 @@ extension WebRoutes {
         let union =
             showsUnion
             ? try await buildUnionPresentation(
-                setup: setup, viewer: user, isStaff: isStaff, lockingFor: lockingFor, showAll: showingAll,
+                setup: setup, reader: reader, showAll: showingAll,
                 allURL: "\(boardURL)?all=1", on: req.db)
             : nil
 
@@ -146,13 +142,37 @@ extension WebRoutes {
     }
 }
 
+/// Who reads a board, and what the read may do. Staff read names and the
+/// whole list. A classmate reading the page locks every handle it shows
+/// (docs/student-avatars.md §3); a staff view, the page or Present mode,
+/// locks nothing (#1757).
+struct LeaderboardReader {
+    let user: APIUser
+    let isStaff: Bool
+    /// The viewer whose read locks the handles shown; nil when nothing locks.
+    let lockingFor: UUID?
+
+    /// A classmate or a staff member reading the leaderboard page.
+    static func page(user: APIUser, isStaff: Bool) -> LeaderboardReader {
+        LeaderboardReader(user: user, isStaff: isStaff, lockingFor: isStaff ? nil : user.id)
+    }
+
+    /// Present mode: nameless like a student view, locking nothing like a
+    /// staff one.
+    static func presenting(as user: APIUser) -> LeaderboardReader {
+        LeaderboardReader(user: user, isStaff: false, lockingFor: nil)
+    }
+}
+
 /// Both halves of a union activity as the page shows them, by handle and
 /// bird. Nil when no match has landed yet, so the page can say so once
 /// rather than printing two empty tables.
 func buildUnionPresentation(
-    setup: APITestSetup, viewer: APIUser, isStaff: Bool, lockingFor: UUID?, showAll: Bool, allURL: String,
-    on db: Database
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, allURL: String, on db: Database
 ) async throws -> UnionPresentation? {
+    let viewer = reader.user
+    let isStaff = reader.isStaff
+    let lockingFor = reader.lockingFor
     let tally = try await unionTally(setup: setup, on: db)
     guard tally.targetCount > 0 else { return nil }
     let identities = try await RankedIdentities.load(
@@ -757,8 +777,11 @@ struct LeaderboardBoard: Sendable {
 /// `isStaff` decides whether names, usernames and submission counts are built
 /// at all — a student's page never holds them.
 func buildLeaderboard(
-    setup: APITestSetup, viewer: APIUser, isStaff: Bool, lockingFor: UUID?, showAll: Bool, on db: Database
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, on db: Database
 ) async throws -> LeaderboardBoard {
+    let viewer = reader.user
+    let isStaff = reader.isStaff
+    let lockingFor = reader.lockingFor
     let setupID = setup.id ?? ""
     let allEntries = try await leaderboardEntries(testSetupID: setupID, on: db)
     let identities = try await RankedIdentities.load(
@@ -997,8 +1020,11 @@ struct StandingsBoard: Sendable {
 /// The standings for a round robin, best first (`activityStandings`), under
 /// the same handle-and-bird identity as a ranking row.
 func buildStandingsBoard(
-    setup: APITestSetup, viewer: APIUser, isStaff: Bool, lockingFor: UUID?, showAll: Bool, on db: Database
+    setup: APITestSetup, reader: LeaderboardReader, showAll: Bool, on db: Database
 ) async throws -> StandingsBoard {
+    let viewer = reader.user
+    let isStaff = reader.isStaff
+    let lockingFor = reader.lockingFor
     let standings = try await activityStandings(testSetupID: setup.id ?? "", on: db)
     let identities = try await RankedIdentities.load(
         userIDs: standings.map(\.userID), courseID: setup.courseID, on: db)
