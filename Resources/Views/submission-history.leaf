@@ -20,16 +20,16 @@ Submission History
     <tbody>
     #for(row in rows):
         <tr>
-            <td class="col-hide-phone">#(row.attemptNumber)</td>
-            <td>#(row.submittedAt)</td>
-            <td>#(row.status)</td>
-            <td>#(row.gradeText)</td>
+            <td class="col-hide-phone">#(row.history.attemptNumber)</td>
+            <td>#(row.history.submittedAt)</td>
+            <td>#(row.history.status)</td>
+            <td>#(row.history.gradeText)</td>
             <td>
                 <div class="history-actions">
-                    <a class="btn action-btn action-btn-icon" href="/submissions/#(row.submissionID)" title="View results" aria-label="View results">
+                    <a class="btn action-btn action-btn-icon" href="/submissions/#(row.history.submissionID)" title="View results" aria-label="View results">
                         <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
                     </a>
-                    <a class="btn action-btn action-btn-icon" href="/api/v1/submissions/#(row.submissionID)/download" title="Download submission" aria-label="Download submission">
+                    <a class="btn action-btn action-btn-icon" href="/api/v1/submissions/#(row.history.submissionID)/download" title="Download submission" aria-label="Download submission">
                         <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
                     </a>
                     #if(row.canOpenInNotebook):

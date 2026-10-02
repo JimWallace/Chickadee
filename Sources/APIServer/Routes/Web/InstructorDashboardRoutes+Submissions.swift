@@ -6,8 +6,8 @@
 // The grades CSV export lives in `InstructorDashboardRoutes+GradesCSV.swift`;
 // the per-student actions (history, retest, notebook reset, grade overrides)
 // live in `InstructorDashboardRoutes+StudentActions.swift`; the shared
-// `preferredResultsBySubmissionID` fold lives in
-// `Helpers/PreferredResultsBySubmissionID.swift`.
+// "highest grade wins" folds live in
+// `Helpers/BestGradePercentBySubmissionID.swift`.
 
 import Fluent
 import Foundation

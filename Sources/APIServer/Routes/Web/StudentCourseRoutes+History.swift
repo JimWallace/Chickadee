@@ -56,7 +56,7 @@ extension StudentCourseRoutes {
         // parallel.  All four depend on the assignments / setupIDs from
         // phase 1, but are independent of each other.  Pre-batching this
         // way drops the page from ~7 sequential queries to two parallel
-        // groups + one dependent follow-on (preferredResults below).
+        // groups + one dependent follow-on (the two result folds below).
         async let setupsByIDFuture = loadStudentCourseSetupsByID(req: req, setupIDs: setupIDs)
         async let submissionsFuture = loadStudentCourseSubmissions(
             req: req, student: student, setupIDs: setupIDs)
@@ -80,14 +80,14 @@ extension StudentCourseRoutes {
             rows: classAchievementRows, setupsByID: setupsByID, disabledBySetup: disabledBySetup)
 
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
-        // preferredResults must wait until submissions resolves (it needs
-        // the submission IDs), so it stays serial after phase 2.
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // Both folds wait until submissions resolves (they need the submission
+        // IDs), so they stay serial after phase 2. The grade cells read the
+        // percent; the badge path reads the row that percent came from, so a
+        // badge and the grade beside it agree (#1111, #1709).
+        let bestResultBySubmissionID = try await bestGradeResultBySubmissionID(
             for: submissions.compactMap(\.id),
             on: req.db
         )
-        // Grade cells use the shared "highest grade wins" fold across ALL
-        // result sources (#1111); preferredResults stays for the badge path.
         let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissions.compactMap(\.id),
             on: req.db
@@ -96,7 +96,7 @@ extension StudentCourseRoutes {
         // LATEST submission only — batch-fetch just those blobs from the
         // result_collections side table (#1173).
         let latestResultIDs = submissionsBySetupID.values.compactMap { history in
-            history.first?.id.flatMap { preferredResultBySubmissionID[$0]?.id }
+            history.first?.id.flatMap { bestResultBySubmissionID[$0]?.id }
         }
         let latestBlobs = try await collectionJSONByResultID(for: latestResultIDs, on: req.db)
         let collectionByResultID = latestBlobs.compactMapValues(decodedCollection(from:))
@@ -107,7 +107,7 @@ extension StudentCourseRoutes {
         let rowContext = StudentAssignmentRowContext(
             courseCode: course.urlKey,
             urlToken: try student.requireURLToken(),
-            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            bestResultBySubmissionID: bestResultBySubmissionID,
             collectionByResultID: collectionByResultID,
             bestPercentBySubmissionID: bestPercentBySubmissionID,
             student: student,
@@ -726,13 +726,13 @@ extension StudentCourseRoutes {
     fileprivate struct StudentAssignmentRowContext {
         let courseCode: String
         let urlToken: String
-        let preferredResultBySubmissionID: [String: APIResult]
-        /// Decoded collection per latest-submission preferred result id —
+        let bestResultBySubmissionID: [String: APIResult]
+        /// Decoded collection per latest-submission best-grade result id —
         /// pre-fetched from the result_collections side table (#1173) for
         /// the badge path.
         let collectionByResultID: [String: TestOutcomeCollection]
         /// "Highest grade wins" percent per submission (#1111) — feeds the
-        /// grade cells; `preferredResultBySubmissionID` feeds the badges.
+        /// grade cells; `bestResultBySubmissionID` feeds the badges with the same rows.
         let bestPercentBySubmissionID: [String: Int]
         let student: APIUser
         let fmt: DateFormatter
@@ -753,11 +753,11 @@ extension StudentCourseRoutes {
     ) -> StudentAssignmentRow {
         let courseCode = context.courseCode
         let urlToken = context.urlToken
-        let preferredResultBySubmissionID = context.preferredResultBySubmissionID
+        let bestResultBySubmissionID = context.bestResultBySubmissionID
         let fmt = context.fmt
         let latest = history.first
         // Highest grade across the whole history, from the shared
-        // highest-grade-wins map — NOT the worker-preferred result (#1111).
+        // highest-grade-wins map (#1111).
         let bestGradePercent: Int? =
             history
             .compactMap { submission in
@@ -768,7 +768,7 @@ extension StudentCourseRoutes {
         let disabledHere = context.disabledBySetup[assignment.testSetupID] ?? []
         var badges = submissionBadges(
             history: history,
-            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            bestResultBySubmissionID: bestResultBySubmissionID,
             collectionByResultID: context.collectionByResultID,
             achievements: context.perSubBySetup[assignment.testSetupID]
         ).filter { !disabledHere.contains($0.id) }
@@ -844,13 +844,13 @@ extension StudentCourseRoutes {
     /// improvement).  Class-wide badges are appended by the caller.
     fileprivate func submissionBadges(
         history: [APISubmission],
-        preferredResultBySubmissionID: [String: APIResult],
+        bestResultBySubmissionID: [String: APIResult],
         collectionByResultID: [String: TestOutcomeCollection],
         achievements: [Achievement]?
     ) -> [AchievementBadge] {
         guard let latestSubmission = history.first,
             let latestSubID = latestSubmission.id,
-            let result = preferredResultBySubmissionID[latestSubID],
+            let result = bestResultBySubmissionID[latestSubID],
             let resultID = result.id,
             let collection = collectionByResultID[resultID],
             let gradePct = gradePercent(from: collection)
@@ -860,7 +860,7 @@ extension StudentCourseRoutes {
         let latestAttempt = latestSubmission.attemptNumber ?? 1
         let priorSub = history.first(where: { $0.attemptNumber == latestAttempt - 1 })
         let priorPct: Int? = priorSub.flatMap { ps in
-            guard let psID = ps.id, let pr = preferredResultBySubmissionID[psID] else {
+            guard let psID = ps.id, let pr = bestResultBySubmissionID[psID] else {
                 return nil
             }
             return pr.gradePercentValue
