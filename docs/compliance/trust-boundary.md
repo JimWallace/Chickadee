@@ -36,9 +36,10 @@ writer hygiene are audited in `mcp-student-data-audit-2026-07.md` §2.2–§3.
 
 There is **no** Chickadee→model-API egress edge to allowlist; the model API is
 reached by the agent. Chickadee's own outbound edges (OIDC/DUO, BrightSpace/D2L
-Valence, the LTI platform's token, JWKS, AGS and NRPS endpoints, UW calendar,
-optional alert webhook) carry no MCP content and should be restricted at the
-network layer (see `ira-audit-report.md` §5).
+Valence, the LTI platform's token, JWKS, AGS and NRPS endpoints, GitHub's API
+when an App is registered, UW calendar, optional alert webhook) carry no MCP
+content and should be restricted at the network layer (see
+`ira-audit-report.md` §5).
 
 ## The LMS as a counterparty (LTI 1.3, 2026-09)
 
@@ -64,6 +65,30 @@ or key with it.
   LMS subject; Chickadee learns the launching user's name, email and roles,
   and, on a roster check, the membership in transit only.
 - **No model involvement.** No LTI flow reaches an agent or a model API.
+
+## GitHub as a counterparty (2026-10)
+
+GitHub submission (`docs/github-submissions.md`) adds GitHub on both sides of
+the boundary, off until an admin registers an App through the manifest flow.
+It is separate from the MCP surface and shares no token, scope or key with it.
+
+- **Inbound.** Two kinds. A student's or instructor's browser returns from a
+  GitHub authorization (`/github/link/callback`, `/instructor/github/callback`)
+  with a code that Chickadee exchanges server-side over HTTPS; the user token
+  is revoked before any answer is used. GitHub itself posts push deliveries to
+  `/github/webhook`, verified by `X-Hub-Signature-256` against the App's
+  webhook secret; a delivery records a time and a SHA and starts no grading.
+- **Outbound.** Calls to `api.github.com` (authenticated as the App with a
+  JWT signed by its private key, or with a short-lived installation token) and
+  to `github.com` (the tarball download). The App's credentials live in the
+  database and a 0600 file (`.github-app-secrets`), never in environment
+  variables. These are the only GitHub egress edges, and they are the ones to
+  allowlist.
+- **What crosses** is listed per flow in `data-flow-inventory.md` ("GitHub
+  flows") and per item in `docs/github-submissions.md` ("What reaches
+  GitHub"). Grading stays on Chickadee's runners: release and secret tests
+  never reach a student's repository.
+- **No model involvement.** No GitHub flow reaches an agent or a model API.
 
 ## Figure
 
@@ -93,7 +118,7 @@ flowchart LR
     end
 
     EG["Network egress allowlist<br/>(deployment layer)"]
-    OIDC["OIDC IdP / BrightSpace /<br/>UW calendar"]
+    OIDC["OIDC IdP / BrightSpace /<br/>LTI platform / GitHub /<br/>UW calendar"]
 
     I -->|"authorise once (PKCE)"| A
     A -->|"bearer token over /mcp (HTTPS/SSE)"| B
