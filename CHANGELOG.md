@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.323] - 2026-10-02
+
+### Changed
+
+- **The account page builds its course rows outside the handler.** `enrolledCourseRow` and `availableCourseRow` in `AccountRoutes+Rows.swift` carry the slip-day arithmetic and the self-enroll gate, so the handler is loads plus render (#1715).
+
+### Changed
+
+- **`Sources/Core/README.md` states the rule for what belongs in Core.** A type belongs there when the runner links or decodes it; "anything Vapor-free" is not the rule. The 33 server-only files that compile into the runner for nothing are listed as debt by group, with the audit sweep that owns each move (#1723).
+
+### Changed
+
+- **Every sweep monitor and cache accessor on `Application` uses `lazyStored`.** Eighteen accessors in `Services/` still spelled the four-line get-or-create by hand, most with a setter nothing called. They now read like the LTI adopters, and the unused setters are gone (#1727).
+
+
 ## [0.5.322] - 2026-10-02
 
 ### Fixed
