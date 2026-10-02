@@ -70,7 +70,7 @@ struct CourseBundleRoutes: RouteCollection {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let manifestData = try encoder.encode(manifest)
         let setupCopies = data.testSetups.compactMap { setup in
-            setup.id.map { (id: $0, zipPath: setup.zipPath) }
+            setup.id.map { (id: $0, zipPath: setup.zipPath, notebookPath: exportableNotebookPath(of: setup)) }
         }
         let submissionPaths = data.submissions.map(\.zipPath)
         // Hosted content-item attachment files: (on-disk src, in-bundle name).
@@ -286,7 +286,8 @@ struct CourseBundleRoutes: RouteCollection {
                 bundleID: bid,
                 originalID: sid,
                 manifest: s.manifest,
-                zipFilename: "testsetups/\(sid).zip"
+                zipFilename: "testsetups/\(sid).zip",
+                notebookFilename: exportableNotebookPath(of: s).map { _ in "testsetups/\(sid).ipynb" }
             )
         }
 
@@ -430,7 +431,7 @@ struct CourseBundleRoutes: RouteCollection {
 private func writeExportStaging(
     stagingDir: URL,
     manifestData: Data,
-    setupCopies: [(id: String, zipPath: String)],
+    setupCopies: [(id: String, zipPath: String, notebookPath: String?)],
     submissionPaths: [String],
     contentFileCopies: [(src: String, bundleName: String)],
     logger: Logger
@@ -465,8 +466,13 @@ private func writeExportStaging(
         } else {
             logger.warning("Export: test setup zip missing at \(src.path), skipping")
         }
+        // The starter notebook as it is now, beside the zip (#1736).
+        if let notebookPath = setup.notebookPath {
+            try FileManager.default.copyItem(
+                at: URL(fileURLWithPath: notebookPath),
+                to: stagingDir.appendingPathComponent("testsetups/\(setup.id).ipynb"))
+        }
     }
-
     for zipPath in submissionPaths {
         let src = URL(fileURLWithPath: zipPath)
         let onDiskName = src.lastPathComponent
@@ -477,6 +483,13 @@ private func writeExportStaging(
             logger.warning("Export: submission file missing at \(src.path), skipping")
         }
     }
+}
+
+/// The setup's starter notebook path when the file exists on disk, so the
+/// manifest names only files the staging copy will hold.
+private func exportableNotebookPath(of setup: APITestSetup) -> String? {
+    guard let path = setup.notebookPath, FileManager.default.fileExists(atPath: path) else { return nil }
+    return path
 }
 
 // MARK: - Export data carriers

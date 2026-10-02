@@ -347,15 +347,23 @@ public struct BundledTestSetup: Codable, Sendable {
     public let manifest: String
     /// Relative path within the bundle ZIP: "testsetups/<originalID>.zip"
     public let zipFilename: String
+    /// Relative path of the starter notebook, "testsetups/<originalID>.ipynb",
+    /// when the setup has one (#1736). The starter lives beside the zip, not
+    /// inside it: the web publish and the MCP create build the zip without
+    /// it, and an edit never rebuilds the zip, so the zip entry an older
+    /// bundle fell back to was absent or stale. Nil in bundles written before
+    /// this field existed; import then falls back to the zip entry.
+    public let notebookFilename: String?
 
     public init(
         bundleID: String, originalID: String, manifest: String,
-        zipFilename: String
+        zipFilename: String, notebookFilename: String? = nil
     ) {
         self.bundleID = bundleID
         self.originalID = originalID
         self.manifest = manifest
         self.zipFilename = zipFilename
+        self.notebookFilename = notebookFilename
     }
 }
 
