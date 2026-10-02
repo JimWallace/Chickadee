@@ -22,6 +22,9 @@ enum GitHubCourseBindError: String, Error, Equatable {
     case githubFailed
     /// The chosen template is not one the organization's installation grants.
     case unknownTemplate
+    /// Course repositories were made from the assignment's template, so it
+    /// can be neither cleared nor changed (#1767).
+    case templateInUse
 
     var message: String {
         switch self {
@@ -43,6 +46,8 @@ enum GitHubCourseBindError: String, Error, Equatable {
             "GitHub did not respond. Try again later."
         case .unknownTemplate:
             "That template is not available. Mark the repository as a template on GitHub, or give the App access to it."
+        case .templateInUse:
+            "Students have made repositories from this template. It cannot be cleared or changed while they exist."
         }
     }
 }
