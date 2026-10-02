@@ -112,11 +112,9 @@ enum CourseCloneService {
                     targetCourseID: newCourseID, directories: directories, on: db)
                 createdPaths += authored.createdPaths
                 let copy = authored.assignment
+                // The three per-assignment policies came along in cloneAssignment.
                 copy.sortOrder = assignment.sortOrder ?? index
                 copy.sectionID = assignment.sectionID.flatMap { sectionIDMap[$0] }
-                copy.secretRevealEnabled = assignment.secretRevealEnabled
-                copy.passingThresholdPercent = assignment.passingThresholdPercent
-                copy.brightspaceSyncExcluded = assignment.brightspaceSyncExcluded
                 try await copy.save(on: db)
                 assignmentCount += 1
             }

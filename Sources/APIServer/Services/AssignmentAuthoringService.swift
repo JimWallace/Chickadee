@@ -229,6 +229,15 @@ enum AssignmentAuthoringService {
                     visibility: .closed,
                     validationSubmissionID: clonedSolution?.id),
                 on: db)
+            // The per-assignment policies travel with every clone (#1738).
+            // The course clone used to set them after this returned and the
+            // MCP clone_assignment did not, so the two clones differed.
+            // Section and sort order stay with the course clone: sections
+            // map per course.
+            assignment.secretRevealEnabled = source.secretRevealEnabled
+            assignment.passingThresholdPercent = source.passingThresholdPercent
+            assignment.brightspaceSyncExcluded = source.brightspaceSyncExcluded
+            try await assignment.save(on: db)
             // Seed the clone's own v1. It inherits no history — the copy lands
             // in a NEW setup id, which is exactly the "only the most recent
             // version travels" semantic a new term wants — so this is what

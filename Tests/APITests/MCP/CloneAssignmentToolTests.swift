@@ -70,6 +70,27 @@ import Vapor
         }
     }
 
+    /// The three per-assignment policies travel with the clone (#1738), as
+    /// they do with the course clone.
+    @Test func copiesTheThreePolicies() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let source = try await fixture(on: app)
+            source.secretRevealEnabled = true
+            source.passingThresholdPercent = 60
+            source.brightspaceSyncExcluded = true
+            try await source.save(on: app.db)
+            let output = try await CloneAssignmentTool().execute(
+                CloneAssignmentTool.Input(
+                    sourceAssignmentPublicID: source.publicID, newTitle: "Lab 1 (Copy)", targetCourseCode: nil),
+                context(app))
+            let clone = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
+            #expect(clone.secretRevealEnabled == true)
+            #expect(clone.passingThresholdPercent == 60)
+            #expect(clone.brightspaceSyncExcluded == true)
+        }
+    }
+
     @Test func copiesNotebook() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

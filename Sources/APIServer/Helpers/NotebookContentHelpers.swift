@@ -328,26 +328,16 @@ private func notebookCandidateEntryNames(starterNotebook: String?, entries: [Str
 
 // MARK: - Zip inspection helpers
 
-/// Returns true if the zip archive contains at least one `.ipynb` file.
-/// Uses `unzip -l` (list mode) so no files are extracted.
+/// Returns true if the zip archive contains at least one `.ipynb` entry.
+/// The bytes are written to a temporary file so `listZipEntries`, the one
+/// zip lister, can read them (#1731); nothing is extracted.
 func zipContainsNotebook(_ zipData: Data) async -> Bool {
     let tmp = FileManager.default.temporaryDirectory
         .appendingPathComponent("chickadee_zip_check_\(UUID().uuidString).zip")
     defer { try? FileManager.default.removeItem(at: tmp) }
 
     guard (try? zipData.write(to: tmp)) != nil else { return false }
-
-    // Must go through the shared helper: it carries the one-shot environment
-    // snapshot and the bounded capture every zip spawn needs
-    // (see ZipSubprocess.swift).
-    guard
-        let result = try? await runZipProcess(
-            executablePath: "/usr/bin/unzip",
-            arguments: ["-l", tmp.path]
-        )
-    else { return false }
-    let output = String(data: result.stdout, encoding: .utf8) ?? ""
-    return output.contains(".ipynb")
+    return await listZipEntries(zipPath: tmp.path).contains { $0.hasSuffix(".ipynb") }
 }
 
 /// Extracts `assignment.ipynb` from the zip at `zipPath` and returns its Data,

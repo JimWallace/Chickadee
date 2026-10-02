@@ -114,8 +114,7 @@ struct GitHubAccountLinkRoutes: RouteCollection {
         code: String, verifier: String, req: Request
     ) async throws -> GitHubUser {
         guard
-            let app = try await APIGitHubApp.query(on: req.db).first(),
-            let secrets = try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath),
+            let (app, secrets) = try await GitHubAppRegistration.resolve(req: req),
             let redirectURI = GitHubUserAuthorization.redirectURI(
                 publicBaseURL: req.application.securityConfiguration.publicBaseURL)
         else { throw GitHubLinkError.unavailable }

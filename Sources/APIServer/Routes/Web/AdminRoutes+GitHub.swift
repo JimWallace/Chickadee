@@ -131,7 +131,8 @@ extension AdminRoutes {
         req: Request, options: GitHubAppOptions, flashSuccess: String?, flashError: String?
     ) async throws -> View {
         let organizationText = options.organizationText
-        let registered = try await APIGitHubApp.query(on: req.db).first()
+        let registration = try await GitHubAppRegistration.state(req: req)
+        let registered = registration.app
         let baseURL = req.application.securityConfiguration.publicBaseURL
         var creation: GitHubAppCreationContext?
         var flashError = flashError
@@ -162,6 +163,9 @@ extension AdminRoutes {
             activeAdminTab: "github",
             baseURLConfigured: baseURL != nil,
             app: registered.map(AdminGitHubAppDetails.init(app:)),
+            secretsUnavailable: registration.problem != nil,
+            secretsMissing: registration.problem?.isMissing ?? false,
+            secretsPath: registration.problem?.path ?? "",
             creation: creation,
             organization: organizationText,
             organizationOpen: options.anySet,

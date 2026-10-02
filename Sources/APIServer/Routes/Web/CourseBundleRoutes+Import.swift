@@ -636,6 +636,13 @@ private func importBundledSubmissions(
             kind: bundledSub.kindOrStudent
         )
         try await sub.save(on: db)
+        // The create stamp is import time; the bundle carries when the
+        // student submitted, and the history page and the solution ordering
+        // read that (#1739).
+        if let submittedAt = bundledSub.submittedAt {
+            sub.submittedAt = submittedAt
+            try await sub.save(on: db)
+        }
         subIDMap[bundledSub.bundleID] = newSubID
         tally.submissionsImported += 1
     }
@@ -685,6 +692,10 @@ private func importBundledResults(
             source: bundledResult.source
         )
         try await result.saveWithCollection(json: bundledResult.collectionJSON, on: db)
+        if let receivedAt = bundledResult.receivedAt {
+            result.receivedAt = receivedAt
+            try await result.save(on: db)
+        }
         tally.resultsImported += 1
     }
 }
