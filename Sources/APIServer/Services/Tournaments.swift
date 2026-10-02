@@ -1,4 +1,4 @@
-// APIServer/Helpers/Tournaments.swift
+// APIServer/Services/Tournaments.swift
 //
 // The server half of a tournament (docs/class-activities.md, "Tournaments"):
 // starting one on a snapshot of the class, enqueueing a match job per slot,
