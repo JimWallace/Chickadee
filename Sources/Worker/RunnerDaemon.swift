@@ -346,10 +346,6 @@ actor WorkerDaemon {
         )
     }
 
-    // `unzip(_:to:)` was removed in v0.4.178; job processing now calls
-    // `extractZipArchive(zipPath:into:)` from the `Core` library, which
-    // shares the same lock + EFAULT-retry as the server-side zip helpers.
-
     /// Runs the optional pre-test `make` step through the same bounded
     /// process machinery as test scripts (#1107). The step executes AFTER the
     /// student submission is merged into the workspace, so a submission with
