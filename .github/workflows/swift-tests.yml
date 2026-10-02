@@ -144,6 +144,8 @@ jobs:
 
       - name: Require a reason on every unchecked Sendable
         run: scripts/check-unchecked-sendable.sh
+      - name: Secret files are git-ignored
+        run: scripts/check-secret-files-ignored.sh
 
       - name: Block Swift property access in Leaf templates
         run: scripts/check-leaf-semantics.sh

@@ -24,6 +24,8 @@ Tools/jupyterlite/.jupyterlite.doit.db
 .local-runner-autostart
 .worker-secret
 .mcp-signing-key
+.lti-tool-key
+.github-app-secrets
 .env
 chickadee*.sqlite
 chickadee*.sqlite3
