@@ -3,7 +3,7 @@
 // Binding a course to its LEARN org unit, and mapping its assignments to
 // the org unit's grade items by name. Functions over models, a database and
 // the application, never a `Request`: the handlers in
-// `InstructorDashboardRoutes+BrightSpace.swift` decode the form, flash the
+// `InstructorLMSRoutes+BrightSpace.swift` decode the form, flash the
 // outcome, write the audit entry and redirect. Moved out of the route
 // extension in #1654 (slice 3).
 
