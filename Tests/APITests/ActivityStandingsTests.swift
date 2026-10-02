@@ -170,6 +170,33 @@ import VaporTesting
         }
     }
 
+    /// With no classmate and no bot, the claim opens a row against nobody
+    /// and the job runs alone. The row completes, but it counts nothing: the
+    /// first submitter has no standings row rather than a loss (#1748).
+    @Test func aMatchAgainstNobodyCountsNothingInTheStandings() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "alone", manifest: try robinManifest())
+            let chosen = try await claim(app, fx: fx, user: fx.a, submissionID: "alone_a1")
+            #expect(chosen.isEmpty)
+            let nobody = ChosenOpponent(champion: nil, identity: JobOpponent.noOpponentIdentity)
+            try await openMatch(
+                testSetupID: fx.setupID, submissionID: "alone_a1", opponent: nobody,
+                seed: JobOpponent.matchSeed(submissionID: "alone_a1", opponentIdentity: nobody.identity),
+                on: app.db)
+
+            try await recordActivityMatch(
+                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "alone_a1",
+                outcomes: [outcome("match", metric: 0, status: .error, score: 0)],
+                matches: nil, on: app.db)
+
+            let row = try #require(
+                try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "alone_a1").first())
+            #expect(row.completedAt != nil)
+            #expect(try await standing(app, fx: fx, user: fx.a) == nil)
+            #expect(try await winnerRecord(app, fx: fx) == nil)
+        }
+    }
+
     // MARK: - Landing a matrix result
 
     /// The worker's reports complete the rows by identity; the challenger's

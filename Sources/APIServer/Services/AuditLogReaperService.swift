@@ -58,19 +58,18 @@ extension Application {
     /// the caller (the registration site in `AppServices`) is the one
     /// source of truth for retention configuration.
     func auditLogReaperMonitor(maxAge: TimeInterval = auditLogDefaultMaxAge) -> PeriodicSweepMonitor {
-        if let existing = storage[AuditLogReaperMonitorKey.self] { return existing }
-        let created = PeriodicSweepMonitor(
-            name: "Audit-log reaper",
-            interval: auditLogReaperSweepInterval,
-            runImmediately: true
-        ) { application in
-            try await reapStaleAuditLogEntries(
-                on: application.db,
-                logger: application.logger,
-                maxAge: maxAge
-            )
+        lazyStored(AuditLogReaperMonitorKey.self) {
+            PeriodicSweepMonitor(
+                name: "Audit-log reaper",
+                interval: auditLogReaperSweepInterval,
+                runImmediately: true
+            ) { application in
+                try await reapStaleAuditLogEntries(
+                    on: application.db,
+                    logger: application.logger,
+                    maxAge: maxAge
+                )
+            }
         }
-        storage[AuditLogReaperMonitorKey.self] = created
-        return created
     }
 }

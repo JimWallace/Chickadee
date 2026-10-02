@@ -97,6 +97,18 @@ import VaporTesting
         }
     }
 
+    /// The duplicate check folds case the way `coursesMatching` does when it
+    /// resolves a key, so "cs139" and "CS139" cannot both be active in one
+    /// term and both answer the same URL key (#1779).
+    @Test func duplicateCheckIgnoresCase() async throws {
+        try await withApp(app) { app in
+            try await course("CS140", fall26)
+            #expect(try await activeCourseCodeIsTaken("cs140", term: fall26, excluding: nil, on: app.db))
+            #expect(try await activeCourseCodeIsTaken("Cs140", term: fall26, excluding: nil, on: app.db))
+            #expect(!(try await activeCourseCodeIsTaken("cs140", term: winter27, excluding: nil, on: app.db)))
+        }
+    }
+
     // MARK: - URL key
 
     @Test func urlKeyIsTheCodeAloneWithoutATerm() async throws {
@@ -239,6 +251,33 @@ import VaporTesting
             // write resolves.
             let chosen = try await resolveMCPCourse(key: "CS247", tool: "t", context: context, forWrite: true)
             #expect(chosen.id == active.id)
+        }
+    }
+
+    /// The MCP resolver and the web resolver answer one key the same way:
+    /// active courses are matched first, and an archived course is reached
+    /// only when no active one matches. An archived legacy course coded
+    /// "CS243-F26" used to win that key over an active CS243 in Fall 2026
+    /// over MCP, because the exact-code rule fired before the active filter
+    /// (#1778).
+    @Test func mcpMatchesActiveCoursesBeforeArchivedOnes() async throws {
+        try await withApp(app) { app in
+            let legacy = try await course("CS243-F26", nil, archived: true)
+            let termed = try await course("CS243", fall26)
+            let instructor = try await makeTestUser(on: app, username: "term_mcp3", role: "instructor")
+            try await enroll(instructor, in: legacy, role: .instructor)
+            try await enroll(instructor, in: termed, role: .instructor)
+            let context = toolContext(subject: "term_mcp3")
+
+            let overMCP = try await resolveMCPCourse(key: "CS243-F26", tool: "t", context: context, forWrite: true)
+            let onTheWeb = try await findActiveCourse(byKey: "CS243-F26", viewer: nil, on: app.db)
+            #expect(overMCP.id == termed.id)
+            #expect(onTheWeb?.id == termed.id)
+
+            // With no active match the archived course is still reachable.
+            let archivedOnly = try await course("CS250", nil, archived: true)
+            let fallback = try await resolveMCPCourse(key: "CS250", tool: "t", context: context, forWrite: false)
+            #expect(fallback.id == archivedOnly.id)
         }
     }
 

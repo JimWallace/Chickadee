@@ -845,16 +845,12 @@ struct ServerStartedAtKey: StorageKey {
 
 extension Application {
     var serverHealthAlertMonitor: ServerHealthAlertMonitor {
-        get {
-            if let existing = storage[ServerHealthAlertMonitorKey.self] { return existing }
-            let created = ServerHealthAlertMonitor(
+        lazyStored(ServerHealthAlertMonitorKey.self) {
+            ServerHealthAlertMonitor(
                 configuration: serverHealthAlertConfiguration,
                 webhookURLFilePath: alertWebhookURLFilePath
             )
-            storage[ServerHealthAlertMonitorKey.self] = created
-            return created
         }
-        set { storage[ServerHealthAlertMonitorKey.self] = newValue }
     }
 
     /// Drives `serverHealthAlertMonitor.sweep` on the configured cadence.
@@ -862,9 +858,8 @@ extension Application {
     /// right away, matching the historical actor loop, and there was never
     /// an extra detached boot sweep for this service.
     var serverHealthAlertSweepMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[ServerHealthAlertSweepMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(ServerHealthAlertSweepMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "Server health alert",
                 interval: serverHealthAlertConfiguration.checkIntervalSeconds,
                 minimumInterval: 5,
@@ -872,10 +867,7 @@ extension Application {
             ) { application in
                 await application.serverHealthAlertMonitor.sweep(application: application)
             }
-            storage[ServerHealthAlertSweepMonitorKey.self] = created
-            return created
         }
-        set { storage[ServerHealthAlertSweepMonitorKey.self] = newValue }
     }
 
     var alertWebhookURLFilePath: String {

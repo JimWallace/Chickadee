@@ -2,9 +2,10 @@
 //
 // Submission-retention policy: a course's data is kept for one year
 // (the SUBMISSION_RETENTION_DAYS window) after the END OF TERM, then becomes
-// eligible for permanent deletion. Chickadee has no term/semester concept, so
-// "end of term" is signalled by archiving the course — the retention clock
-// starts at `APICourse.archivedAt`.
+// eligible for permanent deletion. A course records its term
+// (`APICourse.term`, docs/course-terms.md) but not the day it ends, so "end
+// of term" is signalled by archiving the course — the retention clock starts
+// at `APICourse.archivedAt`.
 //
 // This is FIPPA / UWaterloo TL55 retention: assignments (submissions) are
 // personal information that must be retained for one year after term end and

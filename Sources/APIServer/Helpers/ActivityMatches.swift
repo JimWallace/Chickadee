@@ -224,14 +224,38 @@ func recordActivityMatch(
             current.defences = 0
             try await current.update(on: db)
         } else {
-            try? await APIActivityChampion(
-                testSetupID: testSetupID, userID: userID, submissionID: submissionID, crownedAt: Date()
-            ).save(on: db)
+            // Two first crownings can land together: both read an empty hill
+            // and both reach this insert. The unique index keeps one, and the
+            // record must name the same student (#1752).
+            guard
+                try await crownFirstChampion(
+                    testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
+            else { return }
         }
         try await awardChampionRecords(setup: setup, userID: userID, submissionID: submissionID, on: db)
     } else if let current, current.userID != userID {
         current.defences += 1
         try await current.update(on: db)
+    }
+}
+
+/// Inserts the first champion row of a setup. Returns false when another
+/// crowning landed first and the unique index on `test_setup_id` kept
+/// theirs; any other failure is rethrown.
+func crownFirstChampion(
+    testSetupID: String, userID: UUID, submissionID: String, on db: Database
+) async throws -> Bool {
+    do {
+        try await APIActivityChampion(
+            testSetupID: testSetupID, userID: userID, submissionID: submissionID, crownedAt: Date()
+        ).save(on: db)
+        return true
+    } catch {
+        let taken = try await APIActivityChampion.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .first()
+        guard taken != nil else { throw error }
+        return false
     }
 }
 
@@ -303,10 +327,17 @@ private func recordMatrixMatches(
 /// Rewrites the student's standings row from `submissionID`'s completed
 /// matches. A draw is a completed match the challenger did not win whose
 /// score is exactly one half; a loss is any other non-win.
+///
+/// A match against nobody (`JobOpponent.noOpponentIdentity`: the first
+/// submitter, with no classmate and no bundled bot) counts nothing. The row
+/// exists so the job has a match, but it is not a result against anyone, and
+/// counting it sat the first submitter last on a loss until a classmate
+/// arrived (#1748). With nothing to count, the student has no standings row.
 func recomputeStanding(testSetupID: String, userID: UUID, submissionID: String, on db: Database) async throws {
     let rows = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
         .filter(\.$completedAt != nil)
+        .filter(\.$opponentIdentity != JobOpponent.noOpponentIdentity)
         .all()
     let wins = rows.filter { $0.won == true }.count
     let draws = rows.filter { $0.won != true && $0.score == 0.5 }.count
@@ -316,7 +347,9 @@ func recomputeStanding(testSetupID: String, userID: UUID, submissionID: String, 
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$userID == userID)
         .first()
-    if let existing {
+    if rows.isEmpty {
+        try await existing?.delete(on: db)
+    } else if let existing {
         existing.submissionID = submissionID
         existing.played = rows.count
         existing.wins = wins

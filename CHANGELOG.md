@@ -9,6 +9,115 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.322] - 2026-10-02
+
+### Fixed
+
+- **The admin Users page no longer writes an avatar for MCP service accounts.** It materialized a bird for every account on first view, service accounts included, which never open an account page (#1764).
+
+### Changed
+
+- **One `brightspaceRedirect` helper for the BrightSpace instructor routes.** The 32 flash writes and 24 redirects to the page each spelled the same two lines; every mutating handler now ends in one call that sets the flash and redirects (#1714).
+
+### Changed
+
+- **The compliance inventory and trust-boundary note list GitHub.** `data-flow-inventory.md` gains a per-flow table for the six GitHub flows, and `trust-boundary.md` names GitHub as a counterparty with its inbound webhook and callbacks, its two outbound hosts, and the rule that grading never leaves Chickadee's runners (#1770).
+
+### Fixed
+
+- **An assignment's GitHub template cannot be cleared or changed while course repositories exist.** Clearing it sent a student whose repository exists to owned-repository mode, which refused the organization's repository as not theirs; changing it gave later students a different start. The page now refuses with a sentence, the same gate the LTI platform delete uses (#1767).
+
+### Security
+
+- **The GitHub account-link callback revokes the user token when the user read fails.** The revoke ran after `GET /user`, so a throw there rethrew past it and left the token live. Both user-authorization callbacks now run their lookups through one helper, `withRevokedUserToken`, which revokes before any outcome is read (#1765).
+
+### Security
+
+- **The GitHub tarball reader's `gzip` child gets an explicit environment.** It inherited the server's whole environment, the one exception to the rule that every server child is launched with `Environment.only`. A new guard asserts every `Subprocess.run` under the server passes `environment:`, with a fixture proving it fails (#1797).
+
+### Changed
+
+- **One `ManifestCoherence` check for the manifest rules every authoring door enforces.** The zip upload, the three `setManifest*` edits and the two MCP mode tools each restated the upload-and-browser, grader-only-and-browser, opponent-and-browser and upload-only-language rules. They now ask one function, and an edit is refused only for the incoherence it introduces, never for one a legacy manifest inherits (#1713).
+
+### Changed
+
+- **The account page loads a course's taken handles once per enrollment.** `takenHandles` is the one query behind every handle draw and check, and it reads only the handle column of rows that have one. The account page passes the set to the draw and the alternates instead of loading the roster twice (#1759).
+
+
+## [0.5.321] - 2026-10-02
+
+### Fixed
+
+- **Two first hill crownings landing together name one champion.** Both winners could reach the first insert; the unique index kept the first row while the champion record went to the second writer. The record is now awarded only when this call's insert is the row the hill keeps (#1752).
+
+### Fixed
+
+- **A round-robin match against nobody counts nothing in the standings.** The first submitter, with no classmate and no bundled bot, played a match whose row completed as a loss and sat them last on an average score of zero until they resubmitted. The row still completes, but the standings skip it, so the student has no standings row until they play someone (#1748).
+
+
+## [0.5.320] - 2026-10-02
+
+### Changed
+
+- **`docs/class-activities.md` describes the code as it stands after slice 6.** The Model section lists all five opponent sources and names `ActivityAggregation`, the tables section says slice 5 fills `round`, and the achievements section counts the four sweep-evaluable shapes (#1754).
+
+### Fixed
+
+- **The course-code duplicate check is case-insensitive.** The unique index compares bytes while both resolvers fold case, so "cs135" and "CS135" could be two active offerings in one term that one URL key names. Every door that creates or renames a course now refuses the second (#1779).
+
+### Changed
+
+- **Four comments on the language field now state the declared-language rule.** They described the inference era: a nil language that "falls back to sniffing the suite", a recorded field that was a "memo" of a derivation, and a `rederive` that no longer exists. Each now says the language is declared and nothing derives it from content (#1725).
+
+### Fixed
+
+- **The MCP course resolver matches active courses before archived ones.** It matched over every course and then kept the active subset only when non-empty, so an archived legacy course coded "CS243-F26" won that key over an active CS243 in Fall 2026, while the web resolver chose the termed course. Both now agree (#1778).
+
+### Changed
+
+- **`ReapableSession` lives in `Models/` with the other Fluent models.** It was the one model class declared inside a service file, so a reader of `Models/` could not find the `_fluent_sessions` mapping (#1735).
+
+### Changed
+
+- **Two service headers describe the rules the code has.** `PersonalizationEvaluator` no longer claims a `.python` default that `no-language-defaults.sh` forbids, and `SubmissionRetentionService` no longer says Chickadee has no term concept (#1733).
+
+### Fixed
+
+- **Indexes for the periodic sweeps, the leaderboard poll and the push webhook.** The AGS grade-sync sweep (every 60 seconds), the hourly LTI reaper, the achievement sweep's corpus-run read, the union leaderboard body polled every 5 seconds, the tournament scheduler and the GitHub push webhook each scanned a table whose only index was the row's unique identity. `CreateSweepAndPollIndexes` adds the nine indexes those filters lead on (#1800, #1801, #1802, #1803, #1804).
+
+
+## [0.5.319] - 2026-10-02
+
+### Security
+
+- **`.lti-tool-key` and `.github-app-secrets` are git-ignored.** Both are written to the working directory by default and were absent from `.gitignore`, so a developer running the server from a checkout could commit an App private key. A new guard reads the secret file names from `SecretFile.swift` and asserts each is ignored, with a fixture proving it fails (#1772).
+
+
+## [0.5.318] - 2026-10-02
+
+### Fixed
+
+- **Un-archiving a course checks the per-term duplicate rule first.** The toggle saved straight into the unique index over active courses, which rejected the save as an unhandled error once an active course held the same code and term. It now reports the duplicate the way the edit form does (#1777).
+
+
+## [0.5.317] - 2026-10-02
+
+### Fixed
+
+- **The AGS failure-reason backfill matches the sentence its rows were written with.** `AddLTIGradeSyncFailureReasonColumn` keyed its `UPDATE` on the live `LTIGradeSyncSweep.notLaunchedMessage`, so rewording that sentence before a database applied the migration would have backfilled nothing. The matched sentence is frozen in the migration (#1811).
+
+
+## [0.5.316] - 2026-10-02
+
+### Fixed
+
+- **An admin can no longer change their own role.** A self-demotion could leave
+  no admin able to undo it. The server now refuses the request with 403, and the
+  role menu on the signed-in admin's own row in the Users list is disabled.
+- **Changing a role now returns to the Users list.** It used to open the admin
+  dashboard, so the saved role was not visible.
+
+
 ## [0.5.315] - 2026-10-02
 
 ### Changed

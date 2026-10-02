@@ -11,8 +11,9 @@
 // source literals (`repr(value)` in Python, `deparse(value)` in R) — drop-in
 // literals that `NotebookSubstitution.apply` substitutes into `{{name}}`
 // placeholders and that the worker writes into `_ck_inputs.{py,R}`. The
-// language is chosen per assignment (`AssignmentLanguage`); the default is
-// `.python`, so every existing caller is byte-for-byte unchanged.
+// language is the assignment's declared `AssignmentLanguage`, and every
+// caller passes it: no `language:` parameter has a default
+// (`scripts/no-language-defaults.sh`).
 //
 // Trust model: instructor-authored Python on the instructor's own
 // server.  Same risk profile as the validation-submission path that
