@@ -3,19 +3,21 @@
 // Slice 2 of #461 — server-side evaluation of `PersonalizationExpression`
 // rows with `seed` bound to the per-(student, assignment) hex seed.
 //
-// Each evaluation spawns the assignment's interpreter (`python3` or, for
-// an R assignment, `Rscript`) against a tiny generated driver script that
-// binds `seed`, every static `globalVariables` + section variable as
-// module-level names, then evaluates each expression in declared order so
-// later expressions can reference earlier ones.  Values are emitted as
-// source literals (`repr(value)` in Python, `deparse(value)` in R) — drop-in
-// literals that `NotebookSubstitution.apply` substitutes into `{{name}}`
-// placeholders and that the worker writes into `_ck_inputs.{py,R}`. The
-// language is the assignment's declared `AssignmentLanguage`, and every
-// caller passes it: no `language:` parameter has a default
+// Each evaluation spawns the driver `driverPlan` picks for the assignment's
+// language — `python3`, `Rscript`, `lua`, `octave-cli`, `racket`, or an `sh`
+// script that compiles with `g++` or `javac` — against a tiny generated
+// driver that binds `seed`, every static `globalVariables` + section variable
+// as module-level names, then evaluates each expression in declared order so
+// later expressions can reference earlier ones.  Values are emitted as source
+// literals in that language (`repr(value)` in Python, `deparse(value)` in R,
+// each other driver's own serializer) — drop-in literals that
+// `NotebookSubstitution.apply` substitutes into `{{name}}` placeholders and
+// that the worker writes into the language's `_ck_inputs` file. The language
+// is the assignment's declared `AssignmentLanguage`, and every caller passes
+// it: no `language:` parameter has a default
 // (`scripts/no-language-defaults.sh`).
 //
-// Trust model: instructor-authored Python on the instructor's own
+// Trust model: instructor-authored code on the instructor's own
 // server.  Same risk profile as the validation-submission path that
 // already executes instructor solution notebooks server-side.
 // Sandboxed-exec parity with the worker (`sandbox-exec` /  `unshare`)
