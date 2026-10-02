@@ -36,6 +36,11 @@ struct AuthoringDirectories: Sendable {
 struct AuthoredAssignment: Sendable {
     let assignment: APIAssignment
     let setup: APITestSetup
+    /// Every file or directory the operation wrote. A caller that copies
+    /// several assignments inside one transaction removes them all when a
+    /// later copy fails, because the rows roll back and the files would not
+    /// (#1743).
+    var createdPaths: [String] = []
 }
 
 /// How a metadata update should treat the due date (absent / clear / set).
@@ -235,7 +240,10 @@ enum AssignmentAuthoringService {
             // personalization expressions read them from the shared directory.
             await extractSupportFilesToSharedDirectory(
                 for: newSetup, testSetupsDirectory: directories.setups)
-            return AuthoredAssignment(assignment: assignment, setup: newSetup)
+            let createdPaths =
+                [dstZip] + [newNotebookPath, copiedSolutionPath].compactMap { $0 }
+                + [directories.setups + "shared/\(newSetupID)/"]
+            return AuthoredAssignment(assignment: assignment, setup: newSetup, createdPaths: createdPaths)
         } catch {
             // Roll back the copied files so a failed clone leaves no orphans.
             try? fm.removeItem(atPath: dstZip)
