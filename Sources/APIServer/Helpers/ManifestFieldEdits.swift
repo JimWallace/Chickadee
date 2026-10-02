@@ -138,13 +138,9 @@ func currentManifestLanguage(_ manifest: String?) -> String? {
 /// Sets the test setup's recorded `language` to `language` when it differs.
 /// Returns the effective language.
 ///
-/// The recorded field is normally a *memo* of what resolution derived from the
-/// content (`manifestWithRederivedLanguage`), which is why nothing else writes
-/// it directly. An upload-only language is the case that memo cannot reach: with
-/// no editor kernel there is no notebook kernelspec to imply it, and C++'s
-/// generated tests are extension-free `.sh` wrappers by design — leaving a
-/// declaration as the only signal there is. Hence this setter, and hence its two
-/// guards.
+/// The recorded field is the author's declaration, and this setter is the one
+/// place a route or tool changes it: `AssignmentLanguage.resolve(manifest:)`
+/// reads it and nothing derives it from content. Hence its two guards.
 ///
 /// Refuses an upload-only language while the setup is still in notebook mode:
 /// the mirror of `setManifestSubmissionMode`'s guard, so the incoherent
