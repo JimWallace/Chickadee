@@ -1,16 +1,17 @@
 # Student avatars — design note
 
-**Status: shipped for the account page.** Every student has a chickadee and a
-per-course handle, drawn on first view and stored; the account page renders the
-bird in place of the initials monogram, which is gone.
+**Status: shipped, and in use.** Every student has a chickadee and a per-course
+handle, drawn on first view and stored; the account page renders the bird in
+place of the initials monogram, which is gone, and the wardrobe lets a student
+choose its backdrop and ring (docs/student-wardrobe.md).
 
-**Nothing displays either one to anybody else yet.** There is no leaderboard and
-no class-facing page — `account.leaf` is the only template that renders a bird
-or names a handle, and it shows a student only their own. The handle is
-therefore **reserved, not in use**, and student-facing copy must say so: a
-sentence about how a pseudonym behaves in front of classmates is a claim about a
-surface that does not exist, and a student can act on it. Also not built: the
-customization wardrobe (unlock model, picker) and the geometry slots it needs.
+**Both are shown to other people.** Eleven templates include the avatar partial:
+the leaderboard pages (list, bracket, Present mode) show a student's bird and
+handle to classmates, and the instructor Students, Slip days and LEARN lists,
+the admin runner page and the readiness list show the bird beside the name to
+staff. The handle is therefore **in use**, and student-facing copy says so: the
+account page names the handle per course and says plainly that a stable
+pseudonym is not anonymity (section 5).
 
 ---
 
@@ -385,8 +386,7 @@ written and expensive afterwards, once students are wearing the results.
 The art for the colour slots exists (`Resources/Views/_avatar-sprite.leaf`,
 the `--avatar-*` palette in `Public/styles.css`, and
 `Tools/avatar-preview/preview.mjs`, which renders a contact sheet from those two
-files rather than from a copy of them). Nothing is wired: no `AvatarSpec`, no
-column, no page renders one. What follows is what the drawing changed, since
+files rather than from a copy of them). What follows is what the drawing changed, since
 four of the five findings were only visible by rendering the thing and looking
 at it.
 
@@ -645,10 +645,12 @@ box is sized by the text it covers, so a variable-length name moves the box.
 What the pixel test gives up here, `AccountRoutesTests` and `AvatarSpecTests`
 assert against the markup instead.
 
-**One consequence still owed:** the design's size floor — "the bird earns its
-detail at 48px and up; below that the monogram chip takes over". `.avatar-sm`
-was removed for that reason, since a 24px bird is a smudge. Nothing renders one
-that small today, so the chip belongs to the slice that first needs it.
+**The size floor, as built:** "the bird earns its detail at 48px and up". Below
+it the bird is recognition, not identification, so `.avatar-sm` (1.5rem,
+`AvatarSize.small`) is drawn only where a handle beside it carries the identity:
+the leaderboard rows, which is what `RankedIdentities.presentation` defaults to.
+A row with no text beside the bird would want a monogram chip instead, and none
+exists.
 
 ---
 
@@ -703,10 +705,8 @@ Each slice is independently mergeable and independently useful.
   component-vocabulary entry, and the contact-sheet tool. 92,160 birds. What
   the wiring is done too: `_avatar.leaf` takes an `AvatarPresentation`
   sub-context and the monogram is gone — the helper, the CSS, its
-  component-vocabulary entry and its tests with it. Still owed: a
-  visual-regression baseline, and a run of the `ui-review` agent, which is
-  unconditional for anything touching `Resources/Views/` or `styles.css` and
-  was unavailable in the environment this was built in.
+  component-vocabulary entry and its tests with it. The visual-regression
+  baseline (`student-account--light.png` and its dark twin) is committed.
 - **S3 — student-facing copy and compliance. Done.** The account page names the
   handle per course and says plainly that a stable pseudonym is not anonymity.
   `profile.json` carries the spec and `enrollments.json` the handle, both
