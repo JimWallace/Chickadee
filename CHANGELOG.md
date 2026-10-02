@@ -9,6 +9,29 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.332] - 2026-10-02
+
+### Changed
+
+- **The assignment loaders live in `AssignmentHelpers.swift`.** `loadAssignmentForWrite` and `loadAssignmentAndSetupForWrite` sat under the suite-editing helper file, while their 39 callers in 21 files are grading actions, lifecycle actions and BrightSpace. The read loaders and the private resolvers they share moved with them. A pure move (#1717).
+
+### Fixed
+
+- **`get_server_info` reports each activity kind's real aggregation.** It said `leaderboard` for every kind, because `aggregatesToLeaderboard` was true for all six and the `standings` branch was dead, so a round robin, a tournament and the tests-and-code kind reported an aggregation their pages do not show. The payload now carries the kind's `ActivityAggregation` token, the schema enum is derived from the same cases, and the vestigial `aggregatesToLeaderboard` is deleted: every kind has a ranking page, so the leaderboard route and `leaderboardPath` ask only visibility (#1746).
+
+### Changed
+
+- **The dead `setup` parameter of `AssignmentLanguage.resolve(for:manifest:)` is gone.** The wrapper discarded its setup at every one of its fifteen call sites and forwarded to Core's `resolve(manifest:)`; the sites call that directly now, and the wrapper file with it. The two stale headers the issue named were already corrected by #1725 (#1733).
+
+### Changed
+
+- **The browser manifest strips grader-only names through the typed manifest.** `manifestWithGraderOnlyFilesStripped` was the last manifest dictionary outside a migration: it parsed to `[String: Any]`, blanked the list and re-serialized without sorted keys, so the one case that rewrote served bytes in a third encoding. It now decodes to `TestProperties`, empties `graderOnlyFiles` and encodes with the stable encoder every other manifest write uses; the no-op cases still return the input byte for byte (#1721).
+
+### Changed
+
+- **The four user-activity telemetry files no longer share a name with class activities.** `ActivityEventReaperService`, `ActivityEventThrottle`, `ActivityChartService` and `CourseActivityService` reap, throttle and chart `user_activity_events` and build the course timeline, which has nothing to do with the class-activity trio (`ActivityAuthoring`, `ActivityMatches`, `ActivityUnion`). They are `UserActivityEventReaperService`, `UserActivityEventThrottle`, `UserActivityChartService` and `CourseTimelineService` now, with their storage keys and test files renamed to match. Symbol renames only (#1734).
+
+
 ## [0.5.331] - 2026-10-02
 
 ### Changed
