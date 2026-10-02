@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.338] - 2026-10-02
+
+### Changed
+
+- **The tuft and tilt fill is a one-time migration, not a rule on every avatar read.** A bird stored before those axes existed was filled lazily on its next account-page load, behind a probe `AvatarStore.ensureSpec` ran on every read. `FillLateAvatarAxes` fills the missing axes of every stored bird once, the store returns a stored bird as stored, and the lazy-fill tests are replaced by a migration test (#1762).
+
+### Fixed
+
+- **The visual check no longer fails when the two seeded users swap rows on the admin Users page.** The table sorts by last seen, and the once-a-minute refresh of that time decided which user led, so one capture pass could flip the rows. The capture now pins the order the baselines hold.
+
+
 ## [0.5.337] - 2026-10-02
 
 ### Changed
