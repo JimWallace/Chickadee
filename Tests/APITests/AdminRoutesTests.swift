@@ -112,6 +112,49 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
+    @Test func changeRoleRefusesTheAdminsOwnAccount() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let me = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "admin_routes").first())
+            let myID = try me.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+
+            try await app.asyncTest(
+                .POST, "/admin/users/\(myID.uuidString)/role",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["role": "user", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+            let unchanged = try await APIUser.find(myID, on: app.db)
+            #expect(unchanged?.role == "admin")
+        }
+    }
+
+    @Test func usersListOffersNoRoleControlOnTheViewersOwnRow() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let me = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "admin_routes").first())
+            let other = try await makeUser(username: "role_other", role: "user")
+            let myPath = "/admin/users/\(try me.requireID().uuidString)/role"
+            let otherPath = "/admin/users/\(try other.requireID().uuidString)/role"
+
+            try await app.asyncTest(
+                .GET, "/admin/users-data?fragment=rows",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    let body = String(buffer: res.body)
+                    #expect(!body.contains(myPath))
+                    #expect(body.contains(otherPath))
+                })
+        }
+    }
+
     @Test func adminPageOffersNoRunnerSecretControls() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()

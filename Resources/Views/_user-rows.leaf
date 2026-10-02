@@ -16,6 +16,8 @@
                 <td class="item-status" data-sort-value="#(user.role)">
                     #if(user.role == "mcp"):
                     <span class="tier tier-preview">MCP service</span>
+                    #elseif(user.isCurrentUser):
+                    Admin <span class="you-pill">You</span>
                     #else:
                     <form method="post" action="/admin/users/#(user.id)/role"
                           class="inline-form form-flush">
