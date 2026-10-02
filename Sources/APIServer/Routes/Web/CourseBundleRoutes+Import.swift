@@ -466,6 +466,12 @@ private func importBundledTestSetups(
         // The zip copy above carries the support files, but students and
         // personalization expressions read them from the shared directory.
         await extractSupportFilesToSharedDirectory(for: setup, testSetupsDirectory: setupsDir)
+        // Seed the imported assignment's v1, as clone and create do, so it
+        // has a starting point to roll back to and the timeline can say it
+        // arrived by import (#1741). Best effort, like the other seeds.
+        await AssignmentVersionStore.seedInitialVersion(
+            setup: setup, origin: AssignmentVersionOrigin.bundleImport,
+            testSetupsDirectory: setupsDir, on: db)
 
         // A bundle exported by an older build carries no language declaration,
         // so declare one on the way in — the same thing
