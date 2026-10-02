@@ -231,16 +231,18 @@ import VaporTesting
         }
     }
 
-    /// The binding page needs the session, which the LMS frame does not
-    /// carry, so a deep-linking launch from an unlinked course says how to
-    /// link it instead, in a page the LMS frame may show.
-    @Test func anUnlinkedContextIsRefusedWithHowToLinkIt() async throws {
+    /// An instructor's deep-linking launch from an unlinked course shows the
+    /// course choice in the frame; a new account teaches nothing yet, so the
+    /// choice is empty. No picker request is stored until the course is
+    /// linked. (A TA's refusal is
+    /// `aTeachingAssistantFromAnUnlinkedContextIsToldWhoCanLinkIt`.)
+    @Test func anInstructorFromAnUnlinkedContextSeesTheCourseChoice() async throws {
         try await withApp(app) { app in
             _ = try await fixture(bind: false)
             let launched = try await launch()
-            #expect(launched.status == .forbidden)
-            #expect(launched.location == nil)
-            #expect(launched.html.contains("Open a Chickadee link from this course in a new window once"))
+            #expect(launched.status == .ok)
+            #expect(launched.html.contains("Link LMS course"))
+            #expect(launched.html.contains("No unlinked Chickadee course is available to you."))
             #expect(launched.headers.first(name: "X-Frame-Options") == nil)
             let count = try await APILTIDeepLinkRequest.query(on: app.db).count()
             #expect(count == 0)
