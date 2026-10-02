@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/InstructorDashboardRoutes+BrightSpace.swift
+// APIServer/Routes/Web/InstructorLMSRoutes+BrightSpace.swift
 //
 // The instructor BrightSpace tab: connection status, the assignment→grade-
 // item mapping, the sync-activity log, manual sync actions, and the LEARN
@@ -22,7 +22,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension InstructorDashboardRoutes {
+extension InstructorLMSRoutes {
 
     // MARK: - GET /instructor/brightspace
 
