@@ -32,6 +32,11 @@ GitHub
     </div>
     #if(app):
     <p class="section-intro">Chickadee reads student repositories through this App.</p>
+    #if(secretsUnavailable):
+    <div class="flash flash-warning" role="status">
+        #(secretsProblem) Until then GitHub submission is unavailable and webhook deliveries are refused.
+    </div>
+    #endif
     <div class="card section-gap">
         <dl class="detail-grid detail-grid--cells">
             <div><dt>Name</dt>

@@ -37,10 +37,9 @@ struct GitHubWebhookRoutes: RouteCollection {
 
     @Sendable
     func receive(req: Request) async throws -> HTTPStatus {
-        guard
-            try await APIGitHubApp.query(on: req.db).count() > 0,
-            let secret = (try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath))?.webhookSecret
-        else { throw Abort(.notFound) }
+        guard let secret = try await GitHubAppRegistration.resolve(req: req)?.secrets.webhookSecret else {
+            throw Abort(.notFound)
+        }
         let body = req.body.data.map { Data(buffer: $0) } ?? Data()
         guard
             GitHubWebhookSignature.isValid(

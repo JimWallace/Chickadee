@@ -661,6 +661,10 @@ struct AdminGitHubContext: Encodable {
     let baseURLConfigured: Bool
     /// The registered App, or nil when none is registered.
     let app: AdminGitHubAppDetails?
+    /// True when an App is registered but its secrets file is missing or
+    /// unreadable (#1771); `secretsProblem` is the sentence that says which.
+    let secretsUnavailable: Bool
+    let secretsProblem: String
     /// The manifest form, or nil when an App is registered or the form cannot
     /// be built.
     let creation: GitHubAppCreationContext?
