@@ -64,7 +64,7 @@ struct IndexRowContext {
     let extensionDueAtBySetupID: [String: Date]
     let previouslyOpenedSetupIDs: Set<String>
     let isActiveCourseStaff: Bool
-    /// The active course URL key (`CourseContext.pathKey`) for vanity links.
+    /// The active course URL key (`CourseContext.urlKey`) for vanity links.
     let activeCourseKey: String?
     let hasNotebookBySetupID: [String: Bool]
     let slipDay: DashboardSlipDayData

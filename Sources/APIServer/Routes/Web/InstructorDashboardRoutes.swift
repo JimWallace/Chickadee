@@ -140,7 +140,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             roster = try await buildCourseRoster(
                 req: req,
                 activeCourseUUID: activeCourseUUID,
-                activeCourseKey: courseState.active?.pathKey ?? "",
+                activeCourseKey: courseState.active?.urlKey ?? "",
                 fmt: fmt,
                 isoFormatter: isoFormatter
             )
