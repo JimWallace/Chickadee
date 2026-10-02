@@ -9,6 +9,29 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.328] - 2026-10-02
+
+### Fixed
+
+- A course clone that fails part-way no longer leaves the earlier assignments' zips, notebooks, solution copies and shared directories on disk. The transaction already rolled their rows back; the service now removes their files before the error leaves (#1743).
+
+### Fixed
+
+- A GitHub commit status post is abandoned after 20 seconds, and every GitHub API call carries a 30-second timeout, so a GitHub connection that stops answering no longer holds the runner's result report open (#1773).
+
+### Fixed
+
+- **Bundle import seeds an imported assignment's `v1`.** Clone and create stamp one; import relied on the lazy baseline, and the `import` origin the timeline displays was produced nowhere. The versioning doc no longer claims a snapshot records metadata, and the solution tool's comment no longer claims the solution lives in the setup zip (#1741).
+
+### Fixed
+
+- **One grade fold on every surface.** The student's own submission-history page, the class-goal sweep, and the badge path on the dashboard and the per-student page still preferred a worker result over a browser one. A browser result at 100 % followed by a worker regrade at 90 % read as 90 % to the student and to the sweep while every staff page said 100 %. All of them now read the highest grade across every result through the folds in `BestGradePercentBySubmissionID.swift`, and the worker-first fold is gone (#1709).
+
+### Changed
+
+- **RunnerCore carries one copy of each trim helper, and its footer type has its own name.** Five private copies of the two whitespace trims across three files are now the two shared functions in `LineSplitting.swift`. The footer parser's value type is `FooterValue`, so it no longer shares a name with Core's public `JSONValue`. The struct the six verbatim extractors return is `ExtractedVerbatimNotebook`; it served Lua, Octave, C++, Racket and Java under an R-only name. No behaviour changed (#1724).
+
+
 ## [0.5.327] - 2026-10-02
 
 ### Changed
