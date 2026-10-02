@@ -194,18 +194,11 @@ struct GitHubCourseRoutes: RouteCollection {
             req.logger.warning("GitHub course binding exchange failed", metadata: ["error": "\(error)"])
             throw GitHubCourseBindError.exchangeFailed
         }
-        let lookup: Result<([GitHubUserInstallation], String?), any Error>
-        do {
-            lookup = .success(
-                (try await client.userInstallations(token), try await client.organizationRole(token, organization)))
-        } catch {
-            lookup = .failure(error)
-        }
         // Revoked before any answer is used, so no path keeps the token.
-        do {
-            try await client.revokeToken(token, app.clientID, secrets.clientSecret)
-        } catch {
-            req.logger.warning("GitHub user token not revoked", metadata: ["error": "\(error)"])
+        let lookup = await client.withRevokedUserToken(
+            token, clientID: app.clientID, clientSecret: secrets.clientSecret, logger: req.logger
+        ) { token in
+            (try await client.userInstallations(token), try await client.organizationRole(token, organization))
         }
         guard case .success(let (installations, role)) = lookup else {
             req.logger.warning("GitHub course binding check failed")

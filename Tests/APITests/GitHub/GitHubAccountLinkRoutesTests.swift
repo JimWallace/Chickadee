@@ -267,6 +267,25 @@ import VaporTesting
         }
     }
 
+    /// The token is revoked when the user read fails, not only when it
+    /// succeeds (#1765): nothing is stored, and the fake saw the revoke.
+    @Test func aFailedUserReadStillRevokesTheToken() async throws {
+        let revoked = revoked
+        app.githubOAuthClient = GitHubOAuthClient(
+            exchangeCode: { exchange in "token-for-\(exchange.code)" },
+            fetchUser: { _ in throw GitHubLinkError.exchangeFailed },
+            revokeToken: { token, _, _ in revoked.withLockedValue { $0.append(token) } })
+        try await withApp(app) { app in
+            try await registerApp(on: app)
+            let (state, cookie) = try await startLink(cookie: try await login())
+            try await get("/github/link/callback?code=abc&state=\(state)", cookie: cookie) { res in
+                #expect(res.headers.first(name: .location) == "/account?githubError=exchangeFailed")
+            }
+            #expect(revoked.withLockedValue { $0 } == ["token-for-abc"])
+            #expect(try await links().isEmpty)
+        }
+    }
+
     @Test func aGitHubAccountLinksToOneChickadeeAccountOnly() async throws {
         try await withApp(app) { app in
             try await registerApp(on: app)
