@@ -3393,7 +3393,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    picks the varying colours by assigning palette tokens to the --av-* custom
    properties on that element, which is the sanctioned inline form.
 
-   Only four properties are per-student: the fixed parts of the bird read their
+   Only five properties are per-student (AvatarPresentation.inlineProperties
+   in Core/AvatarMarkup.swift lists them): the fixed parts of the bird read their
    colours straight from the palette, because a body or a beak that varied
    would stop the birds being one species. */
 .avatar {

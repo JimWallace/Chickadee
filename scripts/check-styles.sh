@@ -404,9 +404,9 @@ fi
 # The avatar props are the second honest case, and the same shape as --bar-h:
 # every one carries a palette token chosen for the STUDENT the server is
 # rendering, so no stylesheet can hold it and no modifier class could enumerate
-# 9,216 of them. They are a closed set — one per slot in AvatarSpec, plus the
-# wing-mark that reuses the cheek — and the Swift side names the tokens
-# (Core/AvatarMarkup.swift), so a page cannot invent an eighth.
+# 9,216 of them. They are a closed set, five today, listed with the field each
+# reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift); the
+# partial test derives from that list, so a page cannot invent a sixth.
 PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border"
 inline_prop_violations=""
 while IFS= read -r hit; do

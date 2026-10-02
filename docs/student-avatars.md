@@ -528,7 +528,8 @@ attribute from the guard entirely. Handing the partial the token names lets it
 write real `--av-*:` declarations the guard can check, with neither side holding
 a second copy of the palette.
 
-Those seven `--av-*` properties are on the inline-custom-property allowlist in
+Those five `--av-*` properties (`AvatarPresentation.inlineProperties`, which
+the partial test derives from) are on the inline-custom-property allowlist in
 `check-styles.sh`, alongside `--bar-h`, and for the same stated reason: each
 carries a value that varies per **datum** — the student being rendered — which
 no stylesheet can hold and no modifier class could enumerate 1,382,400 of.

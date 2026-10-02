@@ -125,14 +125,6 @@ import Testing
         return try String(contentsOf: url.appendingPathComponent(path), encoding: .utf8)
     }
 
-    /// Both announce branches carry the same style attribute, so the border is
-    /// assigned twice: once per branch.
-    @Test func partialAssignsTheBorderInBothBranches() throws {
-        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let assignment = "--av-border: var(#(borderToken))"
-        #expect(partial.components(separatedBy: assignment).count - 1 == 2)
-    }
-
     /// The ring is a sprite layer; a solid ring is coloured by the property the
     /// partial assigns.
     @Test func stylesheetDrawsTheRingFromTheBorderProperty() throws {
