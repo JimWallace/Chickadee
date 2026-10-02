@@ -595,7 +595,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         let manifest = setup.decodedManifest()
         // Resolved once and handed to both language-bearing seeds below.
         let resolvedLanguage = manifest.flatMap {
-            AssignmentLanguage.resolve(for: setup, manifest: $0)
+            AssignmentLanguage.resolve(manifest: $0)
         }
         let patternFamiliesJSON = manifestArraySeedJSON(manifest?.patternFamilies)
         let notebookChecksJSON = manifestArraySeedJSON(manifest?.notebookChecks)

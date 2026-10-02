@@ -1,6 +1,6 @@
 // Tests/APITests/AssignmentLanguageResolutionTests.swift
 //
-// The server-side resolution seam: `AssignmentLanguage.resolve(for:manifest:)`.
+// The resolution seam the server reads: `AssignmentLanguage.resolve(manifest:)`.
 //
 // A brand-new R notebook assignment is the case that used to fall through.  Its
 // suite is empty and nothing has recorded a language, so the manifest alone
@@ -51,14 +51,14 @@ import Vapor
             // kernelspec is content, and content does not declare a language.
             try await attachNotebook(fixture, kernel: "xr")
             #expect(
-                AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil,
+                AssignmentLanguage.resolve(manifest: manifest) == nil,
                 "a notebook kernel must not silently declare the language")
 
             // The author declares it — which is what every creation path now
             // does, and what the REST upload does on the author's behalf.
             try await declareManifestLanguage(setup: fixture.setup, to: .r, on: fixture.app.db)
             let declared = try pfDecodeManifest(fixture.setup.manifest)
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: declared) == .r)
+            #expect(AssignmentLanguage.resolve(manifest: declared) == .r)
 
             let result = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [pfBMIFamily()], on: fixture.app.db)
@@ -96,10 +96,10 @@ import Vapor
         try await withPatternFamilyFixture(declaredLanguage: nil) { fixture in
             #expect(fixture.setup.notebookPath == nil)
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
+            #expect(AssignmentLanguage.resolve(manifest: manifest) == nil)
 
             let rSuite = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")])
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: rSuite) == nil)
+            #expect(AssignmentLanguage.resolve(manifest: rSuite) == nil)
             #expect(AssignmentLanguage.derivedDeclaration(manifest: rSuite, notebookData: nil) == .r)
         }
     }
@@ -111,12 +111,12 @@ import Vapor
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
 
             fixture.setup.notebookPath = fixture.app.testSetupsDirectory + "does-not-exist.ipynb"
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
+            #expect(AssignmentLanguage.resolve(manifest: manifest) == nil)
 
             let junk = fixture.app.testSetupsDirectory + "junk.ipynb"
             try Data("not a notebook".utf8).write(to: URL(fileURLWithPath: junk))
             fixture.setup.notebookPath = junk
-            #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == nil)
+            #expect(AssignmentLanguage.resolve(manifest: manifest) == nil)
         }
     }
 }

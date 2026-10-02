@@ -70,7 +70,7 @@ extension PublishedAssignmentRoutes {
                 name: "assignmentID", reason: "Manifest is not valid JSON")
         }
 
-        guard let language = AssignmentLanguage.resolve(for: setup, manifest: manifest) else {
+        guard let language = AssignmentLanguage.resolve(manifest: manifest) else {
             return try await ComputeExpectedResponse(
                 ok: false, rendered: nil, error: nil,
                 unsupportedReason:

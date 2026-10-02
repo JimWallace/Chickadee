@@ -98,7 +98,7 @@ enum GlobalInputsService {
             manifest: manifest,
             inputs: inputs,
             testSetupsDirectory: testSetupsDirectory,
-            language: AssignmentLanguage.resolve(for: setup, manifest: manifest),
+            language: AssignmentLanguage.resolve(manifest: manifest),
             seedDB: pools.seed)
 
         // 5. Re-render through `applyPatternFamilies` so generated tests and raw
