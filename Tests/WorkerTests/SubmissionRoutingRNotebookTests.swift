@@ -80,17 +80,17 @@ import Testing
     @Test func rNotebookSkipsPythonNormalization() throws {
         try stage(Self.rNotebook)
         #expect(
-            !shouldNormalizePythonSubmission(
+            submissionNormalization(
                 manifest: try manifest(rOnlyManifest), submissionFilename: "solution.ipynb",
-                submissionDirectory: tmpDir))
+                submissionDirectory: tmpDir) != .pythonModule)
     }
 
     @Test func pythonNotebookStillNormalizes() throws {
         try stage(Self.pythonNotebook)
         #expect(
-            shouldNormalizePythonSubmission(
+            submissionNormalization(
                 manifest: try manifest(pyOnlyManifest), submissionFilename: "solution.ipynb",
-                submissionDirectory: tmpDir))
+                submissionDirectory: tmpDir) == .pythonModule)
     }
 
     @Test func rNotebookWithPythonSuiteStaysPython() throws {
@@ -98,9 +98,9 @@ import Testing
         // (those tests need `solution.py` + the auto-loaded student_module).
         try stage(Self.rNotebook)
         #expect(
-            shouldNormalizePythonSubmission(
+            submissionNormalization(
                 manifest: try manifest(pyOnlyManifest), submissionFilename: "solution.ipynb",
-                submissionDirectory: tmpDir))
+                submissionDirectory: tmpDir) == .pythonModule)
     }
 
     @Test func rNotebookRoutesToExtractionProducingDotR() throws {
@@ -108,9 +108,9 @@ import Testing
         // extracted to `solution.R` (not `solution.py`) by extractNotebooksToCode.
         try stage(Self.rNotebook)
         #expect(
-            !shouldNormalizePythonSubmission(
+            submissionNormalization(
                 manifest: try manifest(rOnlyManifest), submissionFilename: "solution.ipynb",
-                submissionDirectory: tmpDir))
+                submissionDirectory: tmpDir) != .pythonModule)
         try extractNotebooksToCode(in: tmpDir)
         #expect(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("solution.R").path))
         #expect(
@@ -149,9 +149,9 @@ import Testing
         // also what recovers a submission stored before the submit-time fix.
         try stage(Self.pythonNotebook)
         #expect(
-            !shouldNormalizePythonSubmission(
+            submissionNormalization(
                 manifest: try manifest(rOnlyManifest), submissionFilename: "solution.ipynb",
-                submissionDirectory: tmpDir))
+                submissionDirectory: tmpDir) != .pythonModule)
     }
 
     @Test func forcedRExtractionProducesDotRFromPythonKernelNotebook() throws {

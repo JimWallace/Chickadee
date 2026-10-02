@@ -60,8 +60,9 @@ needs:
 ### The worker fix this trial surfaced
 
 Authoring the trial exposed a real gap in the shipped R path: the worker's
-submission router (`shouldNormalizePythonSubmission` in
-`Sources/Worker/SubmissionStaging.swift`) treated **every** `.ipynb` submission
+submission router (then `shouldNormalizePythonSubmission`, now the
+`submissionNormalization` strategy in `Sources/Worker/SubmissionStaging.swift`)
+treated **every** `.ipynb` submission
 as Python, so an R-kernel notebook was normalized to `solution.py` and the
 R-aware extractor (`extractNotebooksToCode`, which emits `.R`) was never
 reached. Every test then errored with *"No R submission file was found to

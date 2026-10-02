@@ -339,8 +339,10 @@ third language exists, where `== .python` would stop consulting the notebook
 kernelspec for an assignment that had resolved positively — the opposite of
 what the guard wants.
 
-**The one that remains** is `shouldNormalizePythonSubmission` in
-`SubmissionStaging.swift`. It cannot be inverted the same way: it is a
+**The one that remains** (since replaced: `submissionNormalization` returns a
+strategy enum, and the boolean was deleted in #1794) is
+`shouldNormalizePythonSubmission` in `SubmissionStaging.swift`. It cannot be
+inverted the same way: it is a
 normalization *strategy* shaped as "R, or else Python", whose Python branch is
 reached by falling through content and extension probes rather than by naming
 Python. A third language would be normalized as Python with no compile error.
@@ -423,7 +425,7 @@ part:
   browser copy silently covered one language fewer than Swift did. The
   generalisation and the thing that copies it have to move together.
 
-**The one item still open.** `shouldNormalizePythonSubmission` is called out
+**The one item still open** (closed since: see the note above). `shouldNormalizePythonSubmission` is called out
 here as the site the compiler will not force, and it is still shaped "R, or else
 Python" after Lua. Lua behaves correctly through it by reaching the generic
 notebook extractor the same way R does, so nothing is broken — but the
