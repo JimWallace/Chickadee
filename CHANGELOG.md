@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.314] - 2026-10-02
+
+### Fixed
+
+- **The two leaderboard pages read the aggregation axis by name.** Present mode had a `default:` arm and the leaderboard page defined the metric board as "none of the other three", so a fifth aggregation would have rendered the metric board silently. Both now name `.leaderboard`, and a source scan pins it (#1745).
+
+
 ## [0.5.313] - 2026-10-02
 
 ### Fixed
