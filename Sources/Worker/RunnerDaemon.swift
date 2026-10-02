@@ -327,7 +327,9 @@ actor WorkerDaemon {
             operation: {
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
-                request.timeoutInterval = 5
+                // No per-request timeout: one here overrides the session's idle
+                // interval and whole-transfer cap above, which exist so a large
+                // zip on a slow link can still finish (#1793).
                 self.signer.sign(&request)
                 let (tmpURL, response) = try await Self.downloadSession.download(for: request)
                 guard let http = response as? HTTPURLResponse else {
