@@ -277,8 +277,8 @@ func submissionNotebookLanguage(
 
 /// How a submission is prepared before the shell scripts run.
 ///
-/// This replaced a `Bool` named `shouldNormalizePythonSubmission`, and the
-/// rename is the point. A boolean can only say "Python, or the other thing",
+/// This replaced a `Bool` named `shouldNormalizePythonSubmission` (deleted in
+/// #1794), and the rename is the point. A boolean can only say "Python, or the other thing",
 /// so the caller had to re-derive *which* other thing with a second test —
 /// `forcedLanguage: targetsR ? .r : nil`, which type-checks forever and hands
 /// every language after R to the notebook sniff. Carrying the language in the
@@ -413,21 +413,6 @@ func submissionNormalization(
 /// Upload shapes Python claims when nothing else has. `json` is here because a
 /// notebook saved without its extension still parses as one.
 private let pythonSubmissionExtensions: Set<String> = ["py", "ipynb", "json"]
-
-/// Retained as a thin wrapper over `submissionNormalization` so existing
-/// callers and tests keep working; the routing itself no longer asks a boolean
-/// question of a three-language system.
-func shouldNormalizePythonSubmission(
-    manifest: TestProperties,
-    submissionFilename: String?,
-    submissionDirectory: URL
-) -> Bool {
-    submissionNormalization(
-        manifest: manifest,
-        submissionFilename: submissionFilename,
-        submissionDirectory: submissionDirectory
-    ) == .pythonModule
-}
 
 /// The runner's key for a prepared test-setup directory.
 ///

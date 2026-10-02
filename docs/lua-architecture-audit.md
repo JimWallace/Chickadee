@@ -324,8 +324,9 @@ reasoning.
   and intended: `resolve` calls a mixed suite `.r` (first `.R` script wins) for
   *rendering*, while routing keeps it on the Python normalizer for
   *submission prep* — two different questions, unchanged by this PR. The
-  `shouldNormalizePythonSubmission` boolean is retained as a thin wrapper, so
-  existing callers see identical results. No finding.
+  `shouldNormalizePythonSubmission` boolean was retained as a thin wrapper at
+  the time, so existing callers saw identical results (deleted in #1794). No
+  finding.
 
 - **`studentModulePrefixes` widening — can only widen, SAFE as claimed.** The
   only consumer is `KernelEnvironment.provides` (`KernelEnvironment.swift:60`),

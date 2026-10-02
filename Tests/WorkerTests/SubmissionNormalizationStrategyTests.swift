@@ -159,19 +159,4 @@ import Testing
         #expect(result == .extractToSource(forcedLanguage: nil))
     }
 
-    /// The legacy boolean is still the same answer, so the call site's old
-    /// behaviour is pinned while the strategy is what everything reads.
-    @Test(arguments: AssignmentLanguage.allCases)
-    func theLegacyBooleanAgreesWithTheStrategy(_ language: AssignmentLanguage) throws {
-        let dir = try Self.emptyDirectory()
-        defer { try? FileManager.default.removeItem(at: dir) }
-
-        let manifest = Self.manifest(
-            suiteScripts: ["publictest_a.\(language.generatedScriptExtension)"])
-        let strategy = submissionNormalization(
-            manifest: manifest, submissionFilename: "lab.ipynb", submissionDirectory: dir)
-        let legacy = shouldNormalizePythonSubmission(
-            manifest: manifest, submissionFilename: "lab.ipynb", submissionDirectory: dir)
-        #expect((strategy == .pythonModule) == legacy)
-    }
 }

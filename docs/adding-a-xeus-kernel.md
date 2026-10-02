@@ -603,12 +603,15 @@ additions, because prose is the surface no guard reaches.
    purely browser-graded assignment cannot be validated. This shipped with Lua.
    `theRunnerImageProvidesEveryInterpreter` in the conformance matrix now
    asserts it per language.
-2. **`shouldNormalizePythonSubmission`** is shaped "R, or else Python". It is
-   the one language decision the compiler will not force; there is a comment at
-   the function saying so. **Still true after Lua** — Lua reaches the generic
-   notebook extractor through the same predicate R does, so it behaves, but the
-   shape is unchanged and the next language should expect to fix it properly
-   rather than ride it.
+2. **`submissionNormalization`** decides how an upload is prepared, and its
+   answer is an enum (`.pythonModule`, or `.extractToSource(forcedLanguage:)`),
+   not the "R, or else Python" boolean it replaced. Python's explicit claims
+   come first (a required `.py`, a `.py` upload), then another language's
+   ownership of the suite, then the notebook's own kernelspec, then Python's
+   heuristics, then a generic extraction. Nothing in it asks "is it R?", so a
+   new language reaches the extractor through the ownership step rather than
+   by riding a predicate shaped for the one before it. The boolean wrapper
+   that survived the rename for its callers was deleted in #1794.
 3. **The generated JS constants.** `scripts/generate-js-constants.sh` now
    **discovers** every `<lang>KernelNames` declaration and writes a fenced
    `<LANG>_KERNEL_NAMES` block per language, failing when one has no block to
