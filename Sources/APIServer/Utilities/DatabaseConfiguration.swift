@@ -583,4 +583,9 @@ func registerMigrations(on app: Application) {
     // now kept as a completion item (docs/student-wardrobe.md, decision 4).
     // Raw SQL, so its place in the list is not load-bearing.
     app.migrations.add(SwapStarterGradcapForHeadband())
+
+    // One-time fill of the tuft and tilt axes for birds stored before the
+    // axes existed; a draw into the empty slots only (#1762). Raw SQL, so its
+    // place in the list is not load-bearing.
+    app.migrations.add(FillLateAvatarAxes())
 }
