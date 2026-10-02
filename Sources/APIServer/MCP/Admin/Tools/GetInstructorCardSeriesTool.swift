@@ -27,9 +27,18 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
         var courseCode: String
     }
 
-    /// The existing dashboard sparkline payload, reused verbatim — aggregate
+    /// The dashboard sparkline payload, plus the offering it describes. A
+    /// bare code shared by several offerings resolves to the newest term, so
+    /// the result names the course that answered (docs/course-terms.md): its
+    /// code, its key, and its term (nil when the course has none). Aggregate
     /// per-bucket counts only, no row-level identifiers.
-    typealias Output = InstructorCardSeriesResponse
+    struct Output: Content, Sendable {
+        let courseCode: String
+        let courseKey: String
+        let courseTerm: String?
+        let generatedAt: Date
+        let windows: [InstructorCardWindowSeries]
+    }
 
     static let name = "get_instructor_card_series"
     static let description =
@@ -37,7 +46,8 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
         + "per-bucket student submissions, active students (distinct count), active assignments "
         + "(distinct count), and browser errors. Requires courseCode (e.g. \"CS136\", matched "
         + "case-insensitively, or a course key with the term such as \"CS136-F26\"; a bare code "
-        + "shared by several offerings takes the newest term). Returns every selectable window in one payload (24h = 24 hourly "
+        + "shared by several offerings takes the newest term; the result names the offering used as courseCode, "
+        + "courseKey and courseTerm). Returns every selectable window in one payload (24h = 24 hourly "
         + "buckets, 7d = 28 six-hour buckets, 30d = 30 daily buckets), each with bucket labels, a "
         + "headline, and the per-bucket series. Read-only; aggregate counts only — no student "
         + "identities, grades, or submission contents."
@@ -77,8 +87,11 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
 
         let studentIDs = try await enrolledStudentIDs(courseUUID: courseUUID, on: context.db)
 
-        return try await context.request.application.diagnostics.instructorCardSeries(
+        let series = try await context.request.application.diagnostics.instructorCardSeries(
             setupIDs: setupIDs, studentIDs: studentIDs, on: context.db)
+        return Output(
+            courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
+            generatedAt: series.generatedAt, windows: series.windows)
     }
 
     /// The course's enrolled students, matching the instructor dashboard's

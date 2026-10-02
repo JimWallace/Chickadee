@@ -1,4 +1,4 @@
-# MCP Tool-Surface Inventory
+, plus the offering's code, key and term# MCP Tool-Surface Inventory
 
 Audit scope: the Model Context Protocol (MCP) surfaces under
 `Sources/APIServer/MCP/`. Base snapshot taken at `VERSION` **0.4.435**;
