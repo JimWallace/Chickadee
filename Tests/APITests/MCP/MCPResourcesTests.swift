@@ -268,6 +268,33 @@ import Vapor
         }
     }
 
+    /// A termed course lists under its key, and reads by that key, by the key
+    /// in another case, and by the bare code (#1782).
+    @Test func courseGuidanceReadsATermedCourseByKeyOrCode() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = APICourse(
+                code: "CS137", name: "Termed", enrollmentMode: .closed,
+                term: AcademicTerm(year: 2026, season: .fall))
+            course.mcpInstructions = "Term notes."
+            try await course.save(on: app.db)
+            let prof = try await makeTestUser(on: app, username: "termprof")
+            try await APICourseEnrollment(
+                userID: try prof.requireID(), courseID: try course.requireID(), role: .instructor
+            ).save(on: app.db)
+
+            let listing = try await MCPResourceProvider().list(context: context(app, subject: "termprof"))
+            #expect(Self.resourceURIs(listing).contains(MCPResourceProvider.courseGuidanceURI(courseCode: "CS137-F26")))
+
+            for segment in ["CS137-F26", "cs137-f26", "CS137", "cs137"] {
+                let guidance = try await MCPResourceProvider().read(
+                    uri: MCPResourceProvider.courseGuidanceURI(courseCode: segment),
+                    context: context(app, subject: "termprof"))
+                #expect(Self.firstContentText(guidance) == "Term notes.", "segment \(segment)")
+            }
+        }
+    }
+
     @Test func courseGuidanceURIRoundTrips() {
         #expect(
             MCPResourceProvider.courseGuidanceCode(
