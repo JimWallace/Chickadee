@@ -322,7 +322,7 @@ All `diagnostics:read`. Names are provisional.
 | `get_health_alerts` | Current `ServerHealthAlertService` rule states (which are firing) + configured thresholds | clean |
 | `get_metrics_card_series` | The time-series (sparkline) data behind the admin dashboard's five operational cards — per-bucket max queue depth, jobs processed, max load, p95 queue-wait, p95 execution — for every window (24h / 7d / 30d). The windowed series behind `get_metrics_snapshot` | aggregate, no row identifiers |
 | `get_metrics_timeseries` | Flexible-window operational time-series (`metricsTimeSeriesSnapshot`): per-bucket runner utilization, **HTTP request count + P95 latency**, completed jobs, test status counts, queue-wait/execution P95. Arbitrary window/bucket | aggregate, no row identifiers |
-| `get_active_users_series` | The admin dashboard's "Active Users" chart: distinct active users per bucket over a trailing window (`ActivityChartService`) | aggregate, distinct counts only |
+| `get_active_users_series` | The admin dashboard's "Active Users" chart: distinct active users per bucket over a trailing window (`UserActivityChartService`) | aggregate, distinct counts only |
 | `get_instructor_card_series` | The instructor dashboard's four cards for one course (by `courseCode`): per-bucket submissions, active students, active assignments, browser errors (`instructorCardSeries`); the result names the offering used (`courseCode`, `courseKey`, `courseTerm`) | aggregate counts only; enrolled-student lookup is internal scoping, no identity reaches the output |
 | `get_queue_state` | Current worker-queue state: pending depth (worker-eligible + total), in-flight, oldest-pending age, stuck-submission count (the reaper's view), recent-window peak depth | aggregate, clean |
 | `list_runners` | The runner fleet (`makeWorkerRows`): id, hostname, version, load, jobs processed, rolling avg execution/queue-wait | clean |
@@ -454,7 +454,7 @@ OAuth and DB-wall work lands.
    instructor/admin dashboard sparklines, exposed verbatim from the same builders
    the dashboards poll: `get_metrics_card_series` (the five admin operational
    cards, `metricsCardSeries`), `get_active_users_series` (the "Active Users"
-   chart, `ActivityChartService.chartData`), and `get_instructor_card_series`
+   chart, `UserActivityChartService.chartData`), and `get_instructor_card_series`
    (one course's four cards, `instructorCardSeries`). `get_metrics_snapshot`
    gives the point-in-time numbers; these give the windowed series behind them.
    All admin-gated and PII-free: the operational/active-users series carry only

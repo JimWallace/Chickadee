@@ -78,11 +78,14 @@ The Core type, the migration, the model accessor, and tests
 
 ### Slice 2: Declare the term at every door (built)
 
-- Admin **create** form: year input and term select, both required
-  (`CourseTermInput`, `CourseTermForm`). The form starts empty and suggests
-  nothing: that fits the rule that nothing guesses a term, and a default
-  taken from today's date would change the visual-regression baseline of
-  the page every term. A missing or invalid term redirects with
+- Admin **create** form: year select and term select, both required
+  (`CourseTermInput`, `CourseTermForm`). The year select offers last year to
+  two years ahead and starts on the current year; the term select starts on
+  a placeholder and suggests nothing, which is the half of the term a date
+  cannot name reliably. The year window is built from today's date, so its
+  options move every January whether or not one is marked, and the
+  visual-regression baseline of the page moves with it: the harness pins the
+  timezone, not the clock (#1784). A missing or invalid term redirects with
   `course_term_required`; a duplicate active code redirects with
   `code_taken`.
 - Admin **edit** form: set or change the term. This is how an admin gives an

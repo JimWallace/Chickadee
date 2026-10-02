@@ -16,7 +16,7 @@
 // picks up a real timestamp.
 //
 // This uses a Fluent typed query — the SAME pattern as `AuditLogReaperService`
-// and `ActivityEventReaperService` — rather than hand-rolled raw SQL, so the
+// and `UserActivityEventReaperService` — rather than hand-rolled raw SQL, so the
 // `Date < created_at` comparison binds correctly on BOTH SQLite and Postgres.
 // The previous raw-SQL form compared the `timestamp` column to a text-bound
 // ISO8601 cutoff (`created_at < <string>`); SQLite's loose typing accepted it,

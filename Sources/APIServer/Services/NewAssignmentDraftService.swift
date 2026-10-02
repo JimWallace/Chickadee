@@ -82,7 +82,7 @@ struct NewAssignmentDraftService {
     /// the time "create assignment notebook" runs, the manifest already knows,
     /// and the scaffold no longer has to assume Python.
     var scaffoldLanguage: AssignmentLanguage? {
-        setup.decodedManifest().flatMap { AssignmentLanguage.resolve(for: setup, manifest: $0) }
+        setup.decodedManifest().flatMap { AssignmentLanguage.resolve(manifest: $0) }
     }
 
     // MARK: - Dispatcher

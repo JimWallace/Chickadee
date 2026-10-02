@@ -1,4 +1,4 @@
-// APIServer/Services/CourseActivityService.swift
+// APIServer/Services/CourseTimelineService.swift
 //
 // The merged course activity timeline (#421): who changed what in this course,
 // and when.
@@ -95,7 +95,7 @@ struct ActivityDay: Encodable, Sendable {
     }
 }
 
-enum CourseActivityService {
+enum CourseTimelineService {
 
     /// How many events one page of the timeline shows. Deliberately modest: the
     /// view answers "what changed recently", and an agent authoring session can

@@ -1,4 +1,4 @@
-// APIServer/Services/ActivityEventReaperService.swift
+// APIServer/Services/UserActivityEventReaperService.swift
 //
 // Periodic cleanup of stale `user_activity_events` rows.  These rows back the
 // admin dashboard's "active users over time" chart, whose longest window is
@@ -39,13 +39,13 @@ func reapStaleActivityEvents(
     logger.debug("Activity-event reaper sweep complete (cutoff=\(cutoff))")
 }
 
-struct ActivityEventReaperMonitorKey: StorageKey {
+struct UserActivityEventReaperMonitorKey: StorageKey {
     typealias Value = PeriodicSweepMonitor
 }
 
 extension Application {
-    var activityEventReaperMonitor: PeriodicSweepMonitor {
-        lazyStored(ActivityEventReaperMonitorKey.self) {
+    var userActivityEventReaperMonitor: PeriodicSweepMonitor {
+        lazyStored(UserActivityEventReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Activity-event reaper",
                 interval: activityEventReaperSweepInterval,

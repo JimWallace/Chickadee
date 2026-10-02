@@ -279,7 +279,8 @@ extension CourseBundleRoutes {
             // reference solution. The submissions above landed on the NEW
             // setup ids, so this is what turns a carried solution into one the
             // assignment can actually resolve.
-            try await linkImportedValidationSubmissions(courseID: t.courseID, db: db)
+            try await linkImportedValidationSubmissions(
+                courseID: t.courseID, setupsDir: dirs.setupsDir, db: db)
 
             // 6h-ter. Seed each imported assignment's v1, as clone and create
             // do, so it has a starting point to roll back to and the timeline
@@ -469,9 +470,19 @@ private func importBundledTestSetups(
                 to: URL(fileURLWithPath: newZipPath))
         }
 
-        // Extract .ipynb if present (browser-mode setups).
+        // The starter notebook: the flat file the bundle carries (#1736), else
+        // the zip entry an older bundle may hold (browser-mode setups).
         var notebookPath: String?
-        if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
+        if let bundledNotebook = bundledSetup.notebookFilename,
+            FileManager.default.fileExists(atPath: extractDir.appendingPathComponent(bundledNotebook).path)
+        {
+            let nbPath = setupsDir + "\(newSetupID).ipynb"
+            try await runBlocking(app: app) {
+                try FileManager.default.copyItem(
+                    at: extractDir.appendingPathComponent(bundledNotebook), to: URL(fileURLWithPath: nbPath))
+            }
+            notebookPath = nbPath
+        } else if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             try await runBlocking(app: app) {
                 try nbData.write(to: URL(fileURLWithPath: nbPath))
@@ -698,8 +709,11 @@ private func importBundledSubmissions(
 /// newest validation submission for the assignment's setup — but the stored
 /// pointer is what the authoring pages read to decide an assignment HAS a
 /// solution, so leaving it nil shows an imported assignment as having none.
+/// Also writes each linked solution's source into the setup's shared
+/// directory, which the import built from the zip alone (#1742).
 private func linkImportedValidationSubmissions(
     courseID: UUID,
+    setupsDir: String,
     db: Database
 ) async throws {
     let assignments = try await APIAssignment.query(on: db)
@@ -716,6 +730,10 @@ private func linkImportedValidationSubmissions(
         else { continue }
         assignment.validationSubmissionID = solutionID
         try await assignment.save(on: db)
+        if let setup = try await APITestSetup.find(assignment.testSetupID, on: db) {
+            await SolutionNotebookExtractor.writeSolutionSource(
+                fromCopiedSolution: solution, setup: setup, testSetupsDirectory: setupsDir)
+        }
     }
 }
 

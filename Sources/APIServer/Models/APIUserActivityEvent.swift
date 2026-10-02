@@ -4,7 +4,7 @@ import Vapor
 /// A lightweight "this user was active" ping, written by
 /// `UserActivityMiddleware` for genuine (non-background-refresh) authenticated
 /// requests, throttled to at most one row per user per
-/// `ActivityEventThrottle.window` so a continuously-browsing user yields a
+/// `UserActivityEventThrottle.window` so a continuously-browsing user yields a
 /// handful of rows per hour rather than one per request.
 ///
 /// Unlike `APIUser.lastSeenAt` (a single live snapshot, overwritten on every

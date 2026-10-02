@@ -357,8 +357,9 @@ uses AGS.
 **The sweep.** Every 60 seconds, for each row pending longer than 90 seconds:
 
 1. Find the student's subject on the platform in `lti_identities`. A student
-   who has never launched has none; the row fails with a reason and is queued
-   again by that student's first launch.
+   who has never launched and was not linked by student number (see "Linking
+   students before they launch") has none; the row fails with a reason and is
+   queued again by that student's first launch, or by the link.
 2. Compute the best grade. With no grade, and a score on the LMS that
    Chickadee sent, send a clearing score (`gradingProgress` = NotReady, no
    `scoreGiven`).
@@ -409,6 +410,33 @@ only a username, which NRPS does not send, so it is always "could not be
 matched".
 
 The readiness sweep that feeds the LEARN tab still reads Valence only.
+
+### Linking students before they launch
+
+AGS names a student by LMS subject, and a subject is known only after the
+student's first launch. A class that uses Chickadee directly may never launch
+from the LMS, so its grades would never reach the LMS. On a course that uses
+the LTI grade service, an instructor can press **Link students** on
+`/instructor/lti-grades`. The action reads the NRPS membership and stores an
+`lti_identities` row for each course student matched by student number
+(`LTIRoster.preLinks`):
+
+- the member is active and has the Learner context role;
+- the member's `lis_person_sourcedid` equals the student's `studentID`
+  (trimmed), and that number names exactly one learner and exactly one course
+  student, so a duplicate number links nobody;
+- neither the subject nor the account has a link on the platform yet;
+- the account is not an admin or MCP account (the resolver's rule).
+
+Each new link queues again that student's rows that failed for "not
+launched", and the action is audited as `lti.students_linked`. A membership
+with no student numbers links nobody and says so.
+
+A link made here is the same row a first launch makes, so the student's later
+launches sign in to the matched account. That is why only an instructor may
+run it, and why a shared number links nobody. A student's `studentID` comes
+from the SSO `student_id` claim or from the instructor who registered the
+pre-enrollment; a student cannot set it.
 
 ## Compliance
 

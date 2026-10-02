@@ -9,6 +9,78 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.333] - 2026-10-02
+
+### Fixed
+
+- **A course bundle carries the starter notebook.** The export copied only the setup zip, but the starter lives beside it: the web publish and the MCP create build the zip without it, and an edit never rebuilds the zip. A web- or MCP-created assignment exported with no starter, and an uploaded one exported the original rather than the edited file. The bundle now carries the flat notebook under `testsetups/<id>.ipynb`, and import prefers it over the zip entry; an older bundle still falls back to the zip (#1736).
+
+### Changed
+
+- **The course clone tests pin every reset against a set value.** The admin clone source had no start date or deadline override, so two of its reset assertions could not fail, and the instructor New term test asserted only an assignment count. Both sources now carry a due date, a start date, an active override and an after-due reveal, and both tests assert each reset (#1785).
+
+### Changed
+
+- **`RunnerResult.swift` is deleted.** It described a JSON document that runner scripts write and the worker parses, which is the runner JSON protocol CLAUDE.md forbids and which nothing has ever used: `RunnerResult` and `RunnerOutcome` had no reference outside one Core test block, now gone with them (#1722).
+
+### Fixed
+
+- **Deleting a user clears the two tournament columns that name one, and no longer repeats three cascades.** `tournament_runs.started_by` and `winner_user_id` have no foreign key on either backend and were left dangling; they are nulled now, the run itself stays. The explicit deletes of `leaderboard_entries`, `github_account_links` and `github_course_repositories` rows are gone, because each declares an `ON DELETE CASCADE` that both backends enforce. A new test reads the `Create*` migrations for every user column with no foreign key and fails until it is cleared or kept on purpose (#1808).
+
+### Changed
+
+- **The runner-sanitized key-set pin now sees every field.** Its fixture left `activity`, `language`, `languageDeclared`, `submissionMode`, `githubSubmission` and `githubStatusChecks` at their defaults, and a default is omitted from the encoding, so the pin could not catch any of the six shipping to runners by mistake. The fixture populates all six, and the pinned set names `language` and `languageDeclared`, which `runnerSanitized` forwards on purpose (#1747).
+
+### Changed
+
+- **The course-terms doc says what the create form does.** It said the form suggests nothing because a date-derived default would move the visual baseline every term; the year select has always started on the current year, and its window of options is built from the date in any case, so the baseline moves every January either way. The doc now says the year is suggested and the season is not, and why the baseline argument did not hold (#1784).
+
+
+## [0.5.332] - 2026-10-02
+
+### Changed
+
+- **The assignment loaders live in `AssignmentHelpers.swift`.** `loadAssignmentForWrite` and `loadAssignmentAndSetupForWrite` sat under the suite-editing helper file, while their 39 callers in 21 files are grading actions, lifecycle actions and BrightSpace. The read loaders and the private resolvers they share moved with them. A pure move (#1717).
+
+### Fixed
+
+- **`get_server_info` reports each activity kind's real aggregation.** It said `leaderboard` for every kind, because `aggregatesToLeaderboard` was true for all six and the `standings` branch was dead, so a round robin, a tournament and the tests-and-code kind reported an aggregation their pages do not show. The payload now carries the kind's `ActivityAggregation` token, the schema enum is derived from the same cases, and the vestigial `aggregatesToLeaderboard` is deleted: every kind has a ranking page, so the leaderboard route and `leaderboardPath` ask only visibility (#1746).
+
+### Changed
+
+- **The dead `setup` parameter of `AssignmentLanguage.resolve(for:manifest:)` is gone.** The wrapper discarded its setup at every one of its fifteen call sites and forwarded to Core's `resolve(manifest:)`; the sites call that directly now, and the wrapper file with it. The two stale headers the issue named were already corrected by #1725 (#1733).
+
+### Changed
+
+- **The browser manifest strips grader-only names through the typed manifest.** `manifestWithGraderOnlyFilesStripped` was the last manifest dictionary outside a migration: it parsed to `[String: Any]`, blanked the list and re-serialized without sorted keys, so the one case that rewrote served bytes in a third encoding. It now decodes to `TestProperties`, empties `graderOnlyFiles` and encodes with the stable encoder every other manifest write uses; the no-op cases still return the input byte for byte (#1721).
+
+### Changed
+
+- **The four user-activity telemetry files no longer share a name with class activities.** `ActivityEventReaperService`, `ActivityEventThrottle`, `ActivityChartService` and `CourseActivityService` reap, throttle and chart `user_activity_events` and build the course timeline, which has nothing to do with the class-activity trio (`ActivityAuthoring`, `ActivityMatches`, `ActivityUnion`). They are `UserActivityEventReaperService`, `UserActivityEventThrottle`, `UserActivityChartService` and `CourseTimelineService` now, with their storage keys and test files renamed to match. Symbol renames only (#1734).
+
+
+## [0.5.331] - 2026-10-02
+
+### Changed
+
+- **The architecture doc and two comments name what exists.** The database section describes `DATABASE_BACKEND` and the per-backend variables the code reads, not a `DATABASE_URL` it never did; its non-additive-migration example is `CreateResultCollections`, since the other was folded away; the FK migration and the admin user deletion cite the operations doc's "User-row foreign-key cascade" heading by its real name; and the FK migration says `users`, not `api_users` (#1807).
+
+### Fixed
+
+- **A copied assignment gets its solution source.** The solution-save path writes `solution.py` (or the language's own file) into the shared directory and never into the setup zip, and every copy path rebuilt the shared directory from the zip alone, so a clone or an imported course whose expressions `import solution` failed until the next solution save. The clone and the bundle import now write the source from the copied solution (#1742).
+
+### Changed
+
+- **A test asserts that every migration index exists.** The migrations hold 45 raw `CREATE INDEX` statements and one SQLKit builder call, each behind a guard that cannot fail loudly, and no test read the catalog back. `MigrationIndexCoverageTests` derives the expected `idx_*` set from the migration sources, asserts the derivation is complete, and compares it to `sqlite_master` or `pg_indexes` after migration (#1809).
+
+
+## [0.5.330] - 2026-10-02
+
+### Added
+
+- **Link students to LEARN by student number for LTI grades.** The LTI grade service can send a grade only for a student whose LEARN identity Chickadee knows, and until now Chickadee learned it only when the student opened a Chickadee link from LEARN. An instructor can now press "Link students" on the LMS grades page: Chickadee reads the LEARN class list through NRPS and links each course student whose student number matches exactly one LEARN learner. Grades that waited for those students are sent again. A student number shared by two people links nobody, existing links are not changed, and admin accounts are never linked.
+
+
 ## [0.5.329] - 2026-10-02
 
 ### Fixed

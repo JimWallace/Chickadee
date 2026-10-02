@@ -519,6 +519,95 @@ import VaporTesting
         }
     }
 
+    /// The import writes each carried solution's source into the shared
+    /// directory it built from the zip alone (#1742).
+    @Test func importWritesTheSolutionSource() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "SOLN_SRC")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_soln_src", courseID: courseID)
+            let setupID = try setup.requireID()
+            let assignment = try await insertAssignment(testSetupID: setupID, courseID: courseID)
+            let author = try await makeTestUser(on: app, username: "soln_src_author", role: "admin")
+            let solution = try await makeTestSubmission(
+                on: app, id: "sub_soln_src", setupID: setupID,
+                userID: try author.requireID(), kind: APISubmission.Kind.validation,
+                filename: "solution.ipynb")
+            try #"""
+            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","metadata":{},"source":["def answer():\n","    return 42\n"]}]}
+            """#.write(toFile: solution.zipPath, atomically: true, encoding: .utf8)
+            assignment.validationSubmissionID = try solution.requireID()
+            try await assignment.save(on: app.db)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "SOLN_SRC")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedAssignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let path = app.testSetupsDirectory + "shared/\(importedAssignment.testSetupID)/solution.py"
+            let written = try String(contentsOfFile: path, encoding: .utf8)
+            #expect(written.contains("def answer"))
+        }
+    }
+
+    /// The starter notebook lives beside the zip and is edited in place, so
+    /// the bundle carries the flat file as it is now, not the zip entry
+    /// (#1736).
+    @Test func roundTripCarriesTheEditedStarterNotebook() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "NB_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_nb_rt", courseID: courseID)
+            _ = try await insertAssignment(testSetupID: try setup.requireID(), courseID: courseID)
+            let edited =
+                #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":["Edited after publish\n"]}]}"#
+            let notebookPath = app.testSetupsDirectory + "setup_nb_rt.ipynb"
+            try edited.write(toFile: notebookPath, atomically: true, encoding: .utf8)
+            setup.notebookPath = notebookPath
+            try await setup.save(on: app.db)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "NB_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedSetup = try #require(
+                try await APITestSetup.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let importedNotebookPath = try #require(importedSetup.notebookPath)
+            #expect(try String(contentsOfFile: importedNotebookPath, encoding: .utf8) == edited)
+        }
+    }
+
     /// An imported assignment starts with a `v1` whose origin says it
     /// arrived by import (#1741), as a clone or a creation does.
     @Test func importSeedsAnInitialVersion() async throws {

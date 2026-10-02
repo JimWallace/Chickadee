@@ -179,7 +179,7 @@ extension PublishedAssignmentRoutes {
         // solution scaffolded around `xpython`. An upload-only language has no
         // notebook to scaffold at all and is refused.
         let language = setup.decodedManifest().flatMap {
-            AssignmentLanguage.resolve(for: setup, manifest: $0)
+            AssignmentLanguage.resolve(manifest: $0)
         }
         guard
             let sourceData = await (try? notebookData(for: setup))

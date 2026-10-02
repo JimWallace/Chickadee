@@ -218,6 +218,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case ltiContentLinked = "lti.content_linked"
     case ltiGradeTransportChanged = "lti.grade_transport_changed"
     case ltiGradesPushAll = "lti.grades_push_all"
+    case ltiStudentsLinked = "lti.students_linked"
 
     // The GitHub App registration (docs/github-submissions.md)
     case githubAppRegistered = "github.app_registered"
@@ -273,7 +274,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
             return .mcp
         case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
-            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll:
+            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
+            .ltiStudentsLinked:
             return .lti
         case .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
             .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
@@ -316,7 +318,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .mcpClientRegistered, .mcpConsentGranted, .mcpTokenIssued,
             .mcpCourseInstructionsUpdated, .adminMcpToolCalled,
             .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
-            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
+            .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll, .ltiStudentsLinked,
             .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
             .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
             .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived:
@@ -410,6 +412,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .ltiContentLinked: return "Assignments added to the LMS"
         case .ltiGradeTransportChanged: return "LMS grade transport changed"
         case .ltiGradesPushAll: return "All grades queued for the LMS"
+        case .ltiStudentsLinked: return "Students linked to the LMS"
         case .githubAppRegistered: return "GitHub App registered"
         case .githubAppRemoved: return "GitHub App removed"
         case .githubAccountLinked: return "GitHub account linked"

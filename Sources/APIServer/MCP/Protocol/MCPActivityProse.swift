@@ -56,11 +56,9 @@ struct MCPActivityKindCapability: Encodable, Sendable, Equatable {
     let displayName: String
     /// What the kind does and where its ranking number comes from.
     let summary: String
-    /// How the class's results combine. Reports "leaderboard" for every kind
-    /// with a ranking page (`aggregatesToLeaderboard`), which is all of them;
-    /// `SetActivityToolTests.serverInfoListsEveryKind` pins that value, so
-    /// the finer `ActivityAggregation` axis (standings, bracket) is not yet
-    /// reported here.
+    /// How the class's results combine: the kind's `ActivityAggregation` token
+    /// (`leaderboard`, `standings`, `bracket` or `union`). The schema's enum is
+    /// derived from the same cases, so the two cannot disagree.
     let aggregation: String
     /// What is staged beside the submission when the script runs: "none", or
     /// "supportFile" for a kind that plays a bundled bot (which then needs
@@ -73,7 +71,7 @@ struct MCPActivityKindCapability: Encodable, Sendable, Equatable {
                 name: kind.rawValue,
                 displayName: kind.displayName,
                 summary: kind.summary,
-                aggregation: kind.aggregatesToLeaderboard ? "leaderboard" : "standings",
+                aggregation: kind.aggregation.rawValue,
                 opponentSource: kind.opponentSource.rawValue)
         }
     }

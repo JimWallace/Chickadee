@@ -44,7 +44,7 @@ needs no app; do not add a sixth group. The owning audit sweep is named.
   mixes the shared model with four more renderers and splits the same way.
 - **Activities and achievements**, 588 lines: `Tournament`,
   `AchievementEvaluation` (sweep 5, #1686).
-- **Other**, 235 lines: `LTIRoleMapping`, `LineDiff`, `RunnerResult`.
+- **Other**, 208 lines: `LTIRoleMapping`, `LineDiff`.
 
 All four of `AcademicTerm`, `Avatar*`, `Tournament` and `LTIRoleMapping`
 arrived since August 2026 by copying the pattern this section exists to stop.

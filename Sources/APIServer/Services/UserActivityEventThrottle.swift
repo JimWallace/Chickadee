@@ -1,4 +1,4 @@
-// APIServer/Services/ActivityEventThrottle.swift
+// APIServer/Services/UserActivityEventThrottle.swift
 //
 // In-memory, per-user rate limiter for `user_activity_events` writes.  The
 // activity chart only needs to know *whether* a user was active within a time
@@ -15,7 +15,7 @@
 import Foundation
 import Vapor
 
-actor ActivityEventThrottle {
+actor UserActivityEventThrottle {
     /// One ping per user per this interval.  Five minutes sits well under the
     /// one-hour smallest chart bucket, so bucket membership is never missed.
     static let window: TimeInterval = 5 * 60
@@ -23,7 +23,7 @@ actor ActivityEventThrottle {
     private var lastRecorded: [UUID: Date] = [:]
     private let window: TimeInterval
 
-    init(window: TimeInterval = ActivityEventThrottle.window) {
+    init(window: TimeInterval = UserActivityEventThrottle.window) {
         self.window = window
     }
 
@@ -45,15 +45,15 @@ actor ActivityEventThrottle {
     }
 }
 
-struct ActivityEventThrottleKey: StorageKey {
-    typealias Value = ActivityEventThrottle
+struct UserActivityEventThrottleKey: StorageKey {
+    typealias Value = UserActivityEventThrottle
 }
 
 extension Application {
     /// Process-wide throttle gating `user_activity_events` inserts.
-    var activityEventThrottle: ActivityEventThrottle {
-        lazyStored(ActivityEventThrottleKey.self) {
-            ActivityEventThrottle()
+    var userActivityEventThrottle: UserActivityEventThrottle {
+        lazyStored(UserActivityEventThrottleKey.self) {
+            UserActivityEventThrottle()
         }
     }
 }

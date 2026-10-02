@@ -51,11 +51,10 @@ import Testing
         #expect(!json.contains("activity"))
     }
 
-    /// Every kind this slice ships aggregates to a leaderboard, and each has
-    /// chrome-length copy — the display name is a label, not a sentence.
+    /// Every kind has chrome-length copy — the display name is a label, not a
+    /// sentence — and round-trips through its wire token.
     @Test(arguments: ActivityKind.allCases)
-    func everyKindHasChromeCopyAndAnAggregation(kind: ActivityKind) {
-        #expect(kind.aggregatesToLeaderboard)
+    func everyKindHasChromeCopyAndAWireToken(kind: ActivityKind) {
         #expect(kind.displayName.split(separator: " ").count <= 3)
         #expect(!kind.summary.isEmpty)
         #expect(ActivityKind(rawValue: kind.rawValue) == kind)
