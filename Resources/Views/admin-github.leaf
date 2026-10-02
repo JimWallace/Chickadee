@@ -8,7 +8,7 @@ GitHub
 <section class="page-section">
     <p class="page-crumb">Integrations</p>
     <div class="page-titlebar">
-        <h2>GitHub App #if(app):<span class="tier tier-open">Registered</span>#else:<span class="tier tier-closed">Not registered</span>#endif</h2>
+        <h2>GitHub App #if(app):#if(secretsUnavailable):<span class="tier tier-danger">Unavailable</span>#else:<span class="tier tier-open">Registered</span>#endif#else:<span class="tier tier-closed">Not registered</span>#endif</h2>
         #if(app):
         <div class="toolbar">
             <a class="btn action-btn" href="#(app.htmlURL)" target="_blank" rel="noopener noreferrer">Open on GitHub <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -32,6 +32,11 @@ GitHub
     </div>
     #if(app):
     <p class="section-intro">Chickadee reads student repositories through this App.</p>
+    #if(secretsUnavailable):
+    <div class="flash flash-warning" role="status">
+        <strong>Secrets file #if(secretsMissing):missing#else:unreadable#endif.</strong> GitHub submission and webhooks are off until <code>#(secretsPath)</code> is restored, or the App is removed and registered again.
+    </div>
+    #endif
     <div class="card section-gap">
         <dl class="detail-grid detail-grid--cells">
             <div><dt>Name</dt>
