@@ -35,6 +35,13 @@ struct RunnerSanitizedProjectionTests {
         // same effectiveGradingMode the server did — losing submissionMode
         // would flip an upload+browser bundle back to browser there.
         "submissionMode",
+        // Forwarded deliberately: the runner reads the language off
+        // `Job.language`, but a manifest that silently lost it would resolve
+        // differently on any path that re-reads the runner-facing copy, and
+        // `languageDeclared` is what lets a runner tell "declared to have no
+        // language" from "nobody has declared one".
+        "language",
+        "languageDeclared",
         "requiredFiles",
         "testSuites",
         "timeLimitSeconds",
@@ -46,11 +53,16 @@ struct RunnerSanitizedProjectionTests {
 
     /// A `TestProperties` with **every** field populated with a non-default
     /// value, so every encodable key (including the `encodeIfPresent` pair,
-    /// `makefile` / `starterNotebook`) is exercised by the projection.
+    /// `makefile` / `starterNotebook`, and the flags and blocks a default
+    /// value would omit) is exercised by the projection. A field left at its
+    /// default here is a field the pin cannot see (#1747).
     private func fullyPopulatedManifest() -> TestProperties {
         TestProperties(
             schemaVersion: 2,
             gradingMode: .browser,
+            submissionMode: .uploadOnly,
+            githubSubmission: true,
+            githubStatusChecks: true,
             requiredFiles: ["warmup.py"],
             testSuites: [
                 TestSuiteEntry(
@@ -63,9 +75,18 @@ struct RunnerSanitizedProjectionTests {
             timeLimitSeconds: 30,
             makefile: MakefileConfig(target: "all"),
             starterNotebook: "assignment.ipynb",
+            language: .r,
+            languageDeclared: true,
             // Non-nil so the strip is actually exercised: runnerSanitized() must
             // drop this (server-side gate), keeping the key out of the pinned set.
             minimumRunnerVersion: "0.5.0",
+            // A window and an opponent file, so the whole block is present and
+            // the strip (an older runner must never decode a kind it predates)
+            // is exercised rather than vacuous.
+            activity: ClassActivity(
+                kind: .beatTheInstructor, leaderboardVisibility: .visible, opponentFile: "bot.py",
+                window: LiveSessionWindow(
+                    opensAtISO: "2026-01-05T14:00:00Z", closesAtISO: "2026-01-05T16:00:00Z")),
             patternFamilies: [
                 PatternFamily(
                     id: "fam", name: "Family", kind: .boundaryEquality,
