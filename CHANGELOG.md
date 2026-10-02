@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.339] - 2026-10-02
+
+### Changed
+
+- **Three avatar conveniences that existed only for tests are gone, and a stale handle pick is told so.** `AvatarMarkup.layerSymbolIDs`, `AvatarRing: Codable` and the `AvatarCustomization.applying(_:to:)` overload had no production caller; the tests read `AvatarPresentation.layerRefs` and pass `isStaff` instead. `AvatarSpec` stays `Hashable`: the draw tests count distinct birds with a set, which is the use its comment named. A handle choice that arrives after the handle was locked (a stale tab) used to redirect silently; the account page now says the handle was set before the choice arrived (#1763).
+
+### Changed
+
+- **`shouldNormalizePythonSubmission` is deleted.** It was a boolean wrapper over `submissionNormalization` kept for callers that no longer existed outside six test assertions; those assert the strategy enum directly, and the runbook item that still described the predicate as "R, or else Python" now describes the enum and its precedence (#1794).
+
+
 ## [0.5.338] - 2026-10-02
 
 ### Changed
