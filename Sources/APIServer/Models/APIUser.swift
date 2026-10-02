@@ -391,12 +391,11 @@ struct CourseContext: Encodable {
     var termLabel: String?
     /// The compact term, "F26", for the tab strip.
     var termShortLabel: String?
-    /// The course's URL segment (`APICourse.urlKey`). Nil only in contexts
-    /// built without a course model; read it through `pathKey`.
-    var urlKey: String?
-
-    /// The segment to put in a `/:courseCode/...` URL.
-    var pathKey: String { urlKey ?? code }
+    /// The segment to put in a `/:courseCode/...` URL (`APICourse.urlKey`):
+    /// the code, or "CS135-F26" for a course with a term. Required, so a
+    /// context built without one does not compile and cannot write a bare-code
+    /// link for a termed course (#1787).
+    let urlKey: String
 }
 
 /// The result of resolving which course is "active" for the current request.

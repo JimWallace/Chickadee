@@ -129,7 +129,7 @@ The Core type, the migration, the model accessor, and tests
   matched against `urlKey` by string equality and never parsed back. Every link
   Chickadee writes into a `/:courseCode/...` path uses the key: the vanity
   links (instructor list, student index, LTI launch) and the
-  `/:courseCode/students/...` family. `CourseContext.pathKey` carries it into
+  `/:courseCode/students/...` family. `CourseContext.urlKey` carries it into
   the dashboards. A course with no term keeps its old URLs.
 - **Web resolution** (`findActiveCourse(byKey:viewer:on:)`): an exact code
   match first, so a legacy code such as "CS136-W26" still resolves; else a

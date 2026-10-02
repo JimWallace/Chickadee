@@ -9,7 +9,7 @@ import Testing
     // MARK: - Instructor course derivation
 
     private func course(_ code: String, role: CourseRole, isActive: Bool = false) -> CourseContext {
-        CourseContext(id: code, code: code, name: code, isActive: isActive, role: role)
+        CourseContext(id: code, code: code, name: code, isActive: isActive, role: role, urlKey: code)
     }
 
     private func user(role: String) -> APIUser {
