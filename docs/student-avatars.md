@@ -256,9 +256,11 @@ the change.
   the student uses their one change, and the first time the handle is rendered
   to a classmate: a student-visible leaderboard viewed by another student
   (`RankedIdentities.presentation` and the hill's holder). A student's own row
-  and every staff view lock nothing. After the lock, the row reads "Your handle
-  is set for this course." Staff **Give new handle** ignores the lock and does
-  not set it.
+  and every staff view lock nothing, the projected Present page included: it
+  renders without names, but staff decide what they project and when, and
+  opening it to check it must not spend every student's one change. After the
+  lock, the row reads "Your handle is set for this course." Staff **Give new
+  handle** ignores the lock and does not set it.
 
 ### 4. Rendered as layered SVG `use`, recoloured through design tokens
 

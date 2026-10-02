@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/InstructorDashboardRoutes+LTIRosterCheck.swift
+// APIServer/Routes/Web/InstructorLMSRoutes+LTIRosterCheck.swift
 //
 // The "Check against LEARN" roster check, read from the LMS through NRPS
 // instead of the Valence classlist (docs/lti-1-3.md "Roster through NRPS").
@@ -11,14 +11,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension InstructorDashboardRoutes {
-    /// True when the roster check reads the LMS membership instead of the
-    /// Valence classlist.
-    static func rosterCheckUsesLTI(course: APICourse, valenceConfigured: Bool) -> Bool {
-        guard course.ltiMembershipsURL != nil, course.ltiPlatformID != nil else { return false }
-        return course.usesLTIGrades || !valenceConfigured || (course.brightspaceOrgUnitID ?? "").isEmpty
-    }
-
+extension InstructorLMSRoutes {
     func ltiRosterCheck(course: APICourse, courseID: UUID, req: Request) async throws -> LearnRosterCheckResult {
         guard let membershipsURL = course.ltiMembershipsURL, let platformID = course.ltiPlatformID,
             let platform = try await APILTIPlatform.find(platformID, on: req.db), platform.enabled

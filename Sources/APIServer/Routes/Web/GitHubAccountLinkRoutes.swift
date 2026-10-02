@@ -114,31 +114,33 @@ struct GitHubAccountLinkRoutes: RouteCollection {
         code: String, verifier: String, req: Request
     ) async throws -> GitHubUser {
         guard
-            let app = try await APIGitHubApp.query(on: req.db).first(),
-            let secrets = try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath),
+            let (app, secrets) = try await GitHubAppRegistration.resolve(req: req),
             let redirectURI = GitHubUserAuthorization.redirectURI(
                 publicBaseURL: req.application.securityConfiguration.publicBaseURL)
         else { throw GitHubLinkError.unavailable }
 
         let client = req.application.githubOAuthClient
         let token: String
-        let githubUser: GitHubUser
         do {
             token = try await client.exchangeCode(
                 GitHubCodeExchange(
                     clientID: app.clientID, clientSecret: secrets.clientSecret, code: code,
                     codeVerifier: verifier, redirectURI: redirectURI))
-            githubUser = try await client.fetchUser(token)
         } catch {
             req.logger.warning("GitHub account link exchange failed", metadata: ["error": "\(error)"])
             throw GitHubLinkError.exchangeFailed
         }
-        do {
-            try await client.revokeToken(token, app.clientID, secrets.clientSecret)
-        } catch {
-            req.logger.warning("GitHub user token not revoked", metadata: ["error": "\(error)"])
+        // Revoked before the answer is read, so a failed read keeps no token.
+        let lookup = await client.withRevokedUserToken(
+            token, clientID: app.clientID, clientSecret: secrets.clientSecret, logger: req.logger
+        ) { token in try await client.fetchUser(token) }
+        switch lookup {
+        case .success(let githubUser):
+            return githubUser
+        case .failure(let error):
+            req.logger.warning("GitHub account link user read failed", metadata: ["error": "\(error)"])
+            throw GitHubLinkError.exchangeFailed
         }
-        return githubUser
     }
 
     /// Creates or replaces this user's link. A GitHub account already linked to

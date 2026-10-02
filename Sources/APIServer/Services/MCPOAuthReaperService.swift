@@ -52,18 +52,14 @@ struct MCPOAuthReaperMonitorKey: StorageKey {
 
 extension Application {
     var mcpOAuthReaperMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[MCPOAuthReaperMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(MCPOAuthReaperMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "MCP OAuth reaper",
                 interval: mcpOAuthReaperSweepInterval,
                 runImmediately: true
             ) { application in
                 try await reapExpiredMCPOAuthRecords(on: application.db, logger: application.logger)
             }
-            storage[MCPOAuthReaperMonitorKey.self] = created
-            return created
         }
-        set { storage[MCPOAuthReaperMonitorKey.self] = newValue }
     }
 }

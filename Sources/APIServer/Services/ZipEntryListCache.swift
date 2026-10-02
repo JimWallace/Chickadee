@@ -110,15 +110,8 @@ struct ZipEntryListCacheKey: StorageKey {
 
 extension Application {
     var zipEntryListCache: ZipEntryListCache {
-        get {
-            if let existing = storage[ZipEntryListCacheKey.self] {
-                return existing
-            }
-            let created = ZipEntryListCache(
-                threadPool: threadPool, eventLoopGroup: eventLoopGroup)
-            storage[ZipEntryListCacheKey.self] = created
-            return created
+        lazyStored(ZipEntryListCacheKey.self) {
+            ZipEntryListCache(threadPool: threadPool, eventLoopGroup: eventLoopGroup)
         }
-        set { storage[ZipEntryListCacheKey.self] = newValue }
     }
 }

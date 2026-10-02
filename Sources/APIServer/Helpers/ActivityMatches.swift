@@ -144,6 +144,19 @@ func openMatch(
     }
 }
 
+/// Voids a submission's completed matrix rows before a re-claim opens the
+/// current set (#1744). A retest keeps the submission ID, and a classmate
+/// who resubmitted since is chosen under a new identity, so the old row
+/// against their earlier entry stayed completed beside the new one and
+/// `recomputeStanding` counted both. A re-claim replaces the result
+/// wholesale; the rows it opens are the only ones that count.
+func voidCompletedMatrixRows(submissionID: String, on db: Database) async throws {
+    try await APIMatchResult.query(on: db)
+        .filter(\.$submissionID == submissionID)
+        .filter(\.$completedAt != nil)
+        .delete()
+}
+
 /// Completes this submission's open match and rewrites the hill.
 ///
 /// The rules, each pinned by `ActivityChampionTests`:
@@ -286,12 +299,17 @@ private func recordMatrixMatches(
     var reportByIdentity: [String: MatchReport] = [:]
     for report in matches ?? [] { reportByIdentity[report.opponentIdentity] = report }
     let single = matchOutcome(from: outcomes)
+    // A report with no per-match rows completes one row, and only the bot or
+    // empty one: a claim can open a row per classmate, and completing every
+    // one from a single outcome would record a result against students the
+    // job never played (#1749). Any other unreported row stays open.
+    let completesFromCollection = matches == nil && open.count == 1 && open[0].opponentSubmissionID == nil
     for row in open {
         if let report = reportByIdentity[row.opponentIdentity] {
             row.score = report.score
             row.metric = report.metric
             row.won = report.won
-        } else if matches == nil {
+        } else if completesFromCollection {
             row.score = single?.score
             row.metric = single?.metric
             row.won = single?.status == .pass

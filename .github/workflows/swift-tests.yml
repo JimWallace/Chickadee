@@ -146,6 +146,8 @@ jobs:
         run: scripts/check-unchecked-sendable.sh
       - name: Secret files are git-ignored
         run: scripts/check-secret-files-ignored.sh
+      - name: Every server child gets an explicit environment
+        run: scripts/check-subprocess-environment.sh
 
       - name: Block Swift property access in Leaf templates
         run: scripts/check-leaf-semantics.sh

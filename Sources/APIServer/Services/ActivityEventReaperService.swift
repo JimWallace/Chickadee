@@ -45,18 +45,14 @@ struct ActivityEventReaperMonitorKey: StorageKey {
 
 extension Application {
     var activityEventReaperMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[ActivityEventReaperMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(ActivityEventReaperMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "Activity-event reaper",
                 interval: activityEventReaperSweepInterval,
                 runImmediately: true
             ) { application in
                 try await reapStaleActivityEvents(on: application.db, logger: application.logger)
             }
-            storage[ActivityEventReaperMonitorKey.self] = created
-            return created
         }
-        set { storage[ActivityEventReaperMonitorKey.self] = newValue }
     }
 }

@@ -127,6 +127,31 @@ The platform registration itself (`lti_platforms`: issuer, client ID,
 deployment IDs, the platform's auth, token and JWKS URLs, an optional token
 audience) is operator configuration and holds no personal data.
 
+## GitHub flows (2026-10)
+
+GitHub submission (`docs/github-submissions.md`) adds GitHub as a second
+source of submission content beside the upload form, and as a place a
+public-tier result can be posted. It is not part of the MCP surface; it is
+listed here because the design note's privacy review (its slice 0) requires
+every item that crosses to be in this inventory, and its "What reaches
+GitHub" table is the authoritative per-item list. Direction is relative to
+Chickadee. Every flow is off until an admin registers an App, and every
+student flow needs the student's own click.
+
+| Flow | Direction | Data that crosses | What Chickadee stores | Student PII? | Classification |
+|------|-----------|-------------------|-----------------------|--------------|----------------|
+| App registration (`/admin/github`, the manifest flow) | Chickadee → GitHub, then GitHub → Chickadee | out: the deployment's base URL, callback URLs, App name and permissions; in: the App ID, client ID, client secret, private key, webhook secret | `github_apps`: the IDs and the public facts; the secrets in the 0600 `.github-app-secrets` file | No | Confidential |
+| Account link (`/github/link`, OAuth with PKCE) | Chickadee → GitHub (the authorization), GitHub → Chickadee (the user) | out: that a Chickadee user authorizes the App; in: the user's GitHub ID and login | `github_account_links`: (user, GitHub ID, login). The user token is revoked at once and never stored | The GitHub login, chosen by the student | Confidential |
+| Submit a commit (`/github/submit`) | GitHub → Chickadee | the repository and branch names, the head commit's SHA and message, the commit's files as a tarball | The files as the submission zip; the repository ID, `owner/name` and the SHA on the submission row. Names and messages are read for the page and not stored | No (the student's own repository) | Confidential |
+| Course repositories (`/instructor/github`, `Make my repository`) | Chickadee → GitHub | an instructor's authorization and organization role (read once); a repository named `{assignment-slug}-{github-login}` in the course organization, the template's files, an invitation to the student's login; the archived state at term end | `github_course_organizations`: organization ID, login, installation ID; `github_assignment_templates`; `github_course_repositories`: repository ID, `owner/name`, whether the invitation succeeded | **Yes**: the student's GitHub login, in the repository name, visible to the organization's owners and members with access | Confidential |
+| Push webhook (`POST /github/webhook`, verified by `X-Hub-Signature-256`) | GitHub → Chickadee | the repository ID and head SHA; commit messages, author and committer names and emails, and the pusher's login and email arrive and are **discarded** | The time and the SHA on the course-repository row. Nothing is graded from a push | **Yes**, in transit only | Restricted |
+| Commit status (opt-in per assignment, private repositories only) | Chickadee → GitHub | "n/m public tests passed", "No public tests" or "Build failed", a success or failure state, the context `chickadee/{assignment-slug}`, a link to the results page | Nothing new | The public-tier count the student already sees | Confidential |
+
+No GitHub flow sends a grade, a release- or secret-tier result, a Chickadee
+username, a name, an email address or a student number to GitHub. The
+outbound hosts are `api.github.com` and `github.com`; the one inbound
+endpoint is `/github/webhook`.
+
 ## Models the MCP surface touches vs. never touches
 
 **Touched (authoring + authz):** `APICourse`, `APICourseEnrollment` (authz read

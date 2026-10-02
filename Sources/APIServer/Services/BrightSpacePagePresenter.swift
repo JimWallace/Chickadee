@@ -7,7 +7,7 @@
 // roster-readiness panel.
 //
 // Functions over a database and the application, never a `Request`. The
-// route handler (`InstructorDashboardRoutes+BrightSpace.swift`) resolves the
+// route handler (`InstructorLMSRoutes+BrightSpace.swift`) resolves the
 // active course and the one-shot flashes, then calls `context`. Moved out of
 // the route extension in #1654, where the read side shared one file with the
 // connection actions and the org-unit binding.

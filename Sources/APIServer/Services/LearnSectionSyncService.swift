@@ -171,9 +171,8 @@ struct LearnSectionSyncMonitorKey: StorageKey {
 
 extension Application {
     var learnSectionSyncMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[LearnSectionSyncMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(LearnSectionSyncMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "LEARN section sync",
                 interval: learnSectionSyncInterval,
                 runImmediately: false
@@ -188,9 +187,6 @@ extension Application {
                     application: application
                 )
             }
-            storage[LearnSectionSyncMonitorKey.self] = created
-            return created
         }
-        set { storage[LearnSectionSyncMonitorKey.self] = newValue }
     }
 }

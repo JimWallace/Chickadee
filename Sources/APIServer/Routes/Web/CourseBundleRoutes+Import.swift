@@ -381,7 +381,9 @@ private func importBundledUsers(
             let newUser = APIUser(
                 username: bundledUser.username,
                 passwordHash: "",  // inert placeholder
-                role: bundledUser.role,
+                // A bundle from before the per-course roles (#417) says
+                // `student` or `instructor` here; both are plain users now.
+                role: (UserRole(rawValue: bundledUser.role) ?? .user).rawValue,
                 authProvider: nil,
                 email: bundledUser.email,
                 displayName: bundledUser.displayName
@@ -403,15 +405,28 @@ private func importBundledEnrollments(
     courseID: UUID,
     db: Database
 ) async throws {
-    for bundleID in manifest.enrolledUserBundleIDs {
-        guard let uid = userIDMap[bundleID] else { continue }
+    // A bundle that carries roles (#1740) enrolls each user in the role it
+    // held. An older bundle lists only who was enrolled, and the seeded
+    // enrollment decides the role as it always has.
+    let entries: [(bundleID: String, role: CourseRole?)]
+    if let enrollments = manifest.enrollments {
+        entries = enrollments.map { ($0.userBundleID, $0.role) }
+    } else {
+        entries = manifest.enrolledUserBundleIDs.map { ($0, nil) }
+    }
+    for entry in entries {
+        guard let uid = userIDMap[entry.bundleID] else { continue }
         // Skip if already enrolled (matched user already in another course).
         let alreadyEnrolled = try await APICourseEnrollment.query(on: db)
             .filter(\.$userID == uid)
             .filter(\.$course.$id == courseID)
             .first()
         if alreadyEnrolled == nil {
-            try await saveSeededEnrollment(userID: uid, courseID: courseID, on: db)
+            if let role = entry.role {
+                try await APICourseEnrollment(userID: uid, courseID: courseID, role: role).save(on: db)
+            } else {
+                try await saveSeededEnrollment(userID: uid, courseID: courseID, on: db)
+            }
         }
     }
 }
@@ -653,6 +668,13 @@ private func importBundledSubmissions(
             kind: bundledSub.kindOrStudent
         )
         try await sub.save(on: db)
+        // The create stamp is import time; the bundle carries when the
+        // student submitted, and the history page and the solution ordering
+        // read that (#1739).
+        if let submittedAt = bundledSub.submittedAt {
+            sub.submittedAt = submittedAt
+            try await sub.save(on: db)
+        }
         subIDMap[bundledSub.bundleID] = newSubID
         tally.submissionsImported += 1
     }
@@ -702,6 +724,10 @@ private func importBundledResults(
             source: bundledResult.source
         )
         try await result.saveWithCollection(json: bundledResult.collectionJSON, on: db)
+        if let receivedAt = bundledResult.receivedAt {
+            result.receivedAt = receivedAt
+            try await result.save(on: db)
+        }
         tally.resultsImported += 1
     }
 }

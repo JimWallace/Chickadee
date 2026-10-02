@@ -211,6 +211,7 @@ struct CourseBundleRoutes: RouteCollection {
             sections: sections,
             contentItems: contentItems,
             enrolledUserIDs: enrolledUserIDs,
+            enrollments: enrollments,
             allUsers: Array(allUsers),
             submissions: submissions,
             results: results,
@@ -274,6 +275,10 @@ struct CourseBundleRoutes: RouteCollection {
         }
 
         let enrolledBundleIDs = data.enrolledUserIDs.compactMap { bundleIDs.userBundleIDByUUID[$0] }
+        let bundledEnrollments = data.enrollments.compactMap { e -> BundledEnrollment? in
+            guard let bid = bundleIDs.userBundleIDByUUID[e.userID] else { return nil }
+            return BundledEnrollment(userBundleID: bid, role: e.role)
+        }
 
         let bundledSetups = data.testSetups.compactMap { s -> BundledTestSetup? in
             guard let sid = s.id, let bid = bundleIDs.setupBundleIDByID[sid] else { return nil }
@@ -360,6 +365,7 @@ struct CourseBundleRoutes: RouteCollection {
                 term: course.term),
             users: bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
+            enrollments: bundledEnrollments,
             sections: bundledSections,
             contentItems: bundledContentItems,
             assignments: bundledAssignments,
@@ -471,6 +477,7 @@ private struct ExportData {
     let sections: [APICourseSection]
     let contentItems: [APICourseContentItem]
     let enrolledUserIDs: [UUID]
+    let enrollments: [APICourseEnrollment]
     let allUsers: [APIUser]
     let submissions: [APISubmission]
     let results: [APIResult]

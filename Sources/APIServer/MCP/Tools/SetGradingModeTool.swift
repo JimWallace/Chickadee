@@ -70,28 +70,16 @@ struct SetGradingModeTool: ContentTool {
         // Grading mode (worker vs browser) is a lifecycle setting — instructor-level (#417).
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
-        // Surface the upload-mode conflict as an arguments error (the shared
-        // helper's own guard backstops any path that skips this check).
-        if mode == GradingMode.browser.rawValue,
-            currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue
+        // Surface a coherence violation as an arguments error, so an agent
+        // reads a fixable message rather than a 400 (the shared helper's own
+        // guard backstops any path that skips this). The rules are
+        // `ManifestCoherence`'s; `author_script` and `set_activity` refuse the
+        // same combinations from the other direction.
+        if let parsed = GradingMode(rawValue: mode),
+            let violation = ManifestCoherence.violation(
+                introducedBy: { $0.gradingMode = parsed }, in: setup.manifest)
         {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: uploadModeGradingConflictMessage)
-        }
-        // Same treatment for grader-only files: author_script refuses marking
-        // them on a browser-graded assignment, and this is the reverse door.
-        if mode == GradingMode.browser.rawValue,
-            !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
-        {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: graderOnlyGradingConflictMessage)
-        }
-        // And for a class activity that stages an opponent — set_activity
-        // refuses such a kind on a browser-graded assignment, and this is the
-        // reverse door.
-        if mode == GradingMode.browser.rawValue, currentManifestActivityStagesAnOpponent(setup.manifest) {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: activityOpponentGradingConflictMessage)
+            throw MCPToolError.invalidArguments(tool: Self.name, detail: violation)
         }
         let effective = try await setManifestGradingMode(setup: setup, to: mode, on: context.db)
         return Output(assignmentPublicID: assignment.publicID, gradingMode: effective)

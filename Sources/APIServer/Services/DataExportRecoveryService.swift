@@ -97,9 +97,8 @@ struct StaleDataExportReaperMonitorKey: StorageKey {
 
 extension Application {
     var staleDataExportReaperMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[StaleDataExportReaperMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(StaleDataExportReaperMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "Stale data-export reaper",
                 interval: staleDataExportSweepInterval,
                 minimumInterval: 1,
@@ -110,11 +109,6 @@ extension Application {
                     logger: application.logger
                 )
             }
-            storage[StaleDataExportReaperMonitorKey.self] = created
-            return created
-        }
-        set {
-            storage[StaleDataExportReaperMonitorKey.self] = newValue
         }
     }
 }

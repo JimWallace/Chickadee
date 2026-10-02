@@ -176,9 +176,8 @@ extension Application {
     /// `PeriodicSweepLifecycleHandler` in `AppServices`, only when BrightSpace
     /// is configured. The sweep itself no-ops when credentials are absent.
     var learnRosterReadinessMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[LearnRosterReadinessMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(LearnRosterReadinessMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "LEARN roster readiness",
                 interval: learnRosterReadinessInterval,
                 runImmediately: false
@@ -193,9 +192,6 @@ extension Application {
                     application: application
                 )
             }
-            storage[LearnRosterReadinessMonitorKey.self] = created
-            return created
         }
-        set { storage[LearnRosterReadinessMonitorKey.self] = newValue }
     }
 }

@@ -527,9 +527,8 @@ struct AchievementEvaluationMonitorKey: StorageKey {
 
 extension Application {
     var achievementEvaluationMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[AchievementEvaluationMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(AchievementEvaluationMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "Class-goal achievement",
                 interval: achievementSweepInterval,
                 minimumInterval: 1,
@@ -538,9 +537,6 @@ extension Application {
                 _ = try await evaluateClassGoalAchievements(
                     on: application.db, logger: application.logger)
             }
-            storage[AchievementEvaluationMonitorKey.self] = created
-            return created
         }
-        set { storage[AchievementEvaluationMonitorKey.self] = newValue }
     }
 }

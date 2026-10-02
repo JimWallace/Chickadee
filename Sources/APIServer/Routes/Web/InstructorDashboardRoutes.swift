@@ -40,25 +40,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.get("activity", use: activityPage)
         r.get("students", use: studentsPage)
         r.get("students-data", use: studentsData)
-        // Reconcile the roster against the LEARN classlist (flags dropped students).
-        r.get("students", "learn-check", use: studentsLearnCheck)
-        // BrightSpace tab: status, grade-item mapping, sync log, manual actions.
-        r.get("brightspace", use: brightspacePage)
-        r.post("brightspace", "test", use: brightspaceTestConnection)
-        // Per-instructor identity: connect your own LEARN account, designate it
-        // as this course's sync identity, or disconnect.
-        r.post("brightspace", "connect", use: brightspaceConnectAccount)
-        r.post("brightspace", "use-my-identity", use: brightspaceUseMyIdentity)
-        r.post("brightspace", "disconnect", use: brightspaceDisconnectAccount)
-        r.post("brightspace", "bind-org-unit", use: brightspaceBindOrgUnit)
-        r.get("brightspace", "grade-objects", use: brightspaceGradeObjects)
-        r.post("brightspace", "auto-map", use: brightspaceAutoMap)
-        r.post("brightspace", "sync-now", use: brightspaceSyncNow)
-        r.post("brightspace", "reconcile-now", use: brightspaceReconcileNow)
-        // LMS grades through the LTI grade service (docs/lti-1-3.md, AGS).
-        r.get("lti-grades", use: ltiGradesPage)
-        r.post("lti-grades", "transport", use: saveLTIGradeTransport)
-        r.post("lti-grades", "push-all", use: pushAllLTIGrades)
+        // The LMS routes (LEARN roster check, the BrightSpace tab, LTI grades,
+        // the per-assignment push) live on `InstructorLMSRoutes` (registered
+        // in routes.swift).
         // MCP tab: the active course's authoring guidance for connected agents.
         r.get("mcp", use: mcpPanelPage)
         r.post("mcp", use: saveMCPGuidance)
@@ -102,7 +86,6 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "activity", "opponent", use: saveActivityOpponentFile)
         r.post(":assignmentID", "activity", "window", use: saveActivityWindow)
         r.post(":assignmentID", "tournament", "run", use: runTournament)
-        r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
         r.post(":assignmentID", "close", use: closeAssignment)

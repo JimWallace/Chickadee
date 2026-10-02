@@ -29,10 +29,9 @@ struct GitHubSubmissionAccess: Sendable {
 
     /// Resolves the App, the link and a token. Throws `GitHubSubmitError`.
     static func resolve(userID: UUID, req: Request) async throws -> GitHubSubmissionAccess {
-        guard
-            let app = try await APIGitHubApp.query(on: req.db).first(),
-            let secrets = try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath)
-        else { throw GitHubSubmitError.unavailable }
+        guard let (app, secrets) = try await GitHubAppRegistration.resolve(req: req) else {
+            throw GitHubSubmitError.unavailable
+        }
         guard let link = try await APIGitHubAccountLink.query(on: req.db).filter(\.$userID == userID).first()
         else { throw GitHubSubmitError.notLinked }
 

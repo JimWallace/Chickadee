@@ -206,6 +206,24 @@ import VaporTesting
         }
     }
 
+    /// The Users page writes a bird for every person it lists on first view,
+    /// and for nobody else: an MCP service account never opens an account
+    /// page, so it gets no cosmetic row written (#1764).
+    @Test func anMCPServiceAccountGetsNoAvatarWritten() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            _ = try await makeTestUser(on: app, username: "svc_bird", role: "mcp")
+            _ = try await makeTestUser(on: app, username: "human_bird", role: "user")
+            _ = try await body(of: "/admin/users-data?fragment=rows", cookie: cookie)
+            let service = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "svc_bird").first())
+            let human = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "human_bird").first())
+            #expect(service.avatarSpecJSON == nil)
+            #expect(human.avatarSpecJSON != nil)
+        }
+    }
+
     @Test func anMCPServiceAccountGetsAPillInsteadOfASelect() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()

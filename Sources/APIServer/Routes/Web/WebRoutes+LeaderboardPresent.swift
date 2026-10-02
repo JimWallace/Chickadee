@@ -25,13 +25,17 @@ extension WebRoutes {
         let course = try await APICourse.find(setup.courseID, on: req.db)
         let aggregation = activity.kind.aggregation
 
+        // Nameless like a student view, locking no handle like a staff one.
+        // Staff decide what they project and when, and opening the page to
+        // check it must not spend every student's one change (#1757).
+        let reader = LeaderboardReader.presenting(as: user)
         var places: [PresentPlace] = []
         var valueLabel = "metric"
         var tournament: TournamentPresentation?
         switch aggregation {
         case .standings:
             let board = try await buildStandingsBoard(
-                setup: setup, viewer: user, isStaff: false, showAll: true, on: req.db)
+                setup: setup, reader: reader, showAll: true, on: req.db)
             places = board.rows.map {
                 PresentPlace(
                     rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
@@ -40,7 +44,7 @@ extension WebRoutes {
             valueLabel = "average"
         case .union:
             let union = try await buildUnionPresentation(
-                setup: setup, viewer: user, isStaff: false, showAll: true, allURL: "", on: req.db)
+                setup: setup, reader: reader, showAll: true, allURL: "", on: req.db)
             places = (union?.kills ?? []).map {
                 PresentPlace(
                     rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
@@ -54,7 +58,7 @@ extension WebRoutes {
             // Named rather than left to a catch-all arm, so a fifth
             // aggregation does not render the metric board silently (#1745).
             let board = try await buildLeaderboard(
-                setup: setup, viewer: user, isStaff: false, showAll: true, on: req.db)
+                setup: setup, reader: reader, showAll: true, on: req.db)
             places = board.rows.map {
                 PresentPlace(
                     rank: $0.rank, rankText: $0.rankText, rankTier: $0.rankTier, handle: $0.handle,
