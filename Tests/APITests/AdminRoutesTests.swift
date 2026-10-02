@@ -103,7 +103,7 @@ private struct PassthroughResponder: AsyncResponder {
                 },
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin")
+                    #expect(res.headers.first(name: .location) == "/admin/users")
                 })
 
             let updated = try await APIUser.find(userID, on: app.db)
@@ -135,22 +135,33 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
-    @Test func usersListOffersNoRoleControlOnTheViewersOwnRow() async throws {
+    @Test func usersListDisablesTheRoleMenuOnTheViewersOwnRow() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
             let me = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "admin_routes").first())
             let other = try await makeUser(username: "role_other", role: "user")
-            let myPath = "/admin/users/\(try me.requireID().uuidString)/role"
-            let otherPath = "/admin/users/\(try other.requireID().uuidString)/role"
+            let myMenu = "id=\"role-\(try me.requireID().uuidString)\""
+            let otherMenu = "id=\"role-\(try other.requireID().uuidString)\""
+
+            /// The opening `<select …>` tag that carries `marker`.
+            func selectTag(in body: String, marker: String) -> String? {
+                guard let start = body.range(of: marker),
+                    let end = body[start.upperBound...].firstIndex(of: ">")
+                else { return nil }
+                return String(body[start.lowerBound..<end])
+            }
 
             try await app.asyncTest(
                 .GET, "/admin/users-data?fragment=rows",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     let body = String(buffer: res.body)
-                    #expect(!body.contains(myPath))
-                    #expect(body.contains(otherPath))
+                    let mine = selectTag(in: body, marker: myMenu)
+                    let theirs = selectTag(in: body, marker: otherMenu)
+                    #expect(mine?.contains("disabled") == true)
+                    #expect(theirs != nil)
+                    #expect(theirs?.contains("disabled") == false)
                 })
         }
     }

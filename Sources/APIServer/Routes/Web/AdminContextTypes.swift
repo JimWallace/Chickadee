@@ -18,8 +18,8 @@ struct AdminUserRow: Content {
     /// template branches on (a bare optional in a Leaf conditional is unreliable).
     var avatar: AvatarPresentation?
     var hasAvatar: Bool = false
-    /// True for the row of the admin viewing the list. Its role is shown as
-    /// text, because an admin cannot change their own role.
+    /// True for the row of the admin viewing the list. Its role menu is
+    /// disabled, because an admin cannot change their own role.
     var isCurrentUser: Bool = false
 }
 

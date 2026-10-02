@@ -16,15 +16,13 @@
                 <td class="item-status" data-sort-value="#(user.role)">
                     #if(user.role == "mcp"):
                     <span class="tier tier-preview">MCP service</span>
-                    #elseif(user.isCurrentUser):
-                    Admin <span class="you-pill">You</span>
                     #else:
                     <form method="post" action="/admin/users/#(user.id)/role"
                           class="inline-form form-flush">
                         #csrfFormField()
                         <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
                         <span class="state-select" data-state="#(user.role)">
-                            <select id="role-#(user.id)" name="role" class="form-input" data-ck-submit-on-change>
+                            <select id="role-#(user.id)" name="role" class="form-input" data-ck-submit-on-change#if(user.isCurrentUser): disabled#endif>
                                 <option value="user"#if(user.role == "user"): selected#endif>User</option>
                                 <option value="admin"#if(user.role == "admin"): selected#endif>Admin</option>
                             </select>

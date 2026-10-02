@@ -416,7 +416,7 @@ struct AdminRoutes: RouteCollection {
             ],
             on: req
         )
-        return req.redirect(to: "/admin")
+        return req.redirect(to: "/admin/users")
     }
 
     // MARK: - POST /admin/runner-autostart
