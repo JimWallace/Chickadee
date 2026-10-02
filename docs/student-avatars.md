@@ -490,13 +490,16 @@ shape, accessory colour.** The tune-up targets those:
   three except tests and the preview tool.
 
 **Specs stored before the tune-up** have no `tuft` or `tilt` key. They decode to
-`none` / `upright`, and on the next `AvatarStore.ensureSpec` load they get a
-one-time random fill of **only the missing keys**, which is written back. That
-is a draw into an empty slot, not a reshuffle, so decision 2 holds: every slot
-the student already had stays as it was. The alternative, keeping them tuftless
-and upright forever, would split every class into two cohorts anybody could
-see. `AvatarSpec.missingAxes(inStoredJSON:)` tells an absent key from a stored
-default, so a student whose draw was `none` / `upright` is never redrawn.
+`none` / `upright`, and the `FillLateAvatarAxes` migration gave each of them a
+one-time random fill of **only the missing keys** (#1762). That is a draw into
+an empty slot, not a reshuffle, so decision 2 holds: every slot the student
+already had stays as it was. The alternative, keeping them tuftless and upright
+forever, would split every class into two cohorts anybody could see.
+`AvatarSpec.missingAxes(inStoredJSON:)` tells an absent key from a stored
+default, so a student whose draw was `none` / `upright` is never redrawn. It is
+a migration, not a rule in `AvatarStore.ensureSpec`, for the reason the gradcap
+swap is: one change to stored data runs once over every row, with no probe on
+every later read.
 
 ### 8. Seed to bird, bird to page
 
