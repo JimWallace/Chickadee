@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.340] - 2026-10-02
+
+### Fixed
+
+- **A cloned course starts with enrollment closed.** The clone copied the source's enrollment mode, so a clone of an `.auto` course enrolled every user who logged in, last term's students included, before the instructor had set up the new term. The new offering now starts `.closed`, and the instructor opens enrollment when the term starts (#1780).
+
+### Security
+
+- **A course repository invites the student's current GitHub login, not the stored one.** The login stored at link time named the repository and the collaborator. GitHub releases a renamed login for anyone to take, so a stale one could invite a stranger with write access. The server now reads the current login from the linked numeric ID before it makes a repository or sends an invitation, and stores it. When no account has the ID, nothing is made or sent, and the student is asked to link again (#1766).
+
+
 ## [0.5.339] - 2026-10-02
 
 ### Changed
