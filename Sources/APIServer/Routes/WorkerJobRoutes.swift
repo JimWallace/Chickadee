@@ -377,6 +377,10 @@ struct WorkerJobRoutes: RouteCollection {
         var classmates: [ChosenOpponent] = []
         if activity.kind.opponentSource == .classmates {
             do {
+                // A re-claim (retest) replaces the whole result: rows from an
+                // earlier claim against classmates who have since resubmitted
+                // would otherwise stay completed and inflate the standings.
+                try await voidCompletedMatrixRows(submissionID: submissionID, on: db)
                 classmates = try await chooseClassmates(for: submission, activity: activity, on: db)
             } catch {
                 throw WorkerJobError.internalInconsistency(
