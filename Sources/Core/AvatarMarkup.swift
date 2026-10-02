@@ -139,12 +139,25 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         }
     }
 
+    /// Every per-student custom property `_avatar.leaf` assigns, paired with
+    /// the field it reads and the token it carries. The one list: `tokens`
+    /// derives from it, and the partial test asserts each entry is assigned in
+    /// both announce branches, so a token added here cannot reach the page
+    /// unassigned, and a property assigned there cannot be absent here (#1761).
+    public var inlineProperties: [AvatarInlineProperty] {
+        [
+            AvatarInlineProperty(name: "--av-cap", field: "capToken", token: capToken),
+            AvatarInlineProperty(name: "--av-wing", field: "wingToken", token: wingToken),
+            AvatarInlineProperty(name: "--av-accent", field: "accentToken", token: accentToken),
+            AvatarInlineProperty(name: "--av-backdrop", field: "backdropToken", token: backdropToken),
+            AvatarInlineProperty(name: "--av-border", field: "borderToken", token: borderToken),
+        ]
+    }
+
     /// Every palette token this presentation names. The drift test asserts each
     /// is declared in the stylesheet, and that the stylesheet declares no
     /// avatar token no presentation can name.
-    public var tokens: [String] {
-        [capToken, wingToken, accentToken, backdropToken, borderToken]
-    }
+    public var tokens: [String] { inlineProperties.map(\.token) }
 
     /// Every symbol this presentation names, in the order the partial stacks
     /// them — with the two that never vary.
@@ -168,4 +181,13 @@ public enum AvatarMarkup {
             .layerRefs
             .map { String($0.dropFirst()) }
     }
+}
+
+/// One per-student custom property the avatar partial assigns: its `--av-*`
+/// name, the `AvatarPresentation` field the partial reads it from, and the
+/// palette token that field carries for this bird.
+public struct AvatarInlineProperty: Sendable, Equatable {
+    public let name: String
+    public let field: String
+    public let token: String
 }
