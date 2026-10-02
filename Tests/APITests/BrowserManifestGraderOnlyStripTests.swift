@@ -3,7 +3,7 @@ import Testing
 
 @testable import APIServer
 
-/// Pins the contract for `manifestWithGraderOnlyFilesStripped`: the
+/// Pins the contract for `manifestWithGraderOnlyFilesStripped` (#1721): the
 /// browser-runner manifest endpoint must not leak grader-only support-file
 /// names (option B — `docs/datasets.md`) to the student's browser, while
 /// leaving every other field — and the common no-grader-only case — untouched.
@@ -17,7 +17,9 @@ import Testing
 
         let object = try #require(
             try JSONSerialization.jsonObject(with: Data(stripped.utf8)) as? [String: Any])
-        #expect(try #require(object["graderOnlyFiles"] as? [String]).isEmpty)
+        // An empty list is omitted from the typed encoding, so the key is
+        // absent; a reader that defaults a missing key to `[]` sees the same.
+        #expect((object["graderOnlyFiles"] as? [String] ?? []).isEmpty)
         // The names must be gone from the served bytes, not just the parsed array.
         #expect(!stripped.contains("holdout.csv"))
         #expect(!stripped.contains("answers.py"))
