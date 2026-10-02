@@ -288,9 +288,21 @@ session:
    at another site.
 4. The launch response is the picker itself: the bound course's assignments,
    as checkboxes or, when the platform accepts one item, radios, with the
-   ticket in a hidden field. There is no redirect. An unbound context is
-   refused with a sentence that says to open a Chickadee link from the course
-   in a new window once, because `/lti/bind` needs the session.
+   ticket in a hidden field. There is no redirect.
+
+   An unbound context cannot use `/lti/bind`, which needs the session. So an
+   **instructor** launch from one renders "Link LMS course" in the frame
+   instead: the Chickadee courses the instructor teaches that are not linked
+   yet. The verified request travels to `POST /lti/deep-link/bind` in a
+   15-minute token the tool key signs (`LTIDeepLinkBindToken`, audience
+   `chickadee:lti-deep-link-bind`, so a deep-linking response the same key
+   signs cannot stand in for it). That route applies `/lti/bind`'s rules (a
+   course the instructor teaches that is not linked yet), links the context,
+   audits `lti.course_bound`, and renders the picker. The token needs no
+   single use: it can only bind the context to a course the same instructor
+   teaches, and a context already linked goes straight on to its picker. Any
+   other role from an unbound context is told to ask an instructor, as at
+   `/lti/bind`.
 5. `POST /lti/deep-link` is public and outside the CSRF group. The ticket
    authenticates it: it is unguessable, names one request, and dies when used,
    so it also does the CSRF token's job. The route refuses an unknown,

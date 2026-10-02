@@ -51,6 +51,14 @@ actor LTIToolKeyAuthority {
         try await keys.sign(payload, kid: keyID)
     }
 
+    /// Verifies a JWT this key signed. Only the tool's own tokens go through
+    /// it: the deep-linking bind token, which carries a verified request
+    /// through the LMS frame where no session exists. Platform tokens verify
+    /// against the platform's key set, never this one.
+    func verify<Payload: JWTPayload>(_ token: String, as _: Payload.Type) async throws -> Payload {
+        try await keys.verify(token, as: Payload.self)
+    }
+
     /// The public key as a JWK (RFC 7517) for the JWKS endpoint.
     func publicJWK() -> [String: String] {
         [

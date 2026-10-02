@@ -234,10 +234,10 @@ extension LTIRoutes {
     /// Sends the signed-in user to the bound course, enrolling them at the
     /// launch's role when they are not enrolled yet, or, for a deep-linking
     /// launch, renders the assignment picker. An unbound context sends an
-    /// instructor to the binding page and refuses anyone else; a deep-linking
-    /// launch from one is refused with a sentence, because the binding page
-    /// needs the session cookie, which a browser does not send inside the LMS
-    /// frame the picker opens in.
+    /// instructor to the binding page and refuses anyone else. A deep-linking
+    /// launch from one shows an instructor the course choice inside the LMS
+    /// frame instead, since the binding page needs the session cookie, which a
+    /// browser does not send there; anyone else is told how to link it.
     private func routeToCourse(
         launch: LTIValidatedLaunch, platform: APILTIPlatform, user: APIUser, deepLink: LTIPendingDeepLink?,
         req: Request
@@ -248,7 +248,14 @@ extension LTIRoutes {
             let course = try await LTICourseBinding.course(
                 platformID: platformID, contextID: context.id, on: req.db)
         else {
-            if deepLink != nil { throw LTILaunchFailure.deepLinkCourseNotLinked }
+            if let deepLink {
+                // An instructor links the course inside the frame; anyone else
+                // is told how, as `/lti/bind` admits instructors only too.
+                guard launch.courseRole == .instructor else { throw LTILaunchFailure.deepLinkCourseNotLinked }
+                return try await LTIDeepLinkRoutes.startBind(
+                    deepLink, platform: platform, contextID: context.id,
+                    contextTitle: context.title ?? context.label ?? context.id, user: user, req: req)
+            }
             guard launch.courseRole == .instructor else { throw LTILaunchFailure.courseNotLinked }
             req.session.data[Self.pendingPlatformKey] = platformID.uuidString
             req.session.data[Self.pendingContextKey] = context.id

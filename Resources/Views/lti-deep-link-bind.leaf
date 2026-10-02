@@ -1,0 +1,32 @@
+#extend("base"):
+#export("title"):
+Link LMS course
+#endexport
+#export("content"):
+<h1>Link LMS course</h1>
+<p class="section-intro">Choose the Chickadee course for <strong>#(contextTitle)</strong>. Launches and content added from this LMS course then go to it.</p>
+#if(error):
+<div class="form-error" role="alert">#(error)</div>
+#endif
+#if(count(courses) == 0):
+<p class="empty">No unlinked Chickadee course is available to you.</p>
+<p class="section-note">Ask an administrator to create the course, or to add you as its instructor, then open the LMS content picker again.</p>
+#else:
+<form method="post" action="/lti/deep-link/bind" class="form-stack">
+    <input type="hidden" name="token" value="#(token)">
+    <div class="field-stack">
+        <label for="lti-dl-bind-course">Chickadee course</label>
+        <select id="lti-dl-bind-course" class="form-input" name="courseID" required>
+            <option value="" selected disabled>Choose a course</option>
+            #for(course in courses):
+            <option value="#(course.id)">#(course.code)#if(course.termLabel): #(course.termLabel)#endif — #(course.name)</option>
+            #endfor
+        </select>
+    </div>
+    <div class="toolbar toolbar--end">
+        <button class="btn btn-primary" type="submit">Link and continue</button>
+    </div>
+</form>
+#endif
+#endexport
+#endextend

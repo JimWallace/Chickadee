@@ -247,6 +247,130 @@ import VaporTesting
         }
     }
 
+    // MARK: - Linking the LMS course from the frame
+
+    static let teachingAssistant = "http://purl.imsglobal.org/vocab/lis/v2/membership/Instructor#TeachingAssistant"
+
+    /// The hidden bind token on the "Link LMS course" page.
+    private static func bindToken(in html: String) -> String? {
+        guard let range = html.range(of: #"name="token" value=""#) else { return nil }
+        let rest = html[range.upperBound...]
+        return rest.firstIndex(of: "\"").map { String(rest[..<$0]) }
+    }
+
+    /// POSTs the course choice with `token`, with no cookie and no CSRF token.
+    private func bind(
+        token: String, courseID: String?, _ check: @escaping (TestingHTTPResponse) throws -> Void
+    ) async throws {
+        var fields = ["token=\(token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")"]
+        if let courseID { fields.append("courseID=\(courseID)") }
+        let body = fields.joined(separator: "&")
+        try await app.asyncTest(
+            .POST, "/lti/deep-link/bind",
+            beforeRequest: { req in
+                req.headers.contentType = .urlEncodedForm
+                req.body = .init(string: body)
+            },
+            afterResponse: check)
+    }
+
+    /// Enrolls the account the launches resolved as instructor in `course`.
+    private func enrollLaunchedUser(as role: CourseRole, in course: APICourse) async throws {
+        let userID = try #require(try await APILTIIdentity.query(on: app.db).first()).userID
+        try await APICourseEnrollment(userID: userID, courseID: try course.requireID(), role: role).save(on: app.db)
+    }
+
+    @Test func anInstructorLinksTheLMSCourseInTheFrameThenPicks() async throws {
+        try await withApp(app) { app in
+            let fixture = try await fixture(bind: false)
+            // The first launch resolves the account; it teaches nothing yet.
+            let first = try await launch()
+            #expect(first.status == .ok)
+            #expect(first.html.contains("No unlinked Chickadee course is available to you."))
+            try await enrollLaunchedUser(as: .instructor, in: fixture.course)
+
+            let launched = try await launch()
+            #expect(launched.status == .ok)
+            #expect(launched.html.contains("Designing Functional Programs"))
+            #expect(!launched.html.contains("<nav class=\"nav\""))
+            let csp = launched.headers.first(name: "Content-Security-Policy") ?? ""
+            #expect(csp.contains("frame-ancestors 'self' \(LTITestPlatform.issuer)"))
+            let token = try #require(Self.bindToken(in: launched.html))
+
+            var html = ""
+            try await bind(token: token, courseID: try fixture.course.requireID().uuidString) { res in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "X-Frame-Options") == nil)
+                html = res.body.string
+            }
+            #expect(html.contains("Lab 1"))
+            let ticket = try #require(Self.ticket(in: html))
+            let course = try #require(try await APICourse.find(try fixture.course.requireID(), on: app.db))
+            #expect(course.ltiContextID == "context-1")
+            #expect(course.ltiPlatformID == fixture.platform.id)
+            let actions = try await APIAuditLogEntry.query(on: app.db).all().map(\.action)
+            #expect(actions.contains(AuditAction.ltiCourseBound.rawValue))
+
+            try await choose([fixture.lab1.publicID], ticket: ticket) { res in
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("name=\"JWT\""))
+            }
+
+            // Posting the same choice again goes on to the now-linked course.
+            try await bind(token: token, courseID: try fixture.course.requireID().uuidString) { res in
+                #expect(res.status == .ok)
+                #expect(Self.ticket(in: res.body.string) != nil)
+            }
+        }
+    }
+
+    @Test func aCourseTheInstructorDoesNotTeachIsNotLinked() async throws {
+        try await withApp(app) { app in
+            let fixture = try await fixture(bind: false)
+            _ = try await launch()
+            try await enrollLaunchedUser(as: .instructor, in: fixture.course)
+            let other = try await makeTestCourse(on: app, code: "OTHER1")
+            let launched = try await launch()
+            let token = try #require(Self.bindToken(in: launched.html))
+            try await bind(token: token, courseID: try other.requireID().uuidString) { res in
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("Choose a course you teach that is not linked yet."))
+                #expect(Self.bindToken(in: res.body.string) == token)
+            }
+            let reloaded = try #require(try await APICourse.find(try other.requireID(), on: app.db))
+            #expect(reloaded.ltiContextID == nil)
+        }
+    }
+
+    @Test func aForgedOrMissingBindTokenIsRefused() async throws {
+        try await withApp(app) { app in
+            let fixture = try await fixture(bind: false)
+            let courseID = try fixture.course.requireID().uuidString
+            try await bind(token: "not-a-token", courseID: courseID) { res in
+                #expect(res.status == .notFound)
+            }
+            // A JWT the tool key signed for another purpose is not a bind token.
+            let response = LTIDeepLinkingResponse(
+                clientID: "x", platformIssuer: LTITestPlatform.issuer, deploymentID: "d", data: nil, contentItems: [])
+            let other = try await app.ltiToolKeyAuthority().sign(response)
+            try await bind(token: other, courseID: courseID) { res in
+                #expect(res.status == .notFound)
+            }
+            let reloaded = try #require(try await APICourse.find(try fixture.course.requireID(), on: app.db))
+            #expect(reloaded.ltiContextID == nil)
+        }
+    }
+
+    @Test func aTeachingAssistantFromAnUnlinkedContextIsToldWhoCanLinkIt() async throws {
+        try await withApp(app) { _ in
+            _ = try await fixture(bind: false)
+            let launched = try await launch(roles: [Self.teachingAssistant])
+            #expect(launched.status == .forbidden)
+            #expect(launched.html.contains("Ask an instructor of the course to add Chickadee content once"))
+            #expect(Self.bindToken(in: launched.html) == nil)
+        }
+    }
+
     // MARK: - Refusals
 
     @Test func aStudentCannotDeepLink() async throws {
