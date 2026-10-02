@@ -97,18 +97,6 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
         return season.initial + (twoDigits < 10 ? "0\(twoDigits)" : "\(twoDigits)")
     }
 
-    /// Parses a `shortLabel` ("F26", case-insensitive) back into a term. A
-    /// short label carries only two digits, so it names a year from 2000 to
-    /// 2099; that is the range Chickadee writes into course URLs.
-    public init?(shortLabel label: String) {
-        guard label.count == 3, let initial = label.first,
-            let season = TermSeason.allCases.first(where: { $0.initial == initial.uppercased() }),
-            label.dropFirst().allSatisfy({ $0.isASCII && $0.isNumber }),
-            let twoDigits = Int(label.dropFirst())
-        else { return nil }
-        self.init(year: 2000 + twoDigits, season: season)
-    }
-
     /// A number that increases by one per term, in calendar order. Use it
     /// as a sort value where a `Comparable` value cannot go (a table cell).
     public var ordinal: Int {
@@ -123,17 +111,6 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
         case .spring: AcademicTerm(year: year, season: .fall)
         case .fall: AcademicTerm(year: year + 1, season: .winter)
         }
-    }
-
-    /// The term that contains `date`, using the start months of the three
-    /// seasons.  A suggestion for a form default, never a stored value.
-    public static func containing(
-        _ date: Date, calendar: Calendar = Calendar(identifier: .gregorian)
-    ) -> AcademicTerm? {
-        let parts = calendar.dateComponents([.year, .month], from: date)
-        guard let year = parts.year, let month = parts.month else { return nil }
-        let season = TermSeason.allCases.last { $0.startMonth <= month } ?? .winter
-        return AcademicTerm(year: year, season: season)
     }
 
     private enum CodingKeys: String, CodingKey { case year, season }

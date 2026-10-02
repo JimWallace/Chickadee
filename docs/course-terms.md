@@ -53,8 +53,7 @@ Two rules follow from these decisions:
 - `Core/AcademicTerm.swift`: `TermSeason` (`winter`, `spring`, `fall`, in
   calendar order) and `AcademicTerm` (year + season). `AcademicTerm` is
   `Comparable` in calendar order and has `next`, `displayName` ("Fall 2026")
-  and `containing(_:)` (the term that contains a date, for form defaults
-  only).
+  and `shortLabel` ("F26").
 - Two nullable columns on `courses`: `term_year` (int) and `term_season`
   (string, a `TermSeason` raw value). Migration: `AddCourseTerm`.
 - `APICourse.term` is the typed accessor. It returns nil unless both columns
@@ -123,8 +122,8 @@ The Core type, the migration, the model accessor, and tests
   create, edit and import report a duplicate instead of failing on the
   index. Edit no longer refuses a code that only an archived course uses.
 - **The URL key.** `APICourse.urlKey` is the code for a course with no term,
-  and "CS135-F26" for a course with one (`AcademicTerm.shortLabel`, parsed
-  back by `AcademicTerm(shortLabel:)`, years 2000 to 2099). Every link
+  and "CS135-F26" for a course with one (`AcademicTerm.shortLabel`). A key is
+  matched against `urlKey` by string equality and never parsed back. Every link
   Chickadee writes into a `/:courseCode/...` path uses the key: the vanity
   links (instructor list, student index, LTI launch) and the
   `/:courseCode/students/...` family. `CourseContext.pathKey` carries it into
