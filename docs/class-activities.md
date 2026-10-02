@@ -378,7 +378,9 @@ classmate, in submission-id order. Latest by submission time, so a
 resubmission by B changes what A's NEXT job plays and never what A's landed
 job played. When no classmate has submitted yet, the challenger plays the
 bundled bot on the single-opponent path (or nobody, when there is no bot), so
-the first submitter still has a match and a row. The claim opens one
+the first submitter still has a match and a row. A match against nobody
+counts nothing in the standings: the row completes, but the student has no
+standings row until they play a classmate or the bot. The claim opens one
 `match_results` row per opponent — the same open-at-claim, complete-at-ingest
 shape as the hill — and the job carries `Job.opponents`, a list of the same
 structural `JobOpponent` the hill's `Job.opponent` is; a runner that predates

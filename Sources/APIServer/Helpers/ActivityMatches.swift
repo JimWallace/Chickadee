@@ -322,10 +322,17 @@ private func recordMatrixMatches(
 /// Rewrites the student's standings row from `submissionID`'s completed
 /// matches. A draw is a completed match the challenger did not win whose
 /// score is exactly one half; a loss is any other non-win.
+///
+/// A match against nobody (`JobOpponent.noOpponentIdentity`: the first
+/// submitter, with no classmate and no bundled bot) counts nothing. The row
+/// exists so the job has a match, but it is not a result against anyone, and
+/// counting it sat the first submitter last on a loss until a classmate
+/// arrived (#1748). With nothing to count, the student has no standings row.
 func recomputeStanding(testSetupID: String, userID: UUID, submissionID: String, on db: Database) async throws {
     let rows = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
         .filter(\.$completedAt != nil)
+        .filter(\.$opponentIdentity != JobOpponent.noOpponentIdentity)
         .all()
     let wins = rows.filter { $0.won == true }.count
     let draws = rows.filter { $0.won != true && $0.score == 0.5 }.count
@@ -335,7 +342,9 @@ func recomputeStanding(testSetupID: String, userID: UUID, submissionID: String, 
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$userID == userID)
         .first()
-    if let existing {
+    if rows.isEmpty {
+        try await existing?.delete(on: db)
+    } else if let existing {
         existing.submissionID = submissionID
         existing.played = rows.count
         existing.wins = wins
