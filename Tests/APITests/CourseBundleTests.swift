@@ -727,6 +727,70 @@ import VaporTesting
         }
     }
 
+    /// Staff round-trip as staff: the bundle carries each enrollment's course
+    /// role, and import enrolls the matched user in that role (#1740).
+    @Test func roundTripPreservesEnrollmentRoles() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "ROLES_RT")
+            let courseID = try course.requireID()
+            let hash = try testPasswordHash("roles-pw")
+            let expected: [(username: String, role: CourseRole)] = [
+                ("cb_roles_student", .student), ("cb_roles_ta", .ta), ("cb_roles_instructor", .instructor),
+            ]
+            for entry in expected {
+                let user = APIUser(username: entry.username, passwordHash: hash, role: "user")
+                try await user.save(on: app.db)
+                try await APICourseEnrollment(userID: try user.requireID(), courseID: courseID, role: entry.role)
+                    .save(on: app.db)
+            }
+
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in exportedZip = Data(res.body.readableBytesView) }
+            )
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "ROLES_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedID = try imported.requireID()
+            for entry in expected {
+                let user = try #require(
+                    try await APIUser.query(on: app.db).filter(\.$username == entry.username).first())
+                let enrollment = try #require(
+                    try await APICourseEnrollment.query(on: app.db)
+                        .filter(\.$course.$id == importedID)
+                        .filter(\.$userID == (try user.requireID()))
+                        .first())
+                #expect(enrollment.role == entry.role, "\(entry.username) should round-trip as \(entry.role)")
+            }
+        }
+    }
+
+    /// A bundle from before the per-course roles names a user's deployment
+    /// role in the old vocabulary. The importer reads it as a plain user
+    /// rather than writing that word into `users.role` (#1740).
+    @Test func importReadsALegacyUserRoleAsUser() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let zipData = try await makeBundleZipWithUser(
+                courseCode: "LEGACYROLE_CB", username: "cb_legacy_role_user")
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "\(body)")
+            let user = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "cb_legacy_role_user").first())
+            #expect(user.role == UserRole.user.rawValue)
+        }
+    }
+
     // MARK: - Round-trip: sections preserved through export → import
 
     @Test func roundTripPreservesSections() async throws {
