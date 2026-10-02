@@ -71,7 +71,8 @@ import Vapor
                 user: user, activeCourse: active, enrolledCourses: active.map { [$0] } ?? [])
         }
         func course(_ role: CourseRole) -> CourseContext {
-            CourseContext(id: UUID().uuidString, code: "CS101", name: "Intro", isActive: true, role: role)
+            CourseContext(
+                id: UUID().uuidString, code: "CS101", name: "Intro", isActive: true, role: role, urlKey: "CS101")
         }
 
         // No active course → never instructor-in-course, whatever the global role.

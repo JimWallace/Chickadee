@@ -45,7 +45,7 @@ import Testing
         for border in AvatarBorder.allCases {
             var spec = Self.base
             spec.border = border
-            let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+            let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
             #expect(p.ringSymbolRef == "#av-ring-\(border.ring.rawValue)")
             #expect(
                 p

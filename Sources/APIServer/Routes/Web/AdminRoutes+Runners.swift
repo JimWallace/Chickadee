@@ -52,6 +52,9 @@ extension AdminRoutes {
             .all()
 
         let usersByID = try await fetchUsers(req: req, jobs: recentJobs)
+        // A deployment-wide list that belongs to no course: staff anywhere wear
+        // the staff ring, as on the account page (#1758).
+        let staffIDs = try await AvatarStore.courseStaff(among: Array(usersByID.keys), on: req.db)
         let firstSeenAt = try await fetchFirstSeenAt(req: req, runnerID: runnerID)
         let statusCounts = countStatuses(in: recentJobs)
         let snapshotRows = snapshots.map(snapshotRow(for:))
@@ -60,7 +63,8 @@ extension AdminRoutes {
         for metric in recentJobs {
             jobRows.append(
                 try await jobRow(
-                    for: metric, usersByID: usersByID, limitBySetupID: limitBySetupID, on: req.db))
+                    for: metric, usersByID: usersByID, staffIDs: staffIDs, limitBySetupID: limitBySetupID,
+                    on: req.db))
         }
         let chart = Self.utilizationChart(snapshots: snapshots)
         let summary = makeRunnerSummary(worker: worker, recentJobs: recentJobs, statusCounts: statusCounts)
@@ -191,6 +195,7 @@ extension AdminRoutes {
     private func jobRow(
         for metric: JobExecutionMetric,
         usersByID: [UUID: APIUser],
+        staffIDs: Set<UUID>,
         limitBySetupID: [String: Int],
         on db: Database
     ) async throws -> AdminRunnerJobRow {
@@ -210,9 +215,10 @@ extension AdminRoutes {
             workdirPeakFormatted: metric.workdirPeakBytes.map(formatBytes),
             completedAt: metric.completedAt.map(iso8601String)
         )
-        if let user {
+        if let user, let userID = user.id {
             let spec = try await AvatarStore.ensureSpec(for: user, on: db)
-            row.avatar = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative)
+            row.avatar = AvatarPresentation(
+                for: spec, size: .roster, accessibility: .decorative, isStaff: staffIDs.contains(userID))
             row.hasAvatar = true
         }
         let status = Self.statusPill(for: row.finalStatus)

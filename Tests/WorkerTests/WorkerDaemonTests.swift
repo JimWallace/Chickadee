@@ -811,7 +811,8 @@ import Testing
 
         try await daemon.download(
             url: testURL("http://127.0.0.1:\(flakyServer.port)/artifact.zip"),
-            to: destination
+            to: destination,
+            stage: .downloadSubmission
         )
 
         #expect(FileManager.default.fileExists(atPath: destination.path))

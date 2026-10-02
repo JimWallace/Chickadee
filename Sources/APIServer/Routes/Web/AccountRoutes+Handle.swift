@@ -65,11 +65,10 @@ extension AccountRoutes {
     /// Each student enrollment's handle, materialized on first view, and its
     /// "Change handle" panel.  Keyed by course.
     static func studentHandles(
-        enrollments: [APICourseEnrollment], spec: AvatarSpec, req: Request
+        enrollments: [APICourseEnrollment], spec: AvatarSpec, isStaff: Bool, req: Request
     ) async throws -> (handles: [UUID: String], choices: [UUID: AccountHandleChoice]) {
         var handles: [UUID: String] = [:]
         var choices: [UUID: AccountHandleChoice] = [:]
-        let takenCourseID = req.query[String.self, at: "handleTaken"]
         for enrollment in enrollments where enrollment.role == .student {
             // One roster read per enrollment, shared by the draw and the
             // alternates (#1759).
@@ -80,22 +79,25 @@ extension AccountRoutes {
             taken.insert(handle)
             handles[courseID] = handle
             choices[courseID] = handleChoice(
-                for: enrollment, handle: handle, spec: spec, taken: taken,
-                wasTaken: takenCourseID == courseID.uuidString, req: req)
+                for: enrollment, handle: handle, spec: spec, taken: taken, isStaff: isStaff, req: req)
         }
         return (handles, choices)
     }
 
     /// The handle part of a course row on the account page.
+    /// `isStaff` is the page's answer, not this course's: a student here who
+    /// teaches elsewhere wears the staff ring on every bird of the account page.
     static func handleChoice(
         for enrollment: APICourseEnrollment, handle: String, spec: AvatarSpec, taken: Set<String>,
-        wasTaken: Bool, req: Request
+        isStaff: Bool, req: Request
     ) -> AccountHandleChoice {
+        // The notice the POST redirects back with, naming its course.
+        let wasTaken = req.query[String.self, at: "handleTaken"] == enrollment.course.id?.uuidString
         guard enrollment.avatarHandleLockedAt == nil else {
             return AccountHandleChoice(isLocked: true, options: [], canChoose: false, wasTaken: false)
         }
         let alternates = handleOffer(for: enrollment, taken: taken, req: req)
-        let avatar = AvatarPresentation(for: spec, size: .small, accessibility: .decorative)
+        let avatar = AvatarPresentation(for: spec, size: .small, accessibility: .decorative, isStaff: isStaff)
         let options =
             [AccountHandleOption(handle: handle, isCurrent: true, avatar: avatar)]
             + alternates.map { AccountHandleOption(handle: $0, isCurrent: false, avatar: avatar) }

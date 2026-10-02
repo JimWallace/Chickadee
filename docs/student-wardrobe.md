@@ -1,9 +1,8 @@
 # Student wardrobe — design note
 
-**Status:** slice W1 (border and backdrop colour, chosen on the account page)
-has shipped. Slice W2 (rings as sprite art, the patterned rings and the staff
-ring) has shipped, and the seasonal rings (W2b) are being built. Everything
-after W2b is a plan. The participation currency is
+**Status:** slice W1 (border and backdrop colour, chosen on the account page),
+slice W2 (rings as sprite art, the patterned rings and the staff ring) and the
+seasonal rings (W2b, 0.5.309) have shipped. Everything after W2b is a plan. The participation currency is
 **shelved**: the maintainer decided that the first idea for it ("seeds") is
 not fun enough, and we will come back to it.
 
@@ -214,7 +213,7 @@ One page section on the account page, "Your chickadee":
 
 - The bird at the standard size, as a preview.
 - Two groups of choices: **Backdrop** (eight) and **Border** (none, the five
-  colours and the four patterned rings). Each choice is a radio input with a
+  colours and the seven patterned rings). Each choice is a radio input with a
   round sample, so the form works with the keyboard and with no JavaScript. A
   ring's sample is the ring itself, drawn from the sprite on the student's
   backdrop. A locked ring is disabled and shown dimmed. Staff see a one-line
@@ -332,7 +331,7 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 |---|---|---|
 | W1 | Border + backdrop picker on the account page; headband replaces the gradcap in the draw; existing gradcaps swapped | shipped |
 | W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | shipped |
-| W2b | Seasonal rings: snowflake, blossom and maple, open during their term and kept after | in progress |
+| W2b | Seasonal rings: snowflake, blossom and maple, open during their term and kept after | shipped |
 | W3 | `wardrobe_unlocks` + the `unlock(itemID)` achievement reward; the three unlockable expressions become grantable | planned |
 | W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | planned |
 | W5 | Trophy case + class-activity medals | planned |

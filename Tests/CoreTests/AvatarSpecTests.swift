@@ -84,7 +84,7 @@ import Testing
         let spec = AvatarSpec(
             cap: .teal, wing: .edged, expression: .keen, accessory: .glasses, accent: .lagoon,
             backdrop: .sage)
-        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         #expect(p.capToken == "--avatar-teal-cap")
         #expect(p.wingToken == "--avatar-teal-wing")
         #expect(p.backdropToken == "--avatar-back-sage")
@@ -99,12 +99,12 @@ import Testing
 
     @Test func presentationIsDecorativeOrLabelledButNeverBoth() {
         let spec = AvatarSpec.drawn(fromSeed: 3)
-        let plain = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let plain = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         #expect(plain.isLabelled == false)
         #expect(plain.label.isEmpty)
 
         let named = AvatarPresentation(
-            for: spec, size: .standard, accessibility: .labelled("Quiet Cedar"))
+            for: spec, size: .standard, accessibility: .labelled("Quiet Cedar"), isStaff: false)
         #expect(named.isLabelled)
         #expect(named.label == "Quiet Cedar")
     }
@@ -168,7 +168,7 @@ import Testing
             cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
             backdrop: .sky)
         let presentation = AvatarPresentation(
-            for: spec, size: .standard, accessibility: .decorative)
+            for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         // The four varying layers are interpolated; the two fixed ones are
         // literal fragments.
         let expected = [
@@ -184,6 +184,11 @@ import Testing
     /// Every `--av-*` the partial assigns is one the presentation supplies, and
     /// every one the presentation supplies is assigned — in BOTH branches.
     ///
+    /// The list is `AvatarPresentation.inlineProperties`, not a copy of it: a
+    /// sixth per-student token added there is asserted here the same day, and
+    /// a property the partial assigns that the list does not name fails the
+    /// count (#1761).
+    ///
     /// The decorative and labelled branches carry byte-identical style
     /// attributes and differ only in how the bird is announced, so an edit that
     /// touches one renders a partially black bird through the other. Counting
@@ -191,20 +196,29 @@ import Testing
     /// the guard passes on exactly the drift it exists to catch.
     @Test func partialAssignsEveryPresentationPropertyInBothBranches() throws {
         let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let properties = ["--av-cap", "--av-wing", "--av-accent", "--av-backdrop"]
+        let spec = AvatarSpec(
+            cap: .plum, wing: .barred, expression: .wink, accessory: .scarf, accent: .ember,
+            backdrop: .sky)
+        let properties =
+            AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
+            .inlineProperties
         let branches = partial.components(separatedBy: "#else:")
         #expect(branches.count == 2, "the partial no longer has two announce branches")
         for property in properties {
-            let occurrences = partial.components(separatedBy: "\(property): var(").count - 1
-            #expect(occurrences == 2, "\(property) is assigned \(occurrences)x, expected once per branch")
+            // Flat field names, not `avatar.capToken`: the sub-context form
+            // makes the presentation this partial's root. Qualifying them
+            // resolves to empty, silently — a bird with no colours that still
+            // returns 200.
+            let assignment = "\(property.name): var(#(\(property.field)))"
+            let occurrences = partial.components(separatedBy: assignment).count - 1
+            #expect(occurrences == 2, "\(property.name) is assigned \(occurrences)x, expected once per branch")
+            #expect(
+                !partial.contains("avatar.\(property.field)"), "\(property.field) is qualified; it will resolve empty")
         }
-        // Flat field names, not `avatar.capToken`: the sub-context form makes
-        // the presentation this partial's root. Qualifying them resolves to
-        // empty, silently — a bird with no colours that still returns 200.
-        for field in ["capToken", "wingToken", "accentToken", "backdropToken"] {
-            #expect(partial.contains("#(\(field))"), "partial never reads \(field)")
-            #expect(!partial.contains("avatar.\(field)"), "\(field) is qualified; it will resolve empty")
-        }
+        let assigned = partial.components(separatedBy: "--av-").count - 1
+        #expect(
+            assigned == properties.count * 2,
+            "the partial assigns \(assigned) --av- properties; the list names \(properties.count) per branch")
     }
 
     /// The palette the renderer names and the palette the stylesheet declares
@@ -231,7 +245,7 @@ import Testing
                         cap: cap, wing: .plain, expression: .bright, accessory: .none,
                         accent: accent, backdrop: backdrop)
                     expected.formUnion(
-                        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+                        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
                             .tokens)
                 }
             }

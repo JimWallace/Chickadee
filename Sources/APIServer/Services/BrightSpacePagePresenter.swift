@@ -511,8 +511,9 @@ enum BrightSpacePagePresenter {
                         detail: enrollment.brightspaceSyncDetail ?? "Not on the LEARN classlist.",
                         userID: uid,
                         unenrollURL: "/courses/\(courseUUID.uuidString)/unenroll/\(uid)",
+                        // `enrollments` is student-role only, so no row is staff.
                         avatar: AvatarPresentation(
-                            for: spec, size: .roster, accessibility: .decorative),
+                            for: spec, size: .roster, accessibility: .decorative, isStaff: false),
                         hasAvatar: true))
             }
         }

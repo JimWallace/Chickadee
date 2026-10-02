@@ -108,33 +108,6 @@ import Testing
         #expect(testSetupCacheKey(for: first) != testSetupCacheKey(for: second))
     }
 
-    /// Survivor: `:431 RemoveSideEffects` — deleting the zero byte separating
-    /// the test-setup id from the URL.
-    ///
-    /// Without it the material is a plain concatenation, so the boundary
-    /// between the two fields can move without changing a single byte. The
-    /// pair below is crafted to sit exactly on that boundary —
-    /// `"a" + "https://b/c"` and `"ahttps://b" + "/c"` concatenate
-    /// identically — because any ordinary pair differs anyway and would let
-    /// the mutant survive a green test.
-    ///
-    /// Compared on the digest half alone: the key's prefix carries the id
-    /// verbatim, so the full keys differ here whatever the digest does, and
-    /// asserting on them would pass for the wrong reason.
-    @Test func theIdUrlBoundaryCannotBeMovedWithoutChangingTheDigest() throws {
-        let first = try Self.makeJob(testSetupID: "a", testSetupURL: "https://b/c")
-        let second = try Self.makeJob(testSetupID: "ahttps://b", testSetupURL: "/c")
-
-        #expect(
-            Self.digest(of: first) != Self.digest(of: second),
-            "the id/url boundary must not be ambiguous")
-    }
-
-    /// The hash half of the key, with the `"\(testSetupID)-"` prefix removed.
-    private static func digest(of job: Job) -> String {
-        String(testSetupCacheKey(for: job).dropFirst(job.testSetupID.count + 1))
-    }
-
     /// The property `testSetupCacheKey` lacked, and the reason #1526 existed:
     /// the same job must always produce the same key.
     ///

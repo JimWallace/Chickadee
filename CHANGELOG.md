@@ -9,6 +9,58 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.337] - 2026-10-02
+
+### Changed
+
+- **The per-student avatar properties are listed once.** `AvatarPresentation.inlineProperties` pairs each `--av-*` name with the field the partial reads and the token it carries; `tokens` derives from it, and the partial test asserts every entry is assigned in both announce branches and that the partial assigns nothing the list does not name. A sixth token could previously pass the palette test and reach the page unassigned in one branch. The three comments that counted the properties (four, seven) cite the list (#1761).
+
+### Fixed
+
+- **Every avatar names whether its wearer is staff.** `AvatarPresentation` had an overload that defaulted `isStaff` to false, and five of twelve sites never said otherwise: the admin runner job list drew an instructor's own submission under a student ring, and the account page's handle panel drew a staff-elsewhere student's stored ring beside a main bird wearing the staff ring. The overload is gone, so every site states the answer; the runner page asks the roster, the handle panel takes the page's answer, and a students-only list says `false` with the reason (#1758).
+
+
+## [0.5.336] - 2026-10-02
+
+### Fixed
+
+- **Every avatar names whether its wearer is staff.** `AvatarPresentation` had an overload that defaulted `isStaff` to false, and five of twelve sites never said otherwise: the admin runner job list drew an instructor's own submission under a student ring, and the account page's handle panel drew a staff-elsewhere student's stored ring beside a main bird wearing the staff ring. The overload is gone, so every site states the answer; the runner page asks the roster, the handle panel takes the page's answer, and a students-only list says `false` with the reason (#1758).
+
+
+## [0.5.335] - 2026-10-02
+
+### Changed
+
+- **The avatar and wardrobe design notes describe the shipped feature.** `docs/student-avatars.md` said nothing displays a bird or handle to anyone else and that nothing is wired; eleven templates render them, to classmates on the leaderboards and to staff on the rosters. It also said `.avatar-sm` was removed and the visual baseline was still owed; both exist. `docs/student-wardrobe.md` said the seasonal rings were in progress (they shipped in 0.5.309) and counted four patterned rings (there are seven); `docs/ui-design.md` said three sizes where it lists five; and the export comment said nothing shows the handle to anyone else (#1760).
+
+### Changed
+
+- **The runner test-setup cache key no longer hashes the test-setup id, and an unencodable manifest is a forced miss.** The id is the key's verbatim prefix, so hashing it too changed the digest's value but never which jobs collide; the append, its boundary test and its stale equivalent-mutant entry (which still quoted an encoder renamed in #1679) are gone, at the cost of one cache miss per entry after the upgrade. A manifest that fails to encode used to key on id and URL alone, which is a collision rather than a miss; it keys on a fresh digest now (#1790).
+
+### Fixed
+
+- **Runner download retries name the download the caller started.** `download(url:to:)` inferred its retry stage from the destination filename, so an opponent download for a match or matrix job was logged and retried as `download_testsetup`. The stage is a parameter now (`download_submission`, `download_testsetup`, or the new `download_opponent`), and the log test drives all three (#1793).
+
+### Fixed
+
+- **The index coverage test reads only its own schema on Postgres.** It listed `pg_indexes` across every schema, so it failed whenever a parallel suite was mid-migration in a schema of its own and still held an index a later migration drops.
+
+### Changed
+
+- **Two `AcademicTerm` members with no production caller are deleted.** `AcademicTerm(shortLabel:)` and `AcademicTerm.containing(_:)` were called only from Core tests; a course key is matched against `urlKey` by string equality, and the term form offers a window of years rather than a date-derived term. The doc described both as live and now does not (#1786).
+
+### Changed
+
+- **`CourseContext.urlKey` is required.** It was optional, nil only in a context built without a course model, and `pathKey` fell back to the bare code; both constructors always passed it, so the fallback existed only for a future context that would silently write bare-code links for a termed course. The field is non-optional, the fallback is gone, and the three vanity-link writers read `urlKey` directly (#1787).
+
+
+## [0.5.334] - 2026-10-02
+
+### Fixed
+
+- The server compiles again on `main`. #1873 added a call to the old `AssignmentLanguage.resolve(for:manifest:)` in the solution extractor after #1878 had validated the deletion of that parameter, so the two merges crossed and `main` failed to build.
+
+
 ## [0.5.333] - 2026-10-02
 
 ### Fixed
