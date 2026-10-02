@@ -9,6 +9,41 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.322] - 2026-10-02
+
+### Fixed
+
+- **The admin Users page no longer writes an avatar for MCP service accounts.** It materialized a bird for every account on first view, service accounts included, which never open an account page (#1764).
+
+### Changed
+
+- **One `brightspaceRedirect` helper for the BrightSpace instructor routes.** The 32 flash writes and 24 redirects to the page each spelled the same two lines; every mutating handler now ends in one call that sets the flash and redirects (#1714).
+
+### Changed
+
+- **The compliance inventory and trust-boundary note list GitHub.** `data-flow-inventory.md` gains a per-flow table for the six GitHub flows, and `trust-boundary.md` names GitHub as a counterparty with its inbound webhook and callbacks, its two outbound hosts, and the rule that grading never leaves Chickadee's runners (#1770).
+
+### Fixed
+
+- **An assignment's GitHub template cannot be cleared or changed while course repositories exist.** Clearing it sent a student whose repository exists to owned-repository mode, which refused the organization's repository as not theirs; changing it gave later students a different start. The page now refuses with a sentence, the same gate the LTI platform delete uses (#1767).
+
+### Security
+
+- **The GitHub account-link callback revokes the user token when the user read fails.** The revoke ran after `GET /user`, so a throw there rethrew past it and left the token live. Both user-authorization callbacks now run their lookups through one helper, `withRevokedUserToken`, which revokes before any outcome is read (#1765).
+
+### Security
+
+- **The GitHub tarball reader's `gzip` child gets an explicit environment.** It inherited the server's whole environment, the one exception to the rule that every server child is launched with `Environment.only`. A new guard asserts every `Subprocess.run` under the server passes `environment:`, with a fixture proving it fails (#1797).
+
+### Changed
+
+- **One `ManifestCoherence` check for the manifest rules every authoring door enforces.** The zip upload, the three `setManifest*` edits and the two MCP mode tools each restated the upload-and-browser, grader-only-and-browser, opponent-and-browser and upload-only-language rules. They now ask one function, and an edit is refused only for the incoherence it introduces, never for one a legacy manifest inherits (#1713).
+
+### Changed
+
+- **The account page loads a course's taken handles once per enrollment.** `takenHandles` is the one query behind every handle draw and check, and it reads only the handle column of rows that have one. The account page passes the set to the draw and the alternates instead of loading the roster twice (#1759).
+
+
 ## [0.5.321] - 2026-10-02
 
 ### Fixed
