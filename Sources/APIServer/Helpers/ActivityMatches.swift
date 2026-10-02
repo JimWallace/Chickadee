@@ -224,14 +224,38 @@ func recordActivityMatch(
             current.defences = 0
             try await current.update(on: db)
         } else {
-            try? await APIActivityChampion(
-                testSetupID: testSetupID, userID: userID, submissionID: submissionID, crownedAt: Date()
-            ).save(on: db)
+            // Two first crownings can land together: both read an empty hill
+            // and both reach this insert. The unique index keeps one, and the
+            // record must name the same student (#1752).
+            guard
+                try await crownFirstChampion(
+                    testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
+            else { return }
         }
         try await awardChampionRecords(setup: setup, userID: userID, submissionID: submissionID, on: db)
     } else if let current, current.userID != userID {
         current.defences += 1
         try await current.update(on: db)
+    }
+}
+
+/// Inserts the first champion row of a setup. Returns false when another
+/// crowning landed first and the unique index on `test_setup_id` kept
+/// theirs; any other failure is rethrown.
+func crownFirstChampion(
+    testSetupID: String, userID: UUID, submissionID: String, on db: Database
+) async throws -> Bool {
+    do {
+        try await APIActivityChampion(
+            testSetupID: testSetupID, userID: userID, submissionID: submissionID, crownedAt: Date()
+        ).save(on: db)
+        return true
+    } catch {
+        let taken = try await APIActivityChampion.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .first()
+        guard taken != nil else { throw error }
+        return false
     }
 }
 
