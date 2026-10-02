@@ -138,11 +138,6 @@ private func firstNonEmptyTrimmedLine(_ source: String) -> String {
     return splitLines(trimmedLeading).first ?? ""
 }
 
-private func trimHorizontalWhitespace(_ s: String) -> String {
-    let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
-    return String(s.drop(while: isHWS).reversed().drop(while: isHWS).reversed())
-}
-
 /// ASCII-only lowercase.  Shebang lines and file extensions are ASCII, so this
 /// is behaviour-identical to `lowercased()` for the inputs we classify — but it
 /// avoids linking Embedded Swift's Unicode case-folding tables into the wasm

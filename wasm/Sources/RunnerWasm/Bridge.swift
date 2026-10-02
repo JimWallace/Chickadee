@@ -68,7 +68,7 @@ private func notebookCells(_ cells: [JSNotebookCell]) -> [NotebookCell] {
     cells.map { NotebookCell(cellType: $0.cellType, source: $0.source) }
 }
 
-private func extractedSource(_ extracted: ExtractedRNotebook) -> JSExtractedSource {
+private func extractedSource(_ extracted: ExtractedVerbatimNotebook) -> JSExtractedSource {
     JSExtractedSource(source: extracted.source, codeCellCount: extracted.codeCellCount)
 }
 
