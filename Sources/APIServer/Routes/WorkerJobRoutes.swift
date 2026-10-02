@@ -345,6 +345,8 @@ struct WorkerJobRoutes: RouteCollection {
         let personalizedFiles = DatasetResolver.resolve(
             manifest: claimed.manifest, seedHex: assignmentSeed, sourceDirectory: datasetSharedDir)
 
+        let opponentSet = try await Self.jobOpponentSet(
+            manifest: claimed.manifest, submission: submission, base: base, on: req.db)
         return Job(
             submissionID: submissionID,
             testSetupID: setupID,
@@ -357,26 +359,50 @@ struct WorkerJobRoutes: RouteCollection {
             personalizedInputs: personalizedInputs,
             personalizedFiles: personalizedFiles,
             language: language,
-            opponent: try await Self.jobOpponent(
-                manifest: claimed.manifest, submission: submission, base: base, on: req.db),
-            opponents: try await Self.jobOpponents(
-                manifest: claimed.manifest, submission: submission, base: base, on: req.db)
+            opponent: opponentSet.opponent,
+            opponents: opponentSet.opponents
+        )
+    }
+
+    /// Both opponent fields of a job, from one read of the activity: the
+    /// single opponent of a bot, hill or tournament match, or the classmate
+    /// list of a matrix job. The classmates are queried ONCE here and handed
+    /// to both builders; each used to call `chooseClassmates` itself, inside
+    /// the serialized claim section (#1750).
+    static func jobOpponentSet(
+        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+    ) async throws(WorkerJobError) -> (opponent: JobOpponent?, opponents: [JobOpponent]?) {
+        guard let activity = manifest.activity, activity.stagesAnOpponent, let submissionID = submission.id
+        else { return (nil, nil) }
+        var classmates: [ChosenOpponent] = []
+        if activity.kind.opponentSource == .classmates {
+            do {
+                classmates = try await chooseClassmates(for: submission, activity: activity, on: db)
+            } catch {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Could not choose the classmates for \(submissionID): \(error)")
+            }
+        }
+        return (
+            try await jobOpponent(
+                activity: activity, submission: submission, base: base, classmates: classmates, on: db),
+            try await jobOpponents(
+                activity: activity, classmates: classmates, submission: submission, base: base, on: db)
         )
     }
 
     /// The opponents a MATRIX job plays (round robin), each with its own open
     /// match row; nil for every other job. With no classmate yet the job is
     /// built like a bot match through `jobOpponent`, so this returns nil
-    /// then too.
+    /// then too. `classmates` is the list `jobOpponentSet` chose.
     static func jobOpponents(
-        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+        activity: ClassActivity, classmates: [ChosenOpponent], submission: APISubmission, base: String,
+        on db: Database
     ) async throws(WorkerJobError) -> [JobOpponent]? {
-        guard let activity = manifest.activity, activity.kind.opponentSource == .classmates,
+        guard activity.kind.opponentSource == .classmates, !classmates.isEmpty,
             let submissionID = submission.id
         else { return nil }
         do {
-            let classmates = try await chooseClassmates(for: submission, activity: activity, on: db)
-            guard !classmates.isEmpty else { return nil }
             var opponents: [JobOpponent] = []
             for chosen in classmates {
                 guard let classmate = chosen.champion, let classmateID = classmate.id else { continue }
@@ -413,11 +439,10 @@ struct WorkerJobRoutes: RouteCollection {
     /// there is the claim's error: a match graded with no row could never
     /// move the hill, which would read as a loss.
     static func jobOpponent(
-        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+        activity: ClassActivity, submission: APISubmission, base: String, classmates: [ChosenOpponent],
+        on db: Database
     ) async throws(WorkerJobError) -> JobOpponent? {
-        guard let activity = manifest.activity, activity.stagesAnOpponent,
-            let submissionID = submission.id
-        else { return nil }
+        guard activity.stagesAnOpponent, let submissionID = submission.id else { return nil }
         switch activity.kind.opponentSource {
         case .none:
             return nil
@@ -427,10 +452,8 @@ struct WorkerJobRoutes: RouteCollection {
             // With classmates to play, `jobOpponents` carries them. With
             // none yet, the bot stands in as a single opponent — one open
             // row, completed from the collection's match entry.
+            guard classmates.isEmpty else { return nil }
             do {
-                if !(try await chooseClassmates(for: submission, activity: activity, on: db)).isEmpty {
-                    return nil
-                }
                 let bot = ChosenOpponent(
                     champion: nil,
                     identity: activity.opponentFile.map(JobOpponent.supportFileIdentity)

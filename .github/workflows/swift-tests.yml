@@ -144,6 +144,8 @@ jobs:
 
       - name: Require a reason on every unchecked Sendable
         run: scripts/check-unchecked-sendable.sh
+      - name: Secret files are git-ignored
+        run: scripts/check-secret-files-ignored.sh
       - name: Every server child gets an explicit environment
         run: scripts/check-subprocess-environment.sh
 

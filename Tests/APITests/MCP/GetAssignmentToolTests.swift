@@ -1,5 +1,6 @@
 // Tests for GetAssignmentTool, backed by a real test database.
 
+import Core
 import Fluent
 import Testing
 import Vapor
@@ -183,6 +184,47 @@ import Vapor
                 _ = try await GetAssignmentTool().execute(
                     GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
             }
+        }
+    }
+
+    /// The live-session window `set_activity` writes is readable here, and
+    /// the three nullable activity keys are present as null when unset, so an
+    /// agent can tell "no window" from a server that predates the field
+    /// (#1753). The real encoding is validated against the output schema, as
+    /// a client does.
+    @Test func reportsTheActivityWindowAndEncodesUnsetBoundsAsNull() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            let windowed = """
+                {"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,\
+                "activity":{"kind":"bestMetric","window":{"opensAtISO":"2026-10-02T14:00:00Z"}}}
+                """
+            try await makeTestSetup(on: app, id: "setup_win", courseID: courseID, manifest: windowed)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_win", courseID: courseID, title: "Race")
+
+            let output = try await GetAssignmentTool().execute(
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+            let activity = try #require(output.activity)
+            #expect(activity.opensAt == "2026-10-02T14:00:00Z")
+            #expect(activity.closesAt == nil)
+            #expect(activity.aggregation == "leaderboard")
+
+            let encoded = try JSONValue(encoding: output)
+            guard case .object(let fields) = encoded, case .object(let block)? = fields["activity"] else {
+                Issue.record("output did not encode to an object with an activity block")
+                return
+            }
+            #expect(block["opensAt"] == .string("2026-10-02T14:00:00Z"))
+            #expect(block["closesAt"] == .null)
+            #expect(block["opponentFile"] == .null)
+            let schema = try #require(GetAssignmentTool.outputSchema)
+            let violations = MCPOutputSchemaValidator.violations(of: encoded, against: schema)
+            #expect(violations.isEmpty, "\(violations)")
         }
     }
 

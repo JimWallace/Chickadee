@@ -14,19 +14,17 @@ import Foundation
 /// `WorkerExecutionReport`, `Job`) need their own iso8601-configured
 /// decoder and must not use this one.
 ///
-/// **`encoder`'s output is not stable for equal input, so NOTHING may
-/// hash or store it.**  It is a plain `JSONEncoder`: key order is not
-/// contractual, and it was measured emitting two different orderings for
-/// two equal `TestProperties` values encoded back to back, serially, in
-/// one process -- 40 of 40 pairs on one run and 0 of 40 on the next.
-/// Any path that hashes or stores a manifest uses `stableEncoder`, whose
-/// sorted keys make equal values produce equal bytes.
-///
-/// That rule used to be written here as a note about two named renderers
-/// rather than as a property of this encoder, and `testSetupCacheKey` was
-/// added hashing the shared one.  The runner's on-disk test-setup cache
-/// then could not reliably hit -- the same job keyed two ways -- with no
-/// failure anywhere to say so (#1526).
+/// There is deliberately no plain `JSONEncoder` here. A plain encoder's
+/// key order is not contractual: it was measured emitting two different
+/// orderings for two equal `TestProperties` values encoded back to back,
+/// serially, in one process -- 40 of 40 pairs on one run and 0 of 40 on
+/// the next. One used to live here beside `stableEncoder`, and
+/// `testSetupCacheKey` was added hashing it, so the runner's on-disk
+/// test-setup cache could not reliably hit -- the same job keyed two ways
+/// -- with no failure anywhere to say so (#1526). The REST zip upload was
+/// its last production caller (#1719). Every manifest that is stored or
+/// hashed now goes through `stableEncoder`, and a plain encoder cannot be
+/// reached for by mistake because it does not exist.
 ///
 /// `JSONDecoder` and `JSONEncoder` are `Sendable` in current Foundation,
 /// so sharing these instances across request handlers is safe as long
@@ -35,7 +33,6 @@ import Foundation
 /// for concurrency-safety reasons.
 public enum ManifestCodec {
     public static let decoder = JSONDecoder()
-    public static let encoder = JSONEncoder()
 
     /// The one encoder for a manifest that is STORED or HASHED: the
     /// `test_setups.manifest` column, a version snapshot, the runner's

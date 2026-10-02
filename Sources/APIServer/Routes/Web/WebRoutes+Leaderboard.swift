@@ -44,10 +44,13 @@ extension WebRoutes {
         }
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
+        // Each flag names its own aggregation. The metric board used to be
+        // "none of the other three", which a fifth aggregation would have
+        // satisfied silently (#1745).
         let showsStandings = activity.kind.aggregation == .standings
         let showsBracket = activity.kind.aggregation == .bracket
         let showsUnion = activity.kind.aggregation == .union
-        let showsMetricBoard = !showsStandings && !showsBracket && !showsUnion
+        let showsMetricBoard = activity.kind.aggregation == .leaderboard
         let boardURL = "/testsetups/\(setupID)/leaderboard"
         // Staff always read the whole list; a student reads a window of it
         // unless they ask for the rest.

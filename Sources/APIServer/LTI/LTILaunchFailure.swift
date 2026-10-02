@@ -62,7 +62,7 @@ enum LTILaunchFailure: AbortError, Equatable {
         case .courseNotLinked:
             "This LMS course is not linked to a Chickadee course yet. Ask your instructor to open the link once."
         case .deepLinkCourseNotLinked:
-            "This LMS course is not linked to a Chickadee course yet. Open a Chickadee link from this course in a new window once, then add content again."
+            "This LMS course is not linked to a Chickadee course yet. Ask an instructor of the course to add Chickadee content once to link it."
         }
     }
 

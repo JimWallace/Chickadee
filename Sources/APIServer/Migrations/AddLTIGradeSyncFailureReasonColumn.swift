@@ -10,11 +10,19 @@ import Fluent
 import SQLKit
 
 struct AddLTIGradeSyncFailureReasonColumn: ChickadeeMigration {
+    /// The sentence the sweep stored on the day those rows were written.
+    /// FROZEN on purpose: the backfill must match what is in the table, not
+    /// what the sweep says today. It must never track
+    /// `LTIGradeSyncSweep.notLaunchedMessage`, or rewording that sentence
+    /// before a database applies this migration silently backfills nothing
+    /// (#1811).
+    static let storedNotLaunchedMessage = "The student has not opened Chickadee from the LMS yet."
+
     func prepare(on database: Database) async throws {
         try await database.schema("lti_grade_syncs").field("failure_reason", .string).update()
         guard let sql = database as? SQLDatabase else { return }
         try await sql.raw(
-            "UPDATE lti_grade_syncs SET failure_reason = \(bind: LTIGradeSyncFailureReason.notLaunched.rawValue) WHERE error = \(bind: LTIGradeSyncSweep.notLaunchedMessage)"
+            "UPDATE lti_grade_syncs SET failure_reason = \(bind: LTIGradeSyncFailureReason.notLaunched.rawValue) WHERE error = \(bind: Self.storedNotLaunchedMessage)"
         ).run()
     }
 
