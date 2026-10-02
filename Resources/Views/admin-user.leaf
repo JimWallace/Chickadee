@@ -20,7 +20,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
     <table class="results-table">
         <thead>
             <tr>
-                <th>Code</th>
+                <th>Course</th>
                 <th>Name</th>
                 <th>Actions</th>
             </tr>
@@ -28,7 +28,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
         <tbody>
         #for(course in enrolledCourses):
             <tr>
-                <td><strong>#(course.code)</strong></td>
+                <td><strong>#(course.code)</strong>#if(course.termLabel): #(course.termLabel)#endif</td>
                 <td>#(course.name)</td>
                 <td>
                     <form method="post"
@@ -65,7 +65,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
         #csrfFormField()
         <select name="courseID" class="form-input user-enroll-select">
             #for(course in availableCourses):
-            <option value="#(course.id)">#(course.code) — #(course.name)</option>
+            <option value="#(course.id)">#(course.code)#if(course.termLabel): #(course.termLabel)#endif — #(course.name)</option>
             #endfor
         </select>
         <button class="btn btn-primary" type="submit">Add</button>
