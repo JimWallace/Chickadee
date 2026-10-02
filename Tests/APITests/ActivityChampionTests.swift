@@ -265,6 +265,27 @@ import VaporTesting
         }
     }
 
+    /// Two first crownings landing together (#1752): the second insert loses
+    /// to the unique index, and the caller must not award the record to the
+    /// loser. Pinned on the seam rather than a real race, which no test can
+    /// schedule.
+    @Test func aSecondFirstCrowningLosesToTheIndexAndAwardsNothing() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "race", manifest: try hillManifest())
+            let setupID = try fx.setup.requireID()
+            #expect(
+                try await crownFirstChampion(
+                    testSetupID: setupID, userID: try fx.a.requireID(), submissionID: "race_a1", on: app.db))
+            #expect(
+                try await crownFirstChampion(
+                    testSetupID: setupID, userID: try fx.b.requireID(), submissionID: "race_b1", on: app.db)
+                    == false)
+            let held = try #require(try await champion(app, fx.setup))
+            #expect(held.userID == (try fx.a.requireID()))
+            #expect(held.submissionID == "race_a1")
+        }
+    }
+
     /// An ordinary activity and a non-student both leave the hill alone.
     @Test func onlyAStudentOnAHillActivityCanHoldIt() async throws {
         try await withAssignmentRoutesApp { app in
