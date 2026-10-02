@@ -125,6 +125,33 @@ import VaporTesting
         }
     }
 
+    /// Removing the App from an account drops that account's cached token at
+    /// once, so the next request resolves afresh instead of serving a token
+    /// GitHub now refuses (#1768).
+    @Test func anUninstallDropsTheCachedToken() async throws {
+        try await withApp(app) { app in
+            try await registerApp()
+            await app.githubInstallationTokens.store(
+                GitHubInstallationToken(token: "t", expiresAt: Date().addingTimeInterval(3_600)), forAccount: 77)
+            let body = Data(
+                #"{"action":"deleted","installation":{"id":5,"account":{"id":77,"login":"someone"}}}"#.utf8)
+            try await deliver(body, event: "installation", signature: signed(body)) { res in
+                #expect(res.status == .noContent)
+            }
+            #expect(await app.githubInstallationTokens.token(forAccount: 77) == nil)
+
+            // Another installation action leaves the cache alone.
+            await app.githubInstallationTokens.store(
+                GitHubInstallationToken(token: "t", expiresAt: Date().addingTimeInterval(3_600)), forAccount: 77)
+            let kept = Data(
+                #"{"action":"created","installation":{"id":6,"account":{"id":77,"login":"someone"}}}"#.utf8)
+            try await deliver(kept, event: "installation", signature: signed(kept)) { res in
+                #expect(res.status == .noContent)
+            }
+            #expect(await app.githubInstallationTokens.token(forAccount: 77) == "t")
+        }
+    }
+
     @Test func otherEventsDeletionsAndUnknownRepositoriesChangeNothing() async throws {
         try await withApp(app) { app in
             try await registerApp()

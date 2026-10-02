@@ -327,7 +327,9 @@ actor WorkerDaemon {
             operation: {
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
-                request.timeoutInterval = 5
+                // No per-request timeout: one here overrides the session's idle
+                // interval and whole-transfer cap above, which exist so a large
+                // zip on a slow link can still finish (#1793).
                 self.signer.sign(&request)
                 let (tmpURL, response) = try await Self.downloadSession.download(for: request)
                 guard let http = response as? HTTPURLResponse else {
@@ -345,10 +347,6 @@ actor WorkerDaemon {
             }
         )
     }
-
-    // `unzip(_:to:)` was removed in v0.4.178; job processing now calls
-    // `extractZipArchive(zipPath:into:)` from the `Core` library, which
-    // shares the same lock + EFAULT-retry as the server-side zip helpers.
 
     /// Runs the optional pre-test `make` step through the same bounded
     /// process machinery as test scripts (#1107). The step executes AFTER the

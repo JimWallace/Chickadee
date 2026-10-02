@@ -4,7 +4,9 @@
 //
 // Display only. A push records when the course repository was last pushed and
 // to which commit, so staff can see it; it never starts a grading job, uses no
-// attempt and takes no runner slot. Every other event is accepted and ignored.
+// attempt and takes no runner slot. An `installation` delivery that removes or
+// suspends the App on an account drops that account's cached token (#1768).
+// Every other event is accepted and ignored.
 //
 // No session and no CSRF token: GitHub is the caller, and the signature over
 // the raw body (`X-Hub-Signature-256`, HMAC-SHA256 under the App's webhook
@@ -35,19 +37,37 @@ struct GitHubWebhookRoutes: RouteCollection {
         let deleted: Bool?
     }
 
+    private struct InstallationAccount: Decodable { let id: Int64 }
+    private struct Installation: Decodable { let account: InstallationAccount }
+    private struct InstallationEvent: Decodable {
+        let action: String
+        let installation: Installation
+    }
+
     @Sendable
     func receive(req: Request) async throws -> HTTPStatus {
-        guard
-            try await APIGitHubApp.query(on: req.db).count() > 0,
-            let secret = (try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath))?.webhookSecret
-        else { throw Abort(.notFound) }
+        guard let secret = try await GitHubAppRegistration.resolve(req: req)?.secrets.webhookSecret else {
+            throw Abort(.notFound)
+        }
         let body = req.body.data.map { Data(buffer: $0) } ?? Data()
         guard
             GitHubWebhookSignature.isValid(
                 body: body, header: req.headers.first(name: "X-Hub-Signature-256"), secret: secret)
         else { throw Abort(.unauthorized) }
 
-        guard req.headers.first(name: "X-GitHub-Event") == "push" else { return .noContent }
+        let event = req.headers.first(name: "X-GitHub-Event")
+        if event == "installation" {
+            // The App was removed from an account, or suspended there: drop
+            // its cached token now rather than serving it for up to an hour
+            // and reading the refusal as "GitHub did not respond" (#1768).
+            if let delivery = try? JSONDecoder().decode(InstallationEvent.self, from: body),
+                delivery.action == "deleted" || delivery.action == "suspend"
+            {
+                await req.application.githubInstallationTokens.remove(account: delivery.installation.account.id)
+            }
+            return .noContent
+        }
+        guard event == "push" else { return .noContent }
         guard let push = try? JSONDecoder().decode(PushEvent.self, from: body) else {
             throw Abort(.badRequest)
         }

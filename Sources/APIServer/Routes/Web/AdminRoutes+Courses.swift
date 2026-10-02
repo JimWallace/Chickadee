@@ -89,6 +89,16 @@ extension AdminRoutes {
         else {
             throw Abort(.notFound)
         }
+        // Un-archiving re-enters the unique index over active courses. An
+        // archived course may share a code and term with an active one (a
+        // bundle import creates one beside it by design), so check the rule
+        // the index enforces and report a duplicate instead of failing on it
+        // (#1777), exactly as the edit route does.
+        if course.isArchived,
+            try await activeCourseCodeIsTaken(course.code, term: course.term, excluding: courseID, on: req.db)
+        {
+            return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
+        }
         course.isArchived.toggle()
         // Archiving is Chickadee's "end of term" signal: stamp the moment so
         // the submission-retention clock has an anchor (see

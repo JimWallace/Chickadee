@@ -4,7 +4,7 @@
 // with D2L `whoami`, storing it, and designating which connected instructor
 // a course pushes grades as. Functions over models, a database and the
 // application, never a `Request`: the handlers in
-// `InstructorDashboardRoutes+BrightSpace.swift` decode the form, flash the
+// `InstructorLMSRoutes+BrightSpace.swift` decode the form, flash the
 // outcome, write the audit entry and redirect. Moved out of the route
 // extension in #1654 (slice 2), beside `BrightSpaceCredentialStore`, which
 // already held the persistence half.

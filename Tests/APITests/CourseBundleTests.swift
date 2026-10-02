@@ -519,6 +519,101 @@ import VaporTesting
         }
     }
 
+    /// An imported assignment starts with a `v1` whose origin says it
+    /// arrived by import (#1741), as a clone or a creation does.
+    @Test func importSeedsAnInitialVersion() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "VERS_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_vers_rt", courseID: courseID)
+            _ = try await insertAssignment(testSetupID: try setup.requireID(), courseID: courseID)
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in zipData = Data(res.body.readableBytesView) }
+            )
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "VERS_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let versions = try await APIAssignmentVersion.query(on: app.db)
+                .filter(\.$testSetupID == assignment.testSetupID)
+                .all()
+            #expect(versions.count == 1)
+            #expect(versions.first?.origin == AssignmentVersionOrigin.bundleImport)
+        }
+    }
+
+    /// Import keeps each submission's `submittedAt` and each result's
+    /// `receivedAt` from the bundle (#1739), not the import time.
+    @Test func bundleRoundTripCarriesTimestamps() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "TIME_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_time_rt", courseID: courseID)
+            let setupID = try setup.requireID()
+            _ = try await insertAssignment(testSetupID: setupID, courseID: courseID)
+            let student = try await makeTestUser(on: app, username: "time_student", role: "student")
+            try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
+            let submittedAt = Date(timeIntervalSince1970: 1_700_000_000)
+            let receivedAt = Date(timeIntervalSince1970: 1_700_000_060)
+            let submission = try await makeTestSubmission(
+                on: app, id: "sub_time_rt", setupID: setupID, userID: try student.requireID(),
+                filename: "warmup.py")
+            submission.submittedAt = submittedAt
+            try await submission.save(on: app.db)
+            let result = try await makeTestResult(on: app, submissionID: "sub_time_rt")
+            result.receivedAt = receivedAt
+            try await result.save(on: app.db)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                }
+            )
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "TIME_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedAssignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let importedSubmission = try #require(
+                try await APISubmission.query(on: app.db)
+                    .filter(\.$testSetupID == importedAssignment.testSetupID)
+                    .filter(\.$kind == APISubmission.Kind.student)
+                    .first())
+            let importedSubmittedAt = try #require(importedSubmission.submittedAt)
+            #expect(abs(importedSubmittedAt.timeIntervalSince(submittedAt)) < 1)
+            let importedResult = try #require(
+                try await APIResult.query(on: app.db)
+                    .filter(\.$submissionID == (try importedSubmission.requireID()))
+                    .first())
+            let importedReceivedAt = try #require(importedResult.receivedAt)
+            #expect(abs(importedReceivedAt.timeIntervalSince(receivedAt)) < 1)
+        }
+    }
+
     /// A bundle exported by an older build carries no language declaration.
     /// Import must supply one, because import is otherwise a permanent source of
     /// undeclared assignments — and "undeclared" is precisely the state the
@@ -664,6 +759,121 @@ import VaporTesting
             #expect(importedAssignments.count == 1, "Round-trip: expected 1 assignment")
             #expect(importedAssignments.first?.title == "RT Lab")
 
+        }
+    }
+
+    /// The bundle carries the four per-assignment policies, the dates, the
+    /// open state and the course authoring guide as they were (#1737).
+    @Test func roundTripPreservesAssignmentPoliciesAndTheGuide() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "POLICY_RT")
+            course.mcpInstructions = "Write every hint as one sentence."
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_policy_rt", courseID: courseID)
+            let assignment = try await insertAssignment(testSetupID: try setup.requireID(), courseID: courseID)
+            let dueAt = Date(timeIntervalSince1970: 1_800_000_000)
+            assignment.dueAt = dueAt
+            assignment.visibility = .open
+            assignment.secretRevealEnabled = true
+            assignment.passingThresholdPercent = 70
+            assignment.solutionVisibility = .afterDue
+            assignment.brightspaceSyncExcluded = true
+            try await assignment.save(on: app.db)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "POLICY_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            #expect(imported.mcpInstructions == "Write every hint as one sentence.")
+            let importedAssignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let importedDueAt = try #require(importedAssignment.dueAt)
+            #expect(abs(importedDueAt.timeIntervalSince(dueAt)) < 1)
+            #expect(importedAssignment.visibility == .open)
+            #expect(importedAssignment.secretRevealEnabled == true)
+            #expect(importedAssignment.passingThresholdPercent == 70)
+            #expect(importedAssignment.solutionVisibility == .afterDue)
+            #expect(importedAssignment.brightspaceSyncExcluded == true)
+        }
+    }
+
+    /// Staff round-trip as staff: the bundle carries each enrollment's course
+    /// role, and import enrolls the matched user in that role (#1740).
+    @Test func roundTripPreservesEnrollmentRoles() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "ROLES_RT")
+            let courseID = try course.requireID()
+            let hash = try testPasswordHash("roles-pw")
+            let expected: [(username: String, role: CourseRole)] = [
+                ("cb_roles_student", .student), ("cb_roles_ta", .ta), ("cb_roles_instructor", .instructor),
+            ]
+            for entry in expected {
+                let user = APIUser(username: entry.username, passwordHash: hash, role: "user")
+                try await user.save(on: app.db)
+                try await APICourseEnrollment(userID: try user.requireID(), courseID: courseID, role: entry.role)
+                    .save(on: app.db)
+            }
+
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in exportedZip = Data(res.body.readableBytesView) }
+            )
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "ROLES_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedID = try imported.requireID()
+            for entry in expected {
+                let user = try #require(
+                    try await APIUser.query(on: app.db).filter(\.$username == entry.username).first())
+                let enrollment = try #require(
+                    try await APICourseEnrollment.query(on: app.db)
+                        .filter(\.$course.$id == importedID)
+                        .filter(\.$userID == (try user.requireID()))
+                        .first())
+                #expect(enrollment.role == entry.role, "\(entry.username) should round-trip as \(entry.role)")
+            }
+        }
+    }
+
+    /// A bundle from before the per-course roles names a user's deployment
+    /// role in the old vocabulary. The importer reads it as a plain user
+    /// rather than writing that word into `users.role` (#1740).
+    @Test func importReadsALegacyUserRoleAsUser() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let zipData = try await makeBundleZipWithUser(
+                courseCode: "LEGACYROLE_CB", username: "cb_legacy_role_user")
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "\(body)")
+            let user = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "cb_legacy_role_user").first())
+            #expect(user.role == UserRole.user.rawValue)
         }
     }
 

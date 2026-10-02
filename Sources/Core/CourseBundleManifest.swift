@@ -30,8 +30,14 @@ public struct CourseBundleManifest: Codable, Sendable {
     public let course: BundledCourse
     /// All users who appear in submissions or enrollments.
     public let users: [BundledUser]
-    /// bundleIDs of users enrolled in the course.
+    /// bundleIDs of users enrolled in the course. Written for readers that
+    /// predate `enrollments`; a bundle that carries `enrollments` is read
+    /// from that list.
     public let enrolledUserBundleIDs: [String]
+    /// The enrollments with their per-course role (nil in bundles exported
+    /// before this field was added; those enrolled every listed user as a
+    /// student, or as an instructor when the account is an admin).
+    public let enrollments: [BundledEnrollment]?
     /// Course sections (nil in bundles exported before this field was added).
     public let sections: [BundledSection]?
     /// Ungraded course content items (nil in bundles exported before this field
@@ -39,7 +45,9 @@ public struct CourseBundleManifest: Codable, Sendable {
     public let contentItems: [BundledContentItem]?
     public let assignments: [BundledAssignment]
     public let testSetups: [BundledTestSetup]
-    /// Student submissions only (kind == "student"); validation runs excluded.
+    /// Student submissions and the instructor's validation runs, which carry
+    /// the reference solutions (#1576). Derived kinds (tournament matches, the
+    /// class aggregate) are not bundled: they regenerate from a term's work.
     public let submissions: [BundledSubmission]
     /// Results paired with their submissions.
     public let results: [BundledResult]
@@ -52,6 +60,7 @@ public struct CourseBundleManifest: Codable, Sendable {
         course: BundledCourse,
         users: [BundledUser],
         enrolledUserBundleIDs: [String],
+        enrollments: [BundledEnrollment]? = nil,
         sections: [BundledSection] = [],
         contentItems: [BundledContentItem] = [],
         assignments: [BundledAssignment],
@@ -66,6 +75,7 @@ public struct CourseBundleManifest: Codable, Sendable {
         self.course = course
         self.users = users
         self.enrolledUserBundleIDs = enrolledUserBundleIDs
+        self.enrollments = enrollments
         self.sections = sections
         self.contentItems = contentItems
         self.assignments = assignments
@@ -100,6 +110,10 @@ public struct BundledCourse: Codable, Sendable {
     /// `bundledCourseTerm`.
     public let termYear: Int?
     public let termSeason: String?
+    /// The course's own MCP authoring guide (`courses.mcp_instructions`);
+    /// nil when the course inherits the default, and in bundles written
+    /// before the field existed (#1737).
+    public let mcpInstructions: String?
 
     public init(
         code: String, name: String,
@@ -108,7 +122,8 @@ public struct BundledCourse: Codable, Sendable {
         slipDaysPerStudent: Int? = nil,
         slipDayExtensionHours: Int? = nil,
         slipDayReleaseRevealHold: Bool? = nil,
-        term: AcademicTerm? = nil
+        term: AcademicTerm? = nil,
+        mcpInstructions: String? = nil
     ) {
         self.code = code
         self.name = name
@@ -119,6 +134,7 @@ public struct BundledCourse: Codable, Sendable {
         self.slipDayReleaseRevealHold = slipDayReleaseRevealHold
         self.termYear = term?.year
         self.termSeason = term?.season.rawValue
+        self.mcpInstructions = mcpInstructions
     }
 }
 
@@ -151,7 +167,10 @@ public struct BundledUser: Codable, Sendable {
     public let username: String
     public let displayName: String?
     public let email: String?
-    /// "student" | "instructor" | "admin"
+    /// The deployment role, `user` or `admin`. Bundles exported before the
+    /// per-course roles (#417) carry `student` or `instructor` here; the
+    /// importer reads any value it does not know as `user`, and the course
+    /// role comes from `enrollments`.
     public let role: String
 
     public init(
@@ -162,6 +181,18 @@ public struct BundledUser: Codable, Sendable {
         self.username = username
         self.displayName = displayName
         self.email = email
+        self.role = role
+    }
+}
+
+/// One course enrollment carried in a bundle: who, and in which per-course
+/// role.
+public struct BundledEnrollment: Codable, Sendable {
+    public let userBundleID: String
+    public let role: CourseRole
+
+    public init(userBundleID: String, role: CourseRole) {
+        self.userBundleID = userBundleID
         self.role = role
     }
 }
@@ -263,12 +294,26 @@ public struct BundledAssignment: Codable, Sendable {
     /// References BundledSection.bundleID (nil = ungrouped, or a bundle
     /// exported before sections were carried).
     public let sectionBundleID: String?
+    /// The four per-assignment policies the clone also copies (#1737). Each
+    /// is nil in a bundle written before it was carried, and imports as the
+    /// column's own default: no secret reveal, no threshold, a hidden
+    /// solution, synced. The bundle is a faithful restore, so unlike the
+    /// clone it carries the solution reveal as it was; it carries the dates
+    /// and the open state the same way.
+    public let secretRevealEnabled: Bool?
+    public let passingThresholdPercent: Int?
+    public let solutionVisibility: SolutionVisibility?
+    public let brightspaceSyncExcluded: Bool?
 
     public init(
         bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool? = nil,
         visibility: AssignmentVisibility? = nil,
         sortOrder: Int?, testSetupBundleID: String,
-        sectionBundleID: String? = nil
+        sectionBundleID: String? = nil,
+        secretRevealEnabled: Bool? = nil,
+        passingThresholdPercent: Int? = nil,
+        solutionVisibility: SolutionVisibility? = nil,
+        brightspaceSyncExcluded: Bool? = nil
     ) {
         self.bundleID = bundleID
         self.title = title
@@ -279,6 +324,10 @@ public struct BundledAssignment: Codable, Sendable {
         self.sortOrder = sortOrder
         self.testSetupBundleID = testSetupBundleID
         self.sectionBundleID = sectionBundleID
+        self.secretRevealEnabled = secretRevealEnabled
+        self.passingThresholdPercent = passingThresholdPercent
+        self.solutionVisibility = solutionVisibility
+        self.brightspaceSyncExcluded = brightspaceSyncExcluded
     }
 }
 

@@ -208,24 +208,24 @@ extension WebRoutes {
             req: req, userID: userID, latestRowBySetupID: latestRowBySetupID)
 
         // Results for the latest + prior submissions only, newest-first (the
-        // worker-first preference depends on that order).
+        // fold's fallback for an ungraded submission depends on that order).
         var interestingIDs = latestRowBySetupID.values.compactMap(\.id)
         interestingIDs.append(contentsOf: priorBySetupID.values.compactMap(\.id))
         let resultRows = try await APIResult.query(on: req.db)
             .filter(\.$submissionID ~~ interestingIDs)
             .sort(\.$receivedAt, .descending)
             .all()
-        let preferredResultBySubmissionID = preferredResultsWorkerFirst(resultRows)
+        let bestResultBySubmissionID = bestGradeResultBySubmissionID(resultRows)
 
         // Badge evaluation needs the collection (executionTimeMs) for each
-        // LATEST submission's preferred result only — batch-fetch just those
+        // LATEST submission's best-grade result only — batch-fetch just those
         // blobs from the side table (#1173), one per dashboard row at most.
         let latestResultIDs = data.latestSubmissionBySetupID.values.compactMap {
-            preferredResultBySubmissionID[$0.submissionID]?.id
+            bestResultBySubmissionID[$0.submissionID]?.id
         }
         let latestBlobs = try await collectionJSONByResultID(for: latestResultIDs, on: req.db)
         let badgeResults = BadgeResultData(
-            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            bestResultBySubmissionID: bestResultBySubmissionID,
             collectionByResultID: latestBlobs.compactMapValues(decodedCollection(from:))
         )
 
@@ -287,33 +287,11 @@ extension WebRoutes {
         return priorBySetupID
     }
 
-    /// One preferred result per submission, worker-first — the browser result
-    /// is only the fallback while the worker regrade is queued.
-    private static func preferredResultsWorkerFirst(
-        _ rows: [APIResult]
-    ) -> [String: APIResult] {
-        var preferred: [String: APIResult] = [:]
-        for row in rows {
-            let key = row.submissionID
-            if let existing = preferred[key] {
-                let existingSource = existing.source ?? "worker"
-                let currentSource = row.source ?? "worker"
-                if existingSource == "worker" { continue }
-                if currentSource == "worker" {
-                    preferred[key] = row
-                }
-            } else {
-                preferred[key] = row
-            }
-        }
-        return preferred
-    }
-
     /// The result-derived badge inputs that don't vary per setup: the
-    /// preferred result per submission, and the decoded collection per
-    /// latest-submission preferred result (side table, #1173).
+    /// best-grade result per submission (the row the grade cell reads, #1709),
+    /// and the decoded collection per latest-submission result (side table, #1173).
     private struct BadgeResultData {
-        let preferredResultBySubmissionID: [String: APIResult]
+        let bestResultBySubmissionID: [String: APIResult]
         let collectionByResultID: [String: TestOutcomeCollection]
     }
 
@@ -328,7 +306,7 @@ extension WebRoutes {
         disabled: Set<String>
     ) -> [AchievementBadge]? {
         guard
-            let result = badgeResults.preferredResultBySubmissionID[latest.submissionID],
+            let result = badgeResults.bestResultBySubmissionID[latest.submissionID],
             let resultID = result.id,
             let collection = badgeResults.collectionByResultID[resultID],
             let gradePercent = gradePercent(from: collection)
@@ -336,7 +314,7 @@ extension WebRoutes {
         let latestAttempt = latestRow.attemptNumber ?? 1
         let priorGradePercent: Int? = priorRow.flatMap { prior in
             guard let priorID = prior.id,
-                let priorResult = badgeResults.preferredResultBySubmissionID[priorID]
+                let priorResult = badgeResults.bestResultBySubmissionID[priorID]
             else { return nil }
             return priorResult.gradePercentValue
         }

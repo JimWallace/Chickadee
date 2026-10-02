@@ -508,7 +508,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// manifest exactly as it reads an old one.
     ///
     /// Nil means undeclared: a manifest written before the field, or a
-    /// `.chickadee` bundle exported by an older build. Those keep deriving.
+    /// `.chickadee` bundle exported by an older build. The boundary that
+    /// accepts one (`AssignmentLanguage.derivedDeclaration`) records a
+    /// declaration at once; nothing resolves a language from content.
     /// Everything on disk is backfilled by `BackfillDeclaredLanguage`, so an
     /// undeclared manifest after that point came from outside this deployment.
     public var languageDeclared: Bool?
@@ -611,7 +613,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         makefile = try c.decodeIfPresent(MakefileConfig.self, forKey: .makefile)
         starterNotebook = try c.decodeIfPresent(String.self, forKey: .starterNotebook)
         // Absent on every manifest written before the language became
-        // first-class; nil falls back to sniffing the suite.
+        // first-class. Nil is the author's answer "none" once
+        // `languageDeclared` is true; nothing sniffs the suite.
         language = try c.decodeIfPresent(AssignmentLanguage.self, forKey: .language)
         languageDeclared = try c.decodeIfPresent(Bool.self, forKey: .languageDeclared)
         minimumRunnerVersion = try c.decodeIfPresent(String.self, forKey: .minimumRunnerVersion)

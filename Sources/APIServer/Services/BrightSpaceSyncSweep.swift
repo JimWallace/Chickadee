@@ -674,9 +674,8 @@ extension Application {
     /// (or the deployment-wide fallback), deferring courses with no identity
     /// connected yet.
     var brightSpaceGradeSyncMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[BrightSpaceGradeSyncMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(BrightSpaceGradeSyncMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "BrightSpace grade sync",
                 interval: brightSpaceGradeSyncInterval,
                 runImmediately: false
@@ -696,10 +695,7 @@ extension Application {
                     application.logger.info("BrightSpace grade sync: pushed \(n) grade(s)")
                 }
             }
-            storage[BrightSpaceGradeSyncMonitorKey.self] = created
-            return created
         }
-        set { storage[BrightSpaceGradeSyncMonitorKey.self] = newValue }
     }
 
     var brightSpaceSyncConfig: BrightSpaceSyncConfig? {

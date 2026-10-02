@@ -64,15 +64,22 @@ func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: Databa
 }
 
 /// True when a non-archived course other than `excluding` already uses
-/// `code` in the same term (exact match; "no term" is one term). This is the
-/// rule of the `idx_courses_code_term_active` index, so a form can report a
-/// duplicate instead of failing on the index.
+/// `code` in the same term ("no term" is one term). This is the rule of the
+/// `idx_courses_code_term_active` index, so a form can report a duplicate
+/// instead of failing on the index.
+///
+/// Codes are compared case-insensitively, the rule `coursesMatching` applies
+/// when it resolves a key. The index compares bytes, so "cs135" and "CS135"
+/// could both be active in one term and both answer the key "cs135"; this
+/// check refuses the second at every door that creates or renames a course
+/// (#1779). Fetching the active set and comparing in Swift is the same
+/// trade-off `findActiveCourse` makes.
 func activeCourseCodeIsTaken(
     _ code: String, term: AcademicTerm?, excluding courseID: UUID?, on db: Database
 ) async throws -> Bool {
-    try await APICourse.query(on: db)
-        .filter(\.$code == code)
+    let lowered = code.lowercased()
+    return try await APICourse.query(on: db)
         .filter(\.$isArchived == false)
         .all()
-        .contains { $0.id != courseID && $0.term == term }
+        .contains { $0.id != courseID && $0.code.lowercased() == lowered && $0.term == term }
 }

@@ -53,6 +53,30 @@ struct GitHubOAuthClient: Sendable {
 }
 
 extension GitHubOAuthClient {
+    /// Runs `body` with a user token and revokes the token before the outcome
+    /// is read, so no path keeps it: a throw from `body` is captured as a
+    /// `Result`, the revoke runs, and only then is the result handed back.
+    /// Both user-authorization callbacks go through here (#1765): the
+    /// account link used to revoke after reading the user, so a failed read
+    /// left the token live.
+    func withRevokedUserToken<T: Sendable>(
+        _ token: String, clientID: String, clientSecret: String, logger: Logger,
+        body: (String) async throws -> T
+    ) async -> Result<T, any Error> {
+        let outcome: Result<T, any Error>
+        do {
+            outcome = .success(try await body(token))
+        } catch {
+            outcome = .failure(error)
+        }
+        do {
+            try await revokeToken(token, clientID, clientSecret)
+        } catch {
+            logger.warning("GitHub user token not revoked", metadata: ["error": "\(error)"])
+        }
+        return outcome
+    }
+
     private struct TokenResponse: Decodable {
         let accessToken: String?
         let error: String?

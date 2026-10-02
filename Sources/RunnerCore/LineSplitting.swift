@@ -1,4 +1,4 @@
-// Shared, embedded-safe line splitting for RunnerCore.
+// Shared, embedded-safe line splitting and trimming for RunnerCore.
 //
 // In Swift, "\r\n" is ONE `Character` (a single extended grapheme cluster), and
 // it equals neither "\n" nor "\r". So `split(separator: "\n" as Character)`
@@ -11,6 +11,9 @@
 //
 // Stdlib only: no Foundation, no `components(separatedBy:)`, no string-
 // processing module — this compiles to wasm with the rest of RunnerCore.
+//
+// The two trims at the foot of the file are the one copy of what three files
+// each used to carry privately (#1724).
 
 /// Split `s` into lines, keeping empty lines, so that `\n`, `\r\n` and a lone
 /// `\r` each count as exactly one line break. The result always has one more
@@ -46,4 +49,19 @@ func splitLines(_ s: String) -> [String] {
 /// grapheme, which a plain `== "\n" || == "\r"` test misses.
 func isWhitespaceOrLineBreak(_ c: Character) -> Bool {
     c.unicodeScalars.allSatisfy { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+}
+
+/// Trim leading and trailing spaces and tabs only, the way Foundation's
+/// `.whitespaces` would. Line breaks stay, so a caller that works one line at
+/// a time keeps its line.
+func trimHorizontalWhitespace(_ s: String) -> String {
+    let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
+    return String(s.drop(while: isHWS).reversed().drop(while: isHWS).reversed())
+}
+
+/// Trim leading and trailing spaces, tabs and line breaks, the way
+/// Foundation's `.whitespacesAndNewlines` would.
+func trimWhitespaceAndNewlines(_ s: String) -> String {
+    let isWS: (Character) -> Bool = isWhitespaceOrLineBreak
+    return String(s.drop(while: isWS).reversed().drop(while: isWS).reversed())
 }

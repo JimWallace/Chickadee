@@ -53,9 +53,13 @@ enum GitHubTarball {
         try gzipped.write(to: input)
         defer { try? fm.removeItem(at: input) }
         do {
+            // Every child the server launches gets an explicit environment
+            // (`SubprocessEnvironment.swift`); `gzip` needs only PATH, to be
+            // found by name (#1797).
             let result = try await Subprocess.run(
                 .name("gzip"),
                 arguments: ["-dc", input.path],
+                environment: .only(["PATH": EnvironmentSource.all["PATH"] ?? "/usr/bin:/bin"]),
                 output: .data(limit: limit),
                 error: .discarded)
             guard case .exited(0) = result.terminationStatus else { throw GitHubSubmitError.unreadable }

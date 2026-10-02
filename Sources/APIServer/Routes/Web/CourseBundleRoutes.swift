@@ -211,6 +211,7 @@ struct CourseBundleRoutes: RouteCollection {
             sections: sections,
             contentItems: contentItems,
             enrolledUserIDs: enrolledUserIDs,
+            enrollments: enrollments,
             allUsers: Array(allUsers),
             submissions: submissions,
             results: results,
@@ -274,6 +275,10 @@ struct CourseBundleRoutes: RouteCollection {
         }
 
         let enrolledBundleIDs = data.enrolledUserIDs.compactMap { bundleIDs.userBundleIDByUUID[$0] }
+        let bundledEnrollments = data.enrollments.compactMap { e -> BundledEnrollment? in
+            guard let bid = bundleIDs.userBundleIDByUUID[e.userID] else { return nil }
+            return BundledEnrollment(userBundleID: bid, role: e.role)
+        }
 
         let bundledSetups = data.testSetups.compactMap { s -> BundledTestSetup? in
             guard let sid = s.id, let bid = bundleIDs.setupBundleIDByID[sid] else { return nil }
@@ -311,7 +316,11 @@ struct CourseBundleRoutes: RouteCollection {
                 visibility: a.visibility,
                 sortOrder: a.sortOrder,
                 testSetupBundleID: setupBid,
-                sectionBundleID: a.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] }
+                sectionBundleID: a.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] },
+                secretRevealEnabled: a.secretRevealEnabled,
+                passingThresholdPercent: a.passingThresholdPercent,
+                solutionVisibility: a.solutionVisibility,
+                brightspaceSyncExcluded: a.brightspaceSyncExcluded
             )
         }
 
@@ -350,16 +359,10 @@ struct CourseBundleRoutes: RouteCollection {
             exportedAt: Date(),
             exportedBy: caller.username,
             chickadeeVersion: ChickadeeVersion.current,
-            course: BundledCourse(
-                code: course.code, name: course.name,
-                enrollmentMode: course.enrollmentMode,
-                slipDaysEnabled: course.slipDaysEnabled,
-                slipDaysPerStudent: course.slipDaysPerStudent,
-                slipDayExtensionHours: course.slipDayExtensionHours,
-                slipDayReleaseRevealHold: course.slipDayReleaseRevealHold,
-                term: course.term),
+            course: bundledCourse(course),
             users: bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
+            enrollments: bundledEnrollments,
             sections: bundledSections,
             contentItems: bundledContentItems,
             assignments: bundledAssignments,
@@ -373,6 +376,20 @@ struct CourseBundleRoutes: RouteCollection {
     /// attachment metadata. Each attachment's global UUID doubles as its unique
     /// bundle filename (`content/<id>`); the bytes are copied in
     /// writeExportStaging.
+    /// The course row of the manifest: identity, enrollment mode, slip-day
+    /// policy, term, and the course's own authoring guide (#1737).
+    private func bundledCourse(_ course: APICourse) -> BundledCourse {
+        BundledCourse(
+            code: course.code, name: course.name,
+            enrollmentMode: course.enrollmentMode,
+            slipDaysEnabled: course.slipDaysEnabled,
+            slipDaysPerStudent: course.slipDaysPerStudent,
+            slipDayExtensionHours: course.slipDayExtensionHours,
+            slipDayReleaseRevealHold: course.slipDayReleaseRevealHold,
+            term: course.term,
+            mcpInstructions: course.mcpInstructions)
+    }
+
     private func buildBundledContentItems(
         data: ExportData,
         bundleIDs: ExportBundleIDs
@@ -471,6 +488,7 @@ private struct ExportData {
     let sections: [APICourseSection]
     let contentItems: [APICourseContentItem]
     let enrolledUserIDs: [UUID]
+    let enrollments: [APICourseEnrollment]
     let allUsers: [APIUser]
     let submissions: [APISubmission]
     let results: [APIResult]

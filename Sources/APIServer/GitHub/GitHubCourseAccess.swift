@@ -14,25 +14,39 @@ struct GitHubCourseAccess: Sendable {
     let organization: APIGitHubCourseOrganization
     let token: String
     let client: GitHubRepoClient
+    /// A fresh token for the organization's installation, once a refused one
+    /// is dropped from the cache (#1768).
+    let renewToken: @Sendable (Request) async throws -> String
 
     /// Throws `GitHubSubmitError.unavailable` when no App is registered or
     /// the course has no organization bound.
     static func resolve(courseID: UUID, req: Request) async throws -> GitHubCourseAccess {
         guard
-            let app = try await APIGitHubApp.query(on: req.db).first(),
-            let secrets = try? GitHubAppSecrets.load(path: req.application.githubAppSecretsFilePath),
+            let (app, secrets) = try await GitHubAppRegistration.resolve(req: req),
             let organization = try await APIGitHubCourseOrganization.query(on: req.db)
                 .filter(\.$courseID == courseID).first()
         else { throw GitHubSubmitError.unavailable }
         let installationID = organization.installationID
-        let token = try await GitHubSubmissionAccess.installationToken(
-            accountID: organization.orgID, app: app, secrets: secrets, req: req
-        ) { _ in installationID }
-        return GitHubCourseAccess(organization: organization, token: token, client: req.application.githubRepoClient)
+        let orgID = organization.orgID
+        let renew: @Sendable (Request) async throws -> String = { req in
+            try await GitHubSubmissionAccess.installationToken(
+                accountID: orgID, app: app, secrets: secrets, req: req
+            ) { _ in installationID }
+        }
+        let token = try await renew(req)
+        return GitHubCourseAccess(
+            organization: organization, token: token, client: req.application.githubRepoClient, renewToken: renew)
+    }
+
+    /// Runs a GitHub call with the token, and once more with a fresh one when
+    /// GitHub refuses it (#1768).
+    func call<T: Sendable>(_ req: Request, _ body: (_ token: String) async throws -> T) async throws -> T {
+        try await GitHubSubmissionAccess.calling(
+            req, accountID: organization.orgID, token: token, renew: renewToken, body)
     }
 
     func templates(req: Request) async throws -> [GitHubRepository] {
-        try await GitHubSubmissionAccess.calling(req) {
+        try await call(req) { token in
             try await client.templates(token)
                 .sorted { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
         }
@@ -50,7 +64,7 @@ struct GitHubCourseAccess: Sendable {
         template: APIGitHubAssignmentTemplate, name: String, testSetupID: String, userID: UUID,
         login: String, req: Request
     ) async throws -> APIGitHubCourseRepository {
-        let made = try await GitHubSubmissionAccess.calling(req) {
+        let made = try await call(req) { token in
             try await client.generate(token, template.templateFullName, organization.orgLogin, name)
         }
         let row = APIGitHubCourseRepository(
@@ -63,7 +77,7 @@ struct GitHubCourseAccess: Sendable {
 
     /// Invites the student with write access, and records that it worked.
     func invite(_ row: APIGitHubCourseRepository, login: String, req: Request) async throws {
-        try await GitHubSubmissionAccess.calling(req) {
+        try await call(req) { token in
             try await client.addCollaborator(token, row.repoFullName, login)
         }
         row.invited = true
@@ -71,7 +85,7 @@ struct GitHubCourseAccess: Sendable {
     }
 
     func archive(_ row: APIGitHubCourseRepository, req: Request) async throws {
-        try await GitHubSubmissionAccess.calling(req) { try await client.archive(token, row.repoFullName) }
+        try await call(req) { token in try await client.archive(token, row.repoFullName) }
         row.archivedAt = Date()
         try await row.save(on: req.db)
     }

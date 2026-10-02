@@ -556,6 +556,11 @@ func registerMigrations(on app: Application) {
     // (docs/github-submissions.md slice 5). Nullable columns.
     app.migrations.add(AddGitHubCourseRepositoryPushColumns())
 
+    // Indexes for the periodic sweeps, the leaderboard poll and the push
+    // webhook (#1800–#1804). Index only; must follow every `Create*` above
+    // whose table it names.
+    app.migrations.add(CreateSweepAndPollIndexes())
+
     // The year and term of each course offering (docs/course-terms.md).
     // Nullable columns on `courses`; nil = no term recorded.
     app.migrations.add(AddCourseTerm())

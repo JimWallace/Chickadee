@@ -578,6 +578,35 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
+    /// Un-archiving re-enters the unique index over active courses. With an
+    /// active course already holding the same code and term, the toggle
+    /// reports a duplicate and leaves the course archived instead of failing
+    /// on the index (#1777).
+    @Test func unarchiveRefusesACodeAnActiveCourseAlreadyHolds() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let archived = try await makeCourse(code: "DUP101", name: "Old offering", archived: true)
+            _ = try await makeCourse(code: "DUP101", name: "New offering", archived: false)
+            let courseID = try archived.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(
+                cookie, path: "/admin/courses/\(courseID.uuidString)")
+
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/archive",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("error=code_taken") == true)
+                })
+
+            let still = try await APICourse.find(courseID, on: app.db)
+            #expect(still?.isArchived == true)
+        }
+    }
+
     @Test func deleteCourseRemovesRecordsAndFilesForArchivedCourse() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()

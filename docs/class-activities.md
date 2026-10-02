@@ -81,12 +81,15 @@ the first student submission. Creation-time choice is a follow-up.
 work end to end. A kind the runner cannot execute is a silent misroute, not a
 feature, so each arrives with the slice that makes it grade. The opponent axis
 is a type of its own since slice 2: `ActivityOpponentSource` (`none` |
-`supportFile`), read off the kind by the exhaustive `opponentSource`, so a kind
-added without an answer does not compile. Every seam that depends on an
-opponent — the worker's `activity-match` capability, the claim gate, the
-browser-grading refusal, the opponent picker — asks `stagesAnOpponent`, never
-the kind. The aggregation axis is still the one derived fact
-`aggregatesToLeaderboard`; it becomes a type when standings land.
+`supportFile` | `champion` | `classmates` | `paired`), read off the kind by the
+exhaustive `opponentSource`, so a kind added without an answer does not
+compile. Every seam that depends on an opponent — the worker's
+`activity-match` capability, the claim gate, the browser-grading refusal, the
+opponent picker — asks `stagesAnOpponent`, never the kind. The aggregation
+axis is a type too since slice 4: `ActivityAggregation` (`leaderboard` |
+`standings` | `bracket` | `union`), read off the kind by the exhaustive
+`aggregation`; `aggregatesToLeaderboard` is the one-line derived fact the
+leaderboard page keeps.
 
 ### Manifest block (Core, `TestProperties.activity`)
 
@@ -246,7 +249,8 @@ different reason now: worker grading is forced by the opponent itself, and
   opponent_submission_id nullable, opponent_identity, round nullable, score,
   metric, won, seed, created_at, completed_at nullable). Unique on
   (submission_id, opponent_identity) — the identity rather than the nullable
-  submission ID, so a bot opponent keys too. Slice 4 fills `round`.
+  submission ID, so a bot opponent keys too. Slice 5 fills `round`; a round
+  robin's rows carry none.
 - `activity_champions` (slice 3): (test_setup_id unique, user_id, submission_id,
   crowned_at, defences). FK to `users`, cascade.
 - `activity_standings` (slice 4): (test_setup_id, user_id, submission_id,
@@ -283,8 +287,10 @@ Additive migrations only; no column changes to existing tables.
   for a round robin (`standingSignals`) and passes them in. Anywhere they
   are not loaded the condition is unmet, and a class goal carrying one is
   refused by `isSweepEvaluableClassGoal`, so the sweep never sees them.
-- `isSweepEvaluableClassGoal` admits exactly three shapes today. Extend the
-  admitted list one shape at a time, each with its own test.
+- `isSweepEvaluableClassGoal` admits exactly four shapes today (no
+  conditions, a single `grade`, a single `itemsCovered`, a single
+  `classCoverage`). Extend the admitted list one shape at a time, each with
+  its own test.
 
 ### King of the hill (slice 3)
 
@@ -372,7 +378,9 @@ classmate, in submission-id order. Latest by submission time, so a
 resubmission by B changes what A's NEXT job plays and never what A's landed
 job played. When no classmate has submitted yet, the challenger plays the
 bundled bot on the single-opponent path (or nobody, when there is no bot), so
-the first submitter still has a match and a row. The claim opens one
+the first submitter still has a match and a row. A match against nobody
+counts nothing in the standings: the row completes, but the student has no
+standings row until they play a classmate or the bot. The claim opens one
 `match_results` row per opponent — the same open-at-claim, complete-at-ingest
 shape as the hill — and the job carries `Job.opponents`, a list of the same
 structural `JobOpponent` the hill's `Job.opponent` is; a runner that predates
@@ -720,35 +728,35 @@ errors rather than passes.
 
 - `Sources/Core/ClassActivity.swift`, `Sources/Core/TestProperties.swift`
   (`activity`), `Sources/RunnerCore/OutputInterpretation.swift` (`metric`)
-- `Sources/APIServer/Helpers/LeaderboardEntries.swift`,
+- `Sources/APIServer/Services/LeaderboardEntries.swift`,
   `Sources/APIServer/Models/APILeaderboardEntry.swift`,
   `Sources/APIServer/Routes/Web/WebRoutes+Leaderboard.swift`,
   `Resources/Views/leaderboard.leaf`
 - `Sources/APIServer/Services/ActivityAuthoring.swift` (the lock and the
   seeded record, shared by the web edit page and `set_activity`)
-- `Sources/APIServer/Helpers/ClassAchievements.swift`
+- `Sources/APIServer/Services/ClassAchievements.swift`
   (`awardHighestMetricRecords`, `awardChampionRecords`,
   `awardTournamentWinnerRecords`), `Sources/Core/Achievement.swift`
-- `Sources/APIServer/Helpers/ActivityMatches.swift` (`chooseOpponent`,
+- `Sources/APIServer/Services/ActivityMatches.swift` (`chooseOpponent`,
   `chooseClassmates`, `openMatch`, `recordActivityMatch`, the standings),
   `Sources/APIServer/Models/APIMatchResult.swift`, `APIActivityChampion.swift`,
   `APIActivityStanding.swift`
 - `Sources/Core/JobOpponent.swift` (`JobOpponent`, `MatchReport`,
   `matchOutcome`), `Sources/Worker/OpponentStaging.swift`,
   `Sources/Worker/MatrixAggregation.swift`
-- `Sources/APIServer/Helpers/ActivityUnion.swift` (`unionTally`, both halves
+- `Sources/APIServer/Services/ActivityUnion.swift` (`unionTally`, both halves
   of a union kind's reading)
 - `Sources/Core/Tournament.swift` (`TournamentSchedule`, `TournamentPairing`),
-  `Sources/APIServer/Helpers/Tournaments.swift` (start, enqueue, pair, land,
+  `Sources/APIServer/Services/Tournaments.swift` (start, enqueue, pair, land,
   advance), `Sources/APIServer/Models/APITournamentRun.swift`,
   `Sources/APIServer/MCP/Tools/RunTournamentTool.swift`
 - `docs/collaborative-class-assignments.md`,
-  `Sources/APIServer/Helpers/ClassItemCoverage.swift` (the ingest-time
+  `Sources/APIServer/Services/ClassItemCoverage.swift` (the ingest-time
   pattern this follows)
 - `docs/student-avatars.md`, `Sources/APIServer/Services/AvatarStore.swift`
 - `Sources/Core/JobOpponent.swift`, `Sources/Worker/OpponentStaging.swift`,
   `Sources/APIServer/Compatibility/RunnerActivityGate.swift` (slice 2)
-- `Sources/APIServer/Helpers/ActivityMatches.swift`,
+- `Sources/APIServer/Services/ActivityMatches.swift`,
   `Sources/APIServer/Models/APIMatchResult.swift`,
   `Sources/APIServer/Models/APIActivityChampion.swift` (slice 3)
 - `docs/runner-capability-profiles.md`,

@@ -11,9 +11,13 @@ import Foundation
 /// On a cache hit the cached directory is **copied** into a fresh scratch
 /// location that the caller owns and is responsible for deleting.
 ///
-/// Cache entries are stored at `<cacheRoot>/<testSetupID>/prepared/`.
-/// The default root is `/tmp/chickadee-runner-cache` (overridable via
-/// `--test-setup-cache-dir` or `RUNNER_TEST_SETUP_CACHE_DIR`).
+/// Cache entries are stored at `<cacheRoot>/<key>/prepared/`, where the key
+/// is `testSetupCacheKey(for:)`: the setup id plus a 16-digit digest of its
+/// URL and manifest, so an edited suite is a new entry. The root doubles as
+/// the runner's working directory (`WorkerCommand`): the per-job scratch
+/// copies and the job workspaces live beside the entries. The default root
+/// is `/tmp/chickadee-runner-cache`, set by `--test-setup-cache-dir` or
+/// `RUNNER_TEST_SETUP_CACHE_DIR`.
 actor TestSetupCache {
 
     static let defaultMaxEntries = 16

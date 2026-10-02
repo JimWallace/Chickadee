@@ -40,17 +40,25 @@ enum JavaPersonalizationDriver {
         // `#include`d as C++ does, because Java has no textual inclusion: each
         // is its own compilation unit and its classes land on the classpath for
         // the driver to call.
-        let sources = (["CkPersonalizeDriver.java"] + supportFiles)
+        let sources =
+            supportFiles
             .map { "'\($0.replacingOccurrences(of: "'", with: "'\\''"))'" }
             .joined(separator: " ")
+        // Compile beside the driver script, in the evaluator's private temp
+        // directory, never in the support directory this runs in: the driver
+        // source and the class files left there were named on the NEXT
+        // evaluation's javac line, and two students' evaluations raced on
+        // one set of classes (#1788). The support files are still named by
+        // their cwd-relative paths; every class lands in the build directory.
         return """
             #!/bin/sh
             # Auto-generated personalization driver. Do not edit.
-            cat > CkPersonalizeDriver.java <<'CHICKADEE_GENERATED_SOURCE'
+            ck_build="$(dirname "$0")"
+            cat > "$ck_build/CkPersonalizeDriver.java" <<'CHICKADEE_GENERATED_SOURCE'
             \(program)
             CHICKADEE_GENERATED_SOURCE
-            javac -encoding UTF-8 -d . \(sources) 1>&2 || exit 3
-            exec java -cp . CkPersonalizeDriver
+            javac -encoding UTF-8 -d "$ck_build" "$ck_build/CkPersonalizeDriver.java" \(sources) 1>&2 || exit 3
+            exec java -cp "$ck_build" CkPersonalizeDriver
             """ + "\n"
     }
 

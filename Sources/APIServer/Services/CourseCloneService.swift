@@ -100,26 +100,38 @@ enum CourseCloneService {
         }
 
         var assignmentCount = 0
-        for (index, assignment) in assignments.enumerated() {
-            guard let setup = setupsByID[assignment.testSetupID] else { continue }
-            let authored = try await AssignmentAuthoringService.cloneAssignment(
-                source: assignment, sourceSetup: setup, newTitle: assignment.title,
-                targetCourseID: newCourseID, directories: directories, on: db)
-            let copy = authored.assignment
-            copy.sortOrder = assignment.sortOrder ?? index
-            copy.sectionID = assignment.sectionID.flatMap { sectionIDMap[$0] }
-            copy.secretRevealEnabled = assignment.secretRevealEnabled
-            copy.passingThresholdPercent = assignment.passingThresholdPercent
-            copy.brightspaceSyncExcluded = assignment.brightspaceSyncExcluded
-            try await copy.save(on: db)
-            assignmentCount += 1
-        }
+        // The caller runs the clone inside a transaction, so a failure at the
+        // k-th copy rolls back the rows of the first k-1. Their files would
+        // stay on disk; this removes them before the error leaves (#1743).
+        var createdPaths: [String] = []
+        do {
+            for (index, assignment) in assignments.enumerated() {
+                guard let setup = setupsByID[assignment.testSetupID] else { continue }
+                let authored = try await AssignmentAuthoringService.cloneAssignment(
+                    source: assignment, sourceSetup: setup, newTitle: assignment.title,
+                    targetCourseID: newCourseID, directories: directories, on: db)
+                createdPaths += authored.createdPaths
+                let copy = authored.assignment
+                // The three per-assignment policies came along in cloneAssignment.
+                copy.sortOrder = assignment.sortOrder ?? index
+                copy.sectionID = assignment.sectionID.flatMap { sectionIDMap[$0] }
+                try await copy.save(on: db)
+                assignmentCount += 1
+            }
 
-        for item in contentItems {
-            try await copyContentItem(
-                item, toCourse: newCourseID,
-                sectionID: item.sectionID.flatMap { sectionIDMap[$0] },
-                contentFilesDirectory: contentFilesDirectory, on: db)
+            for item in contentItems {
+                if let copiedDirectory = try await copyContentItem(
+                    item, toCourse: newCourseID,
+                    sectionID: item.sectionID.flatMap { sectionIDMap[$0] },
+                    contentFilesDirectory: contentFilesDirectory, on: db)
+                {
+                    createdPaths.append(copiedDirectory)
+                }
+            }
+        } catch {
+            let fm = FileManager.default
+            for path in createdPaths { try? fm.removeItem(atPath: path) }
+            throw error
         }
 
         return CourseCloneResult(course: newCourse, assignmentCount: assignmentCount)
@@ -127,24 +139,28 @@ enum CourseCloneService {
 
     /// Copies one content item and its attachment files. Attachments keep
     /// their ids: a file lives at `<itemID>/<attachmentID>`, so a copy under
-    /// the new item id needs no rewrite of the metadata.
+    /// the new item id needs no rewrite of the metadata. Returns the copied
+    /// attachment directory, or nil when the item has none to copy.
     private static func copyContentItem(
         _ item: APICourseContentItem, toCourse courseID: UUID, sectionID: UUID?,
         contentFilesDirectory: String, on db: Database
-    ) async throws {
+    ) async throws -> String? {
         let copy = APICourseContentItem(
             id: UUID(), courseID: courseID, sectionID: sectionID, sortOrder: item.sortOrder,
             title: item.title, kind: item.kind, itemDescription: item.itemDescription,
             links: item.links, attachments: item.attachments, updatedLabel: item.updatedLabel,
             isPublished: item.isPublished)
         let fm = FileManager.default
+        var copiedDirectory: String?
         if let oldID = item.id, let newID = copy.id, !item.attachments.isEmpty {
             let sourceDir = contentFilesDirectory + oldID.uuidString
             if fm.fileExists(atPath: sourceDir) {
                 try fm.createDirectory(atPath: contentFilesDirectory, withIntermediateDirectories: true)
                 try fm.copyItem(atPath: sourceDir, toPath: contentFilesDirectory + newID.uuidString)
+                copiedDirectory = contentFilesDirectory + newID.uuidString
             }
         }
         try await copy.save(on: db)
+        return copiedDirectory
     }
 }

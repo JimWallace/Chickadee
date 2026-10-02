@@ -47,22 +47,8 @@ func setManifestGradingMode(
     guard let parsed = GradingMode(rawValue: mode) else {
         throw AppError.badRequest(reason: "Unknown grading mode \"\(mode)\".")
     }
-    if parsed == .browser,
-        currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue
-    {
-        throw AppError.badRequest(
-            reason: uploadModeGradingConflictMessage)
-    }
-    if parsed == .browser,
-        !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
-    {
-        throw AppError.badRequest(reason: graderOnlyGradingConflictMessage)
-    }
-    // And for an activity that stages an opponent: the opponent lives in a
-    // directory only the native worker creates, so a browser-graded match
-    // would run with nobody on the other side.
-    if parsed == .browser, currentManifestActivityStagesAnOpponent(setup.manifest) {
-        throw AppError.badRequest(reason: activityOpponentGradingConflictMessage)
+    if let violation = ManifestCoherence.violation(introducedBy: { $0.gradingMode = parsed }, in: setup.manifest) {
+        throw AppError.badRequest(reason: violation)
     }
     if currentManifestGradingMode(setup.manifest) != mode {
         try await mutateManifest(setup: setup, on: db) { props in
@@ -138,13 +124,9 @@ func currentManifestLanguage(_ manifest: String?) -> String? {
 /// Sets the test setup's recorded `language` to `language` when it differs.
 /// Returns the effective language.
 ///
-/// The recorded field is normally a *memo* of what resolution derived from the
-/// content (`manifestWithRederivedLanguage`), which is why nothing else writes
-/// it directly. An upload-only language is the case that memo cannot reach: with
-/// no editor kernel there is no notebook kernelspec to imply it, and C++'s
-/// generated tests are extension-free `.sh` wrappers by design — leaving a
-/// declaration as the only signal there is. Hence this setter, and hence its two
-/// guards.
+/// The recorded field is the author's declaration, and this setter is the one
+/// place a route or tool changes it: `AssignmentLanguage.resolve(manifest:)`
+/// reads it and nothing derives it from content. Hence its two guards.
 ///
 /// Refuses an upload-only language while the setup is still in notebook mode:
 /// the mirror of `setManifestSubmissionMode`'s guard, so the incoherent
@@ -164,10 +146,8 @@ func setManifestLanguage(
     }
     let current = currentManifestLanguage(setup.manifest)
     guard current != language else { return language }
-    if requiresUploadOnlySubmission(parsed),
-        currentManifestSubmissionMode(setup.manifest) != SubmissionMode.uploadOnly.rawValue
-    {
-        throw AppError.badRequest(reason: requiresUploadOnlyMessage(parsed))
+    if let violation = ManifestCoherence.violation(introducedBy: { $0.language = parsed }, in: setup.manifest) {
+        throw AppError.badRequest(reason: violation)
     }
     if manifestHasGeneratedScripts(setup.manifest) {
         throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
@@ -309,20 +289,8 @@ func setManifestSubmissionMode(
     guard let parsed = SubmissionMode(rawValue: mode) else {
         throw AppError.badRequest(reason: "Unknown submission mode \"\(mode)\".")
     }
-    if parsed == .uploadOnly,
-        currentManifestGradingMode(setup.manifest) == GradingMode.browser.rawValue
-    {
-        throw AppError.badRequest(
-            reason: uploadModeGradingConflictMessage)
-    }
-    // The coherence rule from the other direction: an instructor cannot flip
-    // an upload-only language back to the notebook workflow it does not have.
-    // Asked of `editorSupport` rather than spelled `== .cpp`, which is what let
-    // Racket through here.
-    if parsed == .notebook,
-        let language = manifestRequiresUploadOnlySubmission(setup.manifest)
-    {
-        throw AppError.badRequest(reason: requiresUploadOnlyMessage(language))
+    if let violation = ManifestCoherence.violation(introducedBy: { $0.submissionMode = parsed }, in: setup.manifest) {
+        throw AppError.badRequest(reason: violation)
     }
     if currentManifestSubmissionMode(setup.manifest) != mode {
         try await mutateManifest(setup: setup, on: db) { props in

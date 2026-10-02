@@ -169,7 +169,7 @@ enum SolutionNotebookExtractor {
         }
         // Exhaustive so a seventh language cannot inherit another's extractor —
         // the `isRNotebook(nb) ? .r : .python` shape one size smaller.
-        let extracted: ExtractedRNotebook
+        let extracted: ExtractedVerbatimNotebook
         switch language {
         case .r: extracted = extractR(cells: inputCells, filename: "solution.ipynb")
         case .lua: extracted = extractLua(cells: inputCells, filename: "solution.ipynb")

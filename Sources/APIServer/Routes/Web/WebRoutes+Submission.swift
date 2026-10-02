@@ -324,19 +324,15 @@ extension WebRoutes {
             .sort(\.$submittedAt, .descending)
             .all()
 
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // The same "highest grade wins" fold, and the same row builder, as the
+        // two staff history pages (#1709): a student and their TA read one grade.
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissions.compactMap(\.id), on: req.db)
+        let historyRows = assignmentSubmissionHistoryRows(
+            submissions: submissions, bestPercentBySubmissionID: bestPercentBySubmissionID, fmt: fmt)
 
-        let rows = submissions.map { submission -> SubmissionHistoryRow in
-            let subID = submission.id ?? ""
-            let gradeText: String
-            if let result = preferredResultBySubmissionID[subID],
-                let pct = result.gradePercentValue
-            {
-                gradeText = "\(pct)%"
-            } else {
-                gradeText = "—"
-            }
+        let rows = zip(submissions, historyRows).map { submission, history -> SubmissionHistoryRow in
+            let subID = history.submissionID
             let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
             let nameExt = (submission.filename ?? "").lowercased()
             let canOpenInNotebook = pathExt == "ipynb" || nameExt.hasSuffix(".ipynb")
@@ -345,11 +341,7 @@ extension WebRoutes {
                 ? "/testsetups/\(setupID)/notebook?submissionID=\(subID)"
                 : nil
             return SubmissionHistoryRow(
-                submissionID: subID,
-                attemptNumber: submission.attemptNumber ?? 1,
-                status: submission.status,
-                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                gradeText: gradeText,
+                history: history,
                 submissionFilename: submission.filename,
                 canOpenInNotebook: canOpenInNotebook,
                 openInNotebookURL: openInNotebookURL
