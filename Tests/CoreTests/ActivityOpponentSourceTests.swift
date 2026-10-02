@@ -84,7 +84,7 @@ import Testing
     /// bot is chosen: the kind itself is worker-only.
     @Test func theHillKindStagesAChampionWithOrWithoutABot() {
         #expect(ActivityKind.kingOfTheHill.opponentSource == .champion)
-        #expect(ActivityKind.kingOfTheHill.aggregatesToLeaderboard)
+        #expect(ActivityKind.kingOfTheHill.aggregation == .leaderboard)
         #expect(ClassActivity(kind: .kingOfTheHill).stagesAnOpponent)
         #expect(ClassActivity(kind: .kingOfTheHill).takesAnOpponentFile)
         #expect(ClassActivity(kind: .kingOfTheHill, opponentFile: "bot.py").stagesAnOpponent)
@@ -119,7 +119,6 @@ import Testing
     @Test func theRoundRobinPlaysClassmatesAndKeepsStandings() {
         #expect(ActivityKind.roundRobin.opponentSource == .classmates)
         #expect(ActivityKind.roundRobin.aggregation == .standings)
-        #expect(ActivityKind.roundRobin.aggregatesToLeaderboard)
         #expect(ClassActivity(kind: .roundRobin).stagesAnOpponent)
         #expect(ClassActivity(kind: .roundRobin).takesAnOpponentFile)
     }
@@ -128,7 +127,6 @@ import Testing
     /// kinds keep the metric ranking they shipped with.
     @Test(arguments: ActivityKind.allCases)
     func everyKindAnswersTheAggregationAxis(kind: ActivityKind) {
-        #expect(kind.aggregatesToLeaderboard)
         switch kind.opponentSource {
         case .classmates: #expect([.standings, .union].contains(kind.aggregation))
         case .paired: #expect(kind.aggregation == .bracket)
@@ -156,7 +154,6 @@ import Testing
     @Test func theTestsAndCodeKindPlaysClassmatesAndReadsAUnion() {
         #expect(ActivityKind.testsVersusImplementations.opponentSource == .classmates)
         #expect(ActivityKind.testsVersusImplementations.aggregation == .union)
-        #expect(ActivityKind.testsVersusImplementations.aggregatesToLeaderboard)
         #expect(ClassActivity(kind: .testsVersusImplementations).stagesAnOpponent)
         #expect(
             ActivityKind.testsVersusImplementations.opponentSource.requiredRunnerCapability

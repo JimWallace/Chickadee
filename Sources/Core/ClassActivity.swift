@@ -183,17 +183,6 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// Whether this kind has a ranking page at all — every kind so far; a bug
-    /// hunt's union aggregation would not. Which table that page shows is
-    /// `aggregation`.
-    public var aggregatesToLeaderboard: Bool {
-        switch self {
-        case .beatTheInstructor, .bestMetric, .kingOfTheHill, .roundRobin, .elimination,
-            .testsVersusImplementations:
-            return true
-        }
-    }
-
     /// The aggregation axis. Exhaustive for the same reason `opponentSource`
     /// is: a kind added without an answer does not compile.
     public var aggregation: ActivityAggregation {
@@ -437,12 +426,12 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public var leaderboardVisibleToStudents: Bool { leaderboardVisibility == .visible }
 
     /// The leaderboard page for this activity when the viewer may open it:
-    /// staff always, a student once it is visible. nil for a kind with no
-    /// ranking page. The one rule every link to the board asks, so the
+    /// staff always, a student once it is visible. Every kind has a ranking
+    /// page (which table it shows is `kind.aggregation`), so visibility is the
+    /// only question. The one rule every link to the board asks, so the
     /// dashboards and the submission page cannot disagree about who sees it.
     public func leaderboardPath(testSetupID: String, viewerIsStaff: Bool) -> String? {
-        guard kind.aggregatesToLeaderboard, viewerIsStaff || leaderboardVisibleToStudents
-        else { return nil }
+        guard viewerIsStaff || leaderboardVisibleToStudents else { return nil }
         return "/testsetups/\(testSetupID)/leaderboard"
     }
 
