@@ -103,12 +103,66 @@ private struct PassthroughResponder: AsyncResponder {
                 },
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin")
+                    #expect(res.headers.first(name: .location) == "/admin/users")
                 })
 
             let updated = try await APIUser.find(userID, on: app.db)
             #expect(updated?.role == "admin")
 
+        }
+    }
+
+    @Test func changeRoleRefusesTheAdminsOwnAccount() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let me = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "admin_routes").first())
+            let myID = try me.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+
+            try await app.asyncTest(
+                .POST, "/admin/users/\(myID.uuidString)/role",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["role": "user", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+            let unchanged = try await APIUser.find(myID, on: app.db)
+            #expect(unchanged?.role == "admin")
+        }
+    }
+
+    @Test func usersListDisablesTheRoleMenuOnTheViewersOwnRow() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let me = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "admin_routes").first())
+            let other = try await makeUser(username: "role_other", role: "user")
+            let myMenu = "id=\"role-\(try me.requireID().uuidString)\""
+            let otherMenu = "id=\"role-\(try other.requireID().uuidString)\""
+
+            /// The opening `<select …>` tag that carries `marker`.
+            func selectTag(in body: String, marker: String) -> String? {
+                guard let start = body.range(of: marker),
+                    let end = body[start.upperBound...].firstIndex(of: ">")
+                else { return nil }
+                return String(body[start.lowerBound..<end])
+            }
+
+            try await app.asyncTest(
+                .GET, "/admin/users-data?fragment=rows",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    let body = String(buffer: res.body)
+                    let mine = selectTag(in: body, marker: myMenu)
+                    let theirs = selectTag(in: body, marker: otherMenu)
+                    #expect(mine?.contains("disabled") == true)
+                    #expect(theirs != nil)
+                    #expect(theirs?.contains("disabled") == false)
+                })
         }
     }
 

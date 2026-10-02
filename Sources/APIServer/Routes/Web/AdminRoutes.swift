@@ -142,7 +142,7 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func usersPage(req: Request) async throws -> View {
-        let userRows = try await fetchUserRows(on: req.db)
+        let userRows = try await fetchUserRows(on: req.db, viewerID: req.auth.get(APIUser.self)?.id)
         let ctx = AdminUsersContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "users",
@@ -166,7 +166,7 @@ struct AdminRoutes: RouteCollection {
     /// unchanged for other consumers.
     @Sendable
     func usersData(req: Request) async throws -> Response {
-        let rows = try await fetchUserRows(on: req.db)
+        let rows = try await fetchUserRows(on: req.db, viewerID: req.auth.get(APIUser.self)?.id)
         guard req.query[String.self, at: "fragment"] == "rows" else {
             return try await rows.encodeResponse(for: req)
         }
@@ -177,7 +177,7 @@ struct AdminRoutes: RouteCollection {
     /// Loads every user, ordered most-recently-seen first (NULL last_seen
     /// rows sink to the bottom, then username, then join date), and maps
     /// them to the wire/template row shape.
-    private func fetchUserRows(on db: Database) async throws -> [AdminUserRow] {
+    private func fetchUserRows(on db: Database, viewerID: UUID?) async throws -> [AdminUserRow] {
         let users = try await APIUser.query(on: db)
             .all()
             .sorted { lhs, rhs in
@@ -221,7 +221,8 @@ struct AdminRoutes: RouteCollection {
                     avatar: AvatarPresentation(
                         for: spec, size: .roster, accessibility: .decorative,
                         isStaff: user.id.map(staff.contains) ?? false),
-                    hasAvatar: true))
+                    hasAvatar: true,
+                    isCurrentUser: user.id != nil && user.id == viewerID))
         }
         return rows
     }
@@ -385,6 +386,12 @@ struct AdminRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
+        // An admin who demotes themselves may leave no way back. Another admin
+        // must make the change, so at least one admin always remains.
+        if try req.auth.require(APIUser.self).id == uuid {
+            throw AppError.forbidden(action: "change your own role")
+        }
+
         let body = try req.content.decode(RoleBody.self)
         // The deployment role is user|admin now (#417 Slice G2); `mcp` is set only
         // at agent provisioning, never toggled here, and the retired
@@ -409,7 +416,7 @@ struct AdminRoutes: RouteCollection {
             ],
             on: req
         )
-        return req.redirect(to: "/admin")
+        return req.redirect(to: "/admin/users")
     }
 
     // MARK: - POST /admin/runner-autostart
