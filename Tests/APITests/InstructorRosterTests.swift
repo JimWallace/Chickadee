@@ -116,7 +116,7 @@ import VaporTesting
             let stored = try #require(
                 try await APIUser.find(student.requireID(), on: app.db)?.avatarSpecJSON)
             let spec = try #require(AvatarStore.decode(stored))
-            let presentation = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative)
+            let presentation = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative, isStaff: false)
             #expect(html.contains("--av-cap: var(\(presentation.capToken))"))
             #expect(html.contains("--av-backdrop: var(\(presentation.backdropToken))"))
         }
