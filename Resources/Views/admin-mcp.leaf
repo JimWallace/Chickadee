@@ -98,7 +98,7 @@ MCP
                 <td class="item-tile-cell"><span class="item-tile" data-kind="notebook"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span></td>
                 <td class="item-main">
                     <div class="item-title"><code>#(account.username)</code></div>
-                    <div class="item-details#if(account.coursesText == ""): item-details--danger#endif">created <span class="js-relative-time" data-iso="#(account.createdAt)">#(account.createdAt)</span> · #if(account.coursesText == ""):No course access#else:<code>#(account.coursesText)</code>#endif</div>
+                    <div class="item-details#if(account.coursesText == ""): item-details--danger#endif">created <span class="js-relative-time" data-iso="#(account.createdAt)">#(account.createdAt)</span> · #if(account.coursesText == ""):No course access#else:#(account.coursesText)#endif</div>
                 </td>
                 <td class="item-actions-td">
                     <div class="assignment-actions-cell">
@@ -138,7 +138,7 @@ MCP
                                     <label class="visually-hidden" for="enroll-#(account.id)">Enrol #(account.username) in a course</label>
                                     <select id="enroll-#(account.id)" name="courseID" class="form-input">
                                         #for(c in account.enrollableCourses):
-                                        <option value="#(c.id)">#(c.code)</option>
+                                        <option value="#(c.id)">#(c.code)#if(c.termLabel): #(c.termLabel)#endif</option>
                                         #endfor
                                     </select>
                                     <button class="btn action-btn" type="submit">Enrol</button>
@@ -148,7 +148,7 @@ MCP
                                 <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll">
                                     #csrfFormField()
                                     <input type="hidden" name="courseID" value="#(c.id)">
-                                    <button class="row-menu-item" type="submit" role="menuitem">Remove from #(c.code)</button>
+                                    <button class="row-menu-item" type="submit" role="menuitem">Remove from #(c.code)#if(c.termLabel): #(c.termLabel)#endif</button>
                                 </form>
                                 #endfor
                                 <form method="post" action="/admin/mcp/accounts/#(account.id)/delete"

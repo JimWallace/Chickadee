@@ -134,10 +134,14 @@ extension AdminRoutes {
             .filter(\.$role == UserRole.mcp.rawValue)
             .sort(\.$username)
             .all()
-        let courses = try await APICourse.query(on: req.db).sort(\.$code).all()
-        let courseByID: [UUID: APICourse] = Dictionary(
-            courses.compactMap { course in course.id.map { ($0, course) } },
-            uniquingKeysWith: { first, _ in first })
+        // Newest term first, as every course list sorts (`courseListPrecedes`);
+        // each account's enrolled courses keep this order.
+        let courses = try await APICourse.query(on: req.db).all().sorted(by: courseListPrecedes)
+        let allCourses = courses.compactMap { course -> AdminMCPCourseRef? in
+            guard let id = course.id else { return nil }
+            return AdminMCPCourseRef(
+                id: id.uuidString, code: course.code, name: course.name, termLabel: course.term?.displayName)
+        }
 
         // Enrollments for the mcp accounts (batch), grouped per user.
         let mcpUserIDs = mcpUsers.compactMap(\.id)
@@ -145,27 +149,21 @@ extension AdminRoutes {
             mcpUserIDs.isEmpty
             ? []
             : try await APICourseEnrollment.query(on: req.db).filter(\.$userID ~~ mcpUserIDs).all()
-        var enrolledByUser: [UUID: [AdminMCPCourseRef]] = [:]
+        var enrolledIDsByUser: [UUID: Set<String>] = [:]
         for enrollment in enrollments {
-            guard let course = courseByID[enrollment.$course.id], let courseID = course.id else { continue }
-            enrolledByUser[enrollment.userID, default: []].append(
-                AdminMCPCourseRef(id: courseID.uuidString, code: course.code, name: course.name))
+            enrolledIDsByUser[enrollment.userID, default: []].insert(enrollment.$course.id.uuidString)
         }
 
-        let allCourses = courses.compactMap { course -> AdminMCPCourseRef? in
-            guard let id = course.id else { return nil }
-            return AdminMCPCourseRef(id: id.uuidString, code: course.code, name: course.name)
-        }
         let accounts = mcpUsers.compactMap { user -> AdminMCPAccountRow? in
             guard let id = user.id else { return nil }
-            let enrolled = (enrolledByUser[id] ?? []).sorted { $0.code < $1.code }
-            let enrolledIDs = Set(enrolled.map(\.id))
+            let enrolledIDs = enrolledIDsByUser[id] ?? []
+            let enrolled = allCourses.filter { enrolledIDs.contains($0.id) }
             return AdminMCPAccountRow(
                 id: id.uuidString,
                 username: user.username,
                 createdAt: user.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
                 enrolledCourses: enrolled,
-                coursesText: enrolled.map(\.code).joined(separator: " · "),
+                coursesText: enrolled.map(\.label).joined(separator: " · "),
                 enrollableCourses: allCourses.filter { !enrolledIDs.contains($0.id) })
         }
 

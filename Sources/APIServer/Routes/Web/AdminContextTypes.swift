@@ -328,6 +328,11 @@ struct AdminMCPCourseRef: Encodable {
     let id: String
     let code: String
     let name: String
+    /// The offering's term, so two offerings of one code can be told apart.
+    let termLabel: String?
+
+    /// The code and term, "CS135 Fall 2026", for text built in Swift.
+    var label: String { termLabel.map { "\(code) \($0)" } ?? code }
 }
 
 struct AdminMCPAccountRow: Encodable {
@@ -397,6 +402,8 @@ struct AdminUserCourseRow: Encodable {
     let id: String
     let code: String
     let name: String
+    /// The offering's term, so two offerings of one code can be told apart.
+    let termLabel: String?
 }
 
 struct AdminCourseDetailContext: Encodable {

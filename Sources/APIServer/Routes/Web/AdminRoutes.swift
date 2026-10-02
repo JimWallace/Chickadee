@@ -559,8 +559,8 @@ struct AdminRoutes: RouteCollection {
 
         let allCourses = try await APICourse.query(on: req.db)
             .filter(\.$isArchived == false)
-            .sort(\.$code)
             .all()
+            .sorted(by: courseListPrecedes)
 
         let enrollments = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$userID == userID)
@@ -571,15 +571,17 @@ struct AdminRoutes: RouteCollection {
 
         let enrolledRows =
             enrollments
-            .compactMap { e -> AdminUserCourseRow? in
-                guard let id = e.course.id else { return nil }
-                return AdminUserCourseRow(id: id.uuidString, code: e.course.code, name: e.course.name)
+            .map(\.course)
+            .sorted(by: courseListPrecedes)
+            .compactMap { course -> AdminUserCourseRow? in
+                guard let id = course.id else { return nil }
+                return AdminUserCourseRow(
+                    id: id.uuidString, code: course.code, name: course.name, termLabel: course.term?.displayName)
             }
-            .sorted { $0.code < $1.code }
 
         let availableRows = allCourses.compactMap { c -> AdminUserCourseRow? in
             guard let id = c.id, !enrolledIDs.contains(id) else { return nil }
-            return AdminUserCourseRow(id: id.uuidString, code: c.code, name: c.name)
+            return AdminUserCourseRow(id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName)
         }
 
         return try await req.view.render(

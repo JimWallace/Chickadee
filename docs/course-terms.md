@@ -107,8 +107,8 @@ The Core type, the migration, the model accessor, and tests
   is always "CS135 Fall 2026 — Name"; the course tab uses "CS135 F26". The
   places: the course tabs and the instructor switcher, the admin courses
   table (a sortable Term column), the admin course page, the import result,
-  the retention page, the LTI bind picker, and the enrollment and account
-  pages. Course lists sort newest term first, then courses with no term,
+  the retention page, the LTI bind picker, the enrollment and account
+  pages, and the course lists on the admin user and MCP pages (#1783). Course lists sort newest term first, then courses with no term,
   then by code (`courseListPrecedes`). With no terms recorded, this is the
   old code order.
 
