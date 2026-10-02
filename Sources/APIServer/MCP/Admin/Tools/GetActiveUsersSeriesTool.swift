@@ -3,7 +3,7 @@
 // Read tool: the time-series data behind the admin dashboard's "Active Users"
 // chart — distinct active users per time bucket over a trailing window.  Wraps
 // the same builder the dashboard polls (`GET /admin/activity`,
-// `ActivityChartService.chartData`).  Returns per-bucket DISTINCT COUNTS only —
+// `UserActivityChartService.chartData`).  Returns per-bucket DISTINCT COUNTS only —
 // never a user identifier.
 
 import Core
@@ -53,6 +53,6 @@ struct GetActiveUsersSeriesTool: DiagnosticTool {
             window = .day
         }
 
-        return try await ActivityChartService.chartData(window: window, on: context.db)
+        return try await UserActivityChartService.chartData(window: window, on: context.db)
     }
 }

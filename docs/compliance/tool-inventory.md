@@ -177,7 +177,7 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 | `get_deployment_info` | static config (DB-free) | clean |
 | `get_deploy_status` / `get_deploy_history` | deployer status/history files | clean |
 | `get_metrics_snapshot` / `get_metrics_card_series` / `get_metrics_timeseries` | dashboard aggregate builders | aggregates only |
-| `get_active_users_series` | `ActivityChartService` | distinct counts per bucket only |
+| `get_active_users_series` | `UserActivityChartService` | distinct counts per bucket only |
 | `get_instructor_card_series` | `instructorCardSeries` (one course) | per-bucket counts only; PII-tested |
 | `get_queue_state` | submissions table | counts/ages only |
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |

@@ -1,4 +1,4 @@
-// APIServer/Services/ActivityChartService.swift
+// APIServer/Services/UserActivityChartService.swift
 //
 // Aggregates `user_activity_events` into the bar-chart series shown on the
 // admin dashboard: "distinct active users per time bucket" over a trailing
@@ -74,7 +74,7 @@ struct ActivityChartData: Content {
     let buckets: [ActivityBucket]
 }
 
-enum ActivityChartService {
+enum UserActivityChartService {
     /// Builds the activity series for `window`, ending at `now`.
     static func chartData(
         window: ActivityWindow,

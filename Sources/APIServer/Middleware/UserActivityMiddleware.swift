@@ -63,7 +63,7 @@ struct UserActivityMiddleware: AsyncMiddleware {
             // last_seen_at is a single live snapshot, whereas these rows
             // accumulate so past time buckets can be reconstructed.  Best-
             // effort — a failed insert must never block the request.
-            let throttle = request.application.activityEventThrottle
+            let throttle = request.application.userActivityEventThrottle
             if await throttle.shouldRecord(userID: userID, now: now) {
                 let event = APIUserActivityEvent(userID: userID, role: user.role)
                 try? await event.create(on: request.db)

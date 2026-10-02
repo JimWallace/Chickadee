@@ -110,7 +110,7 @@ struct AdminRoutes: RouteCollection {
 
         // Default activity series (24h) so the chart renders server-side on
         // first paint; the client swaps windows / polls via GET /admin/activity.
-        let activityChart = try await ActivityChartService.chartData(
+        let activityChart = try await UserActivityChartService.chartData(
             window: .day, on: req.db)
 
         let ctx = AdminContext(
@@ -135,7 +135,7 @@ struct AdminRoutes: RouteCollection {
         let window =
             (try? req.query.get(String.self, at: "window"))
             .flatMap(ActivityWindow.init(rawValue:)) ?? .day
-        return try await ActivityChartService.chartData(window: window, on: req.db)
+        return try await UserActivityChartService.chartData(window: window, on: req.db)
     }
 
     // MARK: - GET /admin/users
