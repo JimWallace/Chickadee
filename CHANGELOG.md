@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.317] - 2026-10-02
+
+### Fixed
+
+- **The AGS failure-reason backfill matches the sentence its rows were written with.** `AddLTIGradeSyncFailureReasonColumn` keyed its `UPDATE` on the live `LTIGradeSyncSweep.notLaunchedMessage`, so rewording that sentence before a database applied the migration would have backfilled nothing. The matched sentence is frozen in the migration (#1811).
+
+
 ## [0.5.316] - 2026-10-02
 
 ### Fixed
