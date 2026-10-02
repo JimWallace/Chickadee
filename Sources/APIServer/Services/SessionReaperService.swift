@@ -60,18 +60,14 @@ struct SessionReaperMonitorKey: StorageKey {
 
 extension Application {
     var sessionReaperMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[SessionReaperMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(SessionReaperMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "Session reaper",
                 interval: sessionReaperSweepInterval,
                 runImmediately: true
             ) { application in
                 try await reapStaleSessions(on: application.db, logger: application.logger)
             }
-            storage[SessionReaperMonitorKey.self] = created
-            return created
         }
-        set { storage[SessionReaperMonitorKey.self] = newValue }
     }
 }

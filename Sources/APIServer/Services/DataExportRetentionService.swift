@@ -65,18 +65,17 @@ struct DataExportReaperMonitorKey: StorageKey {
 
 extension Application {
     var dataExportReaperMonitor: PeriodicSweepMonitor {
-        if let existing = storage[DataExportReaperMonitorKey.self] { return existing }
-        let created = PeriodicSweepMonitor(
-            name: "Data-export reaper",
-            interval: dataExportReaperSweepInterval,
-            runImmediately: true
-        ) { application in
-            try await reapExpiredDataExports(
-                on: application.db,
-                logger: application.logger
-            )
+        lazyStored(DataExportReaperMonitorKey.self) {
+            PeriodicSweepMonitor(
+                name: "Data-export reaper",
+                interval: dataExportReaperSweepInterval,
+                runImmediately: true
+            ) { application in
+                try await reapExpiredDataExports(
+                    on: application.db,
+                    logger: application.logger
+                )
+            }
         }
-        storage[DataExportReaperMonitorKey.self] = created
-        return created
     }
 }

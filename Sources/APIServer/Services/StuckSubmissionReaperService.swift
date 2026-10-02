@@ -65,9 +65,8 @@ struct StuckSubmissionReaperMonitorKey: StorageKey {
 
 extension Application {
     var stuckSubmissionReaperMonitor: PeriodicSweepMonitor {
-        get {
-            if let existing = storage[StuckSubmissionReaperMonitorKey.self] { return existing }
-            let created = PeriodicSweepMonitor(
+        lazyStored(StuckSubmissionReaperMonitorKey.self) {
+            PeriodicSweepMonitor(
                 name: "Stuck submission reaper",
                 interval: stuckSubmissionSweepInterval,
                 minimumInterval: 1,
@@ -78,11 +77,6 @@ extension Application {
                     logger: application.logger
                 )
             }
-            storage[StuckSubmissionReaperMonitorKey.self] = created
-            return created
-        }
-        set {
-            storage[StuckSubmissionReaperMonitorKey.self] = newValue
         }
     }
 }
