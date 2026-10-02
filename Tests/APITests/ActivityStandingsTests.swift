@@ -146,6 +146,30 @@ import VaporTesting
         }
     }
 
+    /// A report with no per-match rows completes only a lone bot or empty
+    /// row. With two classmate rows open, one outcome says nothing about
+    /// either, so both stay open and no standings row is written (#1749).
+    @Test func oneOutcomeNeverCompletesSeveralClassmateRows() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "many", manifest: try robinManifest())
+            _ = try await arInsertSubmission(
+                id: "many_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
+            _ = try await arInsertSubmission(
+                id: "many_c1", testSetupID: fx.setupID, userID: try fx.c.requireID(), on: app)
+            let chosen = try await claim(app, fx: fx, user: fx.a, submissionID: "many_a1")
+            #expect(chosen.count == 2)
+
+            try await recordActivityMatch(
+                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "many_a1",
+                outcomes: [outcome("match", metric: 1)], matches: nil, on: app.db)
+
+            let rows = try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "many_a1").all()
+            #expect(rows.count == 2)
+            #expect(rows.allSatisfy { $0.completedAt == nil })
+            #expect(try await standing(app, fx: fx, user: fx.a) == nil)
+        }
+    }
+
     /// With no classmate and no bot, the claim opens a row against nobody
     /// and the job runs alone. The row completes, but it counts nothing: the
     /// first submitter has no standings row rather than a loss (#1748).
