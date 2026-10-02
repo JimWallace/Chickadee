@@ -1,4 +1,4 @@
-// APIServer/Helpers/ActivityUnion.swift
+// APIServer/Services/ActivityUnion.swift
 //
 // The union reading of a matrix activity (docs/class-activities.md, "Tests
 // and code"): the same `match_results` rows read TWICE, once as what each

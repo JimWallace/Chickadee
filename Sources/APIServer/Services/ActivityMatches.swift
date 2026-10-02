@@ -1,4 +1,4 @@
-// APIServer/Helpers/ActivityMatches.swift
+// APIServer/Services/ActivityMatches.swift
 //
 // The server half of a king-of-the-hill activity (docs/class-activities.md,
 // "King of the hill"): choosing a challenger's opponent when its job is

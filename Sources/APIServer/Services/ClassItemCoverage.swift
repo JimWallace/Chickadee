@@ -1,4 +1,4 @@
-// APIServer/Helpers/ClassItemCoverage.swift
+// APIServer/Services/ClassItemCoverage.swift
 //
 // Accumulates the class-wide union of covered items, one row per item,
 // attributed to the submission that covered it first. Called from every result
