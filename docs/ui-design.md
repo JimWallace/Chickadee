@@ -335,7 +335,7 @@ duplicate.
   `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
   `.av-gear-line`, `.av-bloom-eye` —
   read the palette directly, because a body or a beak that varied would stop
-  the birds being one species.  **Three sizes.**  `.avatar` alone is 3rem: the
+  the birds being one species.  **Five sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
   table row where the handle beside it carries the identity — the leaderboard —
   because below 48px the bird is recognition, not identification, and a row

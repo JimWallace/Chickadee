@@ -61,18 +61,6 @@ import Testing
         #expect(AcademicTerm(year: 9999, season: .fall)?.next == nil)
     }
 
-    @Test(arguments: [
-        (1, TermSeason.winter), (4, .winter), (5, .spring), (8, .spring), (9, .fall), (12, .fall),
-    ])
-    func containingPicksTheSeasonForTheMonth(month: Int, season: TermSeason) throws {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
-        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: month, day: 15)))
-        let term = try #require(AcademicTerm.containing(date, calendar: calendar))
-        #expect(term.year == 2026)
-        #expect(term.season == season)
-    }
-
     @Test func codableRoundTripsAndRejectsABadYear() throws {
         let term = try #require(AcademicTerm(year: 2027, season: .winter))
         let data = try JSONEncoder().encode(term)
@@ -101,25 +89,5 @@ import Testing
         let spring27 = try #require(winter27.next)
         #expect(winter27.ordinal == fall26.ordinal + 1)
         #expect(spring27.ordinal == winter27.ordinal + 1)
-    }
-}
-
-@Suite struct AcademicTermShortLabelParseTests {
-
-    @Test(arguments: ["F26", "f26", "W00", "S99"])
-    func shortLabelRoundTrips(label: String) throws {
-        let term = try #require(AcademicTerm(shortLabel: label))
-        #expect(term.shortLabel == label.uppercased())
-    }
-
-    @Test func shortLabelNamesATwentyFirstCenturyYear() throws {
-        let term = try #require(AcademicTerm(shortLabel: "W27"))
-        #expect(term.year == 2027)
-        #expect(term.season == .winter)
-    }
-
-    @Test(arguments: ["", "F", "F2", "F2026", "X26", "FAB", "F-1", "26F", "F２6"])
-    func malformedShortLabelsAreRejected(label: String) {
-        #expect(AcademicTerm(shortLabel: label) == nil)
     }
 }

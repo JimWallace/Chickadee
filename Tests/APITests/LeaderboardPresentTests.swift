@@ -101,7 +101,8 @@ import VaporTesting
                 rank: rank, rankText: "\(rank)", rankTier: "\(rank)", handle: "h\(rank)",
                 valueText: "0",
                 avatar: AvatarPresentation(
-                    for: AvatarSpec.drawn(fromSeed: UInt64(rank)), size: .podium, accessibility: .decorative))
+                    for: AvatarSpec.drawn(fromSeed: UInt64(rank)), size: .podium, accessibility: .decorative,
+                    isStaff: false))
         }
         #expect(PresentPlace.podiumOrder([place(1), place(2), place(3), place(4)]).map(\.rank) == [2, 1, 3])
         #expect(PresentPlace.podiumOrder([place(1), place(2)]).map(\.rank) == [2, 1])

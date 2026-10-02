@@ -327,7 +327,9 @@ extension InstructorDashboardRoutes {
                     adjustment: adjustment,
                     hasSpends: !spendRows.isEmpty,
                     spends: spendRows,
-                    avatar: AvatarPresentation(for: spec, size: .roster, accessibility: .decorative),
+                    // A students-only ledger: staff hold no slip days.
+                    avatar: AvatarPresentation(
+                        for: spec, size: .roster, accessibility: .decorative, isStaff: false),
                     pips: SlipDayPip.pips(total: total, used: used, extra: adjustment),
                     leftText: "\(max(total - used, 0)) of \(max(total, 0)) left",
                     adjustmentText: adjustment > 0

@@ -101,7 +101,7 @@ import Testing
         let spec = AvatarSpec(
             cap: .forest, wing: .plain, expression: .dreamy, accessory: .none, accent: .ember,
             backdrop: .sky, tuft: .crest, tilt: .left)
-        let p = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative)
+        let p = AvatarPresentation(for: spec, size: .roster, accessibility: .decorative, isStaff: false)
         #expect(p.tuftSymbolRef == "#av-tuft-crest")
         #expect(p.expressionSymbolRef == "#av-expression-dreamy")
         #expect(p.tiltTransform == "rotate(-9 32 34)")
@@ -114,7 +114,7 @@ import Testing
         let spec = AvatarSpec(
             cap: .umber, wing: .plain, expression: .bright, accessory: accessory, accent: .honey,
             backdrop: .straw, tuft: .crest, tilt: .upright)
-        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         let expected = [.beanie, .gradcap].contains(accessory) ? "#av-tuft-none" : "#av-tuft-crest"
         #expect(accessory.hidesTuft == [.beanie, .gradcap].contains(accessory))
         #expect(p.tuftSymbolRef == expected)
@@ -129,7 +129,7 @@ import Testing
             let spec = AvatarSpec(
                 cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
                 backdrop: .sky, tuft: tuft, tilt: tilt)
-            let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+            let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
             #expect(p.tuftSymbolRef == "#av-tuft-\(tuft.rawValue)")
             #expect(p.tiltTransform == "rotate(\(tilt.degrees) 32 34)")
         }

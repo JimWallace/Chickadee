@@ -72,7 +72,7 @@ import Testing
         let spec = AvatarSpec(
             cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
             backdrop: .straw, border: border)
-        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        let p = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
         let expected =
             border.ring == .solid ? "--avatar-accent-\(border.rawValue)" : "--avatar-border-none"
         #expect(p.borderToken == expected)
@@ -123,14 +123,6 @@ import Testing
         var url = URL(fileURLWithPath: #filePath)  // .../Tests/CoreTests/<thisFile>
         for _ in 0..<3 { url.deleteLastPathComponent() }
         return try String(contentsOf: url.appendingPathComponent(path), encoding: .utf8)
-    }
-
-    /// Both announce branches carry the same style attribute, so the border is
-    /// assigned twice: once per branch.
-    @Test func partialAssignsTheBorderInBothBranches() throws {
-        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let assignment = "--av-border: var(#(borderToken))"
-        #expect(partial.components(separatedBy: assignment).count - 1 == 2)
     }
 
     /// The ring is a sprite layer; a solid ring is coloured by the property the

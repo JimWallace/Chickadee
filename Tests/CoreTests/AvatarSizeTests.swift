@@ -18,7 +18,7 @@ import Testing
 
     @Test func aPresentationCarriesTheSizeClass() {
         let spec = AvatarSpec.drawn(fromSeed: 1)
-        let hero = AvatarPresentation(for: spec, size: .hero, accessibility: .decorative)
+        let hero = AvatarPresentation(for: spec, size: .hero, accessibility: .decorative, isStaff: false)
         #expect(hero.sizeClass == "avatar avatar-lg")
     }
 }

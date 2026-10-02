@@ -56,12 +56,6 @@
       "reason": "writeRuntimeHelpers sorts the helper files only so the writes happen in a fixed order. Each helper goes to its own file with a distinct name (allRuntimeHelperFiles traps on a duplicate), each write is atomic, and nothing reads a helper until all of them are written and the test scripts start. Reversing the sort changes only the order of independent writes to different paths, so the workspace is byte-identical and no script, grader or later step can tell the two orders apart. Verified SURVIVED against run 35753274761."
     },
     {
-      "file": "Sources/Worker/SubmissionStaging.swift",
-      "operator": "RemoveSideEffects",
-      "mutated": "let manifestBytes = (try? canonicalManifestEncoder.encode(job.manifest)) ?? Data() var material = Data() material.append(0) material.append(Data(job.testSetupURL.absoluteString.utf8)) material.append(0) material.append(manifestBytes) let digest = sha256HexDigest(material) return \"\\(job.testSetupID)-\\(digest.prefix(16))\"",
-      "reason": "This mutant drops job.testSetupID from the hashed material in testSetupCacheKey. The key carries the id VERBATIM as its prefix, so two jobs with different ids get different keys whether or not the id is also hashed, and two jobs with the same id contribute the same bytes either way. Dropping it changes the digest's value but not which pairs of jobs collide, and collision is the only property the cache reads. Only a golden-digest test could see it, and that would pin an implementation rather than a behaviour. The function's doc comment makes the same argument; this entry makes it visible to the sweep. Verified SURVIVED against run 35753274761."
-    },
-    {
       "file": "Sources/Worker/SubmissionNormalizer.swift",
       "operator": "ChangeLogicalConnector",
       "mutated": "let relativeNSString = relativePath as NSString let ext = relativeNSString.pathExtension.lowercased() if ext == \"ipynb\" { return relativeNSString.deletingPathExtension + \".py\" } let stem = relativeNSString.deletingPathExtension.split(separator: \"/\").last.map(String.init) ?? relativeNSString.deletingPathExtension let parent = relativeNSString.deletingLastPathComponent let generatedName = stem + \".extracted.py\" if parent.isEmpty && parent == \".\" { return generatedName } return (parent as NSString).appendingPathComponent(generatedName)",

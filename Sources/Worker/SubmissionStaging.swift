@@ -424,32 +424,31 @@ private let pythonSubmissionExtensions: Set<String> = ["py", "ipynb", "json"]
 /// nothing in the logs to say why. The second property is why the encoder above
 /// exists (#1526).
 ///
-/// TWO OF THE FIVE `append` CALLS BELOW CANNOT BE CAUGHT BY A TEST, and the
-/// arguments are recorded here so the next triage pass does not re-derive them
-/// or, worse, write a test asserting something that cannot vary. Both were
-/// measured by deleting the line and running the suite:
-///
-///   * `job.testSetupID` — the key carries the id VERBATIM in its prefix, so
-///     two jobs with different ids differ whether or not the id is also hashed,
-///     and two jobs with the same id contribute the same bytes here either way.
-///     Dropping it changes the digest's VALUE but not which pairs of jobs
-///     collide, and collision is the only property the cache reads. Only a
-///     golden-digest test could see it, and that would pin an implementation.
-///   * the second separator, between the URL and the manifest — for that
-///     boundary to move, one manifest's encoding would have to be a proper
-///     suffix of another's. `manifestBytes` is always a complete JSON object
-///     from the encoder, so it opens with `{` and closes with the matching `}`;
-///     no proper suffix of that is itself valid encoder output. The first
-///     separator IS reachable, because a test-setup id and a URL can be chosen
-///     to straddle it, and `SubmissionStagingGapTests` does exactly that.
+/// The material is the URL and the manifest bytes; the id is NOT hashed, because
+/// the key carries it verbatim as its prefix, so hashing it too changed the
+/// digest's value but never which pairs of jobs collide, and collision is the
+/// only property the cache reads (#1790). ONE `append` BELOW CANNOT BE CAUGHT BY
+/// A TEST, and the argument is recorded here so the next triage pass does not
+/// re-derive it or, worse, write a test asserting something that cannot vary:
+/// the separator between the URL and the manifest. For that boundary to move,
+/// one manifest's encoding would have to be a proper suffix of another's.
+/// `manifestBytes` is always a complete JSON object from the encoder, so it
+/// opens with `{` and closes with the matching `}`; no proper suffix of that is
+/// itself valid encoder output.
 func testSetupCacheKey(for job: Job) -> String {
     // `ManifestCodec.stableEncoder`, never `.encoder`: the key order of the
     // plain encoder is not contractual, and a key that hashed it could not
     // reliably hit (#1526).
-    let manifestBytes = (try? ManifestCodec.stableEncoder.encode(job.manifest)) ?? Data()
+    guard let manifestBytes = try? ManifestCodec.stableEncoder.encode(job.manifest) else {
+        // A manifest that does not encode cannot be keyed on its content, and a
+        // fixed fallback would make two such jobs collide on id and URL alone:
+        // a wrong hit, not a miss. A fresh digest is a key nothing else can
+        // produce, so the setup is fetched again. Unreachable today, since
+        // every TestProperties encodes, but silent if it ever were not.
+        let fresh = sha256HexDigest(Data(UUID().uuidString.utf8))
+        return "\(job.testSetupID)-\(fresh.prefix(16))"
+    }
     var material = Data()
-    material.append(Data(job.testSetupID.utf8))
-    material.append(0)
     material.append(Data(job.testSetupURL.absoluteString.utf8))
     material.append(0)
     material.append(manifestBytes)

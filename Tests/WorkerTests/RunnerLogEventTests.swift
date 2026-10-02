@@ -242,10 +242,10 @@ import Testing
         #expect(retry?["retry_in_seconds"] as? Int == 2)
     }
 
-    /// A download retry names its stage: the submission and the test setup
-    /// are told apart by the destination's filename.
-    @Test(arguments: [("submission.zip", "download_submission"), ("setup.zip", "download_testsetup")])
-    func aDownloadRetryNamesItsStage(filename: String, stage: String) async throws {
+    /// A download retry names its stage: the caller says which download it is,
+    /// and the log carries that, whatever the destination is called.
+    @Test(arguments: [RunnerRetryStage.downloadSubmission, .downloadTestSetup, .downloadOpponent])
+    func aDownloadRetryNamesItsStage(stage: RunnerRetryStage) async throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("log-events-download-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -254,11 +254,12 @@ import Testing
 
         let capture = await Self.capturing {
             try? await daemon.download(
-                url: Self.unreachable.appendingPathComponent("artifact"), to: dir.appendingPathComponent(filename))
+                url: Self.unreachable.appendingPathComponent("artifact"),
+                to: dir.appendingPathComponent("artifact.bin"), stage: stage)
         }
         let retries = Self.payloads("network_retry_scheduled", in: capture)
         #expect(!retries.isEmpty)
-        #expect(retries.allSatisfy { $0["failure_stage"] as? String == stage })
+        #expect(retries.allSatisfy { $0["failure_stage"] as? String == stage.rawValue })
     }
 
     /// The reporter's heartbeat retries are `heartbeat_retry_scheduled`, not

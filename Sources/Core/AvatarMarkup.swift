@@ -104,14 +104,12 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// The handle to announce; empty when decorative.
     public let label: String
 
-    /// A student's bird, wearing the ring they chose.
-    public init(for spec: AvatarSpec, size: AvatarSize, accessibility: AvatarAccessibility) {
-        self.init(for: spec, size: size, accessibility: accessibility, isStaff: false)
-    }
-
     /// `isStaff` draws the reserved staff ring in place of the chosen one. The
     /// caller decides it from the course role of the person drawn, for the course
-    /// the page belongs to (or any course, on a page that belongs to none).
+    /// the page belongs to (or any course, on a page that belongs to none). There
+    /// is no overload that defaults it: a surface that forgot the question
+    /// compiled with a student ring on a staff bird (#1758), so every site says
+    /// what it knows, and a students-only list says `false` with the reason.
     public init(
         for spec: AvatarSpec, size: AvatarSize, accessibility: AvatarAccessibility, isStaff: Bool
     ) {
@@ -141,12 +139,25 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         }
     }
 
+    /// Every per-student custom property `_avatar.leaf` assigns, paired with
+    /// the field it reads and the token it carries. The one list: `tokens`
+    /// derives from it, and the partial test asserts each entry is assigned in
+    /// both announce branches, so a token added here cannot reach the page
+    /// unassigned, and a property assigned there cannot be absent here (#1761).
+    public var inlineProperties: [AvatarInlineProperty] {
+        [
+            AvatarInlineProperty(name: "--av-cap", field: "capToken", token: capToken),
+            AvatarInlineProperty(name: "--av-wing", field: "wingToken", token: wingToken),
+            AvatarInlineProperty(name: "--av-accent", field: "accentToken", token: accentToken),
+            AvatarInlineProperty(name: "--av-backdrop", field: "backdropToken", token: backdropToken),
+            AvatarInlineProperty(name: "--av-border", field: "borderToken", token: borderToken),
+        ]
+    }
+
     /// Every palette token this presentation names. The drift test asserts each
     /// is declared in the stylesheet, and that the stylesheet declares no
     /// avatar token no presentation can name.
-    public var tokens: [String] {
-        [capToken, wingToken, accentToken, backdropToken, borderToken]
-    }
+    public var tokens: [String] { inlineProperties.map(\.token) }
 
     /// Every symbol this presentation names, in the order the partial stacks
     /// them — with the two that never vary.
@@ -166,8 +177,17 @@ public enum AvatarMarkup {
     /// varies. Tilt is not a layer; it is a transform on everything between the
     /// backdrop and the ring.
     public static func layerSymbolIDs(for spec: AvatarSpec) -> [String] {
-        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative)
+        AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
             .layerRefs
             .map { String($0.dropFirst()) }
     }
+}
+
+/// One per-student custom property the avatar partial assigns: its `--av-*`
+/// name, the `AvatarPresentation` field the partial reads it from, and the
+/// palette token that field carries for this bird.
+public struct AvatarInlineProperty: Sendable, Equatable {
+    public let name: String
+    public let field: String
+    public let token: String
 }

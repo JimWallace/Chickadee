@@ -5,6 +5,9 @@ enum RunnerRetryStage: String, Sendable {
     case heartbeat
     case downloadSubmission = "download_submission"
     case downloadTestSetup = "download_testsetup"
+    /// An opponent submission for a match or matrix job, which is neither the
+    /// challenger's own upload nor the test setup (#1793).
+    case downloadOpponent = "download_opponent"
     case resultUpload = "result_upload"
 }
 

@@ -417,7 +417,7 @@ extension InstructorDashboardRoutes {
             let vanityURL: String? = {
                 guard let assignment,
                     let title = assignment.title as String?, !title.isEmpty,
-                    let courseKey = activeCourse?.pathKey, !courseKey.isEmpty,
+                    let courseKey = activeCourse?.urlKey, !courseKey.isEmpty,
                     !assignment.slug.isEmpty
                 else { return nil }
                 return VanityURLRoutes.vanityPath(courseCode: courseKey, assignmentSlug: assignment.slug)

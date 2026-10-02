@@ -60,8 +60,12 @@ struct AccountRoutes: RouteCollection {
         // a course's finite space. `ensureHandle` is a no-op read once the row
         // carries one.
         let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
+        // Staff anywhere wear the staff ring here: this page belongs to no one
+        // course (docs/student-wardrobe.md, "The staff ring"). One answer for
+        // every bird on the page, the handle panel's included (#1758).
+        let isStaff = try await AvatarStore.courseStaff(among: [userID], on: req.db).isEmpty == false
         let (handlesByCourseID, handleChoicesByCourseID) = try await Self.studentHandles(
-            enrollments: enrollments, spec: spec, req: req)
+            enrollments: enrollments, spec: spec, isStaff: isStaff, req: req)
 
         let enrolledRows =
             enrollments
@@ -87,9 +91,6 @@ struct AccountRoutes: RouteCollection {
         let github = try await accountGitHubContext(req: req, userID: userID)
 
         let avatarNotice = req.query[String.self, at: "avatar"]
-        // Staff anywhere wear the staff ring here: this page belongs to no one
-        // course (docs/student-wardrobe.md, "The staff ring").
-        let isStaff = try await AvatarStore.courseStaff(among: [userID], on: req.db).isEmpty == false
         let identityName = accountIdentityName(
             displayName: user.displayName,
             preferredName: user.preferredName,
