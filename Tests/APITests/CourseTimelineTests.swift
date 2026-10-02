@@ -1,4 +1,4 @@
-// Tests/APITests/CourseActivityTests.swift
+// Tests/APITests/CourseTimelineTests.swift
 //
 // The merged course activity timeline (#421): content edits from
 // `assignment_versions` and course events from `audit_log`, interleaved,
@@ -20,7 +20,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized) final class CourseActivityTests {
+@Suite(.serialized) final class CourseTimelineTests {
 
     let app: Application
 
@@ -133,7 +133,7 @@ import VaporTesting
                 origin: "mcp:update_suite", number: 2,
                 at: base.addingTimeInterval(120))
 
-            let rows = try await CourseActivityService.timeline(courseID: courseID, on: app.db)
+            let rows = try await CourseTimelineService.timeline(courseID: courseID, on: app.db)
 
             #expect(rows.count == 3)
             // Newest first, and the audit event sits BETWEEN the two content
@@ -168,7 +168,7 @@ import VaporTesting
                 app, courseID: theirs, action: .assignmentDeleted, actor: "them",
                 at: base.addingTimeInterval(20))
 
-            let rows = try await CourseActivityService.timeline(courseID: mine, on: app.db)
+            let rows = try await CourseTimelineService.timeline(courseID: mine, on: app.db)
 
             #expect(rows.count == 1)
             #expect(rows[0].target == "My lab")
@@ -185,7 +185,7 @@ import VaporTesting
                 app, courseID: nil, action: .runnerSecretRotated, actor: "admin",
                 at: Date(timeIntervalSince1970: 1_700_000_000))
 
-            let rows = try await CourseActivityService.timeline(courseID: courseID, on: app.db)
+            let rows = try await CourseTimelineService.timeline(courseID: courseID, on: app.db)
             #expect(rows.isEmpty)
         }
     }
@@ -210,7 +210,7 @@ import VaporTesting
                 app, courseID: courseID, action: .assignmentCreated, actor: "prof_lee",
                 at: base.addingTimeInterval(30))
 
-            let rows = try await CourseActivityService.timeline(
+            let rows = try await CourseTimelineService.timeline(
                 courseID: courseID, actorFilter: "ta_kim", on: app.db)
 
             #expect(rows.count == 2)
@@ -233,7 +233,7 @@ import VaporTesting
 
             try await assignment.delete(on: app.db)
 
-            let rows = try await CourseActivityService.timeline(courseID: courseID, on: app.db)
+            let rows = try await CourseTimelineService.timeline(courseID: courseID, on: app.db)
             #expect(rows.count == 1)
             #expect(rows[0].target == "(deleted assignment)")
             #expect(rows[0].link == nil)
@@ -252,7 +252,7 @@ import VaporTesting
                 origin: AssignmentVersionOrigin.baseline, number: 1,
                 at: Date(timeIntervalSince1970: 1_700_000_000))
 
-            let rows = try await CourseActivityService.timeline(courseID: courseID, on: app.db)
+            let rows = try await CourseTimelineService.timeline(courseID: courseID, on: app.db)
             #expect(rows[0].actor == "system")
             #expect(rows[0].summary.contains("Baseline"))
         }
@@ -273,7 +273,7 @@ import VaporTesting
                 restoredFromVersion: 1)
             try await row.create(on: app.db)
 
-            let rows = try await CourseActivityService.timeline(courseID: courseID, on: app.db)
+            let rows = try await CourseTimelineService.timeline(courseID: courseID, on: app.db)
             #expect(rows[0].summary == "Restored version 1")
         }
     }
@@ -302,7 +302,7 @@ import VaporTesting
                     .first())
             #expect(entry.courseID == courseID)
 
-            let rows = try await CourseActivityService.timeline(courseID: courseID, on: app.db)
+            let rows = try await CourseTimelineService.timeline(courseID: courseID, on: app.db)
             #expect(rows.count == 1)
             #expect(rows[0].detail.contains("role: ta"))
         }

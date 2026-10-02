@@ -211,7 +211,7 @@ dedicated DB role for this surface — see F-7). Enforcement:
 | `get_deployment_info` | static config | version, env name, modes, scopes | clean (DB-free) |
 | `get_deploy_status` / `get_deploy_history` | deployer status/history files | versions, deploy events | clean |
 | `get_metrics_snapshot` / `get_metrics_card_series` / `get_metrics_timeseries` | aggregate builders | counts, percentiles, utilization | aggregates only |
-| `get_active_users_series` | `ActivityChartService` | distinct-user counts per bucket | counts only (F-5) |
+| `get_active_users_series` | `UserActivityChartService` | distinct-user counts per bucket | counts only (F-5) |
 | `get_instructor_card_series` | `instructorCardSeries` | per-bucket submission/active-student/assignment/browser-error counts for one course | counts only; enrolled-student lookup is internal scoping; PII test seeds a student and asserts absence (F-5) |
 | `get_queue_state` | submissions table | pending/in-flight/stuck **counts**, oldest age | counts/ages only |
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics`, `runner_snapshots` | runner identity/capabilities; **aggregate** timing/status over recent jobs | per-job rows (username + submission id) deliberately omitted; PII test asserts user UUID, submission id, and the substring `username` absent |

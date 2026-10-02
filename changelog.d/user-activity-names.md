@@ -1,0 +1,3 @@
+### Changed
+
+- **The four user-activity telemetry files no longer share a name with class activities.** `ActivityEventReaperService`, `ActivityEventThrottle`, `ActivityChartService` and `CourseActivityService` reap, throttle and chart `user_activity_events` and build the course timeline, which has nothing to do with the class-activity trio (`ActivityAuthoring`, `ActivityMatches`, `ActivityUnion`). They are `UserActivityEventReaperService`, `UserActivityEventThrottle`, `UserActivityChartService` and `CourseTimelineService` now, with their storage keys and test files renamed to match. Symbol renames only (#1734).

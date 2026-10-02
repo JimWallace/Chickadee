@@ -1,9 +1,9 @@
-// Tests/APITests/ActivityChartServiceTests.swift
+// Tests/APITests/UserActivityChartServiceTests.swift
 //
 // Coverage for the admin dashboard "active users over time" chart: the
 // distinct-users-per-bucket aggregation and the retention reaper.  The
 // per-user insert throttle is pure (no app/DB) and lives in
-// ActivityEventThrottleTests below.
+// UserActivityEventThrottleTests below.
 
 import Fluent
 import Foundation
@@ -12,7 +12,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized) final class ActivityChartServiceTests {
+@Suite(.serialized) final class UserActivityChartServiceTests {
 
     let app: Application
 
@@ -50,7 +50,7 @@ import VaporTesting
 
     @Test func chartData_dayWindowHas24HourlyBuckets() async throws {
         try await withApp(app) { _ in
-            let data = try await ActivityChartService.chartData(window: .day, on: app.db)
+            let data = try await UserActivityChartService.chartData(window: .day, on: app.db)
             #expect(data.window == "24h")
             #expect(data.buckets.count == 24)
         }
@@ -58,8 +58,8 @@ import VaporTesting
 
     @Test func chartData_weekHas7Buckets_monthHas30() async throws {
         try await withApp(app) { _ in
-            let week = try await ActivityChartService.chartData(window: .week, on: app.db)
-            let month = try await ActivityChartService.chartData(window: .month, on: app.db)
+            let week = try await UserActivityChartService.chartData(window: .week, on: app.db)
+            let month = try await UserActivityChartService.chartData(window: .month, on: app.db)
             #expect(week.buckets.count == 7)
             #expect(month.buckets.count == 30)
         }
@@ -80,7 +80,7 @@ import VaporTesting
             // One ping ~90 minutes ago → a different (earlier) bucket.
             try await seedEvent(userID: userA, secondsAgo: 90 * 60, now: now)
 
-            let data = try await ActivityChartService.chartData(window: .day, on: app.db, now: now)
+            let data = try await UserActivityChartService.chartData(window: .day, on: app.db, now: now)
             let total = data.buckets.reduce(0) { $0 + $1.count }
             // Last bucket: {A, B} = 2.  An earlier bucket: {A} = 1.  Total 3.
             #expect(data.buckets.last?.count == 2)
@@ -94,7 +94,7 @@ import VaporTesting
             let user = try await makeUser("activity_user_outside")
             // 25 hours ago is outside the 24h window entirely.
             try await seedEvent(userID: user, secondsAgo: 25 * 3600, now: now)
-            let data = try await ActivityChartService.chartData(window: .day, on: app.db, now: now)
+            let data = try await UserActivityChartService.chartData(window: .day, on: app.db, now: now)
             let total = data.buckets.reduce(0) { $0 + $1.count }
             #expect(total == 0)
         }
@@ -102,7 +102,7 @@ import VaporTesting
 
     @Test func chartData_emptyTableYieldsZeroedBuckets() async throws {
         try await withApp(app) { _ in
-            let data = try await ActivityChartService.chartData(window: .month, on: app.db)
+            let data = try await UserActivityChartService.chartData(window: .month, on: app.db)
             #expect(data.buckets.count == 30)
             let total = data.buckets.reduce(0) { $0 + $1.count }
             #expect(total == 0)
@@ -146,10 +146,10 @@ import VaporTesting
 
 /// Pure unit tests for the per-user insert throttle — no app or DB, so this is
 /// a plain struct suite.
-@Suite struct ActivityEventThrottleTests {
+@Suite struct UserActivityEventThrottleTests {
 
     @Test func recordsOncePerWindow() async {
-        let throttle = ActivityEventThrottle(window: 300)
+        let throttle = UserActivityEventThrottle(window: 300)
         let user = UUID()
         let t0 = Date()
         #expect(await throttle.shouldRecord(userID: user, now: t0) == true)
@@ -159,7 +159,7 @@ import VaporTesting
     }
 
     @Test func isPerUser() async {
-        let throttle = ActivityEventThrottle(window: 300)
+        let throttle = UserActivityEventThrottle(window: 300)
         let now = Date()
         #expect(await throttle.shouldRecord(userID: UUID(), now: now) == true)
         // A different user is independent even within the same instant.
