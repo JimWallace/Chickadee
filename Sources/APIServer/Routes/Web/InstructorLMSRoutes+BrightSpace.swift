@@ -446,7 +446,7 @@ struct BrightspaceTestResult: Content {
     let message: String
 }
 
-extension InstructorDashboardRoutes {
+extension InstructorLMSRoutes {
     /// Sets the flash the BrightSpace page shows on its next load and sends
     /// the browser back to it. Every mutating handler on the page ends here
     /// (#1714); the page reads and clears the two keys.
