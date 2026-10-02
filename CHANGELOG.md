@@ -9,6 +9,25 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.315] - 2026-10-02
+
+### Changed
+
+- **A round-robin claim queries the classmate list once.** `jobOpponent` and `jobOpponents` each called `chooseClassmates` inside the serialized claim section; `jobOpponentSet` now chooses once and hands the list to both (#1750).
+
+### Fixed
+
+- **`get_assignment` reports the live-session window and the aggregation of a class activity.** `set_activity` told agents to read the current state from `get_assignment`, which carried neither `opensAt` nor `closesAt`. Both are now reported, present as null when unset, beside the kind's aggregation axis (#1753).
+
+### Added
+
+- **Link a LEARN course from the LTI assignment picker.** When an instructor adds Chickadee content from a LEARN course that is not linked to a Chickadee course yet, the picker now asks which of their unlinked courses to link it to, inside the LEARN frame, and then shows that course's assignments. Before, the launch was refused and the course had to be linked another way first. The choice carries a short-lived token signed by the tool key, since the frame has no session, and follows the same rules as the existing course-linking page. Other roles are told to ask an instructor.
+
+### Changed
+
+- **The tournament snapshots its entrants through the shared latest-submission query.** `snapshotEntrants` repeated the enrollment, kind, status and first-per-user fold that `latestStudentSubmissionsByUser` already defines for the classmate chooser and the union read model (#1751).
+
+
 ## [0.5.314] - 2026-10-02
 
 ### Fixed
