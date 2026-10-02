@@ -85,7 +85,11 @@ import VaporTesting
             organizationRole: { _, org in org == "cs101-org" ? role : nil })
     }
 
-    private func useRepos(inviteFails: Bool = false, forksAllowed: Bool? = false) {
+    /// `studentLogin` is the login GitHub reports now for the student's
+    /// numeric ID; nil means no account has the ID.
+    private func useRepos(
+        inviteFails: Bool = false, forksAllowed: Bool? = false, studentLogin: String? = "octo-student"
+    ) {
         let calls = calls
         let visible = [Self.template, Self.made, Self.studentOwned]
         app.githubRepoClient = GitHubRepoClient(
@@ -109,6 +113,10 @@ import VaporTesting
             generate: { token, template, owner, name in
                 calls.withLockedValue { $0.append("generate:\(token):\(template):\(owner)/\(name)") }
                 return Self.made
+            },
+            userLogin: { _, id in
+                calls.withLockedValue { $0.append("user:\(id)") }
+                return id == Self.studentGitHubID ? studentLogin : nil
             },
             addCollaborator: { _, fullName, login in
                 calls.withLockedValue { $0.append("invite:\(fullName):\(login)") }
@@ -442,6 +450,66 @@ import VaporTesting
             try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { _ in }
             #expect(seen("generate:").count == 1)
             #expect(try await APIGitHubCourseRepository.query(on: app.db).first()?.invited == true)
+        }
+    }
+
+    /// A renamed account is named and invited by its current login, read from
+    /// the linked numeric ID, and the link stores it. GitHub releases a renamed
+    /// login for anyone to take, so the stored one could invite a stranger
+    /// (#1766).
+    @Test func aRenamedAccountIsInvitedByItsCurrentLogin() async throws {
+        useRepos(studentLogin: "octo-renamed")
+        try await withApp(app) { app in
+            try await registerApp()
+            try await bindOrganization()
+            let cookie = try await studentWithTemplate()
+            try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { res in
+                #expect(res.headers.first(name: .location) == "/testsetups/gh_setup/github?ok=repository")
+            }
+            #expect(seen("user:") == ["user:\(Self.studentGitHubID)"])
+            #expect(
+                seen("generate:") == ["generate:installation-55:cs101-org/lab-template:cs101-org/lab-1-octo-renamed"])
+            #expect(seen("invite:") == ["invite:\(Self.made.fullName):octo-renamed"])
+            let link = try #require(try await APIGitHubAccountLink.query(on: app.db).first())
+            #expect(link.githubLogin == "octo-renamed")
+        }
+    }
+
+    /// A resent invitation reads the current login too.
+    @Test func aResentInvitationGoesToTheCurrentLogin() async throws {
+        useRepos(inviteFails: true)
+        try await withApp(app) { _ in
+            try await registerApp()
+            try await bindOrganization()
+            let cookie = try await studentWithTemplate()
+            try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { _ in }
+
+            useRepos(studentLogin: "octo-renamed")
+            try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { res in
+                #expect(res.headers.first(name: .location) == "/testsetups/gh_setup/github?ok=repository")
+            }
+            #expect(seen("generate:").count == 1)
+            #expect(seen("invite:").last == "invite:\(Self.made.fullName):octo-renamed")
+        }
+    }
+
+    /// When no GitHub account has the linked ID, nothing is made or sent, and
+    /// the page asks the student to link again.
+    @Test func aLinkedAccountThatIsGoneGetsNoRepository() async throws {
+        useRepos(studentLogin: nil)
+        try await withApp(app) { app in
+            try await registerApp()
+            try await bindOrganization()
+            let cookie = try await studentWithTemplate()
+            try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { res in
+                #expect(res.headers.first(name: .location)?.hasSuffix("error=linkedAccountGone") == true)
+            }
+            #expect(seen("generate:").isEmpty)
+            #expect(seen("invite:").isEmpty)
+            #expect(try await APIGitHubCourseRepository.query(on: app.db).count() == 0)
+            try await get("/testsetups/gh_setup/github?error=linkedAccountGone", cookie: cookie) { res in
+                #expect(res.body.string.contains("no longer exists"))
+            }
         }
     }
 

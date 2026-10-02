@@ -57,6 +57,23 @@ struct GitHubCourseAccess: Sendable {
         try? await client.privateForksAllowed(token, organization.orgLogin)
     }
 
+    /// The linked account's login now, read by its numeric ID, and stored when
+    /// it changed. The stored login names the repository and the collaborator,
+    /// and GitHub releases a renamed login for anyone to take, so a stale one
+    /// could invite a stranger (#1766). Throws
+    /// `GitHubSubmitError.linkedAccountGone` when no account has the ID.
+    func currentLogin(of link: APIGitHubAccountLink, req: Request) async throws -> String {
+        let userID = link.githubUserID
+        guard let login = try await call(req, { token in try await client.userLogin(token, userID) }) else {
+            throw GitHubSubmitError.linkedAccountGone
+        }
+        if login != link.githubLogin {
+            link.githubLogin = login
+            try await link.save(on: req.db)
+        }
+        return login
+    }
+
     /// Makes the student's private repository from the template, then invites
     /// the student. The row is saved before the invitation, so a failed
     /// invitation can be sent again without making a second repository.

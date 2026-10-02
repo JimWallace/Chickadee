@@ -10,6 +10,8 @@ enum GitHubSubmitError: String, Error, Equatable {
     case unavailable
     /// The student has not linked a GitHub account.
     case notLinked
+    /// No GitHub account has the linked numeric ID any more (#1766).
+    case linkedAccountGone
     /// The App is not installed on the student's GitHub account.
     case notInstalled
     /// The installation cannot see the repository.
@@ -43,6 +45,8 @@ enum GitHubSubmitError: String, Error, Equatable {
             "GitHub submission is not available for this assignment. Use the upload form."
         case .notLinked:
             "Link a GitHub account on your account page first."
+        case .linkedAccountGone:
+            "Your linked GitHub account no longer exists. Link your account again on your account page."
         case .notInstalled:
             "Install the GitHub App on your GitHub account, then try again."
         case .repositoryNotFound:

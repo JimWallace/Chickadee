@@ -168,18 +168,19 @@ struct GitHubSubmissionRoutes: RouteCollection {
                 let link = try await APIGitHubAccountLink.query(on: req.db).filter(\.$userID == userID).first()
             else { throw GitHubSubmitError.notLinked }
             let organization = try await GitHubCourseAccess.resolve(courseID: setup.courseID, req: req)
+            let login = try await organization.currentLogin(of: link, req: req)
             if let existing = try await APIGitHubCourseRepository.query(on: req.db)
                 .filter(\.$testSetupID == setupID).filter(\.$userID == userID).first()
             {
                 if !existing.invited {
-                    try await organization.invite(existing, login: link.githubLogin, req: req)
+                    try await organization.invite(existing, login: login, req: req)
                 }
             } else {
                 let name = GitHubCourseRepositoryName.make(
-                    assignmentSlug: assignment?.slug ?? setupID, login: link.githubLogin)
+                    assignmentSlug: assignment?.slug ?? setupID, login: login)
                 let row = try await organization.makeRepository(
                     template: template, name: name, testSetupID: setupID, userID: userID,
-                    login: link.githubLogin, req: req)
+                    login: login, req: req)
                 await AuditLogger.record(
                     action: .githubCourseRepositoryCreated, targetType: .user, targetID: userID.uuidString,
                     metadata: ["repository_id": String(row.repoID), "test_setup_id": setupID], on: req)

@@ -164,8 +164,11 @@ user authorization flow (OAuth with PKCE). Chickadee reads the authenticated
 user from `GET /user`, keeps two values, and discards the user token:
 
 - `github_user_id`: the numeric ID. This is the identity.
-- `github_login`: the login name. This is for display only, because a user can
-  rename their account.
+- `github_login`: the login name. It can go stale, because a user can rename
+  their account and GitHub then releases the old login for anyone to take.
+  The account page shows it. Slice 4 uses a login as an identity, to name a
+  repository and invite a collaborator, so it first reads the current login
+  from the ID (#1766).
 
 A new table `github_account_links` holds one row per Chickadee user, with
 `github_user_id` unique. One GitHub account can not link to two Chickadee users.
@@ -398,7 +401,12 @@ As built (slice 4):
   minutes", and the upload form stays.
 - **The repository** is `{assignment-slug}-{github-login}`, with any character
   GitHub does not allow replaced by `-`, private, in the bound organization.
-  The student is invited with write (`push`) access. The row is saved before
+  The student is invited with write (`push`) access. The login in the name and
+  in the invitation is read from the linked numeric ID first
+  (`GET /user/{account_id}`) and stored, never taken from the stored login: a
+  renamed login is free for anyone to register, so a stale one could invite a
+  stranger with write access (#1766). When no account has the ID, nothing is
+  made or sent, and the student is asked to link again. The row is saved before
   the invitation, so a failed invitation can be sent again (*Resend
   invitation*) without making a second repository.
 - **Submitting** reads the course repository with the organization's
