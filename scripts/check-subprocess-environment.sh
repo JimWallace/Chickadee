@@ -14,53 +14,60 @@ set -uo pipefail
 #
 # Each call is read from `Subprocess.run(` to its matching close paren, so a
 # multi-line call is one unit and an `environment:` on any line of it counts.
+#
+# Pure grep/sed/awk: the format-lint container has no python3.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-python3 - <<'PY'
-import pathlib, sys
-
-root = pathlib.Path("Sources/APIServer")
-missing = []
-calls = 0
-for path in sorted(root.rglob("*.swift")):
-    text = path.read_text(encoding="utf-8")
-    start = 0
-    while True:
-        at = text.find("Subprocess.run(", start)
-        if at < 0:
-            break
-        # Walk to the matching close paren of the call.
+report="$(find Sources/APIServer -name '*.swift' -print0 | sort -z | xargs -0 awk '
+function scan(path, text,    at, start, i, depth, end, call, ch, before, line) {
+    start = 1
+    while ((at = index(substr(text, start), "Subprocess.run(")) > 0) {
+        at += start - 1
         depth = 0
-        i = at + len("Subprocess.run")
-        end = None
-        while i < len(text):
-            ch = text[i]
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
+        end = 0
+        for (i = at + length("Subprocess.run"); i <= length(text); i++) {
+            ch = substr(text, i, 1)
+            if (ch == "(") {
+                depth++
+            } else if (ch == ")") {
+                depth--
+                if (depth == 0) {
                     end = i
                     break
-            i += 1
-        if end is None:
-            end = len(text)
-        calls += 1
-        call = text[at:end]
-        if "environment:" not in call:
-            line = text.count("\n", 0, at) + 1
-            missing.append(f"{path}:{line}")
-        start = end
-if calls == 0:
-    print("check-subprocess-environment: found no Subprocess.run call under Sources/APIServer", file=sys.stderr)
-    sys.exit(1)
-if missing:
-    print("check-subprocess-environment: Subprocess.run call(s) with no environment: argument", file=sys.stderr)
-    for site in missing:
-        print(f"  {site}", file=sys.stderr)
-    print("  Pass Subprocess::Environment.only(...) (SubprocessEnvironment.swift); the default inherits the server's secrets.", file=sys.stderr)
-    sys.exit(1)
-print(f"check-subprocess-environment: OK ({calls} calls, every one passes environment:)")
-PY
+                }
+            }
+        }
+        if (end == 0) end = length(text)
+        calls++
+        call = substr(text, at, end - at + 1)
+        if (index(call, "environment:") == 0) {
+            before = substr(text, 1, at)
+            line = gsub(/\n/, "", before) + 1
+            printf "MISSING %s:%d\n", path, line
+        }
+        start = end + 1
+    }
+}
+FNR == 1 { if (file != "") scan(file, text); file = FILENAME; text = "" }
+{ text = text $0 "\n" }
+END { if (file != "") scan(file, text); printf "CALLS %d\n", calls + 0 }
+')"
+
+calls="$(printf '%s\n' "$report" | awk '/^CALLS /{ s += $2 } END { print s + 0 }')"
+missing="$(printf '%s\n' "$report" | sed -n 's/^MISSING //p')"
+
+if [ "$calls" -eq 0 ]; then
+    echo "check-subprocess-environment: found no Subprocess.run call under Sources/APIServer" >&2
+    exit 1
+fi
+
+if [ -n "$missing" ]; then
+    echo "check-subprocess-environment: Subprocess.run call(s) with no environment: argument" >&2
+    printf '  %s\n' $missing >&2
+    echo "  Pass Subprocess::Environment.only(...) (SubprocessEnvironment.swift); the default inherits the server's secrets." >&2
+    exit 1
+fi
+
+echo "check-subprocess-environment: OK ($calls calls, every one passes environment:)"
