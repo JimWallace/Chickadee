@@ -272,10 +272,11 @@ final class AssignmentHelpersManifestTests {
     }
 
     // Regression: rebuilding the manifest to add or remove a script must
-    // preserve the class-activity block. makeWorkerManifestJSON builds a fresh
-    // dict, so an un-threaded block would turn a leaderboard challenge back
-    // into an ordinary lab on the next script edit — the `languageDeclared`
-    // trap, one field later.
+    // preserve the class-activity block. makeWorkerManifestJSON used to build
+    // a fresh dict, so an un-threaded block turned a leaderboard challenge
+    // back into an ordinary lab on the next script edit — the
+    // `languageDeclared` trap, one field later. It copies the decoded manifest
+    // now (#1655); this pins that the block rides along.
     @Test func updateManifestScriptEditsPreserveActivity() throws {
         let activity = ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)
         let original = try makeWorkerManifestJSON(

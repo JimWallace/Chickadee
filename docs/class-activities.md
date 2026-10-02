@@ -81,12 +81,15 @@ the first student submission. Creation-time choice is a follow-up.
 work end to end. A kind the runner cannot execute is a silent misroute, not a
 feature, so each arrives with the slice that makes it grade. The opponent axis
 is a type of its own since slice 2: `ActivityOpponentSource` (`none` |
-`supportFile`), read off the kind by the exhaustive `opponentSource`, so a kind
-added without an answer does not compile. Every seam that depends on an
-opponent — the worker's `activity-match` capability, the claim gate, the
-browser-grading refusal, the opponent picker — asks `stagesAnOpponent`, never
-the kind. The aggregation axis is still the one derived fact
-`aggregatesToLeaderboard`; it becomes a type when standings land.
+`supportFile` | `champion` | `classmates` | `paired`), read off the kind by the
+exhaustive `opponentSource`, so a kind added without an answer does not
+compile. Every seam that depends on an opponent — the worker's
+`activity-match` capability, the claim gate, the browser-grading refusal, the
+opponent picker — asks `stagesAnOpponent`, never the kind. The aggregation
+axis is a type too since slice 4: `ActivityAggregation` (`leaderboard` |
+`standings` | `bracket` | `union`), read off the kind by the exhaustive
+`aggregation`; `aggregatesToLeaderboard` is the one-line derived fact the
+leaderboard page keeps.
 
 ### Manifest block (Core, `TestProperties.activity`)
 
@@ -246,7 +249,8 @@ different reason now: worker grading is forced by the opponent itself, and
   opponent_submission_id nullable, opponent_identity, round nullable, score,
   metric, won, seed, created_at, completed_at nullable). Unique on
   (submission_id, opponent_identity) — the identity rather than the nullable
-  submission ID, so a bot opponent keys too. Slice 4 fills `round`.
+  submission ID, so a bot opponent keys too. Slice 5 fills `round`; a round
+  robin's rows carry none.
 - `activity_champions` (slice 3): (test_setup_id unique, user_id, submission_id,
   crowned_at, defences). FK to `users`, cascade.
 - `activity_standings` (slice 4): (test_setup_id, user_id, submission_id,
@@ -283,8 +287,10 @@ Additive migrations only; no column changes to existing tables.
   for a round robin (`standingSignals`) and passes them in. Anywhere they
   are not loaded the condition is unmet, and a class goal carrying one is
   refused by `isSweepEvaluableClassGoal`, so the sweep never sees them.
-- `isSweepEvaluableClassGoal` admits exactly three shapes today. Extend the
-  admitted list one shape at a time, each with its own test.
+- `isSweepEvaluableClassGoal` admits exactly four shapes today (no
+  conditions, a single `grade`, a single `itemsCovered`, a single
+  `classCoverage`). Extend the admitted list one shape at a time, each with
+  its own test.
 
 ### King of the hill (slice 3)
 
