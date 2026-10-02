@@ -187,6 +187,43 @@ import VaporTesting
         }
     }
 
+    /// A GitHub that never answers does not hold the worker's result report:
+    /// the post is abandoned at the deadline and nothing is recorded (#1773).
+    @Test func aHangingGitHubIsAbandonedAtTheDeadline() async throws {
+        let posted = posted
+        app.githubRepoClient = GitHubRepoClient(
+            findInstallation: { _, _ in GitHubInstallation(id: 5, accountID: 9_001) },
+            createInstallationToken: { _, _ in
+                GitHubInstallationToken(token: "t", expiresAt: Date().addingTimeInterval(3_600))
+            },
+            repositories: { _ in [] },
+            repository: { _, _ in
+                GitHubRepository(
+                    id: 100, fullName: "octo-student/lab1", ownerID: 9_001, defaultBranch: "main", isPrivate: true)
+            },
+            branches: { _, _ in [] },
+            commit: { _, _, _ in nil },
+            tarball: { _, _, _, _ in Data() },
+            createStatus: { _, _, _, _ in
+                try await Task.sleep(for: .seconds(60))
+                posted.withLockedValue { $0.append("late") }
+            })
+        try await withApp(app) { _ in
+            let submission = try await submission()
+            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let collection = TestOutcomeCollection(
+                submissionID: "sub_gh", testSetupID: "gh_setup", attemptNumber: 1, buildStatus: .passed,
+                compilerOutput: nil, outcomes: [wrMakeOutcome(name: "a")],
+                totalTests: 1, passCount: 1, failCount: 0, errorCount: 0, timeoutCount: 0, executionTimeMs: 1,
+                runnerVersion: "test", timestamp: Date())
+            let started = Date()
+            await GitHubCommitStatusPoster.postIfEnabled(
+                submission: submission, collection: collection, req: req, deadline: .milliseconds(200))
+            #expect(Date().timeIntervalSince(started) < 10)
+            #expect(posted.withLockedValue { $0 }.isEmpty)
+        }
+    }
+
     @Test func aPublicRepositoryGetsNoStatus() async throws {
         useGitHub(repositoryIsPrivate: false)
         try await withApp(app) { _ in

@@ -199,6 +199,11 @@ extension GitHubRepoClient {
 
     private static let api = "https://api.github.com"
 
+    /// How long one API call may take. Vapor's shared client sets no read
+    /// timeout of its own, so without this a GitHub connection that stops
+    /// answering holds the caller for as long as the socket lives (#1773).
+    static let callTimeout: TimeAmount = .seconds(30)
+
     private static func headers(token: String) -> HTTPHeaders {
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .accept, value: "application/vnd.github+json")
@@ -238,7 +243,9 @@ extension GitHubRepoClient {
         func get(_ path: String, token: String) async throws -> ClientResponse {
             let client = app.client
             return try await app.recordingReachability(.github) {
-                try await client.get(URI(string: api + path), headers: headers(token: token))
+                try await client.get(URI(string: api + path), headers: headers(token: token)) { request in
+                    request.timeout = callTimeout
+                }
             }
         }
 
@@ -248,6 +255,7 @@ extension GitHubRepoClient {
             let client = app.client
             return try await app.recordingReachability(.github) {
                 try await client.send(method, headers: headers(token: token), to: URI(string: api + path)) { req in
+                    req.timeout = callTimeout
                     try req.content.encode(body, as: .json)
                 }
             }
