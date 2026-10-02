@@ -92,6 +92,13 @@ struct GitHubRepoClient: Sendable {
     var generate:
         @Sendable (_ token: String, _ template: String, _ owner: String, _ name: String) async throws ->
             GitHubRepository = { _, _, _, _ in throw GitHubSubmitError.unavailable }
+    /// The current login of the GitHub user with this numeric ID, or nil when
+    /// no account has the ID any more. GitHub releases a renamed login for
+    /// anyone to take, so a collaborator is invited by the login this returns,
+    /// never by a stored one (#1766).
+    var userLogin: @Sendable (_ token: String, _ userID: Int64) async throws -> String? = { _, _ in
+        throw GitHubSubmitError.unavailable
+    }
     /// Invites `login` to the repository with write access.
     var addCollaborator: @Sendable (_ token: String, _ fullName: String, _ login: String) async throws -> Void =
         { _, _, _ in throw GitHubSubmitError.unavailable }
@@ -170,6 +177,10 @@ extension GitHubRepoClient {
         let owner: String
         let name: String
         let `private`: Bool
+    }
+
+    private struct UserBody: Decodable {
+        let login: String
     }
 
     private struct PermissionBody: Content {
@@ -360,6 +371,11 @@ extension GitHubRepoClient {
                 throw GitHubSubmitError.githubFailed
             }
             return try decoder().decode(RepositoryBody.self, from: Data(buffer: body)).repository
+        }
+        live.userLogin = { token, userID in
+            let response = try await transport.get("/user/\(userID)", token: token)
+            if response.status == .notFound { return nil }
+            return try transport.decode(UserBody.self, from: response).login
         }
         live.addCollaborator = { token, fullName, login in
             let response = try await transport.send(
