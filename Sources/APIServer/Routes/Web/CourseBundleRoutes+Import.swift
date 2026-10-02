@@ -467,9 +467,19 @@ private func importBundledTestSetups(
                 to: URL(fileURLWithPath: newZipPath))
         }
 
-        // Extract .ipynb if present (browser-mode setups).
+        // The starter notebook: the flat file the bundle carries (#1736), else
+        // the zip entry an older bundle may hold (browser-mode setups).
         var notebookPath: String?
-        if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
+        if let bundledNotebook = bundledSetup.notebookFilename,
+            FileManager.default.fileExists(atPath: extractDir.appendingPathComponent(bundledNotebook).path)
+        {
+            let nbPath = setupsDir + "\(newSetupID).ipynb"
+            try await runBlocking(app: app) {
+                try FileManager.default.copyItem(
+                    at: extractDir.appendingPathComponent(bundledNotebook), to: URL(fileURLWithPath: nbPath))
+            }
+            notebookPath = nbPath
+        } else if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             try await runBlocking(app: app) {
                 try nbData.write(to: URL(fileURLWithPath: nbPath))
