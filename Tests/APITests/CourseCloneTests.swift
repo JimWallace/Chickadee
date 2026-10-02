@@ -260,4 +260,41 @@ import VaporTesting
             #expect(copy.term == AcademicTerm(year: 2026, season: .fall))
         }
     }
+
+    /// A clone starts with enrollment closed, whatever the source's mode. An
+    /// `.auto` mode copied across would enroll every user who logs in, last
+    /// term's students included, before the instructor sets up the new term
+    /// (#1780).
+    @Test(arguments: [CourseEnrollmentMode.auto, .open])
+    func aCloneStartsWithEnrollmentClosed(sourceMode: CourseEnrollmentMode) async throws {
+        try await withApp(app) { app in
+            let cookie = try await loginAsAdmin()
+            let source = APICourse(
+                code: "CL500", name: "Source", enrollmentMode: sourceMode,
+                term: AcademicTerm(year: 2026, season: .fall))
+            try await source.save(on: app.db)
+            let sourceID = try source.requireID()
+
+            _ = try await postClone(
+                sourceID,
+                form: ["code": "CL500", "name": "Target", "termYear": "2027", "termSeason": "winter"],
+                cookie: cookie)
+            let clone = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "CL500").filter(\.$id != sourceID).first())
+            #expect(clone.enrollmentMode == .closed)
+
+            // A student who logs in after the clone joins the source if it is
+            // `.auto`, and never the clone.
+            try await loginUser(username: "clone_late_student", password: "testpassword", role: "user", on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "clone_late_student").first())
+            let courseIDs = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$userID == student.requireID())
+                .all()
+                .map { $0.$course.id }
+            #expect(!courseIDs.contains(try clone.requireID()))
+            #expect(courseIDs.contains(sourceID) == (sourceMode == .auto))
+        }
+    }
 }

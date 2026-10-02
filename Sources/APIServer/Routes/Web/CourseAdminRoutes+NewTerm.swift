@@ -46,7 +46,8 @@ extension CourseAdminRoutes {
             cloneYear: next?.year,
             cloneYearOptions: CourseTermForm.yearOptions(selected: next?.year),
             cloneTermOptions: CourseTermForm.options(selected: next?.season),
-            flashSuccess: justCloned ? "Cloned; set the new course's dates before opening its assignments." : nil,
+            flashSuccess: justCloned
+                ? "Cloned with enrollment closed; set the new course's dates before opening its assignments." : nil,
             flashError: flashError)
         return try await req.view.render("instructor-new-term", ctx)
     }
