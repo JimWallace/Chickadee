@@ -249,6 +249,13 @@ enum AssignmentAuthoringService {
             // personalization expressions read them from the shared directory.
             await extractSupportFilesToSharedDirectory(
                 for: newSetup, testSetupsDirectory: directories.setups)
+            // The zip never holds the solution source, so the shared directory
+            // just built lacks it; write it from the copied solution (#1742).
+            if let clonedSolution {
+                await SolutionNotebookExtractor.writeSolutionSource(
+                    fromCopiedSolution: clonedSolution, setup: newSetup,
+                    testSetupsDirectory: directories.setups)
+            }
             let createdPaths =
                 [dstZip] + [newNotebookPath, copiedSolutionPath].compactMap { $0 }
                 + [directories.setups + "shared/\(newSetupID)/"]
