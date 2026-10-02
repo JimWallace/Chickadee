@@ -33,8 +33,16 @@ import VaporTesting
         let migrations = root.appendingPathComponent("Sources/APIServer/Migrations")
         let files = try FileManager.default.contentsOfDirectory(at: migrations, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "swift" }
-        let create = try Regex(#"CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?(idx_[a-z0-9_]+)"#)
-        let drop = try Regex(#"DROP INDEX (?:IF EXISTS )?(idx_[a-z0-9_]+)"#)
+        // An index is created either as raw SQL or through the SQLKit builder;
+        // both shapes are read, so a migration written either way is covered.
+        let create = [
+            try Regex(#"CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?(idx_[a-z0-9_]+)"#),
+            try Regex(#"create\(index: "(idx_[a-z0-9_]+)""#),
+        ]
+        let drop = [
+            try Regex(#"DROP INDEX (?:IF EXISTS )?(idx_[a-z0-9_]+)"#),
+            try Regex(#"drop\(index: "(idx_[a-z0-9_]+)""#),
+        ]
 
         var created: Set<String> = []
         var dropped: Set<String> = []
@@ -42,8 +50,8 @@ import VaporTesting
             let source = try String(contentsOf: file, encoding: .utf8)
             // Only `prepare` shapes the schema; `revert` is the mirror image.
             let prepare = source.components(separatedBy: "func revert(").first ?? source
-            let createdHere = Set(prepare.matches(of: create).compactMap { $0.output[1].substring.map(String.init) })
-            let droppedHere = Set(prepare.matches(of: drop).compactMap { $0.output[1].substring.map(String.init) })
+            let createdHere = Self.names(in: prepare, matching: create)
+            let droppedHere = Self.names(in: prepare, matching: drop)
             created.formUnion(createdHere)
             // A drop followed by a create of the same name in one `prepare` is
             // a redefinition, not a removal.
@@ -52,6 +60,14 @@ import VaporTesting
         // The one migration that builds its statements from a list.
         created.formUnion(CreateSweepAndPollIndexes.indexes.map(\.name))
         return created.subtracting(dropped)
+    }
+
+    /// The first capture of every match of any of `patterns` in `source`.
+    private static func names(in source: String, matching patterns: [Regex<AnyRegexOutput>]) -> Set<String> {
+        Set(
+            patterns.flatMap { pattern in
+                source.matches(of: pattern).compactMap { $0.output[1].substring.map(String.init) }
+            })
     }
 
     @Test func everyDeclaredIndexExistsAndNoOther() async throws {
