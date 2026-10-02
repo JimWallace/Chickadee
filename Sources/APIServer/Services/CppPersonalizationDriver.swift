@@ -110,9 +110,10 @@ enum CppPersonalizationDriver {
     }
 
     /// The shared seed fold — Horner base-16 over the hex digits of
-    /// CHICKADEE_ASSIGNMENT_SEED, mod 2^31−1 — matching
-    /// `chickadee_seed()` in the R/Lua/Octave runtimes digit for digit, so a
+    /// CHICKADEE_ASSIGNMENT_SEED, mod 2^31−1 — matching `ck::seed()` in
+    /// `test_runtime.hpp` and the other runtimes digit for digit, so a
     /// student's seed is one number in every language.
+    /// `CppPersonalizationDriverTests` runs both copies and compares them.
     static let seedSource = #"""
         static long long ck_seed() {
             const char* raw = std::getenv("CHICKADEE_ASSIGNMENT_SEED");

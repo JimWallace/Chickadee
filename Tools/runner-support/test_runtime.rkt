@@ -49,6 +49,7 @@
          chickadee-unordered-equal?
          chickadee-format
          chickadee-inputs
+         chickadee-seed
          chickadee-label
          chickadee-value
          chickadee-call/capture
@@ -221,6 +222,23 @@
         (dynamic-require `(file ,(path->string (path->complete-path "_ck_inputs.rkt")))
                          'ck-inputs))
       (hash)))
+
+;; --- The per-student seed --------------------------------------------------
+;; Base-16 Horner fold over the hex digits of CHICKADEE_ASSIGNMENT_SEED, mod
+;; 2^31-1: the reduction the server's Racket driver binds as `seed`
+;; (RacketPersonalizationDriver.seedSource) and every other runtime uses, so a
+;; student's seed is one number in every language. Non-hex characters are
+;; skipped; an absent or digitless value is 0. RacketPersonalizationDriverTests
+;; runs both and compares them.
+
+(define (chickadee-seed)
+  (for/fold ([acc 0])
+            ([ch (in-string (string-downcase (or (getenv "CHICKADEE_ASSIGNMENT_SEED") "")))])
+    (define digit
+      (cond [(char<=? #\0 ch #\9) (- (char->integer ch) (char->integer #\0))]
+            [(char<=? #\a ch #\f) (+ 10 (- (char->integer ch) (char->integer #\a)))]
+            [else #f]))
+    (if digit (modulo (+ (* acc 16) digit) 2147483647) acc)))
 
 ;; --- Comparison ------------------------------------------------------------
 

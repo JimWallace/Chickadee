@@ -379,8 +379,11 @@ class ck {
     //
     // Base-16 Horner fold over the hex digits of CHICKADEE_ASSIGNMENT_SEED, mod
     // 2^31-1 — digit-for-digit the same reduction as the R, Lua, Octave, C++
-    // and Racket runtimes, so a student's seed is one number in every language.
-    // Non-hex characters are skipped; an absent or digitless value is 0.
+    // (`ck::seed()`) and Racket (`chickadee-seed`) runtimes and the server's
+    // Java driver (JavaPersonalizationDriver.seedSource), so a student's seed is
+    // one number in every language. Non-hex characters are skipped; an absent
+    // or digitless value is 0. JavaPersonalizationDriverTests runs this and the
+    // driver's copy and compares them.
     //
     // Java has BigInteger and would not need the fold, but the fold is the
     // contract: base R has no bignum, and every other language matches R rather

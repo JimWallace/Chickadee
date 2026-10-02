@@ -37,6 +37,22 @@ extension ConditionTrait {
     static let requiresOctave: ConditionTrait = .enabled("requires octave-cli on PATH") {
         await cachedToolIsAvailable("octave-cli")
     }
+
+    /// Skips, visibly, when `g++` does not answer `--version`.
+    static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") {
+        await cachedToolIsAvailable("g++")
+    }
+
+    /// Skips, visibly, when `javac` does not answer `--version`. The probe is
+    /// `javac`, not `java`: a JRE-only host is the real skew.
+    static let requiresJavac: ConditionTrait = .enabled("requires javac on PATH") {
+        await cachedToolIsAvailable("javac")
+    }
+
+    /// Skips, visibly, when `racket` does not answer `--version`.
+    static let requiresRacket: ConditionTrait = .enabled("requires racket on PATH") {
+        await cachedToolIsAvailable("racket")
+    }
 }
 
 /// `@Test(.ciOnly)` resolves through `any TestTrait`, so the implicit-member
@@ -46,4 +62,7 @@ extension Trait where Self == ConditionTrait {
     static var ciOnly: Self { ConditionTrait.ciOnly }
     static var requiresRscript: Self { ConditionTrait.requiresRscript }
     static var requiresOctave: Self { ConditionTrait.requiresOctave }
+    static var requiresGpp: Self { ConditionTrait.requiresGpp }
+    static var requiresJavac: Self { ConditionTrait.requiresJavac }
+    static var requiresRacket: Self { ConditionTrait.requiresRacket }
 }

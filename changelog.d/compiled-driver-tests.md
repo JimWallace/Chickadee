@@ -1,0 +1,3 @@
+### Added
+
+- **C++ and Racket tests can read the per-student seed, and the C++, Java and Racket personalization drivers have tests.** `test_runtime.hpp` gains `ck::seed()` and `test_runtime.rkt` gains `chickadee-seed`, the same fold the server's drivers bind as `seed`, so a hand-written test no longer has to re-implement it. New suites run each driver through the real evaluator under its real toolchain: the emitted values compile or read back, the driver's seed equals the runtime's, and a support helper loads without leaving files behind. The Java runtime's comment, which claimed every runtime had the fold, is now true (#1789, #1796).
