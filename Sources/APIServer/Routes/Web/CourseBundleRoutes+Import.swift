@@ -231,6 +231,8 @@ extension CourseBundleRoutes {
             newCourse.slipDaysPerStudent = slipDayPolicy.daysPerStudent
             newCourse.slipDayExtensionHours = slipDayPolicy.extensionHours
             newCourse.slipDayReleaseRevealHold = slipDayPolicy.releaseRevealHold
+            // The course's own authoring guide, when it has one (#1737).
+            newCourse.mcpInstructions = manifest.course.mcpInstructions
             try await newCourse.save(on: db)
             guard let newCourseID = newCourse.id else {
                 throw AppError.internalFailure(reason: "Created course missing id after save")
@@ -617,6 +619,14 @@ private func importBundledAssignments(
             sectionID: bundledAssign.sectionBundleID.flatMap { sectionIDMap[$0] },
             courseID: courseID
         )
+        // The four per-assignment policies (#1737). A bundle written before
+        // they were carried leaves each at its column default.
+        newAssign.secretRevealEnabled = bundledAssign.secretRevealEnabled
+        newAssign.passingThresholdPercent = bundledAssign.passingThresholdPercent
+        if let solutionVisibility = bundledAssign.solutionVisibility {
+            newAssign.solutionVisibility = solutionVisibility
+        }
+        newAssign.brightspaceSyncExcluded = bundledAssign.brightspaceSyncExcluded
         try await newAssign.save(on: db)
         tally.assignmentsImported += 1
     }

@@ -316,7 +316,11 @@ struct CourseBundleRoutes: RouteCollection {
                 visibility: a.visibility,
                 sortOrder: a.sortOrder,
                 testSetupBundleID: setupBid,
-                sectionBundleID: a.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] }
+                sectionBundleID: a.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] },
+                secretRevealEnabled: a.secretRevealEnabled,
+                passingThresholdPercent: a.passingThresholdPercent,
+                solutionVisibility: a.solutionVisibility,
+                brightspaceSyncExcluded: a.brightspaceSyncExcluded
             )
         }
 
@@ -355,14 +359,7 @@ struct CourseBundleRoutes: RouteCollection {
             exportedAt: Date(),
             exportedBy: caller.username,
             chickadeeVersion: ChickadeeVersion.current,
-            course: BundledCourse(
-                code: course.code, name: course.name,
-                enrollmentMode: course.enrollmentMode,
-                slipDaysEnabled: course.slipDaysEnabled,
-                slipDaysPerStudent: course.slipDaysPerStudent,
-                slipDayExtensionHours: course.slipDayExtensionHours,
-                slipDayReleaseRevealHold: course.slipDayReleaseRevealHold,
-                term: course.term),
+            course: bundledCourse(course),
             users: bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
             enrollments: bundledEnrollments,
@@ -379,6 +376,20 @@ struct CourseBundleRoutes: RouteCollection {
     /// attachment metadata. Each attachment's global UUID doubles as its unique
     /// bundle filename (`content/<id>`); the bytes are copied in
     /// writeExportStaging.
+    /// The course row of the manifest: identity, enrollment mode, slip-day
+    /// policy, term, and the course's own authoring guide (#1737).
+    private func bundledCourse(_ course: APICourse) -> BundledCourse {
+        BundledCourse(
+            code: course.code, name: course.name,
+            enrollmentMode: course.enrollmentMode,
+            slipDaysEnabled: course.slipDaysEnabled,
+            slipDaysPerStudent: course.slipDaysPerStudent,
+            slipDayExtensionHours: course.slipDayExtensionHours,
+            slipDayReleaseRevealHold: course.slipDayReleaseRevealHold,
+            term: course.term,
+            mcpInstructions: course.mcpInstructions)
+    }
+
     private func buildBundledContentItems(
         data: ExportData,
         bundleIDs: ExportBundleIDs
