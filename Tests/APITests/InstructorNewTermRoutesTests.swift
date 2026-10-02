@@ -29,7 +29,15 @@ import VaporTesting
         try await course.save(on: app.db)
         let courseID = try course.requireID()
         try await makeTestSetup(on: app, id: "setup_ntsrc1", courseID: courseID)
-        try await makeTestAssignment(on: app, testSetupID: "setup_ntsrc1", courseID: courseID, title: "Lab 1")
+        let lab = try await makeTestAssignment(
+            on: app, testSetupID: "setup_ntsrc1", courseID: courseID, title: "Lab 1",
+            dueAt: Date(timeIntervalSince1970: 1_790_000_000))
+        // Dated, overridden and revealing, so the clone's resets are asserted
+        // against values rather than against fields that were empty already.
+        lab.startsAt = Date(timeIntervalSince1970: 1_789_000_000)
+        lab.deadlineOverrideActive = true
+        lab.solutionVisibilityRaw = SolutionVisibility.afterDue.rawValue
+        try await lab.save(on: app.db)
 
         let cookie = try await loginUser(username: username, password: "pw", role: "user", on: app)
         let user = try #require(try await APIUser.query(on: app.db).filter(\.$username == username).first())
@@ -93,8 +101,16 @@ import VaporTesting
                     .filter(\.$code == "NT135").filter(\.$id != sourceID).first())
             let cloneID = try clone.requireID()
             #expect(clone.term == AcademicTerm(year: 2027, season: .winter))
-            let assignments = try await APIAssignment.query(on: app.db).filter(\.$courseID == cloneID).count()
-            #expect(assignments == 1)
+            let assignments = try await APIAssignment.query(on: app.db).filter(\.$courseID == cloneID).all()
+            #expect(assignments.count == 1)
+            // The instructor door resets every date and deadline field the
+            // admin door does: the clone starts closed, undated and unrevealed.
+            let lab = try #require(assignments.first)
+            #expect(lab.visibility == .closed)
+            #expect(lab.dueAt == nil)
+            #expect(lab.startsAt == nil)
+            #expect(lab.deadlineOverrideActive != true)
+            #expect(lab.solutionVisibilityRaw == nil)
 
             // The caller, and only the caller, is enrolled, as instructor.
             let enrollments = try await APICourseEnrollment.query(on: app.db)
