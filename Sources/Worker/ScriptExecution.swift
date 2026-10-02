@@ -16,30 +16,32 @@
 //
 // What this file still owns, because Subprocess deliberately doesn't:
 //
-//   • The capture pipes. We create them, set FD_CLOEXEC, and hand Subprocess
-//     the write ends via `.fileDescriptor(_:closeAfterSpawningProcess:)`.
-//     Subprocess's own pipes come from swift-system's `FileDescriptor.pipe()`,
-//     which is bare `pipe(2)` with no `O_CLOEXEC` — so a process spawned
-//     concurrently with the child inherits a duplicate of the write end and
-//     the read side never sees EOF (issues #1139/#1233). That is fatal on the
-//     `.sequence` output path: its `AsyncSequence` has no cancellation handler
-//     anywhere in the library, so a drain parked on an EOF that will never
-//     arrive cannot be cancelled, the body never returns, `run` never returns,
-//     and enough of those starve the cooperative pool and wedge the process.
-//     Owning the pipes restores both guards at once: CLOEXEC on creation, and
-//     a deadline-bounded final drain.
-//
 //   • Bounded output capture. Subprocess's `.string(limit:)` *throws* once a
 //     child exceeds the limit; a student script printing in a tight loop must
 //     still grade, with the first megabyte kept and a truncation marker
-//     appended. Output accumulates into `CapturedPipeBuffer` instead, drained
-//     concurrently so a child writing more than one pipe buffer never blocks
-//     on a full pipe.
+//     appended. So this file creates the capture pipes, hands Subprocess the
+//     write ends via `.fileDescriptor(_:closeAfterSpawningProcess:)`, and
+//     drains the read ends itself into `CapturedPipeBuffer`, concurrently so a
+//     child writing more than one pipe buffer never blocks on a full pipe, and
+//     with a deadline-bounded final drain.
 //
 //   • The time limit. The deadline is ours to enforce and ours to report:
 //     `ScriptOutput.timedOut` is an explicit flag, not something inferred
 //     from a termination signal, and `interpretScriptOutput` keys the
 //     `timeout` status off it (pinned by Tests/Fixtures/output-contract.json).
+//
+// It does NOT own the pipes to stop a descriptor leak, though this header once
+// said so (#1791). The fear was that Subprocess's own pipes, which come from
+// swift-system's bare `pipe(2)` with no `O_CLOEXEC`, leak a write end into a
+// concurrently spawned child, so the read side never sees EOF (#1139, #1233).
+// But the vendored fork's child marks every descriptor above stderr
+// close-on-exec before `execve` (`_close_range(..., CLOSE_RANGE_CLOEXEC)` in
+// `_SubprocessCShims/process_shims.c`), so a duplicate a sibling inherits
+// closes at that sibling's exec, and no Foundation `Process` spawn is left in
+// the worker to leak one. `SupervisedProcess` and `MimeTypeDetector` rely on
+// the same guarantee. The pipes are still made close-on-exec here, which costs
+// nothing. Whether the two drain threads per script could become
+// `.string(limit:)` with a truncating wrapper is a separate decision.
 
 import Core
 import Foundation
