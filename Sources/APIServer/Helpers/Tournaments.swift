@@ -70,32 +70,12 @@ func startTournament(
 }
 
 /// The latest complete student submission per enrolled student, seeded by
-/// arrival order of those submissions.
+/// arrival order of those submissions. The "latest per student" rule is the
+/// one `latestStudentSubmissionsByUser` states for the classmate chooser and
+/// the union read model; only the seeding order is the tournament's own
+/// (#1751).
 private func snapshotEntrants(setup: APITestSetup, on db: Database) async throws -> [TournamentEntrant] {
-    guard let setupID = setup.id else { return [] }
-    // NULL role is a pre-migration student (the `role` accessor's default).
-    let students = Set(
-        try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == setup.courseID)
-            .group(.or) { or in
-                or.filter(\.$roleRaw == CourseRole.student.rawValue)
-                or.filter(\.$roleRaw == .null)
-            }
-            .all()
-            .map(\.userID))
-    guard !students.isEmpty else { return [] }
-    let candidates = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .filter(\.$status == SubmissionStatus.complete.rawValue)
-        .filter(\.$userID ~~ Array(students))
-        .sort(\.$submittedAt, .descending)
-        .all()
-    var latestByUser: [UUID: APISubmission] = [:]
-    for candidate in candidates {
-        guard let userID = candidate.userID, latestByUser[userID] == nil else { continue }
-        latestByUser[userID] = candidate
-    }
+    let latestByUser = try await latestStudentSubmissionsByUser(setup: setup, on: db)
     return latestByUser.values
         .sorted { a, b in
             let (ta, tb) = (a.submittedAt ?? .distantPast, b.submittedAt ?? .distantPast)
