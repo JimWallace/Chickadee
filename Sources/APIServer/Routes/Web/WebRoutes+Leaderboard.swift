@@ -55,15 +55,20 @@ extension WebRoutes {
         // Staff always read the whole list; a student reads a window of it
         // unless they ask for the rest.
         let showingAll = isStaff || req.query[String.self, at: "all"] == "1"
+        // A classmate reading the page locks every handle it shows; a staff
+        // view locks nothing (docs/student-avatars.md §3).
+        let lockingFor: UUID? = isStaff ? nil : user.id
         let board =
             showsMetricBoard
             ? try await buildLeaderboard(
-                setup: setup, viewer: user, isStaff: isStaff, showAll: showingAll, on: req.db)
+                setup: setup, viewer: user, isStaff: isStaff, lockingFor: lockingFor, showAll: showingAll,
+                on: req.db)
             : LeaderboardBoard.empty
         let standingsBoard =
             showsStandings
             ? try await buildStandingsBoard(
-                setup: setup, viewer: user, isStaff: isStaff, showAll: showingAll, on: req.db)
+                setup: setup, viewer: user, isStaff: isStaff, lockingFor: lockingFor, showAll: showingAll,
+                on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
@@ -75,7 +80,7 @@ extension WebRoutes {
         let union =
             showsUnion
             ? try await buildUnionPresentation(
-                setup: setup, viewer: user, isStaff: isStaff, showAll: showingAll,
+                setup: setup, viewer: user, isStaff: isStaff, lockingFor: lockingFor, showAll: showingAll,
                 allURL: "\(boardURL)?all=1", on: req.db)
             : nil
 
@@ -145,7 +150,7 @@ extension WebRoutes {
 /// bird. Nil when no match has landed yet, so the page can say so once
 /// rather than printing two empty tables.
 func buildUnionPresentation(
-    setup: APITestSetup, viewer: APIUser, isStaff: Bool, showAll: Bool, allURL: String,
+    setup: APITestSetup, viewer: APIUser, isStaff: Bool, lockingFor: UUID?, showAll: Bool, allURL: String,
     on db: Database
 ) async throws -> UnionPresentation? {
     let tally = try await unionTally(setup: setup, on: db)
@@ -170,7 +175,7 @@ func buildUnionPresentation(
         let isTied = (killTieSizes[rank] ?? 1) > 1
         guard
             let identity = try await identities.presentation(
-                for: kill.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student",
+                for: kill.userID, includeName: isStaff, lockingFor: lockingFor, fallbackLabel: "Student",
                 size: .roster,
                 on: db)
         else { continue }
@@ -191,7 +196,7 @@ func buildUnionPresentation(
     for tally in tally.defences {
         guard
             let identity = try await identities.presentation(
-                for: tally.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id,
+                for: tally.userID, includeName: isStaff, lockingFor: lockingFor,
                 fallbackLabel: "Student", size: .roster,
                 on: db)
         else { continue }
@@ -752,7 +757,7 @@ struct LeaderboardBoard: Sendable {
 /// `isStaff` decides whether names, usernames and submission counts are built
 /// at all — a student's page never holds them.
 func buildLeaderboard(
-    setup: APITestSetup, viewer: APIUser, isStaff: Bool, showAll: Bool, on db: Database
+    setup: APITestSetup, viewer: APIUser, isStaff: Bool, lockingFor: UUID?, showAll: Bool, on db: Database
 ) async throws -> LeaderboardBoard {
     let setupID = setup.id ?? ""
     let allEntries = try await leaderboardEntries(testSetupID: setupID, on: db)
@@ -782,7 +787,7 @@ func buildLeaderboard(
         guard
             let identity = try await identities.presentation(
                 for: entry.userID, includeName: isStaff,
-                lockingFor: isStaff ? nil : viewer.id, fallbackLabel: "Student \(rank)",
+                lockingFor: lockingFor, fallbackLabel: "Student \(rank)",
                 size: .roster, on: db)
         else { continue }
         var tieNote = ""
@@ -992,7 +997,7 @@ struct StandingsBoard: Sendable {
 /// The standings for a round robin, best first (`activityStandings`), under
 /// the same handle-and-bird identity as a ranking row.
 func buildStandingsBoard(
-    setup: APITestSetup, viewer: APIUser, isStaff: Bool, showAll: Bool, on db: Database
+    setup: APITestSetup, viewer: APIUser, isStaff: Bool, lockingFor: UUID?, showAll: Bool, on db: Database
 ) async throws -> StandingsBoard {
     let standings = try await activityStandings(testSetupID: setup.id ?? "", on: db)
     let identities = try await RankedIdentities.load(
@@ -1012,7 +1017,7 @@ func buildStandingsBoard(
         let isTied = (tieSizes[rank] ?? 1) > 1
         guard
             let identity = try await identities.presentation(
-                for: standing.userID, includeName: isStaff, lockingFor: isStaff ? nil : viewer.id,
+                for: standing.userID, includeName: isStaff, lockingFor: lockingFor,
                 fallbackLabel: "Student \(rank)",
                 size: .roster, on: db)
         else { continue }

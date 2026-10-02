@@ -83,6 +83,18 @@ import VaporTesting
         }
     }
 
+    /// Present mode is a staff view: it shows every handle and locks none
+    /// of them (#1757).
+    @Test func presentModeLocksNoHandle() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await seed(on: app, id: "lp_lock")
+            _ = try await get("/testsetups/lp_lock/leaderboard?present=1", cookie: cookie, on: app)
+            let enrollments = try await APICourseEnrollment.query(on: app.db).all()
+            #expect(enrollments.contains { $0.avatarHandle != nil })
+            #expect(enrollments.allSatisfy { $0.avatarHandleLockedAt == nil })
+        }
+    }
+
     @Test func thePodiumStandsSecondFirstThird() {
         func place(_ rank: Int) -> PresentPlace {
             PresentPlace(
