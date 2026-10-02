@@ -9,6 +9,37 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.320] - 2026-10-02
+
+### Changed
+
+- **`docs/class-activities.md` describes the code as it stands after slice 6.** The Model section lists all five opponent sources and names `ActivityAggregation`, the tables section says slice 5 fills `round`, and the achievements section counts the four sweep-evaluable shapes (#1754).
+
+### Fixed
+
+- **The course-code duplicate check is case-insensitive.** The unique index compares bytes while both resolvers fold case, so "cs135" and "CS135" could be two active offerings in one term that one URL key names. Every door that creates or renames a course now refuses the second (#1779).
+
+### Changed
+
+- **Four comments on the language field now state the declared-language rule.** They described the inference era: a nil language that "falls back to sniffing the suite", a recorded field that was a "memo" of a derivation, and a `rederive` that no longer exists. Each now says the language is declared and nothing derives it from content (#1725).
+
+### Fixed
+
+- **The MCP course resolver matches active courses before archived ones.** It matched over every course and then kept the active subset only when non-empty, so an archived legacy course coded "CS243-F26" won that key over an active CS243 in Fall 2026, while the web resolver chose the termed course. Both now agree (#1778).
+
+### Changed
+
+- **`ReapableSession` lives in `Models/` with the other Fluent models.** It was the one model class declared inside a service file, so a reader of `Models/` could not find the `_fluent_sessions` mapping (#1735).
+
+### Changed
+
+- **Two service headers describe the rules the code has.** `PersonalizationEvaluator` no longer claims a `.python` default that `no-language-defaults.sh` forbids, and `SubmissionRetentionService` no longer says Chickadee has no term concept (#1733).
+
+### Fixed
+
+- **Indexes for the periodic sweeps, the leaderboard poll and the push webhook.** The AGS grade-sync sweep (every 60 seconds), the hourly LTI reaper, the achievement sweep's corpus-run read, the union leaderboard body polled every 5 seconds, the tournament scheduler and the GitHub push webhook each scanned a table whose only index was the row's unique identity. `CreateSweepAndPollIndexes` adds the nine indexes those filters lead on (#1800, #1801, #1802, #1803, #1804).
+
+
 ## [0.5.319] - 2026-10-02
 
 ### Security
