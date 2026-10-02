@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.327] - 2026-10-02
+
+### Changed
+
+- **The seven activity and achievement persistence files live in `Services/`.** `ActivityMatches`, `Tournaments`, `ClassCorpus`, `ClassAchievements`, `ClassItemCoverage`, `LeaderboardEntries` and `ActivityUnion` are ingest-time persistence with no second surface, which is the Services rule. A move only (#1729).
+
+
 ## [0.5.326] - 2026-10-02
 
 ### Fixed
