@@ -370,7 +370,7 @@ extension WorkerDaemon {
     private func fetchJobArtifacts(job: Job, paths: JobWorkspacePaths) async -> JobArtifactFetch {
         async let submissionDownload: Result<Void, Error> = {
             do {
-                try await self.download(url: job.submissionURL, to: paths.submissionZip)
+                try await self.download(url: job.submissionURL, to: paths.submissionZip, stage: .downloadSubmission)
                 return .success(())
             } catch {
                 return .failure(error)
@@ -388,7 +388,7 @@ extension WorkerDaemon {
                         "testsetup_staging", isDirectory: true)
                     try FileManager.default.createDirectory(
                         at: stagingDir, withIntermediateDirectories: true)
-                    try await self.download(url: job.testSetupURL, to: stagingZip)
+                    try await self.download(url: job.testSetupURL, to: stagingZip, stage: .downloadTestSetup)
                     try await extractZipArchive(zipPath: stagingZip.path, into: stagingDir)
                     return stagingDir
                 })
@@ -421,7 +421,7 @@ extension WorkerDaemon {
         var downloadedOpponent: URL?
         if let url = job.opponent?.submissionURL {
             let destination = opponentDownloadDestination(workDir: paths.workDir)
-            try await download(url: url, to: destination)
+            try await download(url: url, to: destination, stage: .downloadOpponent)
             downloadedOpponent = destination
         }
         let single = try await stageOpponentWorkspace(
@@ -432,7 +432,7 @@ extension WorkerDaemon {
             var downloaded: URL?
             if let url = opponent.submissionURL {
                 let destination = opponentDownloadDestination(workDir: paths.workDir, index: index)
-                try await download(url: url, to: destination)
+                try await download(url: url, to: destination, stage: .downloadOpponent)
                 downloaded = destination
             }
             matrix.append(
