@@ -180,13 +180,17 @@ The Core type, the migration, the model accessor, and tests
 - **Copied:** course sections; every assignment (setup, notebook, reference
   solution, support files, section, order, secret-reveal flag, passing
   threshold, LMS sync exclusion); content items and their attachment files;
-  the enrollment mode, the slip-day policy, and the course MCP authoring
-  guide.
+  the slip-day policy and the course MCP authoring guide.
 - **Not copied:** enrollments, pre-enrollments, submissions, results, grade
   overrides, extensions, slip-day spends, achievement results, version
   history, and the LMS, BrightSpace and GitHub bindings (including the grade
   item and line item of each assignment). A new offering binds to its own
   LMS course.
+- **Enrollment starts closed (#1780).** The clone does not copy the
+  enrollment mode. An `.auto` mode would enroll every user who logs in,
+  last term's students included, as soon as the clone exists. The new
+  offering starts `.closed`, and the instructor opens enrollment when the
+  term starts.
 - **Dates (the open question, now decided):** every copied assignment starts
   closed and unvalidated, with **no due date and no start date**, and its
   solution reveal is set back to hidden. The source dates belong to the

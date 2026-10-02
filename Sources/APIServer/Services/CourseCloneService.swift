@@ -35,13 +35,17 @@ enum CourseCloneService {
     /// - every assignment: setup, notebook, reference solution, support
     ///   files, section, order, and the per-assignment policies (secret
     ///   reveal, passing threshold, LMS sync exclusion);
-    /// - the course settings: enrollment mode, slip-day policy, and the MCP
-    ///   authoring guide.
+    /// - the course settings: slip-day policy and the MCP authoring guide.
     ///
     /// Not copied: enrollments, pre-enrollments, submissions, results, grade
     /// overrides, extensions, slip-day spends, achievement results, version
     /// history, and the LMS, BrightSpace and GitHub bindings. A new offering
     /// binds to its own LMS course.
+    ///
+    /// Enrollment starts `.closed`, whatever the source's mode. An `.auto`
+    /// mode copied across would enroll every user who logs in, last term's
+    /// students included, before the instructor has set up the new term
+    /// (#1780). The instructor opens enrollment when the term starts.
     ///
     /// Every assignment starts closed and unvalidated, with NO due or start
     /// date and its solution hidden. The source's dates belong to the source's
@@ -80,7 +84,7 @@ enum CourseCloneService {
             .all()
 
         let newCourse = APICourse(
-            code: target.code, name: target.name, enrollmentMode: source.enrollmentMode, term: target.term)
+            code: target.code, name: target.name, enrollmentMode: .closed, term: target.term)
         newCourse.slipDaysEnabled = source.slipDaysEnabled
         newCourse.slipDaysPerStudent = source.slipDaysPerStudent
         newCourse.slipDayExtensionHours = source.slipDayExtensionHours
