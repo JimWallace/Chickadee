@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.344] - 2026-10-02
+
+### Fixed
+
+- **The admin user and MCP pages show each course's term.** Their course lists and pickers showed the bare code and sorted by it, so two offerings of one course could not be told apart. They now show the term beside the code, "CS135 Fall 2026", and sort newest term first, as every other course list does (#1783).
+
+
 ## [0.5.343] - 2026-10-02
 
 ### Fixed
