@@ -153,7 +153,7 @@ the same one. Measurements and the full postmortem:
 `.octave`: `.m` scripts grade natively (`octave-cli`;
 the `octave` package plus `gnuplot-nox` + `fonts-freefont-otf` for headless
 figures are on both images) and in the browser via the vendored `xeus-octave`
-kernel (`chickadee-octave`, 142 MB on disk — the largest env — xeus 6.0.5,
+kernel (`chickadee-octave`, 142 MB on disk — the largest env — xeus 6.0.6,
 ~5–12 s boot, no per-statement cost). All eight pattern kinds render and
 execute; notebook checks cover five of ten — `variableExists`,
 `functionExists`, `numericArrayClose`, `cellContains` and `figureCount`, the

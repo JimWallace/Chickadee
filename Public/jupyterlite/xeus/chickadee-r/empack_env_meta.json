@@ -41,31 +41,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "xeus-r",
-      "version": "0.11.2",
-      "build": "h01c9e3f_1",
-      "filename_stem": "xeus-r-0.11.2-h01c9e3f_1",
-      "filename": "xeus-r-0.11.2-h01c9e3f_1.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "r-main-module-abi * vanilla*",
-        "r-cli",
-        "r-evaluate",
-        "r-glue",
-        "r-irdisplay",
-        "r-jsonlite",
-        "r-r6",
-        "r-repr",
-        "r-rlang",
-        "zlib",
-        "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi 3.12.0",
-        "r-base >=4.5.3,<4.6.0a0",
-        "xeus >=6.0.5,<6.1.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "emscripten-abi",
       "version": "4.0.9",
       "build": "h267e887_9",
@@ -109,6 +84,20 @@
       "filename": "r-cli-3.6.6-r45h6b09a92_2.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "r-bit64",
+      "version": "4.8.6",
+      "build": "r45h6b09a92_0",
+      "filename_stem": "r-bit64-4.8.6-r45h6b09a92_0",
+      "filename": "r-bit64-4.8.6-r45h6b09a92_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-bit",
         "emscripten-abi >=4,<5.0a0",
         "r-base >=4.5.3,<4.6.0a0"
       ],
@@ -486,19 +475,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "xeus",
-      "version": "6.0.5",
-      "build": "h0b0027f_0",
-      "filename_stem": "xeus-6.0.5-h0b0027f_0",
-      "filename": "xeus-6.0.5-h0b0027f_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi 3.12.0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
       "name": "r-lifecycle",
       "version": "1.0.5",
       "build": "r45hc72bb7e_0",
@@ -512,6 +488,31 @@
         "r-rlang >=1.0.6"
       ],
       "subdir": "noarch"
+    },
+    {
+      "name": "xeus-r",
+      "version": "0.11.2",
+      "build": "r45h01c9e3f_2",
+      "filename_stem": "xeus-r-0.11.2-r45h01c9e3f_2",
+      "filename": "xeus-r-0.11.2-r45h01c9e3f_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "r-main-module-abi * vanilla*",
+        "r-cli",
+        "r-evaluate",
+        "r-glue",
+        "r-irdisplay",
+        "r-jsonlite",
+        "r-r6",
+        "r-repr",
+        "r-rlang",
+        "zlib",
+        "emscripten-abi >=4,<5.0a0",
+        "r-base >=4.5.3,<4.6.0a0",
+        "nlohmann_json-abi 3.12.0",
+        "xeus >=6.0.6,<6.1.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
     },
     {
       "name": "r-assertthat",
@@ -639,16 +640,15 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "r-bit64",
-      "version": "4.8.2",
-      "build": "r45h6b09a92_7",
-      "filename_stem": "r-bit64-4.8.2-r45h6b09a92_7",
-      "filename": "r-bit64-4.8.2-r45h6b09a92_7.tar.gz",
+      "name": "xeus",
+      "version": "6.0.6",
+      "build": "hc780342_0",
+      "filename_stem": "xeus-6.0.6-hc780342_0",
+      "filename": "xeus-6.0.6-hc780342_0.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "r-bit",
         "emscripten-abi >=4,<5.0a0",
-        "r-base >=4.5.3,<4.6.0a0"
+        "nlohmann_json-abi 3.12.0"
       ],
       "subdir": "emscripten-wasm32"
     },

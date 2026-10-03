@@ -2,7 +2,7 @@
   "jupyter-config-data": {
     "appName": "JupyterLite",
     "appUrl": "./lab",
-    "appVersion": "0.8.3-chickadee.1",
+    "appVersion": "0.8.4-chickadee.1",
     "baseUrl": "./",
     "contentsAllJsonFile": "all.json",
     "defaultKernelName": "xpython",
@@ -29,7 +29,7 @@
         "name": "jupyter-iframe-commands"
       },
       {
-        "load": "static/remoteEntry.6f1030bf65ead662.js",
+        "load": "static/remoteEntry.1dda3c8f6e5cd2a3.js",
         "mimeExtension": "./mimeExtension",
         "name": "jupyterlab-plotly"
       }
@@ -414,11 +414,11 @@
     "versionInfo": {
       "@jupyter-notebook/application": {
         "label": "Jupyter Notebook",
-        "version": "7.6.2"
+        "version": "7.6.3"
       },
       "@jupyterlab/application": {
         "label": "JupyterLab",
-        "version": "4.6.3"
+        "version": "4.6.4"
       }
     }
   },
