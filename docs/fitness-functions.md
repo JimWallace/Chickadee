@@ -41,6 +41,9 @@ converged.
 As of #1448 they also have a self-test: `scripts/check-guards.sh` requires
 every guard to be **seen to fail** on a fixture reproducing the defect it
 exists to catch. A fitness function nobody has watched fail is a hypothesis.
+`scripts/check-guard-coverage.sh` (#1983) closes the other half: each guard
+that `format-lint` runs must have a fixture, or an entry with a reason in its
+exemption list. Before it, five guards ran with no fixture.
 
 ### Holistic + triggered — fewer, and the best work here
 

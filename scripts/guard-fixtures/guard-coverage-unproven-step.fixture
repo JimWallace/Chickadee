@@ -1,0 +1,8 @@
+# A guard with no fixture stays green whether or not it can catch anything.
+guard="scripts/check-guard-coverage.sh"
+files=".github/workflows/swift-tests.yml"
+description="a format-lint step that runs a guard with no fixture"
+expect="no fixture proves can fail"
+apply() {
+    sed -i 's|^\(        run: scripts/no-language-defaults.sh\)$|\1\n      - name: A guard with no fixture\n        run: scripts/guard-fixture-unproven.sh|' .github/workflows/swift-tests.yml
+}

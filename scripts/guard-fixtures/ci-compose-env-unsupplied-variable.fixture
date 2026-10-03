@@ -1,0 +1,10 @@
+# docker compose refuses to start when a required variable is unset. The CI
+# .env must supply every one, or the scheduled scan dies before it starts.
+guard="scripts/ci-compose-env.sh"
+args="--check"
+files="docker-compose.yml"
+description="a compose-required variable that the CI .env does not supply"
+expect="now requires CHICKADEE_GUARD_FIXTURE"
+apply() {
+    sed -i 's|^      LOG_LEVEL: .*|&\n      CHICKADEE_GUARD_FIXTURE: ${CHICKADEE_GUARD_FIXTURE:?required}|' docker-compose.yml
+}

@@ -1,0 +1,10 @@
+# A defaulted language parameter compiles at every call site and renders
+# Python for an assignment in any other language. Two real defects came from
+# this shape before the guard existed.
+guard="scripts/no-language-defaults.sh"
+files="Sources/Core/AssignmentLanguage.swift"
+description="a language parameter that defaults to .python"
+expect="a language parameter carries a default"
+apply() {
+    printf '\nextension AssignmentLanguage {\n    static func guardFixture(language: AssignmentLanguage = .python) {}\n}\n' >> Sources/Core/AssignmentLanguage.swift
+}

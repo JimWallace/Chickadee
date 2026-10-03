@@ -1,0 +1,9 @@
+# check-styles.sh runs other guards. Those need a fixture too, so the coverage
+# check reads one level into each format-lint guard.
+guard="scripts/check-guard-coverage.sh"
+files="scripts/check-styles.sh"
+description="a guard with no fixture that check-styles.sh runs"
+expect="no fixture proves can fail"
+apply() {
+    printf '\nscripts/guard-fixture-unproven.sh || status=1\n' >> scripts/check-styles.sh
+}
