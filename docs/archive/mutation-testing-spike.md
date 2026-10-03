@@ -1,5 +1,10 @@
 # Mutation testing — spike (2026-08)
 
+> **Archived 2026-10-03.** Its verdict ("Muter is not adoptable") was
+> reversed: CI runs a patched Muter. The live state is
+> [handoff-mutation-testing.md](../handoff-mutation-testing.md) and
+> [mutation-testing-pilot.md](../mutation-testing-pilot.md).
+
 **Status: CLOSED, negative. Muter is not adoptable.** The macOS probe ran
 (2026-08-18, run 32141581986, `macos-latest`) and reported **killed=0,
 survived=3 — 0%**, the same fabricated score measured on Linux, on a run whose
@@ -29,7 +34,7 @@ nothing (the fixture picked a one-word category, then the allocation floor never
 engaged, then both titles landed at exactly the cap).
 
 The house rule already exists — *"a check never seen to fail is not a check"*
-([ui-ratchet-handoff.md](archive/ui-ratchet-handoff.md)) — and it is the one discipline
+([ui-ratchet-handoff.md](ui-ratchet-handoff.md)) — and it is the one discipline
 here with no enforcement behind it. Mutation testing is the industrial form of
 that rule: change the source, and any mutant the suite fails to kill is a hole
 in the suite.
