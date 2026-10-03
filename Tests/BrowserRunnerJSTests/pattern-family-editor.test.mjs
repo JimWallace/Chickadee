@@ -464,3 +464,13 @@ test("auto-compute picks its substrate from the language seed", () => {
   assert.equal(hardcodedWorker, null,
     `the editor must not name a worker itself (found ${hardcodedWorker && hardcodedWorker[0]})`);
 });
+
+test("auto-compute returns describeCallFailure's result as is", () => {
+  // describeCallFailure already returns `{ ok: false, error }`. Wrapping it in
+  // another object made the Expected cell show "[object Object]" for every R,
+  // Lua and Octave solution error (#1994).
+  assert.ok(editorSource.includes('return describeCallFailure(err, cellErrors);'),
+    'a failed call must return the described failure');
+  assert.equal(/error:\s*describeCallFailure\(/.exec(editorSource), null,
+    'the described failure must not be wrapped in another object');
+});
