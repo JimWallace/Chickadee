@@ -223,25 +223,29 @@ private func courseSetupIDs(courseUUID: UUID, on db: Database) async throws -> [
     return Array(Set(setupIDs))
 }
 
-/// Kicks off a grade-sync sweep in a detached background task and returns
-/// immediately, so a manual "Sync now" / "Push all" click never holds the
-/// HTTP request open for the duration of every D2L push — a large class is
-/// dozens of sequential round-trips, which would otherwise risk a
-/// reverse-proxy timeout and leave the instructor staring at a spinner.
-/// The rows are already flagged pending by the caller (a fast local
-/// write), so even if this task dies the 60-second periodic monitor picks
-/// them up. Uses `application.db` (NOT a request's `db`, which is request-scoped)
-/// since the task outlives the request, and bypasses the debounce so every
-/// pending row pushes immediately. Failures are recorded per-row by the
-/// sweep itself; a sweep-level throw is logged (it used to be silently
-/// swallowed, #1117). No-op when BrightSpace isn't configured.
-func launchBackgroundBrightSpaceSweep(_ application: Application) {
+/// Starts a grade-sync sweep in the background and returns immediately, so a
+/// manual "Sync now" / "Push all" click never holds the HTTP request open for
+/// the duration of every D2L push — a large class is dozens of sequential
+/// round-trips, which would otherwise risk a reverse-proxy timeout and leave the
+/// instructor staring at a spinner. The rows are already flagged pending by the
+/// caller (a fast local write), so even if this sweep does not run the
+/// 60-second periodic monitor picks them up. Uses `application.db` (NOT a
+/// request's `db`, which is request-scoped) since the sweep outlives the
+/// request, and bypasses the debounce so every pending row pushes immediately.
+/// Failures are recorded per-row by the sweep itself; a sweep-level throw is
+/// logged (it used to be silently swallowed, #1117). No-op when BrightSpace
+/// isn't configured.
+///
+/// The task belongs to `application.backgroundWork`, which cancels and awaits
+/// it at shutdown. It used to be a bare `Task` that could still be using the
+/// database after Fluent closed it (#1923).
+func launchBackgroundBrightSpaceSweep(_ application: Application) async {
     guard let app = application.brightSpaceAppCredentials else { return }
     let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
-    Task {
-        // Each course resolves its designated identity (or the fallback).
-        do {
-            _ = try await sweepBrightSpaceGradeSync(
+    await application.backgroundWork.start {
+        await runManualBrightSpaceSweep(application) {
+            // Each course resolves its designated identity (or the fallback).
+            try await sweepBrightSpaceGradeSync(
                 on: application.db,
                 debounceSecs: debounce,
                 resolveClient: { course in
@@ -251,9 +255,43 @@ func launchBackgroundBrightSpaceSweep(_ application: Application) {
                 application: application,
                 bypassDebounce: true
             )
-        } catch {
-            application.logger.warning(
-                "BrightSpace background sweep failed: \(error)")
         }
+    }
+}
+
+/// Runs a manual sweep only where and when the periodic sweep cannot also be
+/// pushing the same rows (#1923). The sweep reads pending rows without claiming
+/// them, so an overlap pushes a grade twice and can leave an old grade in LEARN.
+///
+/// - On another instance's lease, it does not run: the leader's next periodic
+///   sweep pushes the requeued rows, which the caller back-dated past the
+///   debounce.
+/// - While a sweep holds this process's slot, it does not run either, for the
+///   same reason: the lease cannot tell two sweeps of one instance apart.
+///
+/// Separate from `launchBackgroundBrightSpaceSweep` so a test can pass its own
+/// sweep and observe whether it ran.
+func runManualBrightSpaceSweep(
+    _ application: Application,
+    sweep: () async throws -> Int
+) async {
+    do {
+        guard try await application.brightSpaceGradeSyncMonitor.acquireLease(application: application)
+        else {
+            application.logger.info(
+                "BrightSpace manual sweep not run: another instance holds the grade-sync lease, and its next sweep pushes the requeued rows"
+            )
+            return
+        }
+        guard try await application.brightSpaceGradeSyncSlot.runIfFree(sweep) != nil else {
+            application.logger.info(
+                "BrightSpace manual sweep not run: a sweep is already running in this process, and the next periodic sweep pushes the requeued rows"
+            )
+            return
+        }
+    } catch is CancellationError {
+        // Stopped by the shutdown drain between pushes: not a failure.
+    } catch {
+        application.logger.warning("BrightSpace background sweep failed: \(error)")
     }
 }

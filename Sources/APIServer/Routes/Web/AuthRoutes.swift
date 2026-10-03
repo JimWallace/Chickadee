@@ -287,6 +287,8 @@ struct AuthRoutes: RouteCollection {
         // Revoke any issued OAuth tokens at the IdP. Runs concurrently and is
         // bounded by a deadline so a slow/hung IdP can't keep the task alive
         // indefinitely; the user-facing redirect still happens immediately.
+        // The task belongs to `backgroundWork`, which awaits it at shutdown, so
+        // it never uses `app.client` after the application has gone (#1923).
         if let endpoint = oidcConfig?.discovery.revocationEndpoint,
             let config = oidcConfig
         {
@@ -298,7 +300,7 @@ struct AuthRoutes: RouteCollection {
             ].compactMap { $0 }
 
             if !tokensToRevoke.isEmpty {
-                Task { [tokensToRevoke] in
+                await app.backgroundWork.start {
                     await revokeTokensInParallel(
                         tokens: tokensToRevoke,
                         endpoint: endpoint,

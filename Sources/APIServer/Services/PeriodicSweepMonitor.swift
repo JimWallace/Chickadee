@@ -44,7 +44,8 @@ final class PeriodicSweepMonitor: Sendable {
     }
 
     private let running = Mutex(Running())
-    private let name: String
+    /// The lease key and the name in log lines.
+    let name: String
     private let intervalNanoseconds: UInt64
     private let leaseTTLSeconds: TimeInterval
     private let runImmediately: Bool
@@ -74,18 +75,26 @@ final class PeriodicSweepMonitor: Sendable {
         self.sweep = sweep
     }
 
+    /// Claims or renews this monitor's leader lease, as each tick does, and
+    /// returns whether this instance holds it. For work outside the loop that
+    /// must run on the leader only: the manual BrightSpace "Sync now" sweep
+    /// used to run on any instance, beside the leader's sweep (#1923).
+    func acquireLease(application: Application) async throws -> Bool {
+        try await SweepLeaseCoordinator.acquireOrRenew(
+            name: name,
+            holder: application.sweepLeaseHolderID,
+            ttlSeconds: leaseTTLSeconds,
+            on: application.db
+        )
+    }
+
     /// One leased tick: claim/renew the leader lease, then run the sweep
     /// body only as the holder. Lease errors and sweep errors are both
     /// logged and never escape (matching the pre-lease behavior contract).
     private func runLeasedSweep(application: Application, context: String) async {
         let isLeader: Bool
         do {
-            isLeader = try await SweepLeaseCoordinator.acquireOrRenew(
-                name: name,
-                holder: application.sweepLeaseHolderID,
-                ttlSeconds: leaseTTLSeconds,
-                on: application.db
-            )
+            isLeader = try await acquireLease(application: application)
         } catch {
             application.logger.warning(
                 "\(context)\(name) sweep lease check failed: \(error.localizedDescription)"

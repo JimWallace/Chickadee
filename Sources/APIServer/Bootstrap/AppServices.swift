@@ -34,6 +34,10 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     // Cancel and await in-flight export generation before Fluent closes the
     // databases, so no generation task outlives the application (#1700).
     app.lifecycle.use(DataExportDrainLifecycleHandler())
+    // The same for the work the server starts and does not wait for: a
+    // "Sync now" grade push, logout token revocation, OIDC discovery (#1923).
+    app.backgroundWork = BackgroundWork()
+    app.lifecycle.use(BackgroundWorkDrainLifecycleHandler())
     // Unstick personal-data exports orphaned in `pending` by a restart mid-
     // generation, so the account page's status poll can resolve (#557).
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })
@@ -92,6 +96,8 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
             app.logger.info(
                 "BrightSpace configured but not authorized — authorize at /admin/brightspace")
         }
+        // One slot for the periodic sweep and the manual "Sync now" sweep.
+        app.brightSpaceGradeSyncSlot = BrightSpaceGradeSyncSlot()
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.brightSpaceGradeSyncMonitor })
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnRosterReadinessMonitor })
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnSectionSyncMonitor })

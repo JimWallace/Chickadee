@@ -343,7 +343,7 @@ extension InstructorLMSRoutes {
         // The requeue above is fast local writes; the sweep itself is one
         // sequential D2L PUT per student, so it runs detached instead of
         // holding this request open (a large class risks a proxy timeout).
-        launchBackgroundBrightSpaceSweep(req.application)
+        await launchBackgroundBrightSpaceSweep(req.application)
         await AuditLogger.record(
             action: .brightspaceSyncNow,
             targetType: .course,
@@ -422,7 +422,7 @@ extension InstructorLMSRoutes {
         try await requeueForImmediateSync(overrides, on: req.db)
         // Requeues above are fast local writes; the per-student D2L pushes run
         // detached so a large class can't hold this request to a proxy timeout.
-        launchBackgroundBrightSpaceSweep(req.application)
+        await launchBackgroundBrightSpaceSweep(req.application)
         await AuditLogger.record(
             action: .brightspacePushAll,
             targetType: .assignment,
