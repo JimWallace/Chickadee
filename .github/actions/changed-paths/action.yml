@@ -1,0 +1,78 @@
+name: Changed paths
+description: >
+  Says whether a pull request changes a path that matches a pattern, so an
+  expensive job can skip when nothing it tests changed while its gate still
+  reports a status. Fails safe: a non-PR event, a missing base commit and an
+  empty diff all answer relevant=true, because a skipped smoke on a change it
+  should have tested is a falsely green gate. Callers run actions/checkout
+  with fetch-depth 0 first.
+
+  This was three copies of one bash block (editor-smoke, codeql-js,
+  browser-grading-smoke), and the third had drifted: it did not fetch the base
+  branch and it answered "not relevant" on an empty diff (#1979).
+
+inputs:
+  pattern:
+    description: "Extended regular expression. A changed path that matches it is relevant."
+    required: true
+  exclude:
+    description: "Extended regular expression. A changed path that matches it is not relevant, even when it matches pattern."
+    required: false
+    default: ""
+  label:
+    description: "What the caller runs when a path is relevant, for the notice lines."
+    required: false
+    default: "the job"
+
+outputs:
+  relevant:
+    description: "'true' when a relevant path changed or the answer is unknown, else 'false'"
+    value: ${{ steps.detect.outputs.relevant }}
+
+runs:
+  using: composite
+  steps:
+    - id: detect
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+        BASE_REF: ${{ github.base_ref }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PATTERN: ${{ inputs.pattern }}
+        EXCLUDE: ${{ inputs.exclude }}
+        LABEL: ${{ inputs.label }}
+      run: |
+        set -uo pipefail
+        if [ "$EVENT" != "pull_request" ]; then
+          echo "relevant=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::non-PR event ($EVENT) — running $LABEL."
+          exit 0
+        fi
+        git fetch --no-tags --quiet origin "$BASE_REF" || true
+        if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+          echo "relevant=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::base sha unavailable — running $LABEL (fail-safe)."
+          exit 0
+        fi
+        changed="$(git diff --name-only "$BASE_SHA" HEAD)"
+        if [ -z "$changed" ]; then
+          echo "relevant=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::no diff computed — running $LABEL (fail-safe)."
+          exit 0
+        fi
+        # Here-strings, NOT `echo "$changed" | grep -qE`: with a large
+        # changed-file list (a full JupyterLite re-vendor) grep -q matches
+        # early and closes the pipe, echo takes SIGPIPE, and pipefail then
+        # makes the pipeline fail EVEN ON A MATCH, which skips a required
+        # smoke. A here-string has no upstream writer to receive SIGPIPE.
+        matched="$(grep -E "$PATTERN" <<< "$changed" || true)"
+        if [ -n "$EXCLUDE" ] && [ -n "$matched" ]; then
+          matched="$(grep -vE "$EXCLUDE" <<< "$matched" || true)"
+        fi
+        if [ -n "$matched" ]; then
+          echo "relevant=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::relevant files changed — running $LABEL."
+        else
+          echo "relevant=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::no relevant changes — skipping $LABEL."
+        fi

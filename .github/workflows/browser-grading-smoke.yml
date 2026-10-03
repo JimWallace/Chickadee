@@ -45,37 +45,24 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      run_smoke: ${{ steps.decide.outputs.run_smoke }}
+      run_smoke: ${{ steps.decide.outputs.relevant }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
+      # The per-language prefixes are a PATTERN, not a list. The list they
+      # replaced had already gone stale — it named r/python/lua grading and
+      # python/r eval, while the matrix also ran octave grading, so an
+      # octave-only change skipped the job that tests it. A pattern also
+      # fails in the safe direction: an unrecognised language matches and
+      # runs the smoke rather than silently skipping it.
       - name: Decide whether the browser grading surface was touched
         id: decide
-        run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          if ! changed=$(git diff --name-only "$base" "$head" 2>/dev/null); then
-            echo "could not diff — running the smoke to be safe"
-            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # The per-language prefixes are a PATTERN, not a list. The list they
-          # replaced had already gone stale — it named r/python/lua grading and
-          # python/r eval, while the matrix also ran octave grading, so an
-          # octave-only change skipped the job that tests it. A pattern also
-          # fails in the safe direction: an unrecognised language matches and
-          # runs the smoke rather than silently skipping it.
-          if grep -Eq '^(Public/[a-z0-9]+-(grading|eval)-|Public/eval-protocol-shared\.js|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Sources/Core/[A-Za-z]+PersonalizationRuntime\.swift|Sources/Core/AssignmentLanguage\.swift|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml)' <<< "$changed"; then
-            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
-          fi
+        uses: ./.github/actions/changed-paths
+        with:
+          label: the browser grading smoke
+          pattern: '^(Public/[a-z0-9]+-(grading|eval)-|Public/eval-protocol-shared\.js|Public/pattern-family-editor\.js|Public/xeus-kernel-shared\.js|Public/browser-runner\.js|Public/grading-shared\.js|Public/vendor/xeus-|Public/jupyterlite/xeus/|Sources/Core/[A-Za-z]+PersonalizationRuntime\.swift|Sources/Core/AssignmentLanguage\.swift|Tools/browser-grading-smoke/|Tools/vendor/|Tools/runner-support/|scripts/setup-vendor\.sh|\.github/workflows/browser-grading-smoke\.yml|\.github/actions/changed-paths/)'
 
   smoke:
     needs: changes
