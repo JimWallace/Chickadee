@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.357] - 2026-10-03
+
+### Changed
+
+- **Shared code no longer calls up into the routes for zip and manifest work.** The test-setup zip helpers, the manifest builders and the suite-config builders moved from `Routes/Web/` to `Helpers/`, and `mutateManifest` moved beside the field edits that use it. The download response builders stayed with the routes. `scripts/check-layering.sh` now fails `format-lint` when a file under `Services/`, `Helpers/` or `Utilities/` names a symbol declared only under `Routes/`; the 27 uses that predate it are in a baseline that can only shrink (#1726).
+
+
 ## [0.5.356] - 2026-10-03
 
 ### Changed
