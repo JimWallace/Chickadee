@@ -644,50 +644,12 @@
 
         function languageReprToJSON(trimmed) { return ChickadeeLanguage.reprToJSON(trimmed); }
 
-        /// Tries to parse `raw` the same way the server / renderer will:
-        /// JSON first, then the language's own scalar spellings, then bare
-        /// string.  Returns `{ ok, value, kind, strict }` where `strict` is true
-        /// when `JSON.parse` succeeded (so the parse round-trips exactly)
-        /// and false when we fell back to a bare string.  Used by the
-        /// inline validator to distinguish "nice typed value" from
-        /// "interpreting as a string literal" for the instructor.
+        /// Parses `raw` with the one authoring parser,
+        /// `ChickadeeLanguage.parseValue` (#1958). `strict` is false when the
+        /// text was rewritten or kept as a bare string. The inline validator
+        /// uses it to tell a typed value from a probable typo.
         function tryParseVarValue(raw) {
-            var trimmed = String(raw == null ? '' : raw).trim();
-            if (trimmed === '') return { ok: false, value: undefined, kind: 'empty', strict: false };
-            var scalar = matchScalarToken(trimmed);
-            if (scalar) return scalar;
-            try {
-                var v = JSON.parse(trimmed);
-                var kind =
-                    Array.isArray(v) ? 'list' :
-                    (v === null) ? 'null' :
-                    (typeof v === 'object') ? 'dict' :
-                    (typeof v === 'boolean') ? 'bool' :
-                    (typeof v === 'number') ? 'number' :
-                    (typeof v === 'string') ? 'string' : 'scalar';
-                return { ok: true, value: v, kind: kind, strict: true };
-            } catch (_) {
-                // v0.4.112: language-repr fallback for variables (matches
-                // the same conversion in coerceByType).  Pasting a
-                // dict like `{'address': {'city': 'Waterloo'}}` into a
-                // section's input value should Just Work — in whichever
-                // language the assignment is written.
-                if (trimmed.indexOf('"') === -1) {
-                    var pyish = languageReprToJSON(trimmed);
-                    try {
-                        var v2 = JSON.parse(pyish);
-                        var k2 =
-                            Array.isArray(v2) ? 'list' :
-                            (v2 === null) ? 'null' :
-                            (typeof v2 === 'object') ? 'dict' :
-                            (typeof v2 === 'boolean') ? 'bool' :
-                            (typeof v2 === 'number') ? 'number' :
-                            (typeof v2 === 'string') ? 'string' : 'scalar';
-                        return { ok: true, value: v2, kind: k2, strict: false };
-                    } catch (_) { /* fall through */ }
-                }
-                return { ok: true, value: String(raw), kind: 'string', strict: false };
-            }
+            return ChickadeeLanguage.parseValue(raw);
         }
 
         function renderVariablesTable() {
@@ -976,17 +938,15 @@
         }
 
         /// Interprets a per-column cell value the way an instructor would
-        /// expect when we have no type information.  Accepts Python-style
-        /// capitalised literals (`True`/`False`/`None`) in addition to JSON.
+        /// expect when we have no type information: the assignment language's
+        /// own true/false/null spellings, then JSON, then a bare string (#1958).
+        ///
+        /// No rewrite of a value pasted in the language's syntax: a string
+        /// argument is shown back without quotes, so rewriting would change a
+        /// stored string the next time the family is saved.
         function parseTypedCellValue(raw) {
-            var trimmed = String(raw == null ? '' : raw).trim();
-            switch (trimmed) {
-                case 'True':  return true;
-                case 'False': return false;
-                case 'None':  return null;
-            }
-            try { return JSON.parse(trimmed); }
-            catch (_) { return String(raw); }
+            var parsed = ChickadeeLanguage.parseValue(raw, { rewriteRepr: false });
+            return parsed.ok ? parsed.value : String(raw == null ? '' : raw);
         }
 
         /// Normalises a Python type annotation into a simple kind the coercer
@@ -1016,15 +976,18 @@
             var kind = normaliseTypeHint(typeHint);
             if (!kind) return parseTypedCellValue(raw);
 
-            if (trimmed === '' || trimmed === 'None' || trimmed === 'null') {
+            // The language's own scalar spellings, not Python's (#1958).
+            var scalar = matchScalarToken(trimmed);
+            if (trimmed === '' || trimmed === 'null' || (scalar && scalar.kind === 'null')) {
                 return null;
             }
 
             switch (kind) {
                 case 'bool': {
+                    if (scalar && scalar.kind === 'bool') return scalar.value;
                     var lower = trimmed.toLowerCase();
-                    if (lower === 'true'  || trimmed === 'True'  || trimmed === '1') return true;
-                    if (lower === 'false' || trimmed === 'False' || trimmed === '0') return false;
+                    if (lower === 'true'  || trimmed === '1') return true;
+                    if (lower === 'false' || trimmed === '0') return false;
                     return parseTypedCellValue(raw);
                 }
                 case 'int': {

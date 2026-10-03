@@ -144,3 +144,51 @@ test('every ChickadeeLanguage member a page script calls is exported', async () 
     assert.equal(typeof lang[member], 'function', `ChickadeeLanguage.${entry} is not exported`);
   }
 });
+
+test("parseValue reads the assignment language's spellings, then JSON, then a bare string", () => {
+  // #1958: case cells accepted only Python's True/False/None, so an R author
+  // typing TRUE as a case argument stored the STRING "TRUE".
+  const r = loadWith(R_SEED);
+  assert.deepEqual(r.parseValue('TRUE'), { ok: true, value: true, kind: 'bool', strict: true });
+  assert.deepEqual(r.parseValue('NULL'), { ok: true, value: null, kind: 'null', strict: true });
+  // Python's spelling is not R's: it stays a string, flagged for a look.
+  assert.deepEqual(r.parseValue('True'), { ok: true, value: 'True', kind: 'string', strict: false });
+  assert.deepEqual(r.parseValue(' 42 '), { ok: true, value: 42, kind: 'number', strict: true });
+  assert.deepEqual(r.parseValue('[1, 2]'), { ok: true, value: [1, 2], kind: 'list', strict: true });
+  assert.deepEqual(r.parseValue('   '), { ok: false, value: undefined, kind: 'empty', strict: false });
+
+  const racket = loadWith({ name: 'racket', displayName: 'Racket', trueLiteral: '#t', falseLiteral: '#f', nullLiteral: "'null" });
+  assert.equal(racket.parseValue('#t').value, true);
+  assert.equal(racket.parseValue('#f').value, false);
+
+  // No seed keeps Python's spellings, the behaviour before the seed existed.
+  const py = loadWith(null);
+  assert.deepEqual(py.parseValue('None'), { ok: true, value: null, kind: 'null', strict: true });
+  assert.deepEqual(py.parseValue('False'), { ok: true, value: false, kind: 'bool', strict: true });
+});
+
+test('parseValue rewrites a pasted literal, except where a case cell asks it not to', () => {
+  const py = loadWith(null);
+  assert.deepEqual(py.parseValue("['a', 'b']"), { ok: true, value: ['a', 'b'], kind: 'list', strict: false });
+  // A case cell shows a stored string back without quotes, so a rewrite would
+  // turn the string 'hello' into hello on the next save.
+  assert.deepEqual(py.parseValue("'hello'", { rewriteRepr: false }),
+    { ok: true, value: "'hello'", kind: 'string', strict: false });
+  assert.deepEqual(py.parseValue('hello'), { ok: true, value: 'hello', kind: 'string', strict: false });
+});
+
+test('the authoring editors spell no language literal themselves', async () => {
+  // The scalar spellings come from the seed through this module. A quoted
+  // True/False/None in an editor is the shape #1958 found in the case cells.
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const publicDir = join(require.resolve('../../Public/authoring-language.js'), '..');
+  for (const name of ['pattern-family-editor.js', 'inputs-editor-core.js']) {
+    // Comments may name the spellings; code may not.
+    const source = readFileSync(join(publicDir, name), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    const literal = /['"](True|False|None|TRUE|FALSE|NULL|nil|#t|#f)['"]/.exec(source);
+    assert.equal(literal, null, `${name} spells ${literal && literal[0]} itself`);
+  }
+});
