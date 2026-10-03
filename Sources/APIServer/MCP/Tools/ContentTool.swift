@@ -7,6 +7,7 @@
 // Core stays Vapor-free.
 
 import Core
+import Vapor
 
 /// A single content-authoring tool.
 protocol ContentTool: Sendable {
@@ -140,8 +141,18 @@ extension ContentTool {
                 } catch {
                     throw MCPToolError.invalidArguments(tool: Self.name, detail: String(describing: error))
                 }
-                let output = try await self.execute(input, context)
-                return try JSONValue(encoding: output)
+                do {
+                    let output = try await self.execute(input, context)
+                    return try JSONValue(encoding: output)
+                } catch let error as any AbortError where (400..<500).contains(Int(error.status.code)) {
+                    // A refusal from a shared web path reaches the agent with
+                    // its reason, whichever tool raised it (#1940). Before this,
+                    // only the tools that caught it themselves mapped it, and
+                    // the rest returned an opaque -32603. A 5xx is a server
+                    // fault, not a refusal: it stays opaque to the agent, and
+                    // the dispatcher logs it.
+                    throw MCPToolError.from(error, tool: Self.name)
+                }
             }
         )
     }
