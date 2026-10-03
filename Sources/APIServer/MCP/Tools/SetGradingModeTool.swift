@@ -42,7 +42,7 @@ struct SetGradingModeTool: ContentTool {
             "assignmentPublicID": MCPSchema.assignmentPublicID,
             "gradingMode": .object([
                 "type": .string("string"),
-                "enum": .array([.string("browser"), .string("worker")]),
+                "enum": MCPEnumProse<GradingMode>.jsonEnum,
                 "description": .string(
                     "\"worker\" (native runner) or \"browser\" (in the student's browser, on a xeus kernel)."),
             ]),
@@ -64,10 +64,7 @@ struct SetGradingModeTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let mode = input.gradingMode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard mode == "browser" || mode == "worker" else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "gradingMode must be \"browser\" or \"worker\".")
-        }
+        let parsed = try MCPEnumProse<GradingMode>.parse(mode, tool: Self.name, field: "gradingMode")
         // Grading mode (worker vs browser) is a lifecycle setting — instructor-level (#417).
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
@@ -76,9 +73,8 @@ struct SetGradingModeTool: ContentTool {
         // guard backstops any path that skips this). The rules are
         // `ManifestCoherence`'s; `author_script` and `set_activity` refuse the
         // same combinations from the other direction.
-        if let parsed = GradingMode(rawValue: mode),
-            let violation = ManifestCoherence.violation(
-                introducedBy: { $0.gradingMode = parsed }, in: setup.manifest)
+        if let violation = ManifestCoherence.violation(
+            introducedBy: { $0.gradingMode = parsed }, in: setup.manifest)
         {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: violation)
         }

@@ -32,8 +32,9 @@ struct GetActiveUsersSeriesTool: DiagnosticTool {
         "properties": .object([
             "window": .object([
                 "type": .string("string"),
-                "enum": .array([.string("24h"), .string("1w"), .string("1m")]),
-                "description": .string("Trailing window: 24h (default), 1w, or 1m."),
+                "enum": MCPEnumProse<ActivityWindow>.jsonEnum,
+                "description": .string(
+                    "Trailing window: \(MCPEnumProse<ActivityWindow>.orList). Default \(ActivityWindow.day.rawValue)."),
             ])
         ]),
         "additionalProperties": .bool(false),
@@ -44,11 +45,7 @@ struct GetActiveUsersSeriesTool: DiagnosticTool {
 
         let window: ActivityWindow
         if let raw = input.window, !raw.isEmpty {
-            guard let parsed = ActivityWindow(rawValue: raw) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "Unknown window '\(raw)'. Use 24h, 1w, or 1m.")
-            }
-            window = parsed
+            window = try MCPEnumProse<ActivityWindow>.parse(raw, tool: Self.name, field: "window")
         } else {
             window = .day
         }

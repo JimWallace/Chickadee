@@ -25,9 +25,7 @@ enum MCPAchievementSignalProse {
     ///
     /// Rendered without a conjunction for the same reason `MCPTierProse.oneOfList`
     /// is: these are literal values a caller matches exactly, not a sentence.
-    static var commaList: String {
-        AchievementSignal.allCases.map(\.rawValue).joined(separator: ", ")
-    }
+    static var commaList: String { MCPEnumProse<AchievementSignal>.oneOfList }
 
     /// The units and semantics clause that accompanies the schema enum.
     ///

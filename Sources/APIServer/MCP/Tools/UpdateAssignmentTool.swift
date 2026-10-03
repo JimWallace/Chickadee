@@ -62,8 +62,7 @@ struct UpdateAssignmentTool: ContentTool {
 
     /// "hidden" or "afterDue" — derived from `allCases` so a new policy value
     /// cannot leave this tool's prose or schema stale.
-    private static let solutionVisibilityProse =
-        SolutionVisibility.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
+    private static let solutionVisibilityProse = MCPEnumProse<SolutionVisibility>.quotedOrList
 
     static let name = "update_assignment"
     static let description =
@@ -116,7 +115,7 @@ struct UpdateAssignmentTool: ContentTool {
             ]),
             "visibility": .object([
                 "type": .string("string"),
-                "enum": .array([.string("closed"), .string("preview"), .string("open")]),
+                "enum": MCPEnumProse<AssignmentVisibility>.jsonEnum,
                 "description": .string(
                     "Three-state visibility. \"preview\" is a staff-only beta state. Wins over "
                         + "isOpen if both are given. open → preview is refused (close first)."),
@@ -131,7 +130,7 @@ struct UpdateAssignmentTool: ContentTool {
             ]),
             "solutionVisibility": .object([
                 "type": .string("string"),
-                "enum": .array(SolutionVisibility.allCases.map { .string($0.rawValue) }),
+                "enum": MCPEnumProse<SolutionVisibility>.jsonEnum,
                 "description": .string(
                     "\"afterDue\" reveals the reference solution to each student once their own "
                         + "effective deadline has passed and no slip-day claim could still extend "
@@ -161,7 +160,7 @@ struct UpdateAssignmentTool: ContentTool {
             "isOpen": MCPSchema.boolean,
             "visibility": .object([
                 "type": .string("string"),
-                "enum": .array([.string("closed"), .string("preview"), .string("open")]),
+                "enum": MCPEnumProse<AssignmentVisibility>.jsonEnum,
             ]),
             "dueAt": MCPSchema.string,
             "startsAt": MCPSchema.string,
@@ -169,7 +168,7 @@ struct UpdateAssignmentTool: ContentTool {
             "secretRevealEnabled": MCPSchema.boolean,
             "solutionVisibility": .object([
                 "type": .string("string"),
-                "enum": .array(SolutionVisibility.allCases.map { .string($0.rawValue) }),
+                "enum": MCPEnumProse<SolutionVisibility>.jsonEnum,
             ]),
             "passingThresholdPercent": MCPSchema.nullableInteger,
         ]),
@@ -294,26 +293,14 @@ struct UpdateAssignmentTool: ContentTool {
     /// Maps the optional `visibility` argument to an `AssignmentVisibility`
     /// (nil = no change), rejecting unknown values.
     private static func resolveVisibility(_ raw: String?) throws -> AssignmentVisibility? {
-        guard let raw else { return nil }
-        guard let visibility = AssignmentVisibility(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "visibility must be one of: closed, preview, open.")
-        }
-        return visibility
+        try MCPEnumProse<AssignmentVisibility>.parseOptional(raw, tool: name, field: "visibility")
     }
 
     /// Maps the optional `solutionVisibility` argument to a
     /// `SolutionVisibility` (nil = no change), rejecting unknown values with
     /// the accepted list derived from `allCases`.
     private static func resolveSolutionVisibility(_ raw: String?) throws -> SolutionVisibility? {
-        guard let raw else { return nil }
-        guard let visibility = SolutionVisibility(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name,
-                detail: "solutionVisibility must be one of: "
-                    + SolutionVisibility.allCases.map(\.rawValue).joined(separator: ", ") + ".")
-        }
-        return visibility
+        try MCPEnumProse<SolutionVisibility>.parseOptional(raw, tool: name, field: "solutionVisibility")
     }
 
     /// Maps the optional `dueAt` argument to a `DueDateUpdate`: absent → no

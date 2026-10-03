@@ -100,7 +100,7 @@ public enum NotebookCheckKind: String, Codable, Sendable, Equatable, CaseIterabl
 
 /// How a `.dataFrameColumns` check compares the student's column list
 /// against the expected list.
-public enum ColumnMatchMode: String, Codable, Sendable, Equatable {
+public enum ColumnMatchMode: String, Codable, Sendable, Equatable, CaseIterable {
     /// Lists must be equal as ordered sequences (same columns, same
     /// order, same count).  Pandas treats column order as semantically
     /// meaningful for positional access (`df.iloc[:, 0]`), so this is
