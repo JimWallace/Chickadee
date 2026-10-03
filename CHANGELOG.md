@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.372] - 2026-10-03
+
+### Changed
+
+- **An MCP call looks up its user once.** `requireEligibleSubject` ran two queries, and one write call asked it up to three times (to authorize, then to attribute the retest and the re-validation). The answer is now kept on the request. Write authorization also checked a non-admin's enrollment twice; it now checks it once, and checks it separately only for an admin, whom `evaluateCourseWrite` exempts (#1942).
+
+### Removed
+
+- **`scripts/check-version.sh`.** No workflow, script or test ran it, and it called `rg`, which the CI images may not carry. `docs/release-process.md` said it enforced `VERSION == ChickadeeVersion.current`; it now says what does: `scripts/assemble-release.sh` writes both from one variable (#1984).
+
+### Changed
+
+- **Doc status lines and workflow comments match the code.** `docs/lti-1-3.md` said only slice 1 was built; `docs/architecture.md` described a Pyodide substrate and `Public/pyodide/`; `docs/notebook-editor-smoke-test.md` called the smoke test advisory and path-filtered; `docs/personalization-eval-runtime.md` named two interpreters; `jupyterlite.yml` said CI cannot rebuild the kernels; `editor-smoke.yml` named the Pyodide kernel; `docker-build.yml` claimed the same cache scheme as `swift-tests.yml`; and `docs/achievements-unification.md` said "in progress". Each now says what is true (#1986).
+
+
 ## [0.5.371] - 2026-10-03
 
 ### Changed
