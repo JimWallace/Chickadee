@@ -101,7 +101,7 @@ struct AuthorScriptTool: ContentTool {
         + "is not itself graded; omit tier to keep an existing file's kind (new files default to a "
         + "public test). For test tiers you may also set points, displayName, dependsOn (prerequisite "
         + "script names or family:<id> tokens), sectionID (an existing section), and timeLimitSeconds "
-        + "(a per-test execution time-limit override in seconds, 1–600; 0 clears it so the script uses "
+        + "(a per-test execution time-limit override in seconds, \(mcpTimeLimitRangeText); 0 clears it so the script uses "
         + "the assignment default), and failureDetail (\(MCPFailureDetailProse.slashAlternatives) — "
         + "how much of a failing run the student sees; \"full\" is the default). Cannot edit "
         + "pattern-family or notebook-check generated scripts — edit the family/check instead. "
@@ -160,14 +160,11 @@ struct AuthorScriptTool: ContentTool {
                     "Existing section id to place a test row into (test tiers only); "
                         + "an unknown id is treated as ungrouped."),
             ]),
-            "timeLimitSeconds": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Per-test execution time-limit override in seconds for a test tier "
-                        + "(\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound)); 0 clears the "
-                        + "override (revert to the assignment default set by set_time_limit). Ignored for "
-                        + "support files."),
-            ]),
+            "timeLimitSeconds": MCPSchema.timeLimit(
+                "Per-test execution time-limit override in seconds for a test tier "
+                    + "(\(mcpTimeLimitRangeText)); 0 clears the "
+                    + "override (revert to the assignment default set by set_time_limit). Ignored for "
+                    + "support files."),
             "failureDetail": MCPFailureDetailProse.schema(
                 MCPFailureDetailProse.fieldDescription + " Ignored for support files."),
             "graderOnly": .object([
@@ -393,11 +390,8 @@ struct AuthorScriptTool: ContentTool {
         let normalizedSection = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         let displayName = input.displayName.flatMap { $0.isEmpty ? nil : $0 }
         let points = max(0, input.points ?? 1)
-        // Resolve the override: a value in 1...600 sets it; 0 clears it; nil
-        // means "leave unchanged on replace / default on create".
-        let validatedLimit: Int? = try input.timeLimitSeconds.map { limit in
-            limit == 0 ? 0 : try validateTimeLimitSeconds(limit, tool: Self.name, field: "timeLimitSeconds")
-        }
+        let limitEdit = try parseTimeLimitOverride(
+            input.timeLimitSeconds, tool: Self.name, field: "timeLimitSeconds")
         let detailUpdate = try MCPFailureDetailProse.parse(
             input.failureDetail, tool: Self.name, field: "failureDetail")
 
@@ -410,9 +404,8 @@ struct AuthorScriptTool: ContentTool {
             if let dn = input.displayName { payload.items[idx].script?.displayName = dn.isEmpty ? nil : dn }
             if let deps = input.dependsOn { payload.items[idx].script?.dependsOn = deps }
             if input.sectionID != nil { payload.items[idx].sectionID = normalizedSection }
-            if let validatedLimit {
-                payload.items[idx].script?.timeLimitSeconds = validatedLimit == 0 ? nil : validatedLimit
-            }
+            let storedLimit = payload.items[idx].script?.timeLimitSeconds
+            payload.items[idx].script?.timeLimitSeconds = limitEdit.applied(to: storedLimit)
             if let detailUpdate {
                 payload.items[idx].script?.failureDetail = detailUpdate?.rawValue
             }
@@ -424,7 +417,7 @@ struct AuthorScriptTool: ContentTool {
                 script: filename, tier: tier, points: points,
                 displayName: displayName, dependsOn: input.dependsOn ?? [],
                 content: content, hint: nil,
-                timeLimitSeconds: (validatedLimit == 0 ? nil : validatedLimit),
+                timeLimitSeconds: limitEdit.applied(to: nil),
                 failureDetail: detailUpdate.flatMap { $0 }?.rawValue)
             let item = SuiteItemDTO(
                 kind: "script", script: dto, family: nil, check: nil,
