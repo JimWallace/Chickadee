@@ -44,7 +44,11 @@ on:
       - "Tools/editor-smoke-test/**"
       - ".github/workflows/grading-hang-probe.yml"
       - "Public/browser-runner.js"
-      - "Public/grading-worker.js"
+      # grading-worker.js became one worker per language; a glob, so the next
+      # language is covered without an edit here (#1981).
+      - "Public/*-grading-worker.js"
+      - "Public/*grading-shared.js"
+      - "Public/xeus-kernel-shared.js"
       - "Public/notebook*.js"
       - "Public/jupyterlite/**"
 
