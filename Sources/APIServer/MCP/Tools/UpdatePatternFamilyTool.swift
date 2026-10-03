@@ -240,8 +240,8 @@ struct UpdatePatternFamilyTool: ContentTool {
                             "type": .string("string"),
                             "description": .string(
                                 "Per-student expected: name of a global/section = expression resolved for the "
-                                    + "student's seed (boundary_equality, approximate_equality, "
-                                    + "unordered_equality, and variable_equality). Empty string clears it."),
+                                    + "student's seed (\(MCPPatternKindProse.expectedVarRefKinds)). "
+                                    + "Empty string clears it."),
                         ]),
                         "hint": .object([
                             "type": .string("string"),
