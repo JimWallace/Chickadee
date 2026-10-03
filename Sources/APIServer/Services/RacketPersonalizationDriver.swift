@@ -85,7 +85,7 @@ enum RacketPersonalizationDriver {
 
     /// The whole driver.
     ///
-    /// Expressions evaluate in a namespace seeded with `racket` plus `seed`,
+    /// Expressions evaluate in a namespace seeded with `racket/base` plus `seed`,
     /// the support helpers and the static variables — the same scope model the
     /// other drivers build. Each expression's own result is bound before the
     /// next runs, so a later expression can reference an earlier one.
@@ -95,9 +95,14 @@ enum RacketPersonalizationDriver {
         supportFiles: [String]
     ) -> String {
         var lines: [String] = []
-        lines.append("#lang racket")
+        // `racket/base`, not `racket`: the full language costs about 0.4 s of
+        // start-up per evaluation, more than half of the driver's run, and
+        // the evaluator allows each run only 5 s. The driver itself needs
+        // `string-join` and `nan?` / `infinite?` beyond the base language.
+        // Expressions are unaffected: they evaluate in `make-base-namespace`.
+        lines.append("#lang racket/base")
         lines.append(";; Auto-generated personalization driver. Do not edit.")
-        lines.append("(require racket/string racket/list)")
+        lines.append("(require racket/string racket/math)")
         lines.append("")
         lines.append(seedSource)
         lines.append("")
