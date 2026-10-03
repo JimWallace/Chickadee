@@ -371,7 +371,9 @@ enum MCPServerInstructions {
         import by stem. Generated pattern-family / notebook-check scripts are not editable via \
         author_script — edit the family/check instead.
         - Per-student answers (notebooks). A student's answer can be a module-level VARIABLE \
-        (e.g. `answer = ...`) or a FUNCTION. Watch the notebook extractor's import rule: a code cell's \
+        (e.g. `answer = ...`) or a FUNCTION. In a PYTHON notebook, watch the extractor's import rule \
+        (a notebook in any other language is extracted verbatim, so every top-level statement runs \
+        at load and a computed module-level answer works): a code cell's \
         top-level statement runs at grading-import time ONLY if it is a def/class/import or an \
         assignment whose right-hand side has NO function call — anything else (e.g. \
         `x = int(os.environ["CHICKADEE_ASSIGNMENT_SEED"], 16)`) is quarantined into \

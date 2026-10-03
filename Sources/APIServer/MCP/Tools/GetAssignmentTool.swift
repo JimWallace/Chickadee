@@ -30,7 +30,7 @@ struct GetAssignmentTool: ContentTool {
         let validationStatus: String?
         let deadlineOverrideActive: Bool
         /// How submissions are graded: "worker" (native runner) or "browser"
-        /// (in-browser Pyodide). Read from the test setup's manifest
+        /// (in the student's browser, on a xeus kernel). Read from the test setup's manifest
         /// (`TestProperties.gradingMode`, default "worker").
         ///
         /// This is `effectiveGradingMode`, not the raw stored value: an
@@ -129,7 +129,7 @@ struct GetAssignmentTool: ContentTool {
         + "visibility (closed/preview/open; preview is a staff-only beta state), the "
         + "derived isOpen flag, due date (ISO 8601), scheduled open date (ISO 8601, if any), "
         + "runner validation status, gradingMode (\"worker\" = graded by the native runner, "
-        + "\"browser\" = graded in-browser via Pyodide), the course section (assignment group "
+        + "\"browser\" = graded in the student's browser on a xeus kernel), the course section (assignment group "
         + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped), and "
         + "secretRevealEnabled (whether students may spend their one secret-reveal token to see "
         + "secret-tier test results; set via the assignment-update tool), solutionVisibility "

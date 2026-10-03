@@ -6,10 +6,11 @@
 /// Where and how a submission is graded.
 ///
 /// - `worker`: The submission is queued for a native runner on the server
-///   (default — handles shell-script and Python test suites).
-/// - `browser`: The student's browser runs tests locally via Pyodide and
-///   POSTs the notebook + `TestOutcomeCollection` in one atomic call.
-///   No server-side runner is involved.
+///   (default — handles every test suite).
+/// - `browser`: The student's browser runs tests locally, on the vendored
+///   xeus kernel for each script's language, and POSTs the notebook +
+///   `TestOutcomeCollection` in one atomic call. No server-side runner is
+///   involved.
 ///
 /// Default when the field is absent from JSON: `.worker`.
 public enum GradingMode: String, Codable, Sendable, Equatable {
