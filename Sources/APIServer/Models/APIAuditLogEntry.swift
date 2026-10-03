@@ -95,6 +95,33 @@ final class APIAuditLogEntry: Model, Content, @unchecked Sendable {
     }
 }
 
+// MARK: - Metadata
+
+extension APIAuditLogEntry {
+    /// The `metadata` column as a dictionary. Reads as empty when the column
+    /// is nil or is not a JSON object of strings. Setting it stores the keys
+    /// sorted, and stores nil for an empty dictionary.
+    ///
+    /// Three private decoders used to read this column (#1931); this is the
+    /// one reader and the one writer.
+    var metadataDictionary: [String: String] {
+        get {
+            metadata.flatMap { try? JSONDecoder().decode([String: String].self, from: Data($0.utf8)) }
+                ?? [:]
+        }
+        set { metadata = Self.encodeMetadata(newValue) }
+    }
+
+    /// Encodes metadata for the column: compact JSON with sorted keys, or nil
+    /// when the dictionary is empty.
+    static func encodeMetadata(_ dict: [String: String]) -> String? {
+        guard !dict.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(dict)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+}
+
 /// Stable identifiers for audit-logged actions.  Kept as an enum so a typo
 /// can't silently produce an orphaned action string in the table.
 ///

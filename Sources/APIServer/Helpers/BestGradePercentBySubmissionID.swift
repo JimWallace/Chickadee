@@ -205,18 +205,19 @@ func gradeSummariesBySubmissionID(
         let blobByID = try await collectionJSONByResultID(
             for: legacyRows.compactMap(\.id), on: db)
         for row in legacyRows {
-            let blob = row.id.flatMap { blobByID[$0] }
+            // One decode per blob, not one per value.
+            let fields = row.id.flatMap { blobByID[$0] }.flatMap(CollectionGradeFields.init(json:))
             grouped[row.submissionID, default: []].append(
                 GradeResultSummary(
                     resultID: row.id,
                     submissionID: row.submissionID,
                     source: row.source,
                     receivedAt: row.receivedAt,
-                    earnedPoints: blob.flatMap(gradePointsFromCollectionJSON),
-                    totalPoints: blob.flatMap(gradeTotalPointsFromCollectionJSON),
+                    earnedPoints: fields?.gradePoints,
+                    totalPoints: fields?.gradeTotalPoints,
                     passCount: row.passCount,
                     totalTests: row.totalTests,
-                    legacyGradePercent: blob.flatMap(gradePercentFromCollectionJSON)
+                    legacyGradePercent: fields?.gradePercent
                 ))
         }
     }
