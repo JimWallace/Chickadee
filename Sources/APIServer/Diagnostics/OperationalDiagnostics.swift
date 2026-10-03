@@ -240,10 +240,7 @@ struct SubmissionDiagnosticsContext {
     let assignmentID: UUID?
 }
 
-final class OperationalDiagnosticsService: @unchecked Sendable {
-    // @unchecked Sendable: all stored properties are immutable (`let`); the
-    // mutable state lives behind the internally-synchronized
-    // DiagnosticsMaintenanceStore / CompatibilityCounterStore collaborators.
+final class OperationalDiagnosticsService: Sendable {
     let configuration: DiagnosticsConfiguration
     let maintenance = DiagnosticsMaintenanceStore()
     let compatibilityCounters = CompatibilityCounterStore()
