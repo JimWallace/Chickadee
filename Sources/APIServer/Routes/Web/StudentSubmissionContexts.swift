@@ -85,15 +85,24 @@ struct StudentAssignmentRow: Encodable {
 /// staff (`student-assignment-history.leaf`). Two routes render it: the
 /// assignment's roster (`/instructor/:assignmentID/students/:studentID/history`)
 /// and the course's per-student view. They differ only in where the back link
-/// goes, so that is all they pass differently (#1710).
+/// goes and whether rows link to their diff, so that is all they pass
+/// differently (#1710).
 struct StudentAssignmentHistoryContext: Encodable {
     let currentUser: CurrentUserContext?
+    /// `accountIdentityName`: the display name, else the preferred name, else
+    /// the username.
     let studentName: String
-    let studentUsername: String
+    /// Nil when it would repeat `studentName` (`accountIdentitySecondary`).
+    let studentUsername: String?
     let assignmentID: String
     let assignmentTitle: String
     let backURL: String
     let backLabel: String
+    /// Whether each row links to its diff against the starter. Only the
+    /// roster route offers it: the diff page's History link returns to the
+    /// roster's copy of this page, so from the course route it would drop
+    /// the reader's way back to the student.
+    let showsDiff: Bool
     /// Where a retest returns to: this page.
     let historyPath: String
     let rows: [AssignmentSubmissionHistoryRow]

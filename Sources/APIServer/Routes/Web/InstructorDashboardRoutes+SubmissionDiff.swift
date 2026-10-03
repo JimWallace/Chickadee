@@ -50,13 +50,20 @@ extension InstructorDashboardRoutes {
         let historyURL = submission.userID.map {
             "/instructor/\(assignmentIDRaw)/students/\($0.uuidString)/history"
         }
+        let studentName =
+            student.map {
+                accountIdentityName(displayName: $0.displayName, preferredName: $0.preferredName, username: $0.username)
+            } ?? "unknown"
         return try await req.view.render(
             "submission-diff",
             SubmissionDiffContext(
                 currentUser: req.currentUserContext,
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
-                studentID: student?.username ?? "unknown",
+                studentName: studentName,
+                studentUsername: student.flatMap {
+                    accountIdentitySecondary(identityName: studentName, username: $0.username)
+                },
                 attemptNumber: submission.attemptNumber ?? 1,
                 comparedLabel: sides.comparedLabel,
                 unavailableReason: sides.unavailableReason,
@@ -187,7 +194,9 @@ private struct SubmissionDiffContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
     let assignmentTitle: String
-    let studentID: String
+    /// The same identity line as the history page this is reached from.
+    let studentName: String
+    let studentUsername: String?
     let attemptNumber: Int
     let comparedLabel: String
     let unavailableReason: String?

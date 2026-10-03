@@ -892,7 +892,10 @@ before writing the next sub-context.
 The long tail closed too: `.textarea-mono` (three copies that differed only
 in which of the same five declarations each remembered), `.form-stack`
 (three copies whose only real difference — the max-width — is now a custom
-property), and two more `.section-intro` copies.
+property), and two more `.section-intro` copies. The two staff history
+templates (`student-assignment-history` and `assignment-student-history`)
+became one later, in #1710, with the back link and the diff button as
+context values.
 
 `PAGE_STYLE_BASELINE` 760 → 689.
 

@@ -323,16 +323,19 @@ extension StudentCourseRoutes {
             assignmentID: assignmentIDRaw
         )
 
+        let studentName = accountIdentityName(
+            displayName: student.displayName, preferredName: student.preferredName, username: student.username)
         return try await req.view.render(
             "student-assignment-history",
             StudentAssignmentHistoryContext(
                 currentUser: req.currentUserContext,
-                studentName: student.displayName ?? student.username,
-                studentUsername: student.username,
+                studentName: studentName,
+                studentUsername: accountIdentitySecondary(identityName: studentName, username: student.username),
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 backURL: backURL,
                 backLabel: "Back to student",
+                showsDiff: false,
                 historyPath: historyPath,
                 rows: rows
             )

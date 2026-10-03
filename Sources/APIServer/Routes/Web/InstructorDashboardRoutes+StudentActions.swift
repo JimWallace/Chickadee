@@ -50,16 +50,19 @@ extension InstructorDashboardRoutes {
             bestPercentBySubmissionID: bestPercentBySubmissionID,
             fmt: fmt)
 
+        let studentName = accountIdentityName(
+            displayName: student.displayName, preferredName: student.preferredName, username: student.username)
         return try await req.view.render(
             "student-assignment-history",
             StudentAssignmentHistoryContext(
                 currentUser: req.currentUserContext,
-                studentName: student.displayName ?? student.username,
-                studentUsername: student.username,
+                studentName: studentName,
+                studentUsername: accountIdentitySecondary(identityName: studentName, username: student.username),
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 backURL: "/instructor/\(assignmentIDRaw)/submissions",
-                backLabel: "Back to Assignment Summary",
+                backLabel: "Back to submissions",
+                showsDiff: true,
                 historyPath: "/instructor/\(assignmentIDRaw)/students/\(studentIDRaw)/history",
                 rows: rows
             )
