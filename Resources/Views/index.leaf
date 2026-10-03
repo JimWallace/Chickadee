@@ -86,40 +86,40 @@
         <tr>
             <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span></td>
             <td class="item-main">
-                #if(item.setup.title):
+                #if(item.row.title):
                     <div class="assignment-title-cell">
-                        <strong>#(item.setup.title)</strong>
-                        #if(count(item.setup.badges) > 0):
+                        <strong>#(item.row.title)</strong>
+                        #if(count(item.row.badges) > 0):
                         <span class="achievement-badges achievement-badges-compact">
-                            #for(badge in item.setup.badges):
+                            #for(badge in item.row.badges):
                             <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
                             #endfor
-                            #if(item.setup.extraBadgeCount > 0):
-                            <span class="achievement-badge achievement-badge-compact achievement-badge-overflow" title="Also earned: #(item.setup.extraBadgesTooltip)">+#(item.setup.extraBadgeCount)</span>
+                            #if(item.row.extraBadgeCount > 0):
+                            <span class="achievement-badge achievement-badge-compact achievement-badge-overflow" title="Also earned: #(item.row.extraBadgesTooltip)">+#(item.row.extraBadgeCount)</span>
                             #endif
                         </span>
                         #endif
                     </div>
                     <div class="item-details">
-                        #if(item.setup.opensAtText):
-                        <span title="This assignment opens automatically at this time.">Opens #(item.setup.opensAtText)</span>
-                        #elseif(item.setup.hasActiveExtension):
-                        Due <span class="js-relative-time" data-iso="#(item.setup.effectiveDueAtISO)">#(item.setup.effectiveDueAtText)</span> · #(item.setup.effectiveDueAtText) <span class="due-extension-note">(extension)</span>
-                        #elseif(item.setup.dueAt):
-                        Due <span class="js-relative-time" data-iso="#(item.setup.dueAtISO)">#(item.setup.dueAt)</span> · #(item.setup.dueAt)
+                        #if(item.row.opensAtText):
+                        <span title="This assignment opens automatically at this time.">Opens #(item.row.opensAtText)</span>
+                        #elseif(item.row.hasActiveExtension):
+                        Due <span class="js-relative-time" data-iso="#(item.row.effectiveDueAtISO)">#(item.row.effectiveDueAtText)</span> · #(item.row.effectiveDueAtText) <span class="due-extension-note">(extension)</span>
+                        #elseif(item.row.dueAt):
+                        Due <span class="js-relative-time" data-iso="#(item.row.dueAtISO)">#(item.row.dueAt)</span> · #(item.row.dueAt)
                         #else:
                         No due date
                         #endif
-                        #if(item.setup.submissionCount == 1):
-                        · <a href="#(item.setup.historyURL)">1 submission</a>
-                        #elseif(item.setup.submissionCount > 1):
-                        · <a href="#(item.setup.historyURL)">#(item.setup.submissionCount) submissions</a>
+                        #if(item.row.submissionCount == 1):
+                        · <a href="#(item.row.historyURL)">1 submission</a>
+                        #elseif(item.row.submissionCount > 1):
+                        · <a href="#(item.row.historyURL)">#(item.row.submissionCount) submissions</a>
                         #endif
-                        #if(item.setup.gradeIsOverridden):
+                        #if(item.row.gradeIsOverridden):
                         · <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
                         #endif
-                        #if(item.setup.bestGradeText):
-                        <span class="row-phone-meta">Grade #(item.setup.bestGradeText)</span>
+                        #if(item.row.bestGradeText):
+                        <span class="row-phone-meta">Grade #(item.row.bestGradeText)</span>
                         #endif
                     </div>
                 #else:
@@ -127,36 +127,36 @@
                 #endif
             </td>
             <td class="item-status">
-                #if(item.setup.staffOnly):
+                #if(item.row.staffOnly):
                 <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">preview</span>
-                #elseif(item.setup.status == "extended"):
+                #elseif(item.row.status == "extended"):
                 <span class="tier tier-extended" title="Your instructor granted you a personal deadline extension — you can still submit past the class deadline.">extended</span>
                 #else:
                 <span class="tier
-                    #if(item.setup.status == "open"):tier-open
-                    #elseif(item.setup.status == "closed"):tier-closed
-                    #elseif(item.setup.status == "unpublished"):tier-unpublished
-                    #endif">#(item.setup.status)</span>
+                    #if(item.row.status == "open"):tier-open
+                    #elseif(item.row.status == "closed"):tier-closed
+                    #elseif(item.row.status == "unpublished"):tier-unpublished
+                    #endif">#(item.row.status)</span>
                 #endif
             </td>
-            <td class="item-grade col-hide-phone">#if(item.setup.bestGradeText):<strong>#(item.setup.bestGradeText)</strong>#else:<span class="empty">—</span>#endif</td>
+            <td class="item-grade col-hide-phone">#if(item.row.bestGradeText):<strong>#(item.row.bestGradeText)</strong>#else:<span class="empty">—</span>#endif</td>
             <td class="item-actions-td">
                 <div class="assignment-actions-cell">
-                    #if(!item.setup.hasAnyAction):
+                    #if(!item.row.hasAnyAction):
                     <span class="empty">—</span>
                     #endif
-                    #if(item.setup.showEditAction):
-                    <a class="btn action-btn action-btn-icon" href="#(item.setup.notebookURL)" title="Edit" aria-label="Edit">
+                    #if(item.row.showEditAction):
+                    <a class="btn action-btn action-btn-icon" href="#(item.row.notebookURL)" title="Edit" aria-label="Edit">
                         <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
                     </a>
                     #endif
-                    #if(item.setup.showUploadAction):
-                    <a class="btn action-btn action-btn-icon" href="#(item.setup.submitURL)" title="Upload" aria-label="Upload">
+                    #if(item.row.showUploadAction):
+                    <a class="btn action-btn action-btn-icon" href="#(item.row.submitURL)" title="Upload" aria-label="Upload">
                         <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>
                     </a>
                     #endif
-                    #if(item.setup.showResetNotebookAction):
-                    <form method="post" action="/testsetups/#(item.setup.id)/reset-notebook" data-confirm="Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected." class="inline-form">
+                    #if(item.row.showResetNotebookAction):
+                    <form method="post" action="/testsetups/#(item.row.id)/reset-notebook" data-confirm="Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected." class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon action-danger" type="submit"
                                 title="Reset notebook to starter (discards current edits; past submissions unaffected)"
@@ -165,21 +165,21 @@
                         </button>
                     </form>
                     #endif
-                    #if(item.setup.slipDayAvailable):
-                    <a class="btn action-btn action-btn-icon" href="#(item.setup.slipDayURL)"
-                       title="#(item.setup.slipDayActionLabel)"
-                       aria-label="#(item.setup.slipDayActionLabel)">
+                    #if(item.row.slipDayAvailable):
+                    <a class="btn action-btn action-btn-icon" href="#(item.row.slipDayURL)"
+                       title="#(item.row.slipDayActionLabel)"
+                       aria-label="#(item.row.slipDayActionLabel)">
                         <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
                     </a>
                     #endif
-                    #if(item.setup.solutionAvailable):
-                    <a class="btn action-btn action-btn-icon" href="#(item.setup.solutionURL)"
+                    #if(item.row.solutionAvailable):
+                    <a class="btn action-btn action-btn-icon" href="#(item.row.solutionURL)"
                        title="Solution" aria-label="Solution">
                         <svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>
                     </a>
                     #endif
-                    #if(item.setup.leaderboardURL):
-                    <a class="btn action-btn action-btn-icon" href="#(item.setup.leaderboardURL)"
+                    #if(item.row.leaderboardURL):
+                    <a class="btn action-btn action-btn-icon" href="#(item.row.leaderboardURL)"
                        title="Leaderboard" aria-label="Leaderboard">
                         <svg class="icon" aria-hidden="true"><use href="#i-award"/></svg>
                     </a>

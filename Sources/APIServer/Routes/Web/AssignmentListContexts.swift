@@ -65,25 +65,6 @@ struct ValidationVariantSummary {
     }
 }
 
-/// One element of a section's unified item list on the instructor dashboard: a
-/// graded assignment row (`assignment`) OR an ungraded content item (`content`),
-/// discriminated by `isContent`. The two lanes interleave in one drag-orderable
-/// `sort_order` sequence, so a reading can sit between two labs.
-struct InstructorSectionItem: Encodable {
-    let isContent: Bool
-    /// Populated when `!isContent`.
-    let assignment: AssignmentRow?
-    /// Populated when `isContent`.
-    let content: ContentItemRow?
-
-    static func assignment(_ row: AssignmentRow) -> InstructorSectionItem {
-        InstructorSectionItem(isContent: false, assignment: row, content: nil)
-    }
-    static func material(_ content: ContentItemRow) -> InstructorSectionItem {
-        InstructorSectionItem(isContent: true, assignment: nil, content: content)
-    }
-}
-
 /// A course section with its unified item list (assignments + content items
 /// interleaved by `sort_order`), used on the instructor dashboard.
 struct CourseSectionRow: Encodable {

@@ -251,26 +251,6 @@ struct ContentItemRow: Encodable {
     }
 }
 
-/// One element of a section's unified item list on the student dashboard: a
-/// graded assignment row (`setup`) OR an ungraded content item (`content`),
-/// discriminated by `isContent`. Materials and assignments interleave in one
-/// `sort_order` sequence, so a reading can sit between two labs rather than
-/// living in a separate lane above them.
-struct IndexSectionItem: Encodable {
-    let isContent: Bool
-    /// Populated when `!isContent`.
-    let setup: TestSetupRow?
-    /// Populated when `isContent`.
-    let content: ContentItemRow?
-
-    static func assignment(_ setup: TestSetupRow) -> IndexSectionItem {
-        IndexSectionItem(isContent: false, setup: setup, content: nil)
-    }
-    static func material(_ content: ContentItemRow) -> IndexSectionItem {
-        IndexSectionItem(isContent: true, setup: nil, content: content)
-    }
-}
-
 /// When a list earns a Filter box.  One threshold for every list on the site
 /// (the student dashboard's sections, the instructor pages), so "a filter
 /// appears at 8 rows" is one rule and not one number per page.
