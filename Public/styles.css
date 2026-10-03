@@ -3282,6 +3282,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 }
 .standin-panel-title { margin: .2rem 0 .5rem; font-size: var(--text-lg); }
 .standin-panel-text { margin: 0; color: var(--gray-700); font-size: var(--text-base); }
+.standin-panel-text + .standin-panel-text { margin-top: .5rem; }
 
 /* The section that holds a row of .diagnostics-cards. Three page-local names
    did this (admin-/instructor-/assignment-diagnostics), and one of them was
