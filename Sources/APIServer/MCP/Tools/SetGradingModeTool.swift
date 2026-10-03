@@ -1,7 +1,7 @@
 // APIServer/MCP/Tools/SetGradingModeTool.swift
 //
 // Write tool: set how an assignment's submissions are graded — "worker" (native
-// runner) or "browser" (in-browser Pyodide) — by assignment public ID.
+// runner) or "browser" (in the student's browser, on a xeus kernel) — by assignment public ID.
 // content:write, course-scoped.
 //
 // gradingMode lives in the test setup's manifest, not on the assignment row.
@@ -31,7 +31,7 @@ struct SetGradingModeTool: ContentTool {
     static let name = "set_grading_mode"
     static let description =
         "Set how an assignment's submissions are graded by its public ID: \"worker\" (graded by the "
-        + "native runner) or \"browser\" (graded in-browser via Pyodide). This changes only the grading "
+        + "native runner) or \"browser\" (graded in the student's browser on a xeus kernel). This changes only the grading "
         + "path, not the tests, so it does not re-grade existing submissions, re-run validation, or "
         + "change the open/closed state (matching set_assignment_course_section and the web setup editor). Read "
         + "the current mode from get_assignment. To make a whole course section default to a mode, use "
@@ -43,7 +43,8 @@ struct SetGradingModeTool: ContentTool {
             "gradingMode": .object([
                 "type": .string("string"),
                 "enum": .array([.string("browser"), .string("worker")]),
-                "description": .string("\"worker\" (native runner) or \"browser\" (in-browser Pyodide)."),
+                "description": .string(
+                    "\"worker\" (native runner) or \"browser\" (in the student's browser, on a xeus kernel)."),
             ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("gradingMode")]),

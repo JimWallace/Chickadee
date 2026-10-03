@@ -361,7 +361,7 @@ Today `Public/notebook-preflight.js` / `notebook.js` POST only a `kind` +
   `source` discriminator. New migration; keep the existing per-(user, setup,
   kind) rate limiter.
 - **Care on the grading path.** Editor/kernel-boot errors are infrastructure
-  (JupyterLite/Pyodide) and safe to capture verbatim. Errors thrown *during
+  (JupyterLite and its xeus kernels) and safe to capture verbatim. Errors thrown *during
   browser grading of a student submission* (`browser-runner.js`) can contain
   student code in the traceback — capture conservatively there (message class
   only, or omit) so we don't smuggle student content into a "no student data"

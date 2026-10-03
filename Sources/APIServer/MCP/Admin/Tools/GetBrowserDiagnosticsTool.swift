@@ -7,8 +7,8 @@
 //
 // PII boundary (code allowlist — the shipped guarantee, no DB role): the
 // returned DTO is hand-built and deliberately OMITS user_id. It keeps the
-// failure kind, source, failed checks, error message/stack (JupyterLite/Pyodide
-// infrastructure text only — capture is restricted to the editor-load path,
+// failure kind, source, failed checks, error message/stack (JupyterLite and
+// xeus kernel infrastructure text only — capture is restricted to the editor-load path,
 // never student-code execution), the coarse browser/OS label (never the raw
 // User-Agent — audit F-4), the test-setup id (instructor content, not student
 // data), and the timestamp. No student identifier is ever included.
@@ -98,7 +98,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
 
     static let name = "get_browser_diagnostics"
     static let description =
-        "In-browser editor + submission diagnostics (JupyterLite/Pyodide) for diagnosis: totals and "
+        "In-browser editor + submission diagnostics (JupyterLite and its xeus kernels) for diagnosis: totals and "
         + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error / page_unresponsive for "
         + "editor-load failures, editor_ready as the success denominator and sw_state for service-worker "
         + "registration, and submit_phase / submit_error for the grading/submission flow), by source, by "
