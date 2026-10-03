@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.366] - 2026-10-03
+
+### Changed
+
+- **The MCP prose derives every kind list.** The ten notebook-check kinds in the `initialize` instructions and the `author_notebook_check` description, and the kinds that accept `expectedVarRef` in both pattern-family tools, were typed by hand. They now come from `NotebookCheckKind.allCases` and from the predicate the save refuses with, and the instructions describe each check kind in a phrase (#1936).
+
+### Changed
+
+- **`get_server_info` reports the options a language refuses inside a kind.** Each language now carries `unsupportedFields`, for example Lua's `cell_contains.regex` and `program_io.ioComparison=regex`, with the reason for each. Before, an agent learned of these two refusals only when a save failed. The `program_io` regex refusal now comes from one predicate, `programIOComparisonUnsupportedReason`, which the save, the schema prose and the payload all read (#1937).
+
+
 ## [0.5.365] - 2026-10-03
 
 ### Fixed
