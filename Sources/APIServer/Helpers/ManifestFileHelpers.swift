@@ -1,10 +1,11 @@
-// APIServer/Routes/Web/ManifestFileHelpers.swift
+// APIServer/Helpers/ManifestFileHelpers.swift
 //
 // Read, mutate, and serialize `TestProperties` manifest JSON: dependent
 // lookups, generated-by checks, add/remove script entries, the worker-
 // facing manifest builder, topological sort, and the hash used as the
 // auto-retest dedup key.  Extracted from AssignmentHelpers.swift
-// (issue #442) — no behaviour changes.
+// (issue #442) — no behaviour changes. In Helpers/ rather than Routes/Web/
+// because services build manifests too (#1726).
 
 import Core
 import Foundation

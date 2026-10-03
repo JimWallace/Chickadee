@@ -209,33 +209,6 @@ func jsonResponse<T: Encodable>(_ value: T, status: HTTPResponseStatus = .ok) th
         body: .init(data: data))
 }
 
-// MARK: - Manifest mutation
-
-/// Decodes the test setup's manifest, runs the caller's mutation on the
-/// `TestProperties` value, encodes it with the stable encoder and saves.
-/// Throws if the manifest does not decode — that indicates a corrupted
-/// setup, not a user error.
-///
-/// Every single-field edit goes through here (`ManifestFieldEdits.swift`,
-/// the suite-section CRUD, the MCP tools), so there is one writer of a
-/// stored manifest.  It used to edit a `[String: Any]` dictionary so that a
-/// key the server did not model would survive an edit; nothing ever read
-/// such a key, and the suite rebuild (`makeWorkerManifestJSON`) dropped it
-/// anyway.  A typed edit cannot misspell a key or drop a field it did not
-/// think to carry.
-func mutateManifest(
-    setup: APITestSetup,
-    on db: Database,
-    _ mutate: (inout TestProperties) throws -> Void
-) async throws {
-    guard var props = setup.decodedManifest() else {
-        throw WebAssignmentError.internalFailure(reason: "Test setup manifest could not be decoded.")
-    }
-    try mutate(&props)
-    setup.manifest = try encodeManifest(props)
-    try await setup.save(on: db)
-}
-
 // MARK: - Suite-section manifest mutations
 //
 // Shared cores for the test-suite Sections CRUD, used by both the published

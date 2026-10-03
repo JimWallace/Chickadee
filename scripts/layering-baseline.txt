@@ -1,0 +1,27 @@
+# Symbols declared only under Sources/APIServer/Routes/ that shared code
+# (Services/, Helpers/, Utilities/) still names. scripts/check-layering.sh
+# fails on any symbol not listed here, and on a listed symbol that is no
+# longer used, so this list only shrinks. To remove a line, move the symbol
+# down to Helpers/ (or into the service that owns it), or move the call up
+# into the route. One symbol per line; lines starting with # are comments.
+AchievementBadge
+LearnRosterReconciler
+NewAssignmentDraftFormState
+NewAssignmentDraftPayload
+NewAssignmentFields
+NotebookFileKind
+assignmentByTestSetupID
+autoScaffoldFromSolutionNotebook
+createAssignmentWithUniquePublicID
+deadlineOverrideValueForInstructorOpen
+defaultNotebookData
+draftSolutionNotebookPath
+enrolledStudentCountsByCourse
+ensureDraftNotebookDirectory
+materializeValidationGrading
+newAssignmentSectionGradingMode
+normalizedDeadlineOverrideAfterDueDateChange
+notebookFilenameForStorage
+removeDraftNotebookFiles
+studentUserIDsByCourse
+waterlooDateTimeFormatter

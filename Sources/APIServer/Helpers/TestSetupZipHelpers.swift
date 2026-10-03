@@ -1,11 +1,14 @@
-// APIServer/Routes/Web/TestSetupZipHelpers.swift
+// APIServer/Helpers/TestSetupZipHelpers.swift
 //
 // Zip-archive read/mutate helpers for the test setup file: list, extract,
-// add, replace, batch-apply, remove, response-build, content-type, and
-// the publish-time `createRunnerSetupZip` step plus the support-file
-// materializer that copies non-test/non-notebook entries into the shared
-// directory.  Extracted from AssignmentHelpers.swift (issue #442) — no
-// behaviour changes.
+// add, replace, batch-apply, remove, and the publish-time
+// `createRunnerSetupZip` step plus the support-file materializer that copies
+// non-test/non-notebook entries into the shared directory.  Extracted from
+// AssignmentHelpers.swift (issue #442) — no behaviour changes.
+//
+// This is the zip layer every directory uses, so it lives in Helpers/, not
+// Routes/Web/ (#1726). The download response builders that sat beside it
+// stayed with the routes, in `FileResponseHelpers.swift`.
 
 import Core
 import Foundation
@@ -293,30 +296,6 @@ func extractZipEntry(zipPath: String, entryName: String) async -> Data? {
         result.terminationStatus == 0
     else { return nil }
     return result.stdout
-}
-
-func buildFileResponse(data: Data, filename: String) -> Response {
-    var headers = HTTPHeaders()
-    headers.contentType = contentType(for: filename)
-    headers.add(name: .contentDisposition, value: "attachment; filename=\"\(filename)\"")
-    return Response(status: .ok, headers: headers, body: .init(data: data))
-}
-
-func contentType(for filename: String) -> HTTPMediaType {
-    let ext = URL(fileURLWithPath: filename).pathExtension.lowercased()
-    switch ext {
-    case "ipynb", "json":
-        return .json
-    case "sh", "bash", "zsh", "rb", "pl", "js", "php", "txt", "md", "csv":
-        return .plainText
-    default:
-        // Every assignment language's own extension is text, from the one
-        // table — hand-listing them here is what served `.lua` as
-        // octet-stream, offering a download prompt instead of displaying it.
-        return AssignmentLanguage(scriptExtension: ext) != nil
-            ? .plainText
-            : HTTPMediaType(type: "application", subType: "octet-stream")
-    }
 }
 
 func createRunnerSetupZip(

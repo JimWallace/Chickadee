@@ -16,7 +16,7 @@
 //   - CSRF via `#csrfFormField()` (or `x-csrf-token` header for AJAX)
 //
 // The manifest is a JSON string stored in APITestSetup.manifest; every
-// write goes through `mutateManifest` (SuiteEditHelpers.swift), which edits
+// write goes through `mutateManifest` (ManifestFieldEdits.swift), which edits
 // the decoded `TestProperties` and stores it with the stable encoder.
 
 import Core
