@@ -521,6 +521,12 @@ scripts/check-class-resolution.sh || status=1
 # an element is interactive, and how much prose a tooltip carries.
 scripts/check-ui-vocabulary.sh || status=1
 
+# ── 7. Leaf idioms that render fine and resolve wrong ───────────────────────
+# A Swift property on a collection (`rows.isEmpty`) and a `#//` line comment
+# both render without an error, so no render test sees them. CI ran this as
+# its own step, so this, the one local entry point, missed it (#1978).
+scripts/check-leaf-semantics.sh || status=1
+
 if [ "$status" -eq 0 ]; then
   echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors; ratchets within baseline)"
 fi
