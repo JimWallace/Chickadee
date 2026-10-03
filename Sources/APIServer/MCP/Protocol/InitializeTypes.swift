@@ -297,9 +297,8 @@ enum MCPServerInstructions {
         A function-calling family auto-generates a 0-point `<function> is defined` existence guard \
         that its cases depend on, so a missing/non-callable function fails once and the cases skip — \
         you rarely need a standalone function_exists check alongside a family. \
-        Notebook-check kinds (author_notebook_check): data_frame_shape, data_frame_columns, \
-        data_frame_equality, series_equality, numeric_array_close, figure_count, cell_contains, \
-        function_exists, variable_exists, and ast_structure. Native checks are validated structurally \
+        Notebook-check kinds (author_notebook_check): \(MCPNotebookCheckKindProse.glossedList). \
+        Native checks are validated structurally \
         when you save (arg count, the expected's shape for the kind, $ref resolution), they \
         personalize per student ($name / expectedVarRef), and get_suite returns their full spec so a \
         later reader can see exactly what they assert. author_script is the escape hatch: it writes \

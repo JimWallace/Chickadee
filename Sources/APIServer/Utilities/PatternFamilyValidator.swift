@@ -175,7 +175,7 @@ private func kindSupportsPerStudentArgRefs(_ kind: PatternKind) -> Bool {
 /// reshape a variable exercise into a function purely to get a per-student
 /// answer.  Extend as renderers gain the preamble
 /// (`personalizationPreambleForCase` / `rPersonalizationPreambleForCase`).
-private func kindSupportsPerStudentExpected(_ kind: PatternKind) -> Bool {
+func kindSupportsPerStudentExpected(_ kind: PatternKind) -> Bool {
     switch kind {
     case .boundaryEquality, .approximateEquality, .unorderedEquality, .variableEquality:
         return true

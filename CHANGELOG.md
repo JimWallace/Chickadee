@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.365] - 2026-10-03
+
+### Fixed
+
+- **Case cells read the assignment language's literals.** A pattern-family case cell accepted only Python's `True`, `False` and `None`. So an R author who typed `TRUE` as an argument stored the string "TRUE", and the generated test passed a string. The case cells, the family Variables table and the inputs editors now use one parser, `ChickadeeLanguage.parseValue` (#1958).
+
+### Fixed
+
+- **The MCP tools name the xeus kernels, not Pyodide.** `get_assignment`, `set_grading_mode` and the admin `get_browser_diagnostics` still said browser grading runs on Pyodide, which was removed in v0.5.19. The `initialize` instructions also gave Python's import-quarantine rule for every notebook; it now applies to Python notebooks only, because a notebook in any other language is extracted verbatim (#1934).
+
+### Changed
+
+- **Racket personalization expressions evaluate faster.** The driver now starts from `racket/base` instead of the full `racket` language. This removes about 0.4 s from each evaluation, more than half of its run. Expressions still evaluate in the same base namespace, so no expression changes meaning (#2001).
+
+
 ## [0.5.364] - 2026-10-03
 
 ### Fixed
