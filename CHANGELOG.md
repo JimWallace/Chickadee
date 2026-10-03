@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.380] - 2026-10-03
+
+### Changed
+
+- **Notebook-check validation throws a typed error, one case per rule.** `NotebookCheckValidator` built nine `Abort(.unprocessableEntity, reason:)` values with hand-written sentences, and imported Vapor for nothing else. It now throws `AuthoringValidationError`, whose description is the same sentence word for word and which leaves a route or an MCP tool as the same 422. The file no longer imports Vapor and leaves the Utilities allowlist. This is the first slice of #1929.
+
+### Changed
+
+- **The OIDC configuration provider uses `Mutex`.** It held the last `NIOLockedValueBox` in the server after #1668. It now uses `Synchronization.Mutex` like the rest of the code base, and `import NIOConcurrencyHelpers` is gone (#1928, part 1).
+
+
 ## [0.5.379] - 2026-10-03
 
 ### Changed
