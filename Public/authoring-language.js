@@ -31,6 +31,10 @@
         scriptExtension: 'py',
         functionScanning: true,
         expressionEvaluation: true,
+        // No worker of its own: which worker runs is the seed's answer, never
+        // this file's, so a page without one computes on the server.
+        autoComputeWorker: null,
+        autoComputeRuntimeSource: null,
         unsupportedCheckKinds: {}
     };
 
@@ -56,6 +60,8 @@
             scriptExtension: parsed.scriptExtension || PYTHON_FALLBACK.scriptExtension,
             functionScanning: parsed.functionScanning !== false,
             expressionEvaluation: parsed.expressionEvaluation !== false,
+            autoComputeWorker: parsed.autoComputeWorker || null,
+            autoComputeRuntimeSource: parsed.autoComputeRuntimeSource || null,
             unsupportedCheckKinds: parsed.unsupportedCheckKinds || {}
         };
         return _cached;
@@ -165,6 +171,16 @@
         return facts().expressionEvaluation !== false;
     }
 
+    /// The in-page worker that computes a case's expected value, or null when
+    /// the server computes it instead (C++, Racket, Java, or no language).
+    ///
+    /// The pattern-family editor called this from #1322 on, but it was never
+    /// added here, so auto-compute threw a TypeError for every language and
+    /// the cell stayed on "computing…" (#1956).
+    function autoComputeWorker() {
+        return facts().autoComputeWorker || null;
+    }
+
     global.ChickadeeLanguage = {
         isPython: isPython,
         facts: facts,
@@ -175,6 +191,7 @@
         reprToJSON: reprToJSON,
         scriptExtension: scriptExtension,
         canScanFunctions: canScanFunctions,
-        canEvaluateExpressions: canEvaluateExpressions
+        canEvaluateExpressions: canEvaluateExpressions,
+        autoComputeWorker: autoComputeWorker
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
