@@ -19,7 +19,7 @@
 // SSO unavailable; it no longer prevents the server from starting.
 
 import Foundation
-import NIOConcurrencyHelpers
+import Synchronization
 import Vapor
 
 /// Stores the resolved OIDC configuration and retries the discovery fetch on
@@ -44,17 +44,17 @@ final class OIDCConfigurationProvider: Sendable {
         var nextRetryNotBefore: Date?
     }
 
-    private let state = NIOLockedValueBox(State())
+    private let state = Mutex(State())
 
     /// The configuration resolved so far, or nil when none has loaded yet.
     /// Performs no I/O and never blocks.
     var current: OIDCConfiguration? {
-        state.withLockedValue { $0.configuration }
+        state.withLock { $0.configuration }
     }
 
     /// Replaces the stored configuration. Used by startup and by tests.
     func store(_ configuration: OIDCConfiguration?) {
-        state.withLockedValue { $0.configuration = configuration }
+        state.withLock { $0.configuration = configuration }
     }
 
     /// Returns the stored configuration, or attempts one fetch when none is
@@ -70,7 +70,7 @@ final class OIDCConfigurationProvider: Sendable {
             case cooling
         }
 
-        let next: Next = state.withLockedValue { state in
+        let next: Next = state.withLock { state in
             if let configuration = state.configuration {
                 return .resolved(configuration)
             }
@@ -101,7 +101,7 @@ final class OIDCConfigurationProvider: Sendable {
     ) async -> OIDCConfiguration? {
         do {
             let configuration = try await task.value
-            state.withLockedValue { state in
+            state.withLock { state in
                 state.configuration = configuration
                 state.inFlight = nil
                 state.nextRetryNotBefore = nil
@@ -109,7 +109,7 @@ final class OIDCConfigurationProvider: Sendable {
             app.logger.info("OIDC discovery succeeded; SSO is available.")
             return configuration
         } catch {
-            state.withLockedValue { state in
+            state.withLock { state in
                 state.inFlight = nil
                 state.nextRetryNotBefore = Date().addingTimeInterval(Self.retryCooldown)
             }
