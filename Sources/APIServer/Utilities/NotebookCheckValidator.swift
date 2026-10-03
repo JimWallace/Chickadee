@@ -6,7 +6,6 @@
 // v0.4.182.
 
 import Core
-import Vapor
 
 /// Validates a list of notebook checks before they are applied to a test
 /// setup.  Mirrors `validatePatternFamilies` for the parallel concept.
@@ -34,19 +33,13 @@ func validateNotebookChecks(
     for check in checks {
         try validateKindSupport(check, language: language)
         guard isValidIdentifierFragment(check.id) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check id '\(check.id)' must contain only letters, digits, and underscore")
+            throw AuthoringValidationError.invalidNotebookCheckID(check.id)
         }
         guard seenCheckIDs.insert(check.id).inserted else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Duplicate notebook check id '\(check.id)'")
+            throw AuthoringValidationError.duplicateNotebookCheckID(check.id)
         }
         guard check.points >= 0 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)': points must be non-negative")
+            throw AuthoringValidationError.negativeNotebookCheckPoints(checkID: check.id)
         }
 
         try notebookCheckKindHandler(for: check.kind).validate(check, language: language)
@@ -85,25 +78,16 @@ func validateNotebookChecks(
             .filter { seenForThisCheck.insert($0).inserted }
         for filename in checkFilenames {
             if rawScripts.contains(filename) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' would generate '\(filename)', but a hand-written file with that name already exists. Rename the file or change the check id."
-                )
+                throw AuthoringValidationError.notebookCheckCollidesWithHandWrittenFile(
+                    checkID: check.id, filename: filename)
             }
             if familyFilenames.contains(filename) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' would generate '\(filename)', which collides with a pattern family's generated filename. Change the check id."
-                )
+                throw AuthoringValidationError.notebookCheckCollidesWithFamilyFile(
+                    checkID: check.id, filename: filename)
             }
             if !seenCheckFilenames.insert(filename).inserted {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' would generate '\(filename)', which collides with another check's generated file. Change the check id."
-                )
+                throw AuthoringValidationError.notebookCheckCollidesWithCheckFile(
+                    checkID: check.id, filename: filename)
             }
         }
     }
@@ -211,12 +195,8 @@ private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLan
             let reason = notebookCheckFieldUnsupportedReason(
                 "regex", kind: check.kind, language: .lua)
         {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (\(check.kind.rawValue)) uses regex matching, "
-                    + "which is not available for Lua assignments: \(reason)"
-            )
+            throw AuthoringValidationError.notebookCheckRegexUnsupported(
+                checkID: check.id, kind: check.kind, language: "Lua", reason: reason)
         }
     case .octave:
         if !notebookCheckKindSupportsOctave(check.kind) {
@@ -248,13 +228,9 @@ private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLan
         // what C++ and Racket produced before the fold.
         guard let reason = notebookCheckKindUnsupportedReason(check.kind, language: language)
         else { break }
-        throw Abort(
-            .unprocessableEntity,
-            reason:
-                "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not available for "
-                + "\(language.displayName) assignments: \(reason) Use a pattern family or a "
-                + "hand-written \(handWrittenTestExtension(language)) test instead."
-        )
+        throw AuthoringValidationError.notebookCheckKindUnavailable(
+            checkID: check.id, kind: check.kind, language: language, reason: reason,
+            handWrittenExtension: handWrittenTestExtension(language))
     }
 }
 
@@ -279,17 +255,9 @@ private func handWrittenTestExtension(_ language: AssignmentLanguage) -> String 
 private func unsupportedKind(
     _ check: NotebookCheck, language: String,
     supports: (NotebookCheckKind) -> Bool, handWrittenExtension: String
-) -> Abort {
-    let supported = NotebookCheckKind.allCases
-        .filter(supports)
-        .map(\.rawValue)
-        .sorted()
-        .joined(separator: ", ")
-    return Abort(
-        .unprocessableEntity,
-        reason:
-            "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not supported for "
-            + "\(language) assignments — supported kinds are: \(supported). "
-            + "Express this check as a hand-written \(handWrittenExtension) test for now."
-    )
+) -> AuthoringValidationError {
+    .notebookCheckKindUnsupported(
+        checkID: check.id, kind: check.kind, language: language,
+        supportedKinds: NotebookCheckKind.allCases.filter(supports).map(\.rawValue).sorted(),
+        handWrittenExtension: handWrittenExtension)
 }
