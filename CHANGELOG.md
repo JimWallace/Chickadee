@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.385] - 2026-10-03
+
+### Changed
+
+- **The admin MCP dispatcher re-checks the admin role for every tool.** Eighteen of the nineteen admin diagnostic tools started with `requireAdminSubject`, and a new tool that forgot the line was protected only by the bearer layer. `DiagnosticTool` now has a `rechecksAdminRole` flag, true by default, and `AdminMCPDispatcher` runs the check before it calls the tool. `get_deployment_info` opts out so that it still answers when the database is down. The per-tool checks stay. A side effect: a non-admin who calls a tool with bad arguments now gets "not authorized" instead of "invalid arguments". Closes #1943.
+
+### Changed
+
+- **One change detector for the three CI jobs that skip when nothing they test changed.** `editor-smoke`, `codeql-js` and `browser-grading-smoke` each carried a copy of the same bash block, and the third had drifted: it did not fetch the base branch, and it skipped the browser grading smoke on an empty diff instead of running it. All three now use `.github/actions/changed-paths`, which takes a pattern and an optional exclude pattern and answers `relevant=true` for a non-PR event, a missing base commit or an empty diff. A change to the action runs all three jobs. Closes #1979.
+
+### Added
+
+- **A guard that every task the server starts has an owner.** A new test reads `Sources/APIServer` for a task created and not kept (a line that starts `Task {`, `Task(`, `Task.detached` or `_ = Task`) and fails unless an allowlist says why it is safe. The allowlist is empty. A task nobody keeps can outlive the application, and one that uses the database then queries a closed one (#1700). The last such task, the diagnostics prune at boot, now runs on `Application.backgroundWork`, which shutdown waits for. Closes #1948.
+
+
 ## [0.5.384] - 2026-10-03
 
 ### Fixed
