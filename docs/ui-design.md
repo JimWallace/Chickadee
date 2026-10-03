@@ -450,13 +450,15 @@ duplicate.
   stay `<tr>` in a `tbody[data-section-id]` and keep their `data-assignment-id`
   / `data-content-item-id`, because `section-items-dnd.js` reads them.
 - **`.editor-split`** — an editor (a form) beside a facts `.card`; one column on a phone. The MCP authoring-voice page.
-- **`.facts-actions`** — the buttons at the top right of a facts card (a `.detail-grid` in a `.card`): Test connection and a ⋯ on the LEARN page. `.section-items-combo` (20rem) is the state track of a list whose control is a combobox plus its Save button.
+- **`.facts-actions`** — the buttons at the top right of a facts card (a `.detail-grid` in a `.card`): Test connection and a ⋯ on the LEARN page.
+- **`.section-items-combo`** (20rem) — the state track of a `.section-items` list whose control is a combobox plus its Save button.
 - **`.add-panel`** — a form that opens under a page or section header: the
   add-material form, the add-staff form, the slip-day settings.  Closed until a
   control carrying `data-add-target` opens it; `app.js` toggles `is-open` (and
   preselects a kind when the control carries `data-add-kind`).  Without JS the
-  control links to the panel's id and `:target` opens it.  `.section-items-seen`
-  is the Students list's last-seen track.
+  control links to the panel's id and `:target` opens it.
+- **`.section-items-seen`** — the Students list's last-seen track of a
+  `.section-items` list.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
   `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
   `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so
@@ -518,9 +520,9 @@ duplicate.
   hides columns on phones and wants them restated reuses this one — the name is
   the mechanism, not the first table that needed it, precisely so the second
   table does not mint a twin.
-  `.text-error` / `.text-ok` / `.text-quiet` — status-line colours
+- **`.text-error`** / **`.text-ok`** / **`.text-quiet`** — status-line colours
   (`ChickadeeUI.setStatus` toggles them; nothing writes `el.style.color`).
-  `.empty` — the "nothing here yet" line a list renders in place of rows.
+- **`.empty`** — the "nothing here yet" line a list renders in place of rows.
 - **`.ext-details`/`.ext-panel`/`.ext-field-*`** — inline set/clear popover
   forms.  `.popover-panel` is the same shape for a row-anchored panel that
   is not a set/clear form; `app.js` floats both.
@@ -715,13 +717,13 @@ Two renderings, chosen by what the reader is asking (UI audit S8):
 - **Forensic or compliance** times — the audit log, retention dates —
   render **absolute**, in `--font-mono`, deliberately.  Here the exact
   instant *is* the content, and "2 months ago" would destroy it.
-  The audit log's When cell is the one place both readings appear: a relative
-  line leads and the absolute sits under it in `.log-when-absolute`, because
-  an admin scanning for what just happened asks for recency while the row
-  itself is evidence.  The absolute line is the **no-JS fallback for both**, so
-  the relative span above it is seeded empty — seed both with the server string
-  and the cell prints the same instant twice on every load before the script
-  runs.  A hover `title` does not satisfy this: it is not a disclosure.
+  The audit log's When cell is the one place both readings appear: the
+  absolute time leads in `.log-when-absolute`, because the row itself is
+  evidence, and the relative reading follows it, because an admin scanning for
+  what just happened asks for recency (#1632).  The absolute line is the
+  **no-JS fallback for both**, so the relative span after it is seeded empty —
+  seed both with the server string and the cell prints the same instant twice
+  on every load before the script runs.  A hover `title` does not satisfy this: it is not a disclosure.
 
 The server-formatted string stays in the cell as the no-JS fallback, so a
 column degrades to an absolute date rather than to nothing.  Staleness
@@ -878,6 +880,13 @@ That one entry point runs, in order:
    guards.
 5. `scripts/check-class-resolution.sh` — every assigned class name resolves
    (see "Class names must resolve").
+6. `scripts/check-ui-vocabulary.sh` — the count of global classes this
+   document does not name is a shrink-only ratchet, `cursor` and
+   `text-decoration` values come from the affordance registry, and hover text
+   in a template stays within 20 words.
+7. `scripts/check-leaf-semantics.sh` — no Swift property access on a
+   collection (`rows.isEmpty`) and no `#//` line comment in a template; both
+   render without an error and resolve wrong.
 
 Interpolated class families are pinned by the Swift side instead:
 `swift test --filter StatusClassStylesheetTests`.
