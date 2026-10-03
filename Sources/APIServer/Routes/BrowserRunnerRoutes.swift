@@ -135,7 +135,7 @@ struct BrowserRunnerRoutes: RouteCollection {
     ///
     /// Personalization parity: the native worker resolves this exact seed in
     /// `WorkerJobRoutes.buildJobPayload` via `AssignmentSeedStore.ensureSeed`
-    /// and injects it into the test subprocess (`RunnerDaemon+JobProcessing`).
+    /// and injects it into the test subprocess (`RunnerDaemon+SuiteExecution`).
     /// Browser grading had no equivalent, so any test reading the seed saw
     /// nothing in-browser. This endpoint calls the SAME `ensureSeed` — keyed by
     /// the same `(userID, assignmentID)` that also backs notebook substitution —

@@ -363,7 +363,7 @@ the only first-party frame is the watchdog reporting it.
 
 **Trigger.** Cancelling an in-flight `URLSession` download. The worker's job
 setup runs `async let submissionDownload` alongside the test-setup fetch
-(`RunnerDaemon+JobProcessing.swift`), so when one leg fails — which several
+(`RunnerDaemon+JobPreparation.swift`), so when one leg fails — which several
 tests deliberately induce with 404s — `swift_asyncLet_finish` cancels the
 other mid-transfer and can hit the inversion. Whether the racing transfer is
 completing (`completeTask`) or failing (`urlProtocol(task:didFailWithError:)`)
@@ -394,7 +394,7 @@ entry did not state, both load-bearing:
 
 **Fix shipped (first-party mitigation only).** The prepare phase's two fetches
 now both report a `Result` and are **both always awaited**
-(`fetchJobArtifacts` in `RunnerDaemon+JobProcessing.swift`), so one leg's
+(`fetchJobArtifacts` in `RunnerDaemon+JobPreparation.swift`), so one leg's
 failure can no longer leave the scope with the other still transferring. The
 submission download stays a *structured child* of the job task, so cancelling
 the daemon still tears an in-flight transfer down — the #1233 property is

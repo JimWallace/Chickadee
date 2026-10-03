@@ -224,7 +224,7 @@ the property the Optional bought.
 | Site | Why the default stays |
 |---|---|
 | `Worker/NotebookExtractor.swift:130` | Extraction has to write a file in *some* syntax; grading path |
-| `Worker/RunnerDaemon+JobProcessing.swift:652` | The student-module hint must name the file the extractor actually wrote |
+| `Worker/RunnerDaemon+JobPreparation.swift:332` | The student-module hint must name the file the extractor actually wrote |
 | `PersonalizationSubstitution.swift:55` | There is no literal without a syntax |
 | ~~`TestScriptTemplates.swift`~~ | **Gone.** A language-less suite gets a *shell* scaffold — see below |
 | `NotebookScaffoldHelpers.swift:165,167,174` | A notebook needs a kernelspec; nil already returns nil for upload-only |
