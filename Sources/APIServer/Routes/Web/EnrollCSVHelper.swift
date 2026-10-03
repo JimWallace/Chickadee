@@ -164,10 +164,11 @@ struct EnrollCSVResultContext: Encodable {
     let rejectedUsernames: [String]
     /// URL the back-button should link to (admin course page or /instructor).
     let returnURL: String
-    // Precomputed for easy Leaf truthiness check.
-    var hasRejected: Bool { !rejectedUsernames.isEmpty }
-    var rejectedCount: Int { rejectedUsernames.count }
-    var hasPreEnrolled: Bool { preEnrolledCount > 0 }
+    // No computed properties here: synthesized `Encodable` does not encode
+    // them, so the template could never read them. Three did exist, and the
+    // page showed no rejected count, no pre-enrolled note and no rejected
+    // usernames (#1973). The template derives those from the stored fields
+    // with the `count` tag and a comparison instead.
 }
 
 // MARK: - Bulk-enroll execution

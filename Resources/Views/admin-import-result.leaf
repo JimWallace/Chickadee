@@ -15,60 +15,30 @@ Import result — Admin
     #if(termLabel):#else:
     <div class="flash flash-warning" role="status">The bundle has no year and term. Set them on the <a href="/admin/courses/#(courseID)">course page</a>.</div>
     #endif
-    <table class="results-table import-result-table">
-        <tbody>
-            <tr>
-                <td>Test setups</td>
-                <td><strong>#(testSetupsImported)</strong></td>
-            </tr>
-            <tr>
-                <td>Assignments</td>
-                <td><strong>#(assignmentsImported)</strong></td>
-            </tr>
-            <tr>
-                <td>Users matched</td>
-                <td><strong>#(usersMatched)</strong></td>
-            </tr>
-            <tr>
-                <td>Users created</td>
-                <td><strong>#(usersCreated)</strong></td>
-            </tr>
-            <tr>
-                <td>Submissions</td>
-                <td><strong>#(submissionsImported)</strong></td>
-            </tr>
-            <tr>
-                <td>Results</td>
-                <td><strong>#(resultsImported)</strong></td>
-            </tr>
-        </tbody>
-    </table>
-    <p class="import-result-note">
-        Assignments have been imported as-is (open/closed state preserved).
-        Validation status has been reset — re-run validation from the assignment page if needed.
-        Newly created user accounts have no password and must log in via SSO or use password reset.
-    </p>
-    <div class="import-result-actions">
+    <div class="card section-gap">
+    <dl class="detail-grid">
+        <dt>Test setups</dt>
+        <dd>#(testSetupsImported)</dd>
+        <dt>Assignments</dt>
+        <dd>#(assignmentsImported)</dd>
+        <dt>Users matched</dt>
+        <dd>#(usersMatched)</dd>
+        <dt>Users created</dt>
+        <dd>#(usersCreated)</dd>
+        <dt>Submissions</dt>
+        <dd>#(submissionsImported)</dd>
+        <dt>Results</dt>
+        <dd>#(resultsImported)</dd>
+    </dl>
+    </div>
+    <p class="section-note">Assignments keep their open or closed state; validation is reset, so re-run it from each assignment page.</p>
+    #if(usersCreated > 0):
+    <p class="section-note">New accounts have no password; they sign in through SSO or a password reset.</p>
+    #endif
+    <div class="toolbar">
         <a href="/admin/courses/#(courseID)" class="btn btn-primary">View course</a>
         <a href="/admin" class="btn">Admin dashboard</a>
     </div>
 </section>
-
-<style>
-.import-result-table {
-    max-width: 480px;
-}
-.import-result-note {
-    margin-top: 1rem;
-    color: var(--text-secondary);
-    font-size: var(--text-base);
-}
-.import-result-actions {
-    display: flex;
-    gap: .75rem;
-    margin-top: 1.25rem;
-    flex-wrap: wrap;
-}
-</style>
 #endexport
 #endextend
