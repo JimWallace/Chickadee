@@ -78,47 +78,39 @@ final class APIResult: Model, Content, @unchecked Sendable {
     /// (worker report, browser report, bundle import) gets the columns
     /// without remembering to.
     func stampGradeFields(from collectionJSON: String) {
-        guard let data = collectionJSON.data(using: .utf8),
-            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return }
-        earnedPoints = (root["earnedPoints"] as? Double) ?? (root["earnedPoints"] as? Int).map(Double.init)
-        totalPoints = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
-        passCount = root["passCount"] as? Int
-        totalTests = root["totalTests"] as? Int
+        guard let fields = CollectionGradeFields(json: collectionJSON) else { return }
+        earnedPoints = fields.earnedPoints
+        totalPoints = fields.totalPoints
+        passCount = fields.passCount
+        totalTests = fields.totalTests
     }
 }
 
 // MARK: - Column-first grade accessors
 //
-// Same semantics as gradePercentFromCollectionJSON / gradePointsFromCollectionJSON
-// / gradeTotalPointsFromCollectionJSON in AssignmentHelpers.swift, but reading
-// the denormalized columns. Since #1173 the blob is not on this row, so there
-// is no synchronous fallback: rows whose four columns are all nil report no
-// grade — which matches the old fallback in every reachable state, because
-// the historical grade-columns backfill covered every parseable blob and a
-// blob it couldn't parse yielded nil from the fallback too. Loaders that
-// must hydrate such rows anyway (gradeSummariesBySubmissionID's legacy path)
-// fetch the blob from the side table explicitly.
+// The formulas are `CollectionGradeFields`'s, built from the denormalized
+// columns, so they cannot drift from the blob readers in AssignmentHelpers.swift.
+// Since #1173 the blob is not on this row, so there is no synchronous
+// fallback: rows whose four columns are all nil report no grade — which
+// matches the old fallback in every reachable state, because the historical
+// grade-columns backfill covered every parseable blob and a blob it couldn't
+// parse yielded nil from the fallback too. Loaders that must hydrate such rows
+// anyway (gradeSummariesBySubmissionID's legacy path) fetch the blob from the
+// side table explicitly.
 extension APIResult {
+    private var gradeFields: CollectionGradeFields {
+        CollectionGradeFields(
+            earnedPoints: earnedPoints, totalPoints: totalPoints,
+            passCount: passCount, totalTests: totalTests)
+    }
+
     /// Whole-result grade percent: weighted (earned/total) when totalPoints > 0,
     /// else unweighted pass/total test counts. Nil when neither is available.
-    var gradePercentValue: Int? {
-        if let earned = earnedPoints, let total = totalPoints, total > 0 {
-            return Int((earned / total * 100).rounded())
-        }
-        guard let pass = passCount, let total = totalTests, total > 0 else { return nil }
-        return Int((Double(pass) / Double(total) * 100).rounded())
-    }
+    var gradePercentValue: Int? { gradeFields.gradePercent }
 
     /// Earned points (weighted when available, else pass count) for CSV/LEARN export.
-    var gradePointsValue: Double? {
-        if let total = totalPoints, total > 0, let earned = earnedPoints { return earned }
-        return passCount.map(Double.init)
-    }
+    var gradePointsValue: Double? { gradeFields.gradePoints }
 
     /// Total possible weighted points; nil when the result predates weighted grading.
-    var gradeTotalPointsValue: Double? {
-        if let total = totalPoints, total > 0 { return total }
-        return nil
-    }
+    var gradeTotalPointsValue: Double? { gradeFields.gradeTotalPoints }
 }
