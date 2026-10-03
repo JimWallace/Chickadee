@@ -66,7 +66,15 @@ func createScriptInSetup(
         filename: cleaned, content: inlined, setup: setup, environments: kernelEnvironments)
     try await updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlined)
 
-    let tier = normalizeTier(body.tier, isTest: body.isTest)
+    // Whether the file is a test is the server's call when the caller does not
+    // say. The suite table's upload says nothing: its browser-side guess had a
+    // stale extension list and filed Lua, Octave, Racket and Java tests as
+    // support files (#1960). A caller that names a tier or `isTest` still
+    // decides.
+    let isTest =
+        body.isTest
+        ?? (body.tier == nil ? isLikelyTestSuiteScript(name: cleaned, leadingText: body.content) : nil)
+    let tier = normalizeTier(body.tier, isTest: isTest)
     // v0.4.105: allow 0-mark tests (e.g. function-existence guards that only
     // short-circuit downstream tests). Negative values clamp to 0.
     let points = max(0, body.points ?? 1)

@@ -370,6 +370,53 @@ import VaporTesting
         }
     }
 
+    /// The suite table's upload sends no tier and no `isTest`, so the server
+    /// decides. The browser used to decide from a stale list that filed Lua,
+    /// Octave, Racket and Java tests as support files (#1960).
+    @Test(arguments: [
+        ("publictest_area.lua", true),
+        ("publictest_area.m", true),
+        ("publictest_area.rkt", true),
+        ("PublicTestArea.java", true),
+        ("publictest_area.py", true),
+        ("data.csv", false),
+        ("helpers.hpp", false),
+    ])
+    func postScriptWithoutATierLetsTheServerClassifyIt(filename: String, isTest: Bool) async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsInstructor()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let setupID = "sc_cls_" + filename.replacingOccurrences(of: ".", with: "_")
+            _ = try await insertSetup(id: setupID, withEntries: [])
+            let a = try await insertAssignment(testSetupID: setupID, title: "Classify \(filename)")
+
+            struct Created: Decodable {
+                let tier: String
+                let isTest: Bool
+            }
+            var created: Created?
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/scripts",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    try req.content.encode(["filename": filename, "content": "x\n"], as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .created)
+                    created = try? res.content.decode(Created.self)
+                }
+            )
+
+            let result = try #require(created)
+            #expect(result.isTest == isTest)
+            #expect(result.tier == (isTest ? "public" : "support"))
+            let updated = try #require(try await APITestSetup.find(setupID, on: app.db))
+            let suite = try #require(updated.decodedManifest()).testSuites.map(\.script)
+            #expect(suite.contains(filename) == isTest)
+        }
+    }
+
     @Test func postScriptReturns409ForDuplicate() async throws {
         try await withApp(app) { _ in
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),

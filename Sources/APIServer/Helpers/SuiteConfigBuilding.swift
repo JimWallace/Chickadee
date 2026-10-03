@@ -3,7 +3,7 @@
 // The suite-config decode/encode types (`ConfiguredSuiteEntry` and the
 // editor's row shapes) and the builders that turn uploaded files into suite
 // entries (`buildSuiteEntries`, `inferredOrder`, `normalizeTier`,
-// `isLikelyTestSuiteFile`, `hasRecognizedScriptShebang`,
+// `isLikelyTestSuiteScript`, `isLikelyTestSuiteFile`, `hasRecognizedScriptShebang`,
 // `mergeExistingFilesIntoSuiteFiles`, `sanitizeSuiteFilename`). Moved from
 // Routes/Web/SuiteRowHelpers.swift (#1726): the manifest builder and the
 // publish step in Helpers/ use them, and Helpers/ must not call up into the
@@ -251,28 +251,37 @@ func normalizeTier(_ raw: String?, isTest: Bool? = nil) -> String {
     }
 }
 
-func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
-    // Every assignment language's extension, from the one table, UNION the
-    // script languages the runner can dispatch that no assignment is authored
-    // in. The assignment half used to be hand-listed as `py` / `r`, so a `.lua`
-    // suite file uploaded through the web form was silently skipped — not
-    // rejected with a message, just dropped from the suite — while the MCP
-    // `author_script` path accepted it. A new language joins this the day its
-    // case exists.
-    let nonAssignmentScriptExtensions: Set<String> = ["sh", "bash", "zsh", "rb", "pl", "js", "php"]
-    let assignmentExtensions = Set(AssignmentLanguage.allCases.flatMap(\.scriptExtensions))
-    let ext = URL(fileURLWithPath: storedName).pathExtension.lowercased()
-    if assignmentExtensions.contains(ext) || nonAssignmentScriptExtensions.contains(ext) {
-        return true
+/// Whether a suite upload named `name`, whose text starts with `leadingText`,
+/// is a test script rather than a support file.
+///
+/// The one rule for both upload doors: the multipart create form
+/// (`isLikelyTestSuiteFile`) and the suite table's JSON upload
+/// (`createScriptInSetup`). The suite table used to decide in the browser from
+/// its own extension list, which had gone stale and filed Lua, Octave, Racket
+/// and Java tests as support files (#1960).
+///
+/// A file with an extension is a test when the runner can dispatch it, read
+/// from RunnerCore's own table (`classifyScriptInterpreter`), so the answer
+/// cannot drift from what actually runs. That table, not
+/// `AssignmentLanguage.scriptExtensions`, is the right source: C++ claims
+/// `cpp`, `h` and `hpp` there, but its tests are `.sh` wrappers and the runner
+/// cannot run a `.cpp` file, so a C++ header is a support file. An
+/// extensionless file is a test when its shebang names a shell, Python or Lua.
+func isLikelyTestSuiteScript(name: String, leadingText: String) -> Bool {
+    guard URL(fileURLWithPath: name).pathExtension.isEmpty else {
+        return classifyScriptInterpreter(name: name, source: "") != .unknown
     }
-    guard ext.isEmpty else { return false }
-    return hasRecognizedScriptShebang(file)
+    return hasRecognizedScriptShebang(leadingText)
 }
 
-func hasRecognizedScriptShebang(_ file: File) -> Bool {
+func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
     let head = Data(file.data.readableBytesView.prefix(256))
-    guard let prefix = String(bytes: head, encoding: .utf8) else { return false }
-    let firstLine = prefix.split(whereSeparator: \.isNewline).first.map(String.init) ?? prefix
+    return isLikelyTestSuiteScript(
+        name: storedName, leadingText: String(bytes: head, encoding: .utf8) ?? "")
+}
+
+func hasRecognizedScriptShebang(_ text: String) -> Bool {
+    let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
     let normalized = firstLine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard normalized.hasPrefix("#!") else { return false }
     if normalized.range(of: #"^#!\s*/.*/(ba|z)?sh\b"#, options: .regularExpression) != nil {

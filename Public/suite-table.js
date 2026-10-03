@@ -47,11 +47,12 @@
     // ── Upload classification (folded in from the retired suite-list.js,
     // #1126 — that file was ~90% dead; only this classification survived) ──
     //
-    // Decides whether an uploaded file looks like a test script (by
-    // extension, or by shebang for extensionless files) and which tier the
-    // new row should default to.  Pure; unit-tested from
-    // Tests/BrowserRunnerJSTests/suite-table.test.mjs via the module export
-    // at the bottom of this file.
+    // NO LONGER DECIDES ANYTHING. The upload below sends no tier and no
+    // `isTest`, so the server decides with `isLikelyTestSuiteScript`, the rule
+    // its multipart upload already used. This list had gone stale and filed
+    // Lua, Octave, Racket and Java tests as support files (#1960). The helpers
+    // stay only because Tests/BrowserRunnerJSTests/suite-table.test.mjs tests
+    // them; deleting both is a test change that waits for the maintainer.
 
     var SCRIPT_EXTS = ['sh','bash','zsh','py','r','rb','pl','js','php'];
     var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
@@ -1417,20 +1418,18 @@
                 var chain = Promise.resolve();
                 files.forEach(function (file) {
                     chain = chain.then(function () {
-                        return classifyFile(file).then(function (cls) {
-                            return file.text().then(function (content) {
-                                return global.ChickadeeUI.fetchJSON(urls.uploadScript(), {
-                                    method: 'POST', csrfToken: csrfToken,
-                                    body: {
-                                        filename: file.name,
-                                        content: content,
-                                        tier: cls.tier,
-                                        points: 1,
-                                        isTest: cls.isScript
-                                    }
-                                }).then(function (data) {
-                                    addExistingScript(data);
-                                });
+                        return file.text().then(function (content) {
+                            // No tier and no `isTest`: whether this is a test
+                            // is the server's call (#1960).
+                            return global.ChickadeeUI.fetchJSON(urls.uploadScript(), {
+                                method: 'POST', csrfToken: csrfToken,
+                                body: {
+                                    filename: file.name,
+                                    content: content,
+                                    points: 1
+                                }
+                            }).then(function (data) {
+                                addExistingScript(data);
                             });
                         });
                     });
