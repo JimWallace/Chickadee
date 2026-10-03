@@ -17,7 +17,17 @@ GitHub
     <dl class="detail-grid">
         <dt>Organization</dt>
         <dd><a href="#(organization.url)">#(organization.login)</a></dd>
+        #for(capability in organization.capabilities):
+        <dt>#(capability.label)</dt>
+        <dd>#if(capability.granted):<span class="tier tier-open">Granted</span>#else:<span class="tier tier-closed">Not granted</span>#endif</dd>
+        #endfor
     </dl>
+    #if(organization.cannotMakeRepositories):
+    <div class="flash flash-warning" role="status">The GitHub App on this organization cannot make course repositories. An organization owner must <a href="#(organization.installationSettingsURL)">accept its permissions on GitHub</a>, or an admin must add them to the App.</div>
+    #endif
+    #if(organization.capabilitiesUnknown):
+    <p class="section-note">The permissions of the App on this organization could not be read.</p>
+    #endif
     #if(organization.forksAllowed):
     <div class="flash flash-warning" role="status">Members of this organization can fork private repositories. Turn off private forks in its settings on GitHub.</div>
     #endif

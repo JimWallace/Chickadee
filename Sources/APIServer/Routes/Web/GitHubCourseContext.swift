@@ -36,6 +36,29 @@ struct InstructorGitHubOrganization: Encodable {
     let forksAllowed: Bool
     /// True when the fork setting could not be read.
     let forksUnknown: Bool
+    /// What the App's installation on the organization was granted, read when
+    /// the page renders (#1776). Empty when GitHub did not answer.
+    let capabilities: [GitHubCapabilityRow]
+    /// True when the installation cannot make course repositories, so every
+    /// student's "make repository" would fail with a GitHub error.
+    let cannotMakeRepositories: Bool
+    /// True when GitHub did not say what the installation may do.
+    let capabilitiesUnknown: Bool
+    /// Where an organization owner reviews and accepts the App's permissions.
+    let installationSettingsURL: String
+
+    init(binding: APIGitHubCourseOrganization, forksAllowed: Bool?, grants: GitHubAppGrants?) {
+        login = binding.orgLogin
+        url = "https://github.com/\(binding.orgLogin)"
+        self.forksAllowed = forksAllowed == true
+        forksUnknown = forksAllowed == nil
+        capabilities = grants.map(GitHubCapabilityRow.rows(for:)) ?? []
+        cannotMakeRepositories = grants.map { !$0.allows(.courseRepositories) } ?? false
+        capabilitiesUnknown = grants == nil
+        installationSettingsURL =
+            "https://github.com/organizations/\(GitHubRepoClient.pathSegment(binding.orgLogin))"
+            + "/settings/installations/\(binding.installationID)"
+    }
 }
 
 struct InstructorGitHubAssignmentRow: Encodable {

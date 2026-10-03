@@ -118,6 +118,18 @@ struct GitHubRepoClient: Sendable {
     var createStatus:
         @Sendable (_ token: String, _ fullName: String, _ sha: String, _ status: GitHubCommitStatus) async throws ->
             Void = { _, _, _, _ in throw GitHubSubmitError.unavailable }
+
+    // MARK: Granted permissions (#1776)
+
+    /// The permissions and events the App asks for, read with the App JWT.
+    var appGrants: @Sendable (_ appJWT: String) async throws -> GitHubAppGrants = { _ in
+        throw GitHubSubmitError.unavailable
+    }
+    /// The permissions and events one installation was granted, read with the
+    /// App JWT. Throws `GitHubSubmitError.notInstalled` when the installation
+    /// no longer exists.
+    var installationGrants: @Sendable (_ appJWT: String, _ installationID: Int64) async throws -> GitHubAppGrants =
+        { _, _ in throw GitHubSubmitError.unavailable }
 }
 
 extension GitHubRepoClient {
@@ -189,6 +201,17 @@ extension GitHubRepoClient {
 
     private struct ArchiveBody: Content {
         let archived: Bool
+    }
+
+    /// The part of an App or an installation that says what it may do. Both
+    /// fields are absent on an App with no permissions or events.
+    private struct GrantsBody: Decodable {
+        let permissions: [String: String]?
+        let events: [String]?
+
+        var grants: GitHubAppGrants {
+            GitHubAppGrants(permissions: permissions ?? [:], events: events ?? [])
+        }
     }
 
     /// GitHub refuses with 403 and no remaining quota, or with 429, when an App
@@ -328,7 +351,21 @@ extension GitHubRepoClient {
                 }
             })
         addCourseRepositoryCalls(to: &live, transport: transport)
+        addGrantCalls(to: &live, transport: transport)
         return live
+    }
+
+    /// The #1776 calls, which act as the App rather than as an installation.
+    private static func addGrantCalls(to live: inout GitHubRepoClient, transport: LiveTransport) {
+        live.appGrants = { appJWT in
+            let response = try await transport.get("/app", token: appJWT)
+            return try transport.decode(GrantsBody.self, from: response).grants
+        }
+        live.installationGrants = { appJWT, installationID in
+            let response = try await transport.get("/app/installations/\(installationID)", token: appJWT)
+            if response.status == .notFound { throw GitHubSubmitError.notInstalled }
+            return try transport.decode(GrantsBody.self, from: response).grants
+        }
     }
 
     /// The slice-4 calls, apart from `live` so each builder stays readable.

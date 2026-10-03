@@ -158,6 +158,10 @@ extension AdminRoutes {
                     ownerLabel: organization.map { "the organization \($0.value)" } ?? "your GitHub account")
             }
         }
+        var grants: GitHubAppGrants?
+        if case .registered(let app, let secrets) = registration {
+            grants = await GitHubAppGrants.ofApp(app, secrets: secrets, req: req)
+        }
         let ctx = AdminGitHubContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "github",
@@ -166,6 +170,9 @@ extension AdminRoutes {
             secretsUnavailable: registration.problem != nil,
             secretsMissing: registration.problem?.isMissing ?? false,
             secretsPath: registration.problem?.path ?? "",
+            capabilities: grants.map(GitHubCapabilityRow.rows(for:)) ?? [],
+            capabilitiesIncomplete: grants.map { !$0.missing.isEmpty } ?? false,
+            capabilitiesUnknown: registration.problem == nil && registered != nil && grants == nil,
             creation: creation,
             organization: organizationText,
             organizationOpen: options.anySet,
