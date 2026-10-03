@@ -82,7 +82,7 @@ struct MCPLanguageCapability: Encodable, Sendable, Equatable {
 
     /// Pattern-family kinds this language can render, sorted.
     ///
-    /// Every language currently renders all eight — `performanceThreshold` on
+    /// Every language currently renders every kind — `performanceThreshold` on
     /// C++ is supportable precisely BECAUSE it is native-only — so there is no
     /// per-language predicate to consult and this is `PatternKind.allCases`.
     /// It is reported anyway, and as a derived list rather than a documented

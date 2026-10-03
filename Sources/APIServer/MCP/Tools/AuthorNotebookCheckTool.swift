@@ -203,7 +203,7 @@ struct AuthorNotebookCheckTool: ContentTool {
                 "description": .string("data_frame_columns: the expected column names."),
             ]),
             "columnMatch": .object([
-                "type": .string("string"), "enum": .array([.string("exact"), .string("superset")]),
+                "type": .string("string"), "enum": MCPEnumProse<ColumnMatchMode>.jsonEnum,
                 "description": .string("data_frame_columns: match mode (default exact)."),
             ]),
             "expectedCSV": .object([
@@ -346,20 +346,12 @@ struct AuthorNotebookCheckTool: ContentTool {
 
     private static func parseTier(_ raw: String?) throws -> TestTier {
         guard let raw else { return .pub }
-        guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: \(MCPTierProse.oneOfList).")
-        }
-        return tier
+        return try MCPEnumProse<TestTier>.parse(raw, tool: name, field: "tier")
     }
 
     private static func parseColumnMatch(_ raw: String?) throws -> ColumnMatchMode? {
         guard let raw, !raw.isEmpty else { return nil }
-        guard let mode = ColumnMatchMode(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "columnMatch must be \"exact\" or \"superset\".")
-        }
-        return mode
+        return try MCPEnumProse<ColumnMatchMode>.parse(raw, tool: name, field: "columnMatch")
     }
 
     /// Builds the `NotebookCheck` from the input; per-kind field legality is left

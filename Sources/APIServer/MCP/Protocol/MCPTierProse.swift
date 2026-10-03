@@ -31,18 +31,14 @@ enum MCPTierProse {
     ///
     /// The form tool descriptions use — `"tier (public/release/secret)"` — where
     /// the list is an aside inside a larger sentence.
-    static var slashAlternatives: String {
-        TestTier.allCases.map(\.rawValue).joined(separator: "/")
-    }
+    static var slashAlternatives: String { MCPEnumProse<TestTier>.slashAlternatives }
 
     /// Comma list for a "must be one of" error: `"public, release, secret"`.
     ///
     /// Rendered without a conjunction on purpose: this is a set of literal
     /// values a caller must match exactly, not a sentence, and "or" reads as
     /// though the last item were somehow different from the rest.
-    static var oneOfList: String {
-        TestTier.allCases.map(\.rawValue).joined(separator: ", ")
-    }
+    static var oneOfList: String { MCPEnumProse<TestTier>.oneOfList }
 
     /// `oneOfList` plus the pseudo-tier `support` — a bundled file that is never
     /// run, so it is not a `TestTier` case and cannot be derived from one.

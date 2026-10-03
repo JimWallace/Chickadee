@@ -35,11 +35,11 @@ enum MCPNotebookCheckKindProse {
     }
 
     /// Every kind's wire token, in declaration order.
-    static var tokens: [String] { NotebookCheckKind.allCases.map(\.rawValue) }
+    static var tokens: [String] { MCPEnumProse<NotebookCheckKind>.tokens }
 
     /// `"data_frame_shape / data_frame_columns / …"` — the slash-separated form
     /// a tool description uses when listing legal values inline.
-    static var slashSeparated: String { tokens.joined(separator: " / ") }
+    static var slashSeparated: String { MCPEnumProse<NotebookCheckKind>.slashSeparated }
 
     /// `"data_frame_shape (…), data_frame_columns (…), and …"` — the glossed
     /// sentence form the `initialize` instructions use.

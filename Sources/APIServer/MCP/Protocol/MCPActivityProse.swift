@@ -17,14 +17,10 @@ enum MCPActivityProse {
     }
 
     /// `"beatTheInstructor or bestMetric"` — the wire tokens a caller passes.
-    static var tokens: String {
-        LanguageProse.list(ActivityKind.allCases.map(\.rawValue))
-    }
+    static var tokens: String { MCPEnumProse<ActivityKind>.orList }
 
     /// `"\"beatTheInstructor\" | \"bestMetric\""` — a field description's union.
-    static var quotedTokenAlternatives: String {
-        ActivityKind.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " | ")
-    }
+    static var quotedTokenAlternatives: String { MCPEnumProse<ActivityKind>.quotedUnion }
 
     /// One clause per kind: `"beatTheInstructor — …; bestMetric — …"`.
     static var summaries: String {
@@ -32,14 +28,10 @@ enum MCPActivityProse {
     }
 
     /// `"none or supportFile"` — the opponent-source tokens a payload reports.
-    static var opponentSourceTokens: String {
-        LanguageProse.list(ActivityOpponentSource.allCases.map(\.rawValue))
-    }
+    static var opponentSourceTokens: String { MCPEnumProse<ActivityOpponentSource>.orList }
 
     /// `"bracket or swiss"` — the tournament schedules `run_tournament` takes.
-    static var scheduleTokens: String {
-        LanguageProse.list(TournamentSchedule.allCases.map(\.rawValue))
-    }
+    static var scheduleTokens: String { MCPEnumProse<TournamentSchedule>.orList }
 
     /// One clause per schedule: `"bracket — …; swiss — …"`.
     static var scheduleSummaries: String {

@@ -49,11 +49,11 @@ enum MCPPatternKindProse {
     }
 
     /// Every kind's wire token, in declaration order.
-    static var tokens: [String] { PatternKind.allCases.map(\.rawValue) }
+    static var tokens: [String] { MCPEnumProse<PatternKind>.tokens }
 
     /// `"boundary_equality / approximate_equality / …"` — the slash-separated
     /// form a tool description uses when listing legal values inline.
-    static var slashSeparated: String { tokens.joined(separator: " / ") }
+    static var slashSeparated: String { MCPEnumProse<PatternKind>.slashSeparated }
 
     /// `"boundary_equality (…), approximate_equality (…), and …"` — the
     /// glossed sentence form the `initialize` instructions use.
@@ -64,7 +64,7 @@ enum MCPPatternKindProse {
     }
 
     /// The JSON Schema `enum` array for a `kind` property.
-    static var jsonEnum: JSONValue { .array(tokens.map { .string($0) }) }
+    static var jsonEnum: JSONValue { MCPEnumProse<PatternKind>.jsonEnum }
 
     /// The kinds whose cases accept `expectedVarRef`, as `"a, b, and c"`.
     ///

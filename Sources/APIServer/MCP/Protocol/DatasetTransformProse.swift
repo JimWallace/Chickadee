@@ -18,10 +18,5 @@ enum DatasetTransformProse {
 
     /// The kinds as a wire-token list for a schema description:
     /// `"missingValues"`, and with a second kind `"missingValues" or "x"`.
-    static var kinds: String {
-        let quoted = DatasetTransform.Kind.allCases.map { "\"\($0.rawValue)\"" }
-        guard let last = quoted.last else { return "" }
-        guard quoted.count > 1 else { return last }
-        return quoted.dropLast().joined(separator: ", ") + " or " + last
-    }
+    static var kinds: String { MCPEnumProse<DatasetTransform.Kind>.quotedOrList }
 }

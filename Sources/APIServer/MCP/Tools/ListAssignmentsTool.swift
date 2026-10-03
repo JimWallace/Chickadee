@@ -60,9 +60,7 @@ struct ListAssignmentsTool: ContentTool {
                         "isOpen": MCPSchema.boolean,
                         "visibility": .object([
                             "type": .string("string"),
-                            "enum": .array([
-                                .string("closed"), .string("preview"), .string("open"),
-                            ]),
+                            "enum": MCPEnumProse<AssignmentVisibility>.jsonEnum,
                         ]),
                         "dueAt": MCPSchema.string,
                         "startsAt": MCPSchema.string,

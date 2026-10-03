@@ -45,7 +45,7 @@ struct SetSubmissionModeTool: ContentTool {
             "assignmentPublicID": MCPSchema.assignmentPublicID,
             "submissionMode": .object([
                 "type": .string("string"),
-                "enum": .array([.string("notebook"), .string("uploadOnly")]),
+                "enum": MCPEnumProse<SubmissionMode>.jsonEnum,
                 "description": .string(
                     "\"notebook\" (embedded editor plus upload form) or \"uploadOnly\" (upload only)."),
             ]),
@@ -70,10 +70,7 @@ struct SetSubmissionModeTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let mode = input.submissionMode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let parsed = SubmissionMode(rawValue: mode) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "submissionMode must be \"notebook\" or \"uploadOnly\".")
-        }
+        let parsed = try MCPEnumProse<SubmissionMode>.parse(mode, tool: Self.name, field: "submissionMode")
         // How students submit is a lifecycle setting — instructor-level (#417),
         // matching set_grading_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(

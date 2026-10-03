@@ -138,7 +138,7 @@ struct CreateCourseSectionTool: ContentTool {
             ]),
             "defaultGradingMode": .object([
                 "type": .string("string"),
-                "enum": .array([.string("browser"), .string("worker")]),
+                "enum": MCPEnumProse<GradingMode>.jsonEnum,
                 "description": .string("Grading mode adopted by assignments moved here. Default \"browser\"."),
             ]),
         ]),
@@ -171,10 +171,7 @@ struct CreateCourseSectionTool: ContentTool {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Section name must not be empty.")
         }
         let mode = input.defaultGradingMode ?? "browser"
-        guard mode == "browser" || mode == "worker" else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "defaultGradingMode must be \"browser\" or \"worker\".")
-        }
+        _ = try MCPEnumProse<GradingMode>.parse(mode, tool: Self.name, field: "defaultGradingMode")
         let course = try await resolveCourseForWrite(code: input.courseCode, tool: Self.name, context: context)
         let courseID = try course.requireID()
 
@@ -361,7 +358,7 @@ struct RenameCourseSectionTool: ContentTool {
             ]),
             "defaultGradingMode": .object([
                 "type": .string("string"),
-                "enum": .array([.string("browser"), .string("worker")]),
+                "enum": MCPEnumProse<GradingMode>.jsonEnum,
                 "description": .string("New default grading mode; omit to leave unchanged."),
             ]),
         ]),
@@ -400,10 +397,7 @@ struct RenameCourseSectionTool: ContentTool {
             section.name = newName
         }
         if let newMode {
-            guard newMode == "browser" || newMode == "worker" else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "defaultGradingMode must be \"browser\" or \"worker\".")
-            }
+            _ = try MCPEnumProse<GradingMode>.parse(newMode, tool: Self.name, field: "defaultGradingMode")
             section.defaultGradingMode = newMode
         }
         try await section.save(on: context.db)

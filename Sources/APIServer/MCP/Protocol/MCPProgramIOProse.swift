@@ -6,7 +6,6 @@
 // MCPFailureDetailProse.
 
 import Core
-import Vapor
 
 enum MCPProgramIOProse {
 
@@ -19,7 +18,7 @@ enum MCPProgramIOProse {
         }
     }
 
-    static var tokens: [String] { ProgramIOComparison.allCases.map(\.rawValue) }
+    static var tokens: [String] { MCPEnumProse<ProgramIOComparison>.tokens }
 
     static var fieldDescription: String {
         let glossed = ProgramIOComparison.allCases.map { "\($0.rawValue) (\(gloss(for: $0)))" }
@@ -46,7 +45,7 @@ enum MCPProgramIOProse {
     static var schema: JSONValue {
         .object([
             "type": .string("string"),
-            "enum": .array(tokens.map { .string($0) }),
+            "enum": MCPEnumProse<ProgramIOComparison>.jsonEnum,
             "description": .string(fieldDescription),
         ])
     }
@@ -54,11 +53,6 @@ enum MCPProgramIOProse {
     /// nil in → nil out (leave unchanged / default); an unknown token is a
     /// tool error naming the legal values.
     static func parse(_ raw: String?, tool: String) throws -> ProgramIOComparison? {
-        guard let raw else { return nil }
-        guard let parsed = ProgramIOComparison(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "ioComparison must be one of: \(tokens.joined(separator: ", ")).")
-        }
-        return parsed
+        try MCPEnumProse<ProgramIOComparison>.parseOptional(raw, tool: tool, field: "ioComparison")
     }
 }
