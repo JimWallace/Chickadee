@@ -83,42 +83,12 @@ struct ResultRoutes: RouteCollection {
                 logger: req.logger
             )
 
-            // If this is a validation submission, update the assignment's validationStatus
-            // so the instructor sees pass/fail without needing to poll.
+            let effects = ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
+
+            // A validation run's verdict, so the instructor sees pass or fail
+            // without polling.
             if submission.kind == APISubmission.Kind.validation {
-                let passed =
-                    collection.buildStatus == .passed
-                    && collection.totalTests > 0
-                    && collection.failCount == 0
-                    && collection.errorCount == 0
-                    && collection.timeoutCount == 0
-                let status = passed ? "passed" : "failed"
-
-                if let assignment = try await APIAssignment.query(on: req.db)
-                    .filter(\.$validationSubmissionID == collection.submissionID)
-                    .first()
-                {
-                    assignment.validationStatus = status
-                    try await assignment.save(on: req.db)
-                    req.logger.info(
-                        "Validation \(status) for assignment '\(assignment.title)' (submission \(collection.submissionID))"
-                    )
-                }
-
-                // A per-variant run (multi-variant validation) is never the
-                // assignment's linked primary, so the two lookups are
-                // disjoint: this one records the verdict on the variant row
-                // the instructor surfaces read.
-                if let variant = try await ValidationVariant.query(on: req.db)
-                    .filter(\.$submissionID == collection.submissionID)
-                    .first()
-                {
-                    variant.status = status
-                    try await variant.save(on: req.db)
-                    req.logger.info(
-                        "Validation variant \(variant.variantIndex) \(status) for setup \(variant.testSetupID)"
-                    )
-                }
+                try await effects.recordValidationVerdict(collection)
             }
 
             // A tournament match reaches only the bracket, whatever its
@@ -130,14 +100,16 @@ struct ResultRoutes: RouteCollection {
 
             // The class corpus run's grade IS the class's coverage number
             // (docs/collaborative-class-assignments.md). It belongs to no
-            // student, so it never reaches `applyClassWideEffects` below.
+            // student, so `ResultIngestEffects.apply` below skips it.
             if submission.kind == APISubmission.Kind.classAggregate {
                 try await recordClassCoverageRun(
                     submission: submission, collection: collection, on: req.db)
             }
 
-            try await applyClassWideEffects(
-                submission: submission, collection: collection, matches: report.matches, on: req)
+            // Coverage, the leaderboard, the match and the class records, best
+            // effort: the result is committed, so none of them may fail the
+            // report (#1708).
+            await effects.apply(submission: submission, collection: collection, matches: report.matches)
 
             // An opted-in GitHub submission's public-tier result, on its commit
             // (docs/github-submissions.md slice 6). Never throws.
@@ -145,93 +117,6 @@ struct ResultRoutes: RouteCollection {
         }
 
         return ReportResponse(received: true)
-    }
-
-    // MARK: - Class-wide effects
-
-    /// The class-level side effects of one student result: the union of covered
-    /// items, and the class badges a 100% earns.
-    ///
-    /// Extracted from `report` because it is the part that GROWS — every
-    /// class-level signal added to the platform lands here, and inlining them
-    /// pushed the route past the body-length limit. Keeping it separate also
-    /// keeps the two gates visible: coverage is per item and ungated by grade,
-    /// badges are per student and gated at 100%.
-    private func applyClassWideEffects(
-        submission: APISubmission, collection: TestOutcomeCollection, matches: [MatchReport]? = nil,
-        on req: Request
-    ) async throws {
-        guard submission.kind == APISubmission.Kind.student,
-            collection.buildStatus == .passed,
-            let userID = submission.userID,
-            let subID = submission.id
-        else { return }
-
-        // Per item, and deliberately not inside the 100% gate below: a student
-        // who covers one item and nothing else has still contributed that item.
-        //
-        // Only contribution assignments accumulate a union, so the slot count
-        // comes from the instructor's starter notebook. Read through
-        // `notebookBytesCache` (#1171) rather than unzipping per result: a
-        // deadline spike shares one resolution. A setup with no notebook
-        // resolves to nil, which is 0 slots, which is "not a contribution
-        // assignment" — the right answer for every ordinary assignment.
-        let slotCount = await declaredContributionSlotCount(
-            testSetupID: submission.testSetupID, app: req.application, on: req.db)
-        try await recordClassItemCoverage(
-            testSetupID: submission.testSetupID,
-            userID: userID,
-            submissionID: subID,
-            outcomes: collection.outcomes,
-            declaredSlotCount: slotCount,
-            on: req.db
-        )
-
-        // A new contribution changes what the class's combined corpus covers,
-        // so the corpus is re-assembled and re-graded. Debounced to one run in
-        // flight per assignment, and a no-op for every assignment that
-        // declares no slots.
-        if slotCount > 0 {
-            await scheduleClassCorpusRun(
-                setupID: submission.testSetupID, app: req.application, on: req.db,
-                logger: req.logger)
-        }
-
-        // The activity leaderboard, likewise outside the 100% gate: a ranking
-        // metric is whatever the script measured, and the script decides
-        // whether a failing run reports one.
-        try await recordLeaderboardEntry(
-            testSetupID: submission.testSetupID,
-            userID: userID,
-            submissionID: subID,
-            outcomes: collection.outcomes,
-            on: req.db
-        )
-
-        // King of the hill: complete the match this job played and move the
-        // hill if the challenger won (docs/class-activities.md).
-        try await recordActivityMatch(
-            testSetupID: submission.testSetupID,
-            userID: userID,
-            submissionID: subID,
-            outcomes: collection.outcomes,
-            matches: matches,
-            on: req.db
-        )
-
-        guard gradePercent(from: collection) == 100 else { return }
-        let disabled =
-            (try? await APITestSetup.find(submission.testSetupID, on: req.db))
-            .map { BuiltInAchievements.disabled(in: $0) } ?? []
-        try await awardClassBadgesFor100Percent(
-            testSetupID: submission.testSetupID,
-            userID: userID,
-            submissionID: subID,
-            executionTimeMs: collection.executionTimeMs,
-            attemptNumber: submission.attemptNumber ?? 1,
-            disabled: disabled,
-            on: req.db
-        )
     }
 
     // MARK: - DB persistence
@@ -248,13 +133,11 @@ struct ResultRoutes: RouteCollection {
             submissionID: collection.submissionID
         )
 
-        // Mark for BrightSpace sync if the assignment is configured for it.
-        // Shared with the browser-result path so the two ingest routes can't
-        // drift apart on which grades reach LEARN.
-        try await flagResultForBrightSpaceSync(
+        // Mark for BrightSpace and LTI sync. Shared with the browser-result
+        // path so the two ingest routes can't drift apart on which grades
+        // reach the LMS.
+        try await ResultIngestEffects.flagForGradeSync(
             result, testSetupID: collection.testSetupID, application: req.application, on: db)
-        try await LTIGradeSyncQueue.queue(
-            submissionID: collection.submissionID, testSetupID: collection.testSetupID, on: db)
 
         // Row + blob side-table row persist together; the caller's
         // transaction (persist + submission status flip) encloses both.

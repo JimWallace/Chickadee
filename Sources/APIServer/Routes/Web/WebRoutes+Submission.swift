@@ -160,9 +160,10 @@ func recordStudentSubmission(
     // The shared helper carries the v0.4.127 role gate (an admin/TA/
     // instructor testing the assignment must not lock in the immutable
     // badge) and is the same code path the notebook submission routes use.
+    // Best effort: the submission is already stored (#1708).
     if let uid = user.id {
-        try await awardFirstToSubmitRecords(
-            setup: setup, userID: uid, submissionID: try submission.requireID(), on: req.db)
+        await ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
+            .awardFirstToSubmit(setup: setup, userID: uid, submissionID: try submission.requireID())
     }
 
     await ensureLocalRunnerForSubmissionIfNeeded(req: req)

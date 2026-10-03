@@ -141,9 +141,8 @@ struct BrowserResultRoutes: RouteCollection {
         // the 60-second sweep only ever sees rows flagged here, so notebook
         // labs silently reached LEARN only via an instructor's manual "Push
         // all" or a retest that routed through a worker.
-        try await flagResultForBrightSpaceSync(
+        try await ResultIngestEffects.flagForGradeSync(
             browserResult, testSetupID: body.testSetupID, application: req.application, on: req.db)
-        try await LTIGradeSyncQueue.queue(submissionID: subID, testSetupID: body.testSetupID, on: req.db)
         // Same transient-SQLite-lock guard as the submission insert above: this
         // second write can also lose a race with a concurrent commit (session
         // write / background monitor) and surface as a 500 otherwise.
@@ -154,9 +153,16 @@ struct BrowserResultRoutes: RouteCollection {
 
         req.logger.info("Browser result stored for \(subID)")
 
-        await awardBrowserResultBadges(
-            req: req, setup: setup, userID: caller.id, submissionID: subID,
-            reconciled: reconciled, attemptNumber: attemptNumber)
+        // Everything below is a side effect of a grade that is already stored,
+        // so none of it may fail the submission (`ResultIngestEffects`, #1708).
+        // Pathfinder is awarded here rather than at upload because this route
+        // creates the submission row. Then the same class-level effects the
+        // worker report applies.
+        let effects = ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
+        if let userID = caller.id {
+            await effects.awardFirstToSubmit(setup: setup, userID: userID, submissionID: subID)
+        }
+        await effects.apply(submission: submission, collection: reconciled)
 
         // Update the student's server-side working copy with what they just
         // submitted. Without this, the working copy stays as the blank starter
@@ -176,148 +182,6 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         return BrowserResultResponse(submissionID: subID)
-    }
-
-    /// Everything a stored browser result triggers that is NOT the grade.
-    ///
-    /// Extracted so the ordering is visible at the call site: the result is
-    /// saved, and only then does any of this run. See the notes inside.
-    private func awardBrowserResultBadges(
-        req: Request, setup: APITestSetup, userID: UUID?, submissionID subID: String,
-        reconciled: TestOutcomeCollection, attemptNumber: Int
-    ) async {
-        // ── Everything below here is a SIDE EFFECT, and none of it may fail
-        // the submission. ────────────────────────────────────────────────────
-        //
-        // The grade is stored as of the line above. Anything that throws after
-        // it turns a submission that graded perfectly into a 500 the browser
-        // reports as "Failed to submit results" — while the row sits in the
-        // database, so the page polls it forever and never renders a result.
-        // That is the documented `grading-probe` intermittent
-        // (docs/ci-flakiness.md, Family 2's "not the exec-hang" note): three
-        // sightings, each with `suite_done` reached and the POST 500ing after.
-        //
-        // The Pathfinder award used to run BEFORE the result save, which is
-        // what made the window lossy rather than merely noisy — the submission
-        // row existed and the result did not. It moved down here.
-        //
-        // Why these throw at all, when SQLite is meant to wait: sqlite-nio
-        // installs a busy handler that retries forever, so ordinary contention
-        // never surfaces. What it cannot cover is `SQLITE_BUSY_SNAPSHOT` — a
-        // WAL read snapshot that has gone stale because another connection
-        // committed in between — which SQLite returns IMMEDIATELY, bypassing
-        // the handler, because waiting cannot help. Only starting the
-        // transaction again can, which is what `withTransientDatabaseLockRetry`
-        // does. Every badge helper here is read-then-write, the exact shape
-        // that hits it, and the page's own result polling supplies the
-        // concurrent commits.
-        //
-        // Retried first (a transient race should still award the badge), and
-        // logged rather than thrown if it survives the retries. A class badge
-        // is worth an ordinary amount; a student's grade is not worth losing
-        // for one.
-        func bestEffort(_ what: String, _ work: () async throws -> Void) async {
-            do {
-                try await withTransientDatabaseLockRetry(on: req.db) { try await work() }
-            } catch {
-                req.logger.warning(
-                    "browser_result_side_effect_failed \(what) for \(subID): \(error)")
-            }
-        }
-
-        // First-to-submit records (Pathfinder): notebook submissions are the
-        // dominant flow, but only the zip-upload handler used to award this —
-        // browser-graded assignments never had a Pathfinder (audit A2).
-        if let userID {
-            await bestEffort("first_to_submit") {
-                try await awardFirstToSubmitRecords(
-                    setup: setup, userID: userID, submissionID: subID, on: req.db)
-            }
-        }
-
-        // Class records (Trailblazer / fastest / fewest-attempts) on a 100%
-        // browser grade.  These were only awarded in the worker report handler,
-        // so browser-graded assignments never awarded any record unless a
-        // retest or the failover backstop happened to route through a worker
-        // (audit A2).  Same rounded-percent gate and student-role guard as
-        // `ResultRoutes`; the reconciled collection carries the
-        // server-authoritative attempt number.
-        // The class-wide union of covered items. Outside the 100% gate below,
-        // because coverage is per item rather than per student — and wired here
-        // as well as in `ResultRoutes` for the reason the comment above records:
-        // a side effect wired at only one ingest path silently reports half the
-        // class as the whole of it.
-        if reconciled.buildStatus == .passed, let userID {
-            await bestEffort("class_item_coverage") {
-                let slotCount = await declaredContributionSlotCount(
-                    testSetupID: setup.id ?? "", app: req.application, on: req.db)
-                try await recordClassItemCoverage(
-                    testSetupID: setup.id ?? "",
-                    userID: userID,
-                    submissionID: subID,
-                    outcomes: reconciled.outcomes,
-                    declaredSlotCount: slotCount,
-                    on: req.db
-                )
-                // Wired here for the same reason the coverage union is: a
-                // browser-graded contribution assignment whose corpus is only
-                // re-run from the worker path would freeze its class coverage
-                // at whatever the last worker-graded submission produced.
-                if slotCount > 0 {
-                    await scheduleClassCorpusRun(
-                        setupID: setup.id ?? "", app: req.application, on: req.db,
-                        logger: req.logger)
-                }
-            }
-        }
-
-        // The activity leaderboard — the third class-level effect, wired here
-        // beside the other two for the reason recorded above.
-        if reconciled.buildStatus == .passed, let userID {
-            await bestEffort("leaderboard_entry") {
-                try await recordLeaderboardEntry(
-                    testSetupID: setup.id ?? "",
-                    userID: userID,
-                    submissionID: subID,
-                    outcomes: reconciled.outcomes,
-                    on: req.db
-                )
-            }
-        }
-
-        // The hill (king of the hill) — a fourth class-level effect, wired
-        // here for the same reason. A browser-graded king-of-the-hill
-        // assignment is refused at authoring, so this only ever sees the
-        // worker fail-over path, where it completes the row the claim opened.
-        if reconciled.buildStatus == .passed, let userID {
-            await bestEffort("activity_match") {
-                try await recordActivityMatch(
-                    testSetupID: setup.id ?? "",
-                    userID: userID,
-                    submissionID: subID,
-                    outcomes: reconciled.outcomes,
-                    on: req.db
-                )
-            }
-        }
-
-        if reconciled.buildStatus == .passed,
-            let userID,
-            gradePercent(from: reconciled) == 100
-        {
-            await bestEffort("class_badges") {
-                try await awardClassBadgesFor100Percent(
-                    testSetupID: setup.id ?? "",
-                    userID: userID,
-                    submissionID: subID,
-                    executionTimeMs: reconciled.executionTimeMs,
-                    attemptNumber: attemptNumber,
-                    disabled: BuiltInAchievements.disabled(in: setup),
-                    on: req.db
-                )
-            }
-        }
-
     }
 
     // MARK: - POST /api/v1/submissions/runner-submit
@@ -380,10 +244,11 @@ struct BrowserResultRoutes: RouteCollection {
         try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
 
         // First-to-submit records (Pathfinder) — same as the zip-upload and
-        // browser-result paths (audit A2).
+        // browser-result paths (audit A2). Best effort: the submission is
+        // already stored (#1708).
         if let userID = caller.id {
-            try await awardFirstToSubmitRecords(
-                setup: setup, userID: userID, submissionID: subID, on: req.db)
+            await ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
+                .awardFirstToSubmit(setup: setup, userID: userID, submissionID: subID)
         }
 
         // For browser-mode test setups the client-side WASM runner picks up the job;
@@ -506,8 +371,8 @@ struct BrowserResultRoutes: RouteCollection {
         // A failover row IS the student's real submission for this attempt —
         // if they're the first in the class to submit, the frozen browser run
         // must not cost them the record (audit A2).
-        try await awardFirstToSubmitRecords(
-            setup: setup, userID: userID, submissionID: subID, on: req.db)
+        await ResultIngestEffects(application: req.application, db: req.db, logger: req.logger)
+            .awardFirstToSubmit(setup: setup, userID: userID, submissionID: subID)
 
         req.logger.warning(
             "Browser grading failed/froze for setup \(body.testSetupID); enqueued worker backstop grade \(subID)"
