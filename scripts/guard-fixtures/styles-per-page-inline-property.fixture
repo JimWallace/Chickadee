@@ -1,0 +1,9 @@
+# An inline custom property may carry only a value that changes per datum. A
+# width set inline on one page is a design decision that belongs in styles.css.
+guard="scripts/check-styles.sh"
+files="Resources/Views/enroll.leaf"
+description="a component custom property set inline in a template"
+expect="assigns a component custom property inline"
+apply() {
+    printf '<div style="--filter-width:220px"></div>\n' >> Resources/Views/enroll.leaf
+}
