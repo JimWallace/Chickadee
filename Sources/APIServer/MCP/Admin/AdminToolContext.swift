@@ -4,8 +4,9 @@
 // `ToolContext` (the content surface) but with a fundamentally different
 // authorization model: there is NO course scoping.  The admin surface is
 // deployment-wide, so the only gate is "the token subject is an admin"
-// (`requireAdminSubject`) — enforced at the OAuth consent + bearer layer and,
-// for DB-touching tools, re-checked here as defense in depth.
+// (`requireAdminSubject`) — enforced at the OAuth consent + bearer layer and
+// re-checked as defense in depth: by `AdminMCPDispatcher` for every tool that
+// does not opt out (`rechecksAdminRole`), and by most tools themselves.
 
 import Fluent
 import Vapor
