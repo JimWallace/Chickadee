@@ -166,6 +166,8 @@ Anatomy rules that hold across archetypes:
   `.submission-section-block` the results grouping — not general-purpose.
   `.submission-section-heading` is the sub-heading over a grouped
   `.results-table` inside a section (a results section).
+  `.assignment-section-heading` is the heading over one group of rows on a
+  list page: a course section of assignments, or a roster group.
 - Dense/wide tables wrap in `.table-scroll`.
 
 ## Component vocabulary

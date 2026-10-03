@@ -2967,10 +2967,10 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
 .section-action { font-size: var(--text-sm); padding: .2rem .55rem; }
 .section-action--push { margin-left: auto; }
 .grading-mode-select { font-size: var(--text-base); padding: .25rem .45rem; }
-/* Tight row of icon/action buttons in an assignment-row Actions cell; the
-   compact padding comes from the row so individual buttons stay class-clean. */
-.row-actions-tight { display: flex; gap: .2rem; flex-wrap: nowrap; align-items: center; white-space: nowrap; }
-.row-actions-tight .btn { padding: .25rem .35rem; }
+/* Tight row of icon/action buttons in an assignment-row Actions cell. It sets
+   no white-space and no button padding: the extension and grade-override
+   popover forms open inside the cell and would inherit both. */
+.row-actions-tight { display: flex; gap: .2rem; flex-wrap: nowrap; align-items: center; }
 .cell-subrow { margin-top: .25rem; }
 .nowrap { white-space: nowrap; }
 .status-toggle-btn { font-size: var(--text-sm); padding: .25rem .45rem; min-width: 5.5rem; }
