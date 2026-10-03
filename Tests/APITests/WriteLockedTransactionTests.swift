@@ -21,16 +21,6 @@ import Testing
 @testable import APIServer
 
 @Suite(.serialized, .timeLimit(.minutes(2))) struct WriteLockedTransactionTests {
-    /// A WAL-mode SQLite file with one table, the Fluent database over it, and
-    /// a thread pool for the competing connection. The competing writer gets
-    /// its own pool, because while it waits for the write lock it holds a
-    /// thread, and the transaction it waits on needs a thread to commit.
-    private struct Fixture {
-        let db: any Database
-        let path: String
-        let competitorPool: NIOThreadPool
-    }
-
     private static func withWALDatabase(_ body: (Fixture) async throws -> Void) async throws {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-write-lock-\(UUID().uuidString).sqlite").path
@@ -222,5 +212,15 @@ import Testing
             }
             #expect(try await Self.storedNs(on: fixture.db) == [2])
         }
+    }
+
+    /// A WAL-mode SQLite file with one table, the Fluent database over it, and
+    /// a thread pool for the competing connection. The competing writer gets
+    /// its own pool, because while it waits for the write lock it holds a
+    /// thread, and the transaction it waits on needs a thread to commit.
+    private struct Fixture {
+        let db: any Database
+        let path: String
+        let competitorPool: NIOThreadPool
     }
 }
