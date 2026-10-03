@@ -39,15 +39,9 @@ struct TestSetupRow: Encodable {
     let gradingMode: String  // "browser" | "worker" (effective — upload mode pins worker)
     let submissionMode: String  // "notebook" | "uploadOnly"; "uploadOnly" hides the editor actions
     let hasNotebook: Bool  // false → hide Edit button (no starter notebook available)
-    let submissionCount: Int
-    let hasLatestSubmission: Bool
-    let latestSubmissionID: String
-    let latestSubmittedAtText: String
-    let additionalSubmissionCount: Int
-    let bestGradeText: String?
-    /// True when `bestGradeText` is an instructor override rather than the
-    /// runner-computed grade.  Drives the "overridden" tag in the template.
-    let gradeIsOverridden: Bool
+    /// The submission count, the latest submission and the grade that
+    /// counts. `gradeIsOverridden` drives the "overridden" tag.
+    let latest: LatestSubmissionCell
     /// Inline-visible achievement badges only — capped to
     /// `AchievementBadge.dashboardBadgeDisplayLimit` so a student with many
     /// awards doesn't balloon the row height.  The full set still shows on the

@@ -94,15 +94,15 @@
             <td>#(row.surname)</td>
             <td>#(row.givenNames)</td>
             <td class="col-hide-phone"><strong>#(row.studentID)</strong>#if(secretRevealEnabled):#if(row.secretRevealSpent): <span title="Student spent their secret-reveal token — secret test results are visible to them">🔓</span>#endif#endif</td>
-            <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif#if(row.passingLabel): <span class="tier #if(row.isPassing):tier-open#else:tier-closed#endif">#(row.passingLabel)</span>#endif</td>
+            <td>#(row.gradeText)#if(row.latest.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif#if(row.passingLabel): <span class="tier #if(row.isPassing):tier-open#else:tier-closed#endif">#(row.passingLabel)</span>#endif</td>
             <td class="col-hide-phone" data-sort-value="#(row.latestSubmittedAtEpoch)">
-                #if(row.submissionCount > 0):
+                #if(row.latest.submissionCount > 0):
                     <div class="submission-history-cell">
-                        #if(row.hasLatestSubmission):
-                            <a href="/submissions/#(row.latestSubmissionID)" class="submission-history-latest">#(row.latestSubmittedAtText)</a>
+                        #if(row.latest.hasLatestSubmission):
+                            <a href="/submissions/#(row.latest.latestSubmissionID)" class="submission-history-latest">#(row.latest.latestSubmittedAtText)</a>
                         #endif
-                        #if(row.additionalSubmissionCount > 0):
-                            <a href="#(row.fullHistoryURL)" class="submission-history-more">+#(row.additionalSubmissionCount) more</a>
+                        #if(row.latest.additionalSubmissionCount > 0):
+                            <a href="#(row.fullHistoryURL)" class="submission-history-more">+#(row.latest.additionalSubmissionCount) more</a>
                         #endif
                     </div>
                 #else:
@@ -111,8 +111,8 @@
             </td>
             <td>
                 <div class="subm-row-actions">
-                    #if(row.hasLatestSubmission):
-                        <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" data-confirm="Send this submission back to the testing queue?" class="form-flush">
+                    #if(row.latest.hasLatestSubmission):
+                        <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latest.latestSubmissionID)/retest" data-confirm="Send this submission back to the testing queue?" class="form-flush">
                             #csrfFormField()
                             <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                             <button class="btn action-btn action-btn-icon" type="submit"
@@ -122,7 +122,7 @@
                         </form>
                     #endif
                     <details class="ext-details form-flush">
-                        <summary class="btn action-btn action-btn-icon ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                        <summary class="btn action-btn action-btn-icon ext-summary#if(row.latest.gradeIsOverridden): grade-override-active#endif" title="#if(row.latest.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.latest.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>
                         </summary>
                         <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override" class="ext-panel">
@@ -138,7 +138,7 @@
                             </label>
                             <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
-                                #if(row.gradeIsOverridden):
+                                #if(row.latest.gradeIsOverridden):
                                 <button class="btn action-btn" type="submit" formaction="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override/delete" formnovalidate data-confirm="Clear this student’s grade override and revert to the auto-graded result?">Clear</button>
                                 #endif
                             </div>

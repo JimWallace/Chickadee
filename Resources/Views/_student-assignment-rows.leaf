@@ -45,9 +45,9 @@
                 #endif
             </td>
             <td>
-                #if(row.bestGradeText):
-                    <strong>#(row.bestGradeText)</strong>
-                    #if(row.gradeIsOverridden):
+                #if(row.latest.bestGradeText):
+                    <strong>#(row.latest.bestGradeText)</strong>
+                    #if(row.latest.gradeIsOverridden):
                     <span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>
                     #endif
                 #else:
@@ -55,13 +55,13 @@
                 #endif
             </td>
             <td class="col-hide-phone">
-                #if(row.submissionCount > 0):
+                #if(row.latest.submissionCount > 0):
                     <div class="submission-history-cell">
-                        #if(row.hasLatestSubmission):
-                            <a href="/submissions/#(row.latestSubmissionID)" class="submission-history-latest">#(row.latestSubmittedAtText)</a>
+                        #if(row.latest.hasLatestSubmission):
+                            <a href="/submissions/#(row.latest.latestSubmissionID)" class="submission-history-latest">#(row.latest.latestSubmittedAtText)</a>
                         #endif
-                        #if(row.additionalSubmissionCount > 0):
-                            <a href="#(row.historyURL)" class="submission-history-more">+#(row.additionalSubmissionCount) more</a>
+                        #if(row.latest.additionalSubmissionCount > 0):
+                            <a href="#(row.historyURL)" class="submission-history-more">+#(row.latest.additionalSubmissionCount) more</a>
                         #endif
                     </div>
                 #else:
@@ -70,7 +70,7 @@
             </td>
             <td>
                 <div class="student-row-actions">
-                    #if(row.submissionCount > 0):
+                    #if(row.latest.submissionCount > 0):
                     <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="form-flush">
                         #csrfFormField()
                         <button class="btn action-btn action-btn-icon" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
@@ -105,7 +105,7 @@
                         </form>
                     </details>
                     <details class="ext-details form-flush">
-                        <summary class="btn action-btn action-btn-icon ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                        <summary class="btn action-btn action-btn-icon ext-summary#if(row.latest.gradeIsOverridden): grade-override-active#endif" title="#if(row.latest.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.latest.gradeIsOverridden):Edit grade override#else:Override grade#endif">
                             <svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>
                         </summary>
                         <form method="post" action="#(row.gradeOverrideSavePath)" class="popover-panel">
@@ -120,7 +120,7 @@
                             </label>
                             <div class="ext-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
-                                #if(row.gradeIsOverridden):
+                                #if(row.latest.gradeIsOverridden):
                                 <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate data-confirm="Clear this student’s grade override and revert to the auto-graded result?">Clear</button>
                                 #endif
                             </div>
