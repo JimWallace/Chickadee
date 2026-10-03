@@ -1,4 +1,4 @@
-# CI flakiness — state of knowledge (2026-07-02, last extended 2026-10-01)
+# CI flakiness — state of knowledge (2026-07-02, last extended 2026-10-03)
 
 Handoff document for the flakiness work. Families 1–3 are the original
 2026-07-02 body; **Family 4 (2026-08-05), Family 5 (2026-08-09), Family 6
@@ -271,6 +271,33 @@ The fix is two changes, and the second is the one that matters:
 `BrowserResultSideEffectOrderTests` pins both, and reproduces the original
 failure when the order is reinstated. The `run-smoke.sh` error-line change from
 the same PR stays useful for the next intermittent, which will not be this one.
+
+**Fourth sighting (2026-10-03, PR #1913, run 37086408119, chromium) — the
+same 500, one step earlier, and the explanation above was half right.** The
+error-line dump named it at once: six `Transient DB lock` warnings on one
+request, all `busy: database is locked`, then the 500. The transaction that
+failed was the attempt-number insert (`saveSubmissionWithNextAttemptNumber`),
+which runs before the result exists, so the retry wrapper added for the third
+sighting could not save it: every attempt met the same held lock.
+
+The mechanism is wider than `SQLITE_BUSY_SNAPSHOT`. sqlite-nio's busy handler
+is called only for a transaction that has **not read yet**. A deferred
+transaction that has read cannot wait for the write lock at all, so its first
+write fails at once in two cases: another connection holds the write lock
+(plain `SQLITE_BUSY`, `busy:` in the log — this sighting), or another
+connection committed since the read (`SQLITE_BUSY_SNAPSHOT`,
+`busyInSnapshot:`). Fluent opens every SQLite transaction with a plain
+`BEGIN`, which is deferred, and the attempt-number transaction reads
+`MAX(attempt_number)` before it inserts.
+
+The fix (#1919) is `withWriteLockedTransaction`, which opens that transaction
+with `BEGIN IMMEDIATE`: it takes the write lock before the first read, so the
+busy handler waits for a competing writer, and no commit can make its read
+stale. `WriteLockedTransactionTests` reproduces both cases deterministically
+with a second connection (no timing has to line up) and shows the helper
+waiting through each. Postgres is not affected: the same transaction there
+takes an advisory lock. A transaction that writes first, such as
+`saveWithCollection`, does not need the helper.
 
 **Root cause** of Family 2 remains the exec-hang investigation's to close —
 continue from the probe's `grading breadcrumbs:` per-phase timings on an
