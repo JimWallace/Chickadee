@@ -1,7 +1,7 @@
 # LTI 1.3 support
 
-**Status:** design note. Slice 1 is implemented. Nothing in this document
-changes existing behaviour until slice 2 mounts a launch route.
+**Status:** slices 1 to 5 are implemented (see "Slice plan" below). A
+deployment with no LTI platform registered behaves exactly as before.
 
 This note tells how Chickadee can become an LTI 1.3 tool, so that a learning
 management system (LMS) such as D2L Brightspace (UW LEARN) can launch it, link
