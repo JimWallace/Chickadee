@@ -21,6 +21,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# shellcheck source=lib/css.sh
+. "scripts/lib/css.sh"
 
 views=(Resources/Views/*.leaf)
 status=0
@@ -287,7 +289,7 @@ ALLOW_GLOBAL_OVERRIDE="^\.main$"
 extract_selectors() {
   # `|| true` on the greps so no-match (e.g. a file with no <style> block)
   # doesn't trip pipefail.
-  sed -E 's#/\*.*\*/##g' \
+  strip_css_comments \
     | { grep '{' || true; } \
     | sed -E 's/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
     | { grep -vE '^$|^@|^/\*' || true; }
@@ -299,7 +301,7 @@ global_sel="$(extract_selectors < Public/styles.css | sort -u)"
 pairs="$(
   for f in "${views[@]}"; do
     base="$(basename "$f")"
-    sed -n '/<style>/,/<\/style>/p' "$f" | extract_selectors \
+    page_style_blocks "$f" | extract_selectors \
       | while IFS= read -r sel; do [ -n "$sel" ] && printf '%s\t%s\n' "$sel" "$base"; done
   done | sort -u
 )"

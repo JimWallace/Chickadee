@@ -37,6 +37,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# shellcheck source=lib/css.sh
+. "scripts/lib/css.sh"
+
 views=(Resources/Views/*.leaf)
 allowlist_file="scripts/class-resolution-allowlist.txt"
 
@@ -44,9 +47,9 @@ allowlist_file="scripts/class-resolution-allowlist.txt"
 defined="$(
   {
     cat Public/*.css
-    for f in "${views[@]}"; do sed -n '/<style>/,/<\/style>/p' "$f"; done
+    page_style_blocks "${views[@]}"
   } \
-    | sed -E 's#/\*[^*]*\*+([^/*][^*]*\*+)*/##g' \
+    | strip_css_comments \
     | grep -oE '\.[a-z][a-z0-9-]*' \
     | sed 's/^\.//' | sort -u
 )"
