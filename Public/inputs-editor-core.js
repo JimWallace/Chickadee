@@ -74,16 +74,9 @@
     /// spellings still parse when the assignment is Python (or declares no
     /// language), so nothing that worked before stops working.
     function tryParseLiteral(t) {
-        if (!t) return { ok: false };
-        var scalar = ChickadeeLanguage.matchScalarToken(t);
-        if (scalar) return { ok: true, value: scalar.value, strict: true };
-        try { return { ok: true, value: JSON.parse(t), strict: true }; }
-        catch (_) { /* fall through */ }
-        if (t.indexOf('"') === -1) {
-            try { return { ok: true, value: JSON.parse(ChickadeeLanguage.reprToJSON(t)), strict: false }; }
-            catch (_) { /* fall through */ }
-        }
-        return { ok: true, value: t, strict: false };
+        var parsed = ChickadeeLanguage.parseValue(t);
+        if (!parsed.ok) return { ok: false };
+        return { ok: true, value: parsed.value, strict: parsed.strict };
     }
 
     /// Creates the panel-specific editor helpers.  `classes` names the CSS

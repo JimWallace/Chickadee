@@ -119,6 +119,58 @@
         return out;
     }
 
+    /// The kind of a parsed value, for the editors' cues.
+    function kindOf(v) {
+        if (Array.isArray(v)) return 'list';
+        if (v === null) return 'null';
+        if (typeof v === 'object') return 'dict';
+        if (typeof v === 'boolean') return 'bool';
+        if (typeof v === 'number') return 'number';
+        if (typeof v === 'string') return 'string';
+        return 'scalar';
+    }
+
+    /// Parses a value an instructor typed, by the assignment language's rules:
+    /// its own true/false/null spellings, then JSON, then a value pasted in the
+    /// language's own syntax (rewritten by `reprToJSON`), then a bare string.
+    ///
+    /// Returns `{ ok, value, kind, strict }`. `ok` is false only for empty
+    /// text. `strict` is true when the text parsed exactly, as a scalar
+    /// spelling or as JSON, and false when it was rewritten or kept as a bare
+    /// string, which the editors flag for a second look.
+    ///
+    /// The ONE parser for every authoring editor (#1958). There were three: the
+    /// inputs editors and the family Variables table read the language's
+    /// spellings but disagreed on whether a scalar is strict, and the case cells
+    /// accepted only Python's `True` / `False` / `None`, so an R author typing
+    /// `TRUE` as a case argument stored the STRING "TRUE".
+    ///
+    /// `options.rewriteRepr: false` skips the rewrite step. Case cells pass it:
+    /// a stored string argument is shown back without quotes, so a string such
+    /// as `'hello'` would silently become `hello` the next time the family was
+    /// saved.
+    function parseValue(raw, options) {
+        var text = String(raw == null ? '' : raw);
+        var trimmed = text.trim();
+        if (trimmed === '') return { ok: false, value: undefined, kind: 'empty', strict: false };
+        var scalar = matchScalarToken(trimmed);
+        if (scalar) return { ok: true, value: scalar.value, kind: scalar.kind, strict: true };
+        try {
+            var v = JSON.parse(trimmed);
+            return { ok: true, value: v, kind: kindOf(v), strict: true };
+        } catch (_) { /* fall through */ }
+        var rewrite = !(options && options.rewriteRepr === false);
+        // Only when no double quotes exist already, so a string mixing an
+        // apostrophe inside double quotes is not broken.
+        if (rewrite && trimmed.indexOf('"') === -1) {
+            try {
+                var v2 = JSON.parse(reprToJSON(trimmed));
+                return { ok: true, value: v2, kind: kindOf(v2), strict: false };
+            } catch (_) { /* fall through */ }
+        }
+        return { ok: true, value: text, kind: 'string', strict: false };
+    }
+
     /// Why this language cannot use notebook-check `kind`, or null when it can.
     ///
     /// Derived server-side from the SAME predicate the save-time refusal uses,
@@ -189,6 +241,7 @@
         scalarTokens: scalarTokens,
         matchScalarToken: matchScalarToken,
         reprToJSON: reprToJSON,
+        parseValue: parseValue,
         scriptExtension: scriptExtension,
         canScanFunctions: canScanFunctions,
         canEvaluateExpressions: canEvaluateExpressions,
