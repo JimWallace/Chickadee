@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.353] - 2026-10-03
+
+### Changed
+
+- **One service applies a result's side effects, and none of them can fail the report.** The worker report and the browser result wired the class-level effects by hand and had drifted: the browser path retried and logged each one, the worker path threw, so one failed badge write turned a stored grade into a failed report that the runner then retried. `ResultIngestEffects` now applies coverage, the leaderboard, the activity match and the class records for both paths, each retried and then logged if it still fails. First-to-submit records go through the same wrapper at all four places a submission is created, and the grade-sync flags and the validation verdict moved into the service too (#1708).
+
+
 ## [0.5.352] - 2026-10-03
 
 ### Changed
