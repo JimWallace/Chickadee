@@ -1,7 +1,7 @@
 name: Editor smoke test
 
 # Boots the real chickadee-server and drives the JupyterLite notebook editor in
-# a headless browser, asserting the Pyodide kernel comes up and runs a cell.
+# a headless browser, asserting a xeus kernel comes up and runs a cell.
 # This is the gate the recent editor breakages slipped through: swift test, the
 # render tests, and BrowserRunnerJSTests all prove code/templates *resolve* —
 # none put a browser in front of the editor, so a change that loads the page but

@@ -1,6 +1,8 @@
 # Chickadee — Architecture
 
-Status: current as of the 0.5.0 cleanup pass (2026-07).
+Status: current as of the 0.5.0 cleanup pass (2026-07). The browser grading
+and vendored-library sections were corrected in 2026-10, after Pyodide was
+removed (v0.5.19).
 
 ## Overview
 
@@ -208,11 +210,12 @@ Student browser
 ```
 
 Browser-graded assignments run the *same* `executeSuites` loop, compiled to
-wasm, against a Pyodide substrate (`Public/browser-runner.js` /
-`grading-worker.js`, seeded through `BrowserRunnerRoutes`), and post their
-results to the server. A worker backstop regrades browser-mode submissions
-that never complete in the browser, using native `python3` with matching
-semantics.
+wasm, against a xeus kernel substrate: `RoutingExecutor` in
+`Public/browser-runner.js` sends each script to the vendored kernel for its
+language (xeus-python, xeus-r, xeus-lua or xeus-octave) through that
+language's `*-grading-worker.js`, seeded through `BrowserRunnerRoutes`, and the
+page posts the results to the server. A worker backstop regrades browser-mode
+submissions that never complete in the browser, on the native worker.
 
 ---
 
@@ -540,15 +543,14 @@ scripts/setup-vendor.sh
 JupyterLite file paths to the server's test setup storage so the notebook
 editor reads and writes the canonical `.ipynb` files directly.
 
-Pyodide, jszip, and CodeMirror are vendored under `Public/` rather than
-loaded from third-party CDNs, so student and instructor IPs are not leaked on
-every page load (FIPPA/PIPEDA). There is exactly **one canonical Pyodide**
-(`Public/pyodide/`, served at `/pyodide`) and both consumers load it: the
-JupyterLite editor kernel and Chickadee's own browser grading paths. Its
-version is not hardcoded — `scripts/setup-vendor.sh` derives it from the
-pinned `jupyterlite-pyodide-kernel` wheel, and
-`scripts/check-pyodide-parity.sh` fails CI if the vended copy ever drifts
-from the kernel's pin.
+jszip and CodeMirror are vendored under `Public/vendor/`, and the editor
+kernels under `Public/jupyterlite/xeus/`, rather than loaded from third-party
+CDNs, so student and instructor IPs are not leaked on every page load
+(FIPPA/PIPEDA). Each kernel is built from its own emscripten-forge environment
+(`Tools/jupyterlite/environment-*.yml`), and the same vendored kernels serve
+both the JupyterLite editor and browser grading. `scripts/check-xeus-vendored.sh`
+guards the vendored bytes, and `scripts/check-env-vendored-sync.sh` fails a PR
+whose environment files have drifted from them.
 
 ---
 

@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.371] - 2026-10-03
+
+### Changed
+
+- **One retry for a transient SQLite lock.** Worker claims and the attempt-number transaction had two retry loops with two different "is this a lock?" classifiers, so a lock one of them retried could fail at once in the other. `withTransientDatabaseLockRetry` (in `Helpers/TransientDatabaseLockRetry.swift`) is now the only one: each caller keeps its own attempt count and backoff, and the classifier accepts every lock either old one did (#1926).
+
+
 ## [0.5.370] - 2026-10-03
 
 ### Changed

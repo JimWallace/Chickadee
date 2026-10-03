@@ -1,0 +1,3 @@
+### Changed
+
+- **Doc status lines and workflow comments match the code.** `docs/lti-1-3.md` said only slice 1 was built; `docs/architecture.md` described a Pyodide substrate and `Public/pyodide/`; `docs/notebook-editor-smoke-test.md` called the smoke test advisory and path-filtered; `docs/personalization-eval-runtime.md` named two interpreters; `jupyterlite.yml` said CI cannot rebuild the kernels; `editor-smoke.yml` named the Pyodide kernel; `docker-build.yml` claimed the same cache scheme as `swift-tests.yml`; and `docs/achievements-unification.md` said "in progress". Each now says what is true (#1986).
