@@ -94,7 +94,7 @@
        these were inline values in templates first, and both drifted: three
        filter boxes in three sizes, two form stacks 2rem apart for no recorded
        reason. A template may not assign either — scripts/check-styles.sh 4c;
-       a genuinely different width is a named modifier (.form-stack--wide). */
+       a genuinely different width is a named modifier class here. */
     --filter-width: 16rem;
     --form-stack-width: 30rem;
 
@@ -1743,7 +1743,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .grade-override-active { border-color: var(--gray-500); background: var(--gray-100); }
 
-/* ── Student dashboard (index.leaf + _assignment-row.leaf) ───────────── */
+/* ── Student dashboard (index.leaf) ────────────────────────────────── */
 
 .assignment-section-heading {
     font-size: var(--text-lg);
@@ -1752,12 +1752,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
     margin-bottom: .4rem;
 }
 
-.assignment-table { margin-bottom: .5rem; }
-
 /* Ungraded content items (reference material shown inside course sections,
    above the assignments — links, notebooks, slides, outlines). Shared by the
    student dashboard and the instructor authoring view. */
-.content-lane { margin-bottom: .75rem; }
 .content-item-kind {
     display: inline-block;
     font-size: var(--text-2xs);
@@ -1769,7 +1766,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     padding: .1rem .4rem;
     margin-right: .35rem;
 }
-.content-item-title { font-weight: 600; }
 .content-item-hidden {
     display: inline-block;
     font-size: var(--text-2xs);
@@ -1781,7 +1777,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     padding: .1rem .4rem;
     margin-left: .35rem;
 }
-.content-item-desc { font-size: var(--text-xs); margin-top: .15rem; }
 
 /* Student dashboard section list: one table, five tracks (kind tile, title and
    details, status, grade, actions). Each row type fills only the cells that
@@ -2257,8 +2252,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .pip[data-state="used"] { background: transparent; border: 1px solid var(--gray-400); }
 .pip[data-state="extra"] { background: var(--state-amber); }
-.content-item-links a { margin-right: .5rem; }
-.content-item-actions { display: flex; gap: .35rem; align-items: center; }
 .content-item-link-fields {
     display: flex;
     flex-direction: column;
@@ -2281,8 +2274,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .text-error { color: var(--red); }
 .text-ok { color: var(--green); }
 .text-quiet { color: var(--gray-500); }
-
-.due-extension-note { font-size: var(--text-xs); color: var(--gray-600); }
 
 .submission-history-cell {
     display: flex;
@@ -2964,16 +2955,13 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
     color: var(--muted);
 }
 .section-mode-note { font-size: var(--text-sm); color: var(--gray-500); }
-.section-action { font-size: var(--text-sm); padding: .2rem .55rem; }
 .section-action--push { margin-left: auto; }
 .grading-mode-select { font-size: var(--text-base); padding: .25rem .45rem; }
 /* Tight row of icon/action buttons in an assignment-row Actions cell. It sets
    no white-space and no button padding: the extension and grade-override
    popover forms open inside the cell and would inherit both. */
 .row-actions-tight { display: flex; gap: .2rem; flex-wrap: nowrap; align-items: center; }
-.cell-subrow { margin-top: .25rem; }
 .nowrap { white-space: nowrap; }
-.status-toggle-btn { font-size: var(--text-sm); padding: .25rem .45rem; min-width: 5.5rem; }
 .section-empty-cell { color: var(--gray-500); font-style: italic; padding: .6rem .75rem; text-align: center; }
 .publish-label { font-size: var(--text-sm); }
 .publish-uw-warning { color: var(--amber); font-size: var(--text-sm); margin-top: -.25rem; margin-bottom: .25rem; }
@@ -3139,13 +3127,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     gap: 1rem;
     max-width: var(--form-stack-width);
 }
-/* One variant, for a form whose content genuinely wants the room: the MCP tab
-   is a full authoring-guide textarea, not a column of fields. The property was
-   a per-page dial before — 60rem here, 32rem on slip days (2rem off the
-   default, for no reason anyone recorded) — which is exactly how --filter-width
-   produced five filter boxes in three sizes. A width is a decision the design
-   system makes once, or a named variant; never an inline number in a template. */
-.form-stack--wide { --form-stack-width: 60rem; }
 
 /* A textarea holding code or machine text (a token, a CSV paste, an authoring
    guide). Three page-local copies differed only in which of the same five
