@@ -206,20 +206,21 @@ extension InstructorDashboardRoutes {
             ?? inferNameFromStudentID(student.username)
         let passing = passingLabel(
             bestGradePercent: bestGradePercent, threshold: lookups.passingThresholdPercent)
+        let cell = LatestSubmissionCell(
+            count: submissionCount,
+            latestSubmissionID: latest?.id,
+            latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) },
+            bestPercent: runnerBestGradePercent,
+            overridePercent: override)
         return AssignmentStudentRow(
             studentID: student.username,
             studentUUID: studentID.uuidString,
             surname: inferredName.surname,
             givenNames: inferredName.givenNames,
-            gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
-            gradeIsOverridden: override != nil,
+            gradeText: cell.bestGradeText ?? "—",
             gradeOverridePercent: override ?? runnerBestGradePercent ?? 0,
-            submissionCount: submissionCount,
-            hasLatestSubmission: latest != nil,
-            latestSubmissionID: latest?.id ?? "",
-            latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
+            latest: cell,
             latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
-            additionalSubmissionCount: max(submissionCount - 1, 0),
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
             bestGradePercent: bestGradePercent,
             secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID),
@@ -236,7 +237,7 @@ extension InstructorDashboardRoutes {
     ) -> [AssignmentStatCard] {
         let now = Date()
         let windowStart = now.addingTimeInterval(-24 * 60 * 60)
-        let submittedRows = rows.filter { $0.submissionCount > 0 }
+        let submittedRows = rows.filter { $0.latest.submissionCount > 0 }
         let submittedCount = submittedRows.count
         let submissions24h = submissions.filter { submission in
             guard let submittedAt = submission.submittedAt else { return false }
@@ -256,7 +257,7 @@ extension InstructorDashboardRoutes {
         if submittedRows.isEmpty {
             avgAttempts = "—"
         } else {
-            let total = submittedRows.reduce(0) { $0 + $1.submissionCount }
+            let total = submittedRows.reduce(0) { $0 + $1.latest.submissionCount }
             let avg = Double(total) / Double(submittedRows.count)
             avgAttempts = String(format: "%.1f", avg)
         }
@@ -342,7 +343,7 @@ extension InstructorDashboardRoutes {
         let bucketCount = 6  // 1, 2, 3, 4, 5, 6+
         var counts = [Int](repeating: 0, count: bucketCount)
         for row in submittedRows {
-            counts[min(max(row.submissionCount, 1), bucketCount) - 1] += 1
+            counts[min(max(row.latest.submissionCount, 1), bucketCount) - 1] += 1
         }
         let titles = counts.indices.map { bin -> String in
             let attempts: String

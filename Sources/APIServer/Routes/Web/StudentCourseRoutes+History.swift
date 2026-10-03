@@ -817,14 +817,12 @@ extension StudentCourseRoutes {
                 urlToken: urlToken,
                 assignmentID: assignment.publicID
             ),
-            submissionCount: history.count,
-            hasLatestSubmission: latest != nil,
-            latestSubmissionID: latest?.id ?? "",
-            latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
-            additionalSubmissionCount: max(history.count - 1, 0),
-            bestGradeText: activeOverride.map { "\($0.overridePercent)%" }
-                ?? bestGradePercent.map { "\($0)%" },
-            gradeIsOverridden: activeOverride != nil,
+            latest: LatestSubmissionCell(
+                count: history.count,
+                latestSubmissionID: latest?.id,
+                latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) },
+                bestPercent: bestGradePercent,
+                overridePercent: activeOverride?.overridePercent),
             gradeOverridePercent: activeOverride?.overridePercent ?? bestGradePercent ?? 0,
             gradeOverrideSavePath: StudentCoursePaths.gradeOverrideSave(
                 courseCode: courseCode,

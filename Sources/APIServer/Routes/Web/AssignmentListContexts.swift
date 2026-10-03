@@ -523,19 +523,16 @@ struct AssignmentStudentRow: Encodable {
     let studentUUID: String
     let surname: String
     let givenNames: String
+    /// `latest.bestGradeText`, or an em-dash when there is no grade.
     let gradeText: String
-    /// True when `gradeText` is an instructor override rather than the
-    /// runner-computed best grade.
-    let gradeIsOverridden: Bool
     /// Prefill for the inline override form: the active override percent when
     /// one is set, else the runner-computed best grade, else 0.
     let gradeOverridePercent: Int
-    let submissionCount: Int
-    let hasLatestSubmission: Bool
-    let latestSubmissionID: String
-    let latestSubmittedAtText: String
+    /// The submission count, the latest submission and the grade that
+    /// counts. `latest.gradeIsOverridden` is true when `gradeText` is an
+    /// instructor override rather than the runner-computed best grade.
+    let latest: LatestSubmissionCell
     let latestSubmittedAtEpoch: Int  // Unix timestamp (0 if no submission) for chronological sort
-    let additionalSubmissionCount: Int
     let fullHistoryURL: String
     let bestGradePercent: Int?
     /// True when this student has spent their secret-reveal token on the

@@ -77,13 +77,7 @@ struct StudentAssignmentRow: Encodable {
     let retestPath: String
     let resetPath: String
     let historyURL: String
-    let submissionCount: Int
-    let hasLatestSubmission: Bool
-    let latestSubmissionID: String
-    let latestSubmittedAtText: String
-    let additionalSubmissionCount: Int
-    let bestGradeText: String?
-    let gradeIsOverridden: Bool
+    let latest: LatestSubmissionCell
     let gradeOverridePercent: Int  // form prefill; 0 when no override is set
     let gradeOverrideSavePath: String
     let gradeOverrideClearPath: String
