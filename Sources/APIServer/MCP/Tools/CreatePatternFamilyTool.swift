@@ -176,7 +176,7 @@ struct CreatePatternFamilyTool: ContentTool {
         + "Set a `defaultHint` (family-wide) and/or per-case `hint` to give the student a \"💡 Hint\" "
         + "shown only when that test fails (per-case overrides the family default). "
         + "Set a family-level `defaultTimeLimitSeconds` and/or per-case `timeLimitSeconds` "
-        + "(per-test execution time limit, 1–600s, overriding the assignment default). "
+        + "(per-test execution time limit, \(mcpTimeLimitRangeText)s, overriding the assignment default). "
         + "Set a family-level `defaultFailureDetail` and/or per-case `failureDetail` "
         + "(\(MCPFailureDetailProse.slashAlternatives)) to limit how much of a failing case the student "
         + "sees — \"actualOnly\" is what lets a public-tier case withhold its expected value. "
@@ -224,12 +224,9 @@ struct CreatePatternFamilyTool: ContentTool {
             ]),
             "points": MCPSchema.integer,
             "tier": MCPSchema.tierEnum(),
-            "timeLimitSeconds": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Per-case execution time limit (seconds, 1–600), overriding the family "
-                        + "default. Omit / 0 for no per-case override."),
-            ]),
+            "timeLimitSeconds": MCPSchema.timeLimit(
+                "Per-case execution time limit (seconds, \(mcpTimeLimitRangeText)), overriding the family "
+                    + "default. Omit / 0 for no per-case override."),
             "failureDetail": MCPFailureDetailProse.schema(
                 "Per-case student-facing failure detail, overriding the family default. "
                     + MCPFailureDetailProse.fieldDescription),
@@ -270,12 +267,10 @@ struct CreatePatternFamilyTool: ContentTool {
                     "Family-wide \"💡 Hint\" shown to the student on any failing case that has no "
                         + "per-case hint."),
             ]),
-            "defaultTimeLimitSeconds": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Family-level per-test execution time limit (seconds, 1–600) for every generated "
-                        + "entry without a per-case override. Omit / 0 to inherit the assignment default."),
-            ]),
+            "defaultTimeLimitSeconds": MCPSchema.timeLimit(
+                "Family-level per-test execution time limit (seconds, \(mcpTimeLimitRangeText)) for every "
+                    + "generated entry without a per-case override. Omit / 0 to inherit the assignment "
+                    + "default."),
             "defaultFailureDetail": MCPFailureDetailProse.schema(
                 "Family-level student-facing failure detail for every generated entry without a "
                     + "per-case value. " + MCPFailureDetailProse.fieldDescription),
@@ -423,8 +418,9 @@ struct CreatePatternFamilyTool: ContentTool {
             points: input.defaultPoints ?? 1,
             hint: normalizedHint(input.defaultHint),
             tolerance: input.tolerance,
-            timeLimitSeconds: try normalizedTimeLimit(
-                input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds"),
+            timeLimitSeconds: try parseTimeLimitOverride(
+                input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds"
+            ).applied(to: nil),
             failureDetail: try MCPFailureDetailProse.parseValue(
                 input.defaultFailureDetail, tool: Self.name, field: "defaultFailureDetail"))
         let cases = try input.cases.map { try patternCase(from: $0, tool: Self.name) }
@@ -457,8 +453,9 @@ struct CreatePatternFamilyTool: ContentTool {
             argsProvided: provided, argVarRefs: refs, expectedVarRef: ref,
             hint: normalizedHint(c.hint), tier: try parseOptionalTier(c.tier, tool: tool),
             points: c.points,
-            timeLimitSeconds: try normalizedTimeLimit(
-                c.timeLimitSeconds, tool: tool, field: "cases[\(c.key)].timeLimitSeconds"),
+            timeLimitSeconds: try parseTimeLimitOverride(
+                c.timeLimitSeconds, tool: tool, field: "cases[\(c.key)].timeLimitSeconds"
+            ).applied(to: nil),
             failureDetail: try MCPFailureDetailProse.parseValue(
                 c.failureDetail, tool: tool, field: "cases[\(c.key)].failureDetail"),
             enabled: c.enabled ?? true)
@@ -503,14 +500,5 @@ struct CreatePatternFamilyTool: ContentTool {
     static func normalizedHint(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
         return raw
-    }
-
-    /// Normalizes a create-path time limit: nil/0 → nil (no override), and any
-    /// non-zero value is bound-checked to `1...600` (mirroring 0 as the "clear"
-    /// sentinel used on the update path). Shared by the family default and the
-    /// per-case create path so a malformed value is rejected here, not shipped.
-    static func normalizedTimeLimit(_ raw: Int?, tool: String, field: String) throws -> Int? {
-        guard let raw, raw != 0 else { return nil }
-        return try validateTimeLimitSeconds(raw, tool: tool, field: field)
     }
 }

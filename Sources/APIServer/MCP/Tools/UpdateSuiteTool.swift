@@ -74,7 +74,7 @@ struct UpdateSuiteTool: ContentTool {
         "Edit test-suite script metadata for an assignment, by its public ID. For each named "
         + "script provide any of: tier (\(MCPTierProse.slashAlternatives)), points, displayName, "
         + "dependsOn (prerequisite script names), sectionID (\"\" to ungroup), and timeLimitSeconds "
-        + "(a per-test execution time limit override in seconds, 1–600; 0 clears the override so the "
+        + "(a per-test execution time limit override in seconds, \(mcpTimeLimitRangeText); 0 clears the override so the "
         + "script reverts to the assignment default set by set_time_limit), and failureDetail "
         + "(\(MCPFailureDetailProse.slashAlternatives) — how much of a failing run the student sees; "
         + "\"full\" reverts to the default). Does NOT change "
@@ -104,13 +104,9 @@ struct UpdateSuiteTool: ContentTool {
                             "type": .string("string"),
                             "description": .string("Section id, or \"\" to ungroup."),
                         ]),
-                        "timeLimitSeconds": .object([
-                            "type": .string("integer"),
-                            "description": .string(
-                                "Per-test time-limit override in seconds "
-                                    + "(\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound)); "
-                                    + "0 clears the override (revert to the assignment default)."),
-                        ]),
+                        "timeLimitSeconds": MCPSchema.timeLimit(
+                            "Per-test time-limit override in seconds (\(mcpTimeLimitRangeText)); "
+                                + "0 clears the override (revert to the assignment default)."),
                         "failureDetail": MCPFailureDetailProse.schema(MCPFailureDetailProse.fieldDescription),
                     ]),
                     "required": .array([.string("script")]),
@@ -168,16 +164,10 @@ struct UpdateSuiteTool: ContentTool {
             if let sectionID = edit.sectionID {
                 payload.items[idx].sectionID = sectionID.isEmpty ? nil : sectionID
             }
-            if let limit = edit.timeLimitSeconds {
-                // 0 clears the override (revert to the assignment default); any
-                // other value is validated to the accepted range.
-                if limit == 0 {
-                    payload.items[idx].script?.timeLimitSeconds = nil
-                } else {
-                    payload.items[idx].script?.timeLimitSeconds =
-                        try validateTimeLimitSeconds(limit, tool: Self.name, field: "timeLimitSeconds")
-                }
-            }
+            let storedLimit = payload.items[idx].script?.timeLimitSeconds
+            payload.items[idx].script?.timeLimitSeconds = try parseTimeLimitOverride(
+                edit.timeLimitSeconds, tool: Self.name, field: "timeLimitSeconds"
+            ).applied(to: storedLimit)
             if let detailUpdate = try MCPFailureDetailProse.parse(
                 edit.failureDetail, tool: Self.name, field: "failureDetail")
             {

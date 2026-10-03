@@ -144,7 +144,7 @@ struct AuthorNotebookCheckTool: ContentTool {
         + "data_frame_shape needs variable + expectedRows + expectedCols; figure_count needs minFigures; "
         + "cell_contains needs containsText; ast_structure needs requiredConstructs. Optional tier "
         + "(\(MCPTierProse.slashAlternatives), default public), points, dependsOn, sectionID, a \"💡 "
-        + "Hint\" shown on failure, a per-test timeLimitSeconds (1–600s, overriding the assignment "
+        + "Hint\" shown on failure, a per-test timeLimitSeconds (\(mcpTimeLimitRangeText)s, overriding the assignment "
         + "default; 0 inherits it), and a failureDetail (\(MCPFailureDetailProse.slashAlternatives) — how "
         + "much of a failing check the student sees). Saving renders the check's script, validates it synchronously "
         + "(rejecting missing/!malformed kind fields), closes the assignment if it was open (reported as "
@@ -182,12 +182,9 @@ struct AuthorNotebookCheckTool: ContentTool {
                 "type": .string("string"),
                 "description": .string("\"💡 Hint\" shown to the student only when this check fails."),
             ]),
-            "timeLimitSeconds": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Per-test execution time limit (seconds, 1–600) for this check, overriding the "
-                        + "assignment default. Omit / 0 to inherit the default."),
-            ]),
+            "timeLimitSeconds": MCPSchema.timeLimit(
+                "Per-test execution time limit (seconds, \(mcpTimeLimitRangeText)) for this check, "
+                    + "overriding the assignment default. Omit / 0 to inherit the default."),
             "failureDetail": MCPFailureDetailProse.schema(MCPFailureDetailProse.fieldDescription),
             "variable": .object([
                 "type": .string("string"),
@@ -365,13 +362,6 @@ struct AuthorNotebookCheckTool: ContentTool {
         return mode
     }
 
-    /// Normalizes the check-level time limit: nil/0 → nil (inherit the default),
-    /// any non-zero value bound-checked to `1...600`.
-    private static func normalizedTimeLimit(_ raw: Int?) throws -> Int? {
-        guard let raw, raw != 0 else { return nil }
-        return try validateTimeLimitSeconds(raw, tool: name, field: "timeLimitSeconds")
-    }
-
     /// Builds the `NotebookCheck` from the input; per-kind field legality is left
     /// to the validator that runs inside applySuiteEdit. The time limit is
     /// normalized here (0/nil → nil; non-zero bound-checked to 1...600).
@@ -388,7 +378,9 @@ struct AuthorNotebookCheckTool: ContentTool {
             dependsOn: input.dependsOn ?? [],
             sectionID: sectionID,
             hint: input.hint.flatMap { $0.isEmpty ? nil : $0 },
-            timeLimitSeconds: try normalizedTimeLimit(input.timeLimitSeconds),
+            timeLimitSeconds: try parseTimeLimitOverride(
+                input.timeLimitSeconds, tool: name, field: "timeLimitSeconds"
+            ).applied(to: nil),
             failureDetail: try MCPFailureDetailProse.parseValue(
                 input.failureDetail, tool: name, field: "failureDetail"),
             variable: input.variable,

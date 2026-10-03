@@ -160,7 +160,7 @@ struct UpdatePatternFamilyTool: ContentTool {
         + "by key (enableCases / disableCases), set the family-wide `defaultHint` and/or per-case "
         + "`hint` (the \"💡 Hint\" shown to the student only when that test fails; empty string clears "
         + "it), set the family-level `defaultTimeLimitSeconds` and/or a per-case `timeLimitSeconds` "
-        + "(per-test execution time limit, 1–600s, overriding the assignment default; 0 clears it), "
+        + "(per-test execution time limit, \(mcpTimeLimitRangeText)s, overriding the assignment default; 0 clears it), "
         + "set the family-level `defaultFailureDetail` and/or a per-case `failureDetail` "
         + "(\(MCPFailureDetailProse.slashAlternatives); how much of a failing case the student sees; "
         + "\"full\" or an empty string clears it), "
@@ -192,13 +192,10 @@ struct UpdatePatternFamilyTool: ContentTool {
                     "Family-wide \"💡 Hint\" shown on a failing case that has no per-case hint. "
                         + "Empty string clears it."),
             ]),
-            "defaultTimeLimitSeconds": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Family-level per-test execution time limit (seconds, 1–600) for every "
-                        + "generated entry without its own override. 0 clears it (revert to the "
-                        + "assignment default); omit to leave unchanged."),
-            ]),
+            "defaultTimeLimitSeconds": MCPSchema.timeLimit(
+                "Family-level per-test execution time limit (seconds, \(mcpTimeLimitRangeText)) for every "
+                    + "generated entry without its own override. 0 clears it (revert to the "
+                    + "assignment default); omit to leave unchanged."),
             "defaultFailureDetail": MCPFailureDetailProse.schema(
                 "Family-level student-facing failure detail. " + MCPFailureDetailProse.fieldDescription
                     + " Empty string clears it; omit to leave unchanged."),
@@ -249,12 +246,9 @@ struct UpdatePatternFamilyTool: ContentTool {
                                 "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint). "
                                     + "Empty string clears it."),
                         ]),
-                        "timeLimitSeconds": .object([
-                            "type": .string("integer"),
-                            "description": .string(
-                                "Per-case execution time limit (seconds, 1–600), overriding the family "
-                                    + "default. 0 clears it; omit to leave unchanged."),
-                        ]),
+                        "timeLimitSeconds": MCPSchema.timeLimit(
+                            "Per-case execution time limit (seconds, \(mcpTimeLimitRangeText)), overriding "
+                                + "the family default. 0 clears it; omit to leave unchanged."),
                         "failureDetail": MCPFailureDetailProse.schema(
                             "Per-case student-facing failure detail, overriding the family default. "
                                 + "Empty string clears it; omit to leave unchanged."),
@@ -340,17 +334,14 @@ struct UpdatePatternFamilyTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "A case key cannot be in both enableCases and disableCases.")
         }
-        // Bound-check any provided time limit (0 is allowed here as the "clear"
-        // sentinel; non-zero values must fall in 1...600). addCases time limits
-        // are validated by patternCase(from:) on the shared create path.
-        if let dtl = input.defaultTimeLimitSeconds, dtl != 0 {
-            try validateTimeLimitSeconds(dtl, tool: Self.name, field: "defaultTimeLimitSeconds")
-        }
+        // Parse every time limit before any database work, so an out-of-range
+        // value is refused first. addCases time limits are parsed by
+        // patternCase(from:) on the shared create path.
+        let defaultLimitEdit = try parseTimeLimitOverride(
+            input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds")
         for edit in caseEdits {
-            if let tl = edit.timeLimitSeconds, tl != 0 {
-                try validateTimeLimitSeconds(
-                    tl, tool: Self.name, field: "cases[\(edit.key)].timeLimitSeconds")
-            }
+            _ = try parseTimeLimitOverride(
+                edit.timeLimitSeconds, tool: Self.name, field: "cases[\(edit.key)].timeLimitSeconds")
         }
         let editsByKey = try Self.indexCaseEdits(caseEdits)
         try CreatePatternFamilyTool.assertUniqueCaseKeys(addCases, tool: Self.name)
@@ -396,8 +387,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             points: input.defaultPoints ?? family.defaults.points,
             hint: Self.resolveHintEdit(input.defaultHint, existing: family.defaults.hint),
             tolerance: family.defaults.tolerance,
-            timeLimitSeconds: Self.resolveTimeLimitEdit(
-                input.defaultTimeLimitSeconds, existing: family.defaults.timeLimitSeconds),
+            timeLimitSeconds: defaultLimitEdit.applied(to: family.defaults.timeLimitSeconds),
             failureDetail: try MCPFailureDetailProse.parse(
                 input.defaultFailureDetail, tool: Self.name, field: "defaultFailureDetail")
                 ?? family.defaults.failureDetail)
@@ -518,7 +508,9 @@ struct UpdatePatternFamilyTool: ContentTool {
             argsProvided: finalProvided, argVarRefs: finalVarRefs, expectedVarRef: finalExpectedVarRef,
             hint: resolveHintEdit(edit.hint, existing: caseSpec.hint),
             tier: caseSpec.tier, points: caseSpec.points,
-            timeLimitSeconds: resolveTimeLimitEdit(edit.timeLimitSeconds, existing: caseSpec.timeLimitSeconds),
+            timeLimitSeconds: try parseTimeLimitOverride(
+                edit.timeLimitSeconds, tool: name, field: "cases[\(edit.key)].timeLimitSeconds"
+            ).applied(to: caseSpec.timeLimitSeconds),
             failureDetail: try MCPFailureDetailProse.parse(
                 edit.failureDetail, tool: name, field: "cases[\(edit.key)].failureDetail")
                 ?? caseSpec.failureDetail,
@@ -531,17 +523,6 @@ struct UpdatePatternFamilyTool: ContentTool {
     private static func resolveHintEdit(_ edit: String?, existing: String?) -> String? {
         guard let edit else { return existing }
         return edit.isEmpty ? nil : edit
-    }
-
-    /// Resolves a time-limit edit against the existing value, mirroring the
-    /// hint convention with `0` as the sentinel for "clear": nil (omitted)
-    /// preserves the existing override, `0` clears it (revert to inherit), and
-    /// any other value sets it. Provided values are bound-checked by the caller
-    /// (`validateTimeLimitSeconds`) before this runs, so an out-of-range value
-    /// never reaches here.
-    private static func resolveTimeLimitEdit(_ edit: Int?, existing: Int?) -> Int? {
-        guard let edit else { return existing }
-        return edit == 0 ? nil : edit
     }
 
     /// Resolves a parallel array (argVarRefs / argsProvided) for an edited case:
