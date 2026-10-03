@@ -103,7 +103,10 @@ struct StudentAssignmentHistoryContext: Encodable {
     /// roster's copy of this page, so from the course route it would drop
     /// the reader's way back to the student.
     let showsDiff: Bool
-    /// Where a retest returns to: this page.
+    /// This page's path, sent as a retest's `returnTo`. Only the roster
+    /// route's path comes back here: `sanitizedAssignmentReturnPath` accepts
+    /// `/instructor/<id>` paths only, so a retest from the course route lands
+    /// on the roster's submissions page.
     let historyPath: String
     let rows: [AssignmentSubmissionHistoryRow]
 }
