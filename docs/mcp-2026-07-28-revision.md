@@ -238,6 +238,12 @@ move without the content forking:
   discovered and consumed through MCP) is the natural long-term convergence
   point for this kind of guidance; evaluate once the connector supports it.
 
+What an instructor sees on the MCP tab, kept here because each note on the
+page is one sentence: a saved guide reaches an agent through the live resource
+at once, and through the `initialize` instructions the next time the agent
+connects. Emptying the box restores the Chickadee default. When the MCP server
+is disabled on a deployment, a saved guide takes effect once it is enabled.
+
 ## References
 
 - MCP 2026-07-28 RC — official announcement:
