@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.364] - 2026-10-03
+
+### Fixed
+
+- **Auto-compute shows the solution's error on R, Lua and Octave.** A failed in-page call on those languages wrapped its already-described error in a second object, so the Expected cell read "[object Object]" instead of the error, and a timeout was not shown as one (#1994).
+
+### Fixed
+
+- **The MCP instructions say an assignment declares its language.** The `initialize` instructions and `set_assignment_language` still said the language was resolved from the graded scripts and the starter notebook's kernel, which #1331 removed. They now say that `create_assignment` requires the declaration, `set_assignment_language` changes it, and new content does not (#1933).
+
+
 ## [0.5.363] - 2026-10-03
 
 ### Fixed
