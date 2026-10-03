@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.370] - 2026-10-03
+
+### Changed
+
+- **`OperationalDiagnosticsService` is checked by the compiler.** Its four stored properties are constants (three actors and a `Sendable` struct), so it no longer needs `@unchecked Sendable` (#1927).
+
+
 ## [0.5.369] - 2026-10-03
 
 ### Fixed
