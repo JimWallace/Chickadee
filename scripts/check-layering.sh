@@ -10,7 +10,10 @@ set -euo pipefail
 # should depend on. Those moved to `Helpers/`. This guard stops the next one.
 #
 # The rule: a file under `Services/`, `Helpers/` or `Utilities/` may not name a
-# top-level function or type that is declared only under `Routes/`. A function
+# top-level function or type that is declared only under `Routes/`. The
+# feature directories that hold only services, `BrightSpace/` and `GitHub/`,
+# are shared code too and are scanned with them. `LTI/` is not: it holds its
+# own routes. A function
 # counts when it is called (`name(` not after a `.`); a type counts wherever
 # its name appears. Comments and string literals, including the multi-line
 # ones that hold generated Python and R, are skipped.
@@ -23,7 +26,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 baseline_file="scripts/layering-baseline.txt"
-shared_dirs=(Sources/APIServer/Services Sources/APIServer/Helpers Sources/APIServer/Utilities)
+shared_dirs=(Sources/APIServer/Services Sources/APIServer/Helpers Sources/APIServer/Utilities Sources/APIServer/BrightSpace Sources/APIServer/GitHub)
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -81,7 +84,8 @@ if [ -n "$new_symbols" ]; then
     awk -F '\t' -v name="$name" '$1 == name { print "  " name ": " $2 }' "$work/uses"
   done
   echo
-  echo "Services/, Helpers/ and Utilities/ sit below Routes/. Move the symbol down"
+  echo "Shared code (Services/, Helpers/, Utilities/, BrightSpace/, GitHub/) sits"
+  echo "below Routes/. Move the symbol down"
   echo "to Helpers/ (or the service that owns it), or keep the call in the route."
   exit 1
 fi

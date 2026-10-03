@@ -130,9 +130,11 @@ Public/runner-wasm/         Vendored wasm artifact + JS bridge (checked in)
 
 Inside `APIServer/`, `Services/`, `Helpers/` and `Utilities/` sit below
 `Routes/`: a route calls down into them, and they never call up into a route.
-`scripts/check-layering.sh` enforces it in `format-lint`. It fails when a file
-under those three directories names a function or type declared only under
-`Routes/`. The uses that predate the rule are listed in
+The feature directories that hold only services, `BrightSpace/` and `GitHub/`,
+are shared code too. `scripts/check-layering.sh` enforces it in `format-lint`.
+It fails when a file under any of those five directories names a function or
+type declared only under `Routes/`. `LTI/` is not scanned, because it holds its
+own routes. The uses that predate the rule are listed in
 `scripts/layering-baseline.txt`, and that list can only shrink (#1726).
 
 ---
