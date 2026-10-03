@@ -3,6 +3,9 @@
 // Course repositories (docs/github-submissions.md slice 4): the organization
 // bound to a course, an assignment's template, and the repository made for
 // each student. New tables only; empty tables change nothing.
+//
+// The last-push columns were folded in from
+// AddGitHubCourseRepositoryPushColumns in the fourth round (#1806).
 
 import Fluent
 
@@ -38,6 +41,10 @@ struct CreateGitHubCourseRepositories: ChickadeeMigration {
             .field("invited", .bool, .required)
             .field("archived_at", .datetime)
             .field("created_at", .datetime, .required)
+            // The last push to the repository, from a webhook
+            // (docs/github-submissions.md slice 5). nil = no push seen.
+            .field("last_pushed_at", .datetime)
+            .field("last_push_sha", .string)
             .unique(on: "test_setup_id", "user_id")
             .create()
     }

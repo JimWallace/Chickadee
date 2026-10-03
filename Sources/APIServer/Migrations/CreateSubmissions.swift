@@ -33,6 +33,13 @@ struct CreateSubmissions: ChickadeeMigration {
             // personalization for validation submissions, so worker poll +
             // download stay eval-free.
             .field("materialization_json", .string)
+            // Folded from AddSubmissionSourceColumns (fourth round, #1806):
+            // where the submission came from (docs/github-submissions.md
+            // slice 3). nil on every column means an upload.
+            .field("source_kind", .string)
+            .field("source_repo_id", .int64)
+            .field("source_repo_name", .string)
+            .field("source_commit", .string)
             .create()
     }
 

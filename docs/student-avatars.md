@@ -699,7 +699,8 @@ Each slice is independently mergeable and independently useful.
   handles at the time (96 × 96 = 9,216 since the Fall 2026 review), drawn
   without replacement within a course.
 - **S1 — persistence. Done.** `users.avatar_spec` and
-  `course_enrollments.avatar_handle` (`AddAvatarIdentity`), with a **partial**
+  `course_enrollments.avatar_handle` (`AddAvatarIdentity`, since folded into
+  `CreateUsers` and `CreateCourseEnrollments`), with a **partial**
   unique index on (course, handle) excluding NULL — without the exclusion the
   second enrollment created collides with the first on NULL. `AvatarStore`
   materializes both on first view, with the `ensureSeed` race shape. No

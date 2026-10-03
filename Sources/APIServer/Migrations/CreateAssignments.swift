@@ -17,6 +17,10 @@
 //     round; this file now declares `visibility` directly and never creates
 //     `is_open`, so a fresh deploy reaches the same end state without the
 //     create-then-drop)
+//   - AddAssignmentSolutionVisibility          — `solution_visibility`
+//   - AddAssignmentPassingThreshold            — `passing_threshold_percent`
+//   - AddLTIGradeColumns (its assignments half) — `lti_line_item_url`
+//     (all three in the fourth round, #1806)
 //
 // Existing prod has the historical migrations already marked applied so the
 // body changes are invisible to production; the folded Add*/Change* structs
@@ -83,6 +87,15 @@ struct CreateAssignments: ChickadeeMigration {
             // Folded from AddAssignmentBrightSpaceSyncExcluded: explicit
             // "do not sync grades to LEARN" flag, distinct from unmapped.
             .field("brightspace_sync_excluded", .bool)
+            // Folded from AddAssignmentSolutionVisibility: the solution-reveal
+            // policy (`SolutionVisibility`). nil = hidden.
+            .field("solution_visibility", .string)
+            // Folded from AddAssignmentPassingThreshold: the advisory passing
+            // threshold. nil = no threshold.
+            .field("passing_threshold_percent", .int)
+            // Folded from AddLTIGradeColumns: the AGS line item this
+            // assignment's grades go to (docs/lti-1-3.md). nil = none yet.
+            .field("lti_line_item_url", .string)
             .field("created_at", .datetime)
             .unique(on: "public_id")
             .unique(on: "test_setup_id")

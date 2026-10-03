@@ -19,6 +19,13 @@ import SQLKit
 ///     stamped already-archived courses and is a no-op on an empty fresh table)
 ///   - AddCourseSlipDaySettings          — the three slip-day policy columns
 ///     (third round, #1252)
+///   - AddCourseSlipDayRevealHold        — `slip_day_release_reveal_hold`
+///   - AddLTILaunchColumns               — `lti_platform_id`, `lti_context_id`
+///   - AddLTIGradeColumns                — `lti_line_items_url`, `lti_grades_enabled`
+///   - AddLTIMembershipsColumn           — `lti_memberships_url`
+///   - AddCourseTerm                     — `term_year`, `term_season`
+///   - ScopeCourseCodeIndexToTerm        — the active-code index scoped to the
+///     term (all six in the fourth round, #1806)
 ///
 /// The consolidated form below produces the same final schema in a single
 /// Create step.  Existing deploys have CreateCourses already marked
@@ -60,10 +67,29 @@ struct CreateCourses: ChickadeeMigration {
             .field("slip_days_enabled", .bool)
             .field("slip_days_per_student", .int)
             .field("slip_day_extension_hours", .int)
+            // Folded from AddCourseSlipDayRevealHold: the course-level opt-out
+            // for the release-output slip-day reveal hold. nil = hold on.
+            .field("slip_day_release_reveal_hold", .bool)
+            // Folded from AddLTILaunchColumns, AddLTIGradeColumns and
+            // AddLTIMembershipsColumn (docs/lti-1-3.md): the platform binding,
+            // the AGS line-items URL and transport choice, and the NRPS
+            // memberships URL. `lti_platform_id` is a bare uuid with no FK.
+            .field("lti_platform_id", .uuid)
+            .field("lti_context_id", .string)
+            .field("lti_line_items_url", .string)
+            .field("lti_grades_enabled", .bool)
+            .field("lti_memberships_url", .string)
+            // Folded from AddCourseTerm (docs/course-terms.md): the year and
+            // term of the offering. nil = no term recorded.
+            .field("term_year", .int)
+            .field("term_season", .string)
             .field("created_at", .datetime)
             .create()
-        // Partial unique index: only one active course per code.
-        // Archived courses are allowed to share a code (e.g. after term rollover import).
+        // Partial unique index: one active course per code and term. Archived
+        // courses may share a code (e.g. after a term rollover import).
+        // Folded from ScopeCourseCodeIndexToTerm. The term columns are wrapped
+        // in COALESCE because SQL treats two NULLs as distinct: without it, two
+        // courses that record no term could share a code.
         if let sql = database as? SQLDatabase {
             let activePredicate =
                 sql.dialect.name == "postgresql"
@@ -71,8 +97,8 @@ struct CreateCourses: ChickadeeMigration {
                 : "is_archived = 0"
             try await sql.raw(
                 """
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_code_active
-                ON courses(code)
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_code_term_active
+                ON courses(code, COALESCE(term_year, 0), COALESCE(term_season, ''))
                 WHERE \(unsafeRaw: activePredicate)
                 """
             ).run()
@@ -100,7 +126,7 @@ struct CreateCourses: ChickadeeMigration {
     func revert(on database: Database) async throws {
         try await database.schema("course_sections").delete()
         if let sql = database as? SQLDatabase {
-            try await sql.raw("DROP INDEX IF EXISTS idx_courses_code_active").run()
+            try await sql.raw("DROP INDEX IF EXISTS idx_courses_code_term_active").run()
         }
         try await database.schema("courses").delete()
     }
