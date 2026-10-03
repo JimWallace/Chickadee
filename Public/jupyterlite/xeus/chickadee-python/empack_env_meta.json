@@ -116,32 +116,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "wcwidth",
-      "version": "0.8.4",
-      "build": "pyh5ded981_0",
-      "filename_stem": "wcwidth-0.8.4-pyh5ded981_0",
-      "filename": "wcwidth-0.8.4-pyh5ded981_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "pytz",
-      "version": "2026.3.post1",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "pytz-2026.3.post1-pyhcf101f3_0",
-      "filename": "pytz-2026.3.post1-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "cycler",
       "version": "0.12.1",
       "build": "pyhcf101f3_2",
@@ -268,15 +242,15 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "matplotlib",
-      "version": "3.11.1",
-      "build": "pyh400597f_0",
-      "filename_stem": "matplotlib-3.11.1-pyh400597f_0",
-      "filename": "matplotlib-3.11.1-pyh400597f_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "name": "python-tzdata",
+      "version": "2026.4",
+      "build": "pyh5ded981_0",
+      "filename_stem": "python-tzdata-2026.4-pyh5ded981_0",
+      "filename": "python-tzdata-2026.4-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
-        "python",
-        "matplotlib-base ==3.11.1 np23py313h878ade0_0"
+        "python >=3.11",
+        "python"
       ],
       "subdir": "noarch"
     },
@@ -307,6 +281,19 @@
       "subdir": "noarch"
     },
     {
+      "name": "matplotlib",
+      "version": "3.11.2",
+      "build": "pyhb74d4bf_2",
+      "filename_stem": "matplotlib-3.11.2-pyhb74d4bf_2",
+      "filename": "matplotlib-3.11.2-pyhb74d4bf_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "python >=3.13",
+        "matplotlib-base ==3.11.2 np23py313h397d816_2"
+      ],
+      "subdir": "noarch"
+    },
+    {
       "name": "xeus-python-shell-raw",
       "version": "0.8.1",
       "build": "pyhd8ed1ab_0",
@@ -317,31 +304,6 @@
         "python >=3.10"
       ],
       "subdir": "noarch"
-    },
-    {
-      "name": "matplotlib-base",
-      "version": "3.11.1",
-      "build": "np23py313h878ade0_0",
-      "filename_stem": "matplotlib-base-3.11.1-np23py313h878ade0_0",
-      "filename": "matplotlib-base-3.11.1-np23py313h878ade0_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "contourpy",
-        "cycler",
-        "fonttools",
-        "kiwisolver",
-        "numpy",
-        "packaging",
-        "pillow",
-        "pyparsing",
-        "python-dateutil",
-        "pytz",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313",
-        "numpy >=2.2,<3",
-        "qhull >=2020.2,<2020.3.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
     },
     {
       "name": "patsy",
@@ -505,6 +467,19 @@
       "subdir": "noarch"
     },
     {
+      "name": "pytz",
+      "version": "2026.4",
+      "build": "pyh5ded981_0",
+      "filename_stem": "pytz-2026.4-pyh5ded981_0",
+      "filename": "pytz-2026.4-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
       "name": "asttokens",
       "version": "3.0.2",
       "build": "pyhd8ed1ab_0",
@@ -517,15 +492,40 @@
       "subdir": "noarch"
     },
     {
-      "name": "xeus",
-      "version": "6.0.5",
-      "build": "h0b0027f_0",
-      "filename_stem": "xeus-6.0.5-h0b0027f_0",
-      "filename": "xeus-6.0.5-h0b0027f_0.tar.gz",
+      "name": "wcwidth",
+      "version": "0.9.1",
+      "build": "pyh5ded981_0",
+      "filename_stem": "wcwidth-0.9.1-pyh5ded981_0",
+      "filename": "wcwidth-0.9.1-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "matplotlib-base",
+      "version": "3.11.2",
+      "build": "np23py313h397d816_2",
+      "filename_stem": "matplotlib-base-3.11.2-np23py313h397d816_2",
+      "filename": "matplotlib-base-3.11.2-np23py313h397d816_2.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
+        "contourpy",
+        "cycler",
+        "fonttools",
+        "kiwisolver",
+        "numpy",
+        "packaging",
+        "pillow",
+        "pyparsing",
+        "python-dateutil",
+        "pytz",
         "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi 3.12.0"
+        "python_abi 3.13.* *_cp313",
+        "numpy >=2.2,<3",
+        "qhull >=2020.2,<2020.3.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
@@ -585,18 +585,6 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "python-tzdata",
-      "version": "2026.3",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "python-tzdata-2026.3-pyhd8ed1ab_0",
-      "filename": "python-tzdata-2026.3-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "pexpect",
       "version": "4.9.0",
       "build": "pyhd8ed1ab_1",
@@ -623,6 +611,19 @@
         "python >=3.9"
       ],
       "subdir": "noarch"
+    },
+    {
+      "name": "xeus",
+      "version": "6.0.6",
+      "build": "hc780342_0",
+      "filename_stem": "xeus-6.0.6-hc780342_0",
+      "filename": "xeus-6.0.6-hc780342_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi 3.12.0"
+      ],
+      "subdir": "emscripten-wasm32"
     },
     {
       "name": "python_abi",

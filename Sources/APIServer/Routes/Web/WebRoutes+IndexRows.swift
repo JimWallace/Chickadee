@@ -433,14 +433,12 @@ extension WebRoutes {
             submissionMode: props?.effectiveSubmissionMode.rawValue
                 ?? SubmissionMode.notebook.rawValue,
             hasNotebook: hasNotebook,
-            submissionCount: submissionCount,
-            hasLatestSubmission: latestSubmission != nil,
-            latestSubmissionID: latestSubmission?.submissionID ?? "",
-            latestSubmittedAtText: latestSubmission?.submittedAtText ?? "—",
-            additionalSubmissionCount: max(submissionCount - 1, 0),
-            bestGradeText: context.gradeData.overridePercentBySetupID[setupID].map { "\($0)%" }
-                ?? context.gradeData.bestGradePercentBySetupID[setupID].map { "\($0)%" },
-            gradeIsOverridden: context.gradeData.overridePercentBySetupID[setupID] != nil,
+            latest: LatestSubmissionCell(
+                count: submissionCount,
+                latestSubmissionID: latestSubmission?.submissionID,
+                latestSubmittedAtText: latestSubmission?.submittedAtText,
+                bestPercent: context.gradeData.bestGradePercentBySetupID[setupID],
+                overridePercent: context.gradeData.overridePercentBySetupID[setupID]),
             badges: badgeSplit.visible,
             extraBadgeCount: badgeSplit.extraCount,
             extraBadgesTooltip: badgeSplit.extraTooltip,

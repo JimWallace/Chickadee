@@ -9,6 +9,42 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.355] - 2026-10-03
+
+### Added
+
+- **The GitHub pages say which of the App's three options GitHub grants** (#1776). The admin page reads the App's permissions and events from GitHub when it renders, and shows course repositories, push events and commit statuses as granted or not granted. The course page reads the App's installation on the bound organization, which can lag behind the App until an owner accepts a change. When that installation cannot make course repositories, the page says so and links to its settings on GitHub. Before this, each missing option failed in its own silent way: a GitHub error when a student made a repository, pushes that never arrived, and statuses that were logged and dropped.
+
+
+## [0.5.354] - 2026-10-03
+
+### Security
+
+- **The embedded editor moves to JupyterLite 0.8.4.** It fixes three advisories in the JupyterLab it bundles: a pasted cell could mark its own output trusted and run script in the editor's origin (GHSA-6966-vjj6-99xv, in both `jupyterlite` and `jupyterlite-core`), and a language pack's plural-forms header could run as code (GHSA-3jqq-pw4j-pqcj). Chickadee's content security policy already refused inline script there, so the paste path was blocked in practice; the vendored bundle is rebuilt anyway. A fourth alert, in `click` (GHSA-47fr-3ffg-hgmw), stays open: `empack` 6.0.1, the newest release, requires `click<8.2`, and `click` is a build-time tool that never reaches a browser.
+- **The rebuild also re-solved the four kernel environments.** Each environment pins only its top-level packages, so a rebuild takes the newest builds on `emscripten-forge-4x`. The changes are patch releases: `xeus` 6.0.5 to 6.0.6 in all four kernels, `matplotlib` 3.11.1 to 3.11.2, `plotly` 7.0.0 to 7.1.0 (and its editor extension), `r-bit64` 4.8.2 to 4.8.6, and new builds of `xeus-r` 0.11.2 and `python` 3.14.3. The vendored `pyodide-http` patch is applied again and the import guard's module lists are derived again from the new bytes.
+
+
+## [0.5.353] - 2026-10-03
+
+### Changed
+
+- **One service applies a result's side effects, and none of them can fail the report.** The worker report and the browser result wired the class-level effects by hand and had drifted: the browser path retried and logged each one, the worker path threw, so one failed badge write turned a stored grade into a failed report that the runner then retried. `ResultIngestEffects` now applies coverage, the leaderboard, the activity match and the class records for both paths, each retried and then logged if it still fails. First-to-submit records go through the same wrapper at all four places a submission is created, and the grade-sync flags and the validation verdict moved into the service too (#1708).
+
+
+## [0.5.352] - 2026-10-03
+
+### Changed
+
+- **One type for the latest-submission cell.** The student dashboard, the course's per-student view and the assignment roster each built the same cell (submission count, latest submission, grade) with the same rules written three times. `LatestSubmissionCell` now holds those rules, and each row nests it as `latest`. The pages render the same (#1711).
+
+
+## [0.5.351] - 2026-10-03
+
+### Changed
+
+- **One page for a student's history on an assignment.** Course staff reach it from the assignment's roster and from the course's per-student view, and the two routes rendered two near-identical templates. They now render one. Both name the student as the account page does (the name, then the username only when it differs), and the submission diff page uses the same line. Each route keeps its own back link; the roster's now reads "Back to submissions" (#1710).
+
+
 ## [0.5.350] - 2026-10-03
 
 ### Added

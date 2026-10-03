@@ -45,7 +45,7 @@ point at. Closure sizes are compressed and `emscripten-wasm32` only, so treat
 them as a ranking rather than absolutes — the vendored R env measures 29.9 MB
 this way and 62 MB unpacked on disk.
 
-The **xeus ABI pin matters as much as the size.** Our envs are on `xeus 6.0.5`,
+The **xeus ABI pin matters as much as the size.** Our envs are on `xeus 6.0.6`,
 and each env solves independently, so a kernel on the xeus 5 line is not fatal —
 but `Public/xeus-kernel-shared.js` mirrors one xeus generation's boot sequence
 (`new mod.xkernel(argv)`, `get_server()`, `notify_listener`), so a 5.x kernel is

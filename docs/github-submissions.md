@@ -154,8 +154,24 @@ As built (slice 4): the admin page's *Owner and permissions* disclosure has an
 *Allow course repositories* checkbox. Only when it is on does the manifest ask
 for the two slice-4 permissions. An App made without them can be given them
 later on GitHub; until then, every course-repository call fails with a GitHub
-error on the page. The admin page does not yet say whether the registered
-App has them, because the choice is not stored at registration.
+error on the page.
+
+The three options are not stored at registration, because they can change on
+GitHub afterwards. The pages read them from GitHub when they render (#1776):
+
+- The admin page reads the App (`GET /app`) and shows each option as granted
+  or not granted. Course repositories need `administration: write` and
+  `members: read`, push events need the `push` event, and commit statuses need
+  `statuses: write`. The check reads the manifest's own permission constants,
+  so it cannot ask for less than the manifest does.
+- The course page reads the App's installation on the bound organization
+  (`GET /app/installations/{id}`). An installation can lag behind the App: a
+  changed permission reaches it only after an organization owner accepts it.
+  When the installation cannot make course repositories, the page says so and
+  links to the installation's settings on GitHub.
+
+Both reads use the App JWT. When GitHub does not answer, the page says that it
+could not read the permissions, and nothing else on the page changes.
 
 ## Linking an account (slice 2)
 
@@ -570,6 +586,7 @@ Chickadee.
 | 4 | An invitation from the course organization to the student's GitHub login | Out | The student; the organization's owners |
 | 4 | The repository ID and `owner/name`, and whether the invitation succeeded | In | Stored in `github_course_repositories` |
 | 4 | The archived state at the end of term | Out | The same people as the repository |
+| 4 | The App's permissions and events, and those of the installation on the bound organization (#1776) | In | Read for the admin and course pages only; not stored |
 | 5 | The deployment's webhook URL, in the App's settings | Out | The App's owner on GitHub |
 | 5 | Push deliveries for course repositories: the repository ID and head SHA are kept; commit messages, author and committer names and emails, and the pusher's login and email arrive and are **discarded** | In | Stored: the time and the SHA on the course-repository row |
 | 6 | A commit status on a graded GitHub submission's commit, private repositories only: "n/m public tests passed", "No public tests" or "Build failed", a success or failure state, the context `chickadee/{assignment-slug}`, and a link to the results page | Out | Everyone who can see the repository: the student and, for a course repository, the organization's owners and members with access |

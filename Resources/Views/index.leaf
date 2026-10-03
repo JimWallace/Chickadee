@@ -110,16 +110,16 @@
                         #else:
                         No due date
                         #endif
-                        #if(item.row.submissionCount == 1):
+                        #if(item.row.latest.submissionCount == 1):
                         · <a href="#(item.row.historyURL)">1 submission</a>
-                        #elseif(item.row.submissionCount > 1):
-                        · <a href="#(item.row.historyURL)">#(item.row.submissionCount) submissions</a>
+                        #elseif(item.row.latest.submissionCount > 1):
+                        · <a href="#(item.row.historyURL)">#(item.row.latest.submissionCount) submissions</a>
                         #endif
-                        #if(item.row.gradeIsOverridden):
+                        #if(item.row.latest.gradeIsOverridden):
                         · <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
                         #endif
-                        #if(item.row.bestGradeText):
-                        <span class="row-phone-meta">Grade #(item.row.bestGradeText)</span>
+                        #if(item.row.latest.bestGradeText):
+                        <span class="row-phone-meta">Grade #(item.row.latest.bestGradeText)</span>
                         #endif
                     </div>
                 #else:
@@ -139,7 +139,7 @@
                     #endif">#(item.row.status)</span>
                 #endif
             </td>
-            <td class="item-grade col-hide-phone">#if(item.row.bestGradeText):<strong>#(item.row.bestGradeText)</strong>#else:<span class="empty">—</span>#endif</td>
+            <td class="item-grade col-hide-phone">#if(item.row.latest.bestGradeText):<strong>#(item.row.latest.bestGradeText)</strong>#else:<span class="empty">—</span>#endif</td>
             <td class="item-actions-td">
                 <div class="assignment-actions-cell">
                     #if(!item.row.hasAnyAction):
