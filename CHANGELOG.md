@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.363] - 2026-10-03
+
+### Fixed
+
+- **Auto-compute fills a pattern-family case's Expected value again.** The editor asked the language seed for the in-page worker through an accessor that was never added, so every auto-compute threw an error and the cell stayed on "computing…" for every language. The seed reader now provides it, and Python, R, Lua and Octave compute in the page again (#1956).
+
+### Fixed
+
+- **A Lua, Octave, Racket or Java test uploaded through the suite table is a test again.** The suite table guessed in the browser, from an extension list that had gone stale, and filed those tests as support files. The server now decides, with the same rule for both upload paths, taken from the runner's own table of what it can run. A C++ source or header uploaded through the create form is now a support file, because the runner cannot run one; C++ tests are `.sh` wrappers (#1960).
+
+
 ## [0.5.362] - 2026-10-03
 
 ### Fixed
