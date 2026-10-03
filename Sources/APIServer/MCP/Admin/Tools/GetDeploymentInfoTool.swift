@@ -37,6 +37,9 @@ struct GetDeploymentInfoTool: DiagnosticTool {
         + "running process, unlike a cached tool list). Read-only; touches no course, student, or "
         + "database state."
     static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
+    /// The admin re-check reads the users table, and this tool must answer
+    /// when the database is down. The bearer layer still gates it.
+    static let rechecksAdminRole = false
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([

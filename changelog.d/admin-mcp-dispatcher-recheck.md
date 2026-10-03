@@ -1,0 +1,3 @@
+### Changed
+
+- **The admin MCP dispatcher re-checks the admin role for every tool.** Eighteen of the nineteen admin diagnostic tools started with `requireAdminSubject`, and a new tool that forgot the line was protected only by the bearer layer. `DiagnosticTool` now has a `rechecksAdminRole` flag, true by default, and `AdminMCPDispatcher` runs the check before it calls the tool. `get_deployment_info` opts out so that it still answers when the database is down. The per-tool checks stay. A side effect: a non-admin who calls a tool with bad arguments now gets "not authorized" instead of "invalid arguments". Closes #1943.
