@@ -169,8 +169,9 @@ The Core type, the migration, the model accessor, and tests
   solution, shared support files and first version snapshot copy the same
   way everywhere. The route runs the clone in one transaction and records a
   `course.cloned` audit entry.
-- The admin course page has a **Clone for a new term** section
-  (`#clone-course`). Its fields are the code (default: the source code), the
+- The admin course page has a **Clone for a new term** panel
+  (`#clone-course`), which its titlebar button or a link to the anchor opens
+  (#1974). Its fields are the code (default: the source code), the
   name (default: the source name), and the year and term (default: the term
   after the source's term, from `AcademicTerm.next`; no default when the
   source has no term). It posts to `POST /admin/courses/:courseID/clone`. The

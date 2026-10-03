@@ -2052,6 +2052,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .add-panel { display: none; margin-bottom: .75rem; padding: 1rem 1.25rem; }
 .add-panel:target,
 .add-panel.is-open { display: block; }
+/* Cancel on a panel the URL fragment opened: :target would hold it open. */
+.add-panel.is-closed { display: none; }
 .section-items-seen { width: 8rem; }
 .section-items-combo { width: 20rem; }
 /* The action buttons that sit at the top right of a facts card. */

@@ -9,192 +9,112 @@
     <a href="/admin" class="btn">Cancel</a>
 </div>
 
-#if(error == "course_fields_required"):
-<div class="form-error" role="alert">Course code and name are required.</div>
-#elseif(error == "course_term_required"):
-<div class="form-error" role="alert">Enter a four-digit year and a term.</div>
-#elseif(error == "code_taken"):
-<div class="form-error" role="alert">An active course already uses this code.</div>
-#endif
-
-<!-- ── Create course ───────────────────────────────── -->
 <section class="page-section">
     <h2>Course details</h2>
-    <form method="post" action="/admin/courses"
-          class="course-form">
+    <form method="post" action="/admin/courses" class="form-stack">
         #csrfFormField()
-        <label class="form-label course-field-short">
-            Code
-            <input class="form-input course-input-short" type="text" name="code" placeholder="e.g. CMSC131" required autofocus>
-        </label>
-        <label class="form-label course-field-name">
-            Name
-            <input class="form-input course-input-block" type="text" name="name" placeholder="e.g. Introduction to OOP" required>
-        </label>
-        <label class="form-label course-field-short">
-            Year
-            <select class="form-input course-input-short" name="termYear" required>
-                #for(option in yearOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
-        <label class="form-label course-field-short">
-            Term
-            <select class="form-input course-input-short" name="termSeason" required>
-                <option value="" selected disabled>Choose</option>
-                #for(option in termOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
-        <button class="btn btn-primary course-form-submit" type="submit">Create course</button>
+        #extend("_course-fields", courseForm)
+        <div class="toolbar">
+            <button class="btn btn-primary" type="submit">Create course</button>
+        </div>
     </form>
 </section>
 #else:
+#extend("_avatar-sprite")
 <div class="page-titlebar">
-    <div class="toolbar">
     <h1>#(course.code)#if(course.termLabel): #(course.termLabel)#endif — #(course.name)</h1>
-    #if(course.isArchived):
-    <span class="tier tier-closed">archived</span>
-    #else:
-    <span class="tier tier-open">active</span>
-    #endif
-    #if(course.enrollmentMode == "open"):
-    <span class="tier tier-open">open enrolment</span>
-    #elseif(course.enrollmentMode == "auto"):
-    <span class="tier tier-open">auto enrolment</span>
-    #else:
-    <span class="tier tier-closed">closed enrolment</span>
-    #endif
-    </div>
     <div class="toolbar">
-        <form method="post" action="/admin/courses/#(course.id)/archive" class="form-flush">
-            #csrfFormField()
-            #if(course.isArchived):
-            <button class="btn action-danger" type="submit"
-                    data-confirm="Unarchive #(course.code)? #(course.enrollmentCount) students regain access immediately, and the retention clock stops.">Unarchive</button>
-            #else:
-            <button class="btn action-danger" type="submit"
-                    data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back.">Archive</button>
-            #endif
-        </form>
-        <a href="/admin/courses/#(course.id)/export" class="btn">Export bundle</a>
+        <a class="btn action-btn" href="#course-settings-panel" data-add-target="course-settings-panel">Edit settings</a>
+        <a class="btn action-btn" href="#clone-course" data-add-target="clone-course">Clone course</a>
+        <details class="add-section-details popup-anchor">
+            <summary class="btn action-btn action-btn-icon summary-btn" title="More actions" aria-label="More actions for #(course.code)">
+                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+            </summary>
+            <div class="add-section-popup card suite-section-popup row-menu-panel" role="menu">
+                <a class="row-menu-item" href="/admin/courses/#(course.id)/export" role="menuitem">
+                    <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export course bundle
+                </a>
+                #if(course.isArchived):
+                <form method="post" action="/admin/courses/#(course.id)/archive"
+                      data-confirm="Unarchive #(course.code)? #(course.enrollmentCount) students regain access immediately, and the retention clock stops.">
+                    #csrfFormField()
+                    <button class="row-menu-item" type="submit" role="menuitem">
+                        <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>Unarchive course
+                    </button>
+                </form>
+                #else:
+                <form method="post" action="/admin/courses/#(course.id)/archive"
+                      data-confirm="Archive #(course.code)? #(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on this page puts it back.">
+                    #csrfFormField()
+                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                        <svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>Archive course
+                    </button>
+                </form>
+                #endif
+            </div>
+        </details>
     </div>
 </div>
 
-<!-- ── Edit course ─────────────────────────────────── -->
-<section class="page-section">
-    <h2>Edit course</h2>
-    #if(error == "course_term_required"):
-    <div class="form-error" role="alert">Enter a four-digit year and a term.</div>
-    #elseif(error == "code_taken"):
-    <div class="form-error" role="alert">Another course already uses this code.</div>
-    #endif
-    <form method="post" action="/admin/courses/#(course.id)/edit"
-          class="course-form">
+<div class="add-panel card#if(courseForm.error): is-open#endif" id="course-settings-panel">
+    <form method="post" action="/admin/courses/#(course.id)/edit" class="form-stack">
         #csrfFormField()
-        <label class="form-label course-field-short">
-            Code
-            <input class="form-input course-input-short" type="text" name="code" value="#(course.code)"
-                   required>
-        </label>
-        <label class="form-label course-field-name">
-            Name
-            <input class="form-input course-input-block" type="text" name="name" value="#(course.name)"
-                   required>
-        </label>
-        <label class="form-label course-field-short">
-            Year
-            <select class="form-input course-input-short" name="termYear" required>
-                #for(option in yearOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
-        <label class="form-label course-field-short">
-            Term
-            <select class="form-input course-input-short" name="termSeason" required>
-                #if(course.termSeason):#else:
-                <option value="" selected disabled>Choose</option>
-                #endif
-                #for(option in termOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
+        #extend("_course-fields", courseForm)
         #if(course.brightspaceSyncEnabled):
-        <label class="form-label course-field-bs">
-            LEARN Org Unit ID
-            <input class="form-input course-input-block" type="text" name="brightspaceOrgUnitID"
-                   value="#(course.brightspaceOrgUnitID)"
-                   placeholder="e.g. 123456">
-        </label>
+        <div class="field-stack field-stack--narrow">
+            <label for="course-settings-org-unit">LEARN org unit ID</label>
+            <input id="course-settings-org-unit" class="form-input" type="text" name="brightspaceOrgUnitID"
+                   value="#(course.brightspaceOrgUnitID)" placeholder="e.g. 123456"
+                   aria-describedby="course-settings-org-unit-note">
+            <p class="field-note" id="course-settings-org-unit-note">Checked against D2L when you save.</p>
+        </div>
         #endif
-        <button class="btn btn-primary course-form-submit" type="submit">Save</button>
+        <div class="toolbar">
+            <button class="btn btn-primary" type="submit">Save settings</button>
+            <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
+        </div>
     </form>
-    #if(course.brightspaceSyncEnabled):
-    <p class="card-meta course-bs-meta">
-        #if(course.brightspaceOrgUnitID):
-            #if(course.brightspaceOrgUnitName):
-            <span class="tier tier-open">verified</span>
-            Linked to D2L org unit <strong>#(course.brightspaceOrgUnitName)</strong>
-            (ID <code>#(course.brightspaceOrgUnitID)</code>).
-            #else:
-            <span class="tier tier-closed">unverified</span>
-            Org Unit ID <code>#(course.brightspaceOrgUnitID)</code> could not be confirmed in D2L
-            (wrong ID, or D2L unreachable). Re-save to retry verification.
-            #endif
-        #else:
-            LEARN grade sync is active. Set the Org Unit ID to bind this course to its D2L
-            grade book — it's verified against D2L on save.
-        #endif
-        Per-assignment grade item IDs are configured on the
-        <a href="/instructor/brightspace">LEARN</a> tab.
-    </p>
-    #endif
-</section>
+</div>
 
-<!-- ── Clone for a new term ────────────────────────── -->
-<section class="page-section" id="clone-course">
-    <h2>Clone for a new term</h2>
-    <p class="section-intro">Copies this course's content into a new course; students, submissions and grades stay here.</p>
-    <p class="section-note">Copied assignments start closed, with no dates and with the solution reveal off.</p>
-    #if(cloneError):
-    <div class="form-error" role="alert">#(cloneError)</div>
-    #endif
-    <form method="post" action="/admin/courses/#(course.id)/clone" class="course-form">
+<div class="add-panel card#if(cloneForm.error): is-open#endif" id="clone-course">
+    <form method="post" action="/admin/courses/#(course.id)/clone" class="form-stack">
         #csrfFormField()
-        <label class="form-label course-field-short">
-            Code
-            <input class="form-input course-input-short" type="text" name="code" value="#(course.code)" required>
-        </label>
-        <label class="form-label course-field-name">
-            Name
-            <input class="form-input course-input-block" type="text" name="name" value="#(course.name)" required>
-        </label>
-        <label class="form-label course-field-short">
-            Year
-            <select class="form-input course-input-short" name="termYear" required>
-                #for(option in cloneYearOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
-        <label class="form-label course-field-short">
-            Term
-            <select class="form-input course-input-short" name="termSeason" required>
-                #if(cloneYear):#else:
-                <option value="" selected disabled>Choose</option>
-                #endif
-                #for(option in cloneTermOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
-        <button class="btn btn-primary course-form-submit" type="submit">Clone course</button>
+        <p class="section-note">Students, submissions and grades stay here; copied assignments start closed, with no dates and the solution reveal off.</p>
+        #extend("_course-fields", cloneForm)
+        <div class="toolbar">
+            <button class="btn btn-primary" type="submit">Clone course</button>
+            <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
+        </div>
     </form>
-</section>
+</div>
+
+<div class="card section-gap">
+    <dl class="detail-grid">
+        <dt>Status</dt>
+        <dd>#if(course.isArchived):<span class="tier tier-closed">Archived</span>#else:<span class="tier tier-open">Active</span>#endif</dd>
+        <dt>Term</dt>
+        <dd>#if(course.termLabel):#(course.termLabel)#else:<span class="text-muted">None recorded</span>#endif</dd>
+        <dt>Submissions</dt>
+        <dd>#(course.submissionCount)</dd>
+        #if(course.brightspaceSyncEnabled):
+        <dt>LEARN org unit</dt>
+        <dd>
+            #if(course.brightspaceOrgUnitID):
+            #if(course.brightspaceOrgUnitName):
+            #(course.brightspaceOrgUnitName) <span class="card-meta">ID <code>#(course.brightspaceOrgUnitID)</code></span>
+            <span class="tier tier-open">Verified</span>
+            #else:
+            <code>#(course.brightspaceOrgUnitID)</code>
+            <span class="tier tier-danger">Not verified</span>
+            <span class="card-meta">Save the settings again to retry.</span>
+            #endif
+            #else:
+            <span class="text-muted">Not set</span>
+            #endif
+        </dd>
+        #endif
+    </dl>
+</div>
 #endif
 
 <!-- ── Assignments ─────────────────────────────────── -->
@@ -203,34 +123,29 @@
     #if(count(assignments) == 0):
     <p class="empty">No assignments for this course.</p>
     #else:
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th class="due-col">Due</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
+    <table class="results-table section-items">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Kind</th><th scope="col">Assignment</th><th scope="col">Status</th></tr>
         </thead>
         <tbody>
         #for(assignment in assignments):
             <tr>
-                <td>#(assignment.title)</td>
-                <td class="due-col">
-                    #if(assignment.dueAt):#(assignment.dueAt)#else:—#endif
+                <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span></td>
+                <td class="item-main">
+                    <div class="item-title"><a href="/instructor/#(assignment.id)/submissions">#(assignment.title)</a></div>
+                    <div class="item-details">#if(assignment.dueAt):Due #(assignment.dueAt)#else:No due date#endif</div>
                 </td>
-                <td>
+                <td class="item-status">
                     #if(assignment.visibility == "open"):
-                    <span class="tier tier-open">open</span>
+                    <span class="tier tier-open">Open</span>
                     #elseif(assignment.visibility == "preview"):
-                    <span class="tier tier-preview">preview</span>
+                    <span class="tier tier-preview">Preview</span>
                     #else:
-                    <span class="tier tier-closed">closed</span>
+                    <span class="tier tier-closed">Closed</span>
                     #endif
-                </td>
-                <td>
-                    <a href="/instructor/#(assignment.id)/submissions"
-                       class="btn action-btn">Submissions</a>
                 </td>
             </tr>
         #endfor
@@ -239,91 +154,92 @@
     #endif
 </section>
 
+#if(!isNew):
 <!-- ── Enrolled students ────────────────────────────── -->
 <section class="page-section">
     <div class="page-titlebar">
         <h2>Enrolled students (#(course.enrollmentCount))</h2>
-        #if(!isNew):
         <div class="toolbar">
-        <form method="post" action="/admin/courses/#(course.id)/enrollment-mode" class="form-flush">
-            #csrfFormField()
-            <label class="form-label course-enroll-label">
-                Enrolment
-                <select name="enrollmentMode" class="form-input course-enroll-select"
-                        data-ck-submit-on-change>
-                    <option value="open"   #if(course.enrollmentMode == "open"):selected#endif>Open enrolment</option>
-                    <option value="auto"   #if(course.enrollmentMode == "auto"):selected#endif>Auto enrolment</option>
-                    <option value="closed" #if(course.enrollmentMode == "closed"):selected#endif>Closed enrolment</option>
-                </select>
-            </label>
-        </form>
-        #if(!course.isArchived):
-        <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
-              enctype="multipart/form-data" class="form-flush">
-            #csrfFormField()
-            <label class="btn btn-primary course-csv-label">
-                Enrol from CSV
-                <input type="file" name="file" accept=".csv,.txt" required
-                       style="display:none" data-ck-submit-on-change>
-            </label>
-        </form>
-        #endif
+            <form method="post" action="/admin/courses/#(course.id)/enrollment-mode" class="form-flush">
+                #csrfFormField()
+                <label class="visually-hidden" for="enrollment-mode">Enrolment mode</label>
+                <span class="state-select" data-state="#(course.enrollmentMode)">
+                    <select id="enrollment-mode" name="enrollmentMode" class="form-input" data-ck-submit-on-change>
+                        <option value="open"   #if(course.enrollmentMode == "open"):selected#endif>Open enrolment</option>
+                        <option value="auto"   #if(course.enrollmentMode == "auto"):selected#endif>Auto enrolment</option>
+                        <option value="closed" #if(course.enrollmentMode == "closed"):selected#endif>Closed enrolment</option>
+                    </select>
+                </span>
+            </form>
+            #if(!course.isArchived):
+            <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
+                  enctype="multipart/form-data" class="form-flush">
+                #csrfFormField()
+                <label class="btn action-btn">
+                    Enrol from CSV
+                    <input type="file" name="file" accept=".csv,.txt" required
+                           style="display:none" data-ck-submit-on-change>
+                </label>
+            </form>
+            #endif
         </div>
-        #endif
     </div>
     #if(count(enrolledUsers) == 0):
     <p class="empty">No students enrolled yet.</p>
     #else:
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Actions</th>
-            </tr>
+    <table class="results-table section-items section-items--manage">
+        <colgroup>
+            <col class="section-items-tile"><col><col class="section-items-status"><col class="section-items-actions">
+        </colgroup>
+        <thead class="visually-hidden">
+            <tr><th scope="col">Person</th><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Actions</th></tr>
         </thead>
         <tbody>
         #for(user in enrolledUsers):
             <tr>
-                <td>
-                    #if(user.displayName):
-                        #(user.displayName)
-                    #else:
-                        —
-                    #endif
+                <td class="item-tile-cell">#if(user.hasAvatar):#extend("_avatar", user.avatar)#endif</td>
+                <td class="item-main">
+                    <div class="item-title">#if(user.displayName):#(user.displayName)#else:#(user.username)#endif</div>
+                    <div class="item-details"><code>#(user.username)</code></div>
                 </td>
-                <td><code>#(user.username)</code></td>
-                <td>
+                <td class="item-status">
                     #if(course.isArchived):
                     #(user.role)
                     #else:
-                    <form method="post" action="/admin/courses/#(course.id)/role/#(user.id)"
-                          class="inline-form">
+                    <form method="post" action="/admin/courses/#(course.id)/role/#(user.id)" class="inline-form form-flush">
                         #csrfFormField()
-                        <select name="role" class="form-input course-role-select"
-                                aria-label="Per-course role" data-ck-submit-on-change>
-                            <option value="student"#if(user.role == "student"): selected#endif>Student</option>
-                            <option value="ta"#if(user.role == "ta"): selected#endif>TA</option>
-                            <option value="instructor"#if(user.role == "instructor"): selected#endif>Instructor</option>
-                        </select>
+                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
+                        <span class="state-select" data-state="#(user.role)">
+                            <select id="role-#(user.id)" name="role" class="form-input" data-ck-submit-on-change>
+                                <option value="student"#if(user.role == "student"): selected#endif>Student</option>
+                                <option value="ta"#if(user.role == "ta"): selected#endif>TA</option>
+                                <option value="instructor"#if(user.role == "instructor"): selected#endif>Instructor</option>
+                            </select>
+                        </span>
                     </form>
                     #endif
                 </td>
-                <td class="course-action-cell">
-                    <a href="/admin/users/#(user.id)"
-                       class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">
-                        <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
-                    </a>
-                    <form method="post" action="/admin/courses/#(course.id)/unenroll/#(user.id)"
-                          class="inline-form">
-                        #csrfFormField()
-                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
-                                title="Remove from course" aria-label="Remove from course"
-                                data-confirm="Remove @#(user.username) from #(course.code)? They lose access immediately. Their submissions and grades are kept, and you can add them back from this page.">
-                            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
-                        </button>
-                    </form>
+                <td class="item-actions-td">
+                    <div class="assignment-actions-cell">
+                        <a href="/admin/users/#(user.id)" class="btn action-btn action-btn-icon"
+                           title="Manage user" aria-label="Manage @#(user.username)">
+                            <svg class="icon" aria-hidden="true"><use href="#i-pencil"/></svg>
+                        </a>
+                        <details class="ext-details row-menu">
+                            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for @#(user.username)">
+                                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                            </summary>
+                            <div class="popover-panel row-menu-panel" role="menu">
+                                <form method="post" action="/admin/courses/#(course.id)/unenroll/#(user.id)"
+                                      data-confirm="Remove @#(user.username) from #(course.code)? They lose access immediately. Their submissions and grades are kept, and you can add them back from this page.">
+                                    #csrfFormField()
+                                    <button class="row-menu-item row-menu-item--danger" type="submit" role="menuitem">
+                                        <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Remove from course
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
                 </td>
             </tr>
         #endfor
@@ -331,60 +247,6 @@
     </table>
     #endif
 </section>
-
-<style>
-.course-form {
-    display: flex;
-    gap: .5rem;
-    align-items: flex-end;
-    flex-wrap: wrap;
-    max-width: 700px;
-}
-.course-field-short {
-    flex: 0 0 auto;
-}
-.course-field-name {
-    flex: 1 1 200px;
-}
-.course-field-bs {
-    flex: 1 1 140px;
-}
-.course-input-short {
-    width: 9rem;
-    display: block;
-}
-.course-input-block {
-    display: block;
-    width: 100%;
-}
-.course-form-submit {
-    align-self: flex-end;
-}
-.course-bs-meta {
-    margin-top: .5rem;
-}
-.course-enroll-label {
-    font-size: var(--text-base);
-    margin: 0;
-}
-.course-enroll-select {
-    display: block;
-    font-size: var(--text-base);
-}
-.course-csv-label {
-    cursor: pointer;
-    margin: 0;
-}
-.course-action-cell {
-    display: flex;
-    gap: .4rem;
-    flex-wrap: wrap;
-    align-items: center;
-}
-.course-role-select {
-    display: block;
-    font-size: var(--text-base);
-}
-</style>
+#endif
 #endexport
 #endextend

@@ -43,9 +43,8 @@ extension CourseAdminRoutes {
             termLabel: course?.term?.displayName,
             canClone: canClone,
             justCloned: justCloned,
-            cloneYear: next?.year,
-            cloneYearOptions: CourseTermForm.yearOptions(selected: next?.year),
-            cloneTermOptions: CourseTermForm.options(selected: next?.season),
+            cloneForm: CourseFieldsContext(
+                idPrefix: "new-term", code: course?.code ?? "", name: course?.name ?? "", term: next),
             flashSuccess: justCloned
                 ? "Cloned with enrollment closed; set the new course's dates before opening its assignments." : nil,
             flashError: flashError)
@@ -132,10 +131,9 @@ struct InstructorNewTermContext: Encodable {
     /// the new one, so the page points to its assignments, not to a second
     /// clone.
     let justCloned: Bool
-    /// The form defaults: the term after the active course's.
-    let cloneYear: Int?
-    let cloneYearOptions: [CourseTermOption]
-    let cloneTermOptions: [CourseTermOption]
+    /// The form, with the term after the active course's selected. Its error
+    /// stays nil: the page shows a refusal as a flash banner.
+    let cloneForm: CourseFieldsContext
     let flashSuccess: String?
     let flashError: String?
 }
