@@ -59,18 +59,6 @@ enum LanguageProse {
         tokens(where: requiresUploadOnlySubmission)
     }
 
-    /// The languages whose language cannot be derived from their own suite, so
-    /// an author must declare it: `"cpp"` today.
-    ///
-    /// NOT the same set as the upload-only one, though C++ is in both and that
-    /// coincidence is what makes the two easy to conflate. This one is about
-    /// the generated FILENAME: a C++ test case is a shell wrapper, so the suite
-    /// carries no C++ extension to resolve from. Racket generates `.rkt` and is
-    /// perfectly derivable despite also being upload-only.
-    static var mustDeclareTokens: String {
-        tokens(where: { !$0.scriptExtensions.contains($0.generatedScriptExtension) })
-    }
-
     /// Every wire token, comma-separated with no connector:
     /// `"python, r, lua, octave, cpp, racket"`.
     ///
