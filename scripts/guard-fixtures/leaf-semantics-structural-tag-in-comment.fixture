@@ -1,0 +1,9 @@
+# A structural tag name with no parameter list inside an HTML comment is a 500
+# at render. The comment spans lines, which the guard must follow.
+guard="scripts/check-leaf-semantics.sh"
+files="Resources/Views/enroll.leaf"
+description="a structural tag name inside a multi-line HTML comment"
+expect="Leaf tag syntax inside an HTML comment"
+apply() {
+    printf '<!--\n  this partial used to sit in an %sextend wrapper\n-->\n' "#" >> Resources/Views/enroll.leaf
+}

@@ -1,0 +1,10 @@
+# Leaf does not know HTML comments. An interpolation inside one prints the real
+# context value into the served HTML. The tag indicator is passed as an
+# argument so this file does not hold the sequence itself.
+guard="scripts/check-leaf-semantics.sh"
+files="Resources/Views/enroll.leaf"
+description="an interpolation inside an HTML comment"
+expect="Leaf tag syntax inside an HTML comment"
+apply() {
+    printf '<!-- this note names %s(userName) -->\n' "#" >> Resources/Views/enroll.leaf
+}

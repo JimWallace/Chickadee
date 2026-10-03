@@ -1,0 +1,10 @@
+# The count() fix produces compound conditions, and a regex that stopped at the
+# first close paren read only `count(courses` and passed the broken half. The
+# guard now reads each parameter list to its matching paren.
+guard="scripts/check-leaf-semantics.sh"
+files="Resources/Views/enroll.leaf"
+description="a Swift .isEmpty after a count() call in one condition"
+expect="Leaf cannot resolve Swift properties on a collection"
+apply() {
+    printf '#if(count(courses) > 0 && courses.isEmpty):\n<p>guard fixture</p>\n#endif\n' >> Resources/Views/enroll.leaf
+}
