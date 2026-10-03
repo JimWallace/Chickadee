@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.374] - 2026-10-03
+
+### Changed
+
+- **Four finished docs moved to `docs/archive/`.** `xeus-r-kernel-spike.md` (shipped), `mutation-testing-spike.md` (its verdict was reversed; CI runs a patched Muter), `audit-2026-07.md` (every item closed) and `adding-octave-then-cpp.md` (both languages shipped) each carry an archival banner that points at the live doc. Their inbound links are updated, and the R lab trial README no longer calls the xeus-r kernel a spike (#1987).
+
+### Changed
+
+- **`scripts/check-styles.sh` runs `check-leaf-semantics.sh`.** It was a separate CI step, so the one local entry point CLAUDE.md names missed it. `docs/ui-design.md` now lists it and `check-ui-vocabulary.sh` in "Definition of done", says the audit log's When cell leads with the absolute time (as it has since #1632), and gives four catalog entries their own bullets (#1978).
+
+
 ## [0.5.373] - 2026-10-03
 
 ### Fixed
