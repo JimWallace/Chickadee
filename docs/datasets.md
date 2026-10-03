@@ -456,7 +456,7 @@ like `solution.py`):
    materialized sample as a real file at notebook open (next to the existing
    `applyNotebookSubstitutionsIfNeeded` resolution, `:200`). Re-materialize
    when seed/source/params change.
-2. **Worker** (`RunnerDaemon+JobProcessing.swift:583–600`): right where
+2. **Worker** (`materializePersonalizedFiles` in `RunnerDaemon+JobPreparation.swift`): right where
    `_ck_inputs.py` is written into the **per-job scratch** workspace, also
    write the per-student dataset files (overwriting the source copied from the
    cached prepared dir). Resolve + attach in `WorkerJobRoutes.buildJobPayload`

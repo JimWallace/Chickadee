@@ -53,7 +53,7 @@ Three load-bearing facts (confirmed in the current code):
 
 The one per-student input already present at grade time is the **seed**
 (`Job.assignmentSeed`, injected as `CHICKADEE_ASSIGNMENT_SEED` in
-`RunnerDaemon+JobProcessing.executeTestSuites`). The browser grader does **not**
+`RunnerDaemon+SuiteExecution.executeTestSuites`). The browser grader does **not**
 receive the seed yet.
 
 ## Recommended design: shared script + server-resolved per-student values map
