@@ -49,8 +49,18 @@ GitHub
             <div><dt>Owner</dt>
             <dd>#(app.owner)</dd></div>
             #endif
+            #for(capability in capabilities):
+            <div><dt>#(capability.label)</dt>
+            <dd>#if(capability.granted):<span class="tier tier-open">Granted</span>#else:<span class="tier tier-closed">Not granted</span>#endif</dd></div>
+            #endfor
         </dl>
     </div>
+    #if(capabilitiesIncomplete):
+    <p class="section-note">To use an option that is not granted, add it in the App's settings on GitHub.</p>
+    #endif
+    #if(capabilitiesUnknown):
+    <p class="section-note">The App's permissions could not be read from GitHub.</p>
+    #endif
     #else:
     <p class="empty">No GitHub App registered.</p>
     <p class="section-note">GitHub submission is off until an App is registered, which must wait for the privacy review.</p>

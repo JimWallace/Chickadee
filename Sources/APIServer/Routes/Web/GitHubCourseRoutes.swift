@@ -82,8 +82,7 @@ struct GitHubCourseRoutes: RouteCollection {
                     templatesUnavailable = true
                 }
                 organization = InstructorGitHubOrganization(
-                    login: binding.orgLogin, url: "https://github.com/\(binding.orgLogin)",
-                    forksAllowed: forks == true, forksUnknown: forks == nil)
+                    binding: binding, forksAllowed: forks, grants: await Self.installationGrants(binding, req: req))
                 rows = try await Self.assignmentRows(courseID: courseID, templates: templates, on: req.db)
                 repositories = try await Self.repositoryRows(courseID: courseID, on: req.db)
             }
@@ -340,6 +339,15 @@ struct GitHubCourseRoutes: RouteCollection {
         }
         try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
         return courseID
+    }
+
+    /// What the App's installation on the bound organization was granted, or
+    /// nil when it cannot be read (#1776).
+    private static func installationGrants(
+        _ binding: APIGitHubCourseOrganization, req: Request
+    ) async -> GitHubAppGrants? {
+        guard let (app, secrets) = try? await GitHubAppRegistration.resolve(req: req) else { return nil }
+        return await GitHubAppGrants.ofInstallation(binding.installationID, app: app, secrets: secrets, req: req)
     }
 
     /// The course's assignments that accept GitHub submission, with their

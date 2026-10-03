@@ -674,6 +674,15 @@ struct AdminGitHubContext: Encodable {
     let secretsUnavailable: Bool
     let secretsMissing: Bool
     let secretsPath: String
+    /// The App's three options and whether GitHub grants each, read when the
+    /// page renders (#1776). Empty when there is no App, its secrets are
+    /// unavailable, or GitHub did not answer.
+    let capabilities: [GitHubCapabilityRow]
+    /// True when at least one option is not granted.
+    let capabilitiesIncomplete: Bool
+    /// True when the App's secrets are readable but GitHub did not say what
+    /// the App may do.
+    let capabilitiesUnknown: Bool
     /// The manifest form, or nil when an App is registered or the form cannot
     /// be built.
     let creation: GitHubAppCreationContext?

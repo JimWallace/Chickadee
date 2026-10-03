@@ -1,9 +1,10 @@
 // APIServer/GitHub/GitHubAppJWT.swift
 //
 // The short-lived JWT a GitHub App signs with its private key to act as the
-// App (docs/github-submissions.md slice 3). The server uses it for one thing:
-// to get an installation token for the student's account. GitHub requires
-// RS256, `iss` set to the App ID, and a lifetime of ten minutes or less.
+// App (docs/github-submissions.md slice 3). The server uses it to get an
+// installation token, and to read what the App and its installations may do
+// (#1776). GitHub requires RS256, `iss` set to the App ID, and a lifetime of
+// ten minutes or less.
 
 import Crypto
 import Foundation
