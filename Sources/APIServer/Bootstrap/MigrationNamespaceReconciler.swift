@@ -1,4 +1,4 @@
-// APIServer/Utilities/MigrationNamespaceReconciler.swift
+// APIServer/Bootstrap/MigrationNamespaceReconciler.swift
 //
 // One-time, idempotent reconciliation of Fluent migration-history rows written
 // under a previous, module-derived migration namespace. See the doc comment on

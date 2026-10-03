@@ -30,7 +30,7 @@ import Testing
     /// The registered migration types, in order. Vapor's own
     /// `SessionRecord.migration` is not a type of ours and is not listed.
     private static func registeredMigrations() throws -> [String] {
-        let source = try read("Sources/APIServer/Utilities/DatabaseConfiguration.swift")
+        let source = try read("Sources/APIServer/Bootstrap/DatabaseConfiguration.swift")
         let start = try #require(source.range(of: "func registerMigrations("))
         let body = source[start.upperBound...]
         let pattern = try Regex(#"app\.migrations\.add\(([A-Za-z]+)\("#)

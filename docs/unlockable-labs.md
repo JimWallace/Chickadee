@@ -75,7 +75,7 @@ Unique on `(assignment_id, prerequisite_assignment_id)`.
 Validation at write time (422 on violation, matching the suite editor):
 same course, no self-edge, no duplicate, and no cycle — Kahn's algorithm over
 the course's authored edges, mirroring `detectAuthoredCycles` in
-`Sources/APIServer/Utilities/PatternFamilyApplication.swift`.
+`Sources/APIServer/Utilities/PatternFamilyAuthoredGraph.swift`.
 
 Cascade delete means deleting a prerequisite assignment silently removes its
 edges (dependents unlock) — the analogue of the suite editor pruning deps.

@@ -1,4 +1,4 @@
-// APIServer/Services/PythonImportScanner.swift
+// APIServer/Utilities/PythonImportScanner.swift
 //
 // Extracts the top-level module names a Python source file imports
 // unconditionally, so an authoring write can be checked against what the

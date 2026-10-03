@@ -8,9 +8,7 @@
 // never introduce ordering or formatting nondeterminism.
 
 import Core
-import Fluent
 import Foundation
-import Vapor
 
 /// The rendered outputs of every pattern family, keyed by family id —
 /// produced exactly once per apply so the zip write and the manifest rebuild

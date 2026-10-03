@@ -1,4 +1,4 @@
-// APIServer/Utilities/PatternFamilyApplication+Manifest.swift
+// APIServer/Services/PatternFamilyApplication+Manifest.swift
 //
 // Phase 6 of `applyPatternFamilies`: rebuild the manifest JSON from the newly
 // ordered suite entries and re-validate the result.

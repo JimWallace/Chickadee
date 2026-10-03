@@ -1,4 +1,4 @@
-// APIServer/Services/PersonalizedCellRestoration.swift
+// APIServer/Utilities/PersonalizedCellRestoration.swift
 //
 // Turns a *rendered* notebook back into the *template* it was rendered from,
 // for the cells the server personalized.

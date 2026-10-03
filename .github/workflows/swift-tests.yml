@@ -146,6 +146,8 @@ jobs:
         run: scripts/check-unchecked-sendable.sh
       - name: Shared code does not call up into the routes
         run: scripts/check-layering.sh
+      - name: Utilities holds pure code
+        run: scripts/check-utilities-imports.sh
       - name: Secret files are git-ignored
         run: scripts/check-secret-files-ignored.sh
       - name: Every server child gets an explicit environment

@@ -1,4 +1,4 @@
-// APIServer/Services/NotebookSubstitution.swift
+// APIServer/Utilities/NotebookSubstitution.swift
 //
 // Walks a Jupyter notebook (.ipynb JSON) and replaces `{{name}}` markers
 // in code cells with `repr(value)` literals from a substitutions map.
