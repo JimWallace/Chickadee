@@ -329,10 +329,10 @@ extension StudentCourseRoutes {
                 currentUser: req.currentUserContext,
                 studentName: student.displayName ?? student.username,
                 studentUsername: student.username,
-                courseCode: course.code,
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 backURL: backURL,
+                backLabel: "Back to student",
                 historyPath: historyPath,
                 rows: rows
             )

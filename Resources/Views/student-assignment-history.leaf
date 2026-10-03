@@ -10,7 +10,7 @@
             <strong>#(studentName)</strong> (#(studentUsername))
         </p>
     </div>
-    <a class="btn action-btn" href="#(backURL)">Back to student</a>
+    <a class="btn action-btn" href="#(backURL)">#(backLabel)</a>
 </div>
 
 #if(count(rows) == 0):
@@ -37,6 +37,9 @@
             <td>
                 <a class="btn action-btn action-btn-icon" href="/submissions/#(row.submissionID)" title="View results" aria-label="View results">
                     <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+                </a>
+                <a class="btn action-btn action-btn-icon" href="/instructor/#(assignmentID)/submissions/#(row.submissionID)/diff" title="Diff against starter" aria-label="Diff against starter">
+                    <svg class="icon" aria-hidden="true"><use href="#i-diff"/></svg>
                 </a>
             </td>
             <td>

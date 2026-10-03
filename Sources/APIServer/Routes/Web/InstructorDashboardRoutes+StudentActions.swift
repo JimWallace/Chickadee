@@ -51,12 +51,15 @@ extension InstructorDashboardRoutes {
             fmt: fmt)
 
         return try await req.view.render(
-            "assignment-student-history",
-            AssignmentStudentHistoryContext(
+            "student-assignment-history",
+            StudentAssignmentHistoryContext(
                 currentUser: req.currentUserContext,
+                studentName: student.displayName ?? student.username,
+                studentUsername: student.username,
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
-                studentID: student.username,
+                backURL: "/instructor/\(assignmentIDRaw)/submissions",
+                backLabel: "Back to Assignment Summary",
                 historyPath: "/instructor/\(assignmentIDRaw)/students/\(studentIDRaw)/history",
                 rows: rows
             )

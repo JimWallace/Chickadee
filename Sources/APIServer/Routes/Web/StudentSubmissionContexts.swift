@@ -7,15 +7,6 @@
 
 import Foundation
 
-struct AssignmentStudentHistoryContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let assignmentTitle: String
-    let studentID: String
-    let historyPath: String
-    let rows: [AssignmentSubmissionHistoryRow]
-}
-
 struct AssignmentSubmissionHistoryRow: Encodable {
     let submissionID: String
     let attemptNumber: Int
@@ -90,15 +81,20 @@ struct StudentAssignmentRow: Encodable {
     let badges: [AchievementBadge]
 }
 
-/// Per-student, per-assignment full submission history page.
+/// One student's full submission history on one assignment, for course
+/// staff (`student-assignment-history.leaf`). Two routes render it: the
+/// assignment's roster (`/instructor/:assignmentID/students/:studentID/history`)
+/// and the course's per-student view. They differ only in where the back link
+/// goes, so that is all they pass differently (#1710).
 struct StudentAssignmentHistoryContext: Encodable {
     let currentUser: CurrentUserContext?
     let studentName: String
     let studentUsername: String
-    let courseCode: String
     let assignmentID: String
     let assignmentTitle: String
     let backURL: String
+    let backLabel: String
+    /// Where a retest returns to: this page.
     let historyPath: String
     let rows: [AssignmentSubmissionHistoryRow]
 }
