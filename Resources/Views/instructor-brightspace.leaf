@@ -56,7 +56,7 @@ LEARN
                 <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
             </summary>
             <div class="popover-panel row-menu-panel" role="menu">
-                <form method="post" action="/instructor/brightspace/bind-org-unit" class="bs-link-form">
+                <form method="post" action="/instructor/brightspace/bind-org-unit" class="toolbar">
                     #csrfFormField()
                     <label class="bs-conn-label" for="bs-org-unit-input">LEARN org unit ID</label>
                     <input class="form-input bs-conn-input" type="text" id="bs-org-unit-input"
@@ -97,7 +97,7 @@ LEARN
     <p class="bs-conn-line">This course pushes grades as <strong>#(syncIdentity.name)</strong>.</p>
     #endif
     #if(showConnectForm):
-    <form method="post" action="/instructor/brightspace/connect" class="bs-connect-form">
+    <form method="post" action="/instructor/brightspace/connect" class="toolbar">
         #csrfFormField()
         <label class="bs-conn-label" for="bs-valence-user-id">Valence User ID</label>
         <input class="form-input bs-conn-input" type="text" id="bs-valence-user-id"
@@ -113,7 +113,7 @@ LEARN
     </p>
     #endif
     #if(showIdentityActions):
-    <div class="bs-conn-actions">
+    <div class="toolbar">
         #if(showUseMyIdentity):
         <form method="post" action="/instructor/brightspace/use-my-identity" class="inline-form">
             #csrfFormField()
@@ -129,7 +129,7 @@ LEARN
         <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
     </div>
     #else:
-    <div class="bs-conn-actions">
+    <div class="toolbar">
         <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
     </div>
     #endif
@@ -291,13 +291,8 @@ LEARN
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
 .bs-grade-input { font-size: var(--text-base); }
 .bs-conn-line { margin: 0 0 .45rem; }
-.bs-connect-form, .bs-link-form {
-    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
-    margin: .6rem 0 .3rem;
-}
 .bs-conn-label { font-size: var(--text-base); color: var(--gray-600); }
 .bs-conn-input { width: 16rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
-.bs-conn-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0 .3rem; }
 .bs-test-result { margin: 0; padding: 0 1.25rem 1rem; font-size: var(--text-base); }
 </style>
 <!-- Connection test + grade-item pickers are wired by
