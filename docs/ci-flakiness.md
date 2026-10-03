@@ -274,11 +274,13 @@ the same PR stays useful for the next intermittent, which will not be this one.
 
 **Fourth sighting (2026-10-03, PR #1913, run 37086408119, chromium) — the
 same 500, one step earlier, and the explanation above was half right.** The
-error-line dump named it at once: six `Transient DB lock` warnings on one
-request, all `busy: database is locked`, then the 500. The transaction that
-failed was the attempt-number insert (`saveSubmissionWithNextAttemptNumber`),
-which runs before the result exists, so the retry wrapper added for the third
-sighting could not save it: every attempt met the same held lock.
+error-line dump named it at once. Iteration 3 graded in 2,985 ms, then the
+result POST and the page's failover POST each logged six `Transient DB lock`
+warnings, all `busy: database is locked`, and returned 500. The transaction
+that failed in both was the attempt-number insert
+(`saveSubmissionWithNextAttemptNumber`), which runs before the result exists,
+so the side-effect wrapper added for the third sighting could not save it, and
+the retry around it met the same failure six times.
 
 The mechanism is wider than `SQLITE_BUSY_SNAPSHOT`. sqlite-nio's busy handler
 is called only for a transaction that has **not read yet**. A deferred
