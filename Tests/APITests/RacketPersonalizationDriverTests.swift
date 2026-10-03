@@ -87,6 +87,16 @@ import Testing
         }
     }
 
+    /// The driver starts from `racket/base`. The full `racket` language more
+    /// than doubles its start-up, and under a loaded CI runner that pushed one
+    /// evaluation past the evaluator's 5-second limit.
+    @Test func theDriverStartsFromTheBaseLanguage() {
+        let source = RacketPersonalizationDriver.render(
+            staticVariables: [], expressions: [PersonalizationExpression(name: "s", expression: "seed")],
+            supportFiles: [])
+        #expect(source.hasPrefix("#lang racket/base\n"), "the driver starts with \(source.prefix(40))")
+    }
+
     /// A helper beside the assignment is loaded into the expression namespace,
     /// and two evaluations in one support directory both work and leave it as
     /// they found it.
