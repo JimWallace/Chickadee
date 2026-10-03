@@ -1,0 +1,11 @@
+# A class name that appears in styles.css only inside a comment has no rule.
+# The single-line comment strip this guard used counted every line of a
+# multi-line comment but the first as rules, so the retired admin-section,
+# named only in prose, resolved (#1982).
+guard="scripts/check-class-resolution.sh"
+files="Resources/Views/login.leaf"
+description="a class named only in a multi-line stylesheet comment"
+expect="resolve"
+apply() {
+    printf '<div class="admin-section">x</div>\n' >> Resources/Views/login.leaf
+}

@@ -59,29 +59,14 @@ status=0
 # spent by the next person adding a copy.
 CATALOG_BASELINE=247
 
-# Comment stripper.  A scanner cannot tell a selector from prose about a
-# selector, and this codebase has been bitten by that three times (the
-# handoff doc's rule 5).  It must span lines: the sheet's comments run to
-# paragraphs, and a line-at-a-time strip leaves every line but the first,
-# which is how a version string in prose first registered as a class here.
-strip_css_comments() {
-  awk '
-    {
-      line = $0; out = ""
-      while (length(line)) {
-        if (incomment) {
-          p = index(line, "*/")
-          if (p == 0) { line = "" } else { line = substr(line, p + 2); incomment = 0 }
-        } else {
-          p = index(line, "/*")
-          if (p == 0) { out = out line; line = "" }
-          else { out = out substr(line, 1, p - 1); line = substr(line, p + 2); incomment = 1 }
-        }
-      }
-      print out
-    }
-  ' "$1"
-}
+# Comment stripper (scripts/lib/css.sh).  A scanner cannot tell a selector
+# from prose about a selector, and this codebase has been bitten by that three
+# times (the handoff doc's rule 5).  It must span lines: the sheet's comments
+# run to paragraphs, and a line-at-a-time strip leaves every line but the
+# first, which is how a version string in prose first registered as a class
+# here.
+# shellcheck source=lib/css.sh
+. "scripts/lib/css.sh"
 
 # Classes carrying a rule in the global sheet.
 sheet_classes="$(
@@ -267,7 +252,6 @@ check_affordance() {
   values="$(cut -d: -f1 <<<"$registry" | tr '\n' ' ')"
   found="$(
     grep -nE "(^|[;{[:space:]])${prop}[[:space:]]*:" "${style_sources[@]}" 2>/dev/null \
-      | grep -v '^\s*/\*' \
       | sed -E "s/^([^:]+:[0-9]+):.*${prop}[[:space:]]*:[[:space:]]*([^;}!]*).*/\1|\2/" \
       | sed -E 's/[[:space:]]+$//' \
       | awk -F'|' -v reg="$values" '
