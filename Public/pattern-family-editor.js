@@ -1932,7 +1932,10 @@
                     }, TIMEOUT_MS)
                     .then(function (data) { return { ok: true, value: data.result }; })
                     .catch(function (err) {
-                        return { ok: false, error: describeCallFailure(err, cellErrors) };
+                        // Already `{ ok: false, error }` — wrapping it again
+                        // showed every R, Lua and Octave error as
+                        // "[object Object]" (#1994).
+                        return describeCallFailure(err, cellErrors);
                     });
                 });
             }
