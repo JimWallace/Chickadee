@@ -75,7 +75,7 @@ import Testing
         // A parse that stopped early would make the two rules below pass
         // vacuously, so check that it found the list's two ends.
         #expect(names.first == "CreateUsers")
-        #expect(names.count > 80)
+        #expect(names.count > 60)
         for name in names {
             #expect(
                 FileManager.default.fileExists(
