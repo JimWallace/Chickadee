@@ -7,12 +7,12 @@
 //   - AssignmentDraftHelpers.swift
 //   - AssignmentRequirementHelpers.swift
 //   - AssignmentSlugHelpers.swift
-//   - ManifestFileHelpers.swift
+//   - ManifestFileHelpers.swift (now in Helpers/, #1726)
 //   - MultipartHelpers.swift
 //   - NotebookScaffoldHelpers.swift
 //   - RunnerValidationHelpers.swift
 //   - SuiteRowHelpers.swift
-//   - TestSetupZipHelpers.swift
+//   - TestSetupZipHelpers.swift (now in Helpers/, #1726)
 //
 // What remains: section-ID resolution, due-date parsing/formatting,
 // human-name splitting, return-path sanitization, deadline-override

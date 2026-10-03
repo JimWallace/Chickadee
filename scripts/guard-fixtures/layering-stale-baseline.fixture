@@ -1,0 +1,10 @@
+# The layering baseline only shrinks (#1726): a listed symbol that shared
+# code no longer names must fail the guard, so the line is deleted the day
+# the use goes away.
+guard="scripts/check-layering.sh"
+files="scripts/layering-baseline.txt"
+description="a baseline line for a symbol shared code does not use"
+expect="no longer uses"
+apply() {
+    printf 'sanitizedAssignmentReturnPath\n' >> scripts/layering-baseline.txt
+}

@@ -5,7 +5,7 @@
 // `set_assignment_course_section`) and the web section-adoption path
 // (`CourseAdminRoutes+Sections`) all change exactly one field of
 // `test_setups.manifest`.  Each helper is a `mutateManifest` closure
-// (SuiteEditHelpers.swift) over the decoded `TestProperties`, so the decode →
+// (below) over the decoded `TestProperties`, so the decode →
 // mutate → stable-encode → save pattern lives once.  Helpers save only when
 // the field actually changes, so a no-op call doesn't bump the row.  A
 // manifest that does not decode throws — that indicates a corrupted setup,
@@ -14,6 +14,33 @@
 import Core
 import Fluent
 import Foundation
+
+// MARK: - Manifest mutation
+
+/// Decodes the test setup's manifest, runs the caller's mutation on the
+/// `TestProperties` value, encodes it with the stable encoder and saves.
+/// Throws if the manifest does not decode — that indicates a corrupted
+/// setup, not a user error.
+///
+/// Every single-field edit goes through here (the helpers below,
+/// the suite-section CRUD, the MCP tools), so there is one writer of a
+/// stored manifest.  It used to edit a `[String: Any]` dictionary so that a
+/// key the server did not model would survive an edit; nothing ever read
+/// such a key, and the suite rebuild (`makeWorkerManifestJSON`) dropped it
+/// anyway.  A typed edit cannot misspell a key or drop a field it did not
+/// think to carry.
+func mutateManifest(
+    setup: APITestSetup,
+    on db: Database,
+    _ mutate: (inout TestProperties) throws -> Void
+) async throws {
+    guard var props = setup.decodedManifest() else {
+        throw WebAssignmentError.internalFailure(reason: "Test setup manifest could not be decoded.")
+    }
+    try mutate(&props)
+    setup.manifest = try encodeManifest(props)
+    try await setup.save(on: db)
+}
 
 /// Reads the `gradingMode` of a manifest JSON string, defaulting to "worker"
 /// (TestProperties' own default) when the manifest can't be decoded — so every

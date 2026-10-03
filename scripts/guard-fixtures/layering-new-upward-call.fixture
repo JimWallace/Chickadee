@@ -1,0 +1,10 @@
+# Services/, Helpers/ and Utilities/ sit below Routes/ (#1726). A shared file
+# that calls a function declared only under Routes/ must fail the guard
+# unless the symbol is in the shrink-only baseline.
+guard="scripts/check-layering.sh"
+files="Sources/APIServer/Services/PeriodicSweepMonitor.swift"
+description="a service that calls a function declared only under Routes/"
+expect="defined only under Routes/"
+apply() {
+    printf '\n\nfunc guardFixtureLayering() -> String {\n    sanitizedAssignmentReturnPath(nil, assignmentIDRaw: "x", fallbackPath: "/")\n}\n' >> Sources/APIServer/Services/PeriodicSweepMonitor.swift
+}
