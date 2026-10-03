@@ -35,10 +35,12 @@
 // ordering property and reproducing a snapshot race on demand would be a test
 // that passes for the wrong reason on a quiet machine.
 //
-// The side effects live in `awardBrowserResultBadges`, extracted so the
-// ordering is visible at the call site rather than buried 60 lines into the
-// handler. So there are two assertions: the handler saves the result before it
-// calls that method, and that method cannot throw.
+// The side effects live in `ResultIngestEffects` (#1708), which both ingest
+// paths call, so the ordering is visible at the call site rather than buried
+// in the handler. So there are three assertions: the handler saves the result
+// before it calls the service, every effect in the service runs inside the
+// best-effort wrapper, and both ingest routes call the service rather than an
+// effect directly.
 
 import Foundation
 import Testing
@@ -67,11 +69,9 @@ import Testing
         let body = try Self.handlerBody()
         let resultSave = try #require(
             body.range(of: "saveWithCollection"), "the result save has moved — re-point this guard")
-        for sideEffect in [
-            "awardBrowserResultBadges", "awardFirstToSubmitRecords",
-            "awardClassBadgesFor100Percent",
-        ] {
-            guard let call = body.range(of: sideEffect) else { continue }
+        for sideEffect in ["effects.awardFirstToSubmit(", "effects.apply("] {
+            let call = try #require(
+                body.range(of: sideEffect), "\(sideEffect) has moved — re-point this guard")
             #expect(
                 resultSave.lowerBound < call.lowerBound,
                 """
@@ -83,19 +83,22 @@ import Testing
         }
     }
 
-    /// The extracted side-effect method, which is where the wrapper lives.
-    private static func sideEffectBody() throws -> String {
-        let source = try String(
+    private static func source(_ path: String) throws -> String {
+        try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent().deletingLastPathComponent()
                 .deletingLastPathComponent()
-                .appendingPathComponent("Sources/APIServer/Routes/BrowserResultRoutes.swift"),
+                .appendingPathComponent(path),
             encoding: .utf8)
+    }
+
+    /// The side-effect service, which is where the wrapper lives.
+    private static func sideEffectBody() throws -> String {
+        let source = try Self.source("Sources/APIServer/Services/ResultIngestEffects.swift")
         let start = try #require(
-            source.range(of: "private func awardBrowserResultBadges("),
-            "awardBrowserResultBadges has been renamed — re-point this guard")
-        let end = source.range(of: "func submitRunnerSubmission(req: Request)")
-        return String(source[start.lowerBound..<(end?.lowerBound ?? source.endIndex)])
+            source.range(of: "struct ResultIngestEffects"),
+            "ResultIngestEffects has been renamed — re-point this guard")
+        return String(source[start.lowerBound...])
     }
 
     @Test func noSideEffectCanFailTheRequest() throws {
@@ -103,8 +106,12 @@ import Testing
         #expect(
             body.contains("func bestEffort("),
             "the best-effort wrapper is gone; a badge failure can 500 a stored grade again")
-        for sideEffect in ["awardFirstToSubmitRecords", "awardClassBadgesFor100Percent"] {
-            guard let call = body.range(of: sideEffect) else { continue }
+        for sideEffect in [
+            "awardFirstToSubmitRecords", "recordClassItemCoverage", "recordLeaderboardEntry",
+            "recordActivityMatch", "awardClassBadgesFor100Percent",
+        ] {
+            let call = try #require(
+                body.range(of: sideEffect), "\(sideEffect) has left ResultIngestEffects — re-point this guard")
             // The wrapper opens within a line or two above the call it guards:
             // `await bestEffort("…") {` then `try await <call>(`. Looking at a
             // bounded window rather than the whole preceding body, so a
@@ -134,5 +141,24 @@ import Testing
         #expect(
             after.contains("logger.warning"),
             "a swallowed failure must still be visible in the logs")
+    }
+
+    /// Both ingest routes reach the class-level effects through the service.
+    /// A route that called one directly would be the drift this service
+    /// exists to stop: an effect wired at one path only, or without the
+    /// wrapper on one path.
+    @Test func bothIngestRoutesCallTheServiceRatherThanAnEffect() throws {
+        for path in [
+            "Sources/APIServer/Routes/ResultRoutes.swift", "Sources/APIServer/Routes/BrowserResultRoutes.swift",
+        ] {
+            let source = try Self.source(path)
+            #expect(source.contains(".apply(submission:"), "\(path) does not apply ResultIngestEffects")
+            for effect in [
+                "awardFirstToSubmitRecords(", "recordClassItemCoverage(", "recordLeaderboardEntry(",
+                "recordActivityMatch(", "awardClassBadgesFor100Percent(",
+            ] {
+                #expect(!source.contains(effect), "\(path) calls \(effect) directly, outside ResultIngestEffects")
+            }
+        }
     }
 }
