@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.386] - 2026-10-03
+
+### Fixed
+
+- **Python tests graded in the browser no longer see what the previous test left behind.** Each native test runs in a fresh `python3` process, but the browser grades every script of a submission in one xeus-python kernel, and unlike R, Lua and Octave it did not reset between scripts. A test that set a global, rebound a builtin, changed `os.environ` or changed the student's module could change the next test's verdict. The grader now records the kernel's state before the environment config and restores it before every script: globals and builtins go back, workspace modules (`test_runtime`, the student's files, helpers) are dropped and imported afresh, matplotlib figures are closed, and the environment config runs again. Library modules stay loaded, so a script pays about 15 to 30 ms for the reset rather than a second pandas import. The browser grading smoke and a new `python3` execution test both run a script that leaves state behind and one that checks for it. Closes #1959.
+
+
 ## [0.5.385] - 2026-10-03
 
 ### Changed
