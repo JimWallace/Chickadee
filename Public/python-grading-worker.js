@@ -65,6 +65,10 @@ var MISSING_MODULE = /No module named '([A-Za-z_][A-Za-z0-9_]*)'/;
 // not a guarantee, and this is the documented fix.)
 var REFRESH_IMPORT_CACHES = 'import importlib\nimportlib.invalidate_caches()';
 
+// The workspace `init` mounted. Every script needs it again: the reset before a
+// script is followed by the environment config, which changes into it.
+var _workDir = null;
+
 // Grade one Python script and return RAW output { exitCode, stdout, stderr }.
 // No interpretation happens here — RunnerCore maps the exit code to a status and
 // reads the last stdout line for the shortResult, byte-for-byte as it does for
@@ -77,6 +81,13 @@ async function runPythonScript(scriptName) {
     var parsed = null;
     var reply = await _kernel.runInstallingMissingPackages(
         async function () {
+            // Put the kernel back the way a fresh `python3` process would find
+            // it, then configure the environment again (#1959). Inside the
+            // attempt, so a re-run after an on-demand install starts clean too.
+            parsed = null;
+            var resetReply = await _kernel.execute(
+                _py.RESET_CELL_PYTHON + '\n' + _shared.envConfigPython(_workDir));
+            if (resetReply.failure) return resetReply;
             var nonce = _py.makeNonce();
             var attemptReply = await _kernel.execute(_py.runScriptCellPython(scriptName, nonce));
             parsed = _py.parseRunOutput(attemptReply.stdout, nonce);
@@ -130,11 +141,18 @@ self.onmessage = async function (e) {
 
             var workDir = '/chickadee_work_' + Date.now();
             _kernel.mountWorkspace(workDir, msg.files, _shared.writeFilesToEmscriptenFS);
+            _workDir = workDir;
 
             // os.environ persists for the whole session, so one set covers every
             // script (parity with the worker's test subprocess).
             if (msg.seed !== null && msg.seed !== undefined) {
                 await _kernel.execute(_shared.assignmentSeedPython(msg.seed));
+            }
+            // Record the state a fresh process starts in, after the seed and
+            // before anything a script can change. Each script is reset to it.
+            var cleanReply = await _kernel.execute(_py.cleanStateCellPython(workDir));
+            if (cleanReply.failure) {
+                throw new Error('Failed to record the clean Python state: ' + cleanReply.failure);
             }
             // The SAME env-config block the Pyodide grader runs: sys.path, the
             // chdir, the stale-module flush, and the test_runtime/builtins

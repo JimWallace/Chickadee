@@ -147,9 +147,12 @@ passed("context ok")
     },
     python: {
         worker: '/python-grading-worker.js',
+        // Order matters from `publictest_leak` on: the isolation fixture below
+        // must run after the script that leaves state behind.
         scripts: [
             'publictest_pass.py', 'publictest_fail.py', 'publictest_boom.py',
             'publictest_context.py', 'publictest_ondemand.py', 'publictest_nomodule.py',
+            'publictest_leak.py', 'publictest_isolation.py',
         ],
         files: {
             'test_runtime.py': TEST_RUNTIME_PY,
@@ -191,6 +194,46 @@ print("input=" + str(_ck_inputs._ck["threshold"]))
 passed("context ok")
 `,
             '_ck_inputs.py': '_ck = {\n    "threshold": 42,\n}\n',
+            // Cross-script isolation (#1959). Each native test is a fresh
+            // process, so nothing one leaves behind reaches the next. Every
+            // browser script shares one kernel, and the grader must reset it.
+            // Both fixtures pass under plain \`python3\`, one process each.
+            'publictest_leak.py': `import builtins
+import os
+import submission
+from test_runtime import load_student_module, passed
+
+leaked_from_a_previous_test = "yes"
+classify = lambda x: "tampered"
+submission.classify = lambda x: "tampered"
+load_student_module().classify = lambda x: "tampered"
+builtins.leaked_builtin = "yes"
+os.environ["CHICKADEE_LEAKED"] = "yes"
+passed("left state behind")
+`,
+            'publictest_isolation.py': `import builtins
+import os
+import submission
+from test_runtime import failed, load_student_module, passed
+
+problems = []
+if "leaked_from_a_previous_test" in globals():
+    problems.append("a global")
+if hasattr(builtins, "leaked_builtin"):
+    problems.append("a builtin")
+if os.environ.get("CHICKADEE_LEAKED"):
+    problems.append("an environment variable")
+if submission.classify(1) != "positive":
+    problems.append("the imported student module")
+if load_student_module().classify(1) != "positive":
+    problems.append("the loaded student module")
+exposed = globals().get("classify")
+if exposed is not None and exposed(1) != "positive":
+    problems.append("the exposed student function")
+if problems:
+    failed("a previous test leaked " + ", ".join(problems))
+passed("each test starts clean")
+`,
             '.chickadee_student_module': 'submission.py',
             'submission.py': 'def classify(x):\n    return "positive" if x > 0 else "non-positive"\n',
         },
@@ -875,6 +918,15 @@ if (language === 'python') {
     check('and says so, rather than looping or going silent',
         /torch_not_in_this_env/.test((noModule?.stderr || '') + (noModule?.stdout || '')),
         JSON.stringify(noModule?.stderr));
+
+    // Each native test gets a fresh process; one kernel serves all of these,
+    // so the grader resets it before every script (#1959).
+    const leakPy = result.results['publictest_leak.py'];
+    const isolationPy = result.results['publictest_isolation.py'];
+    check('the fixture that leaves state behind passes',
+        leakPy && leakPy.exitCode === 0, JSON.stringify(leakPy));
+    check('the next script sees none of it: globals, builtins, env, student modules',
+        isolationPy && isolationPy.exitCode === 0, JSON.stringify(isolationPy));
 }
 
 if (language === 'r') {
