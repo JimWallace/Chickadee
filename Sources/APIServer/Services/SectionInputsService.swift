@@ -211,7 +211,9 @@ enum SectionInputsService {
                     + "Fix the expression(s) and save again.")
         } catch PersonalizationEvaluatorError.timedOut {
             throw WebAssignmentError.unprocessable(
-                reason: "Expression evaluation timed out (>5s). "
+                reason:
+                    "Expression evaluation timed out "
+                    + "(>\(PersonalizationEvaluator.defaultTimeoutSeconds(for: language))s). "
                     + "Simplify the expressions or move heavy lifting into a support module.")
         } catch {
             throw WebAssignmentError.internalFailure(reason: "Expression evaluator failed: \(error)")

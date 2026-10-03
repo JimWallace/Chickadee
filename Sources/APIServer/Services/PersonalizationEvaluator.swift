@@ -72,10 +72,24 @@ actor AsyncCountingSemaphore {
 
 enum PersonalizationEvaluator {
 
-    /// Timeout (seconds) for a single evaluation subprocess.  Slice 2
-    /// caps at 5 s — instructor expressions should be near-instant;
-    /// anything slower is almost certainly a bug.
-    static let defaultTimeoutSeconds: Int = 5
+    /// Timeout (seconds) for one evaluation subprocess in `language`.
+    ///
+    /// The limit stops a runaway expression: instructor expressions should be
+    /// near-instant. But it also covers the interpreter's start-up and, for
+    /// C++ and Java, a compile. The original 5 s was chosen for Python and did
+    /// not budget for either (#2001). Measured on an idle 4-core host, one
+    /// evaluation with one support helper takes about 3.5 s in Java, 2.75 s in
+    /// C++ and 1.5 s in Racket (which expands the helper from source), so a
+    /// loaded server could refuse an instructor's preview or a student's first
+    /// open. Those three get 15 s. The others start in well under a second.
+    ///
+    /// Exhaustive, so a new language must choose.
+    static func defaultTimeoutSeconds(for language: AssignmentLanguage) -> Int {
+        switch language {
+        case .python, .r, .lua, .octave: return 5
+        case .cpp, .java, .racket: return 15
+        }
+    }
 
     /// Caps concurrent interpreter spawns server-wide (#1156): a deadline
     /// burst of first-opens on a personalized assignment previously forked
@@ -131,9 +145,10 @@ enum PersonalizationEvaluator {
         supportFilesDirectory: String? = nil,
         datasetFiles: [String: String] = [:],
         language: AssignmentLanguage,
-        timeoutSeconds: Int = defaultTimeoutSeconds
+        timeoutSeconds: Int? = nil
     ) async throws -> [String: String] {
         guard !expressions.isEmpty else { return [:] }
+        let timeoutSeconds = timeoutSeconds ?? defaultTimeoutSeconds(for: language)
 
         let fm = FileManager.default
         let tempDir = fm.temporaryDirectory
