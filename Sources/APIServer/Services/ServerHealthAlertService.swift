@@ -822,8 +822,8 @@ struct ServerHealthAlertLifecycleHandler: LifecycleHandler {
         application.serverHealthAlertSweepMonitor.start(application: application)
     }
 
-    func shutdown(_ application: Application) {
-        application.serverHealthAlertSweepMonitor.stop()
+    func shutdownAsync(_ application: Application) async {
+        await application.serverHealthAlertSweepMonitor.stop()
     }
 }
 

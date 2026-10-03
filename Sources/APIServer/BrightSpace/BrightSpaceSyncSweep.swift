@@ -134,6 +134,9 @@ struct GradeSyncSweep {
         targets += try await pendingOverrideTargets(coveredKeys: coveredKeys, cutoff: cutoff)
 
         for target in targets {
+            // Stop between pushes at shutdown; an unsent row stays pending
+            // for the next sweep (#1922).
+            try Task.checkCancellation()
             let syncRows = target.syncRows
             do {
                 // Explicitly excluded from LEARN sync (instructor chose "Do not
