@@ -182,7 +182,11 @@ struct WorkerJobRoutes: RouteCollection {
             return try await claimViaPostgresRowLock(id: submissionID, req: req, body: body)
         }
         return try await req.application.workerClaimQueue.run {
-            try await retrySQLiteBusyClaim {
+            // Three quick attempts: the claim queue already serializes this
+            // process's claims, so a lock here is another process's write.
+            try await withTransientDatabaseLockRetry(
+                on: req.db, maxAttempts: 3, backoff: .fixed(.milliseconds(20))
+            ) {
                 try await APISubmission.query(on: req.db)
                     .filter(\.$id == submissionID)
                     .filter(\.$status == SubmissionStatus.pending.rawValue)

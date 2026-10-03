@@ -4,7 +4,6 @@
 // WorkerJobRoutes.swift in the 0.5 cleanup). One actor per Application,
 // seeded eagerly in bootstrapAppDirectories.
 
-import FluentSQLiteDriver
 import Vapor
 
 /// Ensures at most one worker-job claim operation executes at a time —
@@ -34,40 +33,6 @@ actor WorkerClaimQueue {
     private func advance() {
         if waiting.isEmpty { active = false } else { waiting.removeFirst().resume() }
     }
-}
-
-func retrySQLiteBusyClaim<T>(
-    maxAttempts: Int = 3,
-    retryDelayNanoseconds: UInt64 = 20_000_000,
-    work: @escaping () async throws -> T
-) async throws -> T {
-    precondition(maxAttempts > 0, "maxAttempts must be positive")
-
-    var attempt = 1
-    while true {
-        do {
-            return try await work()
-        } catch {
-            guard attempt < maxAttempts, isSQLiteBusyError(error) else {
-                throw error
-            }
-            attempt += 1
-            try await Task.sleep(nanoseconds: retryDelayNanoseconds)
-        }
-    }
-}
-
-func isSQLiteBusyError(_ error: Error) -> Bool {
-    if let sqliteError = error as? SQLiteError {
-        switch sqliteError.reason {
-        case .busy, .busyInRecovery, .busyInSnapshot, .busyTimeout:
-            return true
-        default:
-            break
-        }
-    }
-
-    return error.localizedDescription.localizedCaseInsensitiveContains("database is locked")
 }
 
 struct WorkerClaimQueueKey: StorageKey {
