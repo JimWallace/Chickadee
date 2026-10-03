@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.387] - 2026-10-03
+
+### Changed
+
+- **One driver for the in-browser kernel workers.** The eight kernel workers (grading and auto-compute, for Python, R, Lua and Octave) now share two drivers in `xeus-kernel-shared.js`, and each worker file is a short config. A grading worker now stops its setup when the cell that sets the assignment seed fails. Before, it ignored that failure and graded every test with the wrong per-student inputs. A new protocol test drives every worker file against a fake kernel (#1963).
+
+### Changed
+
+- **One generic rendering for every MCP enum list.** Each MCP prose module wrote its own slash list, comma list, "or" list and schema `enum` for its own enum, three parsers were written by hand, and four tool schemas typed their `enum` arrays and error messages by hand: assignment visibility, grading mode, submission mode and notebook-check column match. `MCPEnumProse<Value>` now renders all of these from `allCases`, and the existing modules keep their names and delegate to it. `GradingMode`, `SubmissionMode`, `ColumnMatchMode` and `ConditionMatch` are now `CaseIterable`. The admin `get_active_users_series` window and the achievement `match` field are derived too. A dump of the whole served catalog (both MCP surfaces, every description and schema, and the initialize instructions) is byte-identical before and after, except the window description. Rejected values now read "must be one of: …" everywhere. Closes #1938.
+
+
 ## [0.5.386] - 2026-10-03
 
 ### Fixed
