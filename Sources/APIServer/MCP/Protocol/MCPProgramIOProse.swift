@@ -26,7 +26,21 @@ enum MCPProgramIOProse {
         return "Read by kind=program_io only: how each case's expected text is matched against "
             + "what the program printed. One of " + glossed.joined(separator: ", ")
             + ". Trailing whitespace on each line and trailing blank lines are ignored for "
-            + "exact. Omit for exact. regex is refused on a Lua assignment."
+            + "exact. Omit for exact." + refusals
+    }
+
+    /// One sentence per comparison some language refuses, derived from
+    /// `programIOComparisonUnsupportedReason` (the predicate the save-time
+    /// refusal calls), so the prose cannot name a different language (#1937).
+    static var refusals: String {
+        ProgramIOComparison.allCases.compactMap { comparison in
+            let refusing = AssignmentLanguage.allCases.filter {
+                programIOComparisonUnsupportedReason(comparison, language: $0) != nil
+            }
+            guard !refusing.isEmpty else { return nil }
+            return " \(comparison.rawValue) is refused on a "
+                + "\(LanguageProse.list(refusing.map(\.displayName))) assignment."
+        }.joined()
     }
 
     static var schema: JSONValue {
