@@ -12,7 +12,7 @@ jupyter-iframe-commands==0.3.0
 # environment-r.yml.  The build needs micromamba on PATH and network to
 # repo.prefix.dev.  R is on xeus rather than
 # WebR because jupyterlite-webr is dead-ended at jupyterlite-core<0.7 (see
-# docs/xeus-r-kernel-spike.md, #77).
+# docs/r-support.md, #77).
 jupyterlite-xeus==5.1.0
 # The Pyodide kernel was retired in v0.5.19, and with it the ~465 MB vendored
 # Public/pyodide.  It had been kept as the parity anchor for those bytes and as

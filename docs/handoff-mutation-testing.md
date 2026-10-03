@@ -2,7 +2,7 @@
 
 **Status: stock Muter is unusable; a three-line fork works and has been run
 against real source.** Tracking issue: **#1447**. Root cause and measurements:
-[mutation-testing-spike.md](mutation-testing-spike.md). What a real run costs
+[mutation-testing-spike.md](archive/mutation-testing-spike.md). What a real run costs
 and finds: **[mutation-testing-pilot.md](mutation-testing-pilot.md)**. How to
 read a series of runs: [mutation-trend.md](mutation-trend.md).
 

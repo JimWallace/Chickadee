@@ -36,10 +36,10 @@ trial is the first end-to-end assignment that uses it. The moving parts:
   packages (`Dockerfile`), so everything here is base / `stats` / `utils` /
   `grDevices` — `glm()` does the logistic regression, no `tidyverse`.
 
-**Grading is worker-authoritative for R.** There is no in-browser R grader
-(Pyodide is Python-only); the in-browser xeus-r *editor* kernel is still a spike
-(`docs/xeus-r-kernel-spike.md`), so this assignment is set to `gradingMode:
-worker`. Students submit an R notebook (or `.R` file); the worker grades it.
+**Grading is worker-authoritative in this trial.** The assignment is set to
+`gradingMode: worker`: students submit an R notebook (or `.R` file), and the
+native worker grades it. R can also be graded in the browser now, on the
+vendored xeus-r kernel (`docs/r-support.md`).
 
 ### The one contract difference from Python
 
@@ -165,11 +165,10 @@ found to grade."*
 
 ## Known limitations (it is a trial)
 
-- **No in-browser R editing yet.** The xeus-r editor kernel is a validated spike
-  but not production-wired (`docs/xeus-r-kernel-spike.md`), so students cannot
-  run the R notebook in the browser the way the Python lab runs in Pyodide. They
-  edit locally (or in the JupyterLite editor once xeus-r is wired) and submit;
-  the worker grades. Grading is unaffected.
+- **In-browser R editing came later.** When this trial was written there was
+  no R editor kernel, so students edited locally and submitted. The JupyterLite
+  editor now runs R on the vendored xeus-r kernel (`docs/r-support.md`).
+  Grading is unaffected either way.
 - **Whole-file parse.** `load_student()` is resilient to a *runtime* error in one
   top-level statement, but a *syntax* error anywhere makes the submission
   unparseable (R has no per-cell isolation on this path, unlike the Python

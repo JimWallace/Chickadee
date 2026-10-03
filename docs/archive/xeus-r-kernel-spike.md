@@ -1,5 +1,10 @@
 # In-browser R notebook kernel — spike findings (2026-07)
 
+> **Archived 2026-10-03.** The spike shipped: xeus-r is the R editor kernel
+> and the R browser grader. Nothing below describes current behaviour; see
+> [r-support.md](../r-support.md) and
+> [adding-a-xeus-kernel.md](../adding-a-xeus-kernel.md).
+
 Status: **spike complete and fully shipped, including Phase 3.** Both editor
 kernels are now xeus kernels built from one env
 (`Tools/jupyterlite/environment-{python,r}.yml` → `xpython` + `xr`,
@@ -450,7 +455,7 @@ All three would have to go before the ~465 MB could.
 "Pyodide … still serves browser grading" is now true of Python only. R test
 scripts are graded in the browser on the vendored `chickadee-r` kernel — the same
 env this document's editor work produced — via `Public/r-grading-worker.js`. See
-the "Browser-graded R" section of [r-support.md](r-support.md).
+the "Browser-graded R" section of [r-support.md](../r-support.md).
 
 Two measured findings from that work are worth recording here, since they are
 properties of the kernel this document is about rather than of Chickadee:
