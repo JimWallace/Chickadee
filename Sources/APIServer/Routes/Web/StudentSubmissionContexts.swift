@@ -7,15 +7,6 @@
 
 import Foundation
 
-struct AssignmentStudentHistoryContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let assignmentTitle: String
-    let studentID: String
-    let historyPath: String
-    let rows: [AssignmentSubmissionHistoryRow]
-}
-
 struct AssignmentSubmissionHistoryRow: Encodable {
     let submissionID: String
     let attemptNumber: Int
@@ -90,15 +81,32 @@ struct StudentAssignmentRow: Encodable {
     let badges: [AchievementBadge]
 }
 
-/// Per-student, per-assignment full submission history page.
+/// One student's full submission history on one assignment, for course
+/// staff (`student-assignment-history.leaf`). Two routes render it: the
+/// assignment's roster (`/instructor/:assignmentID/students/:studentID/history`)
+/// and the course's per-student view. They differ only in where the back link
+/// goes and whether rows link to their diff, so that is all they pass
+/// differently (#1710).
 struct StudentAssignmentHistoryContext: Encodable {
     let currentUser: CurrentUserContext?
+    /// `accountIdentityName`: the display name, else the preferred name, else
+    /// the username.
     let studentName: String
-    let studentUsername: String
-    let courseCode: String
+    /// Nil when it would repeat `studentName` (`accountIdentitySecondary`).
+    let studentUsername: String?
     let assignmentID: String
     let assignmentTitle: String
     let backURL: String
+    let backLabel: String
+    /// Whether each row links to its diff against the starter. Only the
+    /// roster route offers it: the diff page's History link returns to the
+    /// roster's copy of this page, so from the course route it would drop
+    /// the reader's way back to the student.
+    let showsDiff: Bool
+    /// This page's path, sent as a retest's `returnTo`. Only the roster
+    /// route's path comes back here: `sanitizedAssignmentReturnPath` accepts
+    /// `/instructor/<id>` paths only, so a retest from the course route lands
+    /// on the roster's submissions page.
     let historyPath: String
     let rows: [AssignmentSubmissionHistoryRow]
 }

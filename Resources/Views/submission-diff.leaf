@@ -1,16 +1,20 @@
 #extend("base"):
 #export("title"):
-#(assignmentTitle) — #(studentID) diff
+#(studentName) — #(assignmentTitle) diff
 #endexport
 #export("content"):
 <div class="page-titlebar page-titlebar--baseline">
-    <h1>#(assignmentTitle)</h1>
+    <div>
+        <h1>#(assignmentTitle)</h1>
+        <p class="titlebar-subtitle">
+            <strong>#(studentName)</strong>#if(studentUsername): (#(studentUsername))#endif · attempt #(attemptNumber) · #(comparedLabel)
+        </p>
+    </div>
     <div class="toolbar">
         <a class="btn action-btn" href="#(resultsURL)">Results</a>
         <a class="btn action-btn" href="#(historyURL)">History</a>
     </div>
 </div>
-<p class="titlebar-subtitle">Student ID: <strong>#(studentID)</strong> · attempt #(attemptNumber) · #(comparedLabel)</p>
 
 #if(unavailableReason):
 <p class="empty">#(unavailableReason)</p>
