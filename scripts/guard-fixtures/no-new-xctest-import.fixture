@@ -1,0 +1,10 @@
+# Every test is on Swift Testing. XCTVapor reports through XCTFail, which a
+# Swift Testing test misattributes or drops, so an XCTest import brings that
+# bridge back.
+guard="scripts/no-new-xctest.sh"
+files="Tests/APITests/COEPMiddlewareTests.swift"
+description="a test file that imports XCTest"
+expect="import XCTest/XCTVapor"
+apply() {
+    sed -i '1i import XCTest' Tests/APITests/COEPMiddlewareTests.swift
+}

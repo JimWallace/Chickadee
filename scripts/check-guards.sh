@@ -31,10 +31,15 @@ set -uo pipefail
 # Fixture format (scripts/guard-fixtures/NAME.fixture, sourced):
 #
 #     guard="scripts/check-design-tokens.sh"   # the guard to run
+#     args="--check"                           # optional: its arguments
 #     files="Public/styles.css"                # files apply() modifies
 #     description="a raw hex colour in a rule body"
 #     expect="colour literal"                  # substring its output must have
 #     apply() { ... }                          # introduce the defect
+#
+# `args` exists for the guards that are a check only under a flag: run bare,
+# `generate-js-constants.sh` rewrites the file a fixture just broke, and
+# `ci-compose-env.sh` writes a .env into the repository root.
 #
 # Adding a rule to a guard means adding a fixture. That is the price of the
 # rule, and it is the cheapest possible: proving once that the thing you just
@@ -89,18 +94,20 @@ echo "check-guards: ${#fixtures[@]} fixtures"
 guards_under_test="$(
     for f in "${fixtures[@]}"; do
         # shellcheck disable=SC1090
-        ( source "$f"; printf '%s\n' "$guard" )
+        ( args=""; source "$f"; printf '%s\n' "$guard${args:+ $args}" )
     done | sort -u
 )"
-for g in $guards_under_test; do
-    if ! "./$g" >/dev/null 2>&1; then
+while IFS= read -r g; do
+    # Unquoted on purpose: the line is a guard path and then its arguments.
+    # shellcheck disable=SC2086
+    if ! ./$g >/dev/null 2>&1; then
         echo
         echo "ERROR: $g already fails on the clean tree."
         echo "       Fix that first; until then no fixture result means anything."
         exit 1
     fi
-done
-echo "pre-flight: $(wc -w <<<"$guards_under_test" | tr -d ' ') guards green on the clean tree"
+done <<<"$guards_under_test"
+echo "pre-flight: $(grep -c . <<<"$guards_under_test") guards green on the clean tree"
 echo
 
 for fixture in "${fixtures[@]}"; do
@@ -109,14 +116,16 @@ for fixture in "${fixtures[@]}"; do
     # Read the fixture's metadata in a subshell so one fixture cannot leak
     # variables or an apply() into the next.
     meta="$(
+        args=""
         # shellcheck disable=SC1090
         source "$fixture"
-        printf '%s\n%s\n%s\n%s\n' "$guard" "$files" "$description" "$expect"
+        printf '%s\n%s\n%s\n%s\n%s\n' "$guard" "$files" "$description" "$expect" "$args"
     )"
     guard="$(sed -n 1p <<<"$meta")"
     files="$(sed -n 2p <<<"$meta")"
     description="$(sed -n 3p <<<"$meta")"
     expect="$(sed -n 4p <<<"$meta")"
+    args="$(sed -n 5p <<<"$meta")"
 
     if [ ! -x "$guard" ] && [ ! -f "$guard" ]; then
         echo "✘ $name — names a guard that does not exist: $guard"
@@ -166,7 +175,8 @@ for fixture in "${fixtures[@]}"; do
     ( # shellcheck disable=SC1090
       source "$fixture"; apply )
 
-    out="$("./$guard" 2>&1)"
+    # shellcheck disable=SC2086
+    out="$("./$guard" $args 2>&1)"
     code=$?
     restore_current
 
