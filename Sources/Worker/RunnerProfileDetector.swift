@@ -1,7 +1,5 @@
 import Core
 import Foundation
-import Subprocess
-import SystemPackage
 
 struct RunnerProfileDetector {
     let discoveryEnabled: Bool
@@ -246,48 +244,14 @@ struct RunnerProfileDetector {
     /// `isRunning` poll loop this replaces have nothing left to do. The 25 ms
     /// poll is gone with them: the run now suspends until the child exits.
     private func runProbe(command: String, arguments: [String]) async -> (combined: String, exitCode: Int32)? {
-        var options = PlatformOptions()
-        // setsid(2): a probe that backgrounds something must not outlive the
-        // teardown below, and the group-wide signal is safe only in the
-        // child's own session.
-        options.createSession = true
-        // SIGTERM, then the SIGKILL `teardownSequence` always appends -- the
-        // terminate/sleep/kill ladder the old poll loop ran by hand.
-        options.teardownSequence = [
-            .send(signal: .terminate, toProcessGroup: true, allowedDurationToNextStep: .milliseconds(200))
-        ]
-        let platformOptions = options
-        let timeout = Self.probeTimeoutSeconds
-
-        let outcome: ProbeOutcome
+        let run: BoundedRunResult?
         do {
-            outcome = try await withThrowingTaskGroup(of: ProbeOutcome.self) { group in
-                group.addTask {
-                    let result = try await Subprocess.run(
-                        .path("/usr/bin/env"),
-                        arguments: Arguments([command] + arguments),
-                        platformOptions: platformOptions,
-                        output: .string(limit: Self.probeOutputLimitBytes),
-                        error: .string(limit: Self.probeOutputLimitBytes)
-                    )
-                    return .finished(
-                        stdout: result.standardOutput,
-                        stderr: result.standardError,
-                        exitCode: Self.exitCode(of: result.terminationStatus)
-                    )
-                }
-                group.addTask {
-                    try await Task.sleep(for: .seconds(timeout))
-                    return .timedOut
-                }
-                let first = try await group.next()
-                // Cancelling the run task is what tears the child down;
-                // cancelling the sleep merely ends it. Drain so the cancelled
-                // sibling's error cannot surface as this probe's result.
-                group.cancelAll()
-                while (try? await group.next()) != nil {}
-                return first ?? .timedOut
-            }
+            run = try await runBounded(
+                executable: "/usr/bin/env",
+                arguments: [command] + arguments,
+                limits: BoundedRunLimits(
+                    timeout: .seconds(Self.probeTimeoutSeconds), outputLimit: Self.probeOutputLimitBytes,
+                    teardownGrace: .milliseconds(200)))
         } catch {
             writeStructuredRunnerLog(
                 event: "local_execution_error",
@@ -297,9 +261,7 @@ struct RunnerProfileDetector {
                 ])
             return nil
         }
-
-        switch outcome {
-        case .timedOut:
+        guard let run else {
             writeStructuredRunnerLog(
                 event: "local_execution_error",
                 fields: [
@@ -308,34 +270,16 @@ struct RunnerProfileDetector {
                     "timeout_seconds": Self.probeTimeoutSeconds,
                 ])
             return nil
-        case .finished(let stdout, let stderr, let exitCode):
-            let combined = (stdout + "\n" + stderr).trimmingCharacters(in: .whitespacesAndNewlines)
-            return (combined, exitCode)
         }
-    }
-
-    /// Which of the two racers finished first.  A flat enum so the task group
-    /// has one concrete element type to be generic over.
-    private enum ProbeOutcome: Sendable {
-        case finished(stdout: String, stderr: String, exitCode: Int32)
-        case timedOut
+        let combined = (run.standardOutput + "\n" + run.standardError)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (combined, run.exitCode)
     }
 
     /// Cap on a probe's captured output.  A `--version` banner is a line or
     /// two; anything approaching this is a command that ignored its arguments
     /// and started printing.
     private static let probeOutputLimitBytes = 1024 * 1024
-
-    /// Flattens a `TerminationStatus` to the `Int32` the callers compare
-    /// against 0, with a signalled probe reported as `128 + signal`.
-    private static func exitCode(of status: TerminationStatus) -> Int32 {
-        switch status {
-        case .exited(let code):
-            return Int32(code)
-        case .signaled(let signal):
-            return 128 + Int32(signal)
-        }
-    }
 
     private func firstNumericVersion(in raw: String) -> String? {
         Self.firstNumericVersion(in: raw)

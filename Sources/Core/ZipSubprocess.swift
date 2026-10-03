@@ -81,7 +81,7 @@ public func runZipProcess(
         error: .discarded
     )
     return ZipProcessResult(
-        terminationStatus: zipExitCode(of: result.terminationStatus),
+        terminationStatus: result.terminationStatus.shellExitCode,
         stdout: result.standardOutput
     )
 }
@@ -100,16 +100,5 @@ public func runZipProcessExpectingSuccess(
     )
     guard result.terminationStatus == 0 else {
         throw ZipArchiverError.processFailed(executablePath, result.terminationStatus)
-    }
-}
-
-/// Flattens a `TerminationStatus` to the `Int32` the call sites compare
-/// against 0, with a signalled child reported as `128 + signal`.
-private func zipExitCode(of status: TerminationStatus) -> Int32 {
-    switch status {
-    case .exited(let code):
-        return Int32(code)
-    case .signaled(let signal):
-        return 128 + Int32(signal)
     }
 }

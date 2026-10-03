@@ -1,7 +1,5 @@
 import Core
 import Foundation
-import Subprocess
-import SystemPackage
 
 #if os(Linux)
 import Glibc
@@ -29,56 +27,22 @@ struct MimeTypeDetector {
     /// `async` for that reason alone: the work is identical, but the spawn
     /// now suspends instead of blocking a cooperative-pool thread.
     func detectMimeType(for fileURL: URL) async throws -> String {
-        var options = PlatformOptions()
-        options.createSession = true
-        options.teardownSequence = [
-            .send(signal: .terminate, toProcessGroup: true, allowedDurationToNextStep: .milliseconds(200))
-        ]
-        let platformOptions = options
-        let path = fileURL.path
-
-        let outcome: DetectOutcome
+        let run: BoundedRunResult?
         do {
-            outcome = try await withThrowingTaskGroup(of: DetectOutcome.self) { group in
-                group.addTask {
-                    let result = try await Subprocess.run(
-                        .path("/usr/bin/file"),
-                        arguments: ["--mime-type", "-b", path],
-                        platformOptions: platformOptions,
-                        output: .string(limit: Self.outputLimitBytes)
-                    )
-                    return .finished(
-                        stdout: result.standardOutput,
-                        succeeded: result.terminationStatus.isSuccess
-                    )
-                }
-                group.addTask {
-                    try await Task.sleep(for: .seconds(Self.timeoutSeconds))
-                    return .timedOut
-                }
-                let first = try await group.next()
-                // Cancelling the run task tears `file` down; cancelling the
-                // sleep merely ends it. Drain so the cancelled sibling's error
-                // cannot surface as this call's result.
-                group.cancelAll()
-                while (try? await group.next()) != nil {}
-                return first ?? .timedOut
-            }
+            run = try await runBounded(
+                executable: "/usr/bin/file",
+                arguments: ["--mime-type", "-b", fileURL.path],
+                limits: BoundedRunLimits(
+                    timeout: .seconds(Self.timeoutSeconds), outputLimit: Self.outputLimitBytes,
+                    teardownGrace: .milliseconds(200)))
         } catch {
             throw SubmissionNormalizationError.mimeDetectionFailed(fileURL.lastPathComponent)
         }
-
-        guard case .finished(let stdout, true) = outcome else {
+        guard let run, run.exitCode == 0 else {
             throw SubmissionNormalizationError.mimeDetectionFailed(fileURL.lastPathComponent)
         }
+        let stdout = run.standardOutput
         let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "application/octet-stream" : trimmed
-    }
-
-    /// Which of the two racers finished first.  A flat enum so the task group
-    /// has one concrete element type to be generic over.
-    private enum DetectOutcome: Sendable {
-        case finished(stdout: String, succeeded: Bool)
-        case timedOut
     }
 }
