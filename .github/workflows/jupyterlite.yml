@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+  # The guards take well under a second, so the job can gate a merge queue
+  # (docs/release-process.md, "Merge queue").
+  merge_group:
 
 # Cancel superseded PR runs (rapid pushes used to stack full JupyterLite
 # builds with no cancellation); pushes to main are never cancelled.

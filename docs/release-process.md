@@ -146,14 +146,21 @@ workflow file):
    add **two** rules: **"Require merge queue"** *and* **"Require status checks
    to pass"**. A merge-queue rule on its own with no other active rule can leave
    a PR showing as queued while nothing processes it.
-   - **Only require checks that actually run on `merge_group`** — currently the
-     `Swift Tests` jobs (`format-lint`, `build`, `build-and-verify`,
-     `api-tests`, `api-tests-postgres`, `core-tests`, `worker-tests`,
-     `browser-runner-tests`) and `Analyze (javascript-typescript)`. Requiring a
-     check from a workflow that has *no* `merge_group:` trigger (e.g.
-     `docker-build`, `jupyterlite`) makes the queue wait forever for a check
-     that never starts. Add `merge_group:` to those workflows first if you want
-     them gating the queue.
+   - **Only require checks that actually run on `merge_group`.** These are:
+     - `swift-tests-gate`, the one aggregate check of `swift-tests.yml`.
+       Require it, not the jobs behind it: a job rename or a matrix change
+       then cannot detach a required check (see the comment above the job).
+     - `Analyze (javascript-typescript)`, from `codeql-js.yml`.
+     - `build-and-verify`, from `jupyterlite.yml`. Its guards take well under
+       a second, so it runs in the queue too.
+
+     Requiring a check from a workflow that has *no* `merge_group:` trigger
+     makes the queue wait forever for a check that never starts. `docker-build`
+     is one. So are `editor-smoke-gate` and `r-grading-smoke-gate`: they run on
+     `pull_request` only, because their change detection compares the PR's base
+     and head, and on any other event they fail safe and run the full browser
+     smoke. Keep them required for pull requests, which check every PR before
+     it can enter the queue, but leave them out of the queue's required checks.
 
 **Troubleshooting "queued but not moving":**
 
