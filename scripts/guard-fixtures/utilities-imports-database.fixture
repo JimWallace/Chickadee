@@ -1,0 +1,9 @@
+# Utilities/ holds pure code (#1730): a file there that imports a database
+# module must fail the guard, even behind an attribute.
+guard="scripts/check-utilities-imports.sh"
+files="Sources/APIServer/Utilities/DayGrouper.swift"
+description="a Utilities file that imports a database module"
+expect="imports Vapor or a database module"
+apply() {
+    printf '@preconcurrency import Fluent\n' >> Sources/APIServer/Utilities/DayGrouper.swift
+}

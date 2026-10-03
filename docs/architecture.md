@@ -137,6 +137,17 @@ type declared only under `Routes/`. `LTI/` is not scanned, because it holds its
 own routes. The uses that predate the rule are listed in
 `scripts/layering-baseline.txt`, and that list can only shrink (#1726).
 
+Each of those directories has one job, so a file goes where its imports say:
+
+- `Utilities/` holds pure code: no request and no database.
+  `scripts/check-utilities-imports.sh` fails when a file there imports Vapor or
+  a database module (#1730). Six validators that throw `Abort` may import Vapor
+  and nothing else, and that list can only shrink.
+- `Helpers/` holds code that works with a `Request` or a database driver type.
+- `Services/` holds code over models, a database and the application.
+- `Bootstrap/` holds app setup: the database configuration and the migration
+  registry, the session driver, and the migration-namespace reconciler.
+
 ---
 
 ## The Grading Pipeline
@@ -437,7 +448,7 @@ a three-word EFF diceware passphrase on first startup and persisted to
 
 ## Database & Migrations
 
-`DatabaseConfiguration` (`Sources/APIServer/Utilities/DatabaseConfiguration.swift`)
+`DatabaseConfiguration` (`Sources/APIServer/Bootstrap/DatabaseConfiguration.swift`)
 selects the backend from `DATABASE_BACKEND` (`DatabaseSettings.fromEnvironment`):
 - `postgres` → Fluent PostgreSQL driver, connected from `DATABASE_HOST`,
   `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` and `DATABASE_PORT`

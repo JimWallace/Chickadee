@@ -1,4 +1,4 @@
-// APIServer/Utilities/DatabaseErrorDetail.swift
+// APIServer/Helpers/DatabaseErrorDetail.swift
 //
 // `PSQLError`'s `description` is deliberately generic ("Generic description to
 // prevent accidental leakage of sensitive data"), so a log line built from

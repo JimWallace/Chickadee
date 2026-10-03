@@ -1,4 +1,4 @@
-// APIServer/Utilities/PatternFamilyApplication+SuiteEntries.swift
+// APIServer/Services/PatternFamilyApplication+SuiteEntries.swift
 //
 // Phase 5 of `applyPatternFamilies`: turn the authored ordering plus the
 // already-rendered artifacts into the manifest's `testSuites` list.

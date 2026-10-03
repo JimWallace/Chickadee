@@ -1,4 +1,4 @@
-// APIServer/Services/DayGrouper.swift
+// APIServer/Utilities/DayGrouper.swift
 //
 // Groups rows that arrive newest first into days, labelled "Today",
 // "Yesterday" or "Sep 26" in the server's display time zone. The instructor

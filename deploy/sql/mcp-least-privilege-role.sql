@@ -9,7 +9,7 @@
 --   MCP_DATABASE_USER=chickadee_mcp
 --   MCP_DATABASE_PASSWORD=...
 -- which registers a dedicated connection pool (DatabaseID.mcp) that every MCP
--- tool query runs on (see Sources/APIServer/Utilities/DatabaseConfiguration.swift
+-- tool query runs on (see Sources/APIServer/Bootstrap/DatabaseConfiguration.swift
 -- and ToolContext.db). The main app keeps using its own (owner) role, so the
 -- web UI, worker, and migrations are unaffected. The MCP audit row, the
 -- content-edit re-grade, and the acting-user personalization-seed bookkeeping
