@@ -57,6 +57,9 @@ struct LTIGradeSyncSweep {
         var finished = 0
 
         for row in rows {
+            // Stop between rows at shutdown; an unsent row stays queued for
+            // the next sweep (#1922).
+            try Task.checkCancellation()
             if assignments[row.testSetupID] == nil {
                 assignments[row.testSetupID] = try await assignmentByTestSetupID(row.testSetupID, on: db)
             }
