@@ -459,10 +459,13 @@ file. The steady-state convention:
   build the same final schema from the `Create*` files alone. The first
   round (#502/#505) shipped before this pass; a second round lands with the
   0.5.0 cleanup, folding the post-#502 incrementals. A third round (#1252)
-  folded the two slip-day migrations. A handful are deliberately kept as
+  folded the two slip-day migrations. A fourth round (#1806) folded 15
+  column and index migrations, from the avatar columns to the per-term
+  course-code index. A handful are deliberately kept as
   standalone migrations: `AddUserFKConstraints`, `AddSessionsCreatedAt` (it targets
-  Vapor's own sessions table, which no `Create*` file owns), and
-  `CollapseUserRoles` (a pure data rewrite with no schema home).
+  Vapor's own sessions table, which no `Create*` file owns),
+  `CollapseUserRoles` (a pure data rewrite with no schema home), and
+  `AddLTIGradeSyncFailureReasonColumn` (it backfills existing rows).
 - **Not every migration is additive.** `CreateResultCollections` moved
   `results.collection_json` into a side table and dropped the original
   column, and the assignment table's boolean `is_open` became the three-state

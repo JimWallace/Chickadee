@@ -55,7 +55,8 @@ Two rules follow from these decisions:
   `Comparable` in calendar order and has `next`, `displayName` ("Fall 2026")
   and `shortLabel` ("F26").
 - Two nullable columns on `courses`: `term_year` (int) and `term_season`
-  (string, a `TermSeason` raw value). Migration: `AddCourseTerm`.
+  (string, a `TermSeason` raw value). Migration: `AddCourseTerm`, since
+  folded into `CreateCourses` (#1806).
 - `APICourse.term` is the typed accessor. It returns nil unless both columns
   are present and valid. Setting nil clears both columns. Do not read the raw
   columns directly.
@@ -114,8 +115,9 @@ The Core type, the migration, the model accessor, and tests
 
 ### Slice 3: Uniqueness per term, and code lookups (built)
 
-- Migration `ScopeCourseCodeIndexToTerm` replaces `idx_courses_code_active`
-  with `idx_courses_code_term_active`, a partial unique index on
+- Migration `ScopeCourseCodeIndexToTerm` (since folded into `CreateCourses`,
+  #1806) replaces `idx_courses_code_active` with
+  `idx_courses_code_term_active`, a partial unique index on
   `(code, COALESCE(term_year, 0), COALESCE(term_season, ''))` for active
   courses. The `COALESCE` is necessary: SQL treats two NULLs as different,
   so without it two courses with the same code and no term would both be

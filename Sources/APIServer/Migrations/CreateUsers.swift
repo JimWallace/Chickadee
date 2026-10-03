@@ -31,6 +31,11 @@ struct CreateUsers: ChickadeeMigration {
             // init default; the historical migration's backfill of pre-token
             // rows is a no-op on an empty fresh table and was dropped.
             .field("url_token", .string)
+            // Folded from AddAvatarIdentity (fourth round, #1806): the
+            // generated avatar's slot choices, as JSON. Nullable on purpose:
+            // it is materialized the first time an avatar is needed
+            // (docs/student-avatars.md).
+            .field("avatar_spec", .string)
             .field("created_at", .datetime)
             .create()
 

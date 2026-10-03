@@ -324,7 +324,7 @@ func registerMigrations(on app: Application) {
     // Production DBs that already applied them still carry the names in
     // `_fluent_migrations`; Fluent ignores history rows whose struct names
     // are no longer registered, so this is harmless.  Fresh deploys produce
-    // the same final schema from the `Create*` files alone.  Two rounds so
+    // the same final schema from the `Create*` files alone.  Four rounds so
     // far:
     //   - the #502/#505 round: 13 historical `Add*` migrations folded in
     //     PR #502 (v0.4.171); their remaining no-op stubs were deleted in
@@ -335,6 +335,9 @@ func registerMigrations(on app: Application) {
     //     arrive after their table does.
     //   - the third round (#1252): the two slip-day migrations
     //     (`AddCourseSlipDaySettings`, `AddEnrollmentSlipDaysAdjustment`).
+    //   - the fourth round (#1806): 15 column and index migrations, from
+    //     `AddAvatarIdentity` to `ScopeCourseCodeIndexToTerm`.
+    //     `AddLTIGradeSyncFailureReasonColumn` stays: it backfills rows.
     // `AddSessionsCreatedAt` is NOT consolidated — it's a real migration
     // against Vapor's `_fluent_sessions` table (not one of our own).
     app.migrations.add(CreateUsers())
@@ -354,7 +357,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateAssignmentRequirements())
     app.migrations.add(CreateClassAchievements())
     app.migrations.add(CreateAchievementResults())
-    app.migrations.add(AddAchievementResultCoverage())
     app.migrations.add(CreateClassItemCoverage())
     app.migrations.add(CreatePreEnrollments())
     app.migrations.add(SessionRecord.migration)
@@ -469,12 +471,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateActivityStandings())
     app.migrations.add(CreateTournamentRuns())
 
-    // The synthetic class corpus run and its coverage number
-    // (docs/collaborative-class-assignments.md). New table, plus the two
-    // percent columns a coverage goal's frozen snapshot carries — those must
-    // follow `AddAchievementResultCoverage` above, which is on the same table.
+    // The synthetic class corpus run (docs/collaborative-class-assignments.md).
+    // New table, no ordering constraint.
     app.migrations.add(CreateClassCoverageRuns())
-    app.migrations.add(AddAchievementResultCoveragePercent())
 
     // Session reaper sweep column (#1365). Index-only, but it must follow
     // `AddSessionsCreatedAt` above, which is what creates the column.
@@ -484,44 +483,18 @@ func registerMigrations(on app: Application) {
     // Index-only; the table is created far above.
     app.migrations.add(CreateSubmissionDiagnosticsPruneIndex())
 
-    // Generated student avatars: the spec column, the per-course handle, and
-    // the partial unique index that makes lazy materialization safe.
-    app.migrations.add(AddAvatarIdentity())
-
-    // Per-assignment solution-reveal policy (`SolutionVisibility`). Nullable
-    // column on `assignments`; nil = hidden, the pre-existing behaviour.
-    app.migrations.add(AddAssignmentSolutionVisibility())
-
-    // Course-level opt-out for the release-output slip-day reveal hold.
-    // Nullable column on `courses`; nil = hold on, the safe default.
-    app.migrations.add(AddCourseSlipDayRevealHold())
-
-    // Per-assignment advisory passing threshold. Nullable column on
-    // `assignments`; nil = no threshold, the pre-existing behaviour.
-    app.migrations.add(AddAssignmentPassingThreshold())
-
     // LTI 1.3 platform registrations (docs/lti-1-3.md). New table, no FKs;
     // an empty table means LTI is off.
     app.migrations.add(CreateLTIPlatforms())
 
-    // LTI 1.3 launch (docs/lti-1-3.md slice 2): logins in flight, subject →
-    // account links, the course binding and the per-platform username trust.
-    // All follow CreateLTIPlatforms, whose table they reference or alter.
+    // LTI 1.3 launch (docs/lti-1-3.md slice 2): logins in flight and subject →
+    // account links. Both follow CreateLTIPlatforms, whose table they
+    // reference.
     app.migrations.add(CreateLTILoginStates())
     app.migrations.add(CreateLTIIdentities())
-    app.migrations.add(AddLTILaunchColumns())
 
-    // LTI 1.3 grades through AGS (docs/lti-1-3.md slice 4): the per-course
-    // transport choice, the line-item URLs and the push queue.
-    app.migrations.add(AddLTIGradeColumns())
+    // LTI 1.3 grades through AGS (docs/lti-1-3.md slice 4): the push queue.
     app.migrations.add(CreateLTIGradeSyncs())
-
-    // LTI 1.3 roster through NRPS (docs/lti-1-3.md slice 5).
-    app.migrations.add(AddLTIMembershipsColumn())
-
-    // The audience of the token-request JWT, for a platform whose audience is
-    // not its token URL (Brightspace). Nullable; nil keeps the token URL.
-    app.migrations.add(AddLTITokenAudienceColumn())
 
     // Deep-linking requests carried by a ticket in the picker form, not the
     // session, so the picker works inside the LMS frame. New table.
@@ -539,35 +512,14 @@ func registerMigrations(on app: Application) {
     // referencing users; an empty table changes nothing.
     app.migrations.add(CreateGitHubAccountLinks())
 
-    // Where a submission came from (docs/github-submissions.md slice 3).
-    // Nullable columns; nil on every existing row means an upload.
-    app.migrations.add(AddSubmissionSourceColumns())
-
     // Course repositories (docs/github-submissions.md slice 4). New tables
     // referencing courses, test setups and users; empty tables change nothing.
     app.migrations.add(CreateGitHubCourseRepositories())
-
-    // The last push to a course repository, from a webhook
-    // (docs/github-submissions.md slice 5). Nullable columns.
-    app.migrations.add(AddGitHubCourseRepositoryPushColumns())
 
     // Indexes for the periodic sweeps, the leaderboard poll and the push
     // webhook (#1800–#1804). Index only; must follow every `Create*` above
     // whose table it names.
     app.migrations.add(CreateSweepAndPollIndexes())
-
-    // The year and term of each course offering (docs/course-terms.md).
-    // Nullable columns on `courses`; nil = no term recorded.
-    app.migrations.add(AddCourseTerm())
-
-    // Course codes unique per term (docs/course-terms.md slice 3). Index
-    // only; must follow `AddCourseTerm`, which creates the columns.
-    app.migrations.add(ScopeCourseCodeIndexToTerm())
-
-    // When a student's class handle locked (docs/student-avatars.md §3).
-    // Nullable column on `course_enrollments`; nil = the student may still
-    // choose once.
-    app.migrations.add(AddAvatarHandleLock())
 
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
@@ -593,11 +545,11 @@ func registerMigrations(on app: Application) {
     // One-time swap of every drawn gradcap for the headband: the gradcap is
     // now kept as a completion item (docs/student-wardrobe.md, decision 4).
     // Raw SQL that reads `users.avatar_spec`, so it must follow
-    // `AddAvatarIdentity`.
+    // `CreateUsers`.
     app.migrations.add(SwapStarterGradcapForHeadband())
 
     // One-time fill of the tuft and tilt axes for birds stored before the
     // axes existed; a draw into the empty slots only (#1762). Raw SQL that
-    // reads `users.avatar_spec`, so it must follow `AddAvatarIdentity`.
+    // reads `users.avatar_spec`, so it must follow `CreateUsers`.
     app.migrations.add(FillLateAvatarAxes())
 }
