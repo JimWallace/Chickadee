@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.378] - 2026-10-03
+
+### Fixed
+
+- **The merge-queue runbook names the checks that run in the queue.** It listed eight separate `Swift Tests` jobs, where `swift-tests.yml` says to require only `swift-tests-gate`, and it listed `build-and-verify`, which never ran in the queue. `jupyterlite.yml` now runs on `merge_group` (its guards take under a second), and the runbook says to keep the two browser smoke gates required for pull requests only (#1980).
+
+### Changed
+
+- **The notebook page's notices use the shared components.** The browser and low-memory notices are now `.flash-warning` banners with a "Dismiss" action button, and each is one sentence. The "Editor didn't load" panel and the small-screen notice use `.standin-panel`. The panel now sits above the editor, so the slow-boot notice that reuses it is in view. The page no longer styles `js-` hooks, and the "Save to assignment" button has `type="button"`. `PAGE_STYLE_BASELINE` drops from 427 to 397 (#1976).
+
+
 ## [0.5.377] - 2026-10-03
 
 ### Fixed
