@@ -99,3 +99,48 @@ test('checkKindUnsupportedReason carries the save-time refusal into the menu', (
   assert.match(lang.checkKindUnsupportedReason('astStructure'), /Not available for R/);
   assert.equal(lang.checkKindUnsupportedReason('variableExists'), null);
 });
+
+test('autoComputeWorker is the seeded in-page worker, or null for the server route', () => {
+  // The pattern-family editor called this accessor from #1322 on, but the
+  // module never defined it, so auto-compute threw a TypeError for every
+  // language (#1956).
+  const lang = loadWith({
+    ...R_SEED,
+    autoComputeWorker: '/r-eval-worker.js',
+    autoComputeRuntimeSource: 'chickadee_runtime <- TRUE'
+  });
+  assert.equal(lang.autoComputeWorker(), '/r-eval-worker.js');
+  assert.equal(lang.facts().autoComputeRuntimeSource, 'chickadee_runtime <- TRUE');
+
+  // A language with no kernel (C++, Racket, Java) seeds no worker, and the
+  // editor then computes on the server.
+  const cpp = loadWith({ name: 'cpp', displayName: 'C++', autoComputeWorker: null });
+  assert.equal(cpp.autoComputeWorker(), null);
+  assert.equal(cpp.facts().autoComputeRuntimeSource, null);
+
+  // No seed names no worker: which worker runs is never this module's choice.
+  assert.equal(loadWith(null).autoComputeWorker(), null);
+});
+
+test('every ChickadeeLanguage member a page script calls is exported', async () => {
+  // The defect behind #1956 in general form: a caller can name a member that
+  // the module never exports, and nothing fails until a user clicks the
+  // control. Read every first-party script and check each named member.
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const publicDir = join(require.resolve('../../Public/authoring-language.js'), '..');
+  const lang = loadWith(R_SEED);
+  const called = new Set();
+  for (const name of readdirSync(publicDir)) {
+    if (!name.endsWith('.js') || name === 'authoring-language.js') continue;
+    const source = readFileSync(join(publicDir, name), 'utf8');
+    for (const match of source.matchAll(/ChickadeeLanguage\.([A-Za-z_]\w*)/g)) {
+      called.add(`${match[1]} (${name})`);
+    }
+  }
+  assert.ok(called.size > 0, 'the scan must find the editors that use the module');
+  for (const entry of called) {
+    const member = entry.split(' ')[0];
+    assert.equal(typeof lang[member], 'function', `ChickadeeLanguage.${entry} is not exported`);
+  }
+});
