@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.355] - 2026-10-03
+
+### Added
+
+- **The GitHub pages say which of the App's three options GitHub grants** (#1776). The admin page reads the App's permissions and events from GitHub when it renders, and shows course repositories, push events and commit statuses as granted or not granted. The course page reads the App's installation on the bound organization, which can lag behind the App until an owner accepts a change. When that installation cannot make course repositories, the page says so and links to its settings on GitHub. Before this, each missing option failed in its own silent way: a GitHub error when a student made a repository, pushes that never arrived, and statuses that were logged and dropped.
+
+
 ## [0.5.354] - 2026-10-03
 
 ### Security
