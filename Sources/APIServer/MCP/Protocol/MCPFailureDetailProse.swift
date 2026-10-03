@@ -25,7 +25,7 @@ enum MCPFailureDetailProse {
 
     /// The JSON-schema property every tool that takes a level shares.
     static func schema(_ description: String) -> JSONValue {
-        MCPEnumProse<FailureDetail>.schema(description)
+        MCPEnumProse<FailureDetail>.stringSchema(description)
     }
 
     /// Parses an optional wire value: absent or empty → nil (no value, or

@@ -41,8 +41,10 @@ enum MCPEnumProse<Value: CaseIterable & RawRepresentable> where Value.RawValue =
     /// The JSON Schema `enum` array.
     static var jsonEnum: JSONValue { .array(tokens.map { .string($0) }) }
 
-    /// A string property restricted to the cases.
-    static func schema(_ description: String) -> JSONValue {
+    /// A string property restricted to the cases. Not called `schema(_:)`:
+    /// that is Fluent's word for changing a database, and the guard that finds
+    /// schema-changing test suites reads `.schema(` as one.
+    static func stringSchema(_ description: String) -> JSONValue {
         .object([
             "type": .string("string"),
             "enum": jsonEnum,

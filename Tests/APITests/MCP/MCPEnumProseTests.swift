@@ -25,7 +25,7 @@ import Testing
 
     @Test func schemaRestrictsAStringToTheCases() {
         #expect(
-            Visibility.schema("Who can see it.")
+            Visibility.stringSchema("Who can see it.")
                 == .object([
                     "type": .string("string"),
                     "enum": Visibility.jsonEnum,
