@@ -1,0 +1,3 @@
+### Changed
+
+- **A student's submissions page uses the shared row classes.** Its 20-line page `<style>` block re-created four global rules and ended in a stray `}`. It is gone: the section headings use `.assignment-section-heading`, the "+ extension" note uses `.card-meta`, and the row actions use `.row-actions-tight`. `.row-actions-tight` no longer sets `white-space: nowrap` or button padding, because the extension and grade-override popover forms open inside the cell and inherited both: their inputs ran past the panel edge. `PAGE_STYLE_BASELINE` drops to 427 and `CATALOG_BASELINE` to 246 (#1969).

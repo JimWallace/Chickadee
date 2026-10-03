@@ -3,7 +3,7 @@
      byte-identical apart from the list they looped over, so every fix to a
      row action had to be made in both (UI audit S7). The caller passes its
      list as `rows` via extend's sub-context form. -->
-<table class="results-table submissions-table">
+<table class="results-table">
     <thead>
         <tr>
             <th>Name</th>
@@ -37,7 +37,7 @@
             </td>
             <td class="due-col col-hide-phone">
                 #if(row.effectiveDueAtText):
-                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span class="extension-note">+ extension</span></span>
+                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span class="card-meta">+ extension</span></span>
                 #elseif(row.dueAtText):
                     #(row.dueAtText)
                 #else:
@@ -69,7 +69,7 @@
                 #endif
             </td>
             <td>
-                <div class="student-row-actions">
+                <div class="row-actions-tight">
                     #if(row.latest.submissionCount > 0):
                     <form method="post" action="#(row.retestPath)" data-confirm="Re-test all of this student’s submissions on this assignment?" class="form-flush">
                         #csrfFormField()
