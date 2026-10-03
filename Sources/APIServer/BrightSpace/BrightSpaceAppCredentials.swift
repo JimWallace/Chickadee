@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceAppCredentials.swift
+// APIServer/BrightSpace/BrightSpaceAppCredentials.swift
 //
 // The deployment-level half of the D2L Valence "App + User" credential pair.
 //

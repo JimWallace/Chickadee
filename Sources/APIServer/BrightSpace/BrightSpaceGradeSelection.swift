@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceGradeSelection.swift
+// APIServer/BrightSpace/BrightSpaceGradeSelection.swift
 //
 // Pure grade selection for BrightSpace sync: which grade a student's results
 // (or instructor override) yield for a test setup, and how that grade scales

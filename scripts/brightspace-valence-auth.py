@@ -57,7 +57,7 @@ import urllib.request
 import webbrowser
 
 AUTH_TOKEN_HANDLER = "/d2l/auth/api/token"
-# Must match BrightSpaceSyncConfig in Sources/APIServer/Services/BrightSpaceAPIClient.swift
+# Must match BrightSpaceSyncConfig in Sources/APIServer/BrightSpace/BrightSpaceAPIClient.swift
 LP_API_VERSION = "1.28"
 
 

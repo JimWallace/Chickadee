@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpacePagePresenter.swift
+// APIServer/BrightSpace/BrightSpacePagePresenter.swift
 //
 // Assembles the instructor LEARN tab's view model
 // (`InstructorBrightspaceContext`) from the models and the sync log: the

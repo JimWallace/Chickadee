@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceCourseBinding.swift
+// APIServer/BrightSpace/BrightSpaceCourseBinding.swift
 //
 // Binding a course to its LEARN org unit, and mapping its assignments to
 // the org unit's grade items by name. Functions over models, a database and

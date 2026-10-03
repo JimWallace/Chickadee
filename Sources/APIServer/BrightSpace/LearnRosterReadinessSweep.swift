@@ -1,4 +1,4 @@
-// APIServer/Services/LearnRosterReadinessSweep.swift
+// APIServer/BrightSpace/LearnRosterReadinessSweep.swift
 //
 // Periodic roster-readiness sweep. For every course bound to a LEARN org unit,
 // fetches the classlist once and classifies each enrolled student against it

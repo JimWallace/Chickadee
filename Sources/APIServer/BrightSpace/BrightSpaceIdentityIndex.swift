@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceIdentityIndex.swift
+// APIServer/BrightSpace/BrightSpaceIdentityIndex.swift
 //
 // The ONE reduction of a LEARN classlist into matchable identities (#1117).
 // Grade sync, section sync, and the roster reconciler all resolve Chickadee

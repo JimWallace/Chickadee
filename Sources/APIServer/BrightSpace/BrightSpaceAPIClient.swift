@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceAPIClient.swift
+// APIServer/BrightSpace/BrightSpaceAPIClient.swift
 //
 // Thin D2L BrightSpace REST API client used for grade sync.
 //

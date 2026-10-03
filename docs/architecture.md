@@ -113,6 +113,7 @@ Sources/
     MCP/                    Content-authoring MCP + OAuth 2.1 AS
       Admin/                Read-only admin diagnostics MCP surface
     Configuration/          AppConfig — every env var read
+    BrightSpace/ GitHub/ LTI/   One directory per LMS or forge integration
     Bootstrap/ Services/ Diagnostics/ Helpers/ Utilities/ …
   chickadee-server/         Thin executable wrapper (calls runAPIServer())
   Worker/                   chickadee-runner executable
