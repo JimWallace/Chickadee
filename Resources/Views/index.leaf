@@ -104,7 +104,7 @@
                         #if(item.row.opensAtText):
                         <span title="This assignment opens automatically at this time.">Opens #(item.row.opensAtText)</span>
                         #elseif(item.row.hasActiveExtension):
-                        Due <span class="js-relative-time" data-iso="#(item.row.effectiveDueAtISO)">#(item.row.effectiveDueAtText)</span> · #(item.row.effectiveDueAtText) <span class="due-extension-note">(extension)</span>
+                        Due <span class="js-relative-time" data-iso="#(item.row.effectiveDueAtISO)">#(item.row.effectiveDueAtText)</span> · #(item.row.effectiveDueAtText) <span class="card-meta">(extension)</span>
                         #elseif(item.row.dueAt):
                         Due <span class="js-relative-time" data-iso="#(item.row.dueAtISO)">#(item.row.dueAt)</span> · #(item.row.dueAt)
                         #else:

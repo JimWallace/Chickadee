@@ -588,7 +588,7 @@ duplicate.
 - **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
   `_icons.leaf` by `<use href="#i-…">`.  Geometry may appear in exactly two
   files: that sprite, and `_avatar-sprite.leaf` for the avatar parts.
-- **`.textarea-mono`**, `.form-stack` (+ `--wide`) — a monospace textarea and
+- **`.textarea-mono`**, `.form-stack` — a monospace textarea and
   the stacked form column that usually holds one.
 
 If two pages need the same rule, it belongs in `Public/styles.css`, not
@@ -839,7 +839,7 @@ A page `<style>` block is for styling that genuinely exists on one page only.
   **not** a per-page dial: `--filter-width` and `--form-stack-width` were
   both used as one and both drifted, so the guard now allows only the
   per-datum props it names.  A genuinely different width is the token's
-  value or a named modifier class (`.form-stack--wide`) in `styles.css`.
+  value or a named modifier class in `styles.css`.
 - Values inside page blocks follow the same token rules as the global sheet.
 - **Total page-block size is a shrink-only ratchet**
   (`PAGE_STYLE_BASELINE` in `scripts/check-styles.sh`).  Concept drift lives

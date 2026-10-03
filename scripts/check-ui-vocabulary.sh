@@ -57,7 +57,7 @@ status=0
 #
 # Shrink-only.  Lower it in the PR that earns it; headroom left behind gets
 # spent by the next person adding a copy.
-CATALOG_BASELINE=246
+CATALOG_BASELINE=236
 
 # Comment stripper (scripts/lib/css.sh).  A scanner cannot tell a selector
 # from prose about a selector, and this codebase has been bitten by that three
