@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.382] - 2026-10-03
+
+### Removed
+
+- **Ten stylesheet rules and one partial that nothing used.** The redesigns in #1611, #1613, #1622 and #2025 removed the last users of `.assignment-table`, `.content-lane`, `.content-item-title`, `.content-item-desc`, `.content-item-links`, `.content-item-actions`, `.section-action`, `.cell-subrow`, `.status-toggle-btn` and `.form-stack--wide`, and no template includes `_assignment-table-head.leaf`. They are deleted, and the undocumented-component ratchet goes from 246 to 236. The student dashboard's "(extension)" marker now uses `.card-meta`, as the staff view of a student's submissions does, so `.due-extension-note` is gone too. Closes #1970.
+
+
 ## [0.5.381] - 2026-10-03
 
 ### Fixed

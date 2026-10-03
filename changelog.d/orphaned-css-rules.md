@@ -1,3 +1,0 @@
-### Removed
-
-- **Ten stylesheet rules and one partial that nothing used.** The redesigns in #1611, #1613, #1622 and #2025 removed the last users of `.assignment-table`, `.content-lane`, `.content-item-title`, `.content-item-desc`, `.content-item-links`, `.content-item-actions`, `.section-action`, `.cell-subrow`, `.status-toggle-btn` and `.form-stack--wide`, and no template includes `_assignment-table-head.leaf`. They are deleted, and the undocumented-component ratchet goes from 246 to 236. The student dashboard's "(extension)" marker now uses `.card-meta`, as the staff view of a student's submissions does, so `.due-extension-note` is gone too. Closes #1970.
