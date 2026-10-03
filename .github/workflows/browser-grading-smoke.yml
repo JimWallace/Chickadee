@@ -140,15 +140,34 @@ jobs:
   # branch-protection setting.
   r-grading-smoke-gate:
     # Always runs, so it can be a required status check: green when the smoke
-    # passed OR was not needed, red only when it actually failed.
+    # passed OR was not needed, red when it failed or when nobody could say
+    # whether it was needed.
+    #
+    # Fail closed on the `changes` job, as editor-smoke-gate does. If it fails,
+    # `smoke` is `skipped`, and a gate that read only the smoke result passed a
+    # PR whose grading surface nobody checked (#1979).
+    #
+    # `!cancelled()` is run-scoped: a superseded run skips the gate instead of
+    # reporting its cancelled smoke jobs as a failure. A smoke job killed by its
+    # own timeout-minutes still fails the gate, because the run survives and
+    # the gate sees result=cancelled.
     needs: [changes, smoke]
-    if: always()
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Report
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_SMOKE: ${{ needs.changes.outputs.run_smoke }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
         run: |
-          if [ "${{ needs.smoke.result }}" = "failure" ] || [ "${{ needs.smoke.result }}" = "cancelled" ]; then
-            echo "browser grading smoke failed"
+          echo "changes job: ${CHANGES_RESULT}; run_smoke: ${RUN_SMOKE}; smoke: ${SMOKE_RESULT}"
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::change-detection job did not succeed (${CHANGES_RESULT}), failing closed."
             exit 1
           fi
-          echo "browser grading smoke: ${{ needs.smoke.result }}"
+          if [ "$SMOKE_RESULT" = "failure" ] || [ "$SMOKE_RESULT" = "cancelled" ]; then
+            echo "::error::browser grading smoke failed; see the smoke job."
+            exit 1
+          fi
+          echo "browser grading smoke gate passed (smoke: ${SMOKE_RESULT})."
