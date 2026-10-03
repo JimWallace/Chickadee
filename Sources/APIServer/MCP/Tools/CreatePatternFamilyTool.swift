@@ -213,7 +213,9 @@ struct CreatePatternFamilyTool: ContentTool {
             ]),
             "expectedVarRef": .object([
                 "type": .string("string"),
-                "description": .string("Per-student expected: name of a = expression."),
+                "description": .string(
+                    "Per-student expected: name of a = expression "
+                        + "(\(MCPPatternKindProse.expectedVarRefKinds))."),
             ]),
             "hint": .object([
                 "type": .string("string"),

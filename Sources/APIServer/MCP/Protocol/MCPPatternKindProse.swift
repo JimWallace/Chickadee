@@ -65,4 +65,15 @@ enum MCPPatternKindProse {
 
     /// The JSON Schema `enum` array for a `kind` property.
     static var jsonEnum: JSONValue { .array(tokens.map { .string($0) }) }
+
+    /// The kinds whose cases accept `expectedVarRef`, as `"a, b, and c"`.
+    ///
+    /// Derived from `kindSupportsPerStudentExpected`, the predicate the save
+    /// refuses with, so the schema cannot promise a kind the save rejects
+    /// (#1936).
+    static var expectedVarRefKinds: String {
+        let kinds = PatternKind.allCases.filter(kindSupportsPerStudentExpected).map(\.rawValue)
+        guard kinds.count > 1 else { return kinds.first ?? "" }
+        return kinds.dropLast().joined(separator: ", ") + ", and " + (kinds.last ?? "")
+    }
 }
