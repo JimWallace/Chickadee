@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.350] - 2026-10-03
+
+### Added
+
+- **Tests for the live GitHub clients.** A scripted client stands in for GitHub, so the real request builders of `GitHubRepoClient.live` and `GitHubOAuthClient.live` now run in tests: their URLs and path escaping, their headers and bodies, and how each status maps to a result or an error. Fixture tests feed GitHub's documented user, commit and push payloads and check that only the user ID and login, the commit SHA and message, and a push's head commit are kept. A commit status in course-repository mode is now tested to use the organization's token (#1775).
+
+### Changed
+
+- **One section item type for both dashboards.** `IndexSectionItem` and `InstructorSectionItem` were one struct written twice. They are now type aliases of a generic `SectionItem<Row>`, and both templates read the assignment row as `item.row`. The pages render the same (#1712).
+
+
 ## [0.5.349] - 2026-10-03
 
 ### Changed
