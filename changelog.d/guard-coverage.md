@@ -1,3 +1,0 @@
-### Added
-
-- **Every guard in `format-lint` now has a fixture, or a stated reason why it cannot.** Five guards ran with nothing to show they could fail: `no-language-defaults.sh`, `no-new-xctest.sh`, `check-maintenance-palette.sh`, `generate-js-constants.sh --check` and `ci-compose-env.sh --check`. Each now has a fixture. A fixture can give its guard arguments (`args=`), because the last two are a check only under `--check`. The new `scripts/check-guard-coverage.sh` fails when `format-lint`, or a guard it runs, runs a guard with no fixture and no entry in its exemption list, and when an exemption names a guard that no longer runs (#1983).

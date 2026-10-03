@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.376] - 2026-10-03
+
+### Added
+
+- **Every guard in `format-lint` now has a fixture, or a stated reason why it cannot.** Five guards ran with nothing to show they could fail: `no-language-defaults.sh`, `no-new-xctest.sh`, `check-maintenance-palette.sh`, `generate-js-constants.sh --check` and `ci-compose-env.sh --check`. Each now has a fixture. A fixture can give its guard arguments (`args=`), because the last two are a check only under `--check`. The new `scripts/check-guard-coverage.sh` fails when `format-lint`, or a guard it runs, runs a guard with no fixture and no entry in its exemption list, and when an exemption names a guard that no longer runs (#1983).
+
+### Changed
+
+- **A student's submissions page uses the shared row classes.** Its 20-line page `<style>` block re-created four global rules and ended in a stray `}`. It is gone: the section headings use `.assignment-section-heading`, the "+ extension" note uses `.card-meta`, and the row actions use `.row-actions-tight`. `.row-actions-tight` no longer sets `white-space: nowrap` or button padding, because the extension and grade-override popover forms open inside the cell and inherited both: their inputs ran past the panel edge. `PAGE_STYLE_BASELINE` drops to 427 and `CATALOG_BASELINE` to 246 (#1969).
+
+
 ## [0.5.375] - 2026-10-03
 
 ### Changed
