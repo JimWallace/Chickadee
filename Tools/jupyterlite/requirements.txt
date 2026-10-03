@@ -1,5 +1,5 @@
-jupyterlite==0.8.3
-jupyterlite-core==0.8.3
+jupyterlite==0.8.4
+jupyterlite-core==0.8.4
 # jupyter-iframe-commands — labextension running INSIDE the editor iframe that
 # exposes the JupyterLab command registry to the parent frame over postMessage.
 # Paired with the vendored jupyter-iframe-commands-host bridge (Public/vendor/),

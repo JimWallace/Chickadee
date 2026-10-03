@@ -1,0 +1,3 @@
+### Security
+
+- **The embedded editor moves to JupyterLite 0.8.4.** It fixes three advisories in the JupyterLab it bundles: a pasted cell could mark its own output trusted and run script in the editor's origin (GHSA-6966-vjj6-99xv, in both `jupyterlite` and `jupyterlite-core`), and a language pack's plural-forms header could run as code (GHSA-3jqq-pw4j-pqcj). Chickadee's content security policy already refused inline script there, so the paste path was blocked in practice; the vendored bundle is rebuilt anyway. A fourth alert, in `click` (GHSA-47fr-3ffg-hgmw), stays open: `empack` 6.0.1, the newest release, requires `click<8.2`, and `click` is a build-time tool that never reaches a browser.
