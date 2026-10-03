@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceConnectionService.swift
+// APIServer/BrightSpace/BrightSpaceConnectionService.swift
 //
 // The per-instructor LEARN connection: verifying a pasted Valence user key
 // with D2L `whoami`, storing it, and designating which connected instructor

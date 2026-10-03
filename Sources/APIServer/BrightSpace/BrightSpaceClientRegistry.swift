@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceClientRegistry.swift
+// APIServer/BrightSpace/BrightSpaceClientRegistry.swift
 //
 // Per-identity cache of BrightSpace API clients, and the per-course identity
 // resolution that decides *whose* LEARN key a grade push runs as.

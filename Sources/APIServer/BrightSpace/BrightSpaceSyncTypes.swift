@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceSyncTypes.swift
+// APIServer/BrightSpace/BrightSpaceSyncTypes.swift
 //
 // The non-actor types of the BrightSpace sync subsystem: the env-derived
 // sync configuration, the error vocabulary, and the Codable DTOs mirroring

@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceGradeClears.swift
+// APIServer/BrightSpace/BrightSpaceGradeClears.swift
 //
 // Queued BrightSpace grade REMOVALS (`brightspace_grade_clears`): when an
 // instructor clears an override on a previously-synced student who has no

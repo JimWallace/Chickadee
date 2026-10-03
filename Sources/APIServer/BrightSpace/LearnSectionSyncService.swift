@@ -1,4 +1,4 @@
-// APIServer/Services/LearnSectionSyncService.swift
+// APIServer/BrightSpace/LearnSectionSyncService.swift
 //
 // Periodic sweep that maps each enrolled student to their LEARN group name
 // (e.g. "Lab 3") by fetching the course's configured D2L group category and

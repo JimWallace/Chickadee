@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceGradeSyncService.swift
+// APIServer/BrightSpace/BrightSpaceGradeSyncService.swift
 //
 // BrightSpace sync-row bookkeeping shared by the sweep, the grade clears, and
 // the manual "Sync now" routes: the `BrightSpaceSyncFlaggable` protocol (the

@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceSyncSweep.swift
+// APIServer/BrightSpace/BrightSpaceSyncSweep.swift
 //
 // The debounced BrightSpace grade-sync sweep: orchestration, the per-group
 // grade push, sweep-wide batch loading, the per-sweep classlist / grade-object

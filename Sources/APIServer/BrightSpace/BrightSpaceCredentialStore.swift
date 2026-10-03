@@ -1,4 +1,4 @@
-// APIServer/Services/BrightSpaceCredentialStore.swift
+// APIServer/BrightSpace/BrightSpaceCredentialStore.swift
 //
 // Persistence + resolution for captured BrightSpace Valence user keys.
 //
