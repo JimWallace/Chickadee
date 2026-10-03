@@ -1,6 +1,10 @@
 # Achievements unification
 
-Status: **in progress** (this doc is the plan-of-record). Collapses the three
+Status: **phases A to C shipped; phase D not finished.** The manifest-driven
+evaluation, the one `GET/PUT /instructor/:id/achievements` endpoint and the one
+Achievements editor are live. `disabledBuiltInAwardIDs` is still read
+(`BuiltInAchievements.swift`, `WebRoutes+Submission.swift`). This doc is the
+plan-of-record. It collapses the three
 separate achievement editors (Class Goals, Badges, Built-in Awards) into one
 **Achievements** table at the bottom of the assignment editor, where every
 achievement — collaborative class goals, individual badges, and the

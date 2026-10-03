@@ -1,9 +1,11 @@
 # Personalization evaluation runtime
 
-**Status:** decision recorded + partially implemented. R landed as the second
-language via **per-language evaluation on the server** (`python3` + `Rscript`),
-which keeps today's trilemma corner (2 + 3 below). The eventual move of *all*
-language execution to the runner tier remains deferred future work (0.5+).
+**Status:** decision recorded and implemented for every assignment language.
+`PersonalizationEvaluator` evaluates **per language on the server**: `python3`,
+`Rscript`, `lua`, `octave-cli` and `racket`, and an `sh` driver that compiles
+with `g++` (C++) or `javac` (Java). That keeps today's trilemma corner (2 + 3
+below). The eventual move of *all* language execution to the runner tier
+remains deferred future work.
 
 This records a design discussion about *where* and *in what language* per-student
 personalization expressions are evaluated, so we don't relitigate it from scratch

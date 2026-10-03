@@ -1,8 +1,10 @@
 # Pre-merge browser smoke test for the notebook editor
 
-Status: **implemented (Phase 1), advisory.** The harness lives in
-`Tools/editor-smoke-test/` and runs in CI via the `Editor smoke test` workflow
-(nightly + path-filtered per-PR). Companion to the editor telemetry
+Status: **implemented, with an always-reporting gate.** The harness lives in
+`Tools/editor-smoke-test/` and runs in CI via the `Editor smoke test` workflow,
+nightly and on every pull request with no path filter. A `changes` job decides
+whether the browser smoke runs, and the `editor-smoke-gate` job reports the one
+status (see "Make it a required gate" below). Companion to the editor telemetry
 (`editor_ready` / `sw_state` / `byBrowser`).
 
 ## Status update — what shipped
