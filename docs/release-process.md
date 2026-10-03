@@ -61,8 +61,9 @@ bot's tag will **not** fire `release.yml` (GitHub Release) or the tag build in
 Until `RELEASE_TOKEN` is set, treat the per-release Docker image as a manual /
 follow-up step.
 
-`scripts/check-version.sh` still enforces `VERSION == ChickadeeVersion.current`;
-the release script writes both together, so they never drift.
+`VERSION` and `ChickadeeVersion.current` cannot drift:
+`scripts/assemble-release.sh` writes both from one variable, for an automatic
+patch release and for a manual `--version` cut alike.
 
 ## What the numbers mean while we are 0.y.z
 
