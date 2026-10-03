@@ -14,8 +14,10 @@ import SQLKit
 ///
 /// On Postgres the transaction additionally takes a per-scope advisory lock
 /// (`pg_advisory_xact_lock`, auto-released at commit) so two truly concurrent
-/// transactions serialize instead of both reading the same `MAX`. On SQLite a
-/// write transaction already serializes writers, so the lock is unnecessary.
+/// transactions serialize instead of both reading the same `MAX`. On SQLite
+/// the transaction takes the write lock before it reads
+/// (`withWriteLockedTransaction`), so it waits for a competing writer instead
+/// of failing when it writes after the `MAX` read (#1919).
 ///
 /// `MAX(attempt_number) + 1` is used rather than `COUNT + 1` so deleted rows
 /// can never cause a reused attempt number.
@@ -25,7 +27,7 @@ func saveSubmissionWithNextAttemptNumber(
     on db: Database
 ) async throws {
     try await withTransientDatabaseLockRetry(on: db) {
-        try await db.transaction { tx in
+        try await withWriteLockedTransaction(on: db) { tx in
             if let sql = tx as? SQLDatabase, sql.dialect.name == "postgresql" {
                 let scope = "chickadee.attempt:\(submission.testSetupID):\(userID?.uuidString ?? "-")"
                 try await sql.raw("SELECT pg_advisory_xact_lock(hashtext(\(bind: scope)))").run()
@@ -49,17 +51,17 @@ func saveSubmissionWithNextAttemptNumber(
 /// Retries a database write on a transient SQLite lock error (`SQLITE_BUSY` /
 /// "database is locked").
 ///
-/// SQLite (even in WAL mode) allows only one writer at a time, and the app does
-/// not set a `busy_timeout`, so a contended write fails *immediately* rather than
-/// waiting. Worse, a deferred read-then-write transaction (e.g. the
-/// `MAX(attempt_number)` read above followed by the insert) can get
-/// `SQLITE_BUSY_SNAPSHOT` when another connection — a Fluent-backed session
-/// write, a background monitor — commits between this transaction's read and its
-/// write; that is a *stale snapshot* a `busy_timeout` could not absorb (waiting
-/// doesn't refresh the snapshot), so the only correct recovery is to re-run the
-/// whole transaction against a fresh snapshot. Without this, the contention
-/// surfaced to callers as an intermittent HTTP 500 (notably on
-/// `POST /submissions/browser-result`).
+/// SQLite (even in WAL mode) allows only one writer at a time. An ordinary
+/// contended write waits: sqlite-nio installs a busy handler that retries for as
+/// long as it takes. What fails at once is a deferred read-then-write
+/// transaction, which cannot wait for the write lock once it has read: it fails
+/// when another connection holds the lock (`SQLITE_BUSY`) or has committed since
+/// the read (`SQLITE_BUSY_SNAPSHOT`). `withWriteLockedTransaction` removes both
+/// cases for the attempt-number transaction above (#1919), so this retry is now
+/// a backstop, and the only correct recovery for anything else that reaches it
+/// is to re-run the whole transaction against a fresh snapshot.
+/// Without it, the contention surfaced to callers as an intermittent HTTP 500
+/// (notably on `POST /submissions/browser-result`).
 ///
 /// The transaction body is idempotent under retry: a failed transaction rolls
 /// back (no row committed, the model's create is not marked as existing), so a

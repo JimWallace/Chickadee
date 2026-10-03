@@ -385,7 +385,8 @@ struct PostgresSchemaLease: Sendable, Hashable {
 /// `.sqliteInMemory()` application and never calls `configureTestDatabase`, so
 /// it never asks the pool for anything. It is listed because the scan below
 /// flags what it DOES, and a list that disagreed with the scan would be a list
-/// somebody edits the scan to silence.)
+/// somebody edits the scan to silence. `WriteLockedTransactionTests` is listed
+/// for the same reason: it creates a table in a SQLite file of its own.)
 ///
 /// **Naming a suite is the brittle half of this design, and this file already
 /// records why**: "a guard pointed at a mechanism by name is a guard that
@@ -414,6 +415,7 @@ enum SchemaMutatingSuites {
         "MCPAuditFailClosedTests",
         "ResultCollectionBackfillMigrationTests",
         "GetValidationResultVariantFallbackTests",
+        "WriteLockedTransactionTests",
     ]
 
     /// True when the test currently running belongs to one of those suites.
