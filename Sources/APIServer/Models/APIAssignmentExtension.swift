@@ -3,8 +3,9 @@
 // Per-student deadline extension on an assignment.  An extension lets one
 // student keep submitting past the assignment-wide deadline; the assignment
 // itself remains closed for every other student.  See
-// `AssignmentDeadlineService.requireOpenStudentAssignment(for:user:on:)` for
-// the gate that consults this row.
+// `requireOpenStudentAssignment(for:user:gate:on:)` in
+// `Routes/StudentAssignmentRequestGates.swift` for the gate that consults
+// this row.
 //
 // One row per (assignment, user) — enforced by the composite UNIQUE index in
 // CreateAssignmentExtensions.

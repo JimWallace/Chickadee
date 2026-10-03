@@ -21,11 +21,11 @@
 //     methods.  Struct + `mutating` keeps Sendable obligations simple
 //     and makes unit tests trivial — instantiate, call, assert on
 //     `service.setup` / `service.formState`.
-//   - `req: Request` is a dependency because the actions touch the
-//     filesystem (testSetupsDirectory), the database (setup.save), the
-//     logger, and the per-user JupyterLite working copy that lives
-//     under `req.application.directory.publicDirectory`.  A future
-//     refactor could replace `req` with a smaller interface.
+//   - The application, a database and a logger are the dependencies,
+//     never a `Request` (#1732): the actions touch the filesystem
+//     (testSetupsDirectory), the database (setup.save), the logger, and
+//     the per-user JupyterLite working copy that lives under
+//     `application.directory.publicDirectory`.
 //   - Each method returns a `NewAssignmentDraftActionOutcome` so the
 //     handler can distinguish "applied → standard redirect" from
 //     "validation failed → redirect with error message in the query."
@@ -58,7 +58,9 @@ enum NewAssignmentDraftActionOutcome: Sendable, Equatable {
 /// payload + resolving the setup; call `perform()` to apply one
 /// action; read back `setup` and `formState` afterwards.
 struct NewAssignmentDraftService {
-    let req: Request
+    let application: Application
+    let db: any Database
+    let logger: Logger
     let setup: APITestSetup
     let setupID: String
     let userID: UUID
@@ -131,17 +133,17 @@ struct NewAssignmentDraftService {
         guard let data = defaultNotebookData(title: notebookTitle, language: scaffoldLanguage)
         else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let dir = try ensureDraftNotebookDirectory(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         let path = dir + "assignment.ipynb"
         try data.write(to: URL(fileURLWithPath: path))
         setup.notebookPath = path
-        try await setup.save(on: req.db)
+        try await setup.save(on: db)
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
-            overwriteWith: data
+            overwriteWith: data,
+            on: db, application: application, logger: logger
         )
         formState.assignmentNotebookName = "assignment.ipynb"
     }
@@ -156,19 +158,19 @@ struct NewAssignmentDraftService {
         }
         let normalized = normalizeNotebookForJupyterLite(raw)
         let dir = try ensureDraftNotebookDirectory(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         let filename = notebookFilenameForStorage(
             uploadedName: file.filename, fallback: "assignment.ipynb")
         let path = dir + filename
         try normalized.write(to: URL(fileURLWithPath: path))
         setup.notebookPath = path
-        try await setup.save(on: req.db)
+        try await setup.save(on: db)
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
-            overwriteWith: normalized
+            overwriteWith: normalized,
+            on: db, application: application, logger: logger
         )
         formState.assignmentNotebookName = filename
         return .applied
@@ -176,14 +178,14 @@ struct NewAssignmentDraftService {
 
     mutating func clearAssignmentNotebook() async throws {
         removeDraftNotebookFiles(
-            req: req,
+            application: application,
             setupID: setupID,
             userID: userID,
             fileKind: .assignment,
             persistedPath: setup.notebookPath
         )
         setup.notebookPath = nil
-        try await setup.save(on: req.db)
+        try await setup.save(on: db)
         formState.assignmentNotebookName = nil
     }
 
@@ -193,18 +195,18 @@ struct NewAssignmentDraftService {
                 title: "\(notebookTitle) Solution", language: scaffoldLanguage)
         else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let path = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         _ = try ensureDraftNotebookDirectory(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         try data.write(to: URL(fileURLWithPath: path))
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
                 setupID: setupID, userID: userID, fileKind: .solution),
-            overwriteWith: data
+            overwriteWith: data,
+            on: db, application: application, logger: logger
         )
         formState.solutionNotebookName = "solution.ipynb"
     }
@@ -230,18 +232,18 @@ struct NewAssignmentDraftService {
         else { throw WebAssignmentError.unprocessable(reason: uploadOnlyNotebookScaffoldMessage) }
         let normalized = normalizeNotebookForJupyterLite(sourceData)
         let path = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         _ = try ensureDraftNotebookDirectory(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         try normalized.write(to: URL(fileURLWithPath: path))
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
                 setupID: setupID, userID: userID, fileKind: .solution),
-            overwriteWith: normalized
+            overwriteWith: normalized,
+            on: db, application: application, logger: logger
         )
         formState.solutionNotebookName = "solution.ipynb"
     }
@@ -256,18 +258,18 @@ struct NewAssignmentDraftService {
         }
         let normalized = normalizeNotebookForJupyterLite(raw)
         let path = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         _ = try ensureDraftNotebookDirectory(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+            testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         try normalized.write(to: URL(fileURLWithPath: path))
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
                 setupID: setupID, userID: userID, fileKind: .solution),
-            overwriteWith: normalized
+            overwriteWith: normalized,
+            on: db, application: application, logger: logger
         )
         formState.solutionNotebookName = notebookFilenameForStorage(
             uploadedName: file.filename, fallback: "solution.ipynb")
@@ -283,15 +285,15 @@ struct NewAssignmentDraftService {
                 setup: setup,
                 notebookData: normalized,
                 zipPath: setup.zipPath,
-                on: req.db
+                on: db
             )
             if result.functions > 0 {
-                req.logger.info(
+                logger.info(
                     "auto_scaffold sections=\(result.sections) functions=\(result.functions) setup=\(setup.id ?? "?")"
                 )
             }
         } catch {
-            req.logger.warning("auto_scaffold_failed setup=\(setup.id ?? "?") error=\(error)")
+            logger.warning("auto_scaffold_failed setup=\(setup.id ?? "?") error=\(error)")
         }
 
         return .applied
@@ -299,12 +301,12 @@ struct NewAssignmentDraftService {
 
     mutating func clearSolutionNotebook() throws {
         removeDraftNotebookFiles(
-            req: req,
+            application: application,
             setupID: setupID,
             userID: userID,
             fileKind: .solution,
             persistedPath: draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
+                testSetupsDirectory: application.testSetupsDirectory, setupID: setupID)
         )
         formState.solutionNotebookName = nil
     }
@@ -318,9 +320,9 @@ struct NewAssignmentDraftService {
             zipPath: setup.zipPath
         )
         let sectionGradingMode = try await newAssignmentSectionGradingMode(
-            req: req,
             courseID: courseID,
-            sectionIDRaw: payload.sectionIDRaw
+            sectionIDRaw: payload.sectionIDRaw,
+            on: db
         )
         let starterNotebook =
             setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent }
@@ -335,12 +337,12 @@ struct NewAssignmentDraftService {
             sectionGradingMode: sectionGradingMode,
             starterNotebook: starterNotebook
         )
-        try await setup.save(on: req.db)
+        try await setup.save(on: db)
         await extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: setupID,
             testSuiteScripts: Set(setupPackage.testSuites.map(\.script)),
-            testSetupsDirectory: req.application.testSetupsDirectory
+            testSetupsDirectory: application.testSetupsDirectory
         )
     }
 
@@ -356,9 +358,9 @@ struct NewAssignmentDraftService {
             testSuites: [],
             includeMakefile: false,
             sectionGradingMode: try await newAssignmentSectionGradingMode(
-                req: req, courseID: courseID, sectionIDRaw: payload.sectionIDRaw),
+                courseID: courseID, sectionIDRaw: payload.sectionIDRaw, on: db),
             starterNotebook: starterNotebook
         )
-        try await setup.save(on: req.db)
+        try await setup.save(on: db)
     }
 }

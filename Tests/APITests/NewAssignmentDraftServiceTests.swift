@@ -35,10 +35,6 @@ import VaporTesting
 
     // MARK: - Fixture helpers
 
-    private func makeSyntheticRequest() -> Request {
-        Request(application: app, on: app.eventLoopGroup.next())
-    }
-
     private func sampleNotebookData(marker: String = "marker") -> Data {
         let json = """
             {
@@ -109,7 +105,7 @@ import VaporTesting
         payload: NewAssignmentDraftPayload
     ) -> NewAssignmentDraftService {
         NewAssignmentDraftService(
-            req: makeSyntheticRequest(),
+            application: app, db: app.db, logger: app.logger,
             setup: setup,
             setupID: setup.id ?? "",
             userID: UUID(),
@@ -362,7 +358,7 @@ import VaporTesting
                 requiredLanguagesCSV: "", requiredCapabilitiesCSV: "",
                 assignmentLanguage: "python")
             let service = NewAssignmentDraftService(
-                req: makeSyntheticRequest(),
+                application: app, db: app.db, logger: app.logger,
                 setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),
                 setupID: "x", userID: UUID(), courseID: UUID(),
                 formState: NewAssignmentDraftFormState.empty, payload: payload)
@@ -383,7 +379,7 @@ import VaporTesting
                 requiredLanguagesCSV: "", requiredCapabilitiesCSV: "",
                 assignmentLanguage: "python")
             let service = NewAssignmentDraftService(
-                req: makeSyntheticRequest(),
+                application: app, db: app.db, logger: app.logger,
                 setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),
                 setupID: "x", userID: UUID(), courseID: UUID(),
                 formState: NewAssignmentDraftFormState.empty, payload: payload)

@@ -198,8 +198,8 @@ extension WebRoutes {
         // their dashboard rather than shown an upload form they cannot submit.
         if let userID = user.id, let assignment {
             let isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req))
-            if let redirect = try await closedAssignmentGate(
-                req: req, user: user, userID: userID, assignment: assignment, isClosed: isClosed)
+            if let redirect = try await req.closedAssignmentRedirect(
+                user: user, userID: userID, assignment: assignment, isClosed: isClosed)
             {
                 return redirect
             }

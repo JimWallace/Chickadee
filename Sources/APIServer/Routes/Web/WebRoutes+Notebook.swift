@@ -105,8 +105,8 @@ extension WebRoutes {
         // by a student who has previously engaged with it (and that access is
         // recorded durably so it stays reachable once it closes).  Posting
         // links in advance no longer spoils not-yet-opened labs.
-        if let redirect = try await closedAssignmentGate(
-            req: req, user: user, userID: userID, assignment: assignment, isClosed: isClosed)
+        if let redirect = try await req.closedAssignmentRedirect(
+            user: user, userID: userID, assignment: assignment, isClosed: isClosed)
         {
             return redirect
         }
@@ -197,11 +197,10 @@ extension WebRoutes {
         }
 
         _ = try await overwriteUserNotebookWithPersonalizedStarter(
-            req: req,
             setup: setup,
-            setupID: setupID,
             userID: userID,
-            starter: starter
+            starter: starter,
+            on: req.db, application: req.application, logger: req.logger
         )
 
         req.logger.info("student_self_notebook_reset setup=\(setupID) student=\(userID.uuidString)")
@@ -220,20 +219,20 @@ extension WebRoutes {
         let userID = args.userID
         let userSlug = userID.uuidString.lowercased()
         let notebookData = try await notebookDataForHistorySelection(
-            req: req,
             caller: args.user,
             submissionID: requestedSubmissionID,
             setupID: setupID,
-            userID: userID
+            userID: userID,
+            on: req.db
         )
         let submissionRelativePath = "users/\(userSlug)/\(setupID)/view-\(requestedSubmissionID).ipynb"
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
             relativePath: submissionRelativePath,
-            overwriteWith: notebookData  // always overwrite — we want the exact submission
+            overwriteWith: notebookData,  // always overwrite — we want the exact submission
+            on: req.db, application: req.application, logger: req.logger
         )
         let encodedPath =
             submissionRelativePath
@@ -314,22 +313,22 @@ extension WebRoutes {
                 for: assignment, setup: setup, db: req.db,
                 testSetupsDirectory: req.application.testSetupsDirectory)
             _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
                 setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
                 relativePath: workingCopyPath,
                 defaultData: solutionData,
-                viewMode: viewMode
+                viewMode: viewMode,
+                on: req.db, application: req.application, logger: req.logger
             )
         } else {
             _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
                 setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
                 relativePath: workingCopyPath,
-                viewMode: viewMode
+                viewMode: viewMode,
+                on: req.db, application: req.application, logger: req.logger
             )
         }
         let jupyterLiteNotebookPath = workingCopyPath
@@ -641,11 +640,11 @@ extension WebRoutes {
             let userSlug = userID.uuidString.lowercased()
             let relativePath = "users/\(userSlug)/\(setupID)/view-\(submissionID).ipynb"
             let payload = try await ensureUserNotebookWorkingCopy(
-                req: req,
                 setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
-                relativePath: relativePath
+                relativePath: relativePath,
+                on: req.db, application: req.application, logger: req.logger
             )
             var headers = HTTPHeaders()
             headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")
@@ -679,14 +678,14 @@ extension WebRoutes {
             }
 
         let payload = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
                 setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode),
             defaultData: defaultData,
-            viewMode: viewMode
+            viewMode: viewMode,
+            on: req.db, application: req.application, logger: req.logger
         )
 
         var headers = HTTPHeaders()

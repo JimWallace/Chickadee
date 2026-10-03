@@ -145,20 +145,21 @@ extension WebRoutes {
         // placeholders they typed on screen, a personalized save leaves the
         // rendering that actually runs.
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
                 setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode),
             overwriteWith: asEdited,
-            viewMode: viewMode
+            viewMode: viewMode,
+            on: req.db, application: req.application, logger: req.logger
         )
         // The counterpart view is now a rendering of superseded bytes, so drop
         // it: switching views after a save must show the save, not the notebook
         // as it stood before it.
         await discardOtherNotebookViewCopy(
-            req: req, setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
+            setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode, application: req.application,
+            logger: req.logger)
 
         let outcome =
             switch fileKind {
