@@ -176,7 +176,9 @@ extension DraftAssignmentRoutes {
         formState.requiredCapabilitiesCSV = payload.requiredCapabilitiesCSV
 
         var service = NewAssignmentDraftService(
-            req: req,
+            application: req.application,
+            db: req.db,
+            logger: req.logger,
             setup: setup,
             setupID: setupID,
             userID: userID,
@@ -694,9 +696,9 @@ extension DraftAssignmentRoutes {
         let zipPath = req.application.testSetupsDirectory + "\(setupID).zip"
         _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
         let gradingMode = try await newAssignmentSectionGradingMode(
-            req: req,
             courseID: courseID,
-            sectionIDRaw: sectionIDRaw
+            sectionIDRaw: sectionIDRaw,
+            on: req.db
         )
         let manifest = try makeWorkerManifestJSON(
             testSuites: [],
@@ -792,12 +794,12 @@ extension DraftAssignmentRoutes {
 /// File-scope so `NewAssignmentDraftService` (in `Services/`) can
 /// call it without needing to access the route extension's privates.
 func newAssignmentSectionGradingMode(
-    req: Request,
     courseID: UUID,
-    sectionIDRaw: String
+    sectionIDRaw: String,
+    on db: any Database
 ) async throws -> String {
-    guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db),
-        let sec = try await APICourseSection.find(sid, on: req.db)
+    guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: db),
+        let sec = try await APICourseSection.find(sid, on: db)
     else {
         return "worker"
     }

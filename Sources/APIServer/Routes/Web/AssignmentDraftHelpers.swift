@@ -215,14 +215,14 @@ func draftNotebookData(
 }
 
 func removeDraftNotebookFiles(
-    req: Request,
+    application: Application,
     setupID: String,
     userID: UUID,
     fileKind: NotebookFileKind,
     persistedPath: String?
 ) {
     let workingCopyPath =
-        req.application.directory.publicDirectory
+        application.directory.publicDirectory
         + "jupyterlite/files/"
         + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
     try? FileManager.default.removeItem(atPath: workingCopyPath)

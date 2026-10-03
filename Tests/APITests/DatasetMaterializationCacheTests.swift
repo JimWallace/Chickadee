@@ -51,9 +51,8 @@ import VaporTesting
             let targetPath = studentDir + "/pool.csv"
 
             func visit() async {
-                let req = Request(application: app, on: app.eventLoopGroup.any())
                 await writeDatasetFiles(
-                    req: req, setup: setup, userID: userID, studentDir: studentDir)
+                    setup: setup, userID: userID, studentDir: studentDir, on: app.db, application: app)
             }
 
             // First visit materializes the per-student slice.

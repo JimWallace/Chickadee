@@ -407,11 +407,10 @@ extension StudentCourseRoutes {
         }
 
         _ = try await overwriteUserNotebookWithPersonalizedStarter(
-            req: req,
             setup: setup,
-            setupID: setup.id ?? assignment.testSetupID,
             userID: action.studentID,
-            starter: starter
+            starter: starter,
+            on: req.db, application: req.application, logger: req.logger
         )
 
         req.logger.info(

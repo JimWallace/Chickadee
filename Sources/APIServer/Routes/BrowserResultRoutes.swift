@@ -173,11 +173,11 @@ struct BrowserResultRoutes: RouteCollection {
         // which contains the instructor's injected hidden-test cells.
         if let userID = caller.id {
             _ = try? await ensureUserNotebookWorkingCopy(
-                req: req,
                 setupID: body.testSetupID,
                 userID: userID,
                 fallbackSetup: setup,
-                overwriteWith: body.notebook
+                overwriteWith: body.notebook,
+                on: req.db, application: req.application, logger: req.logger
             )
         }
 

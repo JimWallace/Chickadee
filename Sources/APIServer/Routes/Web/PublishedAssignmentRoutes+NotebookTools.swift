@@ -196,10 +196,10 @@ extension PublishedAssignmentRoutes {
         try await req.fileio.writeFile(.init(data: normalized), at: draftPath)
 
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req, setupID: assignment.testSetupID, userID: userID, fallbackSetup: setup,
+            setupID: assignment.testSetupID, userID: userID, fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
                 setupID: assignment.testSetupID, userID: userID, fileKind: .solution),
-            overwriteWith: normalized)
+            overwriteWith: normalized, on: req.db, application: req.application, logger: req.logger)
 
         return req.redirect(
             to: "/testsetups/\(assignment.testSetupID)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))")

@@ -9,6 +9,10 @@
 // Extracted from WebRoutes+Notebook.swift (which keeps only the route
 // handlers) — no behaviour changes, except that the legacy-copy sweep now
 // runs once at boot instead of on every notebook page view.
+//
+// Functions over models, a database, the application and a logger, never a
+// `Request` (#1732): the routes pass `req.db`, `req.application` and
+// `req.logger`, and turn the closed-assignment gate's answer into a redirect.
 
 import Core
 import Fluent
@@ -103,24 +107,34 @@ func studentHasOpenedAssignment(
         .count() > 0
 }
 
+/// What the closed-assignment gate decided. The route turns
+/// `.redirectToDashboard` into a redirect to `/`.
+enum ClosedAssignmentGate: Equatable, Sendable {
+    /// The viewer may open the assignment.
+    case allowed
+    /// A student must be sent to the dashboard: the assignment is closed,
+    /// not visible to students by its state, and they never engaged with it.
+    case redirectToDashboard
+}
+
 /// Closed-assignment access gate for the student-facing notebook page and
-/// upload form.  Returns a redirect `Response` to the dashboard when a student
-/// must be bounced from a closed assignment they have never engaged with;
-/// otherwise records their first access durably and returns nil.  Instructors
-/// and admins always pass through (no redirect, no record).
+/// upload form.  Returns `.redirectToDashboard` when a student must be bounced
+/// from a closed assignment they have never engaged with; otherwise records
+/// their first access durably and returns `.allowed`.  Course staff for the
+/// assignment's course always pass through (no redirect, no record).  The
+/// caller says whether the viewer is staff there, so a route can answer from
+/// its per-request role memo.
 func closedAssignmentGate(
-    req: Request,
-    user: APIUser,
     userID: UUID,
     assignment: APIAssignment?,
-    isClosed: Bool
-) async throws -> Response? {
+    isClosed: Bool,
+    viewerIsCourseStaff: Bool,
+    on db: any Database
+) async throws -> ClosedAssignmentGate {
     // Course staff (TA+ or admin) bypass the closed-assignment gate for their
     // own course (#417 Slice G — was the global `user.isInstructor`).
-    if let assignmentCourseID = assignment?.courseID,
-        try await req.cachedIsCourseStaff(user, inCourse: assignmentCourseID)
-    {
-        return nil
+    if assignment != nil, viewerIsCourseStaff {
+        return .allowed
     }
     if isClosed, let assignment {
         // A published-then-closed assignment is openable read-only — a student
@@ -132,17 +146,17 @@ func closedAssignmentGate(
         var mayView = assignmentVisibleToStudentByState(assignment)
         if !mayView {
             mayView = try await studentHasOpenedAssignment(
-                assignment: assignment, userID: userID, on: req.db)
+                assignment: assignment, userID: userID, on: db)
         }
         if !mayView {
-            return req.redirect(to: "/")
+            return .redirectToDashboard
         }
     }
     if let assignmentID = assignment?.id {
         try await AssignmentParticipationStore.recordFirstAccess(
-            userID: userID, assignmentID: assignmentID, on: req.db)
+            userID: userID, assignmentID: assignmentID, on: db)
     }
-    return nil
+    return .allowed
 }
 
 /// Reads the mtime (Unix epoch seconds) of the working-copy notebook
@@ -161,19 +175,21 @@ func workingCopyMtimeEpoch(absolutePath: String) -> Int {
 }
 
 func ensureUserNotebookWorkingCopy(
-    req: Request,
     setupID: String,
     userID: UUID,
     fallbackSetup: APITestSetup,
     relativePath: String? = nil,
     defaultData: Data? = nil,
     overwriteWith: Data? = nil,
-    viewMode: NotebookViewMode = .personalized
+    viewMode: NotebookViewMode = .personalized,
+    on db: any Database,
+    application: Application,
+    logger: Logger
 ) async throws -> Data {
     let fileManager = FileManager.default
     let resolvedRelativePath = relativePath ?? userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
     let workingCopyPath =
-        req.application.directory.publicDirectory
+        application.directory.publicDirectory
         + "jupyterlite/files/"
         + resolvedRelativePath
     let workingCopyDir = (workingCopyPath as NSString).deletingLastPathComponent
@@ -183,16 +199,17 @@ func ensureUserNotebookWorkingCopy(
     // burst of them (a lab section opening an assignment) previously parked
     // cooperative-pool threads on disk reads/writes.
     if let overwriteWith {
-        try await runBlocking(on: req) {
+        try await runBlocking(app: application) {
             try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
             try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
         }
-        await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
-        await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
+        await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+        await writeDatasetFiles(
+            setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
         return overwriteWith
     }
 
-    let existingWorkingCopy: Data? = try await runBlocking(on: req) {
+    let existingWorkingCopy: Data? = try await runBlocking(app: application) {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
             !data.isEmpty,
             (try? JSONSerialization.jsonObject(with: data)) != nil
@@ -202,8 +219,9 @@ func ensureUserNotebookWorkingCopy(
     if let existingData = existingWorkingCopy {
         // Symlinks are idempotent — run on every visit so existing working copies
         // also pick up support files when the feature is first deployed.
-        await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
-        await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
+        await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+        await writeDatasetFiles(
+            setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
         return existingData
     }
 
@@ -218,10 +236,11 @@ func ensureUserNotebookWorkingCopy(
         seedData = starter
     } else {
         seedData = try await latestNotebookSubmissionData(
-            req: req,
             setupID: setupID,
             userID: userID,
-            fallbackSetup: fallbackSetup
+            fallbackSetup: fallbackSetup,
+            on: db,
+            application: application
         ).data
     }
 
@@ -242,20 +261,21 @@ func ensureUserNotebookWorkingCopy(
                 seedData: seedData,
                 setup: fallbackSetup,
                 userID: userID,
-                db: req.db,
-                supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/",
-                logger: req.logger
+                db: db,
+                supportFilesDirectory: application.testSetupsDirectory + "shared/\(setupID)/",
+                logger: logger
             )
         case .template:
             seedData
         }
 
-    try await runBlocking(on: req) {
+    try await runBlocking(app: application) {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
     }
-    await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
-    await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
+    await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+    await writeDatasetFiles(
+        setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
 
     return processedData
 }
@@ -276,25 +296,26 @@ func ensureUserNotebookWorkingCopy(
 /// Best-effort: a copy that cannot be removed is a stale editor tab, not a
 /// failed save, so this never throws into the save path.
 func discardOtherNotebookViewCopy(
-    req: Request,
     setupID: String,
     userID: UUID,
     fileKind: NotebookFileKind,
-    viewMode: NotebookViewMode
+    viewMode: NotebookViewMode,
+    application: Application,
+    logger: Logger
 ) async {
     let other: NotebookViewMode = viewMode == .template ? .personalized : .template
     let path =
-        req.application.directory.publicDirectory + "jupyterlite/files/"
+        application.directory.publicDirectory + "jupyterlite/files/"
         + userNotebookWorkingCopyRelativePath(
             setupID: setupID, userID: userID, fileKind: fileKind, viewMode: other)
     let fileManager = FileManager.default
     guard fileManager.fileExists(atPath: path) else { return }
     do {
-        try await runBlocking(on: req) {
+        try await runBlocking(app: application) {
             try fileManager.removeItem(atPath: path)
         }
     } catch {
-        req.logger.warning(
+        logger.warning(
             "Could not discard the \(other.rawValue) working copy for setup \(setupID): \(error)")
     }
 }
@@ -306,28 +327,33 @@ func discardOtherNotebookViewCopy(
 /// assignment must land the student on their substituted starter, never the
 /// raw template (which would leave `name = {{name}}` cells that fail with
 /// NameError).  Substitution failures soft-fail to the raw starter, matching
-/// the seeding path.
+/// the seeding path.  `setup` must be a stored row, since its ID names the
+/// working copy.
 func overwriteUserNotebookWithPersonalizedStarter(
-    req: Request,
     setup: APITestSetup,
-    setupID: String,
     userID: UUID,
-    starter: Data
+    starter: Data,
+    on db: any Database,
+    application: Application,
+    logger: Logger
 ) async throws -> Data {
+    let setupID = try setup.requireID()
     let personalized = await applyNotebookSubstitutionsIfNeeded(
         seedData: starter,
         setup: setup,
         userID: userID,
-        db: req.db,
-        supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/",
-        logger: req.logger
+        db: db,
+        supportFilesDirectory: application.testSetupsDirectory + "shared/\(setupID)/",
+        logger: logger
     )
     return try await ensureUserNotebookWorkingCopy(
-        req: req,
         setupID: setupID,
         userID: userID,
         fallbackSetup: setup,
-        overwriteWith: personalized
+        overwriteWith: personalized,
+        on: db,
+        application: application,
+        logger: logger
     )
 }
 
@@ -471,19 +497,19 @@ func solutionNotebookData(
 }
 
 func notebookDataForHistorySelection(
-    req: Request,
     caller: APIUser,
     submissionID: String,
     setupID: String,
-    userID: UUID
+    userID: UUID,
+    on db: any Database
 ) async throws -> Data {
-    guard let submission = try await APISubmission.find(submissionID, on: req.db) else {
+    guard let submission = try await APISubmission.find(submissionID, on: db) else {
         throw AppError.notFound(resource: "Submission")
     }
     guard submission.kind == APISubmission.Kind.student else {
         throw Abort(.forbidden)
     }
-    let isStaff = try await isSubmissionStaff(caller, submission: submission, on: req.db)
+    let isStaff = try await isSubmissionStaff(caller, submission: submission, on: db)
     if !isStaff && submission.userID != userID {
         throw Abort(.forbidden)
     }
@@ -507,12 +533,13 @@ func notebookDataForHistorySelection(
 }
 
 func latestNotebookSubmissionData(
-    req: Request,
     setupID: String,
     userID: UUID,
-    fallbackSetup: APITestSetup
+    fallbackSetup: APITestSetup,
+    on db: any Database,
+    application: Application
 ) async throws -> (data: Data, filename: String?) {
-    let submissions = try await APISubmission.query(on: req.db)
+    let submissions = try await APISubmission.query(on: db)
         .filter(\.$testSetupID == setupID)
         .filter(\.$userID == userID)
         .filter(\.$kind == APISubmission.Kind.student)
@@ -526,7 +553,7 @@ func latestNotebookSubmissionData(
             continue
         }
         let zipPath = submission.zipPath
-        let candidate: Data? = try await runBlocking(on: req) {
+        let candidate: Data? = try await runBlocking(app: application) {
             guard let data = try? Data(contentsOf: URL(fileURLWithPath: zipPath)),
                 (try? JSONSerialization.jsonObject(with: data)) != nil
             else { return nil }
@@ -543,7 +570,7 @@ func latestNotebookSubmissionData(
     }()
     // The fallback reads the setup's canonical notebook — cached and
     // resolved on the thread pool (#1156/#1171).
-    let fallbackData = try await req.application.notebookBytesCache.notebookData(
+    let fallbackData = try await application.notebookBytesCache.notebookData(
         for: NotebookSourceRef(fallbackSetup))
     return (fallbackData, fallbackFilename)
 }
@@ -555,7 +582,7 @@ func latestNotebookSubmissionData(
 /// that is populated by `extractSupportFilesToSharedDirectory` when the test setup
 /// is created or edited. Only files that exist in the shared directory are linked;
 /// missing files are silently skipped so a missing shared dir never breaks notebook access.
-func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: String) async {
+func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, application: Application) async {
     guard let setupID = setup.id else { return }
 
     // Derive the list of support files: everything in the zip except test suite scripts
@@ -578,19 +605,19 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
     // idempotent), so listing the zip fresh each time would spawn a serialized
     // `unzip` subprocess per load. The cache busts when the zip's mtime/size
     // changes — i.e. whenever the instructor edits support files.
-    let allEntries = await req.application.zipEntryListCache.entries(zipPath: setup.zipPath)
+    let allEntries = await application.zipEntryListCache.entries(zipPath: setup.zipPath)
     let supportNames = allEntries.filter {
         !testScriptNames.contains($0) && !reservedNames.contains($0)
             && !graderOnly.contains($0) && !datasetFilenames.contains($0)
     }
     guard !supportNames.isEmpty else { return }
 
-    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+    let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
 
     // The exists/exists/symlink triple per support file is synchronous
     // filesystem work on every notebook visit — run the whole pass on the
     // thread pool (#1156).
-    try? await runBlocking(on: req) {
+    try? await runBlocking(app: application) {
         let fm = FileManager.default
         for name in supportNames {
             let src = sharedDir + name
@@ -611,10 +638,11 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
 /// fingerprint with all targets present skips the slice + write entirely).
 /// A strict no-op when the assignment declares no datasets.
 func writeDatasetFiles(
-    req: Request,
     setup: APITestSetup,
     userID: UUID,
-    studentDir: String
+    studentDir: String,
+    on db: any Database,
+    application: Application
 ) async {
     guard let manifestData = setup.manifest.data(using: .utf8),
         let props = decodeManifest(from: manifestData),
@@ -623,21 +651,21 @@ func writeDatasetFiles(
     else { return }
 
     guard
-        let assignment = try? await assignmentByTestSetupID(setupID, on: req.db),
+        let assignment = try? await assignmentByTestSetupID(setupID, on: db),
         let assignmentID = assignment.id
     else { return }
 
     guard
         let seedHex = try? await AssignmentSeedStore.ensureSeed(
-            userID: userID, assignmentID: assignmentID, on: req.db)
+            userID: userID, assignmentID: assignmentID, on: db)
     else { return }
 
-    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+    let sharedDir = application.testSetupsDirectory + "shared/\(setupID)/"
 
     // Skip the slice + write when nothing that determines the bytes has
     // changed since the last materialization and every target file is still
     // present (a deleted file is repaired, matching the old always-rewrite).
-    let state: (fingerprint: String, targetsPresent: Bool)? = try? await runBlocking(on: req) {
+    let state: (fingerprint: String, targetsPresent: Bool)? = try? await runBlocking(app: application) {
         (
             fingerprint: datasetMaterializationFingerprint(
                 props: props, seedHex: seedHex, sharedDir: sharedDir),
@@ -646,7 +674,7 @@ func writeDatasetFiles(
             }
         )
     }
-    let cache = req.application.datasetMaterializationCache
+    let cache = application.datasetMaterializationCache
     if let state, state.targetsPresent,
         await cache.isCurrent(userID: userID, setupID: setupID, fingerprint: state.fingerprint)
     {
@@ -657,7 +685,7 @@ func writeDatasetFiles(
     // slice, then writes one file per dataset — synchronous I/O + CPU. Thread
     // pool (#1156).
     let wrote: Bool =
-        (try? await runBlocking(on: req) {
+        (try? await runBlocking(app: application) {
             guard
                 let files = DatasetResolver.resolve(
                     manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)
