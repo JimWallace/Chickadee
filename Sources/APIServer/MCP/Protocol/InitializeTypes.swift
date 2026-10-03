@@ -144,9 +144,11 @@ enum MCPServerInstructions {
         write is refused; every result that names a course reports its courseKey and courseTerm \
         so you can see which offering was used.
         - Assignment — identified by a 6-character public ID; has a title, an optional due date \
-        (ISO 8601), and an open/closed state. Every assignment is authored in ONE language — \
-        \(supportedLanguageNames) — resolved from its graded scripts and its starter notebook's \
-        kernel. The language decides the extension generated tests get, which language \
+        (ISO 8601), and an open/closed state. Every assignment declares ONE language — \
+        \(supportedLanguageNames) — or "none" for a suite of hand-written shell scripts. \
+        create_assignment requires the declaration and set_assignment_language changes it; \
+        replacing the starter notebook or adding a script does not. The language decides the \
+        extension generated tests get, which language \
         personalization expressions are written in, and which pattern-family and notebook-check \
         kinds are available: they are NOT uniform, and a kind a language cannot support is refused \
         when you try to save it, with a message naming what that language does support. Author in \
@@ -253,12 +255,9 @@ enum MCPServerInstructions {
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
         set_submission_mode (notebook editor vs upload-only hand-in), \
-        set_assignment_language (declare \(MCPLanguageProse.tokens) — normally derived from the \
-        notebook kernel or a graded script's extension, but REQUIRED for \
-        \(LanguageProse.mustDeclareTokens), whose generated tests are shell wrappers carrying no \
-        language-bearing extension; a \(LanguageProse.uploadOnlyTokens) assignment must be \
-        uploadOnly, and the language must be declared before any pattern family or notebook check \
-        is authored), \
+        set_assignment_language (change the declared language to one of \(MCPLanguageProse.tokens); \
+        a \(LanguageProse.uploadOnlyTokens) assignment must be uploadOnly, and the change is \
+        refused once any pattern family or notebook check has generated a test), \
         set_time_limit (the assignment's default per-test timeout in seconds; a per-test \
         timeLimitSeconds override, 1–600s, can be set on a hand-written script via author_script / \
         update_suite, on a pattern family via create_pattern_family / update_pattern_family \

@@ -1,19 +1,13 @@
 // APIServer/MCP/Tools/SetAssignmentLanguageTool.swift
 //
-// Write tool: declare the language an assignment is authored and graded in, by
-// assignment public ID. content:write, course-scoped.
+// Write tool: change the language an assignment declares, by assignment public
+// ID. content:write, course-scoped.
 //
-// For a language with an editor kernel the language is DERIVED, not declared —
-// a notebook's kernelspec or a graded script's extension answers it, and the
-// recorded manifest field is only a memo of that. This tool exists for the case
-// derivation cannot reach: C++ has no editor kernel (so no kernelspec implies
-// it) and its generated tests are deliberately extension-free `.sh` wrappers
-// (so no filename implies it either). Without a declaration there is no way to
-// author a C++ assignment through MCP at all.
-//
-// Declaring one of the derivable languages is still allowed and still useful —
-// it pins an assignment whose suite is all pattern families, with no `.R`/`.lua`
-// script on disk to find — it is simply not the case that motivated the tool.
+// Every assignment declares its language when it is created (#1331), and
+// nothing infers one afterwards. This tool is how an author changes that
+// declaration. Because the language decides every generated filename, it
+// refuses a change once a pattern family or notebook check has generated a
+// test.
 
 import Core
 import Fluent
@@ -39,14 +33,10 @@ struct SetAssignmentLanguageTool: ContentTool {
 
     static let name = "set_assignment_language"
     static let description =
-        "Declare the language an assignment is authored and graded in by its public ID: "
-        + "\(MCPLanguageProse.tokens). For every language except "
-        + "\(LanguageProse.mustDeclareTokens) this is normally unnecessary — the "
-        + "language is derived from the starter notebook's kernel or a graded script's extension — but "
-        + "declaring it "
-        + "pins a suite made only of pattern families, which has no script on disk to derive from. For "
-        + "\(LanguageProse.mustDeclareTokens) it is required: its generated tests are shell wrappers "
-        + "carrying no language extension, so nothing in the suite implies the language. A "
+        "Change the language an assignment declares, by its public ID: "
+        + "\(MCPLanguageProse.tokens). Every assignment declares its language when it is created "
+        + "(create_assignment requires it); replacing the starter notebook or adding a script never "
+        + "changes it. A "
         + "\(LanguageProse.uploadOnlyTokens) assignment must already be uploadOnly "
         + "(set_submission_mode) — this tool refuses otherwise. Because a language change rewrites every "
         + "generated filename, declare the language BEFORE authoring pattern families or notebook checks; "
