@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.356] - 2026-10-03
+
+### Changed
+
+- **BrightSpace has its own source directory** (#1728). The 15 BrightSpace and LEARN service files move from `Services/` to `Sources/APIServer/BrightSpace/`, beside `GitHub/` and `LTI/`. The view-context types of the instructor BrightSpace tab move there too, beside `BrightSpacePagePresenter`, their only builder. Nothing else changes.
+
+
 ## [0.5.355] - 2026-10-03
 
 ### Added
