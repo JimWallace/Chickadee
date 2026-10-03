@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.379] - 2026-10-03
+
+### Changed
+
+- **Grade fields and audit metadata are decoded once, with `Decodable`.** Four functions read a result's four grade fields from the collection JSON, each with its own `JSONSerialization` pass, and the legacy grade path parsed one blob three times. `CollectionGradeFields` now decodes the blob once, field by field, and `APIResult`'s column accessors use the same formulas. Three private decoders of `audit_log.metadata` became one `metadataDictionary` accessor on `APIAuditLogEntry` (#1931).
+
+### Fixed
+
+- **Two CI path filters named files that no longer exist.** `editor-smoke.yml` listed `assignment-validate.js` and `embedded-activity.js`, and only three of the eight grading and eval workers, so a change to a Lua or Octave worker, or to the shared grading scripts the notebook page loads, skipped the editor smoke. It now matches the per-language scripts with a pattern, as `browser-grading-smoke.yml` does. `grading-hang-probe.yml` filtered on `grading-worker.js`, which became one worker per language; it now uses globs (#1981).
+
+
 ## [0.5.378] - 2026-10-03
 
 ### Fixed
