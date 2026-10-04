@@ -18,7 +18,6 @@
 
 import Core
 import Foundation
-import Vapor
 
 /// Behaviour for one `PatternKind`: how a case renders to Python and how a
 /// family/case is validated before it is applied to a test setup.
@@ -117,46 +116,28 @@ struct ProgramIOKind: PatternKindHandler {
         // Exactly one arg — the stdin text — which may be empty (a program
         // that reads nothing). `paramNames` is a UI hint only.
         guard c.args.count == 1, case .string = c.args[0] else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (program_io): case '\(c.key)' must have exactly one "
-                    + "arg, the text fed to the program's standard input (a string, possibly empty)")
+            throw AuthoringValidationError.programIOCaseNeedsStdinArg(familyID: family.id, caseKey: c.key)
         }
         guard case .string(let expected) = c.expected else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (program_io): case '\(c.key)' expected must be a "
-                    + "string (the standard output to match)")
+            throw AuthoringValidationError.programIOExpectedNotString(familyID: family.id, caseKey: c.key)
         }
         let comparison = family.resolvedIOComparison
         // An empty needle matches everything under `included` / `regex`, so
         // the case could never fail — refuse it rather than ship a test that
         // grades nothing. Exact may be empty: "prints nothing" is a real case.
         if comparison != .exact, expected.isEmpty {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (program_io): case '\(c.key)' expected must not be "
-                    + "empty for the \(comparison.rawValue) comparison — it would match any output")
+            throw AuthoringValidationError.programIOExpectedEmpty(
+                familyID: family.id, caseKey: c.key, comparison: comparison)
         }
         if let reason = programIOComparisonUnsupportedReason(comparison, language: language) {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (program_io): the \(comparison.rawValue) comparison "
-                    + "is not available on a \(language.displayName) assignment — \(reason)")
+            throw AuthoringValidationError.programIOComparisonUnsupported(
+                familyID: family.id, comparison: comparison, language: language, reason: reason)
         }
         if comparison == .regex {
             // A cheap compile check; each language's own engine has the last
             // word, but an unbalanced group is a typo in every dialect.
             guard (try? NSRegularExpression(pattern: expected)) != nil else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)' (program_io): case '\(c.key)' expected is not a "
-                        + "valid regular expression")
+                throw AuthoringValidationError.programIOInvalidRegex(familyID: family.id, caseKey: c.key)
             }
         }
     }
@@ -181,29 +162,16 @@ struct DifferentialKind: PatternKindHandler {
         let source = (family.referenceImplementation ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines)
         guard !source.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: """
-                    Pattern family '\(family.id)' (differential) has no reference \
-                    implementation. This kind computes each case's expected value by \
-                    running your reference, so there is nothing to compare against \
-                    without one.
-                    """)
+            throw AuthoringValidationError.differentialReferenceMissing(familyID: family.id)
         }
         // The renderer calls a name it chose; the instructor's source has to
         // define it. Without this the family saves, generates, and fails every
         // case at grade time with "name is not defined" — a broken test that
         // reads to the student as a broken submission.
         guard source.contains(family.differentialReferenceName) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: """
-                    Pattern family '\(family.id)' (differential) must define \
-                    `\(family.differentialReferenceName)`, which is the name the generated \
-                    test calls. Rename your reference implementation to \
-                    `\(family.differentialReferenceName)` — it takes the same arguments as \
-                    `\(family.functionName)`.
-                    """)
+            throw AuthoringValidationError.differentialReferenceMissingDefinition(
+                familyID: family.id, referenceName: family.differentialReferenceName,
+                functionName: family.functionName)
         }
     }
 
@@ -222,12 +190,9 @@ private func validatePatternArgCount(
     family: PatternFamily, case c: PatternCase, kindLabel: String?
 ) throws {
     guard !family.paramNames.isEmpty, c.args.count != family.paramNames.count else { return }
-    let prefix = "Pattern family '\(family.id)'" + (kindLabel.map { " (\($0))" } ?? "")
-    throw Abort(
-        .unprocessableEntity,
-        reason:
-            "\(prefix): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-    )
+    throw AuthoringValidationError.patternCaseArgCountMismatch(
+        familyID: family.id, kindLabel: kindLabel, caseKey: c.key, argCount: c.args.count,
+        parameterCount: family.paramNames.count)
 }
 
 // MARK: - boundaryEquality
@@ -263,9 +228,7 @@ struct ApproximateEqualityKind: PatternKindHandler {
 
     func validateFamily(_ family: PatternFamily) throws {
         if let tol = family.defaults.tolerance, tol < 0 || !tol.isFinite {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Pattern family '\(family.id)': tolerance must be a non-negative finite number.")
+            throw AuthoringValidationError.invalidPatternFamilyTolerance(familyID: family.id)
         }
     }
 
@@ -296,28 +259,17 @@ struct VariableEqualityKind: PatternKindHandler {
         // header), not something the renderer or validator cares
         // about.
         guard c.args.count == 1 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' must have exactly one arg (the variable name); got \(c.args.count)"
-            )
+            throw AuthoringValidationError.variableEqualityArgCount(
+                familyID: family.id, caseKey: c.key, argCount: c.args.count)
         }
         guard case .string(let varName) = c.args[0],
             !varName.trimmingCharacters(in: .whitespaces).isEmpty
         else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' arg must be a non-empty string (the variable name)"
-            )
+            throw AuthoringValidationError.variableEqualityArgNotName(familyID: family.id, caseKey: c.key)
         }
         guard isValidIdentifier(varName, language: language) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name "
-                    + "'\(varName)' is not a valid \(identifierKindName(language))"
-            )
+            throw AuthoringValidationError.variableEqualityInvalidName(
+                familyID: family.id, caseKey: c.key, name: varName, language: language)
         }
     }
 }
@@ -338,11 +290,7 @@ struct ReturnTypeCheckKind: PatternKindHandler {
         guard case .string(let expectedType) = c.expected,
             !expectedType.trimmingCharacters(in: .whitespaces).isEmpty
         else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' expected must be a non-empty string naming the type (e.g. \"int\", \"DataFrame\")"
-            )
+            throw AuthoringValidationError.returnTypeCheckExpectedNotTypeName(familyID: family.id, caseKey: c.key)
         }
     }
 }
@@ -363,11 +311,7 @@ struct ExceptionExpectedKind: PatternKindHandler {
         guard case .string(let exceptionType) = c.expected,
             !exceptionType.trimmingCharacters(in: .whitespaces).isEmpty
         else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' expected must be a non-empty string naming the exception class (e.g. \"ValueError\")"
-            )
+            throw AuthoringValidationError.exceptionExpectedNotClassName(familyID: family.id, caseKey: c.key)
         }
     }
 }
@@ -393,11 +337,7 @@ struct PerformanceThresholdKind: PatternKindHandler {
             }
         }()
         guard let t = threshold, t.isFinite, t > 0 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' expected must be a positive number (milliseconds)"
-            )
+            throw AuthoringValidationError.performanceThresholdNotPositive(familyID: family.id, caseKey: c.key)
         }
     }
 }
@@ -420,11 +360,7 @@ struct StdoutEqualityKind: PatternKindHandler {
         // a beginner exercise where the assignment is to add the
         // print() call.
         guard case .string = c.expected else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)"
-            )
+            throw AuthoringValidationError.stdoutEqualityExpectedNotString(familyID: family.id, caseKey: c.key)
         }
     }
 }
@@ -449,11 +385,7 @@ struct UnorderedEqualityKind: PatternKindHandler {
         // grading time and the literal `expected` is unused.
         if c.expectedVarRef == nil {
             guard case .array = c.expected else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)' (unordered_equality): case '\(c.key)' expected must be a list (the elements to match, in any order)"
-                )
+                throw AuthoringValidationError.unorderedEqualityExpectedNotList(familyID: family.id, caseKey: c.key)
             }
         }
     }
