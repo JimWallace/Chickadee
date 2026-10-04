@@ -102,7 +102,7 @@ import Testing
     }
 
     @Test func concurrentFirstCallersShareOneKey() async throws {
-        let provider = LTIToolKeyProvider()
+        let provider = LTIToolKeyCache(ttl: .infinity)
         let path = keyPath
         async let first = provider.authority(path: path)
         async let second = provider.authority(path: path)
