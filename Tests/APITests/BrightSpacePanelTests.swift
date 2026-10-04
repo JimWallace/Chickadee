@@ -89,6 +89,11 @@ import VaporTesting
                     let html = res.body.string
                     #expect(html.contains("/instructor/brightspace/connect"))
                     #expect(html.contains("docs/brightspace-setup.md#per-instructor-identity"))
+                    #expect(html.contains("to get a Valence User ID and User Key for your own account."))
+                    // Both credential inputs name the note as their description.
+                    #expect(
+                        html.components(separatedBy: "aria-describedby=\"bs-connect-note\"").count == 3)
+                    #expect(html.contains("<p class=\"field-note\" id=\"bs-connect-note\">"))
                 })
         }
     }

@@ -104,18 +104,19 @@ LEARN
         <label class="field-inline">
             Valence User ID
             <input class="form-input input-compact" type="text" id="bs-valence-user-id"
-                   name="userID" autocomplete="off" required>
+                   name="userID" autocomplete="off" required aria-describedby="bs-connect-note">
         </label>
         <label class="field-inline">
             Valence User Key
             <input class="form-input input-compact" type="password" id="bs-valence-user-key"
-                   name="userKey" autocomplete="off" required>
+                   name="userKey" autocomplete="off" required aria-describedby="bs-connect-note">
         </label>
         <button class="btn btn-primary" type="submit">Connect my LEARN account</button>
     </form>
-    <p class="section-note">
-        Get the User ID and User Key for your own account with the steps in the
-        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/brightspace-setup.md#per-instructor-identity" target="_blank" rel="noopener noreferrer">LEARN setup guide</a>.
+    <p class="field-note" id="bs-connect-note">
+        Follow the
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/brightspace-setup.md#per-instructor-identity" target="_blank" rel="noopener noreferrer">LEARN setup guide <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>
+        to get a Valence User ID and User Key for your own account.
     </p>
     #endif
     #if(showIdentityActions):
