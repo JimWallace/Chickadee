@@ -9,6 +9,37 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.401] - 2026-10-04
+
+### Changed
+
+- **Each auto-compute warning title is one phrase, and the advice is in a doc.** The titles for a call timeout, a `None` result and a value that has no JSON form had two sentences each. Each is now one phrase, for example "Solution call did not return within 5 seconds". A C++, Racket or Java value that is not JSON, a server refusal and a failed request no longer read "Solution raised:"; they read "Computed value is not JSON", "Auto-compute unavailable here" and "Auto-compute request failed". What to do about each warning is in the new `docs/auto-compute.md`. A note under the cases table links it, for the kinds that auto-compute fills, because a touch screen does not show a title. A JS test holds every auto-compute title to one phrase of at most 20 words (#1991).
+
+### Fixed
+
+- **The amber cue on an input value names its cause, and a note links the explanation.** The Global Inputs panel, the section inputs and a family's Variables table gave every loose value the title "Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict." That was two sentences, and it was wrong for a value pasted in the language's own syntax, which the editor rewrites to a list or a dict. The title is now "Kept as text" or "Read as a pasted literal", from one helper, `ChickadeeLanguage.looseValueTitle`, and the expression titles are now "Per-student expression" and "Empty expression". The value inputs are named "Value", so a title only describes them. The new section "The amber cue on a value" in `docs/inputs.md` explains the cue. One partial, `_value-cue-note.leaf`, links it under the Global Inputs table, under each section's inputs and under a family's Variables table, and shows only while its table has a row (#1996).
+
+### Fixed
+
+- **The staff view of a student's submissions shows the class due date beside an extension.** When a student has an extension, the Due cell shows the extended date, "+ extension", and "class due <date>" (or "no class due date"). Before, the class due date was only in a hover title, which a touch screen does not show (#2026).
+
+### Changed
+
+- **A slow notebook editor shows a warning banner, not the failure panel.** When the editor had not started after 35 seconds, the page showed the "Editor didn't load" panel while the editor was still loading. That panel is a `role="alert"` stand-in for missing content, and its "Diagnostic details" box was empty. A slow boot now shows a third dismissible `flash-warning` banner, `role="status"`, above the editor, like the browser and memory notices. The banner has its own `.ipynb` upload input, which uses the same upload handler as the panel's. The banner goes away when the kernel becomes ready, unless focus is inside it, and a failure after a slow boot replaces it with the panel. When a notice is dismissed, or hidden with focus inside it, focus moves to the status line. The banner text, the memory text and the panel paragraphs are now one sentence each, and the device advice is in the new `docs/notebook-editor-help.md`, which the banner and the panel link (#2028).
+
+### Changed
+
+- **The LEARN page links the setup guide from the connect form.** The note under "Connect my LEARN account" is now one sentence, and "LEARN setup guide" links to the per-instructor section of `docs/brightspace-setup.md`. The form labels and inputs use the shared `.field-inline` and `.input-compact` classes, so the page `<style>` block loses its private copies (#2037).
+
+### Changed
+
+- **The MCP coverage tests read both surfaces.** Four test suites built their own copy of the text an agent reads, and all four read only the content catalog. They now share one helper that also reads the admin catalog, the admin instructions and the doc resources, so a stale list there fails a test. The output-schema structure test reads both catalogs too. `docs/admin-mcp.md` says why most admin tools declare no output schema (#1935).
+
+### Changed
+
+- **An MCP tool error takes the tool's name from the call, not from the tool.** `MCPToolError` no longer carries a `tool` field, and 34 helpers no longer take a `tool:` parameter; tools passed their own name by hand 336 times. The dispatcher passes `call.name` to `mcpToolErrorResult`, so every error names the tool that was actually called. The two `atLeast: CourseRole = .instructor` defaults in `CourseSectionTools.swift` are gone too, as `ToolContext` already required; their callers now say `.instructor` (#1939).
+
+
 ## [0.5.400] - 2026-10-04
 
 ### Changed
