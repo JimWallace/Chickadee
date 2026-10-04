@@ -7,7 +7,7 @@
 //
 // WHY THIS SHAPE. The existing matrix (LanguageConformanceMatrixTests) proves
 // each stage works when handed `.lua` explicitly. That is necessary and it is
-// not sufficient: every defect in docs/lua-architecture-audit.md sat in the
+// not sufficient: every defect in docs/archive/lua-architecture-audit.md sat in the
 // JOINT between stages, where something asked "which language is this?" and
 // answered Python —
 //

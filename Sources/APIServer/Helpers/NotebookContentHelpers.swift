@@ -160,7 +160,7 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
 /// The non-default languages read their aliases from `notebookKernelNames`, so a
 /// new language needs an arm here as well as a descriptor — this function is one
 /// of the enumerated sites the compiler cannot flag, and it shipped without a
-/// Lua arm (see docs/lua-architecture-audit.md).
+/// Lua arm (see docs/archive/lua-architecture-audit.md).
 func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     guard var notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     else { return data }
@@ -177,7 +177,7 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     // vendored kernel, so a new language needs no arm here. This was three
     // hand-written arms and shipped without a Lua one, leaving a `lua`-named
     // notebook on "unknown → leave unchanged" with no kernel the editor could
-    // attach (docs/lua-architecture-audit.md F6).
+    // attach (docs/archive/lua-architecture-audit.md F6).
     // Python is excluded by name rather than as "the default": it now has its
     // own `notebookKernelNames`, and matching it here would route a Python
     // notebook through the destructuring branch instead of the Python branch

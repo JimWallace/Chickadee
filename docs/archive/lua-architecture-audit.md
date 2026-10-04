@@ -1,5 +1,10 @@
 # Lua support + language-dispatch refactor: architecture audit
 
+> **Archived 2026-10-04.** Every finding is resolved. The F4 note on
+> in-process grading moved to #2017. The live runbook is
+> [adding-a-xeus-kernel.md](../adding-a-xeus-kernel.md), and the later audit
+> is [multi-language-audit.md](../multi-language-audit.md).
+
 *Audit of `main` at `0280225` (PR #1282), 2026-08-07. Method: every claim below
 that could be executed was executed — probe scripts against a real `lua 5.4.6`,
 a scratch Swift test against the built package, and deliberate breakage of each
@@ -37,7 +42,7 @@ accurate today and covered by `IsolatedWorkerScriptDriftTests`.
 ## F1 — DEFECT (critical). The language dispatch never dispatches: `resolve` and `rederive` have no Lua arm, so every server-side decision for a real Lua assignment is made as Python
 
 `AssignmentLanguage.resolve(manifest:notebookKernelName:notebookLanguageInfoName:)`
-([Sources/Core/AssignmentLanguage.swift:106](../Sources/Core/AssignmentLanguage.swift))
+([Sources/Core/AssignmentLanguage.swift:106](../../Sources/Core/AssignmentLanguage.swift))
 is the root every server path resolves through (via `resolve(for:manifest:)`).
 Its chain is: recorded `manifest.language` → any `.R` script → `rKernelNames` /
 `language_info == "r"` → `.python`. **No step knows Lua.** `rederive`

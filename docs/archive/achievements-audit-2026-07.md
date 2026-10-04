@@ -1,5 +1,11 @@
 # Achievements: deployment-readiness audit + Labs 6–9 case study (2026-07)
 
+> **Archived 2026-10-04.** Point-in-time audit. #2018 and #2019 fixed A8 and
+> A11, and A15 moved to #2020. A12 and A18, and parts of A16 and A17, were
+> still open at archival, and no issue holds them. The live design is
+> [achievements-unification.md](../achievements-unification.md). The file and
+> line references below are stale.
+
 Status: point-in-time audit ahead of the HLTH 230 Labs 6–9 rollout
 (July 8/15/22 opens). Companion to `docs/achievements-unification.md`
 (the design plan-of-record). Findings reference code as of v0.4.609.
