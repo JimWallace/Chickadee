@@ -85,8 +85,7 @@ extension Application {
         lazyStored(SessionReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Session reaper",
-                interval: sessionReaperSweepInterval,
-                runImmediately: true
+                interval: sessionReaperSweepInterval
             ) { application in
                 try await reapStaleSessions(on: application.db, logger: application.logger)
             }

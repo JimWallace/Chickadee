@@ -23,8 +23,7 @@ extension Application {
             let hours = diagnostics.configuration.pruneIntervalHours
             return PeriodicSweepMonitor(
                 name: "Diagnostics prune",
-                interval: TimeInterval(max(hours, 1)) * 3600,
-                runImmediately: true
+                interval: TimeInterval(max(hours, 1)) * 3600
             ) { application in
                 guard application.diagnostics.configuration.pruneIntervalHours > 0 else { return }
                 await application.diagnostics.pruneNow(on: application.db, logger: application.logger)

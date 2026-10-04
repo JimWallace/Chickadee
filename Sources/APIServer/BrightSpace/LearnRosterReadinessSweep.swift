@@ -172,8 +172,7 @@ extension Application {
         lazyStored(LearnRosterReadinessMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "LEARN roster readiness",
-                interval: learnRosterReadinessInterval,
-                runImmediately: false
+                interval: learnRosterReadinessInterval
             ) { application in
                 guard application.brightSpaceAppCredentials != nil else { return }
                 _ = try await sweepLearnRosterReadiness(

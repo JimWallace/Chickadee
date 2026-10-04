@@ -23,8 +23,7 @@ extension Application {
         lazyStored(LoginAttemptReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Login-attempt reaper",
-                interval: loginAttemptReaperSweepInterval,
-                runImmediately: true
+                interval: loginAttemptReaperSweepInterval
             ) { application in
                 await LoginAttemptService.purgeStale(
                     db: application.db,

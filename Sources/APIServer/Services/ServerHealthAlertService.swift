@@ -854,16 +854,14 @@ extension Application {
     }
 
     /// Drives `serverHealthAlertMonitor.sweep` on the configured cadence.
-    /// No `runImmediately` boot sweep — the loop's first iteration sweeps
-    /// right away, matching the historical actor loop, and there was never
-    /// an extra detached boot sweep for this service.
+    /// The loop's first iteration sweeps right away, matching the historical
+    /// actor loop.
     var serverHealthAlertSweepMonitor: PeriodicSweepMonitor {
         lazyStored(ServerHealthAlertSweepMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Server health alert",
                 interval: serverHealthAlertConfiguration.checkIntervalSeconds,
-                minimumInterval: 5,
-                runImmediately: false
+                minimumInterval: 5
             ) { application in
                 await application.serverHealthAlertMonitor.sweep(application: application)
             }
