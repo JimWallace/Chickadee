@@ -781,8 +781,8 @@ import Testing
         #expect(didKeepPolling, "Runner should continue polling while heartbeat retries fail")
 
         _ = await heartbeatTask.result
-        runTask.cancel()
-        _ = await runTask.result
+        let shutDown = await awaitCancelledDaemon(runTask)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
     }
 
     @Test func downloadRetriesThroughShortServerInterruption() async throws {

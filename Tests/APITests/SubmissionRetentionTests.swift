@@ -17,11 +17,6 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-retention")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(
-            username: "retention_admin", password: "testpassword", role: "admin", on: app)
-    }
-
     private func csrfCookieAndToken(
         _ cookie: String, path: String = "/admin/retention"
     ) async throws -> (String, String) {
@@ -35,7 +30,7 @@ import VaporTesting
 
     @Test func toggleCourseArchiveStampsAndClearsArchivedAt() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("retention_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "RET101", name: "Stamp Me")
             let courseID = try course.requireID()
             #expect(course.archivedAt == nil)
@@ -98,7 +93,7 @@ import VaporTesting
 
     @Test func retentionPageListsArchivedCoursesAndMarksEligible() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("retention_admin", on: app)
 
             let eligible = try await makeTestCourse(
                 on: app, code: "RETPAGEELIG", name: "Eligible Course", archived: true)

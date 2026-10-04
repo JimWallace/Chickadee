@@ -96,18 +96,6 @@ import VaporTesting
 
     // MARK: - Page
 
-    private func page(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     @Test func personSelectListsEveryoneThenStaff() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
@@ -119,7 +107,7 @@ import VaporTesting
             try await APICourseEnrollment(userID: try pupil.requireID(), courseID: courseID, role: .student)
                 .save(on: app.db)
 
-            let html = try await page("/instructor/activity", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/activity", cookie: cookie, on: app)
             #expect(html.contains("<option value=\"\" selected>Everyone</option>"))
             #expect(html.contains("<option value=\"act_ta\">Ada TA</option>"))
             #expect(!html.contains("act_pupil"))
@@ -135,7 +123,7 @@ import VaporTesting
             try await APICourseEnrollment(userID: try ta.requireID(), courseID: courseID, role: .ta)
                 .save(on: app.db)
 
-            let html = try await page("/instructor/activity?actor=act_rt", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/activity?actor=act_rt", cookie: cookie, on: app)
             #expect(html.contains("<option value=\"act_rt\" selected>Round Trip</option>"))
             #expect(!html.contains("<option value=\"\" selected>"))
             #expect(html.contains("No activity matches that person."))
@@ -145,7 +133,7 @@ import VaporTesting
     @Test func aFormerStaffMemberInTheFilterStillGetsAnOption() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
-            let html = try await page("/instructor/activity?actor=gone_person", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/activity?actor=gone_person", cookie: cookie, on: app)
             #expect(html.contains("<option value=\"gone_person\" selected>gone_person</option>"))
         }
     }
@@ -160,7 +148,7 @@ import VaporTesting
                 targetID: UUID().uuidString,
                 metadata: ["course_id": courseID.uuidString, "role": "ta"], on: request)
 
-            let html = try await page("/instructor/activity", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/activity", cookie: cookie, on: app)
             #expect(html.contains("Recent activity"))
             #expect(html.contains("<tr class=\"section-items-heading\">"))
             #expect(html.contains("<strong>Today</strong>"))

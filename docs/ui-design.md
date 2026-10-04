@@ -584,6 +584,11 @@ duplicate.
   too long for the row (the admin LTI platforms table); give its `<summary>`
   a visually hidden copy of the row's name, so a screen reader can tell one
   "Edit" from the next.
+- **`.disclosure-summary`** — the `<summary>` of a `<details>` that a reader
+  opens occasionally, such as the options under a form.  It starts with an
+  `.accordion-caret` (a span around the `#i-chevron-right` icon), which turns
+  while the details is open.  Do not use `.test-output-details` for this:
+  that is the disclosure of a result row or a log row.
 - **`.page-heading`**, `.titlebar-subtitle` — a heading and its subtitle
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.
@@ -630,7 +635,7 @@ Reaching for detail, cheapest first.  Pick the first one that fits:
 | The reader | Idiom |
 |---|---|
 | should just see it | put it on the page — a `.chip` for a value, `.field-note` under a control, `.card-meta` under a title |
-| wants it occasionally | `<details>` + `.accordion-caret`, closed by default |
+| wants it occasionally | `<details>` + `.disclosure-summary` with an `.accordion-caret`, closed by default |
 | is acting on one row | `.ext-details`/`.ext-panel`, or `.popover-panel` |
 | must decide before anything else happens | `.modal-card` — the only blocking shape, and only for a decision |
 | wants a reminder of what a control is | `title` — a phrase, and never the only copy of something they need |

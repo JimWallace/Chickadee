@@ -25,6 +25,19 @@ import VaporTesting
         .deletingLastPathComponent()  // Tests
         .deletingLastPathComponent()  // repo root
 
+    /// The entry point of the vendored editor that the notebook page frames.
+    private static let vendoredEditorEntryPoint =
+        repoRoot
+        .appendingPathComponent("Public", isDirectory: true)
+        .appendingPathComponent(EditorInlineScriptHashes.vendoredEditorDirectory)
+        .appendingPathComponent("lab/index.html")
+
+    /// Skips, visibly, in a checkout without the vendored editor. The tree is
+    /// committed, so CI always has it, and there a skip fails the job.
+    static let requiresVendoredEditor: ConditionTrait = .enabled(
+        if: FileManager.default.fileExists(atPath: vendoredEditorEntryPoint.path),
+        "requires the vendored editor under Public/")
+
     /// The `script-src` directive out of a rendered policy string.
     private func scriptSrc(in csp: String) -> String? {
         csp.split(separator: ";")
@@ -189,19 +202,13 @@ import VaporTesting
         #expect(EditorInlineScriptHashes.derive(publicDirectory: empty.path) == nil)
     }
 
-    @Test func vendoredEditorTreeYieldsItsInlineScriptHashes() throws {
+    @Test(Self.requiresVendoredEditor) func vendoredEditorTreeYieldsItsInlineScriptHashes() throws {
         // Completeness, against the bytes FileMiddleware actually serves. The
         // vendored tree has an inline bootstrap per app entry point; a
         // derivation that found none would leave the editor with no allowance
         // at all, and nothing else in the suite would notice.
         let publicDirectory = Self.repoRoot.appendingPathComponent("Public", isDirectory: true)
-        let entryPoint =
-            publicDirectory
-            .appendingPathComponent(EditorInlineScriptHashes.vendoredEditorDirectory)
-            .appendingPathComponent("lab/index.html")
-        // The vendored editor is large and checked in; a checkout without it
-        // is a valid state for this suite to run in, so say nothing.
-        guard FileManager.default.fileExists(atPath: entryPoint.path) else { return }
+        let entryPoint = Self.vendoredEditorEntryPoint
 
         let hashes = try #require(
             EditorInlineScriptHashes.derive(publicDirectory: publicDirectory.path),

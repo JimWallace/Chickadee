@@ -261,7 +261,7 @@ enum AssignmentVersionStore {
                 lastError = error
             }
         }
-        throw lastError ?? Abort(.internalServerError, reason: "Could not assign a version number")
+        throw lastError ?? AppError.internalFailure(reason: "Could not assign a version number")
     }
 }
 

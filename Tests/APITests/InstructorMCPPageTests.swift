@@ -22,12 +22,7 @@ import VaporTesting
             course.mcpInstructions = "Terse and technical."
             try await course.save(on: app.db)
         }
-        var html = ""
-        try await app.asyncTest(
-            .GET, "/instructor/mcp",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        return html
+        return try await getHTML("/instructor/mcp", cookie: cookie, on: app)
     }
 
     @Test func saveSitsOutsideTheFormAndNamesIt() async throws {

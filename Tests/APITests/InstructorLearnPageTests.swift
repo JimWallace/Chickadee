@@ -26,18 +26,6 @@ import VaporTesting
         }
     }
 
-    private func learnPage(_ app: Application, cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, "/instructor/brightspace",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     // MARK: - The service-account flag
 
     @Test func theFlagFollowsTheDeploymentWideClient() async throws {
@@ -61,7 +49,7 @@ import VaporTesting
                 valenceUserID: "vu", valenceUserKey: "vk", identityName: "Test Instructor (ti)",
                 capturedByUserID: instructor.id, userID: instructor.id, on: app.db)
 
-            let html = try await learnPage(app, cookie: cookie)
+            let html = try await getHTML("/instructor/brightspace", cookie: cookie, on: app)
             #expect(!html.contains("Your LEARN account"))
             #expect(!html.contains("This course pushes grades as"))
             #expect(!html.contains("/instructor/brightspace/connect"))
@@ -84,7 +72,7 @@ import VaporTesting
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
-            let html = try await learnPage(app, cookie: cookie)
+            let html = try await getHTML("/instructor/brightspace", cookie: cookie, on: app)
             #expect(html.contains("Your LEARN account is not connected"))
             #expect(html.contains("/instructor/brightspace/connect"))
             #expect(html.contains("Export Grades CSV"))
@@ -127,7 +115,7 @@ import VaporTesting
             course.brightspaceSyncUserID = instructor.id
             try await course.save(on: app.db)
 
-            let html = try await learnPage(app, cookie: cookie)
+            let html = try await getHTML("/instructor/brightspace", cookie: cookie, on: app)
             #expect(html.contains("<span class=\"tier tier-danger\">Paused</span>"))
             #expect(html.contains("Grade sync is paused"))
             #expect(html.contains("Ask a Chickadee admin."))
@@ -150,7 +138,7 @@ import VaporTesting
             _ = try await arInsertAssignment(
                 testSetupID: "setup_learn_b", title: "Loose Lab", isOpen: true, on: app)
 
-            let html = try await learnPage(app, cookie: cookie)
+            let html = try await getHTML("/instructor/brightspace", cookie: cookie, on: app)
             #expect(html.contains("class=\"state-select\" data-state=\"mapped\""))
             #expect(html.contains("class=\"state-select\" data-state=\"unmapped\""))
             #expect(html.contains("Not synced yet"))
@@ -209,7 +197,7 @@ import VaporTesting
             try await enrollment.save(on: app.db)
             let cookie = try await arLoginAsInstructor(on: app)
 
-            let html = try await learnPage(app, cookie: cookie)
+            let html = try await getHTML("/instructor/brightspace", cookie: cookie, on: app)
             #expect(html.contains("Una Reachable"))
             #expect(html.contains("class=\"avatar avatar-md\""))
             #expect(html.contains("1 student can"))

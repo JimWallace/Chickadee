@@ -167,7 +167,7 @@ func applyPatternFamilies(
 
     let oldManifest = setup.manifest
     guard let props = decodeManifest(fromJSON: oldManifest) else {
-        throw Abort(.internalServerError, reason: "Test setup manifest is not valid JSON")
+        throw AppError.internalFailure(reason: "Test setup manifest is not valid JSON")
     }
 
     // ── 1. Resolve caller arguments against the stored manifest ─────────
@@ -203,7 +203,7 @@ func applyPatternFamilies(
     let generatesScripts =
         nextFamilies.contains { $0.cases.contains(where: \.enabled) } || !inputs.checks.isEmpty
     if language.language == nil, generatesScripts {
-        throw Abort(.badRequest, reason: undeclaredLanguageGenerationMessage)
+        throw AppError.badRequest(reason: undeclaredLanguageGenerationMessage)
     }
     // Inert on the declared-None path: the guard above means nothing is
     // rendered there, and the manifest below records `language.language`, not

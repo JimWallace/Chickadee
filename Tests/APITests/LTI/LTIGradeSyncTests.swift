@@ -270,46 +270,6 @@ import VaporTesting
         }
     }
 
-    @Test func aFailureShowsOneShortSentence() async throws {
-        // A class suite builds an app per test, which must be shut down.
-        try await withApp(app) { _ in
-            struct TransportError: Error {}
-            #expect(LTIGradeSyncSweep.reason(for: TransportError()) == LTIGradeSyncSweep.unreachableMessage)
-            #expect(
-                LTIGradeSyncSweep.reason(for: GradeSelectionError.missingPoints) == LTIGradeSyncSweep.noGradeMessage)
-            #expect(
-                LTIGradeSyncSweep.reason(for: LTIServiceError.lineItemGone) == LTIServiceError.lineItemGone.description)
-
-            // Every reason the page can show stays short: the page lists them in
-            // a table column, so none may grow into a paragraph.
-            let reasons =
-                [
-                    LTIGradeSyncSweep.notLaunchedMessage, LTIGradeSyncSweep.noLineItemsMessage,
-                    LTIGradeSyncSweep.noTotalMessage, LTIGradeSyncSweep.noGradeMessage,
-                    LTIGradeSyncSweep.unreachableMessage, LTIServiceError.lineItemGone.description,
-                ]
-                + [LTIServiceError.Step.token, .findLineItem, .createLineItem, .postScore].flatMap { step in
-                    [
-                        LTIServiceError.rejected(step, status: 500).description,
-                        LTIServiceError.unreadableResponse(step).description,
-                    ]
-                }
-            for reason in reasons {
-                #expect(reason.split(separator: " ").count <= 15, "\(reason)")
-            }
-        }
-    }
-
-    @Test func aGradeSelectionFailureIsTerminalAndStoredAsNoGrade() async throws {
-        // A class suite builds an app per test, which must be shut down.
-        try await withApp(app) { _ in
-            // Grade selection reports in its own type, so the AGS sweep
-            // classifies it without knowing the Valence error taxonomy.
-            #expect(!LTIGradeSyncSweep.isRetryable(GradeSelectionError.missingPoints))
-            #expect(LTIGradeSyncSweep.failureReason(for: GradeSelectionError.missingPoints) == .noGrade)
-        }
-    }
-
     // MARK: - One transport per course
 
     @Test func aValenceCourseQueuesNothing() async throws {
@@ -389,5 +349,43 @@ import VaporTesting
             courseRole: .student, context: LTILaunchClaims.Context(id: "context-1", label: nil, title: nil),
             resourceLink: LTILaunchClaims.ResourceLink(id: "link-1", title: nil), name: nil, email: nil,
             custom: [:], agsEndpoint: ags)
+    }
+}
+
+/// The failure reasons and their classification are pure, so these tests
+/// need no app.
+@Suite struct LTIGradeSyncReasonTests {
+    @Test func aFailureShowsOneShortSentence() {
+        struct TransportError: Error {}
+        #expect(LTIGradeSyncSweep.reason(for: TransportError()) == LTIGradeSyncSweep.unreachableMessage)
+        #expect(
+            LTIGradeSyncSweep.reason(for: GradeSelectionError.missingPoints) == LTIGradeSyncSweep.noGradeMessage)
+        #expect(
+            LTIGradeSyncSweep.reason(for: LTIServiceError.lineItemGone) == LTIServiceError.lineItemGone.description)
+
+        // Every reason the page can show stays short: the page lists them in
+        // a table column, so none may grow into a paragraph.
+        let reasons =
+            [
+                LTIGradeSyncSweep.notLaunchedMessage, LTIGradeSyncSweep.noLineItemsMessage,
+                LTIGradeSyncSweep.noTotalMessage, LTIGradeSyncSweep.noGradeMessage,
+                LTIGradeSyncSweep.unreachableMessage, LTIServiceError.lineItemGone.description,
+            ]
+            + [LTIServiceError.Step.token, .findLineItem, .createLineItem, .postScore].flatMap { step in
+                [
+                    LTIServiceError.rejected(step, status: 500).description,
+                    LTIServiceError.unreadableResponse(step).description,
+                ]
+            }
+        for reason in reasons {
+            #expect(reason.split(separator: " ").count <= 15, "\(reason)")
+        }
+    }
+
+    @Test func aGradeSelectionFailureIsTerminalAndStoredAsNoGrade() {
+        // Grade selection reports in its own type, so the AGS sweep
+        // classifies it without knowing the Valence error taxonomy.
+        #expect(!LTIGradeSyncSweep.isRetryable(GradeSelectionError.missingPoints))
+        #expect(LTIGradeSyncSweep.failureReason(for: GradeSelectionError.missingPoints) == .noGrade)
     }
 }

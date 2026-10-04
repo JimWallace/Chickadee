@@ -186,15 +186,16 @@ public func toolIsAvailable(_ tool: String, arguments: [String] = ["--version"])
     return run.succeeded
 }
 
-/// `toolIsAvailable`, probed once per tool for the lifetime of the test
-/// process.
+/// `toolIsAvailable`, probed once per command (tool and arguments) for the
+/// lifetime of the test process.
 ///
 /// A `ConditionTrait` evaluates its closure once per test it is attached to,
 /// and Swift Testing evaluates them while planning the run, concurrently, so a
 /// target with forty `@Test(.requiresRscript)` tests would otherwise launch
 /// forty `Rscript --version` probes at once before the first test body runs.
 /// Single-flight: the first caller starts the probe and every concurrent
-/// caller awaits that same task, so each tool is spawned exactly once.
+/// caller awaits that same task, so each probe command is spawned exactly
+/// once.
 public func cachedToolIsAvailable(_ tool: String, arguments: [String] = ["--version"]) async -> Bool {
     await ToolAvailabilityProbes.shared.isAvailable(tool, arguments: arguments)
 }
@@ -204,11 +205,15 @@ private actor ToolAvailabilityProbes {
     private var probes: [String: Task<Bool, Never>] = [:]
 
     func isAvailable(_ tool: String, arguments: [String]) async -> Bool {
-        if let probe = probes[tool] {
+        // The key is the whole command, not the tool alone. `lua` answers
+        // `-v` and fails `--version`, so one probe must not answer for the
+        // other.
+        let key = ([tool] + arguments).joined(separator: " ")
+        if let probe = probes[key] {
             return await probe.value
         }
         let probe = Task { await toolIsAvailable(tool, arguments: arguments) }
-        probes[tool] = probe
+        probes[key] = probe
         return await probe.value
     }
 }
