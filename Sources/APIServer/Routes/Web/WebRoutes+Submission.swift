@@ -13,27 +13,18 @@ import Fluent
 import Foundation
 import Vapor
 
-/// The built-in badges (per-submission + class records) for one submission,
-/// sourced from the manifest when seeded, else the registry minus any disabled.
-/// Takes the page's already-loaded `setup` so it doesn't re-fetch the row.
-/// Lifted out of `submissionPage` to keep that handler within its length budget.
-func builtInBadgesForSubmission(
-    badgeContext: BadgeContext,
-    classAchievements: [APIClassAchievement],
-    setup: APITestSetup?
+/// The class-record badges one submission holds, resolved against the
+/// manifest so a custom or renamed record shows its authored name.
+func classRecordBadges(
+    _ classAchievements: [APIClassAchievement], props: TestProperties?
 ) -> [AchievementBadge] {
-    let props = setup?.decodedManifest()
     let disabled = Set(props?.disabledBuiltInAwardIDs ?? [])
-    return AchievementBadge.forSubmission(
-        badgeContext,
-        achievements: BuiltInAchievements.manifestPerSubmission(props: props),
-        disabled: disabled)
-        + classAchievements.compactMap {
-            AchievementBadge.forClassAchievement(
-                $0.achievementID,
-                manifestAchievements: props?.achievements ?? [],
-                disabled: disabled)
-        }
+    return classAchievements.compactMap {
+        AchievementBadge.forClassAchievement(
+            $0.achievementID,
+            manifestAchievements: props?.achievements ?? [],
+            disabled: disabled)
+    }
 }
 
 /// The extensions a submission to this assignment may carry.
@@ -552,11 +543,12 @@ extension WebRoutes {
         processed.earnedPoints = formatPoints(bonused)
     }
 
-    /// Assembles the badge strip for one submission: class-wide achievement
-    /// badges held by this specific submission, built-in badges, and
-    /// authorable individual badges (threshold / test) earned per-student from
-    /// this submission's result — the latter evaluated over all tiers so a
-    /// secret-test badge works without revealing the test.
+    /// Assembles the badge strip for one submission: the badges its own
+    /// result earns (`badgesEarnedBySubmission`, the same call the dashboard
+    /// and the staff per-student page make), then the class-wide record
+    /// badges this submission holds.  Individual badges read every tier, so a
+    /// secret-test badge works without revealing the test.  A submission with
+    /// no result yet earns none.
     private func submissionBadges(
         req: Request,
         submission: APISubmission,
@@ -576,14 +568,12 @@ extension WebRoutes {
         if setupProps?.activity?.kind.aggregation == .standings, let userID = submission.userID, let setup {
             standings = try await standingSignals(testSetupID: setup.id ?? "", userID: userID, on: req.db)
         }
-        let individualBadges = earnedIndividualBadgesForDisplay(
-            collection: displayCollection, props: setupProps,
-            gradePercent: processed.gradePercent, standings: standings)
-        return builtInBadgesForSubmission(
-            badgeContext: processed.badgeContext,
-            classAchievements: classAchievements,
-            setup: setup)
-            + individualBadges
+        // `badgeContext` holds the raw grade; `processed.gradePercent` may
+        // carry a class-goal bonus, which never earns a badge (#2020).
+        let earned =
+            displayCollection == nil
+            ? [] : badgesEarnedBySubmission(processed.badgeContext, props: setupProps, standings: standings)
+        return earned + classRecordBadges(classAchievements, props: setupProps)
     }
 
     /// Selects the result row to render on the submission page: the worker

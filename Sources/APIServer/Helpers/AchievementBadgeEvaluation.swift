@@ -44,21 +44,43 @@ func earnedIndividualBadges(
     }
 }
 
-/// The individual badges to show for a submission's display result — the
-/// handler passes the already-decoded collection (fetched once from the
-/// result_collections side table, #1173) and this evaluates the authored
-/// individual badges.  Returns [] when there is no decodable result.  Lifted
-/// out of the submission handler to keep that function within its length budget.
-func earnedIndividualBadgesForDisplay(
-    collection: TestOutcomeCollection?,
+/// The badges one graded submission earns by itself: the per-submission
+/// badges and the authored individual badges.  The submission page, the
+/// student dashboard and the staff per-student page all call this, so a
+/// badge shows on all three pages or on none (#2020).  Class-wide badges are
+/// appended by each caller.
+///
+/// Every badge reads `context.gradePercent`, the raw autograded grade.  A
+/// class-goal bonus is extra credit for the class, not a part of this
+/// submission's result, so it never earns a badge.
+func badgesEarnedBySubmission(
+    _ context: BadgeContext,
     props: TestProperties?,
-    gradePercent: Int,
     standings: (standing: Int, matchesWon: Int)? = nil
 ) -> [AchievementBadge] {
-    guard let collection else { return [] }
-    return earnedIndividualBadges(
-        props: props,
-        gradePercent: gradePercent,
-        outcomes: collection.outcomes,
-        standings: standings)
+    AchievementBadge.forSubmission(
+        context,
+        achievements: BuiltInAchievements.manifestPerSubmission(props: props),
+        disabled: Set(props?.disabledBuiltInAwardIDs ?? []))
+        + earnedIndividualBadges(
+            props: props,
+            gradePercent: context.gradePercent,
+            outcomes: context.outcomes,
+            standings: standings)
+}
+
+/// The student's current round-robin place for each assignment that needs
+/// it: a standings activity that authors an individual badge.  Every other
+/// assignment is skipped, so a page with no such assignment makes no query.
+func standingsBySetupID(
+    propsBySetupID: [String: TestProperties], userID: UUID, on db: Database
+) async throws -> [String: (standing: Int, matchesWon: Int)] {
+    var standings: [String: (standing: Int, matchesWon: Int)] = [:]
+    for (setupID, props) in propsBySetupID
+    where props.activity?.kind.aggregation == .standings
+        && props.achievements.contains(where: \.isAuthorableIndividualBadge)
+    {
+        standings[setupID] = try await standingSignals(testSetupID: setupID, userID: userID, on: db)
+    }
+    return standings
 }

@@ -126,15 +126,16 @@ enum BuiltInAchievements {
     }
 
     /// Per-setup achievement data for the multi-assignment pages: disabled
-    /// built-in ids, the authored per-submission list (nil = registry
-    /// fallback), and the full authored achievements (so manifest-authored
-    /// class records resolve at display time, audit A6).  One setups query
+    /// built-in ids, the full authored achievements (so manifest-authored
+    /// class records resolve at display time, audit A6), and the decoded
+    /// manifest for the per-submission badges.  One setups query
     /// covers all three maps — this replaced the separate `disabledBySetup` /
     /// `manifestPerSubmissionBySetup` fetches that each queried the same rows.
     struct SetupAchievementData {
         var disabled: Set<String> = []
-        var perSubmission: [Achievement]?
         var achievements: [Achievement] = []
+        /// The decoded manifest, for `badgesEarnedBySubmission`.
+        var props: TestProperties?
     }
 
     /// Batch `[setupID: SetupAchievementData]` over already-loaded setup rows;
@@ -151,8 +152,8 @@ enum BuiltInAchievements {
             guard let id = setup.id, let props = setup.decodedManifest() else { continue }
             map[id] = SetupAchievementData(
                 disabled: Set(props.disabledBuiltInAwardIDs),
-                perSubmission: manifestPerSubmission(props: props),
-                achievements: props.achievements)
+                achievements: props.achievements,
+                props: props)
         }
         return map
     }
