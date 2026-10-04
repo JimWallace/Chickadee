@@ -5,7 +5,6 @@
 # down to Helpers/ (or into the service that owns it), or move the call up
 # into the route. One symbol per line; lines starting with # are comments.
 AchievementBadge
-LearnRosterReconciler
 NewAssignmentDraftFormState
 NewAssignmentDraftPayload
 NewAssignmentFields

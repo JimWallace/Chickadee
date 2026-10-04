@@ -100,8 +100,9 @@
                  because it does not send the field. -->
             <input type="hidden" name="liveEdit" value="1">
             #else:
-            <button class="btn btn-primary" type="submit"
-                    title="Save assignment metadata (name, due date, notebooks) and re-validate. Suite edits are saved live as you make them.">
+            <span class="field-note field-note--muted" id="suite-live-save-note">Suite edits save as you make them.</span>
+            <button class="btn btn-primary" type="submit" aria-describedby="suite-live-save-note"
+                    title="Save the name, due date and notebooks, then re-validate">
                 Save &amp; Validate
             </button>
             #endif

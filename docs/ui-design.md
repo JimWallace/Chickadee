@@ -307,7 +307,9 @@ duplicate.
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only:
-  open/closed/extended/preview/unpublished/danger).  `.tier-danger` is the one
+  open/closed/extended/preview/unpublished/danger).  A bare `.tier` is the
+  neutral state badge, for a state with no status colour ("Secret tests
+  revealed").  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
   and must not be borrowed for it.
 - **`.account-identity`** — the account page's identity header: the student's
@@ -836,7 +838,7 @@ pattern above and is not counted (`workbench.js`'s `--wb-left-width` and
 
 A page `<style>` block is for styling that genuinely exists on one page only.
 
-- Class names are **role-named** (`.guide-textarea`, `.learn-flag`), never
+- Class names are **role-named** (`.guide-textarea`, `.students-titlebar`), never
   utility-named (`.mt-1`, `.red-text`).
 - A page block may not re-define a selector from the global sheet
   (`.main` is the one allowlisted override).
