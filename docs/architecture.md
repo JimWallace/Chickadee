@@ -411,7 +411,68 @@ struct SandboxedScriptRunner: ScriptRunner { … }     // --sandbox flag
 
 The sandbox boundary is at the subprocess level. Swift never imports a JVM,
 Python interpreter, or any language runtime — all language execution goes
-through `Foundation.Process`.
+through `swift-subprocess` (`runBounded`).
+
+### What in-process grading does not protect
+
+Most generated tests load the submission into the test's own process. Python
+imports it as a module. R and Octave evaluate its source. Lua loads it into an
+environment table, and Racket requires it as a module. C++ compiles it into
+the test binary, and Java compiles it into the test program. So the submission
+and the test are one process. (A `programIO` test in C++ or Java is the
+exception. It runs the submission as a separate process; see
+[program-io.md](program-io.md).)
+
+This lets the submission read the values of the test that runs it. The
+expected value is one of these values. Each runtime gives a way to read them:
+
+- Python: `inspect.stack()` returns the call stack, and the test's frames
+  are on it.
+- R: `sys.frames()` returns the call stack, and the test's frames are on it.
+- Lua: `debug.getlocal` reads the locals of the test chunk. A Lua audit in
+  2026-08 used this to print `expected_output`, and the test passed.
+
+The submission can also read the files in its working directory. On the
+native worker, this directory is the test setup directory. It holds every
+script in the suite, of every tier. It also holds the grader-only files and
+the per-student inputs file. Neither sandbox prevents a read.
+
+A submission can send what it reads to the student. For example, a generated
+test puts the text of an exception from the submission into its failure
+message. On a public test, the student sees that text at the `full` and
+`actualOnly` levels of [failure detail](failure-detail.md).
+
+The boundary is the process, not the stack frame. That boundary still gives
+these protections:
+
+- **The server.** Student code runs on a runner, never in the server process.
+  A script gets an allowlisted environment, so it does not inherit the
+  runner's shared secret (`Sources/Worker/ScriptRunner.swift`). The runner
+  also marks itself non-dumpable at start, so a script cannot read the
+  secret from the runner's own `/proc` entries.
+- **The host, with `--sandbox`.** The script cannot reach the network. On
+  Linux it has no real privileges. On macOS it can write only in its working
+  directory. Without `--sandbox`, the script runs as the runner's user, with
+  network access.
+
+Other students' work is **not** isolated on one runner. A job holds one
+submission, but every job on a runner runs as the same user, and the job
+workspaces share one directory. So while two jobs run at the same time
+(`--max-jobs` above 1), a script in one can read the other's workspace, with
+or without `--sandbox`, which creates no mount namespace. A class-activity
+match job also stages a classmate's submission as the opponent, by design (see
+[class-activities.md](class-activities.md)).
+
+This is a property of the design, not a defect. Treat each value in a test,
+and each file in its test setup, as visible to a determined student. To hide
+an expected value, a test must keep it out of the submission's process and
+out of the files that the submission can read. That is a design change. It
+adds a process start to each test, in each language.
+
+Browser grading has a wider limit. The student's browser receives the whole
+test setup, less the grader-only files. So a student can open every test in
+their own browser, without a submission (see
+[failure-detail.md](failure-detail.md) and [datasets.md](datasets.md)).
 
 ---
 
