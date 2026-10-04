@@ -9,7 +9,6 @@
 
 import Core
 import Foundation
-import Vapor
 
 // MARK: - Authored-graph cycle detection
 
@@ -61,10 +60,7 @@ func detectAuthoredCycles(
     }
 
     guard processed == inDegree.count else {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Dependency graph contains a cycle among scripts and/or pattern families."
-        )
+        throw AuthoringValidationError.authoredDependencyCycle
     }
 }
 
@@ -166,11 +162,7 @@ func validateAuthoredSectionContiguity(_ items: [AuthoredSuiteItem]) throws {
         if sid != current {
             seenCompleted.insert(current)
             if seenCompleted.contains(sid) {
-                let label = sid ?? "<ungrouped>"
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Items with sectionID '\(label)' are not contiguous; "
-                        + "group all items of a section together before saving.")
+                throw AuthoringValidationError.authoredSectionNotContiguous(sectionID: sid)
             }
             current = sid
         }
@@ -191,9 +183,7 @@ func validateFamilyRefDependencies(
     for r in authoredRawEntries {
         for dep in r.dependsOn {
             if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Script '\(r.script)' depends on unknown pattern family '\(fid)'.")
+                throw AuthoringValidationError.scriptDependsOnUnknownFamily(script: r.script, familyID: fid)
             }
         }
     }
@@ -201,14 +191,10 @@ func validateFamilyRefDependencies(
         for dep in f.dependsOn {
             if let fid = parseFamilyDepToken(dep) {
                 if fid == f.id {
-                    throw Abort(
-                        .unprocessableEntity,
-                        reason: "Pattern family '\(f.id)' cannot depend on itself.")
+                    throw AuthoringValidationError.familyDependsOnItself(familyID: f.id)
                 }
                 guard knownFamilyIDs.contains(fid) else {
-                    throw Abort(
-                        .unprocessableEntity,
-                        reason: "Pattern family '\(f.id)' depends on unknown family '\(fid)'.")
+                    throw AuthoringValidationError.familyDependsOnUnknownFamily(familyID: f.id, dependency: fid)
                 }
             }
         }
@@ -216,9 +202,7 @@ func validateFamilyRefDependencies(
     for c in checks {
         for dep in c.dependsOn {
             if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Notebook check '\(c.id)' depends on unknown pattern family '\(fid)'.")
+                throw AuthoringValidationError.notebookCheckDependsOnUnknownFamily(checkID: c.id, familyID: fid)
             }
         }
     }
