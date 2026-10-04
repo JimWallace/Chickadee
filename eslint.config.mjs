@@ -45,6 +45,9 @@ const chickadeeGlobals = {
   // Public/authoring-language.js — the assignment's language facts, read by
   // every authoring editor.
   ChickadeeLanguage: 'readonly',
+  // Public/auto-compute-client.js — runs the solution for a pattern-family
+  // case's Expected cell. Split out of pattern-family-editor.js (#1966).
+  ChickadeeAutoCompute: 'readonly',
   ChickadeeGradingShared: 'readonly',
   ChickadeeRGradingShared: 'readonly',
   ChickadeeLuaGradingShared: 'readonly',

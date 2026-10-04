@@ -1,5 +1,6 @@
 // How an auto-compute result lands in a pattern-family Expected cell
-// (`applyAutoComputeResult` in Public/pattern-family-editor.js).
+// (`applyAutoComputeResult` in Public/auto-compute-client.js, which was in
+// Public/pattern-family-editor.js until #1966).
 //
 // The defect (#1998): a failed auto-compute set only the cell's placeholder
 // and title. If the cell already held a value computed earlier, the
@@ -12,12 +13,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 
-const editorSource = await fs.readFile(path.resolve('Public/pattern-family-editor.js'), 'utf8');
+const clientSource = await fs.readFile(path.resolve('Public/auto-compute-client.js'), 'utf8');
 const languageModuleSource = await fs.readFile(path.resolve('Public/authoring-language.js'), 'utf8');
 
-/// The editor's module scope, loaded under a stub DOM. Only the exported
-/// helpers are used, so the stub never has to stand in for a real page.
-function loadEditor() {
+/// The auto-compute module's scope, loaded under a stub DOM, after the
+/// language module as the page loads them. Only the exported helpers are
+/// used, so the stub never has to stand in for a real page.
+function loadClient() {
   const ctx = {
     console, JSON, Array, Object, Math, Set, Map, Promise, RegExp, String, Boolean, Number,
     setTimeout, clearTimeout, fetch: () => Promise.resolve({}), location: { href: '' },
@@ -29,11 +31,11 @@ function loadEditor() {
   ctx.window = ctx;
   ctx.globalThis = ctx;
   vm.runInNewContext(languageModuleSource, ctx, { filename: 'authoring-language.js' });
-  vm.runInNewContext(editorSource, ctx, { filename: 'pattern-family-editor.js' });
-  return ctx.chickadeeApplyAutoComputeResult;
+  vm.runInNewContext(clientSource, ctx, { filename: 'auto-compute-client.js' });
+  return ctx.ChickadeeAutoCompute.applyAutoComputeResult;
 }
 
-const apply = loadEditor();
+const apply = loadClient();
 
 /// A cell that auto-compute filled earlier in the session.
 function computedCell() {

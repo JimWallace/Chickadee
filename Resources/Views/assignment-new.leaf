@@ -367,7 +367,9 @@ Create Assignment
 
 <!-- Pattern family editor module — same implementation as the edit page,
      wired to draft-scoped URLs.  After a save, the page reloads so the
-     server-rendered suite table picks up the newly generated scripts. -->
+     server-rendered suite table picks up the newly generated scripts.
+     The auto-compute client it uses loads first. -->
+<script src="/auto-compute-client.js?v=#appVersion()"></script>
 <script src="/pattern-family-editor.js?v=#appVersion()"></script>
 
 
