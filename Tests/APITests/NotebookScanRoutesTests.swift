@@ -19,15 +19,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsInstructor(on app: Application) async throws -> String {
-        let cookie = try await loginUser(
-            username: "testinstructor_nbscan", password: "testpassword",
-            role: "instructor", on: app)
-        // Phase 5: /instructor is gated on the per-course role — enrol the instructor.
-        try await enrollAsTestInstructor(username: "testinstructor_nbscan", on: app)
-        return cookie
-    }
-
     private func loginAsStudent(on app: Application) async throws -> String {
         return try await loginUser(
             username: "teststudent_nbscan", password: "testpassword",
@@ -103,7 +94,7 @@ import VaporTesting
 
     @Test func scanNotebookReturnsFunctionsForInstructor() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -131,7 +122,7 @@ import VaporTesting
 
     @Test func scanNotebookReturnsEmptyArrayForNoFunctions() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -162,7 +153,7 @@ import VaporTesting
 
     @Test func scanNotebookIncludesParamNames() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -190,7 +181,7 @@ import VaporTesting
 
     @Test func scanNotebookIncludesTemplates() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -231,7 +222,7 @@ import VaporTesting
     /// error cannot see a caller passing the WRONG language.
     @Test func scanNotebookTemplatesUseTheRequestedLanguage() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -257,7 +248,7 @@ import VaporTesting
 
     @Test func scanNotebookReturnsTypeHintFlag() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -301,7 +292,7 @@ import VaporTesting
 
     @Test func scanNotebookReturns400ForEmptyBody() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -329,7 +320,7 @@ import VaporTesting
     /// reported on their DOB-check pattern family).
     @Test func scanNotebookForwardsParamTypesReturnTypeAndDefaults() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             let notebook = """
@@ -401,7 +392,7 @@ import VaporTesting
 
     @Test func scanNotebookIgnoresPrivateFunctions() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_nbscan", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             let notebookWithPrivate = """

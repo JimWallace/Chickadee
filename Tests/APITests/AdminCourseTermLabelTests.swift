@@ -27,18 +27,6 @@ import VaporTesting
         )
     }
 
-    private func page(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var body = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                body = res.body.string
-            })
-        return body
-    }
-
     @Test func theUserPageShowsEachOfferingsTermNewestFirst() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
@@ -49,7 +37,7 @@ import VaporTesting
             _ = try await makeTestEnrollment(on: app, userID: subject.requireID(), courseID: offerings.fall)
             _ = try await makeTestEnrollment(on: app, userID: subject.requireID(), courseID: offerings.winter)
 
-            let body = try await page("/admin/users/\(try subject.requireID().uuidString)", cookie: cookie, on: app)
+            let body = try await getHTML("/admin/users/\(try subject.requireID().uuidString)", cookie: cookie, on: app)
             let winter = try #require(body.range(of: "<strong>CS135</strong> Winter 2026"))
             let fall = try #require(body.range(of: "<strong>CS135</strong> Fall 2025"))
             #expect(winter.lowerBound < fall.lowerBound, "the newer term is listed first")
@@ -67,7 +55,7 @@ import VaporTesting
             _ = try await makeTestEnrollment(on: app, userID: agent.requireID(), courseID: offerings.fall)
             _ = try await makeTestEnrollment(on: app, userID: agent.requireID(), courseID: offerings.winter)
 
-            let body = try await page("/admin/mcp", cookie: cookie, on: app)
+            let body = try await getHTML("/admin/mcp", cookie: cookie, on: app)
             #expect(body.contains("CS135 Winter 2026 · CS135 Fall 2025</div>"))
             #expect(body.contains(">Remove from CS135 Winter 2026</button>"))
             #expect(body.contains(">Remove from CS135 Fall 2025</button>"))

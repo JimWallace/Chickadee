@@ -34,16 +34,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsInstructor() async throws -> String {
-        let cookie = try await loginUser(
-            username: "testinstructor", password: "testpassword", role: "instructor", on: app)
-        // Teaching authority is per-course now (#417 Slice G2): explicitly enrol
-        // the instructor as course staff in the shared TEST101 course (the
-        // setups here live in it) instead of relying on auto-enroll granting it.
-        try await enrollAsTestInstructor(username: "testinstructor", on: app)
-        return cookie
-    }
-
     private func loginAsStudent() async throws -> String {
         return try await loginUser(username: "teststudent", password: "testpassword", role: "student", on: app)
     }
@@ -94,7 +84,7 @@ import VaporTesting
     @Test func instructorGetsFullNotebook() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor", on: app)
             // Full-tier notebook access is per-course staff now (#417 Slice G);
             // enrol the instructor in the setup's course (shared TEST101).
             try await enrollAsTestInstructor(username: "testinstructor", on: app)
@@ -439,7 +429,7 @@ import VaporTesting
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
             // submissions/file is instructor-tier (defensive endpoint, no student UI);
             // use an instructor cookie for this test.
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             // Simulate the student uploading a filtered notebook (no secret/release cells).

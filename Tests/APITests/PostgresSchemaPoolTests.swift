@@ -1,6 +1,7 @@
 // Tests/APITests/PostgresSchemaPoolTests.swift
 //
-// Guards for the pre-migrated Postgres schema pool in TestHelpers.swift.
+// Guards for the pre-migrated Postgres schema pool in
+// MigratedPostgresSchemaPool.swift.
 //
 // Three properties are load-bearing and none of them is visible in a green
 // run: that a schema comes back even when the test that borrowed it blew up,
@@ -108,7 +109,7 @@ import Vapor
         var scanned = 0
         for file in files {
             // This file is the guard, and it quotes the tokens it looks for.
-            // Everything else is scanned, including TestHelpers.swift — the
+            // Everything else is scanned, including the helper files — the
             // scan keys on `@Test`-bearing files below, and a helper with no
             // tests declares no suite to flag.
             guard file.lastPathComponent != URL(fileURLWithPath: #filePath).lastPathComponent
@@ -124,7 +125,7 @@ import Vapor
             found == SchemaMutatingSuites.names,
             """
             The suites that change their database's shape have changed. \
-            SchemaMutatingSuites.names in Tests/APITests/TestHelpers.swift says \
+            SchemaMutatingSuites.names in Tests/APITests/SchemaMutatingSuites.swift says \
             \(SchemaMutatingSuites.names.sorted()); the sources say \(found.sorted()). \
             A suite that rewrites its schema or its migration log must be declared there so \
             it gets a freshly migrated Postgres schema instead of one recycled out of the pool.
