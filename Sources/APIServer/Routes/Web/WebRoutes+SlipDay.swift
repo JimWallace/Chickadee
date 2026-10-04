@@ -199,7 +199,7 @@ extension WebRoutes {
 
 // MARK: - View context
 
-struct SlipDayConfirmContext: Encodable {
+private struct SlipDayConfirmContext: Encodable {
     let currentUser: CurrentUserContext?
     let testSetupID: String
     let assignmentTitle: String

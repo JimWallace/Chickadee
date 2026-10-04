@@ -204,7 +204,7 @@ extension InstructorDashboardRoutes {
 /// Context for the rows-only fragment of the roster table.  Carries exactly
 /// what `_student-rows.leaf` reads — no more, so the fragment cannot start
 /// depending on page-level state the poll does not compute.
-struct StudentRowsFragmentContext: Encodable {
+private struct StudentRowsFragmentContext: Encodable {
     let currentUser: CurrentUserContext
     let enrolledStudents: [EnrolledStudentRow]
     let rosterReadOnly: Bool
