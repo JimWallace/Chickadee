@@ -1925,27 +1925,48 @@ chickadee_format <- function(x, max_chars = 300L) {
 # return an integer (1L). Comparing numerics by value keeps that difference
 # from failing an otherwise-correct answer. Everything else falls back to
 # all.equal's structural comparison (names, nesting, attributes).
+#
+# A JSON null renders as NA, so NA matches NA in the same position, as
+# Octave's isequaln does. Without that, no case with a null could pass.
 chickadee_equal <- function(actual, expected) {
-    if (is.numeric(actual) && is.numeric(expected)) {
-        if (length(actual) != length(expected)) return(FALSE)
-        return(isTRUE(all(actual == expected)))
+    if (is.atomic(actual) && is.atomic(expected) &&
+        length(actual) == 1L && length(expected) == 1L &&
+        is.na(actual) && is.na(expected)) {
+        return(TRUE)
     }
-    if (is.logical(actual) && is.logical(expected)) {
+    if ((is.numeric(actual) && is.numeric(expected)) ||
+        (is.logical(actual) && is.logical(expected))) {
         if (length(actual) != length(expected)) return(FALSE)
-        return(isTRUE(all(actual == expected)))
+        same <- (is.na(actual) & is.na(expected)) |
+            (!is.na(actual) & !is.na(expected) & actual == expected)
+        return(isTRUE(all(same)))
     }
     isTRUE(all.equal(actual, expected))
 }
 
-# Order-insensitive comparison for the unordered_equality kind: same
-# elements, any order. Compared as characters so mixed numeric/integer
-# element types do not matter.
+# Order-insensitive comparison for the unordered_equality kind: the same
+# elements in any order. Each top-level element is compared with
+# chickadee_equal, so a nested value keeps its structure and a number never
+# matches a string (#2016). Each actual element is paired with an unused
+# expected one; greedy pairing is exact because chickadee_equal is an
+# equivalence, as in test_runtime.lua.
 chickadee_unordered_equal <- function(actual, expected) {
-    a <- tryCatch(unlist(actual, use.names = FALSE), error = function(e) NULL)
-    b <- tryCatch(unlist(expected, use.names = FALSE), error = function(e) NULL)
-    if (is.null(a) || is.null(b)) return(FALSE)
-    if (length(a) != length(b)) return(FALSE)
-    isTRUE(all(sort(as.character(a)) == sort(as.character(b))))
+    is_collection <- function(x) is.null(x) || is.atomic(x) || is.list(x)
+    if (!is_collection(actual) || !is_collection(expected)) return(FALSE)
+    if (length(actual) != length(expected)) return(FALSE)
+    used <- rep(FALSE, length(expected))
+    for (i in seq_along(actual)) {
+        match <- 0L
+        for (j in seq_along(expected)) {
+            if (!used[[j]] && chickadee_equal(actual[[i]], expected[[j]])) {
+                match <- j
+                break
+            }
+        }
+        if (match == 0L) return(FALSE)
+        used[[match]] <- TRUE
+    }
+    TRUE
 }
 
 # --- Per-student personalization primitives ---------------------------------
