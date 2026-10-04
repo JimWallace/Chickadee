@@ -44,21 +44,18 @@ func earnedIndividualBadges(
     }
 }
 
-/// The individual badges to show for a submission's display result — the
-/// handler passes the already-decoded collection (fetched once from the
-/// result_collections side table, #1173) and this evaluates the authored
-/// individual badges.  Returns [] when there is no decodable result.  Lifted
-/// out of the submission handler to keep that function within its length budget.
-func earnedIndividualBadgesForDisplay(
-    collection: TestOutcomeCollection?,
-    props: TestProperties?,
-    gradePercent: Int,
-    standings: (standing: Int, matchesWon: Int)? = nil
-) -> [AchievementBadge] {
-    guard let collection else { return [] }
-    return earnedIndividualBadges(
-        props: props,
-        gradePercent: gradePercent,
-        outcomes: collection.outcomes,
-        standings: standings)
+/// The student's current round-robin place for each assignment that needs
+/// it: a standings activity that authors an individual badge.  Every other
+/// assignment is skipped, so a page with no such assignment makes no query.
+func standingsBySetupID(
+    propsBySetupID: [String: TestProperties], userID: UUID, on db: Database
+) async throws -> [String: (standing: Int, matchesWon: Int)] {
+    var standings: [String: (standing: Int, matchesWon: Int)] = [:]
+    for (setupID, props) in propsBySetupID
+    where props.activity?.kind.aggregation == .standings
+        && props.achievements.contains(where: \.isAuthorableIndividualBadge)
+    {
+        standings[setupID] = try await standingSignals(testSetupID: setupID, userID: userID, on: db)
+    }
+    return standings
 }

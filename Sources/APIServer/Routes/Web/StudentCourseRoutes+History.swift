@@ -75,7 +75,9 @@ extension StudentCourseRoutes {
         // Honor per-assignment disabled built-in awards across the page (reuses
         // the setups already loaded above, so no extra query).
         let disabledBySetup = setupsByID.mapValues { BuiltInAchievements.disabled(in: $0) }
-        let perSubBySetup = setupsByID.compactMapValues { BuiltInAchievements.manifestPerSubmission(in: $0) }
+        let propsBySetup = setupsByID.compactMapValues { $0.decodedManifest() }
+        let standingsBySetup = try await standingsBySetupID(
+            propsBySetupID: propsBySetup, userID: try student.requireID(), on: req.db)
         let classBadgesBySetupID = classBadgesBySetup(
             rows: classAchievementRows, setupsByID: setupsByID, disabledBySetup: disabledBySetup)
 
@@ -113,7 +115,8 @@ extension StudentCourseRoutes {
             student: student,
             fmt: fmt,
             disabledBySetup: disabledBySetup,
-            perSubBySetup: perSubBySetup
+            propsBySetup: propsBySetup,
+            standingsBySetup: standingsBySetup
         )
         let rows = sortedAssignments.map { assignment in
             buildStudentAssignmentRow(
@@ -740,9 +743,11 @@ extension StudentCourseRoutes {
         let fmt: DateFormatter
         /// `[setupID: disabled built-in award ids]` — the same map for every row.
         let disabledBySetup: [String: Set<String>]
-        /// `[setupID: manifest per-submission achievements]` — same map every
-        /// row; absent setups fall back to the registry.
-        let perSubBySetup: [String: [Achievement]]
+        /// `[setupID: decoded manifest]` — same map every row; an absent
+        /// setup falls back to the built-in registry.
+        let propsBySetup: [String: TestProperties]
+        /// `[setupID: round-robin place]`, only for standings activities.
+        let standingsBySetup: [String: (standing: Int, matchesWon: Int)]
     }
 
     fileprivate func buildStudentAssignmentRow(
@@ -772,7 +777,8 @@ extension StudentCourseRoutes {
             history: history,
             bestResultBySubmissionID: bestResultBySubmissionID,
             collectionByResultID: context.collectionByResultID,
-            achievements: context.perSubBySetup[assignment.testSetupID]
+            props: context.propsBySetup[assignment.testSetupID],
+            standings: context.standingsBySetup[assignment.testSetupID]
         ).filter { !disabledHere.contains($0.id) }
         badges.append(contentsOf: classBadges)
 
@@ -840,13 +846,15 @@ extension StudentCourseRoutes {
         )
     }
 
-    /// Achievement badges earned on the latest submission (attempt/speed/
-    /// improvement).  Class-wide badges are appended by the caller.
+    /// The badges the latest submission earns by itself (the same call the
+    /// submission page makes, #2020).  Class-wide badges are appended by the
+    /// caller.
     fileprivate func submissionBadges(
         history: [APISubmission],
         bestResultBySubmissionID: [String: APIResult],
         collectionByResultID: [String: TestOutcomeCollection],
-        achievements: [Achievement]?
+        props: TestProperties?,
+        standings: (standing: Int, matchesWon: Int)?
     ) -> [AchievementBadge] {
         guard let latestSubmission = history.first,
             let latestSubID = latestSubmission.id,
@@ -865,14 +873,16 @@ extension StudentCourseRoutes {
             }
             return pr.gradePercentValue
         }
-        return AchievementBadge.forSubmission(
+        return badgesEarnedBySubmission(
             BadgeContext(
                 attemptNumber: latestAttempt,
                 gradePercent: gradePct,
                 executionTimeMs: collection.executionTimeMs,
-                priorGradePercent: priorPct
+                priorGradePercent: priorPct,
+                outcomes: collection.outcomes,
+                testNameAliases: props?.testNameAliases() ?? [:]
             ),
-            achievements: achievements
-        )
+            props: props,
+            standings: standings)
     }
 }

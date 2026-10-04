@@ -228,6 +228,8 @@ extension WebRoutes {
             bestResultBySubmissionID: bestResultBySubmissionID,
             collectionByResultID: latestBlobs.compactMapValues(decodedCollection(from:))
         )
+        let standings = try await standingsBySetupID(
+            propsBySetupID: achievementBySetup.compactMapValues(\.props), userID: userID, on: req.db)
 
         for (setupID, latest) in data.latestSubmissionBySetupID {
             guard let latestRow = latestRowBySetupID[setupID] else { continue }
@@ -235,8 +237,8 @@ extension WebRoutes {
                 latestRow: latestRow, latest: latest,
                 priorRow: priorBySetupID[setupID],
                 badgeResults: badgeResults,
-                perSubmission: achievementBySetup[setupID]?.perSubmission,
-                disabled: achievementBySetup[setupID]?.disabled ?? [])
+                props: achievementBySetup[setupID]?.props,
+                standings: standings[setupID])
             {
                 data.latestBadgesBySetupID[setupID] = badges
             }
@@ -295,15 +297,16 @@ extension WebRoutes {
         let collectionByResultID: [String: TestOutcomeCollection]
     }
 
-    /// The per-submission badges for one setup's latest submission, or nil
-    /// when it has no decodable graded result.
+    /// The badges one setup's latest submission earns by itself (the same
+    /// call the submission page makes, #2020), or nil when it has no
+    /// decodable graded result.
     private static func latestSubmissionBadges(
         latestRow: APISubmission,
         latest: LatestSubmissionItem,
         priorRow: APISubmission?,
         badgeResults: BadgeResultData,
-        perSubmission: [Achievement]?,
-        disabled: Set<String>
+        props: TestProperties?,
+        standings: (standing: Int, matchesWon: Int)?
     ) -> [AchievementBadge]? {
         guard
             let result = badgeResults.bestResultBySubmissionID[latest.submissionID],
@@ -318,16 +321,17 @@ extension WebRoutes {
             else { return nil }
             return priorResult.gradePercentValue
         }
-        return AchievementBadge.forSubmission(
+        return badgesEarnedBySubmission(
             BadgeContext(
                 attemptNumber: latestAttempt,
                 gradePercent: gradePercent,
                 executionTimeMs: collection.executionTimeMs,
                 priorGradePercent: priorGradePercent,
-                outcomes: collection.outcomes
+                outcomes: collection.outcomes,
+                testNameAliases: props?.testNameAliases() ?? [:]
             ),
-            achievements: perSubmission,
-            disabled: disabled)
+            props: props,
+            standings: standings)
     }
 
     /// Builds one dashboard row from a setup plus the request-wide context.
