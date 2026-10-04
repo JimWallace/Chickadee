@@ -178,22 +178,19 @@ struct SetActivityTool: ContentTool {
             activity = nil
         } else {
             guard let kind = ActivityKind(rawValue: kindToken) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "kind must be \(MCPActivityProse.tokens), or \"none\".")
+                throw MCPToolError.invalidArguments(detail: "kind must be \(MCPActivityProse.tokens), or \"none\".")
             }
             let visibilityToken =
                 input.leaderboardVisibility?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? LeaderboardVisibility.hidden.rawValue
             guard let visibility = LeaderboardVisibility(rawValue: visibilityToken) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "leaderboardVisibility must be \"hidden\" or \"visible\".")
+                throw MCPToolError.invalidArguments(detail: "leaderboardVisibility must be \"hidden\" or \"visible\".")
             }
             activity = ClassActivity(kind: kind, leaderboardVisibility: visibility)
         }
         // A lifecycle setting — instructor-level, like set_submission_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
         let current = currentManifestActivity(setup.manifest)
         let requested = activity.map { block in
             block
@@ -211,7 +208,7 @@ struct SetActivityTool: ContentTool {
         } catch let error as AppError {
             // Surface the lock as an arguments error so an agent reads a
             // fixable message rather than a 400.
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: error.reason)
+            throw MCPToolError.invalidArguments(detail: error.reason)
         }
         let stored = setup.decodedManifest()
         return Output(

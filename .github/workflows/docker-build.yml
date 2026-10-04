@@ -15,6 +15,8 @@ on:
       - "docker-compose.yml"
       - "deploy/**"
       - ".github/workflows/docker-build.yml"
+      # It gives the toolchain key of the release cache.
+      - ".github/actions/swift-test-setup/**"
   push:
     branches: [main]
     tags: ["v*"]
@@ -60,9 +62,13 @@ jobs:
       # touched by new commits.
       - uses: ./.github/actions/restore-git-mtimes
 
+      # Only the toolchain key. This job does not use the shared debug
+      # `-build-` cache, so `build-cache` is none.
       - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+        id: setup
+        uses: ./.github/actions/swift-test-setup
+        with:
+          build-cache: none
 
       # Release cache is keyed on Sources + manifest only (no Tests/** — the
       # release products don't build the test targets), in its own `-release-`
@@ -72,9 +78,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .build
-          key: ${{ runner.os }}-release-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
+          key: ${{ runner.os }}-release-${{ steps.setup.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
           restore-keys: |
-            ${{ runner.os }}-release-${{ steps.toolchain.outputs.key }}-
+            ${{ runner.os }}-release-${{ steps.setup.outputs.toolchain-key }}-
 
       # Skip only on an exact cache hit (artifacts already match this tree); a
       # restore-keys partial hit recompiles incrementally over the older tree.

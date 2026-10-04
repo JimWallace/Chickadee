@@ -22,14 +22,20 @@
         remove: 'js-global-input-remove'
     }, {});
 
+    // The panels init() has wired, so that init() can run again (#1957).
+    // The workbench calls it after it swaps the edit half: the new half has a
+    // new panel to wire, and a panel wired before is not wired twice.
+    var wiredBlocks = new WeakSet();
+
     function init() {
         var block = document.getElementById('global-inputs-block');
-        if (!block) return;
+        if (!block || wiredBlocks.has(block)) return;
         var tbody = block.querySelector('tbody.js-global-inputs-body');
         var addBtn = document.getElementById('global-input-add');
         var status = document.getElementById('global-inputs-status');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
         if (!tbody || !assignmentID) return;
+        wiredBlocks.add(block);
 
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/global-variables';
 
@@ -75,7 +81,15 @@
 
         var saver = core.makeDebouncedSaver(doSave, 500);
 
+        // The amber-cue note (_value-cue-note.leaf) shows only while the
+        // table has a row, since the cue it explains is drawn on a row (#1996).
+        var cueNote = block.querySelector('.js-value-cue-note');
+        function syncCueNote() {
+            if (cueNote) cueNote.hidden = !tbody.querySelector('tr');
+        }
+
         editor.refreshAllRows(tbody);
+        syncCueNote();
 
         block.addEventListener('input', function (e) {
             var tr = e.target.closest && e.target.closest('tr.js-global-input-row');
@@ -89,17 +103,28 @@
             if (btn && block.contains(btn)) {
                 var tr = btn.closest('tr.js-global-input-row');
                 if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
+                syncCueNote();
             }
         });
 
         if (addBtn) {
-            addBtn.addEventListener('click', function () { editor.addEmptyRow(tbody); });
+            addBtn.addEventListener('click', function () {
+                editor.addEmptyRow(tbody);
+                syncCueNote();
+            });
         }
 
         // Expose a global flush hook so the main "Save & Validate"
         // submit can await any pending PUTs before reloading the page.
         window.chickadeeFlushGlobalInputs = saver.flush;
+        // Only a save that is waiting: the workbench swap awaits this before
+        // it discards the panel (surface-swap.js), and must not write for
+        // nothing.
+        window.chickadeeFlushPendingGlobalInputs = saver.flushPending;
     }
+
+    // Called again by ChickadeeEditPage.init() after a workbench swap.
+    window.initGlobalInputsEditor = init;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

@@ -27,17 +27,11 @@ import Testing
 
 @Suite(.timeLimit(.minutes(5))) struct JavaNativeGradingTests {
 
-    static let requiresJavac: ConditionTrait = .enabled("requires javac on PATH") { await Self.javacAvailable }
-
-    static var javacAvailable: Bool {
-        get async { await toolIsAvailable("javac", arguments: ["--version"]) }
-    }
-
     /// The did-not-skip proof. Every test below returns silently when the JDK is
     /// absent — correct on a laptop, a silent hole in CI, and precisely how a
     /// language ships with a suite that never runs.
     @Test(.ciOnly) func javacIsPresentInCI() async {
-        let isAvailable = await Self.javacAvailable
+        let isAvailable = await cachedToolIsAvailable("javac")
         #expect(
             isAvailable,
             """
@@ -47,47 +41,14 @@ import Testing
             """)
     }
 
-    /// A workspace shaped like the one `RunnerDaemon` materializes: the injected
-    /// runtime, the student's class, and the hint naming it.
-    static func makeWorkspace(submission: String, scripts: [String: String]) throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ck-javanative-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // Reached through `runtimeHelperFiles(for:)` rather than the constant, so
-        // this also proves the helper a Java workspace gets is the one the
-        // installer loop writes.
-        for (name, source) in runtimeHelperFiles(for: .java) {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        try submission.write(
-            to: dir.appendingPathComponent("Solution.java"), atomically: true, encoding: .utf8)
-        try "Solution.java".write(
-            to: dir.appendingPathComponent(".chickadee_student_module"),
-            atomically: true, encoding: .utf8)
-        for (name, source) in scripts {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        return dir
-    }
-
-    static func runSuites(_ items: [SuiteItem], in dir: URL) async -> [TestOutcome] {
-        let executor = NativeScriptExecutor(
-            runner: UnsandboxedScriptRunner(), workDir: dir, overrides: [:])
-        return await executeSuites(
-            items, timeLimitSeconds: 120, attemptNumber: 1, executor: executor)
-    }
-
-    static func item(_ script: String) -> SuiteItem {
-        SuiteItem(script: script, tier: .pub, displayName: script, dependsOn: [], points: 1)
-    }
+    /// Builds this suite's workspaces and runs its suites.
+    static let harness = NativeGradingHarness(
+        language: .java, solutionFilename: "Solution.java", timeLimitSeconds: 120)
 
     /// A generated Java case is a `.sh` wrapper, so this also pins that the
     /// wrapper's compile-and-run round trip survives the worker's dispatch —
     /// the thing `generatedScriptExtension: "sh"` makes true and no test said.
-    @Test(Self.requiresJavac) func aGeneratedJavaCaseIsGradedByTheNativeWorker() async throws {
+    @Test(.requiresJavac) func aGeneratedJavaCaseIsGradedByTheNativeWorker() async throws {
         // Written out rather than produced by `renderJavaPatternCase`: that
         // renderer lives in APIServer, which WorkerTests cannot import. The
         // shape is the generated one — quoted heredoc, javac with the runtime
@@ -120,12 +81,12 @@ import Testing
             exit $ck_rc
             """
 
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "public class Solution { static int f(int x) { return x * 2; } }\n",
             scripts: ["publictest_fam_01.sh": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_fam_01.sh")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_fam_01.sh")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == .pass,
@@ -140,7 +101,7 @@ import Testing
 
     /// The exit-code contract holds through javac + java + the wrapper's
     /// sentinel check, not just through the classifier.
-    @Test(Self.requiresJavac) func exitCodesMapToOutcomeStatuses() async throws {
+    @Test(.requiresJavac) func exitCodesMapToOutcomeStatuses() async throws {
         func wrapper(_ verdict: String) -> String {
             """
             #!/bin/sh
@@ -157,7 +118,7 @@ import Testing
             """
         }
 
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "public class Solution { static int f(int x) { return x; } }\n",
             scripts: [
                 "publictest_pass.sh": wrapper(#"passed("ok")"#),
@@ -166,11 +127,11 @@ import Testing
             ])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites(
+        let outcomes = await Self.harness.runSuites(
             [
-                Self.item("publictest_pass.sh"),
-                Self.item("publictest_fail.sh"),
-                Self.item("publictest_error.sh"),
+                NativeGradingHarness.item("publictest_pass.sh"),
+                NativeGradingHarness.item("publictest_fail.sh"),
+                NativeGradingHarness.item("publictest_error.sh"),
             ], in: dir)
         #expect(outcomes.count == 3)
         #expect(outcomes[0].status == .pass, "stderr: \(outcomes[0].longResult ?? "none")")
@@ -186,8 +147,8 @@ import Testing
     /// A HAND-WRITTEN `.java` suite entry is a documented instructor path
     /// (`docs/java-support.md`), and nothing pinned that it dispatches to `java`
     /// single-file source mode rather than falling through to `/bin/sh`.
-    @Test(Self.requiresJavac) func aHandWrittenJavaScriptIsRunByTheJavaLauncher() async throws {
-        let dir = try Self.makeWorkspace(
+    @Test(.requiresJavac) func aHandWrittenJavaScriptIsRunByTheJavaLauncher() async throws {
+        let dir = try Self.harness.makeWorkspace(
             submission: "public class Solution { static int f(int x) { return x; } }\n",
             scripts: [
                 "publictest_handwritten.java": """
@@ -200,7 +161,7 @@ import Testing
             ])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_handwritten.java")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_handwritten.java")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == .pass,

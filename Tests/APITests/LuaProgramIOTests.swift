@@ -14,12 +14,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaProgramIOTests {
 
-    static let requiresLua: ConditionTrait = .enabled("requires lua on PATH") { await Self.luaAvailable }
-
-    static var luaAvailable: Bool {
-        get async { await LuaStdoutCaptureTests.luaAvailable }
-    }
-
     private static var repoRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // APITests
@@ -57,12 +51,12 @@ import Testing
         return "error"
     }
 
-    @Test(Self.requiresLua) func numberReadsPassAndFail() async throws {
+    @Test(.requiresLua) func numberReadsPassAndFail() async throws {
         #expect(try await grade("local a = io.read(\"n\")\nlocal b = io.read(\"n\")\nprint(a + b)\n") == "pass")
         #expect(try await grade("local a = io.read(\"*n\")\nlocal b = io.read(\"*n\")\nprint(a * b)\n") == "fail")
     }
 
-    @Test(Self.requiresLua) func lineReadsAndIoLinesIterate() async throws {
+    @Test(.requiresLua) func lineReadsAndIoLinesIterate() async throws {
         await #expect(
             try grade("local a = io.read()\nlocal b = io.read(\"l\")\nprint(tonumber(a) + tonumber(b))\n") == "pass")
         #expect(
@@ -72,17 +66,17 @@ import Testing
                 == "pass")
     }
 
-    @Test(Self.requiresLua) func wholeInputReadAndIncludedComparison() async throws {
+    @Test(.requiresLua) func wholeInputReadAndIncludedComparison() async throws {
         #expect(try await grade("io.write(\"got: \", io.read(\"a\"))\n", expected: "got: 3\n4") == "pass")
         #expect(try await grade("print(\"answer is 7\")\n", comparison: .included) == "pass")
     }
 
-    @Test(Self.requiresLua) func anOsExitAfterTheAnswerIsStillGraded() async throws {
+    @Test(.requiresLua) func anOsExitAfterTheAnswerIsStillGraded() async throws {
         #expect(try await grade("print(io.read(\"n\") + io.read(\"n\"))\nos.exit(0)\n") == "pass")
         #expect(try await grade("print(0)\nos.exit(0)\n") == "fail")
     }
 
-    @Test(Self.requiresLua) func aCrashIsAGradedFailure() async throws {
+    @Test(.requiresLua) func aCrashIsAGradedFailure() async throws {
         #expect(try await grade("error(\"boom\")\n") == "fail")
     }
 }

@@ -215,10 +215,16 @@ struct EnrolledStudentRow: Content {
     /// Explicit flag for the template: a bare optional in a Leaf conditional is
     /// unreliable, so the partial gates on this instead of on `avatar`.
     var hasAvatar: Bool = false
-    /// Why LEARN cannot receive this student's grade ("Not on LEARN classlist"),
-    /// read from the readiness sweep's stored status.  Nil when the course is not
-    /// linked, the student is confirmed, or the sweep has not classified them.
+    /// The badge when LEARN cannot receive this student's grade ("Not on
+    /// LEARN"), read from the readiness sweep's stored status.  Nil when the
+    /// course is not linked, the student is confirmed, or the sweep has not
+    /// classified them.  `LearnUnreachableReason` gives all three values.
     var learnFlag: String?
+    /// Why LEARN cannot receive the grade, for the row's details line.
+    var learnFlagReason: String?
+    /// What staff can do about it, for the row's details line.  Only a student
+    /// that LEARN does not list is a candidate for removal.
+    var learnFlagAdvice: String?
     /// For a pending row: "Awaiting first login · added from CSV Sep 3".
     var pendingNote: String = ""
 }
@@ -392,7 +398,8 @@ struct InstructorMCPContext: Encodable {
     /// `canEdit && isCustomized` — folded so the template gates the Reset
     /// button on one flag (LeafKit 1.14.2 mis-parses `&&`).
     let showResetButton: Bool
-    /// One-line statement of where the current text comes from.
+    /// A noun phrase that names where the current text comes from.  It is
+    /// chrome in a definition list, so it is not a sentence.
     let sourceNote: String
     let maxLength: Int
     /// True when the viewer may save: a per-course instructor or an admin, and

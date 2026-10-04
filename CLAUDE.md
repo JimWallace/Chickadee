@@ -104,288 +104,83 @@ Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
 **Browser grading has four substrates, routed per script (#1271).**
-`RoutingExecutor` in `Public/browser-runner.js` sends a `.py` test to the
-vendored **xeus-python** kernel (`/python-grading-worker.js`), a `.R` test to
-**xeus-r** (`/r-grading-worker.js`), a `.lua` test to **xeus-lua**
-(`/lua-grading-worker.js`), and a `.m` test to **xeus-octave**
-(`/octave-grading-worker.js`), choosing with the same
-`RunnerCore.classifyScript` the native worker uses to pick a subprocess command
-— and booting only the runtimes an assignment actually contains, so an R lab
-never fetches the Python env. `RunnerCore` still owns the suite loop and output
-interpretation for all four; a substrate supplies only "run this script, report
-its exit code and streams".
-
-xeus-r is the **only** route to in-browser R (WebR's `jupyterlite-webr` caps at
-`jupyterlite-core<0.7` and we pin 0.8.x). Because a kernel has no process
-contract, `Public/r-grading-shared.js` masks `quit`/`commandArgs` in the global
-environment so `test_runtime.R` stays byte-identical across both runners, and
-wraps each script in ONE top-level R expression (xeus-lite yields to the JS
-event loop between top-level expressions and does not regain control for
-~180ms — a *wait*, not work: one expression summing 8M elements costs less
-than one summing 1, and R's own clock reports 0ms across nested expressions vs
-~228ms across a bare one. A statement-list wrapper cost ~3.5s per test vs
-~0.8s). Only a real kernel proves any of this, so `Tools/browser-grading-smoke` boots
-one in a browser in CI. See `docs/r-support.md`.
-
-**Lua is a full assignment language as of the second-half work.**
-`chickadee-lua` (19 MB, boot ~2.5s) grades `.lua` scripts in the browser and the
-native worker injects `Tools/runner-support/test_runtime.lua` beside the Python
-and R helpers, so one file serves `lua script.lua` and the kernel.
-`AssignmentLanguage` gained `.lua`, with a Lua literal renderer,
-a pattern-family renderer covering all eight kinds, a notebook-check renderer
-covering four of ten, and a personalization driver. The six unsupported check
-kinds are refused at save time rather than absent: the four data-frame kinds
-need a data frame (Lua has no such type and the env ships no packages),
-`figureCount` needs a plotting library, and `astStructure` is Python-only as it
-is for R. `cellContains` additionally refuses `regex: true`, because Lua
-patterns are a different language from PCRE and a Python-authored pattern would
-quietly match the wrong thing rather than erroring. Its two per-kernel quirks
-are `os.exit` masking (R's `quit()` problem again — if it regresses, every test
-reads as a pass) and a per-script wipe of globals added since boot, since `_G`
-*is* Lua's standard library and cannot be cleared outright. Crucially, **R's two
-expensive lessons did NOT generalise**: xeus-lua costs 5ms for 20 top-level
-statements (no ~180ms yield) and its `io.stderr` reaches the kernel stream
-directly (no `evaluate` calling-handler trap). Budget one quirk per kernel, not
-the same one. Measurements and the full postmortem:
-`docs/adding-a-xeus-kernel.md` §"What the Lua run actually cost".
-
-**Octave is the fourth assignment language.** `AssignmentLanguage` gained
-`.octave`: `.m` scripts grade natively (`octave-cli`;
-the `octave` package plus `gnuplot-nox` + `fonts-freefont-otf` for headless
-figures are on both images) and in the browser via the vendored `xeus-octave`
-kernel (`chickadee-octave`, 142 MB on disk — the largest env — xeus 6.0.6,
-~5–12 s boot, no per-statement cost). All eight pattern kinds render and
-execute; notebook checks cover five of ten — `variableExists`,
-`functionExists`, `numericArrayClose`, `cellContains` and `figureCount`, the
-last two being Lua's opposite answers re-measured (plotting is core Octave,
-and Octave's regexp is PCRE so `cellContains` takes `regex: true` where Lua
-refuses it) — while the four data-frame kinds (no data-frame type in core
-Octave, no packages on the channel) and `astStructure` are refused at save
-time. The literal rule is the language's one silent trap: `[65, "bc"]` is the
-char array `"Abc"`, so `JSONValue.octaveLiteral` renders arrays as `[...]`
-only when every element is a numeric/boolean scalar (null → `NA`) and
-everything else — any string, mixed kinds, nesting, objects, empty — as
-cells, with objects as
-`containers.Map` calls. Equality is `isequaln`-based (NA/NaN match
-themselves; Octave is already type-blind across logical/int/double) plus a
-both-empty rule and shape-blind numeric comparison. `test_runtime.m` loads
-submissions by evaluating their text behind a `1;` guard, so notebooks,
-scripts and one-function-per-file submissions all register their definitions
-(the last under its own name, not its filename). The kernel needed NO
-substrate patch (the per-kernel quirk budget went unspent): `fprintf(2,…)`
-reaches the stderr stream, `setenv` works, and the `exit`/`quit` masks carry
-the status on the `chickadee:exit` error identifier. The scorecard's
-prediction that Octave needs `OCTAVE_PATH` was measured wrong — `.` is first
-on the default load path in both runners — and the LanguageDescriptor table
-records the correction. Postmortem: `docs/adding-a-xeus-kernel.md` §"What
-the Octave run actually cost".
-
-**C++ is the fifth assignment language — and the FIRST with no editor kernel; Racket is the second (see below).**
-`EditorSupport.uploadOnly` (the `LanguageDescriptor` judgement that folded the
-four kernel facts) plus `submissionMode: "uploadOnly"` (a manifest field beside
-`gradingMode`; `notebook` mode deliberately keeps the upload form beside the
-editor, so there is no third "both" value) make C++ assignments upload-only and
-native-worker-only by construction: no xeus kernel is vendored because the
-browser would grade a *different compiler* than the course's g++ — the
-two-C++s decision in `docs/cpp-support.md`. A generated case is a POSIX shell
-wrapper (heredoc C++ source → g++ one translation unit → exec the binary under
-the original shell contract): no `ScriptInterpreter` case, no build strategy in
-Swift, `generatedScriptExtension` is `"sh"` (the one language whose generated
-extension is not its own — pinned, since `.sh` must keep carrying no language
-signal). Single-TU inclusion (`#define main ck_student_main` around the
-student's file) is what dissolved the memo's declared-type problem: no
-prototype is ever declared, literals render CTAD-typed and `ck::equal` in
-`test_runtime.hpp` compares cross-type. All 8 pattern kinds execute —
-`performanceThreshold` is supportable *because* the language is native-only
-(-O2 wrapper), `returnTypeCheck` matches static types via decltype — and all
-ten notebook checks are refused categorically (no notebook workflow exists).
-Literal refusals are the language's trap-guard: JSON null, mixed arrays,
-nested containers have no C++ rendering and are refused at save time
-(`cppRenderabilityIssue`), with an undefined-identifier backstop so a leak is
-a compile error; the measured trap was `std::cmp_equal` rejecting `bool` by
-design (equality promotes bools explicitly). Personalization `=` expressions
-are C++, compiled-and-run by an `sh` driver (~0.3s, same Horner seed fold),
-delivered as typed `inline const auto` definitions in `_ck_inputs.hpp` where a
-missing input is a compile error. Per-test compile ~0.65s at -O0, measured.
-g++ rides both images and the runner capability probe.
+`RoutingExecutor` in `Public/browser-runner.js` sends each script to the xeus
+kernel for its language. It classifies with the same `RunnerCore.classifyScript`
+that the native worker uses. It boots only the runtimes that the assignment
+contains. `RunnerCore` owns the suite loop and output interpretation for all
+four; a substrate only runs a script and reports its exit code and streams. See
+`docs/architecture.md`. xeus-r is the only route to in-browser R; its masks and
+its one-top-level-expression rule are in `docs/r-support.md`.
 
 **Every worker the notebook page spawns must be in
-`NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** The page is
-cross-origin isolated on Chromium/Firefox, and a worker created by a
-`require-corp` document must ITSELF be served `require-corp` or the browser
-refuses the script (`ERR_BLOCKED_BY_RESPONSE`) — at which point `ensureReady`
-throws and the submission silently fails over to the native worker: right marks,
-none of the speed. The allowlist is per-path, so "same directory, same
-middleware" proves nothing about a worker not on it; that reasoning is how #1274
-shipped browser-graded R that no isolated engine ever ran.
-`IsolatedWorkerScriptDriftTests` reads the spawn sites out of the page scripts
-and fails on drift in either direction. It currently lists the four grading
-workers (Python, R, Lua, Octave) plus the freeze watchdog.
+`NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** If it is not, an
+isolated engine refuses the script. The submission then fails over to the native
+worker with no error. `IsolatedWorkerScriptDriftTests` guards the list. See
+`docs/adding-a-xeus-kernel.md` step 8.
 
-**Racket is the sixth assignment language, and the second upload-only one.**
-No Scheme-family kernel exists on `emscripten-forge-4x` to vendor, so
-`EditorSupport.uploadOnly` — but for a *contingent* reason where C++'s is a
-decision: C++ has no kernel because grading a different compiler than the course
-teaches is a pedagogy defect, Racket has none because nobody built one. It is
-otherwise the cheapest language here: interpreted, so `racket file.rkt` needs no
-`.sh` wrapper, and dynamically typed, so `JSONValue` renders without C++'s
-refusal table. All eight pattern kinds render and execute across both dialects
-CS 135/115 (`#lang htdp/bsl`) and CS 136 (`#lang racket`) write; notebook checks
-are refused categorically, as for C++. The measured trap: a teaching-language
-module EXPORTS NOTHING, so a generated test loads the submission with
-`dynamic-require` + `module->namespace` and evaluates an application form rather
-than a bare identifier. Its two runner defects — `.rkt` dispatching to `/bin/sh`,
-and `racket --version`'s letter-led `v8.10` defeating the runner's version parser
-— are fixed, each with an `allCases` guard; a Racket assignment still needs a
-runner new enough to carry both. See `docs/multi-language-audit.md`.
+**Assignment languages.** Seven ship. `LanguageDescriptor`
+(`Sources/Core/LanguageDescriptor.swift`) holds the facts per language, and MCP
+`get_server_info` reports them, with the refused kinds and a reason for each.
 
-**Java is the seventh assignment language, and the third upload-only one.**
-Both reasons the other two are upload-only hold at once: no JVM kernel exists on
-the channel (Racket's contingent reason) *and* a browser kernel would grade a
-different toolchain than the course's `javac` (C++'s principled one). Its
-generated cases are `.sh` wrappers like C++'s — the SECOND language to answer
-`generatedScriptExtension: "sh"`, which is what turned six hardcoded
-`language == .cpp` forks into the derived
-`LanguageDescriptor.generatesLanguagelessWrapper`. Generating `.java` cannot
-work: single-file source mode compiles exactly one file and sees neither the
-student's class nor `test_runtime.java`, while the wrapper's `javac` pulls both
-in from the sourcepath on demand. All ten pattern kinds render and execute; all
-ten notebook checks are refused categorically. Three measured traps shape it: a
-student's **`System.exit(0)` would make every test read as a pass** (the
-`quit()`/`os.exit`/`exit` hazard, but in the NATIVE path, where
-`SecurityManager` is deprecated for removal — so every verdict prints a sentinel
-the wrapper checks for); **`Integer.valueOf(1).equals(Long.valueOf(1L))` is
-false**, so `ck.equal` compares numerically or a `long`-returning submission is
-silently marked wrong; and **setting `CLASSPATH` REPLACES the default `.`**, the
-`LUA_PATH` trap again and the third case proving `moduleResolution` and
-`workingDirectoryIsOnDefaultSearchPath` must be asked separately. Unlike C++ it
-needs no literal refusal table (`Object` + autoboxing render every `JSONValue`
-shape), but it has its own literal rules: `Arrays.asList` never `List.of` (which
-throws on null), `int` unless the value exceeds int32 (Java widens but never
-narrows), and **never a backslash-u escape**, which javac processes in the lexer
-and which would break the source file. The probe is `javac --version`, not
-`java`: a JRE-only host is the real skew. See `docs/java-support.md`.
+| Language | Editor | Generated test | Doc |
+|---|---|---|---|
+| Python | xeus-python kernel | `.py` | `docs/architecture.md` |
+| R | xeus-r kernel | `.R` | `docs/r-support.md` |
+| Lua | xeus-lua kernel | `.lua` | `docs/adding-a-xeus-kernel.md` §"What the Lua run actually cost" |
+| Octave | xeus-octave kernel | `.m` | `docs/adding-a-xeus-kernel.md` §"What the Octave run actually cost" |
+| C++ | upload-only (a decision) | `.sh` wrapper | `docs/cpp-support.md` |
+| Racket | upload-only (no kernel exists) | `.rkt` | `docs/multi-language-audit.md` |
+| Java | upload-only (both reasons) | `.sh` wrapper | `docs/java-support.md` |
 
-**Every assignment DECLARES its language. Nothing infers one (v0.5.59, #1331).**
-`AssignmentLanguage` (`.python | .r | .lua | .octave | .cpp | .racket | .java`, Core) is
-read from the manifest and nowhere else: `resolve(manifest:)` returns
-`manifest.language`, full stop. Declaration is a **requirement**, and every door
-that creates an assignment enforces it — the web create page's `required`
-language select (with an explicit "None"), MCP `create_assignment`'s required
-`language`, `POST /api/v1/testsetups`, and course-bundle import.
-`BackfillDeclaredLanguage` answered it for everything that predates the rule, so
-`languageDeclared` is true everywhere and a **nil language means the author said
-"none"** — a plain `.sh` suite — never "nobody has been asked".
+An upload-only language also sets `submissionMode: "uploadOnly"`. There is no
+third "both" value (`TestProperties.swift`). Which check kinds each language
+refuses, and why: `docs/authoring-parity.md`. Per-language literal traps:
+`docs/adding-a-xeus-kernel.md` §"Traps".
 
-Resolution used to sniff: a `.R` graded script, else a notebook kernel, else
-`.python`. That made "the author chose Python" and "we guessed from a `.py`
-file" the same answer, and every silent misroute in the multi-language arc
-descended from it — a Lua assignment resolving to Python, an R author's first
-`=` expression sent to `python3`, a browser writing `_ck_inputs.py` for an R
-runtime. **Do not reintroduce inference.** If a call site does not know the
-language, the answer is to ask the author, not to guess.
+- **Mask the exit call.** The kernels mask R `quit()`, Lua `os.exit`, and
+  Octave `exit` and `quit`. The Java wrapper requires a sentinel line, because
+  `System.exit(0)` cannot be masked. If a mask regresses, every test reads as a
+  pass.
+- **Budget one quirk per kernel, not the same one.** R's per-expression wait and
+  its stderr trap did not occur on Lua or Octave.
+- **`.sh` carries no language signal.** To ask whether a language generates a
+  `.sh` wrapper, read `LanguageDescriptor.generatesLanguagelessWrapper`. Do not
+  write `language == .cpp`.
 
-Derivation survives in exactly one place, deliberately not called `resolve`:
-`AssignmentLanguage.derivedDeclaration` runs at the three boundaries where
-content arrives with no author answer (the REST zip upload, bundle import, the
-backfill) and each records the result immediately. It is a boundary step, not a
-resolution strategy. `rederive` is gone: a declaration does not go stale when
-content changes, so replacing a starter notebook no longer rewrites the language
-underneath the author.
+**Every assignment declares its language. Nothing infers one (#1331).**
+`resolve(manifest:)` returns `manifest.language` and nothing else. A nil
+language means that the author said "none": a suite of hand-written scripts.
+**Do not reintroduce inference.** If a call site does not know the language,
+ask the author. `AssignmentLanguage.derivedDeclaration` runs only at three
+boundaries, and each records the result at once. See
+[docs/language-declaration.md](docs/language-declaration.md).
 
-Every language-specific path dispatches on the declared value — literal
-rendering (`pythonLiteral`/`rLiteral`), the per-student inputs file
-(`_ck_inputs.py`/`_ck_inputs.R` via `renderInputsFile`), and the expression
-driver. Personalization is evaluated **per-language on the server**:
-`PersonalizationEvaluator` spawns `python3`, `Rscript`, `lua` or `octave-cli`
-(all on the server image), preserving the property that expression source +
-the solution never reach the runner. Base R has no bignum, so the seed is a
-deterministic Horner-fold reduction
-(`RPersonalizationRuntime.chickadeeSeedRSource`, shared by the server driver and
-the grading runtime so they never drift). `astStructure` remains the one
-Python-only check kind.
+- **No function may default a `language:` parameter.**
+  `scripts/no-language-defaults.sh` enforces this in `format-lint`.
+- **Fail loudly while authoring. Never fail while grading, rendering a page or
+  extracting a student's submission.** Every remaining `?? .python` follows this
+  rule; the per-site table is in `docs/language-declaration.md`.
+- **`makeWorkerManifestJSON(preserving:)` copies the decoded manifest.** Do not
+  build a fresh dict: it drops `languageDeclared`.
+- **Personalization runs per language on the server**
+  (`PersonalizationEvaluator`). Expression source and the solution never reach
+  the runner. See `docs/personalization-eval-runtime.md`.
 
-**No function may default a `language:` parameter** — `scripts/no-language-defaults.sh`
-enforces it in `format-lint`. Seventeen did, which is what made the two #1330
-defects possible. A caller that means Python says so.
+**A declared language is not exclusive. Shell is the substrate.** The
+declaration controls what Chickadee generates. A script's own extension controls
+how it runs, so a `.R` helper in a Python assignment runs under `Rscript`.
+Content does not change the declaration. Only an explicit change does: the
+language dropdown, or MCP `set_assignment_language`. "None" means "nothing is
+generated". Do not add a `.shell` language case. See
+`docs/language-declaration.md` §"A declared language is not exclusive".
 
-The `?? .python` sites that remain are a different question from resolution —
-"this operation needs a language and the assignment declares none" — and are
-settled by one rule: **fail loudly while authoring, never while grading,
-rendering a page, or extracting a student's submission.** An instructor can fix
-a missing declaration in seconds; a student cannot fix it at all. So generating
-a test, storing an `=` expression, and checking a solution file's extension all
-refuse on a declared-None assignment, while extraction, literal rendering,
-notebook scaffolding and the two display paths keep a locally-stated default.
-Corollary worth knowing: `makeWorkerManifestJSON(preserving:)` copies the
-decoded manifest and replaces only the suite, so a rebuild cannot drop
-`languageDeclared`. It used to write a **fresh dict**, and carrying only the
-language turned a deliberate "None" back into "nobody has been asked". See
-[docs/language-declaration.md](docs/language-declaration.md) for the per-site
-table. Also `docs/r-support.md`.
-
-**A declared language is NOT exclusive. Shell is the substrate every assignment
-sits on.** Two concepts do two jobs and are routinely confused for one:
-`ScriptInterpreter` (RunnerCore) is **per script**, derived from extension →
-shebang → content, and has fourteen cases including `sh`, `bash`, `zsh`, `ruby`,
-`perl`, `node` and `php` — interpreters the runner dispatches but Chickadee
-cannot author in. `AssignmentLanguage` (Core) is **per assignment**, declared,
-and has seven. The declaration governs what Chickadee **generates**; the script's
-own extension governs how it **runs**. `TestSuiteEntry` carries no language
-field precisely because of this: `scriptInvocation(for:)` takes only a URL, and
-the runner stages *every* language's `test_runtime.*` into every job workspace,
-so a hand-written `.R` helper inside a Python assignment runs under `Rscript`
-and always has. No authoring surface refuses an off-language script, and
-`KernelImportGuard` is explicitly per-file. This is the original design — "test
-suites are shell scripts; the runner executes them generically" — with
-per-language generation layered on top, not replacing it.
-
-Two consequences that were each once a defect. **Content does not vote on the
-declaration:** `resolveAuthoringLanguage` used to let an authored `.R` script
-outrank the stored language, silently re-rendering every generated script and
-deleting the old ones — a migration triggered by adding a helper. It returns the
-declaration now; changing language stays the dropdown's job. **The capability
-gate reads the suite, not just the declaration:**
+**A runner claims only a job it can grade (`RunnerLanguageGate`).**
 `AssignmentLanguage.languagesRequiredToGrade(manifest:)` unions the declared
-language with every language the suite's extensions imply, because asking only
-the declaration let a `.R` helper in a Python assignment be claimed by an R-less
-runner and die at exit 127 in front of a student. An empty set — a plain `.sh`
-suite, or one of `.rb`/`.js` — still fails open, which is what keeps the
-original mode claimable by anyone.
-
-So **"None" means "nothing is generated"**, which in practice means hand-written
-scripts only. Do not turn it into a `.shell` language case: `sh` must keep
-carrying no language signal (C++'s generated cases *are* `.sh` wrappers), and
-the field that would have to claim it, `scriptExtensions`, is also what
-`update_solution` reads to decide which solution filenames are acceptable.
-
-**A runner only claims a job it can actually grade — enforced, not authored
-(`RunnerLanguageGate`).** Runners are separate hosts that upgrade on their own
-schedule, so several `chickadee-runner` builds poll at once and claim order
-decides which one grades a job. That used to make an assignment in a newer
-language nondeterministic: it validated green because a capable runner happened
-to claim it, then failed for the one student whose job an older runner claimed —
-with a symptom (exit 127, "interpreter not found") that reads as a broken test
-script and gets debugged as one. The claim seam now asks
-`languagesRequiredToGrade` for every language the job needs — the declared one
-*plus* every language the suite's own script extensions imply — and refuses a
-runner whose advertised profile lacks any of them, so the job waits for a runner
-that can grade it. No authoring step: the
-manifest already knows the language, and `RunnerProfileDetector` discovers its
-probes from `AssignmentLanguage.allCases`, so every runner advertises every
-language it has and a runner whose *build* predates one advertises a profile
-without it. Two deliberate fail-opens — nothing requiring an interpreter (a plain
-`.sh` suite, or one of the interpreters that has no capability token) and a
-runner advertising no profile at all (discovery switched off,
-an operator's choice; an old runner still has discovery on and is caught by the
-closed path). It catches strictly more than a version gate: a *current* runner
-whose host lacks the interpreter never advertises it either. `minimumRunnerVersion`
-(MCP `set_minimum_runner_version`, metadata-only) survives for the case this
-cannot see — runner behaviour that is not observable as an interpreter — and is
-the wrong tool for "this is a new language". Browser-graded assignments are
-covered too, since instructor validation is enqueued as a `kind == .validation`
-submission and always runs on the **native worker**. See
-`docs/runner-capability-profiles.md`.
+language with every language that the suite's extensions imply. A runner whose
+advertised profile lacks one of them does not claim the job. There is no
+authoring step. `minimumRunnerVersion` is the wrong tool for a new language.
+Validation runs on the native worker, so browser-graded assignments are gated
+too. See `docs/runner-capability-profiles.md`.
 
 **A class goal counts one of three things, and the sweep will evaluate no fourth.**
 `Achievement` scope `.classWide` used to mean exactly one arithmetic: how many

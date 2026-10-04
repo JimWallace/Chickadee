@@ -604,4 +604,41 @@ import VaporTesting
 
         }
     }
+
+    /// #2026: an extended row shows the class due date on the page. It was
+    /// only in a hover title, which a touch screen does not show.
+    @Test func extendedRowShowsTheClassDueDateOnThePage() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            let classDue = Date(timeIntervalSince1970: 1_790_000_000)
+            try await arInsertSetup(id: "ext_cell_setup", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "ext_cell_setup", title: "Extended Lab", isOpen: true,
+                dueAt: classDue, on: app
+            )
+            let student = try await arInsertStudent(username: "ext_cell_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            let classDueText = waterlooDateTimeFormatter().string(from: classDue)
+            try await app.asyncTest(
+                .GET, "/TEST101/students/\(try student.requireURLToken())/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("+ extension"))
+                    #expect(body.contains("class due \(classDueText)"))
+                    #expect(!body.contains("Assignment-wide due date"))
+                }
+            )
+        }
+    }
 }

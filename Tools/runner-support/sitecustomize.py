@@ -4,11 +4,10 @@
 # (passed/failed/errored/require_function) and the loaded student module(s)
 # available as builtins so test scripts can use them without an import.
 #
-# CANONICAL SOURCE.  This file is mirrored verbatim (code, not comments) into:
-#   * Sources/Worker/TestRuntimeSources.swift  (the `sitecustomizePy` literal)
-#   * Public/browser-runner.js                 (the `SITECUSTOMIZE_PY` literal)
-# RuntimeSourceDriftTests (Swift) and the browser-runner JS drift test fail CI
-# if any copy drifts.  Edit this file, then re-sync the two embeds.
+# CANONICAL SOURCE, and the only copy.  Plugins/EmbedRunnerSupport compiles it
+# into the native runner.  scripts/generate-js-constants.sh writes it into
+# Public/runner-support-sources.js for the browser runner.  After an edit, run
+# that script and commit the result; CI fails if the generated file is stale.
 
 import builtins
 import test_runtime as _tr

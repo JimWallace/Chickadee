@@ -13,7 +13,8 @@ import Testing
 @testable import APIServer
 
 @Suite struct MCPOutputSchemaSyncTests {
-    private let tools = MCPToolCatalog.live.all
+    /// Both surfaces: the admin catalog's schemas are hand-written too (#1935).
+    private let tools = MCPServedText.tools
 
     /// Every advertised schema (input and output) must be a well-formed object
     /// schema whose `required` names all exist in `properties` — the mistake a

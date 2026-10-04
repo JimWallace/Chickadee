@@ -152,10 +152,19 @@ enum AchievementsEditing {
             }
             return goal
         case .record:
-            guard let dim = RecordDimension(rawValue: input.recordDimension ?? "firstToSolve") else {
+            // No default: a record ranks on its dimension, so a missing one is
+            // a question for the author, not a silent "first to solve"
+            // (audit A17).  The web form always sends one; an MCP agent may not.
+            guard let raw = input.recordDimension, !raw.isEmpty else {
                 throw WebAssignmentError.invalidParameter(
                     name: "recordDimension",
-                    reason: "Unknown record dimension '\(input.recordDimension ?? "")'.")
+                    reason: "A record needs a record dimension: one of "
+                        + RecordDimension.allCases.map(\.rawValue).joined(separator: ", ") + ".")
+            }
+            guard let dim = RecordDimension(rawValue: raw) else {
+                throw WebAssignmentError.invalidParameter(
+                    name: "recordDimension",
+                    reason: "Unknown record dimension '\(raw)'.")
             }
             return Achievement(
                 id: id, name: name, detail: cleanDetail, scope: .record,
@@ -311,7 +320,51 @@ enum AchievementsEditing {
             id: achievement.id, name: achievement.name, detail: achievement.detail,
             scope: achievement.scope, conditions: conditions, match: achievement.match,
             reward: achievement.reward, classFraction: achievement.classFraction,
-            recordDimension: achievement.recordDimension, sectionID: achievement.sectionID)
+            recordDimension: achievement.recordDimension)
+    }
+
+    /// The shapes nothing evaluates (audit A18).  The editor never produces
+    /// them, so each one is a hand-authored manifest that would save fine and
+    /// then never fire for anyone — the silent-never-fires shape every other
+    /// check here closes.
+    ///
+    /// - An `individual` achievement is evaluated only as a badge
+    ///   (`isAuthorableIndividualBadge` / `isPerSubmissionBadge`), and a
+    ///   `classWide` one only as a points goal (`isClassGoal`).  Any other
+    ///   reward on those scopes is read by nothing.
+    /// - A condition's `target` is read only by `testPass` (the test) and
+    ///   `itemsCovered` (the section).  On every other signal `isSatisfied`
+    ///   ignores it, so a "grade of section X" condition would quietly grade
+    ///   the whole assignment.
+    private static func validateEvaluableShape(_ achievement: Achievement) throws {
+        switch (achievement.scope, achievement.reward.type) {
+        case (.individual, .badge), (.classWide, .points), (.record, _):
+            break
+        case (.individual, .title), (.individual, .points):
+            throw WebAssignmentError.invalidParameter(
+                name: "reward",
+                reason: "'\(achievement.name)' is an individual achievement with a "
+                    + "'\(achievement.reward.type.rawValue)' reward. An individual achievement "
+                    + "is a badge; a title belongs to a record and points to a class goal.")
+        case (.classWide, .badge), (.classWide, .title):
+            throw WebAssignmentError.invalidParameter(
+                name: "reward",
+                reason: "'\(achievement.name)' is a class goal with a "
+                    + "'\(achievement.reward.type.rawValue)' reward. A class goal awards points.")
+        }
+        for condition in achievement.conditions where condition.target != nil {
+            switch condition.signal {
+            case .testPass, .itemsCovered:
+                continue
+            case .grade, .attempts, .executionTimeMs, .gradeJumpPercent, .standing, .matchesWon,
+                .classCoverage:
+                throw WebAssignmentError.invalidParameter(
+                    name: "target",
+                    reason: "'\(achievement.name)' puts a target on a '\(condition.signal.rawValue)' "
+                        + "condition, which reads the whole assignment. Only 'testPass' (a test) "
+                        + "and 'itemsCovered' (a section) take a target.")
+            }
+        }
     }
 
     /// Cross-row validation the per-row converter can't do: ids must be unique
@@ -326,6 +379,7 @@ enum AchievementsEditing {
                 throw WebAssignmentError.invalidParameter(
                     name: "id", reason: "Duplicate achievement id '\(achievement.id)'.")
             }
+            try validateEvaluableShape(achievement)
         }
         // A malformed manifest can't provide a suite to check against; the
         // rest of the achievements pipeline already treats that as "no suite

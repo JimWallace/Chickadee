@@ -37,6 +37,9 @@ on:
       - "Public/notebook*.js"
       - "Public/jl-kernel-diagnostics.js"
       - "Public/browser-runner.js"
+      # The test runtimes the browser grades with, generated from
+      # Tools/runner-support (#1962).
+      - "Public/runner-support-sources.js"
       - "Public/jupyterlite/**"
 
 concurrency:

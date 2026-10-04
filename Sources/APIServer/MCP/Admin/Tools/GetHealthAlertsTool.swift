@@ -53,7 +53,7 @@ struct GetHealthAlertsTool: DiagnosticTool {
     }
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject(tool: Self.name)
+        try await context.requireAdminSubject()
         let app = context.request.application
         let evaluations = await evaluateHealthRules(
             on: app, configuration: app.serverHealthAlertConfiguration)

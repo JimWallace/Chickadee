@@ -141,6 +141,14 @@
             };
 
         if (document.getElementById('test-editor-overlay')) {
+            // The shell and its document listeners exist once per document, so
+            // a second call keeps them.  The "+ Add Test" buttons belong to one
+            // render of the edit body, and a workbench swap brings new ones
+            // (#1957), so upgrade them here too.  `enhanceAddTestButtons` is a
+            // function declaration below, which JavaScript hoists, so the call
+            // is valid before its text.  A button that is already upgraded is
+            // a <details>, so this does not upgrade a button twice.
+            enhanceAddTestButtons();
             return global.__chickadeeTestEditorModal || { open: function () {}, close: function () {} };
         }
 
@@ -398,8 +406,9 @@
         // grouped. Picking a type stashes the target section and opens the modal
         // already in that type (`presetType`) — no redundant picker inside the
         // modal. (The catalog lives here in JS, so the menu is built client-side
-        // rather than templated; sections are added via full-page reload, so a
-        // one-time upgrade at init covers every button.)
+        // rather than templated. A new section arrives in a new render of the
+        // page or of the workbench edit half, and each call to this init
+        // upgrades the buttons of the current render.)
         //
         // The menu applies `unsupportedReason` exactly as the modal's select
         // does, and that is not belt-and-braces. For a `check` or `family` kind

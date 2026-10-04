@@ -9,6 +9,231 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.406] - 2026-10-04
+
+### Changed
+
+- **The Overview's row drag uses the shared drag vocabulary.** The assignment rows on the instructor Overview rendered their own `.assignment-drag-handle` grip and `.assignment-draggable` / `.dragging` row classes, styled in the page's own style block as copies of the global rules. They now use `.suite-drag-handle` and `.suite-row-dragging`, and the whole-row grab cursor is one global rule keyed on `tr[draggable="true"]`. The page style block shrinks by 15 lines (#1972).
+
+### Changed
+
+- **CLAUDE.md states the seven assignment languages as one table.** The per-language paragraphs moved to the language docs, and CLAUDE.md keeps the rules that fail silently: declare a language and never infer one, no `language:` defaults, fail loudly only while authoring, mask the exit call. `docs/adding-a-xeus-kernel.md` now records what Lua and Octave support after their runs (#1989).
+
+### Fixed
+
+- **A CI-tolerant time budget for the concurrent evaluator test.** `EvaluatorSpawnGateTests.concurrentEvaluationsAllComplete` starts six `python3` evaluations at once. On a loaded CI runner one of them missed the 5-second default and the test failed (`PersonalizationEvaluatorTests.swift:242`, on #2059 and #2006). The test now passes a 30-second budget to each evaluation. The default the server uses does not change.
+
+
+## [0.5.405] - 2026-10-04
+
+### Fixed
+
+- **The workbench edit half works again after an in-place save (#1957).** An
+  in-place save swaps the edit half for a new render. The new markup has no
+  running code: a parsed script does not run, and the CSP blocks inline
+  scripts. So the suite table came back with no rows, and the editors in the
+  half did not respond. Now `surface-swap.js` calls one hook,
+  `ChickadeeEditPage.init()`, after the swap. That function wires the new render
+  and does nothing on a render that it has wired. The swap no longer re-creates
+  script elements. The editors that start themselves (section inputs, global
+  inputs, achievements) export an `init` that is idempotent per element. The
+  "+ Add Test" buttons of a new render are upgraded, the dataset estimates are
+  painted again, and the language facts follow the new seed. Listeners on
+  `<body>` are bound once per document, so one click does one action. The
+  workbench smoke check now makes a second action in the swapped half.
+
+### Changed
+
+- **The browser runner loads the runtime helpers from a generated file.** `Public/browser-runner.js` held five hand-copied runtime helpers, 1,604 lines in all. A drift test compared them with `Tools/runner-support/` and ignored comments. Now `scripts/generate-js-constants.sh` writes each runtime helper into `Public/runner-support-sources.js` as a JSON string, byte for byte. The notebook page loads that file before `browser-runner.js`. The browser therefore uses the same bytes that the native runner compiles in, and no copy can drift. `runtime-drift.test.mjs` is retired. Format-lint runs the generator with `--check`, as before. A new Node test checks that each generated entry equals its canonical file, and that the map holds every helper. The browser finds the helpers with the rule that the native runner uses: every `test_runtime.*` and `sitecustomize.py`. So the browser workspace now also gets the C++, Java and Racket helpers. No kernel scanner reads their extensions, so grading does not change (#1962).
+
+
+## [0.5.404] - 2026-10-04
+
+### Changed
+
+- **Four more authoring validators throw a typed error, one case per rule.** `ManifestValidation`, `PatternKindHandler`, `NotebookCheckKindHandler` and `PatternFamilyAuthoredGraph` built 52 `Abort(.unprocessableEntity, reason:)` values with hand-written sentences, and imported Vapor for nothing else. They now throw `AuthoringValidationError`, whose description is the same sentence word for word and which leaves a route or an MCP tool as the same 422. The four files no longer import Vapor and leave the Utilities allowlist. `PatternFamilyValidator` still throws `Abort`, because a test asserts that type. This continues #1929.
+
+
+## [0.5.403] - 2026-10-04
+
+### Fixed
+
+- **Text that only a hover title held is now on the page.** A failed variant badge on the instructor Overview says that students on those variants fail too. The assignment editor says beside Save & Validate that suite edits save as you make them. A spent secret-reveal token shows as a "Secret tests revealed" badge, not as an emoji with no label (#1975).
+- **The LEARN flag on the Students tab is a short badge with the correct advice.** The badge was the full sentence that the roster-readiness sweep stores. It is now "Not on LEARN" or "No LEARN match", and the reason and the advice are on the row. Only a student whose ID LEARN does not list gets the advice to remove them if they dropped. A student with no ID gets the advice to add one (#1975).
+- **The Source line on the instructor MCP tab is a short phrase.** It now reads "Chickadee default" or "Customized", the same as the badge in the heading. The old text was two sentences and referred to "the text below", which is not correct on a narrow screen (#2023).
+
+
+## [0.5.402] - 2026-10-04
+
+### Changed
+
+- **The two MCP surfaces share one bearer middleware.** `MCPBearerAuthMiddleware` and `AdminMCPBearerAuthMiddleware` were two copies that differed only in how they grant scopes. They are now `MCPSurfaceBearerAuthMiddleware<Scope>` with a per-surface scope ceiling, and the old names stay as typealiases with their old initializers. The content surface still clamps to the MCP_MODE ceiling on every request; the admin surface still grants only `diagnostics:read`. Behaviour does not change (#1944).
+
+
+## [0.5.401] - 2026-10-04
+
+### Changed
+
+- **Each auto-compute warning title is one phrase, and the advice is in a doc.** The titles for a call timeout, a `None` result and a value that has no JSON form had two sentences each. Each is now one phrase, for example "Solution call did not return within 5 seconds". A C++, Racket or Java value that is not JSON, a server refusal and a failed request no longer read "Solution raised:"; they read "Computed value is not JSON", "Auto-compute unavailable here" and "Auto-compute request failed". What to do about each warning is in the new `docs/auto-compute.md`. A note under the cases table links it, for the kinds that auto-compute fills, because a touch screen does not show a title. A JS test holds every auto-compute title to one phrase of at most 20 words (#1991).
+
+### Fixed
+
+- **The amber cue on an input value names its cause, and a note links the explanation.** The Global Inputs panel, the section inputs and a family's Variables table gave every loose value the title "Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict." That was two sentences, and it was wrong for a value pasted in the language's own syntax, which the editor rewrites to a list or a dict. The title is now "Kept as text" or "Read as a pasted literal", from one helper, `ChickadeeLanguage.looseValueTitle`, and the expression titles are now "Per-student expression" and "Empty expression". The value inputs are named "Value", so a title only describes them. The new section "The amber cue on a value" in `docs/inputs.md` explains the cue. One partial, `_value-cue-note.leaf`, links it under the Global Inputs table, under each section's inputs and under a family's Variables table, and shows only while its table has a row (#1996).
+
+### Fixed
+
+- **The staff view of a student's submissions shows the class due date beside an extension.** When a student has an extension, the Due cell shows the extended date, "+ extension", and "class due <date>" (or "no class due date"). Before, the class due date was only in a hover title, which a touch screen does not show (#2026).
+
+### Changed
+
+- **A slow notebook editor shows a warning banner, not the failure panel.** When the editor had not started after 35 seconds, the page showed the "Editor didn't load" panel while the editor was still loading. That panel is a `role="alert"` stand-in for missing content, and its "Diagnostic details" box was empty. A slow boot now shows a third dismissible `flash-warning` banner, `role="status"`, above the editor, like the browser and memory notices. The banner has its own `.ipynb` upload input, which uses the same upload handler as the panel's. The banner goes away when the kernel becomes ready, unless focus is inside it, and a failure after a slow boot replaces it with the panel. When a notice is dismissed, or hidden with focus inside it, focus moves to the status line. The banner text, the memory text and the panel paragraphs are now one sentence each, and the device advice is in the new `docs/notebook-editor-help.md`, which the banner and the panel link (#2028).
+
+### Changed
+
+- **The LEARN page links the setup guide from the connect form.** The note under "Connect my LEARN account" is now one sentence, and "LEARN setup guide" links to the per-instructor section of `docs/brightspace-setup.md`. The form labels and inputs use the shared `.field-inline` and `.input-compact` classes, so the page `<style>` block loses its private copies (#2037).
+
+### Changed
+
+- **The MCP coverage tests read both surfaces.** Four test suites built their own copy of the text an agent reads, and all four read only the content catalog. They now share one helper that also reads the admin catalog, the admin instructions and the doc resources, so a stale list there fails a test. The output-schema structure test reads both catalogs too. `docs/admin-mcp.md` says why most admin tools declare no output schema (#1935).
+
+### Changed
+
+- **An MCP tool error takes the tool's name from the call, not from the tool.** `MCPToolError` no longer carries a `tool` field, and 34 helpers no longer take a `tool:` parameter; tools passed their own name by hand 336 times. The dispatcher passes `call.name` to `mcpToolErrorResult`, so every error names the tool that was actually called. The two `atLeast: CourseRole = .instructor` defaults in `CourseSectionTools.swift` are gone too, as `ToolContext` already required; their callers now say `.instructor` (#1939).
+
+
+## [0.5.400] - 2026-10-04
+
+### Changed
+
+- **The five native-grading suites share one harness (#1954).**
+  `Tests/WorkerTests/Support/NativeGradingHarness.swift` builds the grading
+  workspace and runs the suites. It replaces five copies of `makeWorkspace`,
+  `runSuites` and `item`. Each copy differed only in the language, the
+  submission's file name and the time limit, so those are now the harness's
+  three fields. Every language now writes its runtime through
+  `runtimeHelperFiles(for:)`, as Java and Racket already did.
+
+### Changed
+
+- **The admin GitHub page has its own disclosure, and a muted field note has one spelling.** The "Owner and permissions" disclosure now has a summary with an `.accordion-caret`, which turns while the disclosure is open. It no longer uses `.test-output-details`, which is the disclosure for test results. Every `field-note text-muted` is now `field-note field-note--muted`, the spelling that the component vocabulary names (#1977).
+
+### Changed
+
+- **One composite action holds the CI setup steps (#1985).** `.github/actions/swift-test-setup` gives the toolchain cache key, restores or saves the shared `.build` cache, and probes for the test dependencies. The four test lanes, `build`, `repeat-test`, `test-coverage`, `docker-build` and `browser-probe-setup` use it. Before, each job had its own copy. The cache keys keep the same values, so the existing caches stay valid. The nightly coverage probe now checks every grading interpreter. Before, it checked five tools and no interpreter. On a stale image, the install now fails after three apt-get attempts, and it fails when a command is still missing after the install. `LanguageConformanceMatrixTests` now reads the interpreter table of the action, and fails when a workflow probes for an interpreter itself. `.node-version` (24.21.0, the version of the CI image) is now the one Node pin for each `setup-node` step. Before, the pins were 22, 24 and 24.21.0.
+
+### Changed
+
+- **The two MCP surfaces share one tool registry type and one principal type.** `ToolRegistry` and `DiagnosticToolRegistry` were two structs that differed only in their element type, and `MCPPrincipal` and `AdminMCPPrincipal` differed only in their scope type. They are now `MCPToolRegistry<Tool>` and `MCPSurfacePrincipal<Scope>`, and the old names stay as typealiases. Behaviour does not change. The bearer middlewares follow in a second change (#1944).
+
+### Changed
+
+- **Three retention sweeps moved off the request path onto leased sweeps.** The diagnostics retention prune ran inside a student's submission, a runner's poll and a runner's result report, and once from a boot task. Expired worker nonces were deleted inside the HMAC middleware, and stale login attempts inside the rate-limit middleware. Each was gated by a per-process throttle with no lease, so every server instance pruned. They now run as `PeriodicSweepMonitor`s: diagnostics at `pruneIntervalHours` (0 still turns it off), nonces every minute, login attempts every ten minutes. The two throttle actors and `ObservabilityLifecycleHandler` are gone (#1924).
+
+### Fixed
+
+- **A runner log value that JSON cannot hold no longer erases the line.** `writeStructuredRunnerLog` fell back to only the event name and timestamp when one field was a `Date`, a `URL`, an enum or `NaN`. Such a value is now written as its description, and the other fields stay. No call passes such a value today; this removes the trap (#1932).
+
+
+## [0.5.399] - 2026-10-04
+
+### Changed
+
+- **Each interpreter trait is declared once per test target (#1946).**
+  Seventeen suites declared their own `requiresLua`, `requiresPython3`,
+  `requiresGpp`, `requiresJavac`, `requiresOctave`, `requiresRacket` or
+  `requiresRscript`, and most of them probed through the uncached
+  `toolIsAvailable`. The traits are now in `HostConditionTraits.swift`
+  (APITests) and `WorkerTestSkip.swift` (WorkerTests), on
+  `cachedToolIsAvailable`, and 117 tests use them. The probe cache is now
+  keyed by the whole command, because `lua` answers `-v` and fails
+  `--version`. The pandas and matplotlib traits stay local.
+
+### Changed
+
+- **Four silent test skips are now traits (#1947).** Four tests returned
+  early, with no report, when `python3` or the vendored editor was absent.
+  They now carry `.requiresPython3` or a trait for the vendored editor, so a
+  skip shows in the report and fails CI. A guard in `LuaStdoutCaptureTests`
+  that the trait already made unreachable is gone. The python3 guard in the
+  pattern-family syntax helper stays, and its comment now says why a trait
+  cannot replace it.
+
+### Changed
+
+- **Page tests share one `getHTML` and one `loginAsAdmin` helper (#1951).**
+  Thirty APITests suites carried a private copy of "GET a page and return
+  its HTML", of an admin sign-in, or of both. The new
+  `Tests/APITests/TestPageHelpers.swift` holds one of each, and the private
+  copies are gone. `getHTML` expects `200 OK` unless told otherwise and
+  records a failure at the caller's line.
+
+### Changed
+
+- **One helper signs in a per-course test instructor (#1952).**
+  `loginAsCourseInstructor(username:courseCode:on:)` signs in an instructor
+  and enrols them as course staff through `enrollAsTestInstructor`.
+  `arLoginAsInstructor` no longer repeats that upsert line for line, and five
+  suites lose a private copy of the same two steps.
+
+### Changed
+
+- **Three hand-built test apps now get the standard test wiring (#1953).**
+  `SSOAuthFlowTests` and `AuthModeGatingTests` now build on `makeTestApp`,
+  and `NotebookWebRoutesTests` adds the same registrations itself: the
+  version-capture middleware, the data-export drain and the kernel
+  inventory. All three now seed `appConfig`, so they do not read the
+  configuration of the machine that runs them. The two OIDC callback tests
+  read the callback path through `OIDCEnvConfig.fromEnvironment()`.
+
+### Changed
+
+- **Five suites that start subprocesses now have a time limit (#1955).**
+  `SectionInputsTests`, `AuditTockRegressionTests`, `SupportImportTests`,
+  `RunnerProfileDetectorTests` and `RunnerExecProbeTests` start `python3` or
+  an interpreter probe. They now carry `.timeLimit(.minutes(2))`, so a stall
+  fails a named test and does not hold the CI job until its kill.
+
+### Changed
+
+- **The service, helper, model, OIDC, LTI and GitHub layers throw typed errors, not `Abort`.** Twenty-three sites below `Routes/` threw `Abort` beside the house error enums. They now throw `AppError` (with a new `unauthenticated` case), a new `OIDCConfigurationError` for the startup checks, `LTIServiceError` for a failed platform key set fetch, and `GitHubTokenRevokeRefused` for a refused token revocation. HTTP statuses do not change. Some messages are now sentences where they were bare statuses: for example, a course role check says "You do not have permission to do this in this course." (#1930).
+
+
+## [0.5.398] - 2026-10-04
+
+### Changed
+
+- **The APITests helper file is now eight files, one job each (#1945).**
+  `Tests/APITests/TestHelpers.swift` had 1,717 lines and six unrelated jobs.
+  The code moves without change to `TestDatabase.swift`,
+  `MigratedSQLiteTemplate.swift`, `MigratedPostgresSchemaPool.swift`,
+  `SchemaMutatingSuites.swift`, `TestApp.swift`, `TestRequests.swift`,
+  `TestLogin.swift` and `WorkerHMACTestHeaders.swift`. Two functions lose
+  `private` so that the next file can call them. The comment on
+  `SchemaMutatingSuites` now names all five suites. No test body changes.
+
+### Changed
+
+- **A worker heartbeat test now waits for the daemon with a limit (#1949).**
+  `workerDaemonHeartbeatFailuresDoNotStopPolling` cancelled the daemon and
+  then waited for it with no limit. It now calls `awaitCancelledDaemon`, which
+  waits 30 seconds at most and records an issue when the daemon does not stop.
+
+### Changed
+
+- **Seventeen pure-function tests no longer build a Vapor app (#1950).** They
+  were in class suites that build an app in `init`, so each of them paid for
+  an app that it did not use. They now sit in struct suites in the same
+  files, with no `withApp` wrapper. No assertion changes.
+
+### Changed
+
+- **An enrollment render assertion can fail again (#2036).**
+  `bulkEnrollCSV_enrollsMatchedUsers` checked the CSV result page with a
+  disjunction that held `html.contains("2")`, which almost any page
+  satisfies. It now reads each count from its own row of the page: 2
+  enrolled, 1 pre-enrolled, 0 already enrolled and 0 rejected.
+
+
 ## [0.5.397] - 2026-10-04
 
 ### Changed

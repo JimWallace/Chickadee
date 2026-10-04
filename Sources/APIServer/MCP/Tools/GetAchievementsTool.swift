@@ -49,7 +49,7 @@ struct GetAchievementsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
         return Output(
             assignmentPublicID: assignment.publicID,
             achievements: AchievementsEditing.rows(fromManifest: setup.manifest))

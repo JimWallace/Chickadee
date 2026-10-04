@@ -33,18 +33,18 @@ enum MCPFailureDetailProse {
     /// absence), any other level → itself, anything else refused with the
     /// accepted list. Returns a double optional so an edit path can tell
     /// "not mentioned" (`.none`) from "clear it" (`.some(nil)`).
-    static func parse(_ raw: String?, tool: String, field: String) throws -> FailureDetail?? {
+    static func parse(_ raw: String?, field: String) throws -> FailureDetail?? {
         guard let raw else { return .none }
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return .some(nil) }
-        let detail = try MCPEnumProse<FailureDetail>.parse(trimmed, tool: tool, field: field)
+        let detail = try MCPEnumProse<FailureDetail>.parse(trimmed, field: field)
         return .some(detail == .full ? nil : detail)
     }
 
     /// `parse` flattened for a CREATE path, where "not mentioned" and "clear"
     /// both mean the default: nil unless a non-default level was given.
-    static func parseValue(_ raw: String?, tool: String, field: String) throws -> FailureDetail? {
-        switch try parse(raw, tool: tool, field: field) {
+    static func parseValue(_ raw: String?, field: String) throws -> FailureDetail? {
+        switch try parse(raw, field: field) {
         case .none: return nil
         case .some(let value): return value
         }

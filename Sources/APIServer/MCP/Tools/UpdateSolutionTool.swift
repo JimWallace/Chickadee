@@ -135,19 +135,17 @@ struct UpdateSolutionTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         guard (input.notebook == nil) != (input.solutionFile == nil) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "Supply exactly one of notebook / solutionFile.")
+            throw MCPToolError.invalidArguments(detail: "Supply exactly one of notebook / solutionFile.")
         }
         if let notebook = input.notebook {
-            try validateNotebookShape(notebook, tool: Self.name)
+            try validateNotebookShape(notebook)
         }
 
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
         // The bearer context has no session-authenticated user; resolve the
         // subject so the validation submission is attributed to the acting account.
-        let subject = try await context.requireEligibleSubject(tool: Self.name)
+        let subject = try await context.requireEligibleSubject()
 
         // Content versioning: this tool reaches its setup by id rather than
         // through `authorizedAssignmentAndSetupForWrite`, so it registers for a
@@ -178,7 +176,6 @@ struct UpdateSolutionTool: ContentTool {
         }()
         if let uploadOnlyLanguage, input.notebook != nil {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail:
                     "\(uploadOnlyLanguage.rawValue) has no notebook workflow, so a notebook cannot "
                     + "serve as its reference solution. Pass solutionFile ({filename, content}) instead.")
@@ -193,7 +190,6 @@ struct UpdateSolutionTool: ContentTool {
                 name != ".."
             else {
                 throw MCPToolError.invalidArguments(
-                    tool: Self.name,
                     detail: "solutionFile.filename must be a bare filename with no path separators.")
             }
             // Which extensions are acceptable IS a language question, and it
@@ -204,7 +200,6 @@ struct UpdateSolutionTool: ContentTool {
             // authoring-time refusal that names its own fix.
             guard let language else {
                 throw MCPToolError.invalidArguments(
-                    tool: Self.name,
                     detail:
                         "This assignment declares no language, so there is no set of solution-file "
                         + "extensions to check \"\(name)\" against. Set the assignment's language "
@@ -214,7 +209,6 @@ struct UpdateSolutionTool: ContentTool {
             guard language.scriptExtensions.contains(ext) else {
                 let allowed = language.scriptExtensions.sorted().joined(separator: ", ")
                 throw MCPToolError.invalidArguments(
-                    tool: Self.name,
                     detail:
                         "solutionFile.filename must end in an extension \(language.rawValue) "
                         + "recognizes (\(allowed)); got \"\(name)\".")
@@ -226,8 +220,7 @@ struct UpdateSolutionTool: ContentTool {
             do {
                 data = normalizeNotebookForJupyterLite(try JSONEncoder().encode(input.notebook))
             } catch {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "The notebook could not be serialized to JSON.")
+                throw MCPToolError.invalidArguments(detail: "The notebook could not be serialized to JSON.")
             }
             storedFilename = "solution.ipynb"
             cellCount = notebookCellCount(input.notebook ?? .null)
@@ -242,8 +235,7 @@ struct UpdateSolutionTool: ContentTool {
                 filename: storedFilename,
                 submitterUserID: subject.id)
         } catch {
-            throw MCPToolError.executionFailed(
-                tool: Self.name, detail: "Could not store the solution for validation: \(error)")
+            throw MCPToolError.executionFailed(detail: "Could not store the solution for validation: \(error)")
         }
 
         // Close a currently-open assignment through the shared content-edit

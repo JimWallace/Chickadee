@@ -30,16 +30,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsInstructor() async throws -> String {
-        let cookie = try await loginUser(
-            username: "testinstructor_editor", password: "testpassword",
-            role: "instructor", on: app)
-        // Phase 5: /instructor is gated on the per-course role — enrol in EDIT101.
-        try await enrollAsTestInstructor(
-            username: "testinstructor_editor", on: app, courseCode: "EDIT101")
-        return cookie
-    }
-
     private func loginAsStudent() async throws -> String {
         try await loginUser(
             username: "teststudent_editor", password: "testpassword",
@@ -143,7 +133,8 @@ import VaporTesting
 
     @Test func downloadNotebookFileReturnsNotebookBytes() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let nb = sampleNotebookData(marker: "starter")
             try await insertSetup(id: "ed_nb1", notebookOnDisk: nb)
             let a = try await insertAssignment(testSetupID: "ed_nb1", title: "Lab 1")
@@ -186,7 +177,8 @@ import VaporTesting
 
     @Test func downloadNotebookFileReturns404ForUnknownAssignment() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
 
             try await app.asyncTest(
                 .GET, "/instructor/zzzzzz/files/notebook",
@@ -204,7 +196,8 @@ import VaporTesting
 
     @Test func downloadSetupItemReturnsFileContent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             try await insertSetup(
                 id: "ed_item1",
                 zipEntries: [("data.csv", Data("col1,col2\n1,2\n".utf8))])
@@ -225,7 +218,8 @@ import VaporTesting
 
     @Test func downloadSetupItemReturns404ForMissingFile() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             try await insertSetup(id: "ed_item2")
             let a = try await insertAssignment(testSetupID: "ed_item2", title: "Lab 4")
 
@@ -245,7 +239,8 @@ import VaporTesting
     /// "../etc/passwd", "subdir/x") is rejected at the handler level.
     @Test func downloadSetupItemRejectsPathTraversal() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             try await insertSetup(id: "ed_item3")
             let a = try await insertAssignment(testSetupID: "ed_item3", title: "Lab 5")
 
@@ -283,7 +278,8 @@ import VaporTesting
 
     @Test func downloadSolutionFileReturnsZipEntry() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let solution = sampleNotebookData(marker: "solution-payload")
             try await insertSetup(
                 id: "ed_sol1",
@@ -307,7 +303,8 @@ import VaporTesting
 
     @Test func downloadSolutionFileReturns404WhenNoSolutionExists() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             try await insertSetup(id: "ed_sol2")  // no solution.* entry
             let a = try await insertAssignment(testSetupID: "ed_sol2", title: "Lab 8")
 
@@ -365,7 +362,8 @@ import VaporTesting
 
     @Test func createSolutionFromAssignmentReturns404ForUnknownAssignment() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -393,7 +391,8 @@ import VaporTesting
     /// user-visible behaviour: click Create solution, land on an editor.
     @Test func solutionNotebookPageResolvesADraftOnlySolution() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let setup = try await insertSetup(id: "ed_draftonly_sol", notebookOnDisk: sampleNotebookData())
             _ = try await insertAssignment(testSetupID: "ed_draftonly_sol", title: "Draft Only")
             try writeDraftSolutionNotebook(
@@ -427,7 +426,8 @@ import VaporTesting
 
     @Test func draftSolutionNotebookReturnsNotebookBytes() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let setup = try await insertSetup(id: "ed_draft_sol1")
             try writeDraftSolutionNotebook(
                 setupID: setup.id ?? "",
@@ -451,7 +451,8 @@ import VaporTesting
 
     @Test func draftSolutionNotebookReturns404ForUnknownDraft() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
 
             try await app.asyncTest(
                 .GET, "/instructor/new/draft/solution-notebook?draftID=ZZZ_does_not_exist",
@@ -467,7 +468,8 @@ import VaporTesting
 
     @Test func draftSolutionNotebookReturns404ForDraftWithoutSolutionFile() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let setup = try await insertSetup(id: "ed_draft_sol2")
             // intentionally do NOT write the solution.ipynb fallback file
             try await app.asyncTest(
@@ -484,7 +486,8 @@ import VaporTesting
 
     @Test func draftSolutionNotebookReturns404ForMissingDraftIDParam() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
 
             try await app.asyncTest(
                 .GET, "/instructor/new/draft/solution-notebook",
@@ -547,7 +550,8 @@ import VaporTesting
 
     @Test func saveEditedAssignmentReturns404ForUnknownAssignment() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -572,7 +576,8 @@ import VaporTesting
             // `GET /instructor` redirects to `/enroll` and the token extractor
             // returns an empty string.  Token issuance is session-scoped, not
             // path-scoped, so the early fetch is still valid for the POST.
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await insertSetup(id: "ed_save2", notebookOnDisk: sampleNotebookData())
             let a = try await insertAssignment(testSetupID: "ed_save2", title: "Original Title")
@@ -603,7 +608,8 @@ import VaporTesting
         try await withApp(app) { _ in
             // Manifest has empty `testSuites: []` (see `insertSetup`), so the
             // "at least one test script" guard should fire and redirect.
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_editor", courseCode: "EDIT101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await insertSetup(id: "ed_save3", notebookOnDisk: sampleNotebookData())
             let a = try await insertAssignment(testSetupID: "ed_save3", title: "Lab Save 3")

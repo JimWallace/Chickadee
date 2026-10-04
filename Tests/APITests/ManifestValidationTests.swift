@@ -66,7 +66,7 @@ import Vapor
 
     @Test func selfReferenceThrows() throws {
         let m = try manifest([("a.sh", ["a.sh"])])
-        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        let abort = try #require(throws: AuthoringValidationError.self) { try validateManifestDependencies(m) }
         #expect(abort.status == .unprocessableEntity)
         #expect(abort.reason.contains("cannot depend on itself"))
     }
@@ -75,7 +75,7 @@ import Vapor
 
     @Test func unknownDependencyThrows() throws {
         let m = try manifest([("a.sh", ["nonexistent.sh"])])
-        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        let abort = try #require(throws: AuthoringValidationError.self) { try validateManifestDependencies(m) }
         #expect(abort.status == .unprocessableEntity)
         #expect(abort.reason.contains("nonexistent.sh"))
     }
@@ -87,7 +87,7 @@ import Vapor
             ("a.sh", ["b.sh"]),
             ("b.sh", ["a.sh"]),
         ])
-        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        let abort = try #require(throws: AuthoringValidationError.self) { try validateManifestDependencies(m) }
         #expect(abort.status == .unprocessableEntity)
         #expect(abort.reason.contains("cycle"))
     }
@@ -98,7 +98,7 @@ import Vapor
             ("b.sh", ["a.sh"]),
             ("c.sh", ["b.sh"]),
         ])
-        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        let abort = try #require(throws: AuthoringValidationError.self) { try validateManifestDependencies(m) }
         #expect(abort.reason.contains("cycle"))
     }
 
@@ -110,7 +110,7 @@ import Vapor
             ("b.sh", ["a.sh"]),
             ("c.sh", ["b.sh"]),
         ])
-        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        let abort = try #require(throws: AuthoringValidationError.self) { try validateManifestDependencies(m) }
         #expect(abort.reason.contains("cycle"))
     }
 
@@ -119,7 +119,7 @@ import Vapor
             ("a.sh", []),
             ("b.sh", ["a.sh", "missing.sh"]),
         ])
-        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        let abort = try #require(throws: AuthoringValidationError.self) { try validateManifestDependencies(m) }
         #expect(abort.reason.contains("missing.sh"))
     }
 }

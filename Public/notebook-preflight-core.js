@@ -38,22 +38,20 @@
         return { ok: failed.length === 0, failed: failed, lowMemory: isLowMemory(dm), deviceMemory: dm };
     }
 
-    /// The copy a fallback panel shows for each non-generic situation. The
-    /// generic "Editor didn't load" copy is the template's own text.
+    /// The copy for the two non-generic situations. `memory` replaces the
+    /// failure panel's title and first paragraph; the generic "Editor did not
+    /// load" copy is the template's own text. `slow` fills the slow-boot
+    /// notice, a warning banner above the editor (#2028). Each text is one
+    /// sentence (docs/ui-design.md, "UI copy"); the causes and the device
+    /// advice are in docs/notebook-editor-help.md, which both link.
     var FALLBACK_COPY = {
         memory: {
             title: 'Your browser ran low on memory',
-            text: 'The notebook kernel stopped because your browser hit a memory limit — ' +
-                'common on Safari and on phones, tablets, or low-memory computers. ' +
-                'Reload to try again, or open this assignment on a laptop or desktop in ' +
-                'Chrome or Firefox. You can also submit by uploading your .ipynb file below.'
+            text: 'Reload to try again, or upload your .ipynb file below to submit.'
         },
         slow: {
-            title: 'The editor is taking a while to load',
-            text: 'The in-browser kernel may not work on older browsers, or on devices with limited ' +
-                'memory such as some iPads. If the editor doesn’t finish loading, a laptop or ' +
-                'desktop — or a more recent browser — may work better. You can still submit ' +
-                'by uploading your notebook (.ipynb) file below.'
+            title: 'Editor slow to load.',
+            text: 'If it does not start, upload your .ipynb file to submit.'
         }
     };
 

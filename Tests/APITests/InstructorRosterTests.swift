@@ -15,18 +15,6 @@ import VaporTesting
 
 @Suite struct InstructorRosterTests {
 
-    private func page(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     private func enroll(
         _ username: String, role: CourseRole = .student, on app: Application
     ) async throws -> APIUser {
@@ -45,7 +33,7 @@ import VaporTesting
             _ = try await enroll("roster_ta", role: .ta, on: app)
             _ = try await enroll("roster_pupil", on: app)
 
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             let staff = try #require(html.range(of: "id=\"course-staff-table\""))
             let students = try #require(html.range(of: "id=\"enrolled-students-table\""))
             let taName = try #require(html.range(of: "roster_ta"))
@@ -63,7 +51,7 @@ import VaporTesting
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             try await APIPreEnrollment(courseID: courseID, username: "frag_pending").save(on: app.db)
 
-            let html = try await page(
+            let html = try await getHTML(
                 "/instructor/students-data?fragment=rows", cookie: cookie, on: app)
             #expect(html.contains("frag_pupil"))
             #expect(html.contains("frag_pending"))
@@ -80,13 +68,14 @@ import VaporTesting
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == flagged.requireID()).first())
             enrollment.learnSyncReadiness = .unreachable
-            enrollment.brightspaceSyncDetail = "Not on the LEARN classlist"
+            // The sentence the sweep really stores, not a short stand-in.
+            enrollment.brightspaceSyncDetail = LearnUnreachableReason.notOnClasslist.storedDetail
             try await enrollment.save(on: app.db)
 
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             let row = try #require(html.range(of: "learn_flagged"))
-            #expect(html[row.upperBound...].prefix(400).contains("learn-flag"))
-            #expect(html.components(separatedBy: "class=\"learn-flag\"").count - 1 == 1)
+            #expect(html[row.upperBound...].prefix(400).contains("class=\"tier tier-danger\""))
+            #expect(html.components(separatedBy: "if confirmed dropped").count - 1 == 1)
             #expect(!html.contains("learn-check-btn"))
         }
     }
@@ -99,7 +88,10 @@ import VaporTesting
         enrollment.learnSyncReadiness = .confirmed
         #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == nil)
         enrollment.learnSyncReadiness = .unreachable
-        #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == "Not on LEARN classlist")
+        // With no stored detail, the flag gives the advice that does no harm.
+        #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == .noMatch)
+        enrollment.brightspaceSyncDetail = LearnUnreachableReason.notOnClasslist.storedDetail
+        #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == .notOnClasslist)
         enrollment.role = .ta
         #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == nil)
     }
@@ -109,7 +101,7 @@ import VaporTesting
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await enroll("avatar_pupil", on: app)
 
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             #expect(html.contains("class=\"avatar avatar-md\""))
 
             // The bird on the page is the stored one, the same the account page reads.
@@ -128,7 +120,7 @@ import VaporTesting
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             try await APIPreEnrollment(courseID: courseID, username: "pending_pupil").save(on: app.db)
 
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             let start = try #require(html.range(of: "student-row-pending"))
             let end = try #require(html.range(of: "</tr>", range: start.upperBound..<html.endIndex))
             let row = html[start.lowerBound..<end.upperBound]
@@ -143,9 +135,9 @@ import VaporTesting
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             for index in 0..<7 { _ = try await enroll("filter_\(index)", on: app) }
-            #expect(!(try await page("/instructor/students", cookie: cookie, on: app)).contains("filter-group"))
+            #expect(!(try await getHTML("/instructor/students", cookie: cookie, on: app)).contains("filter-group"))
             _ = try await enroll("filter_7", on: app)
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             #expect(html.contains("data-list-filter=\"enrolled-students-table\""))
         }
     }
@@ -154,7 +146,7 @@ import VaporTesting
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await enroll("menu_pupil", on: app)
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             #expect(html.contains("aria-label=\"More actions for menu_pupil\""))
             #expect(html.contains("Remove from course"))
             #expect(!html.contains("students-unenroll-btn"))
@@ -175,7 +167,7 @@ import VaporTesting
             enrollment.role = .ta
             try await enrollment.save(on: app.db)
 
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             #expect(html.contains("ro_pupil"))
             #expect(!html.contains("row-menu"))
             #expect(!html.contains("add-staff-panel"))
@@ -266,7 +258,7 @@ import VaporTesting
                 userID: try spender.requireID(), assignment: assignment,
                 policy: course.slipDayPolicy, on: app.db)
 
-            let html = try await page("/instructor/slip-days", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/slip-days", cookie: cookie, on: app)
             #expect(html.contains("Refund Refund Lab slip day"))
             #expect(html.contains("aria-label=\"More actions for sd_spender\""))
             #expect(!html.contains("aria-label=\"More actions for sd_idle\""))
@@ -282,7 +274,7 @@ import VaporTesting
             _ = try await enroll("sd_facts", on: app)
             let hold = course.slipDayPolicy.releaseRevealHold
 
-            let html = try await page("/instructor/slip-days", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/slip-days", cookie: cookie, on: app)
             #expect(html.contains("<dd><strong>3 days</strong></dd>"))
             #expect(html.contains("<strong>24 hours</strong>"))
             #expect(html.contains(hold ? "Held until claims lapse" : "Shown at each deadline"))

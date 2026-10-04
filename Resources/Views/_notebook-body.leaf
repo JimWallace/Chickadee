@@ -23,7 +23,7 @@
     .notebook-header,
     #jl-frame,
     #js-nb-fallback,
-    #nb-device-warning,
+    #nb-device-warning, #nb-slow-notice,
     #nb-browser-support-warning,
     #nb-results,
     #browser-runner-status { display: none; }
@@ -34,7 +34,7 @@
 </style>
 <div class="notebook-header">
     <div class="notebook-toolbar">
-        <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
+        <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></span>
         <div class="notebook-actions">
             #if(isStudentSolutionView):
             <span class="nb-closed-notice">Reference solution#if(isReadOnly): &mdash; view only.#endif</span>
@@ -86,7 +86,7 @@
         </div>
     </div>
 </div>
-<!-- The two dismissible notices below are revealed by notebook-preflight.js.
+<!-- The three dismissible notices below are revealed by notebook-preflight.js.
      They do not block: the editor still loads beneath them. -->
 <div id="nb-browser-support-warning" class="flash flash-warning" role="status" hidden>
     <div class="toolbar">
@@ -100,6 +100,19 @@
         <button type="button" id="nb-device-warning-dismiss" class="btn action-btn" aria-label="Dismiss memory notice">Dismiss</button>
     </div>
 </div>
+<!-- The slow-boot notice. notebook-preflight.js writes its title and text
+     from FALLBACK_COPY.slow (notebook-preflight-core.js) when it reveals it.
+     The file input is a second upload path, because the editor may never
+     start; notebook.js gives it the same handler as the one in the failure
+     panel. -->
+<div id="nb-slow-notice" class="flash flash-warning" role="status" hidden>
+    <div class="toolbar">
+        <span><strong class="js-nb-slow-title"></strong> <span class="js-nb-slow-text"></span></span>
+        <input type="file" id="nb-slow-upload-file" accept=".ipynb,application/json" aria-label="Upload your .ipynb file">
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md#the-editor-is-slow-to-load" target="_blank" rel="noopener noreferrer">More help <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>
+        <button type="button" id="nb-slow-notice-dismiss" class="btn action-btn" aria-label="Dismiss loading notice">Dismiss</button>
+    </div>
+</div>
 <div class="nb-smallscreen-notice standin-panel" role="note">
     <h2 class="standin-panel-title">Open on a larger screen</h2>
     <p class="standin-panel-text">
@@ -107,24 +120,24 @@
         assignment on a larger screen to edit and submit your notebook.
     </p>
 </div>
-<!-- The js- classes are the hooks notebook-preflight.js rewrites; the
-     standin-panel classes carry the look. The panel sits above the editor:
-     on a slow boot it is shown while the editor still loads, and below a
-     full-height editor it would be out of view. -->
+<!-- The failure panel, shown only when the editor failed: notebook-preflight.js
+     hides the editor and reveals it. A slow boot uses the notice above
+     instead (#2028). The js- classes are the hooks notebook-preflight.js
+     rewrites; the standin-panel classes carry the look. The panel sits above
+     the editor's place on the page, so it is in view. -->
 <section id="js-nb-fallback" class="standin-panel" role="alert" hidden>
-    <h2 class="standin-panel-title js-nb-fallback-title">Editor didn&rsquo;t load</h2>
+    <h2 class="standin-panel-title js-nb-fallback-title">Editor did not load</h2>
     <p class="standin-panel-text js-nb-fallback-text">
-        The in-browser notebook editor didn&rsquo;t start in your browser.
-        You can still submit your assignment by uploading your <code>.ipynb</code> file directly.
+        To submit your work, upload your <code>.ipynb</code> file.
     </p>
     <p class="standin-panel-text">
-        <input type="file" id="nb-upload-file" accept=".ipynb,application/json">
+        <input type="file" id="nb-upload-file" accept=".ipynb,application/json" aria-label="Upload your .ipynb file">
     </p>
     <p class="standin-panel-text">
-        Still stuck? You can
+        If the problem continues,
         <a id="nb-reset-editor-link" href="/reset-editor">reset the notebook editor</a>
-        &mdash; this clears cached editor data in your browser (your submitted
-        work is safe) so the kernel can start fresh.
+        or read the
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md" target="_blank" rel="noopener noreferrer">notebook editor help <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>.
     </p>
     <details>
         <summary>Diagnostic details</summary>
@@ -160,6 +173,7 @@
 <script src="/r-grading-shared.js?v=#appVersion()"></script>
 <script src="/lua-grading-shared.js?v=#appVersion()"></script>
 <script src="/octave-grading-shared.js?v=#appVersion()"></script>
+<script src="/runner-support-sources.js?v=#appVersion()"></script>
 <script src="/notebook-core.js?v=#appVersion()"></script>
 <script src="/notebook.js?v=#appVersion()"></script>
 <script src="/browser-runner.js?v=#appVersion()" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>

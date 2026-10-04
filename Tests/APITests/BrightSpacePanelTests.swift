@@ -73,6 +73,31 @@ import VaporTesting
         }
     }
 
+    /// #2037: the note under the connect form names the LEARN setup guide,
+    /// so it links to it.
+    @Test func connectFormNoteLinksTheSetupGuide() async throws {
+        try await withAssignmentRoutesApp { app in
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("/instructor/brightspace/connect"))
+                    #expect(html.contains("docs/brightspace-setup.md#per-instructor-identity"))
+                    #expect(html.contains("to get a Valence User ID and User Key for your own account."))
+                    // Both credential inputs name the note as their description.
+                    #expect(
+                        html.components(separatedBy: "aria-describedby=\"bs-connect-note\"").count == 3)
+                    #expect(html.contains("<p class=\"field-note\" id=\"bs-connect-note\">"))
+                })
+        }
+    }
+
     @Test func connectionPanelShowsIdentityActionsWhenConnected() async throws {
         try await withAssignmentRoutesApp { app in
             // A connected instructor sees their identity plus the test /

@@ -137,23 +137,22 @@ struct UpdateSuiteTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         guard !input.edits.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Provide at least one edit.")
+            throw MCPToolError.invalidArguments(detail: "Provide at least one edit.")
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         // Load the full authored suite with script bodies preserved from the zip.
         var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         var updated: [String] = []
         for edit in input.edits {
-            let tier = try parseOptionalTier(edit.tier, tool: Self.name)
+            let tier = try parseOptionalTier(edit.tier)
             guard
                 let idx = payload.items.firstIndex(where: {
                     $0.kind == "script" && $0.script?.script == edit.script
                 })
             else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "No script named \"\(edit.script)\" in the suite.")
+                throw MCPToolError.invalidArguments(detail: "No script named \"\(edit.script)\" in the suite.")
             }
             if let tier { payload.items[idx].script?.tier = tier }
             if let points = edit.points { payload.items[idx].script?.points = points }
@@ -166,17 +165,17 @@ struct UpdateSuiteTool: ContentTool {
             }
             let storedLimit = payload.items[idx].script?.timeLimitSeconds
             payload.items[idx].script?.timeLimitSeconds = try parseTimeLimitOverride(
-                edit.timeLimitSeconds, tool: Self.name, field: "timeLimitSeconds"
+                edit.timeLimitSeconds, field: "timeLimitSeconds"
             ).applied(to: storedLimit)
             if let detailUpdate = try MCPFailureDetailProse.parse(
-                edit.failureDetail, tool: Self.name, field: "failureDetail")
+                edit.failureDetail, field: "failureDetail")
             {
                 payload.items[idx].script?.failureDetail = detailUpdate?.rawValue
             }
             updated.append(edit.script)
         }
 
-        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        try await applySuiteEditMapped(setup: setup, body: payload, on: context.db)
         // Close, re-grade, and re-validate (matching the web Save button).
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)

@@ -40,13 +40,13 @@ import Vapor
 
     @Test func aWebRefusalReachesTheAgentWithItsReason() async throws {
         let refusal = AppError.badRequest(reason: "Unknown grading mode \"fast\".")
-        await #expect(throws: MCPToolError.invalidArguments(tool: "refuse", detail: refusal.reason)) {
+        await #expect(throws: MCPToolError.invalidArguments(detail: refusal.reason)) {
             try await Self.invoke(throwing: refusal)
         }
     }
 
     @Test func aVaporAbortRefusalReachesTheAgentWithItsReason() async throws {
-        await #expect(throws: MCPToolError.invalidArguments(tool: "refuse", detail: "not yours")) {
+        await #expect(throws: MCPToolError.invalidArguments(detail: "not yours")) {
             try await Self.invoke(throwing: Abort(.forbidden, reason: "not yours"))
         }
     }
@@ -62,7 +62,7 @@ import Vapor
     }
 
     @Test func anMCPToolErrorPassesThroughUnchanged() async throws {
-        let original = MCPToolError.notAuthorized(tool: "refuse", detail: "not enrolled")
+        let original = MCPToolError.notAuthorized(detail: "not enrolled")
         await #expect(throws: original) {
             try await Self.invoke(throwing: original)
         }
@@ -77,11 +77,11 @@ import Vapor
         .validationRequired(reason: "r"), .internalFailure(reason: "r"),
     ])
     func everyWebErrorMapsAsBefore(error: AppError) {
-        let mapped = MCPToolError.from(error, tool: "t")
+        let mapped = MCPToolError.from(error)
         if case .internalFailure = error {
-            #expect(mapped == .executionFailed(tool: "t", detail: error.reason))
+            #expect(mapped == .executionFailed(detail: error.reason))
         } else {
-            #expect(mapped == .invalidArguments(tool: "t", detail: error.reason))
+            #expect(mapped == .invalidArguments(detail: error.reason))
         }
     }
 }
