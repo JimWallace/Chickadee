@@ -117,8 +117,6 @@ import Testing
 /// `exec`; failing closed advertises nothing and every C++ job queues forever.
 @Suite(.timeLimit(.minutes(2))) struct RunnerExecProbeTests {
 
-    static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") { await Self.gppIsAvailable() }
-
     /// The probe program is answered per language, exhaustively — the guard
     /// against an eighth compiled language reaching the probe with C++'s source.
     @Test func onlyCppSuppliesAnExecProbeProgram() {
@@ -136,7 +134,7 @@ import Testing
 
     /// A work root that permits exec advertises C++; the same probe against a
     /// directory it cannot write to does not.
-    @Test(Self.requiresGpp) func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
+    @Test(.requiresGpp) func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
         let usable = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-execprobe-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: usable, withIntermediateDirectories: true)
@@ -163,7 +161,4 @@ import Testing
             "an unusable work root withheld python too, which needs no exec probe")
     }
 
-    private static func gppIsAvailable() async -> Bool {
-        return await toolIsAvailable("g++", arguments: ["--version"])
-    }
 }

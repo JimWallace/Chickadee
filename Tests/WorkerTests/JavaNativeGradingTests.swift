@@ -27,17 +27,11 @@ import Testing
 
 @Suite(.timeLimit(.minutes(5))) struct JavaNativeGradingTests {
 
-    static let requiresJavac: ConditionTrait = .enabled("requires javac on PATH") { await Self.javacAvailable }
-
-    static var javacAvailable: Bool {
-        get async { await toolIsAvailable("javac", arguments: ["--version"]) }
-    }
-
     /// The did-not-skip proof. Every test below returns silently when the JDK is
     /// absent — correct on a laptop, a silent hole in CI, and precisely how a
     /// language ships with a suite that never runs.
     @Test(.ciOnly) func javacIsPresentInCI() async {
-        let isAvailable = await Self.javacAvailable
+        let isAvailable = await cachedToolIsAvailable("javac")
         #expect(
             isAvailable,
             """
@@ -87,7 +81,7 @@ import Testing
     /// A generated Java case is a `.sh` wrapper, so this also pins that the
     /// wrapper's compile-and-run round trip survives the worker's dispatch —
     /// the thing `generatedScriptExtension: "sh"` makes true and no test said.
-    @Test(Self.requiresJavac) func aGeneratedJavaCaseIsGradedByTheNativeWorker() async throws {
+    @Test(.requiresJavac) func aGeneratedJavaCaseIsGradedByTheNativeWorker() async throws {
         // Written out rather than produced by `renderJavaPatternCase`: that
         // renderer lives in APIServer, which WorkerTests cannot import. The
         // shape is the generated one — quoted heredoc, javac with the runtime
@@ -140,7 +134,7 @@ import Testing
 
     /// The exit-code contract holds through javac + java + the wrapper's
     /// sentinel check, not just through the classifier.
-    @Test(Self.requiresJavac) func exitCodesMapToOutcomeStatuses() async throws {
+    @Test(.requiresJavac) func exitCodesMapToOutcomeStatuses() async throws {
         func wrapper(_ verdict: String) -> String {
             """
             #!/bin/sh
@@ -186,7 +180,7 @@ import Testing
     /// A HAND-WRITTEN `.java` suite entry is a documented instructor path
     /// (`docs/java-support.md`), and nothing pinned that it dispatches to `java`
     /// single-file source mode rather than falling through to `/bin/sh`.
-    @Test(Self.requiresJavac) func aHandWrittenJavaScriptIsRunByTheJavaLauncher() async throws {
+    @Test(.requiresJavac) func aHandWrittenJavaScriptIsRunByTheJavaLauncher() async throws {
         let dir = try Self.makeWorkspace(
             submission: "public class Solution { static int f(int x) { return x; } }\n",
             scripts: [

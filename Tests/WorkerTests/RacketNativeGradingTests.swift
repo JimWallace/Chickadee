@@ -24,17 +24,11 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct RacketNativeGradingTests {
 
-    static let requiresRacket: ConditionTrait = .enabled("requires racket on PATH") { await Self.racketAvailable }
-
-    static var racketAvailable: Bool {
-        get async { await toolIsAvailable("racket", arguments: ["--version"]) }
-    }
-
     /// The did-not-skip proof. Every test below returns silently when Racket is
     /// absent — correct on a laptop, a silent hole in CI, and precisely how a
     /// language ships with a suite that never runs.
     @Test(.ciOnly) func racketIsPresentInCI() async {
-        let isAvailable = await Self.racketAvailable
+        let isAvailable = await cachedToolIsAvailable("racket")
         #expect(
             isAvailable,
             """
@@ -87,7 +81,7 @@ import Testing
     /// shape that defeated the shebang check and the Python content sniff and
     /// fell through to `/bin/sh`, where the leading `;` is a syntax error and
     /// the run exits 2.
-    @Test(Self.requiresRacket) func aRacketTestIsGradedByTheNativeWorker() async throws {
+    @Test(.requiresRacket) func aRacketTestIsGradedByTheNativeWorker() async throws {
         let dir = try Self.makeWorkspace(
             submission: """
                 #lang racket/base
@@ -115,7 +109,7 @@ import Testing
 
     /// The exit-code contract holds through the real interpreter, not just
     /// through the classifier.
-    @Test(Self.requiresRacket) func exitCodesMapToOutcomeStatuses() async throws {
+    @Test(.requiresRacket) func exitCodesMapToOutcomeStatuses() async throws {
         let dir = try Self.makeWorkspace(
             submission: "#lang racket/base\n(define (f) 1)\n",
             scripts: [
@@ -143,7 +137,7 @@ import Testing
     /// Racket test, and before F2 the file was never written into the workspace
     /// — so this is the assertion that the helper actually lands and parses,
     /// rather than that a constant exists in the binary.
-    @Test(Self.requiresRacket) func theInstalledRuntimeIsRequirableByAGeneratedTest() async throws {
+    @Test(.requiresRacket) func theInstalledRuntimeIsRequirableByAGeneratedTest() async throws {
         let dir = try Self.makeWorkspace(
             submission: "#lang racket/base\n(define (f) 1)\n",
             scripts: [
@@ -177,7 +171,7 @@ import Testing
     ///
     /// `chickadee-inputs` returns an empty hash when the load fails, so the test
     /// asserts on the values, not only on the absence of an error.
-    @Test(Self.requiresRacket) func perStudentInputsAreReadableOnTheNativePath() async throws {
+    @Test(.requiresRacket) func perStudentInputsAreReadableOnTheNativePath() async throws {
         let script = #"""
             ; Test: per-student inputs
             #lang racket
