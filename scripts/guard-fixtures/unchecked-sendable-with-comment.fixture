@@ -1,0 +1,9 @@
+# A comment no longer makes a non-model @unchecked Sendable acceptable
+# (#1927): every shared mutable state is an actor or a Mutex now.
+guard="scripts/check-unchecked-sendable.sh"
+files="Sources/APIServer/Services/PeriodicSweepMonitor.swift"
+description="an @unchecked Sendable class that carries a comment saying why"
+expect="outside a Fluent model"
+apply() {
+    printf '\n\nfinal class GuardFixtureBox: @unchecked Sendable {\n    // @unchecked Sendable: every access is serialised by the caller.\n    var count = 0\n}\n' >> Sources/APIServer/Services/PeriodicSweepMonitor.swift
+}
