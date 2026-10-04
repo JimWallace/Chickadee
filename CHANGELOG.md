@@ -9,6 +9,29 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.409] - 2026-10-04
+
+### Changed
+
+- **The last authoring validator throws the typed error.** `PatternFamilyValidator` built 19 `Abort(.unprocessableEntity, reason:)` values with hand-written sentences; it now throws `AuthoringValidationError`, one case per rule, with the same sentence word for word. Nothing under `Sources/APIServer/Utilities/` imports Vapor any more, so `scripts/check-utilities-imports.sh` loses its Abort-validator allowance and the fixture that proved the allowance shrank. This closes #1929.
+
+### Changed
+
+- **One nonce and one status-line parser for the grading workers.** `makeNonce` was copied into each of the four language grading modules, and the Lua and Octave `parseRunOutput` functions were identical. Both now live in `Public/grading-shared.js`, which every worker and the notebook page already load first, and the language modules delegate to them (#1963).
+
+### Changed
+
+- **The browser runner's executors are their own file.** `RoutingExecutor`, `GradingWorkerExecutor`, `UnavailableExecutor` and the script helpers moved from `Public/browser-runner.js` to `Public/grading-executors.js`. The runner keeps the page wiring, the submission path, the notebook extraction and the generated language tables, and builds the router over the two tables it needs with one call. `browser-runner.js` drops from 1,377 lines to 895 (#1965).
+
+### Changed
+
+- **CLAUDE.md points to the class-goal, course-term, CSP, solution-reveal and MCP docs.** Each section keeps its rule in one or two lines. The detail moved next to its guard or doc: `docs/collaborative-class-assignments.md` gains a "Class goals in force" section, `scripts/check-security-headers.sh` states what the CSP keeps and why, `docs/architecture.md` and `docs/mcp-2026-07-28-revision.md` gain the OAuth and course-guidance facts, and `docs/course-terms.md` states the no-code-only-lookup rule (#1989).
+
+### Changed
+
+- **CLAUDE.md's Reference Material is one line per document.** The 43 bullets averaged about 77 words, and each repeated what its document already says. The list keeps every document and drops the summaries; nothing in a bullet was missing from its document (#1989).
+
+
 ## [0.5.408] - 2026-10-04
 
 ### Changed
