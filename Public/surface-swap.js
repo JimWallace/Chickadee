@@ -58,12 +58,17 @@
     /// pane. A rewire that throws goes to the same reload fallback as a failed
     /// fetch, because a half with no wiring is a half-swapped page.
     ///
-    /// Focus is kept across the swap. Emptying the half removes the focused
-    /// control, and the browser then moves focus to <body>: a keyboard user
-    /// who saved a section name would lose their place on each save. So the
-    /// id of the focused element is read before the half is emptied, and the
-    /// element with that id in the new half takes focus after the rewire. An
-    /// element with no id cannot be found again, so it is not restored.
+    /// Focus is kept across the swap when the focused control has an id.
+    /// Emptying the half removes the focused control, and the browser then
+    /// moves focus to <body>. So the id of the focused element is read before
+    /// the half is emptied, and the element with that id in the new half takes
+    /// focus after the rewire. That covers the id-bearing controls that stay
+    /// visible across a save (the header edit toggle, the add buttons of the
+    /// inputs and achievements panels). It does not cover the section rename
+    /// and create forms: their controls carry no id, and inplace-forms.js
+    /// disables the submit button before the fetch, which already moves focus
+    /// to <body>. An element with no id cannot be found again, so it is not
+    /// restored.
     ///
     /// `opts.keepElement` names an element (by id) to carry across the swap
     /// rather than let `innerHTML` destroy. The notebook half needs this for
