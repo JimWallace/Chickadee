@@ -27,9 +27,9 @@ directions.
    needs none of those.
 
 2. **Pseudonymous identity on leaderboards.** Leaderboards do not exist yet —
-   `docs/achievements-audit-2026-07.md` lists "surface record holders (opt-in,
-   first-name-or-anonymous)" as an open design follow-up, and a class ranking
-   listing real names is not something we would ship. The requirement is
+   `docs/archive/achievements-audit-2026-07.md` lists "surface record holders
+   (opt-in, first-name-or-anonymous)" as an open design follow-up, and a class
+   ranking listing real names is not something we would ship. The requirement is
    precise: **a student must be able to find themselves in the list and nobody
    else.** That is not "hide the names"; it is "give every student a handle
    they know and nobody else can compute."
