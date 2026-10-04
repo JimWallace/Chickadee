@@ -58,10 +58,12 @@ LEARN
             <div class="popover-panel row-menu-panel" role="menu">
                 <form method="post" action="/instructor/brightspace/bind-org-unit" class="toolbar">
                     #csrfFormField()
-                    <label class="bs-conn-label" for="bs-org-unit-input">LEARN org unit ID</label>
-                    <input class="form-input bs-conn-input" type="text" id="bs-org-unit-input"
-                           name="orgUnitID" value="#(orgUnitFieldValue)" autocomplete="off"
-                           placeholder="e.g. 1106038">
+                    <label class="field-inline">
+                        LEARN org unit ID
+                        <input class="form-input input-compact" type="text" id="bs-org-unit-input"
+                               name="orgUnitID" value="#(orgUnitFieldValue)" autocomplete="off"
+                               placeholder="e.g. 1106038">
+                    </label>
                     <button class="row-menu-item" type="submit" role="menuitem"
                             title="Bind this course to its LEARN org unit (blank to clear)">
                         <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>Change org unit
@@ -99,17 +101,21 @@ LEARN
     #if(showConnectForm):
     <form method="post" action="/instructor/brightspace/connect" class="toolbar">
         #csrfFormField()
-        <label class="bs-conn-label" for="bs-valence-user-id">Valence User ID</label>
-        <input class="form-input bs-conn-input" type="text" id="bs-valence-user-id"
-               name="userID" autocomplete="off" required>
-        <label class="bs-conn-label" for="bs-valence-user-key">Valence User Key</label>
-        <input class="form-input bs-conn-input" type="password" id="bs-valence-user-key"
-               name="userKey" autocomplete="off" required>
+        <label class="field-inline">
+            Valence User ID
+            <input class="form-input input-compact" type="text" id="bs-valence-user-id"
+                   name="userID" autocomplete="off" required>
+        </label>
+        <label class="field-inline">
+            Valence User Key
+            <input class="form-input input-compact" type="password" id="bs-valence-user-key"
+                   name="userKey" autocomplete="off" required>
+        </label>
         <button class="btn btn-primary" type="submit">Connect my LEARN account</button>
     </form>
     <p class="section-note">
-        Paste the Valence User ID + User Key minted for your own account (see the
-        LEARN setup guide). Chickadee verifies the pair against D2L before storing it.
+        Get the User ID and User Key for your own account with the steps in the
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/brightspace-setup.md#per-instructor-identity" target="_blank" rel="noopener noreferrer">LEARN setup guide</a>.
     </p>
     #endif
     #if(showIdentityActions):
@@ -291,8 +297,6 @@ LEARN
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
 .bs-grade-input { font-size: var(--text-base); }
 .bs-conn-line { margin: 0 0 .45rem; }
-.bs-conn-label { font-size: var(--text-base); color: var(--gray-600); }
-.bs-conn-input { width: 16rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
 .bs-test-result { margin: 0; padding: 0 1.25rem 1rem; font-size: var(--text-base); }
 </style>
 <!-- Connection test + grade-item pickers are wired by
