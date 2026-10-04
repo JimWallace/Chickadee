@@ -21,7 +21,7 @@ import Foundation
 /// - a WRITE is refused with the keys to choose from, because writing into
 ///   the wrong term is silent and hard to see.
 func resolveMCPCourse(
-    key rawKey: String, tool: String, context: ToolContext, forWrite: Bool
+    key rawKey: String, context: ToolContext, forWrite: Bool
 ) async throws -> APICourse {
     let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
     let all = try await APICourse.query(on: context.db).all()
@@ -34,7 +34,7 @@ func resolveMCPCourse(
     var pool = coursesMatching(key: key, in: all.filter { !$0.isArchived })
     if pool.isEmpty { pool = coursesMatching(key: key, in: all.filter(\.isArchived)) }
     guard !pool.isEmpty else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "No course found with code \"\(key)\".")
+        throw MCPToolError.invalidArguments(detail: "No course found with code \"\(key)\".")
     }
     if pool.count > 1 {
         let enrolledIDs = try await context.subjectEnrollments(among: pool.compactMap(\.id))
@@ -43,14 +43,13 @@ func resolveMCPCourse(
     }
     let ordered = pool.sorted(by: courseListPrecedes)
     guard let chosen = ordered.first else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "No course found with code \"\(key)\".")
+        throw MCPToolError.invalidArguments(detail: "No course found with code \"\(key)\".")
     }
     if forWrite, ordered.count > 1 {
         let choices = ordered.map { course in
             course.term.map { "\(course.urlKey) (\($0.displayName))" } ?? course.urlKey
         }
         throw MCPToolError.invalidArguments(
-            tool: tool,
             detail: "The course code \"\(key)\" names more than one offering: "
                 + choices.joined(separator: ", ")
                 + ". Pass the course key of the one to change.")

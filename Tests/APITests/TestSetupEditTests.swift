@@ -22,15 +22,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsInstructor(on app: Application) async throws -> String {
-        let cookie = try await loginUser(
-            username: "testinstructor_edit", password: "testpassword", role: "instructor", on: app)
-        // Instructor authority is per-course (Phase 5) — enrol the fixture
-        // instructor as a per-course instructor in the shared test course.
-        try await enrollAsTestInstructor(username: "testinstructor_edit", on: app)
-        return cookie
-    }
-
     private func loginAsStudent(on app: Application) async throws -> String {
         return try await loginUser(username: "teststudent_edit", password: "testpassword", role: "student", on: app)
     }
@@ -134,7 +125,7 @@ import VaporTesting
 
     @Test func putAssignmentSavesFileToDisk() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "setup_put1", on: app)
 
@@ -162,7 +153,7 @@ import VaporTesting
 
     @Test func putAssignmentUpdatesNotebookPathInDB() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "setup_put2", on: app)
 
@@ -188,7 +179,7 @@ import VaporTesting
 
     @Test func putAssignmentNormalizesPython3KernelBeforeSaving() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "setup_put_kernel", on: app)
 
@@ -260,7 +251,7 @@ import VaporTesting
 
     @Test func getAssignmentServesFlatFileWhenPresent() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             try await insertSetup(id: "setup_flat", on: app)
 
             // Write a flat notebook file directly.
@@ -295,7 +286,7 @@ import VaporTesting
 
     @Test func getAssignmentNormalizesPython3KernelToPyodideKernel() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             try await insertSetup(id: "setup_flat_kernel", on: app)
 
             let flatPath = app.testSetupsDirectory + "setup_flat_kernel.ipynb"
@@ -326,7 +317,7 @@ import VaporTesting
 
     @Test func putAssignmentRejectsNonJSON() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "setup_bad", on: app)
 
@@ -348,7 +339,7 @@ import VaporTesting
 
     @Test func putAssignmentReturnsNotFoundForUnknownSetup() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -414,7 +405,7 @@ import VaporTesting
 
     @Test func editPageNotFoundForUnknownAssignment() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let fakeID = "zzzzzz"
 
             try await app.asyncTest(
@@ -432,7 +423,7 @@ import VaporTesting
 
     @Test func editPageInstructorAccessGranted() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             try await insertSetup(id: "setup_ep2", on: app)
             let a = try await insertAssignment(testSetupID: "setup_ep2", title: "My Lab", on: app)
             let id = a.publicID
@@ -457,7 +448,7 @@ import VaporTesting
 
     @Test func putAssignmentNormalizesIRKernelToWebR() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "setup_put_ir", on: app)
 
@@ -487,7 +478,7 @@ import VaporTesting
 
     @Test func getAssignmentNormalizesIRKernelToXeusR() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             try await insertSetup(id: "setup_flat_ir", on: app)
 
             let flatPath = app.testSetupsDirectory + "setup_flat_ir.ipynb"
@@ -521,7 +512,7 @@ import VaporTesting
     @Test func normalizationPreservesPythonKernelUnchanged() async throws {
         try await withApp(try await makeApp()) { app in
             // PUT a Python notebook and verify it still normalizes to Pyodide (not webr).
-            let cookie = try await loginAsInstructor(on: app)
+            let cookie = try await loginAsCourseInstructor(username: "testinstructor_edit", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "setup_put_py_check", on: app)
 

@@ -79,12 +79,11 @@ struct SetMinimumRunnerVersionTool: ContentTool {
         let requested = input.minimumRunnerVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let requested, !requested.isEmpty, !RunnerVersionGate.isParseable(requested) {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "minimumRunnerVersion must be a version like \"0.5.0\" (got \"\(requested)\"); "
                     + "pass null or an empty string to clear the gate.")
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
         let effective = try await setManifestMinimumRunnerVersion(
             setup: setup, to: requested, on: context.db)
         return Output(assignmentPublicID: assignment.publicID, minimumRunnerVersion: effective)

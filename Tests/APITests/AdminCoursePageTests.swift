@@ -19,25 +19,9 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-admin-course-page")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "course_page_admin", password: "testpassword", role: "admin", on: app)
-    }
-
-    private func getHTML(_ path: String, cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     /// A course in Fall 2026, its page path, and an admin's session cookie.
     private func termCoursePage() async throws -> (path: String, cookie: String) {
-        let cookie = try await loginAsAdmin()
+        let cookie = try await loginAsAdmin("course_page_admin", on: app)
         let course = APICourse(code: "PAGE101", name: "Pages", term: AcademicTerm(year: 2026, season: .fall))
         try await course.save(on: app.db)
         return ("/admin/courses/\(try course.requireID().uuidString)", cookie)
@@ -55,7 +39,7 @@ import VaporTesting
     @Test func settingsAreFactsAndTheirFormsStartClosed() async throws {
         try await withApp(app) { _ in
             let (path, cookie) = try await termCoursePage()
-            let html = try await getHTML(path, cookie: cookie)
+            let html = try await getHTML(path, cookie: cookie, on: app)
             #expect(html.contains("<dl class=\"detail-grid\">"))
             #expect(html.contains("<dt>Term</dt>"))
             #expect(html.contains("Fall 2026"))
@@ -66,9 +50,9 @@ import VaporTesting
 
     @Test func aCourseWithNoTermSaysSo() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("course_page_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "PAGE102")
-            let html = try await getHTML("/admin/courses/\(try course.requireID().uuidString)", cookie: cookie)
+            let html = try await getHTML("/admin/courses/\(try course.requireID().uuidString)", cookie: cookie, on: app)
             #expect(html.contains("None recorded"))
         }
     }
@@ -76,7 +60,7 @@ import VaporTesting
     @Test func aSettingsErrorOpensOnlyTheSettingsPanel() async throws {
         try await withApp(app) { _ in
             let (path, cookie) = try await termCoursePage()
-            let html = try await getHTML(path + "?error=\(CourseFormError.codeTaken.rawValue)", cookie: cookie)
+            let html = try await getHTML(path + "?error=\(CourseFormError.codeTaken.rawValue)", cookie: cookie, on: app)
             #expect(try openingTag(withID: "course-settings-panel", in: html).contains("is-open"))
             #expect(try openingTag(withID: "clone-course", in: html).contains("is-open") == false)
             #expect(html.contains(CourseFormError.codeTaken.message))
@@ -86,7 +70,8 @@ import VaporTesting
     @Test func aCloneErrorOpensOnlyTheClonePanel() async throws {
         try await withApp(app) { _ in
             let (path, cookie) = try await termCoursePage()
-            let html = try await getHTML(path + "?error=\(CourseCloneFormError.codeTaken.rawValue)", cookie: cookie)
+            let html = try await getHTML(
+                path + "?error=\(CourseCloneFormError.codeTaken.rawValue)", cookie: cookie, on: app)
             #expect(try openingTag(withID: "clone-course", in: html).contains("is-open"))
             #expect(try openingTag(withID: "course-settings-panel", in: html).contains("is-open") == false)
             #expect(html.contains(CourseCloneFormError.codeTaken.message))
@@ -97,11 +82,11 @@ import VaporTesting
     @Test func eachCourseFormHasItsOwnFieldIDs() async throws {
         try await withApp(app) { _ in
             let (path, cookie) = try await termCoursePage()
-            let html = try await getHTML(path, cookie: cookie)
+            let html = try await getHTML(path, cookie: cookie, on: app)
             for id in ["course-settings-code", "course-settings-term", "clone-code", "clone-term"] {
                 #expect(html.components(separatedBy: "id=\"\(id)\"").count == 2, "\(id) appears once")
             }
-            let newHTML = try await getHTML("/admin/courses/new", cookie: cookie)
+            let newHTML = try await getHTML("/admin/courses/new", cookie: cookie, on: app)
             #expect(newHTML.contains("id=\"new-course-code\""))
             #expect(newHTML.contains("autofocus"))
         }
@@ -109,12 +94,12 @@ import VaporTesting
 
     @Test func destructiveActionsSitInMenus() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("course_page_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "PAGE103")
             let courseID = try course.requireID()
             let student = try await makeTestUser(on: app, username: "page_student", role: "student")
             try await makeTestEnrollment(on: app, userID: try student.requireID(), courseID: courseID)
-            let html = try await getHTML("/admin/courses/\(courseID.uuidString)", cookie: cookie)
+            let html = try await getHTML("/admin/courses/\(courseID.uuidString)", cookie: cookie, on: app)
 
             // Archive and Remove are menu items, each behind a confirmation.
             for action in ["/archive", "/unenroll/\(try student.requireID().uuidString)"] {
@@ -129,12 +114,12 @@ import VaporTesting
 
     @Test func theRosterShowsEachPersonsAvatar() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("course_page_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "PAGE104")
             let courseID = try course.requireID()
             let student = try await makeTestUser(on: app, username: "page_avatar", role: "student")
             try await makeTestEnrollment(on: app, userID: try student.requireID(), courseID: courseID)
-            let html = try await getHTML("/admin/courses/\(courseID.uuidString)", cookie: cookie)
+            let html = try await getHTML("/admin/courses/\(courseID.uuidString)", cookie: cookie, on: app)
             let cell = try #require(html.range(of: "<td class=\"item-tile-cell\">"))
             let cellEnd = try #require(html[cell.upperBound...].range(of: "</td>"))
             #expect(html[cell.upperBound..<cellEnd.lowerBound].contains("<svg"))

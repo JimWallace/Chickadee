@@ -19,20 +19,16 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct NotebookCheckRuntimeStateTests {
 
-    static let requiresPython3: ConditionTrait = .enabled("requires python3 on PATH") { Self.python3Available }
     static let requiresPandas: ConditionTrait = .enabled("requires python3 with pandas") {
-        guard Self.python3Available else { return false }
+        guard await cachedToolIsAvailable("python3") else { return false }
         return await Self.pythonModuleAvailable("pandas")
     }
     static let requiresMatplotlib: ConditionTrait = .enabled("requires python3 with matplotlib") {
-        guard Self.python3Available else { return false }
+        guard await cachedToolIsAvailable("python3") else { return false }
         return await Self.pythonModuleAvailable("matplotlib")
     }
 
     // MARK: - Harness
-
-    private static let python3Available = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
-        .contains { FileManager.default.fileExists(atPath: $0) }
 
     /// Mirrors the worker's `pythonBootstrap` (ScriptInvocation.swift) closely
     /// enough for these tests: bind the test_runtime builtins, load the
@@ -127,7 +123,7 @@ import Testing
 
     // MARK: - variable_exists sees quarantined assignments
 
-    @Test(Self.requiresPython3) func variableExists_seesCallProducedVariable() async throws {
+    @Test(.requiresPython3) func variableExists_seesCallProducedVariable() async throws {
         // `answer = compute()` has a call on the RHS, so the extractor
         // quarantines it — an import-only check would report "not defined".
         let cells = [
@@ -142,7 +138,7 @@ import Testing
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }
 
-    @Test(Self.requiresPython3) func variableExists_missingVariableStillFails() async throws {
+    @Test(.requiresPython3) func variableExists_missingVariableStillFails() async throws {
         let cells = [
             NotebookCell(cellType: "code", source: "def compute():\n    return 1")
         ]
@@ -153,7 +149,7 @@ import Testing
         #expect(result.stdout.contains("is not defined in the student notebook"))
     }
 
-    @Test(Self.requiresPython3) func variableExists_brokenLaterCellDoesNotHideEarlierState() async throws {
+    @Test(.requiresPython3) func variableExists_brokenLaterCellDoesNotHideEarlierState() async throws {
         // The second cell raises at execution; the per-cell resilient
         // wrappers must keep the first cell's state visible.
         let cells = [

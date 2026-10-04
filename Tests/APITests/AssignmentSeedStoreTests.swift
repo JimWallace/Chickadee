@@ -170,17 +170,18 @@ import VaporTesting
 
         }
     }
+}
 
-    @Test func generateSeedHex_isLowercaseHexOfExpectedLength() async throws {
-        try await withApp(app) { _ in
-            for _ in 0..<32 {
-                let seed = AssignmentSeedStore.generateSeedHex()
-                #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
-                #expect(
-                    seed.allSatisfy { "0123456789abcdef".contains($0) },
-                    "seed must be lowercase hex; got \(seed)")
-            }
-
+/// `AssignmentSeedStore.generateSeedHex` reads no database, so this test
+/// needs no app.
+@Suite struct AssignmentSeedHexTests {
+    @Test func generateSeedHex_isLowercaseHexOfExpectedLength() {
+        for _ in 0..<32 {
+            let seed = AssignmentSeedStore.generateSeedHex()
+            #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
+            #expect(
+                seed.allSatisfy { "0123456789abcdef".contains($0) },
+                "seed must be lowercase hex; got \(seed)")
         }
     }
 }

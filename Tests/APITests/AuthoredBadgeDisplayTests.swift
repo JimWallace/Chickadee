@@ -62,33 +62,21 @@ import VaporTesting
         return (cookie, try student.requireURLToken(), submissionID)
     }
 
-    private func body(of path: String, cookie: String, on app: Application) async throws -> String {
-        var body = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok, "\(path) must render")
-                body = res.body.string
-            })
-        return body
-    }
-
     @Test func anEarnedAuthoredBadgeShowsOnEveryPage() async throws {
         try await withAssignmentRoutesApp { app in
             let seeded = try await seedHalfPassingSubmission(
                 setupID: "authored_everywhere", achievements: [authoredBadge(atLeast: 50)], on: app)
             let instructorCookie = try await arLoginAsInstructor(on: app)
 
-            let submissionPage = try await body(
-                of: "/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
+            let submissionPage = try await getHTML(
+                "/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
             #expect(submissionPage.contains(Self.badgeLabel), "submission page")
 
-            let dashboard = try await body(of: "/", cookie: seeded.cookie, on: app)
+            let dashboard = try await getHTML("/", cookie: seeded.cookie, on: app)
             #expect(dashboard.contains(Self.badgeLabel), "student dashboard")
 
-            let staffPage = try await body(
-                of: StudentCoursePaths.submissions(courseCode: "TEST101", urlToken: seeded.urlToken),
+            let staffPage = try await getHTML(
+                StudentCoursePaths.submissions(courseCode: "TEST101", urlToken: seeded.urlToken),
                 cookie: instructorCookie, on: app)
             #expect(staffPage.contains(Self.badgeLabel), "staff per-student page")
         }
@@ -99,10 +87,10 @@ import VaporTesting
             let seeded = try await seedHalfPassingSubmission(
                 setupID: "authored_nowhere", achievements: [authoredBadge(atLeast: 60)], on: app)
 
-            let submissionPage = try await body(
-                of: "/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
+            let submissionPage = try await getHTML(
+                "/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
             #expect(!submissionPage.contains(Self.badgeLabel))
-            let dashboard = try await body(of: "/", cookie: seeded.cookie, on: app)
+            let dashboard = try await getHTML("/", cookie: seeded.cookie, on: app)
             #expect(!dashboard.contains(Self.badgeLabel))
         }
     }
@@ -120,13 +108,13 @@ import VaporTesting
                 evaluatedAt: Date()
             ).save(on: app.db)
 
-            let submissionPage = try await body(
-                of: "/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
+            let submissionPage = try await getHTML(
+                "/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
             #expect(submissionPage.contains("100%"), "the page shows the grade with the bonus")
             #expect(
                 !submissionPage.contains(Self.badgeLabel),
                 "the badge reads the raw 50%, not the 100% with the bonus")
-            let dashboard = try await body(of: "/", cookie: seeded.cookie, on: app)
+            let dashboard = try await getHTML("/", cookie: seeded.cookie, on: app)
             #expect(!dashboard.contains(Self.badgeLabel))
         }
     }

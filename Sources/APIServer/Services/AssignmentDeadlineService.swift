@@ -306,7 +306,7 @@ func requireSolutionVisible(
     guard let assignment,
         try await solutionVisibleToStudent(assignment: assignment, user: user, on: db)
     else {
-        throw Abort(.forbidden, reason: "The solution to this assignment is not available.")
+        throw AppError.forbidden(action: "view the solution to this assignment")
     }
 }
 

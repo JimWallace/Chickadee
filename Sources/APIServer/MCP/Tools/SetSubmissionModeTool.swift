@@ -70,18 +70,18 @@ struct SetSubmissionModeTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let mode = input.submissionMode.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parsed = try MCPEnumProse<SubmissionMode>.parse(mode, tool: Self.name, field: "submissionMode")
+        let parsed = try MCPEnumProse<SubmissionMode>.parse(mode, field: "submissionMode")
         // How students submit is a lifecycle setting — instructor-level (#417),
         // matching set_grading_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
         // Surface a coherence violation as an arguments error, so an agent
         // reads a fixable message rather than a 400. The shared helper keeps
         // its own guard as the backstop for any path that skips this.
         if let violation = ManifestCoherence.violation(
             introducedBy: { $0.submissionMode = parsed }, in: setup.manifest)
         {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: violation)
+            throw MCPToolError.invalidArguments(detail: violation)
         }
         let effective = try await setManifestSubmissionMode(
             setup: setup, to: mode, on: context.db)

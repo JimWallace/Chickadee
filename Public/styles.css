@@ -2403,7 +2403,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
     font-style: italic;
 }
 
-/* Muted flavour of .field-note, for hints inside a form label. */
+/* Muted flavour of .field-note, for a hint in or under a form label.  Use
+   this class, not .field-note with .text-muted (#1977). */
 .field-note--muted {
     display: block;
     color: var(--text-secondary);
@@ -2719,8 +2720,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .suite-detail-status-error { color: var(--red); }
 
 /* Rotating disclosure caret on rows that open an inline editor (pattern-family
-   and notebook-check rows in the suite editor; every achievement row).  Script
-   rows open the modal instead, so they deliberately carry no caret. */
+   and notebook-check rows in the suite editor; every achievement row), and in
+   a .disclosure-summary.  Script rows open the modal instead, so they
+   deliberately carry no caret. */
 .accordion-caret {
     display: inline-flex;
     align-items: center;
@@ -2728,6 +2730,24 @@ code { font-family: var(--font-mono); font-size: .9em; }
     transition: transform .18s ease;
 }
 .suite-row-expanded .accordion-caret { transform: rotate(90deg); }
+
+/* The <summary> of a <details> that a reader opens occasionally
+   (docs/ui-design.md, "Interaction idioms").  An .accordion-caret
+   replaces the native marker and turns while the details is open.  The link
+   colour marks it as a control, so it does not read like the muted notes
+   inside it, and fit-content keeps the click area and the focus ring on the
+   label. */
+.disclosure-summary {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    width: fit-content;
+    list-style: none;
+    color: var(--blue);
+    font-size: var(--text-base);
+}
+.disclosure-summary::-webkit-details-marker { display: none; }
+details[open] > .disclosure-summary .accordion-caret { transform: rotate(90deg); }
 
 /* Editor-only row affordances — the shared, student-facing .results-table is
    untouched.  Firmer separators between tests, and a hover fill (skipping the

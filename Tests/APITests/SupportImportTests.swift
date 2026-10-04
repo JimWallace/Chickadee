@@ -11,7 +11,7 @@ import Testing
 
 @testable import APIServer
 
-@Suite final class SupportImportTests {
+@Suite(.timeLimit(.minutes(2))) final class SupportImportTests {
 
     private let tempDir: URL
 

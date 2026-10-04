@@ -12,7 +12,7 @@ import Testing
 
 @testable import APIServer
 
-@Suite struct SectionInputsTests {
+@Suite(.timeLimit(.minutes(2))) struct SectionInputsTests {
 
     // MARK: - Schema round-trip
 

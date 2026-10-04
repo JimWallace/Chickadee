@@ -1,0 +1,9 @@
+<!-- The note under a table of input values (#1996). The Global Inputs panel,
+     each section's inputs and a family's Variables table include this one
+     copy, so the wording and the link have one source. It renders hidden;
+     each editor script shows it while its table has a row, because the cue it
+     explains is drawn by that script. -->
+<p class="field-note field-note--muted js-value-cue-note" hidden>
+    If a value has an amber border, read
+    <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/inputs.md#the-amber-cue-on-a-value" target="_blank" rel="noopener noreferrer">the amber cue on a value <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>.
+</p>

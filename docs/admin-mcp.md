@@ -337,6 +337,13 @@ A `get_deployment_info` / capability-probe tool mirrors the content surface's
 `get_server_info` and lets the agent confirm the surface is live and what it can
 see before doing anything.
 
+**Output schemas.** An output schema is optional in MCP, and only
+`get_deployment_info` declares one. The other admin tools return
+`structuredContent` with no schema, because the reader is an operator's agent
+that reads the JSON, not a client that validates it. Add a schema to an admin
+tool when a client starts to depend on its keys. `MCPOutputSchemaSyncTests`
+then checks its shape, because it reads both catalogs (#1935).
+
 ---
 
 ## 6. Track 1 — enrich capture so the tools have signal

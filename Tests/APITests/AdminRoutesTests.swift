@@ -21,10 +21,6 @@ private struct PassthroughResponder: AsyncResponder {
         self.app = try await makeTestApp(prefix: "chickadee-admin")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "admin_routes", password: "testpassword", role: "admin", on: app)
-    }
-
     private func csrfCookieAndToken(_ cookie: String, path: String = "/admin") async throws -> (String, String) {
         let (token, boundCookie) = try await csrfFields(for: path, cookie: cookie, on: app)
         return (boundCookie, token)
@@ -89,7 +85,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func changeRoleUpdatesUserRole() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let target = try await makeUser(username: "role_target", role: "user")
             let userID = try target.requireID()
             let (boundCookie, token) = try await csrfCookieAndToken(cookie)
@@ -114,7 +110,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func changeRoleRefusesTheAdminsOwnAccount() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let me = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "admin_routes").first())
             let myID = try me.requireID()
@@ -137,7 +133,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func usersListDisablesTheRoleMenuOnTheViewersOwnRow() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let me = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "admin_routes").first())
             let other = try await makeUser(username: "role_other", role: "user")
@@ -168,7 +164,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func adminPageOffersNoRunnerSecretControls() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let (boundCookie, token) = try await csrfCookieAndToken(cookie)
 
             try await app.asyncTest(
@@ -230,7 +226,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func updateLocalRunnerAutoStartPersistsSetting() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let (boundCookie, token) = try await csrfCookieAndToken(cookie)
 
             try await app.asyncTest(
@@ -254,7 +250,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func adminDashboardShowsJobsProcessedCardLabel() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
 
             try await app.asyncTest(
                 .GET, "/admin",
@@ -275,7 +271,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func storageTabShowsBreakdown() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
 
             try await app.asyncTest(
                 .GET, "/admin/storage",
@@ -310,7 +306,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func adminTabBarPresentWithOverviewActive() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             try await app.asyncTest(
                 .GET, "/admin",
                 beforeRequest: { req in
@@ -334,7 +330,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func usersTabDefaultsToMostRecentLastSeenFirst() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let now = Date()
             _ = try await makeUser(username: "never_seen")
             let older = try await makeUser(username: "older_seen", role: "student")
@@ -376,7 +372,7 @@ private struct PassthroughResponder: AsyncResponder {
     /// FK constraints to existing columns) behaves identically.
     @Test func deleteUserCascadesClassAchievements() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let student = try await makeUser(username: "fk_cascade_student", role: "student")
             let studentID = try student.requireID()
             let course = try await makeCourse(code: "FKC101", name: "FK Cascade")
@@ -426,7 +422,7 @@ private struct PassthroughResponder: AsyncResponder {
     /// (immutable grade history) but the retest attribution drops.
     @Test func deleteUserNullsRetestedByReferences() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let student = try await makeUser(username: "fk_null_student", role: "student")
             let studentID = try student.requireID()
             let instructor = try await makeUser(username: "fk_null_instructor", role: "instructor")
@@ -463,7 +459,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func adminUserActionsRenderDeleteInUsersTableOnly() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let managedUser = try await makeUser(username: "managed_for_actions", role: "student")
             let userID = try managedUser.requireID()
 
@@ -498,7 +494,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func editCourseUpdatesFields() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "EDIT101", name: "Original Name")
             let courseID = try course.requireID()
             let (boundCookie, token) = try await csrfCookieAndToken(
@@ -527,7 +523,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func copyCourseSkipsTakenCopyCodes() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let source = try await makeCourse(code: "CPY101", name: "Copy Source")
             // Occupy the first two candidate codes so the copy must fall
             // through to -COPY-3 — pins the candidate ordering of
@@ -556,7 +552,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func toggleCourseArchiveFlipsArchivedState() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "ARCH101", name: "Archive Me", archived: false)
             let courseID = try course.requireID()
             let (boundCookie, token) = try await csrfCookieAndToken(
@@ -584,7 +580,7 @@ private struct PassthroughResponder: AsyncResponder {
     /// on the index (#1777).
     @Test func unarchiveRefusesACodeAnActiveCourseAlreadyHolds() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let archived = try await makeCourse(code: "DUP101", name: "Old offering", archived: true)
             _ = try await makeCourse(code: "DUP101", name: "New offering", archived: false)
             let courseID = try archived.requireID()
@@ -609,7 +605,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func deleteCourseRemovesRecordsAndFilesForArchivedCourse() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let student = try await makeUser(username: "delete_student", role: "student")
             let studentID = try student.requireID()
             let course = try await makeCourse(code: "DEL101", name: "Delete Me", archived: true)
@@ -664,7 +660,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func deleteCourseRejectedWhenRetentionWindowNotElapsed() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "DELRECENT", name: "Recently Archived", archived: true)
             // Archived just now — well inside the retention window.
             course.archivedAt = Date()
@@ -692,7 +688,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func adminEnrollAndUnenrollUserMutatesEnrollment() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let user = try await makeUser(username: "managed_student", role: "student")
             let userID = try user.requireID()
             let course = try await makeCourse(code: "ENROLL101", name: "Managed Course")
@@ -744,7 +740,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func adminRunnersUsesScaledAvgWaitUnits() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "WAIT101", name: "Wait Course")
             let courseID = try course.requireID()
             let setup = try await makeSetup(id: "setup_wait_admin", courseID: courseID)
@@ -803,7 +799,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func runnerDetailShowsStageTimingBreakdownWhenAvailable() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "RUN101", name: "Runner Detail")
             let courseID = try course.requireID()
             let setup = try await makeSetup(id: "setup_runner_detail", courseID: courseID)
@@ -931,7 +927,7 @@ private struct PassthroughResponder: AsyncResponder {
     // jobs counted separately from processed (complete + failed), per worker.
     @Test func adminRunnersCountsAssignedAndProcessedPerWorker() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "WRK101", name: "Worker Course")
             let courseID = try course.requireID()
             let setup = try await makeSetup(id: "setup_wrk_counts", courseID: courseID)
@@ -986,7 +982,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func usersDataReturnsJSONRows() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             _ = try await makeUser(username: "json_feed_user", role: "instructor")
 
             try await app.asyncTest(
@@ -1010,7 +1006,7 @@ private struct PassthroughResponder: AsyncResponder {
     /// did) diverge from the template silently.
     @Test func usersDataFragmentRendersTheSameRowsPartial() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             _ = try await makeUser(username: "fragment_user", role: "instructor")
 
             try await app.asyncTest(
@@ -1039,7 +1035,7 @@ private struct PassthroughResponder: AsyncResponder {
     /// poll reads it) and gains a rows fragment for the dashboard table.
     @Test func runnersFeedServesBothJSONAndFragment() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
 
             try await app.asyncTest(
                 .GET, "/admin/runners",
@@ -1101,7 +1097,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func allAdminTabsShowVersionBanner() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             for path in ["/admin", "/admin/users", "/admin/storage", "/admin/audit", "/admin/alerts"] {
                 try await app.asyncTest(
                     .GET, path,
@@ -1129,7 +1125,7 @@ private struct PassthroughResponder: AsyncResponder {
             )
             try await entry.save(on: app.db)
 
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             try await app.asyncTest(
                 .GET, "/admin/audit",
                 beforeRequest: { req in
@@ -1152,7 +1148,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func storageTabListsPerAssignmentFootprint() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "STG101", name: "Storage Course")
             let courseID = try course.requireID()
             _ = try await makeSetup(id: "setup_storage_bd", courseID: courseID)
@@ -1181,7 +1177,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func courseCopySectionsArePreserved() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "CPSECT")
             let courseID = try course.requireID()
 
@@ -1262,7 +1258,7 @@ private struct PassthroughResponder: AsyncResponder {
 
     @Test func courseCopyNotebookPathIsPreserved() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
             let course = try await makeCourse(code: "CPNB")
             let courseID = try course.requireID()
 
