@@ -9,6 +9,22 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.393] - 2026-10-04
+
+### Changed
+
+- **The notebook page keeps its pure rules in a core file.** The new
+  `Public/notebook-core.js` holds the editor readiness probes, the kernel
+  recovery and reseed decisions, and the results formatting. The page loads
+  it before `notebook.js`. Three node test suites now load the core
+  directly. They no longer boot all of `notebook.js` under a stub DOM.
+  (#1967)
+
+### Security
+
+- **The runner and the server refuse inspection by other processes of their user.** Both mark themselves non-dumpable at start (Linux `prctl(PR_SET_DUMPABLE, 0)`). A child process they start runs as the same user, and it could read their environment through `/proc`, which holds the runner secret and the server's credentials. The kernel now refuses that read to any process without `CAP_SYS_PTRACE`. The runner's start-up log reports the result as `process_inspection`.
+
+
 ## [0.5.392] - 2026-10-04
 
 ### Changed
