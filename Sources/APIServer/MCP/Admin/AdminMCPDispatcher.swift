@@ -112,14 +112,14 @@ struct AdminMCPDispatcher: Sendable {
             // line each tool must remember (#1943). A refusal is a tool error
             // and is audited, as it was when each tool ran it itself.
             if tool.rechecksAdminRole {
-                try await context.requireAdminSubject(tool: tool.name)
+                try await context.requireAdminSubject()
             }
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
             outcome = MCPToolOutcome.success.rawValue
             response = .success(id: id, result: mcpToolSuccessResult(output))
         } catch let error as MCPToolError {
             outcome = MCPToolOutcome(error).rawValue
-            response = .success(id: id, result: mcpToolErrorResult(error))
+            response = .success(id: id, result: mcpToolErrorResult(error, tool: call.name))
         } catch {
             // A non-MCPToolError throw is opaque to the agent (bare -32603);
             // log the underlying error so the failure is diagnosable.

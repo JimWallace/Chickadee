@@ -234,6 +234,11 @@ func pfAssertValidPythonSyntax(_ source: String, label: String) async throws {
     // launches env, env exits 127, and a non-throwing write to the now-closed
     // stdin pipe traps (broken pipe) → SIGILL, taking down the whole test
     // process.  CI installs python3; this guard only protects bare dev hosts.
+    //
+    // A guard, not a trait, because a helper cannot carry a trait. Its 14
+    // callers in four files also make text assertions on the rendered
+    // source, and those need no python3. A `.requiresPython3` trait on each
+    // caller would skip them too.
     let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
     guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
         return  // python3 unavailable on this platform — skip the syntax check

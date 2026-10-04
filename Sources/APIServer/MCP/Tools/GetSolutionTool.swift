@@ -56,12 +56,11 @@ struct GetSolutionTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let assignment = try await context.authorizedAssignment(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
 
         guard let solution = try await loadExistingSolution(assignment: assignment, on: context.db)
         else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail:
                     "This assignment has no solution notebook on file. Upload one in the editor, or set "
                     + "one with update_solution.")
@@ -72,7 +71,6 @@ struct GetSolutionTool: ContentTool {
             notebook = try JSONDecoder().decode(JSONValue.self, from: solution.data)
         } catch {
             throw MCPToolError.executionFailed(
-                tool: Self.name,
                 detail: "The stored solution (\(solution.filename)) is not valid notebook JSON.")
         }
 

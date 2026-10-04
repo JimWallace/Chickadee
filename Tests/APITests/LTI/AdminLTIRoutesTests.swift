@@ -28,10 +28,6 @@ import VaporTesting
         "jwksURL": "https://learn.example.edu/d2l/.well-known/jwks",
     ]
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "lti_admin", password: "testpassword", role: "admin", on: app)
-    }
-
     /// POSTs `fields` to `path` as the admin, with a CSRF token bound to the session.
     private func post(
         _ path: String, _ fields: [String: String], cookie: String,
@@ -65,7 +61,7 @@ import VaporTesting
 
     @Test func pageShowsToolConfigurationAndAnEmptyPlatformList() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await get("/admin/lti", cookie: cookie) { res in
                 #expect(res.status == .ok)
                 let body = res.body.string
@@ -90,7 +86,7 @@ import VaporTesting
 
     @Test func registeringStoresThePlatformAndAuditsIt() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await post("/admin/lti/platforms", Self.form, cookie: cookie) { res in
                 #expect(res.status == .seeOther)
                 #expect(res.headers.first(name: .location) == "/admin/lti?ok=registered")
@@ -111,7 +107,7 @@ import VaporTesting
 
     @Test func invalidRegistrationShowsTheReasonAndKeepsWhatWasTyped() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             var fields = Self.form
             fields["jwksURL"] = "http://learn.example.edu/jwks"
             try await post("/admin/lti/platforms", fields, cookie: cookie) { res in
@@ -127,7 +123,7 @@ import VaporTesting
 
     @Test func duplicateIssuerAndClientIDIsRefusedAsASentence() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await post("/admin/lti/platforms", Self.form, cookie: cookie) { _ in }
             try await post("/admin/lti/platforms", Self.form, cookie: cookie) { res in
                 #expect(res.status == .ok)
@@ -140,7 +136,7 @@ import VaporTesting
 
     @Test func editingKeepsThePlatformIdentity() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await post("/admin/lti/platforms", Self.form, cookie: cookie) { _ in }
             let platform = try #require(try await APILTIPlatform.query(on: app.db).first())
             let id = try platform.requireID()
@@ -158,7 +154,7 @@ import VaporTesting
 
     @Test func tokenAudienceIsStoredShownForEditingAndClearedWhenBlank() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             var fields = Self.form
             fields["tokenAudience"] = " https://api.brightspace.com/auth/token "
             try await post("/admin/lti/platforms", fields, cookie: cookie) { _ in }
@@ -185,7 +181,7 @@ import VaporTesting
 
     @Test func disablingAndEnablingToggleLaunchAcceptance() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await post("/admin/lti/platforms", Self.form, cookie: cookie) { _ in }
             let id = try #require(try await APILTIPlatform.query(on: app.db).first()).requireID()
 
@@ -205,7 +201,7 @@ import VaporTesting
 
     @Test func deletingRemovesThePlatformAndAuditsIt() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await post("/admin/lti/platforms", Self.form, cookie: cookie) { _ in }
             let id = try #require(try await APILTIPlatform.query(on: app.db).first()).requireID()
             try await post("/admin/lti/platforms/\(id)/delete", [:], cookie: cookie) { res in
@@ -220,7 +216,7 @@ import VaporTesting
 
     @Test func unknownPlatformIsNotFound() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await post("/admin/lti/platforms/\(UUID())/delete", [:], cookie: cookie) { res in
                 #expect(res.status == .notFound)
             }
@@ -229,7 +225,7 @@ import VaporTesting
 
     @Test func unknownNoticeKeyShowsNoBanner() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await get("/admin/lti?ok=%3Cb%3Espoof%3C%2Fb%3E", cookie: cookie) { res in
                 #expect(res.status == .ok)
                 #expect(!res.body.string.contains("spoof"))
@@ -239,7 +235,7 @@ import VaporTesting
 
     @Test func deletingUnbindsItsCoursesSoGradesStopGoingThroughAGS() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_admin", on: app)
             try await post("/admin/lti/platforms", Self.form, cookie: cookie) { _ in }
             let platformID = try #require(try await APILTIPlatform.query(on: app.db).first()).requireID()
             let courseID = try await app.testCourseID(code: "LTI-BOUND")

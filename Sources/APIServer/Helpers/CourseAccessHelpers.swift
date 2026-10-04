@@ -33,7 +33,7 @@ func requireCourseRole(
     caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
 ) async throws {
     guard !caller.isAdmin else { return }
-    guard let callerID = caller.id else { throw Abort(.unauthorized) }
+    guard let callerID = caller.id else { throw AppError.unauthenticated }
     try requireResolvedCourseRole(
         try await courseRole(of: callerID, inCourse: courseID, db: db), atLeast: minimum)
 }
@@ -42,8 +42,9 @@ func requireCourseRole(
 /// role — shared with the request-memoized variant below so the two cannot
 /// drift.
 private func requireResolvedCourseRole(_ role: CourseRole?, atLeast minimum: CourseRole) throws {
-    guard let role else { throw Abort(.forbidden) }
-    guard role >= minimum else { throw Abort(.forbidden) }
+    guard let role, role >= minimum else {
+        throw AppError.forbidden(action: "do this in this course")
+    }
 }
 
 /// Throws `.forbidden` unless `caller` is an admin or is enrolled in the
@@ -243,11 +244,11 @@ func requireCourseWriteAccess(
     case nil:
         return
     case .notEnrolled, .roleTooLow:
-        throw Abort(.forbidden)
+        throw AppError.forbidden(action: "change this course")
     case .courseMissing:
-        throw Abort(.notFound, reason: "Course not found.")
+        throw AppError.notFound(resource: "Course")
     case .archived:
-        throw Abort(.forbidden, reason: "This course is archived and is read-only.")
+        throw AppError.forbidden(action: "change an archived course, which is read-only")
     }
 }
 
@@ -267,8 +268,7 @@ func ensureNotLastInstructor(
         .filter(\.$userID != userID)
         .count()
     guard otherInstructors > 0 else {
-        throw Abort(
-            .conflict,
+        throw AppError.conflict(
             reason:
                 "A course must keep at least one instructor. Assign another instructor before removing or demoting this one."
         )
@@ -360,7 +360,7 @@ extension Request {
         caller: APIUser, courseID: UUID, atLeast minimum: CourseRole
     ) async throws {
         guard !caller.isAdmin else { return }
-        guard let callerID = caller.id else { throw Abort(.unauthorized) }
+        guard let callerID = caller.id else { throw AppError.unauthenticated }
         try requireResolvedCourseRole(
             try await cachedCourseRole(of: callerID, inCourse: courseID), atLeast: minimum)
     }

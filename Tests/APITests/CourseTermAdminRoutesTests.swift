@@ -20,10 +20,6 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-course-term")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "term_admin", password: "testpassword", role: "admin", on: app)
-    }
-
     /// Posts a form to `path` with a CSRF token bound to `formPath`, and
     /// returns the redirect location.
     private func post(
@@ -46,23 +42,11 @@ import VaporTesting
         return location
     }
 
-    private func getHTML(_ path: String, cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     // MARK: - Create
 
     @Test func createStoresTheDeclaredTerm() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             _ = try await post(
                 "/admin/courses",
                 form: ["code": "TRM101", "name": "Terms", "termYear": "2026", "termSeason": "fall"],
@@ -83,7 +67,7 @@ import VaporTesting
     ])
     func createRefusesAMissingOrInvalidTerm(termFields: [String: String]) async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             var form = ["code": "TRM102", "name": "Terms"]
             form.merge(termFields) { _, new in new }
             let location = try await post(
@@ -97,7 +81,7 @@ import VaporTesting
 
     @Test func createRefusesAnActiveDuplicateCode() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             // Same code AND term, so this is a duplicate under the per-term
             // rule of slice 3 as well as the code-only rule of today.
             try await APICourse(
@@ -116,8 +100,8 @@ import VaporTesting
 
     @Test func newCourseFormOffersTheThreeTermsWithNoneChosen() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
-            let html = try await getHTML("/admin/courses/new?error=course_term_required", cookie: cookie)
+            let cookie = try await loginAsAdmin("term_admin", on: app)
+            let html = try await getHTML("/admin/courses/new?error=course_term_required", cookie: cookie, on: app)
             #expect(html.contains("name=\"termYear\""))
             #expect(html.contains("<option value=\"winter\""))
             #expect(html.contains("<option value=\"spring\""))
@@ -136,7 +120,7 @@ import VaporTesting
 
     @Test func editSetsTheTermOfACourseThatHasNone() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "TRM201")
             let id = try course.requireID().uuidString
             let location = try await post(
@@ -152,7 +136,7 @@ import VaporTesting
 
     @Test func editWithAnInvalidTermChangesNothing() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             let course = APICourse(
                 code: "TRM202", name: "Terms", term: AcademicTerm(year: 2026, season: .fall))
             try await course.save(on: app.db)
@@ -171,12 +155,12 @@ import VaporTesting
 
     @Test func courseDetailShowsTheTermAndTheCodeTakenError() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             let course = APICourse(
                 code: "TRM203", name: "Terms", term: AcademicTerm(year: 2026, season: .fall))
             try await course.save(on: app.db)
             let id = try course.requireID().uuidString
-            let html = try await getHTML("/admin/courses/\(id)?error=code_taken", cookie: cookie)
+            let html = try await getHTML("/admin/courses/\(id)?error=code_taken", cookie: cookie, on: app)
             #expect(html.contains("TRM203 Fall 2026 — Terms"))
             #expect(html.contains("value=\"2026\""))
             #expect(html.contains("<option value=\"fall\" selected"))
@@ -187,9 +171,9 @@ import VaporTesting
 
     @Test func courseDetailWithoutATermAsksForOne() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "TRM204")
-            let html = try await getHTML("/admin/courses/\(try course.requireID().uuidString)", cookie: cookie)
+            let html = try await getHTML("/admin/courses/\(try course.requireID().uuidString)", cookie: cookie, on: app)
             #expect(html.contains(">Choose</option>"))
             #expect(!html.contains("<option value=\"fall\" selected"))
         }
@@ -199,10 +183,10 @@ import VaporTesting
 
     @Test func adminCoursesTableShowsTheTerm() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             let term = try #require(AcademicTerm(year: 2027, season: .winter))
             try await APICourse(code: "TRM301", name: "Terms", term: term).save(on: app.db)
-            let html = try await getHTML("/admin", cookie: cookie)
+            let html = try await getHTML("/admin", cookie: cookie, on: app)
             #expect(html.contains("Winter 2027 · 0 submissions"))
         }
     }
@@ -222,7 +206,7 @@ import VaporTesting
                 ).save(on: app.db)
             }
 
-            let html = try await getHTML("/", cookie: cookie)
+            let html = try await getHTML("/", cookie: cookie, on: app)
             let newTab = try #require(html.range(of: "TRM402 F26"))
             let oldTab = try #require(html.range(of: "TRM401 S26"))
             #expect(newTab.lowerBound < oldTab.lowerBound)
@@ -282,7 +266,7 @@ import VaporTesting
 
     @Test func bundleExportAndImportCarryTheTerm() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             let term = try #require(AcademicTerm(year: 2026, season: .fall))
             let source = APICourse(code: "TRM501", name: "Bundled", term: term)
             try await source.save(on: app.db)
@@ -296,7 +280,7 @@ import VaporTesting
 
     @Test func importOfABundleWithoutATermAsksForOne() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("term_admin", on: app)
             let source = APICourse(code: "TRM502", name: "Legacy")
             try await source.save(on: app.db)
 

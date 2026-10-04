@@ -304,7 +304,7 @@ import Vapor
                         maxBytes: nil),
                     context(app))
             } catch let error as MCPToolError {
-                guard case .invalidArguments(_, let detail) = error else {
+                guard case .invalidArguments(let detail) = error else {
                     Issue.record("expected invalidArguments, got \(error)")
                     return
                 }
@@ -326,7 +326,7 @@ import Vapor
                     context(app))
                 Issue.record("expected a thrown error for an unknown path")
             } catch let error as MCPToolError {
-                guard case .invalidArguments(_, let detail) = error else {
+                guard case .invalidArguments(let detail) = error else {
                     Issue.record("expected invalidArguments, got \(error)")
                     return
                 }

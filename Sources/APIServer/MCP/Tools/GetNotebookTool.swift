@@ -50,22 +50,20 @@ struct GetNotebookTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
 
         let data: Data
         do {
             data = try await notebookData(for: setup)
         } catch {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "This assignment has no notebook to return.")
+            throw MCPToolError.invalidArguments(detail: "This assignment has no notebook to return.")
         }
 
         let notebook: JSONValue
         do {
             notebook = try JSONDecoder().decode(JSONValue.self, from: data)
         } catch {
-            throw MCPToolError.executionFailed(
-                tool: Self.name, detail: "The stored notebook is not valid JSON.")
+            throw MCPToolError.executionFailed(detail: "The stored notebook is not valid JSON.")
         }
 
         return Output(

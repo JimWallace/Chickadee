@@ -91,17 +91,18 @@ func mcpToolSuccessResult(_ structured: JSONValue) -> JSONValue {
 }
 
 /// Reports a tool-originated failure inside the result with `isError:true`
-/// so the model can see and correct it (rather than a JSON-RPC error).
-func mcpToolErrorResult(_ error: MCPToolError) -> JSONValue {
+/// so the model can see and correct it (rather than a JSON-RPC error). `tool`
+/// is the name the dispatcher called, so no tool has to pass its own (#1939).
+func mcpToolErrorResult(_ error: MCPToolError, tool: String) -> JSONValue {
     let message: String
     switch error {
     case .unknownTool(let name):
         message = "Unknown tool: \(name)"
-    case .invalidArguments(let tool, let detail):
+    case .invalidArguments(let detail):
         message = "Invalid arguments for \(tool): \(detail)"
-    case .notAuthorized(let tool, let detail):
+    case .notAuthorized(let detail):
         message = "Not authorized for \(tool): \(detail)"
-    case .executionFailed(let tool, let detail):
+    case .executionFailed(let detail):
         message = "\(tool) failed: \(detail)"
     }
     return .object([

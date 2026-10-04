@@ -14,8 +14,8 @@
                 <div class="item-title text-muted"><em>#(student.displayName)</em></div>
                 <div class="item-details">#(student.pendingNote)</div>
                 #else:
-                <div class="item-title"><a href="#(student.submissionsURL)">#(student.displayName)</a>#if(student.learnFlag): <span class="learn-flag" title="Not on the LEARN classlist: remove if confirmed dropped">#(student.learnFlag)</span>#endif</div>
-                <div class="item-details"><code>#(student.username)</code></div>
+                <div class="item-title"><a href="#(student.submissionsURL)">#(student.displayName)</a>#if(student.learnFlag): <span class="tier tier-danger" title="LEARN grade sync cannot reach this student">#(student.learnFlag)</span>#endif</div>
+                <div class="item-details"><code>#(student.username)</code>#if(student.learnFlag): · #(student.learnFlagReason) · #(student.learnFlagAdvice)#endif</div>
                 #endif
             </td>
             <td class="item-status">

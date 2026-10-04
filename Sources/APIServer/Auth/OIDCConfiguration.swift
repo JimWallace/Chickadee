@@ -112,17 +112,11 @@ struct OIDCConfiguration: Sendable {
     static func validateEnvironment(from app: Application) throws -> EnvironmentInputs {
         let env = app.appConfig.oidc
         guard let clientID = env.clientID else {
-            throw Abort(
-                .internalServerError,
-                reason: "OIDC_CLIENT_ID is required when AUTH_MODE is not 'local'"
-            )
+            throw OIDCConfigurationError.missingSetting("OIDC_CLIENT_ID")
         }
 
         guard let clientSecret = env.clientSecret else {
-            throw Abort(
-                .internalServerError,
-                reason: "OIDC_CLIENT_SECRET is required when AUTH_MODE is not 'local'"
-            )
+            throw OIDCConfigurationError.missingSetting("OIDC_CLIENT_SECRET")
         }
 
         // Honour `app.securityConfiguration` (legacy accessor with a per-test
@@ -182,10 +176,7 @@ struct OIDCConfiguration: Sendable {
             try await app.client.get(URI(string: inputs.discoveryURL))
         }
         guard discoveryResponse.status == .ok else {
-            throw Abort(
-                .internalServerError,
-                reason: "OIDC discovery failed: HTTP \(discoveryResponse.status.code)"
-            )
+            throw OIDCConfigurationError.discoveryFailed(httpStatus: discoveryResponse.status.code)
         }
         let discovery = try discoveryResponse.content.decode(OIDCDiscovery.self)
 
@@ -195,10 +186,7 @@ struct OIDCConfiguration: Sendable {
             try await app.client.get(URI(string: discovery.jwksURI))
         }
         guard jwksResponse.status == .ok else {
-            throw Abort(
-                .internalServerError,
-                reason: "OIDC JWKS fetch failed: HTTP \(jwksResponse.status.code)"
-            )
+            throw OIDCConfigurationError.jwksFetchFailed(httpStatus: jwksResponse.status.code)
         }
         var jwksBuffer = jwksResponse.body ?? ByteBuffer()
         let jwksJSON = jwksBuffer.readString(length: jwksBuffer.readableBytes) ?? ""
@@ -220,6 +208,32 @@ struct OIDCConfiguration: Sendable {
     /// Validates the environment and then fetches, in one step.
     static func load(from app: Application) async throws -> OIDCConfiguration {
         try await fetch(from: app, inputs: validateEnvironment(from: app))
+    }
+}
+
+// MARK: - Configuration errors
+
+/// Why the OIDC configuration could not be built: a missing setting at start,
+/// or an identity provider that did not answer. An `AbortError` with status
+/// 500, because `load(from:)` also runs inside a login request when the boot
+/// fetch failed.
+enum OIDCConfigurationError: AbortError, CustomStringConvertible {
+    case missingSetting(String)
+    case discoveryFailed(httpStatus: UInt)
+    case jwksFetchFailed(httpStatus: UInt)
+
+    var status: HTTPResponseStatus { .internalServerError }
+    var reason: String { description }
+
+    var description: String {
+        switch self {
+        case .missingSetting(let name):
+            return "\(name) is required when AUTH_MODE is not 'local'"
+        case .discoveryFailed(let httpStatus):
+            return "OIDC discovery failed: HTTP \(httpStatus)"
+        case .jwksFetchFailed(let httpStatus):
+            return "OIDC JWKS fetch failed: HTTP \(httpStatus)"
+        }
     }
 }
 

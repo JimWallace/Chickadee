@@ -68,7 +68,7 @@ import VaporTesting
                     // An uncustomized course starts on the Chickadee default,
                     // seeded into the one editable box.
                     #expect(html.contains("Authoring voice for Chickadee assignments"))
-                    #expect(html.contains("uses the Chickadee default"))
+                    #expect(html.contains("<dd>Chickadee default</dd>"))
                     // Nothing to reset while the course is still inheriting.
                     #expect(!html.contains("Reset to Chickadee default"))
                 })
@@ -131,7 +131,7 @@ import VaporTesting
                 afterResponse: { res in
                     let html = res.body.string
                     #expect(html.contains("Use metric units throughout."))
-                    #expect(html.contains("uses its own authoring voice"))
+                    #expect(html.contains("<dd>Customized</dd>"))
                     #expect(html.contains("Reset to Chickadee default"))
                 })
 

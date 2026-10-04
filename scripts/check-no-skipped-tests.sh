@@ -51,8 +51,9 @@ for report in "$@"; do
     status=1
     echo "ERROR: $skipped skipped test(s) in $report."
     echo "       Every condition a trait names must hold on the CI image. Add the"
-    echo "       missing tool to .github/docker/ci-image/Dockerfile and to the"
-    echo "       per-job apt fallback in .github/workflows/swift-tests.yml."
+    echo "       missing tool to .github/docker/ci-image/Dockerfile and to the probe"
+    echo "       in .github/actions/swift-test-setup/action.yml: an interpreter to its"
+    echo "       interpreter table, any other tool to the tools input of the lane."
     # Each <skipped>reason</skipped> belongs to the <testcase> line before it.
     awk '
         /<testcase / {

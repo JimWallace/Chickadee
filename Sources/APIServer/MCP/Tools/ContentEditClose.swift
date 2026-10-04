@@ -48,7 +48,7 @@ func closeOpenAssignmentForContentEdit(
 @discardableResult
 func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext) async -> Int {
     do {
-        let actingUser = try await context.requireEligibleSubject(tool: "retest")
+        let actingUser = try await context.requireEligibleSubject()
         // Re-queue runs on the privileged default pool, not the MCP pool: it
         // reads and flips STUDENT submission rows (a system regrade, not
         // agent-facing data access), so it must not depend on the MCP path's
@@ -68,7 +68,6 @@ func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext
 func applySuiteEditMapped(
     setup: APITestSetup,
     body: SuitePayload,
-    tool: String,
     kernelEnvironments: KernelEnvironments? = nil,
     on db: any Database
 ) async throws {
@@ -76,9 +75,9 @@ func applySuiteEditMapped(
         try await applySuiteEdit(
             setup: setup, body: body, kernelEnvironments: kernelEnvironments, on: db)
     } catch let error as WebAssignmentError {
-        throw MCPToolError.from(error, tool: tool)
+        throw MCPToolError.from(error)
     } catch let error as any AbortError {
-        throw MCPToolError.from(error, tool: tool)
+        throw MCPToolError.from(error)
     }
 }
 
@@ -112,7 +111,7 @@ func finalizeContentEdit(
     // with no session user, so the helper's `req.auth` fallback would throw
     // 401 inside its swallow-all catch and the re-validation would silently
     // never be enqueued (the assignment kept its stale validationStatus).
-    let submitterUserID = try? await context.requireEligibleSubject(tool: "validate").id
+    let submitterUserID = try? await context.requireEligibleSubject().id
     await scheduleValidationAfterSuiteEdit(
         req: context.request, assignment: assignment, submitterUserID: submitterUserID)
     return ContentEditFinalizeResult(assignmentClosed: closed, submissionsRequeued: requeued)

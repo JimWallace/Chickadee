@@ -93,15 +93,15 @@ extension ContentTool {
 /// by the dispatcher.
 enum MCPToolError: Error, Sendable, Equatable {
     case unknownTool(String)
-    case invalidArguments(tool: String, detail: String)
+    case invalidArguments(detail: String)
     /// The authenticated subject is not permitted to act on the targeted
     /// resource — e.g. the MCP account is not enrolled in the target course.
-    case notAuthorized(tool: String, detail: String)
+    case notAuthorized(detail: String)
     /// The tool's arguments were valid and authorized, but the operation
     /// failed while executing (e.g. a file copy or a downstream save). Surfaced
     /// to the model so it can retry or report rather than seeing an opaque
     /// protocol-level internal error.
-    case executionFailed(tool: String, detail: String)
+    case executionFailed(detail: String)
 }
 
 // MARK: - Type erasure
@@ -139,7 +139,7 @@ extension ContentTool {
                 do {
                     input = try arguments.decoded(as: Input.self)
                 } catch {
-                    throw MCPToolError.invalidArguments(tool: Self.name, detail: String(describing: error))
+                    throw MCPToolError.invalidArguments(detail: String(describing: error))
                 }
                 do {
                     let output = try await self.execute(input, context)
@@ -151,7 +151,7 @@ extension ContentTool {
                     // the rest returned an opaque -32603. A 5xx is a server
                     // fault, not a refusal: it stays opaque to the agent, and
                     // the dispatcher logs it.
-                    throw MCPToolError.from(error, tool: Self.name)
+                    throw MCPToolError.from(error)
                 }
             }
         )
@@ -161,19 +161,4 @@ extension ContentTool {
 // MARK: - Registry
 
 /// Name-keyed registry of content tools.
-struct ToolRegistry: Sendable {
-    private let toolsByName: [String: AnyContentTool]
-
-    init(_ tools: [AnyContentTool]) {
-        toolsByName = Dictionary(tools.map { ($0.name, $0) }, uniquingKeysWith: { existing, _ in existing })
-    }
-
-    /// All registered tools, sorted by name for stable `tools/list` output.
-    var all: [AnyContentTool] {
-        toolsByName.values.sorted { $0.name < $1.name }
-    }
-
-    func tool(named name: String) -> AnyContentTool? {
-        toolsByName[name]
-    }
-}
+typealias ToolRegistry = MCPToolRegistry<AnyContentTool>
