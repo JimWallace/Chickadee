@@ -573,15 +573,15 @@ struct AdminRoutes: RouteCollection {
             enrollments
             .map(\.course)
             .sorted(by: courseListPrecedes)
-            .compactMap { course -> AdminUserCourseRow? in
+            .compactMap { course -> AdminCourseRef? in
                 guard let id = course.id else { return nil }
-                return AdminUserCourseRow(
+                return AdminCourseRef(
                     id: id.uuidString, code: course.code, name: course.name, termLabel: course.term?.displayName)
             }
 
-        let availableRows = allCourses.compactMap { c -> AdminUserCourseRow? in
+        let availableRows = allCourses.compactMap { c -> AdminCourseRef? in
             guard let id = c.id, !enrolledIDs.contains(id) else { return nil }
-            return AdminUserCourseRow(id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName)
+            return AdminCourseRef(id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName)
         }
 
         return try await req.view.render(

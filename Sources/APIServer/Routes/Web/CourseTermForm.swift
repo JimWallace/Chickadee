@@ -6,13 +6,6 @@
 import Core
 import Foundation
 
-/// One `<option>` of the term select.
-struct CourseTermOption: Encodable {
-    let value: String
-    let label: String
-    let selected: Bool
-}
-
 /// What a course form posted for its term.
 enum CourseTermInput: Equatable {
     /// Neither field was posted (an older client, or a form without them).
@@ -52,20 +45,20 @@ enum CourseTermForm {
     /// the window is added so an older course keeps its own value.
     static func yearOptions(
         selected: Int?, now: Date = Date(), calendar: Calendar = Calendar(identifier: .gregorian)
-    ) -> [CourseTermOption] {
+    ) -> [SelectOption] {
         let current = calendar.component(.year, from: now)
         let marked = selected ?? current
         var years = Set((current - yearsBefore)...(current + yearsAfter))
         if AcademicTerm.yearRange.contains(marked) { years.insert(marked) }
         return years.sorted().map {
-            CourseTermOption(value: String($0), label: String($0), selected: $0 == marked)
+            SelectOption(value: String($0), label: String($0), selected: $0 == marked)
         }
     }
 
     /// The three seasons in calendar order, with `selected` marked.
-    static func options(selected: TermSeason?) -> [CourseTermOption] {
+    static func options(selected: TermSeason?) -> [SelectOption] {
         TermSeason.allCases.map {
-            CourseTermOption(value: $0.rawValue, label: $0.displayName, selected: $0 == selected)
+            SelectOption(value: $0.rawValue, label: $0.displayName, selected: $0 == selected)
         }
     }
 }

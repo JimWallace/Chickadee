@@ -11,8 +11,8 @@ struct CourseFieldsContext: Encodable {
     let idPrefix: String
     let code: String
     let name: String
-    let yearOptions: [CourseTermOption]
-    let termOptions: [CourseTermOption]
+    let yearOptions: [SelectOption]
+    let termOptions: [SelectOption]
     /// True when no term is chosen yet: the term select opens on a disabled
     /// "Choose", so a form cannot post a season nobody picked.
     let asksForTerm: Bool

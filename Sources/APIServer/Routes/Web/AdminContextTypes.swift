@@ -324,7 +324,8 @@ struct UserRowsFragmentContext: Encodable {
     let users: [AdminUserRow]
 }
 
-struct AdminMCPCourseRef: Encodable {
+/// One course as the admin pages name it, in an enrolled or enrollable list.
+struct AdminCourseRef: Encodable {
     let id: String
     let code: String
     let name: String
@@ -341,11 +342,11 @@ struct AdminMCPAccountRow: Encodable {
     let createdAt: String
     /// Courses this account is enrolled in — the only courses its tokens may
     /// touch (admins excepted). Empty means the account can do nothing.
-    let enrolledCourses: [AdminMCPCourseRef]
+    let enrolledCourses: [AdminCourseRef]
     /// "CS135 · CS136" for the details line; empty when the account has none.
     let coursesText: String
     /// Courses the account is not yet enrolled in, for the enrol picker.
-    let enrollableCourses: [AdminMCPCourseRef]
+    let enrollableCourses: [AdminCourseRef]
 }
 
 struct AdminMCPContext: Encodable {
@@ -366,7 +367,7 @@ struct AdminMCPContext: Encodable {
     let showServiceAccounts: Bool
     let accounts: [AdminMCPAccountRow]
     /// All courses, for the per-account enrollment picker.
-    let allCourses: [AdminMCPCourseRef]
+    let allCourses: [AdminCourseRef]
     /// Browser-flow OAuth grants (all of them — admin view), with revoke.
     let grants: [AgentGrantRow]
     /// Set immediately after a mint so the page can show the token exactly once.
@@ -394,16 +395,8 @@ struct AdminUserDetailContext: Encodable {
     let displayName: String?
     let username: String
     let role: String
-    let enrolledCourses: [AdminUserCourseRow]
-    let availableCourses: [AdminUserCourseRow]
-}
-
-struct AdminUserCourseRow: Encodable {
-    let id: String
-    let code: String
-    let name: String
-    /// The offering's term, so two offerings of one code can be told apart.
-    let termLabel: String?
+    let enrolledCourses: [AdminCourseRef]
+    let availableCourses: [AdminCourseRef]
 }
 
 struct AdminCourseDetailContext: Encodable {
@@ -553,13 +546,6 @@ enum AuditCategoryTile {
     }
 }
 
-/// One selectable option in the action-filter dropdown.
-struct AdminAuditFilterOption: Encodable {
-    let value: String
-    let label: String
-    let selected: Bool
-}
-
 struct AdminAuditContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
@@ -567,7 +553,7 @@ struct AdminAuditContext: Encodable {
     /// The same rows under day headings, newest first.
     let days: [DayGroup<AdminAuditRow>]
     /// Available action filters (grouped label shown to the admin).
-    let actionOptions: [AdminAuditFilterOption]
+    let actionOptions: [SelectOption]
     /// The actor substring currently filtered on (echoed back into the input).
     let filterActor: String
     /// True when any filter is active — drives the "Clear filters" affordance.

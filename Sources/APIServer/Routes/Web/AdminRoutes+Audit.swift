@@ -81,7 +81,7 @@ extension AdminRoutes {
         let actionOptions =
             AuditAction.allCases
             .map { action in
-                AdminAuditFilterOption(
+                SelectOption(
                     value: action.rawValue,
                     label: "\(action.category.rawValue) — \(action.label)",
                     selected: action.rawValue == filterAction)
