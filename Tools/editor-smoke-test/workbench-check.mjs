@@ -662,7 +662,38 @@ async function main() {
           "a write replaced the editor document — the author's kernel restarted and " +
           "their unsaved cells are gone.");
       }
-      console.log("suite-section write: page and kernel both intact, section landed");
+
+      // The swapped half must be WIRED, not only rendered (#1957). The new
+      // markup has no running code of its own: a parsed script does not run,
+      // and the CSP blocks inline scripts. surface-swap.js calls
+      // ChickadeeEditPage.init() for it. Before that hook, the half looked
+      // right and nothing in it worked: the suite table had no rows and every
+      // button was dead. So make a second action in the new half. Open the
+      // rename form of the section that the write made. suite-table.js owns
+      // that toggle, and it binds it only when the half is wired.
+      const wired = await page.evaluate((name) => {
+        const block = Array.from(document.querySelectorAll(".section-block")).find(
+          (b) => (b.querySelector(".section-header strong")?.textContent || "").trim() === name);
+        if (!block) return { found: false };
+        const rows = block.querySelectorAll("tbody[data-section-id] tr").length;
+        const addTest = !!block.querySelector("details.add-test-details");
+        const toggle = block.querySelector(".js-section-edit-toggle");
+        if (toggle) toggle.click();
+        const edit = block.querySelector(".section-edit");
+        const opened = !!edit && edit.style.display !== "none";
+        const cancel = block.querySelector(".js-section-edit-cancel");
+        if (cancel) cancel.click();
+        return { found: true, rows, addTest, opened };
+      }, sectionName);
+      if (!wired.found || wired.rows === 0 || !wired.addTest || !wired.opened) {
+        return fail(
+          `the edit half re-rendered after the write but is not wired (#1957): ` +
+          `${JSON.stringify(wired)}. rows=0 means suite-table.js did not fill the ` +
+          `new tables; addTest=false means the "+ Add Test" button was not ` +
+          `upgraded; opened=false means the rename toggle is dead. ` +
+          `ChickadeeEditPage.init() did not run on the new half.`);
+      }
+      console.log("suite-section write: page and kernel both intact, section landed, half re-wired");
     }
 
     // 8. Optional: capture the page for human review.
