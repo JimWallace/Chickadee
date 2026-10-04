@@ -116,7 +116,7 @@ extension CourseAdminRoutes {
     }
 }
 
-struct InstructorNewTermContext: Encodable {
+private struct InstructorNewTermContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
     let hasActiveCourse: Bool

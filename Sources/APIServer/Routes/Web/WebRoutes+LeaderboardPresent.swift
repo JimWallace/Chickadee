@@ -120,7 +120,7 @@ struct PresentPlace: Encodable, Sendable {
     }
 }
 
-struct LeaderboardPresentContext: Encodable {
+private struct LeaderboardPresentContext: Encodable {
     let testSetupID: String
     let assignmentTitle: String
     let courseCode: String

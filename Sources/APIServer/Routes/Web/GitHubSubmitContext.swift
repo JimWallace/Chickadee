@@ -4,8 +4,41 @@
 // slice 3) and the steps that fill it: the repositories the linked account
 // owns, the branches of the chosen one, and that branch's head commit.
 
+import Fluent
 import Foundation
 import Vapor
+
+/// The attempt and deadline chips on the upload form and the GitHub submit
+/// page, so the two show the same facts.
+struct SubmitChips: Encodable {
+    /// Prior submissions plus one.
+    let attemptNumber: Int
+    let deadlineText: String?
+    let deadlineISO: String?
+
+    static func make(
+        setupID: String, assignment: APIAssignment?, user: APIUser, on db: Database
+    ) async throws -> SubmitChips {
+        // The deadline actually in force for this student: a personal extension
+        // outranks the class due date, which is what the chip must show.
+        let extensionDueAt: Date? =
+            if let assignment {
+                try await studentExtensionDueAt(for: assignment, user: user, on: db)
+            } else { nil }
+        let deadline = laterDeadline(baseline: assignment?.dueAt, extensionDueAt: extensionDueAt)
+        let priorAttempts: Int =
+            if let userID = user.id {
+                try await APISubmission.query(on: db)
+                    .filter(\.$testSetupID == setupID)
+                    .filter(\.$userID == userID)
+                    .count()
+            } else { 0 }
+        return SubmitChips(
+            attemptNumber: priorAttempts + 1,
+            deadlineText: deadline.map { waterlooDateTimeFormatter().string(from: $0) },
+            deadlineISO: deadline.map(iso8601String))
+    }
+}
 
 struct GitHubSubmitCommitView: Encodable, Equatable {
     let repositoryID: String

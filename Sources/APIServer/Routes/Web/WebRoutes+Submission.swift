@@ -125,38 +125,6 @@ func submissionRejectionMessage(manifest: TestProperties?) -> String {
     "That file type is not accepted. " + submissionAcceptHintText(manifest: manifest)
 }
 
-/// The attempt and deadline chips on the upload form and the GitHub submit
-/// page, so the two show the same facts.
-struct SubmitChips: Encodable {
-    /// Prior submissions plus one.
-    let attemptNumber: Int
-    let deadlineText: String?
-    let deadlineISO: String?
-
-    static func make(
-        setupID: String, assignment: APIAssignment?, user: APIUser, on db: Database
-    ) async throws -> SubmitChips {
-        // The deadline actually in force for this student: a personal extension
-        // outranks the class due date, which is what the chip must show.
-        let extensionDueAt: Date? =
-            if let assignment {
-                try await studentExtensionDueAt(for: assignment, user: user, on: db)
-            } else { nil }
-        let deadline = laterDeadline(baseline: assignment?.dueAt, extensionDueAt: extensionDueAt)
-        let priorAttempts: Int =
-            if let userID = user.id {
-                try await APISubmission.query(on: db)
-                    .filter(\.$testSetupID == setupID)
-                    .filter(\.$userID == userID)
-                    .count()
-            } else { 0 }
-        return SubmitChips(
-            attemptNumber: priorAttempts + 1,
-            deadlineText: deadline.map { waterlooDateTimeFormatter().string(from: $0) },
-            deadlineISO: deadline.map(iso8601String))
-    }
-}
-
 /// Saves a student submission whose file is already stored, then runs what
 /// every student submission runs next. Shared by the upload form and a GitHub
 /// submission (docs/github-submissions.md slice 3), so the two cannot drift.
