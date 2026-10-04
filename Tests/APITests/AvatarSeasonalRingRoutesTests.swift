@@ -37,15 +37,6 @@ import VaporTesting
 
     // MARK: - The page and the post
 
-    private func page(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        return html
-    }
-
     private func post(
         _ fields: [String: String], cookie: String, on app: Application
     ) async throws
@@ -69,7 +60,7 @@ import VaporTesting
         try await withAssignmentRoutesApp { app in
             let cookie = try await loginUser(
                 username: "season_page", password: "pw", role: "user", on: app)
-            let html = try await page("/account", cookie: cookie, on: app)
+            let html = try await getHTML("/account", cookie: cookie, on: app)
             let open = Self.inSeason
             #expect(html.contains("value=\"\(open.rawValue)\""))
             #expect(html.contains(##"data-av-season="\##(try #require(open.season).rawValue)""##))
@@ -88,7 +79,7 @@ import VaporTesting
         try await withAssignmentRoutesApp { app in
             let cookie = try await loginUser(
                 username: "season_post", password: "pw", role: "user", on: app)
-            _ = try await page("/account", cookie: cookie, on: app)
+            _ = try await getHTML("/account", cookie: cookie, on: app)
 
             let other = try #require(Self.outOfSeason.first)
             #expect(
@@ -111,7 +102,7 @@ import VaporTesting
         try await withAssignmentRoutesApp { app in
             let cookie = try await loginUser(
                 username: "season_worn", password: "pw", role: "user", on: app)
-            _ = try await page("/account", cookie: cookie, on: app)
+            _ = try await getHTML("/account", cookie: cookie, on: app)
             let worn = try #require(Self.outOfSeason.first)
             let user = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "season_worn").first())
@@ -120,7 +111,7 @@ import VaporTesting
             user.avatarSpecJSON = AvatarStore.encode(spec)
             try await user.save(on: app.db)
 
-            let html = try await page("/account", cookie: cookie, on: app)
+            let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.contains(##"value="\##(worn.rawValue)" data-av-token="--avatar-border-none" checked>"##))
             #expect(!html.contains(##"value="\##(worn.rawValue)" data-av-token="--avatar-border-none" disabled"##))
 

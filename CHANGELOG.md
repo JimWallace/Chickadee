@@ -9,6 +9,151 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.400] - 2026-10-04
+
+### Changed
+
+- **The five native-grading suites share one harness (#1954).**
+  `Tests/WorkerTests/Support/NativeGradingHarness.swift` builds the grading
+  workspace and runs the suites. It replaces five copies of `makeWorkspace`,
+  `runSuites` and `item`. Each copy differed only in the language, the
+  submission's file name and the time limit, so those are now the harness's
+  three fields. Every language now writes its runtime through
+  `runtimeHelperFiles(for:)`, as Java and Racket already did.
+
+### Changed
+
+- **The admin GitHub page has its own disclosure, and a muted field note has one spelling.** The "Owner and permissions" disclosure now has a summary with an `.accordion-caret`, which turns while the disclosure is open. It no longer uses `.test-output-details`, which is the disclosure for test results. Every `field-note text-muted` is now `field-note field-note--muted`, the spelling that the component vocabulary names (#1977).
+
+### Changed
+
+- **One composite action holds the CI setup steps (#1985).** `.github/actions/swift-test-setup` gives the toolchain cache key, restores or saves the shared `.build` cache, and probes for the test dependencies. The four test lanes, `build`, `repeat-test`, `test-coverage`, `docker-build` and `browser-probe-setup` use it. Before, each job had its own copy. The cache keys keep the same values, so the existing caches stay valid. The nightly coverage probe now checks every grading interpreter. Before, it checked five tools and no interpreter. On a stale image, the install now fails after three apt-get attempts, and it fails when a command is still missing after the install. `LanguageConformanceMatrixTests` now reads the interpreter table of the action, and fails when a workflow probes for an interpreter itself. `.node-version` (24.21.0, the version of the CI image) is now the one Node pin for each `setup-node` step. Before, the pins were 22, 24 and 24.21.0.
+
+### Changed
+
+- **The two MCP surfaces share one tool registry type and one principal type.** `ToolRegistry` and `DiagnosticToolRegistry` were two structs that differed only in their element type, and `MCPPrincipal` and `AdminMCPPrincipal` differed only in their scope type. They are now `MCPToolRegistry<Tool>` and `MCPSurfacePrincipal<Scope>`, and the old names stay as typealiases. Behaviour does not change. The bearer middlewares follow in a second change (#1944).
+
+### Changed
+
+- **Three retention sweeps moved off the request path onto leased sweeps.** The diagnostics retention prune ran inside a student's submission, a runner's poll and a runner's result report, and once from a boot task. Expired worker nonces were deleted inside the HMAC middleware, and stale login attempts inside the rate-limit middleware. Each was gated by a per-process throttle with no lease, so every server instance pruned. They now run as `PeriodicSweepMonitor`s: diagnostics at `pruneIntervalHours` (0 still turns it off), nonces every minute, login attempts every ten minutes. The two throttle actors and `ObservabilityLifecycleHandler` are gone (#1924).
+
+### Fixed
+
+- **A runner log value that JSON cannot hold no longer erases the line.** `writeStructuredRunnerLog` fell back to only the event name and timestamp when one field was a `Date`, a `URL`, an enum or `NaN`. Such a value is now written as its description, and the other fields stay. No call passes such a value today; this removes the trap (#1932).
+
+
+## [0.5.399] - 2026-10-04
+
+### Changed
+
+- **Each interpreter trait is declared once per test target (#1946).**
+  Seventeen suites declared their own `requiresLua`, `requiresPython3`,
+  `requiresGpp`, `requiresJavac`, `requiresOctave`, `requiresRacket` or
+  `requiresRscript`, and most of them probed through the uncached
+  `toolIsAvailable`. The traits are now in `HostConditionTraits.swift`
+  (APITests) and `WorkerTestSkip.swift` (WorkerTests), on
+  `cachedToolIsAvailable`, and 117 tests use them. The probe cache is now
+  keyed by the whole command, because `lua` answers `-v` and fails
+  `--version`. The pandas and matplotlib traits stay local.
+
+### Changed
+
+- **Four silent test skips are now traits (#1947).** Four tests returned
+  early, with no report, when `python3` or the vendored editor was absent.
+  They now carry `.requiresPython3` or a trait for the vendored editor, so a
+  skip shows in the report and fails CI. A guard in `LuaStdoutCaptureTests`
+  that the trait already made unreachable is gone. The python3 guard in the
+  pattern-family syntax helper stays, and its comment now says why a trait
+  cannot replace it.
+
+### Changed
+
+- **Page tests share one `getHTML` and one `loginAsAdmin` helper (#1951).**
+  Thirty APITests suites carried a private copy of "GET a page and return
+  its HTML", of an admin sign-in, or of both. The new
+  `Tests/APITests/TestPageHelpers.swift` holds one of each, and the private
+  copies are gone. `getHTML` expects `200 OK` unless told otherwise and
+  records a failure at the caller's line.
+
+### Changed
+
+- **One helper signs in a per-course test instructor (#1952).**
+  `loginAsCourseInstructor(username:courseCode:on:)` signs in an instructor
+  and enrols them as course staff through `enrollAsTestInstructor`.
+  `arLoginAsInstructor` no longer repeats that upsert line for line, and five
+  suites lose a private copy of the same two steps.
+
+### Changed
+
+- **Three hand-built test apps now get the standard test wiring (#1953).**
+  `SSOAuthFlowTests` and `AuthModeGatingTests` now build on `makeTestApp`,
+  and `NotebookWebRoutesTests` adds the same registrations itself: the
+  version-capture middleware, the data-export drain and the kernel
+  inventory. All three now seed `appConfig`, so they do not read the
+  configuration of the machine that runs them. The two OIDC callback tests
+  read the callback path through `OIDCEnvConfig.fromEnvironment()`.
+
+### Changed
+
+- **Five suites that start subprocesses now have a time limit (#1955).**
+  `SectionInputsTests`, `AuditTockRegressionTests`, `SupportImportTests`,
+  `RunnerProfileDetectorTests` and `RunnerExecProbeTests` start `python3` or
+  an interpreter probe. They now carry `.timeLimit(.minutes(2))`, so a stall
+  fails a named test and does not hold the CI job until its kill.
+
+### Changed
+
+- **The service, helper, model, OIDC, LTI and GitHub layers throw typed errors, not `Abort`.** Twenty-three sites below `Routes/` threw `Abort` beside the house error enums. They now throw `AppError` (with a new `unauthenticated` case), a new `OIDCConfigurationError` for the startup checks, `LTIServiceError` for a failed platform key set fetch, and `GitHubTokenRevokeRefused` for a refused token revocation. HTTP statuses do not change. Some messages are now sentences where they were bare statuses: for example, a course role check says "You do not have permission to do this in this course." (#1930).
+
+
+## [0.5.398] - 2026-10-04
+
+### Changed
+
+- **The APITests helper file is now eight files, one job each (#1945).**
+  `Tests/APITests/TestHelpers.swift` had 1,717 lines and six unrelated jobs.
+  The code moves without change to `TestDatabase.swift`,
+  `MigratedSQLiteTemplate.swift`, `MigratedPostgresSchemaPool.swift`,
+  `SchemaMutatingSuites.swift`, `TestApp.swift`, `TestRequests.swift`,
+  `TestLogin.swift` and `WorkerHMACTestHeaders.swift`. Two functions lose
+  `private` so that the next file can call them. The comment on
+  `SchemaMutatingSuites` now names all five suites. No test body changes.
+
+### Changed
+
+- **A worker heartbeat test now waits for the daemon with a limit (#1949).**
+  `workerDaemonHeartbeatFailuresDoNotStopPolling` cancelled the daemon and
+  then waited for it with no limit. It now calls `awaitCancelledDaemon`, which
+  waits 30 seconds at most and records an issue when the daemon does not stop.
+
+### Changed
+
+- **Seventeen pure-function tests no longer build a Vapor app (#1950).** They
+  were in class suites that build an app in `init`, so each of them paid for
+  an app that it did not use. They now sit in struct suites in the same
+  files, with no `withApp` wrapper. No assertion changes.
+
+### Changed
+
+- **An enrollment render assertion can fail again (#2036).**
+  `bulkEnrollCSV_enrollsMatchedUsers` checked the CSV result page with a
+  disjunction that held `html.contains("2")`, which almost any page
+  satisfies. It now reads each count from its own row of the page: 2
+  enrolled, 1 pre-enrolled, 0 already enrolled and 0 rejected.
+
+
+## [0.5.397] - 2026-10-04
+
+### Changed
+
+- **CLAUDE.md agrees with the code again.** The Data Models section copied six types and a manifest example that no longer matched the source (`TestOutcomeStatus` is `TestStatus`, there is no `student` tier, and the example would not decode). It now names where each type lives and keeps only the two manifest rules the code does not state. The pattern-family paragraph says ten kinds ship in the assignment's language, not two Python kinds, and two Reference Material bullets no longer call C++ a non-language or the Racket defects open (#1988).
+- **`@unchecked Sendable` is now refused outside a Fluent model, with or without a comment.** The guard used to accept any site that carried a comment, and no site in `Sources/` needs that permission any more. A new guard fixture proves a commented site now fails (#1927).
+
+### Changed
+
+- **The LTI tool key loads through `SingleFlightCache`.** `LTIToolKeyProvider` was a second copy of `SingleFlightCache` with an infinite TTL. It is now `LTIToolKeyCache`, a typealias with an infinite TTL, the same pattern as `MetricsCardCache`. `SingleFlightCache` moves from `Diagnostics/` to `Helpers/`, because it is no longer only a diagnostics type. Behaviour does not change (#1928).
+
+
 ## [0.5.396] - 2026-10-04
 
 ### Changed

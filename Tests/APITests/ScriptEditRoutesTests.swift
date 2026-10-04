@@ -26,17 +26,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsInstructor() async throws -> String {
-        let cookie = try await loginUser(
-            username: "testinstructor_scripts", password: "testpassword",
-            role: "instructor", on: app)
-        // Instructor authority is per-course (Phase 5) — enrol in the script
-        // tests' course (SCR101) so the /instructor gate admits them.
-        try await enrollAsTestInstructor(
-            username: "testinstructor_scripts", on: app, courseCode: "SCR101")
-        return cookie
-    }
-
     private func loginAsStudent() async throws -> String {
         return try await loginUser(
             username: "teststudent_scripts", password: "testpassword",
@@ -105,7 +94,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             try await insertSetup(
                 id: "sc_get1",
                 withEntries: [
@@ -137,7 +127,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             try await insertSetup(id: "sc_get2", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_get2", title: "GetMissing")
             let id = a.publicID
@@ -182,7 +173,8 @@ import VaporTesting
 
     @Test func getScriptReturns404ForUnknownAssignment() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
 
             try await app.asyncTest(
                 .GET, "/instructor/zzzzzzzzz/scripts/test_a.py",
@@ -207,7 +199,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(id: "sc_put1", withEntries: [("test_bar.py", "# old\n")])
             let a = try await insertAssignment(testSetupID: "sc_put1", title: "PutTest")
@@ -240,7 +233,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "sc_put2", withEntries: [("test_bar.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_put2", title: "PutMissing")
@@ -298,7 +292,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(id: "sc_post1", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_post1", title: "PostTest")
@@ -337,7 +332,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             _ = try await insertSetup(id: "sc_post2", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_post2", title: "PostManifest")
@@ -384,7 +380,8 @@ import VaporTesting
     ])
     func postScriptWithoutATierLetsTheServerClassifyIt(filename: String, isTest: Bool) async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setupID = "sc_cls_" + filename.replacingOccurrences(of: ".", with: "_")
             _ = try await insertSetup(id: setupID, withEntries: [])
@@ -424,7 +421,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "sc_post3", withEntries: [("test_existing.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_post3", title: "PostDupe")
@@ -453,7 +451,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "sc_post4", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_post4", title: "PostBadName")
@@ -511,7 +510,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(
                 id: "sc_del1",
@@ -549,7 +549,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             // Include a second file so the zip is not empty after the delete.
             try await insertSetup(
@@ -595,7 +596,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(
                 id: "sc_del3",
@@ -638,7 +640,8 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             try await insertSetup(id: "sc_del4", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_del4", title: "DeleteMissing")
@@ -704,7 +707,8 @@ import VaporTesting
                 throw IssueRecorded("zip not available")
             }
             try requireKernelInventory()
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(id: "sc_imp1", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_imp1", title: "ImportReject")
@@ -739,7 +743,8 @@ import VaporTesting
                 throw IssueRecorded("zip not available")
             }
             try requireKernelInventory()
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(id: "sc_imp2", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_imp2", title: "ImportAccept")
@@ -774,7 +779,8 @@ import VaporTesting
                 throw IssueRecorded("zip not available")
             }
             try requireKernelInventory()
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(
                 id: "sc_imp3", withEntries: [("genome_gen.py", "def make():\n    return 1\n")])
@@ -813,7 +819,8 @@ import VaporTesting
                 throw IssueRecorded("zip not available")
             }
             try requireKernelInventory(.r)
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(id: "sc_rimp1", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_rimp1", title: "RImportReject")
@@ -849,7 +856,8 @@ import VaporTesting
                 throw IssueRecorded("zip not available")
             }
             try requireKernelInventory(.r)
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginAsCourseInstructor(
+                username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let setup = try await insertSetup(id: "sc_rimp2", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_rimp2", title: "RImportAccept")

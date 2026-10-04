@@ -21,15 +21,9 @@ import Testing
 
 @Suite(.timeLimit(.minutes(5))) struct JavaRendererExecutionTests {
 
-    static let requiresJavac: ConditionTrait = .enabled("requires javac on PATH") { await Self.javacAvailable }
-
-    static var javacAvailable: Bool {
-        get async { await toolIsAvailable("javac", arguments: ["--version"]) }
-    }
-
     /// The did-not-skip proof for the APITests job.
     @Test(.ciOnly) func javacIsPresentInCI() async {
-        let isAvailable = await Self.javacAvailable
+        let isAvailable = await cachedToolIsAvailable("javac")
         #expect(
             isAvailable,
             "javac absent: every Java renderer execution test skipped silently")
@@ -95,7 +89,7 @@ import Testing
 
     // MARK: - boundaryEquality
 
-    @Test(Self.requiresJavac) func boundaryEqualityPassesAndFails() async throws {
+    @Test(.requiresJavac) func boundaryEqualityPassesAndFails() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
 
         let good = try await Self.execute(
@@ -115,7 +109,7 @@ import Testing
     /// An authored `6` is an `Integer`; a student returning `long` boxes to
     /// `Long`, and `Integer.valueOf(6).equals(Long.valueOf(6L))` is FALSE. A
     /// runtime that trusted `equals` would mark this correct submission wrong.
-    @Test(Self.requiresJavac) func aWiderReturnTypeStillMatchesAnAuthoredInteger() async throws {
+    @Test(.requiresJavac) func aWiderReturnTypeStillMatchesAnAuthoredInteger() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
         let result = try await Self.execute(
             script: script, submission: Self.solution("static long f(int x) { return x * 2L; }"))
@@ -133,7 +127,7 @@ import Testing
     /// calling `System.exit(0)` in their own code exits the JVM with status 0;
     /// without the sentinel the wrapper checks for, the case — and every case in
     /// the assignment — reads as a PASS.
-    @Test(Self.requiresJavac) func aSubmissionCallingSystemExitIsAnErrorNotAPass() async throws {
+    @Test(.requiresJavac) func aSubmissionCallingSystemExitIsAnErrorNotAPass() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
         let result = try await Self.execute(
             script: script,
@@ -149,7 +143,7 @@ import Testing
 
     // MARK: - A submission that does not compile
 
-    @Test(Self.requiresJavac) func aNonCompilingSubmissionIsAnError() async throws {
+    @Test(.requiresJavac) func aNonCompilingSubmissionIsAnError() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(6)))
         let result = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return \"oops\"; }"))
@@ -159,7 +153,7 @@ import Testing
 
     // MARK: - approximateEquality
 
-    @Test(Self.requiresJavac) func approximateEqualityHonoursTolerance() async throws {
+    @Test(.requiresJavac) func approximateEqualityHonoursTolerance() async throws {
         let script = Self.render(Self.family(.approximateEquality, expected: .double(1.0)))
         let good = try await Self.execute(
             script: script,
@@ -173,7 +167,7 @@ import Testing
 
     // MARK: - unorderedEquality
 
-    @Test(Self.requiresJavac) func unorderedEqualityIgnoresOrder() async throws {
+    @Test(.requiresJavac) func unorderedEqualityIgnoresOrder() async throws {
         let script = Self.render(
             Self.family(.unorderedEquality, expected: .array([.int(1), .int(2), .int(3)])))
         let good = try await Self.execute(
@@ -192,7 +186,7 @@ import Testing
 
     // MARK: - returnTypeCheck
 
-    @Test(Self.requiresJavac) func returnTypeCheckMatchesNeutralNames() async throws {
+    @Test(.requiresJavac) func returnTypeCheckMatchesNeutralNames() async throws {
         let script = Self.render(Self.family(.returnTypeCheck, expected: .string("str")))
         let good = try await Self.execute(
             script: script, submission: Self.solution("static String f(int x) { return \"ok\"; }"))
@@ -206,7 +200,7 @@ import Testing
 
     // MARK: - exceptionExpected
 
-    @Test(Self.requiresJavac) func exceptionExpectedMatchesOnTypeAndMessage() async throws {
+    @Test(.requiresJavac) func exceptionExpectedMatchesOnTypeAndMessage() async throws {
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string("IllegalArgumentException")))
         let good = try await Self.execute(
@@ -231,7 +225,7 @@ import Testing
     /// static context" — so the one test whose job is to explain the problem
     /// said everything was fine (#1349). Forgetting `static` is the most common
     /// Java intro mistake.
-    @Test(Self.requiresJavac) func theExistenceGuardRejectsANonStaticMethod() async throws {
+    @Test(.requiresJavac) func theExistenceGuardRejectsANonStaticMethod() async throws {
         let script = renderJavaExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(6)), specHash: "h")
         let nonStatic = try await Self.execute(
@@ -257,7 +251,7 @@ import Testing
     /// A successful compile's warnings must not ride into a PASSING test's
     /// `longResult` (#1349). Raw types produce javac's "unchecked or unsafe
     /// operations" note, which is the everyday way a student trips this.
-    @Test(Self.requiresJavac) func compilerWarningsDoNotReachAPassingResult() async throws {
+    @Test(.requiresJavac) func compilerWarningsDoNotReachAPassingResult() async throws {
         let script = Self.render(Self.family(.boundaryEquality, expected: .int(1)))
         let good = try await Self.execute(
             script: script,
@@ -277,7 +271,7 @@ import Testing
     /// emitted an EXPRESSION lambda, and `ck.Thunk.run()` returns `Object`, so
     /// javac refused it with "void cannot be converted to Object" and every
     /// case in the family reported `error` (#1346).
-    @Test(Self.requiresJavac) func exceptionExpectedAcceptsAVoidTarget() async throws {
+    @Test(.requiresJavac) func exceptionExpectedAcceptsAVoidTarget() async throws {
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string("IllegalArgumentException")))
         let good = try await Self.execute(
@@ -294,7 +288,7 @@ import Testing
     /// was an illegal escape, erroring the whole family (#1346). Round-trips
     /// through the match, so it proves the escaping is correct and not merely
     /// compilable.
-    @Test(Self.requiresJavac) func anExpectedStringWithQuotesAndBackslashesStillCompiles() async throws {
+    @Test(.requiresJavac) func anExpectedStringWithQuotesAndBackslashesStillCompiles() async throws {
         let script = Self.render(
             Self.family(.exceptionExpected, expected: .string(#"must be "positive" (C:\in)"#)))
         let good = try await Self.execute(
@@ -310,7 +304,7 @@ import Testing
 
     // MARK: - performanceThreshold
 
-    @Test(Self.requiresJavac) func performanceThresholdTimesTheCall() async throws {
+    @Test(.requiresJavac) func performanceThresholdTimesTheCall() async throws {
         let script = Self.render(Self.family(.performanceThreshold, expected: .int(5000)))
         let good = try await Self.execute(
             script: script, submission: Self.solution("static int f(int x) { return x; }"))
@@ -327,7 +321,7 @@ import Testing
 
     // MARK: - stdoutEquality
 
-    @Test(Self.requiresJavac) func stdoutEqualityComparesPrintedText() async throws {
+    @Test(.requiresJavac) func stdoutEqualityComparesPrintedText() async throws {
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hello")))
         let good = try await Self.execute(
             script: script,
@@ -349,7 +343,7 @@ import Testing
     /// found no sentinel, and an ordinary exception was reported as exit 2
     /// "Does the submission call System.exit?" (#1344). The exit code is the
     /// regression: it must be 1 (a graded fail), not 2.
-    @Test(Self.requiresJavac) func stdoutEqualityStillReportsWhenTheSubmissionThrows() async throws {
+    @Test(.requiresJavac) func stdoutEqualityStillReportsWhenTheSubmissionThrows() async throws {
         let script = Self.render(Self.family(.stdoutEquality, expected: .string("hello")))
         let thrown = try await Self.execute(
             script: script,
@@ -368,7 +362,7 @@ import Testing
 
     // MARK: - variableEquality
 
-    @Test(Self.requiresJavac) func variableEqualityReadsAStaticField() async throws {
+    @Test(.requiresJavac) func variableEqualityReadsAStaticField() async throws {
         let family = Self.family(
             .variableEquality, function: "Solution.LIMIT", expected: .int(42))
         let script = Self.render(family)
@@ -383,7 +377,7 @@ import Testing
 
     // MARK: - differential
 
-    @Test(Self.requiresJavac) func differentialComparesAgainstTheReference() async throws {
+    @Test(.requiresJavac) func differentialComparesAgainstTheReference() async throws {
         let family = Self.family(
             .differential, expected: .null,
             // `ck_ref_Solution_f`, not `ck_ref_Solution.f`: the qualified target
@@ -406,7 +400,7 @@ import Testing
     /// test — the leg the runbook warns is usually proved only in one
     /// direction. The file here is the real `renderInputsFile` output, not a
     /// fixture.
-    @Test(Self.requiresJavac) func aPerStudentInputReachesTheGeneratedTest() async throws {
+    @Test(.requiresJavac) func aPerStudentInputReachesTheGeneratedTest() async throws {
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .boundaryEquality,
             functionName: "Solution.f", paramNames: ["x"],
@@ -435,7 +429,7 @@ import Testing
 
     // MARK: - The existence guard
 
-    @Test(Self.requiresJavac) func theExistenceGuardFailsOnAMissingMethod() async throws {
+    @Test(.requiresJavac) func theExistenceGuardFailsOnAMissingMethod() async throws {
         let script = renderJavaExistenceGuard(
             family: Self.family(.boundaryEquality, expected: .int(6)), specHash: "h")
 
@@ -453,7 +447,7 @@ import Testing
 
     /// The submission runs in source-file mode with the case's text on its
     /// stdin; the checker class grades what it printed.
-    @Test(Self.requiresJavac) func programIOPassesAndFails() async throws {
+    @Test(.requiresJavac) func programIOPassesAndFails() async throws {
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
         let good = try await Self.execute(
@@ -480,7 +474,7 @@ import Testing
     }
 
     /// Regex anchors are line anchors, matched against the normalized output.
-    @Test(Self.requiresJavac) func programIORegexMatchesALineOfTheOutput() async throws {
+    @Test(.requiresJavac) func programIORegexMatchesALineOfTheOutput() async throws {
         let family = PatternFamily(
             id: "fam", name: "Family", kind: .programIO, functionName: "", paramNames: ["stdin"],
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil),
@@ -497,7 +491,7 @@ import Testing
     /// `System.exit` from a whole program is the program ending, not the
     /// test: a non-zero status is a graded failure, a zero one is graded on
     /// the output.
-    @Test(Self.requiresJavac) func programIOSystemExitIsGradedOnTheOutput() async throws {
+    @Test(.requiresJavac) func programIOSystemExitIsGradedOnTheOutput() async throws {
         let script = Self.render(
             Self.family(.programIO, expected: .string("7"), args: [.string("3\n4\n")]))
         let good = try await Self.execute(

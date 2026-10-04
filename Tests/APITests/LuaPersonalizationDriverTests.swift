@@ -29,12 +29,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaPersonalizationDriverTests {
 
-    static let requiresLua: ConditionTrait = .enabled("requires lua on PATH") { await Self.luaAvailable }
-
-    static var luaAvailable: Bool {
-        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
-    }
-
     /// Runs `source` as a Lua script in a fresh directory, returning
     /// (exitCode, stdout, stderr). `extraFiles` are written beside it.
     static func runLua(
@@ -71,7 +65,7 @@ import Testing
             encoding: .utf8)
     }
 
-    @Test(Self.requiresLua) func theDriverEvaluatesExpressionsAndEmitsLuaLiterals() async throws {
+    @Test(.requiresLua) func theDriverEvaluatesExpressionsAndEmitsLuaLiterals() async throws {
         let source = PersonalizationEvaluator.renderLuaDriverScript(
             staticVariables: [FamilyVariable(name: "base", value: .int(10))],
             expressions: [
@@ -103,7 +97,7 @@ import Testing
     /// The emitted literals must be *parseable Lua*, not merely plausible. This
     /// is the property that makes the driver's output safe to write verbatim
     /// into the inputs file.
-    @Test(Self.requiresLua) func everyEmittedValueParsesBackAsLua() async throws {
+    @Test(.requiresLua) func everyEmittedValueParsesBackAsLua() async throws {
         let source = PersonalizationEvaluator.renderLuaDriverScript(
             staticVariables: [],
             expressions: [
@@ -129,7 +123,7 @@ import Testing
 
     /// The done-test item that has no other guard: one seed, two
     /// implementations. Both are run here on the same env var and compared.
-    @Test(Self.requiresLua) func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
+    @Test(.requiresLua) func theDriverSeedEqualsTheGradingRuntimeSeed() async throws {
         // A realistic 64-hex-char assignment seed, plus edge cases: empty (no
         // seed set) and a short value.
         for seed in [String(repeating: "9f3c", count: 16), "", "ff", "0"] {
@@ -167,7 +161,7 @@ import Testing
     /// The seed is also supposed to match R's, so a student's seed is one number
     /// whichever non-Python language the assignment is in. Both fold the same
     /// hex with Horner's method modulo 2^31-1.
-    @Test(Self.requiresLua) func theLuaSeedMatchesTheDocumentedHornerFold() async throws {
+    @Test(.requiresLua) func theLuaSeedMatchesTheDocumentedHornerFold() async throws {
         let seed = "abc123"
         let source = """
             \(LuaPersonalizationRuntime.chickadeeSeedLuaSource)

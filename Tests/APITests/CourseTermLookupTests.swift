@@ -109,15 +109,6 @@ import VaporTesting
         }
     }
 
-    // MARK: - URL key
-
-    @Test func urlKeyIsTheCodeAloneWithoutATerm() async throws {
-        try await withApp(app) { _ in
-            #expect(APICourse(code: "CS135", name: "").urlKey == "CS135")
-            #expect(APICourse(code: "CS135", name: "", term: fall26).urlKey == "CS135-F26")
-        }
-    }
-
     // MARK: - findActiveCourse(byKey:viewer:on:)
 
     @Test func aKeyNamesItsTerm() async throws {
@@ -294,5 +285,16 @@ import VaporTesting
             #expect(output.courses.map(\.key) == ["CS248-F26", "CS249"])
             #expect(output.courses.map(\.term) == ["Fall 2026", nil])
         }
+    }
+}
+
+/// `APICourse.urlKey` reads only the course's own fields, so this test
+/// needs no app.
+@Suite struct CourseURLKeyTests {
+    private let fall26 = AcademicTerm(year: 2026, season: .fall)
+
+    @Test func urlKeyIsTheCodeAloneWithoutATerm() {
+        #expect(APICourse(code: "CS135", name: "").urlKey == "CS135")
+        #expect(APICourse(code: "CS135", name: "", term: fall26).urlKey == "CS135-F26")
     }
 }

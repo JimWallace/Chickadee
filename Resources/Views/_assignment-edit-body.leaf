@@ -253,14 +253,14 @@
             <a class="btn action-btn" href="#(activity.leaderboardURL)">Open leaderboard</a>
         </div>
     </div>
-    <p class="field-note text-muted">#(activity.summary)</p>
+    <p class="field-note field-note--muted">#(activity.summary)</p>
     <form method="post" action="/instructor/#(assignmentID)/activity" data-ck-inplace>
         #csrfFormField()
         <label class="form-label">
             <input type="checkbox" name="visible" #if(activity.leaderboardVisible):checked#endif>
             Show the leaderboard to students
         </label>
-        <p class="field-note text-muted">Students appear under their class handle and see rank and metric only. Staff always see the leaderboard, with names.</p>
+        <p class="field-note field-note--muted">Students appear under their class handle and see rank and metric only. Staff always see the leaderboard, with names.</p>
         <button class="btn action-btn" type="submit">Save leaderboard setting</button>
     </form>
     #if(activity.needsOpponentFile):
@@ -274,7 +274,7 @@
                 #endfor
             </select>
         </label>
-        <p class="field-note text-muted">#if(activity.opponentFileChosen):The worker copies this file into the directory <code>CHICKADEE_OPPONENT_DIR</code> names, where the match script reads it.#else:Nothing is staged for the match script until you upload the bot as a support file and select it here.#endif</p>
+        <p class="field-note field-note--muted">#if(activity.opponentFileChosen):The worker copies this file into the directory <code>CHICKADEE_OPPONENT_DIR</code> names, where the match script reads it.#else:Nothing is staged for the match script until you upload the bot as a support file and select it here.#endif</p>
         <button class="btn action-btn" type="submit">Save opponent file</button>
     </form>
     #endif
@@ -288,7 +288,7 @@
             Session closes (optional)
             <input class="form-input" type="datetime-local" name="closesAt" value="#(activity.windowClosesAtLocal)">
         </label>
-        <p class="field-note text-muted">Submissions outside these times are refused.</p>
+        <p class="field-note field-note--muted">Submissions outside these times are refused.</p>
         <button class="btn action-btn" type="submit">Save session window</button>
     </form>
 </section>
@@ -309,7 +309,7 @@
             <input type="checkbox" name="enabled" #if(secretRevealEnabled):checked#endif>
             Allow each student to spend their one reveal token to see this assignment&rsquo;s secret test results
         </label>
-        <p class="field-note text-muted">Spending is permanent for the student (staff can re-grant from the submissions page). Revealed secret tests show like public ones — names, output, and hints. Grades are unaffected.</p>
+        <p class="field-note field-note--muted">Spending is permanent for the student (staff can re-grant from the submissions page). Revealed secret tests show like public ones — names, output, and hints. Grades are unaffected.</p>
         <button class="btn action-btn" type="submit">Save reveal setting</button>
     </form>
     <form method="post" action="/instructor/#(assignmentID)/solution-visibility" data-ck-inplace>
@@ -318,7 +318,7 @@
             <input type="checkbox" name="afterDue" #if(solutionVisibilityAfterDue):checked#endif>
             Show the reference solution to each student once their deadline has passed
         </label>
-        <p class="field-note text-muted">Each student&rsquo;s reveal waits for their own deadline, including extensions and any slip days they could still claim.</p>
+        <p class="field-note field-note--muted">Each student&rsquo;s reveal waits for their own deadline, including extensions and any slip days they could still claim.</p>
         <button class="btn action-btn" type="submit">Save solution setting</button>
     </form>
     #if(githubSubmission):
@@ -328,12 +328,12 @@
             <input type="checkbox" name="enabled" #if(githubSubmission.enabled):checked#endif>
             Allow submission from a GitHub commit
         </label>
-        <p class="field-note text-muted">Students can also submit a commit from a GitHub repository they own, or from a <a href="/instructor/github">course repository</a>.</p>
+        <p class="field-note field-note--muted">Students can also submit a commit from a GitHub repository they own, or from a <a href="/instructor/github">course repository</a>.</p>
         <label class="form-label">
             <input type="checkbox" name="statusChecks" #if(githubSubmission.statusChecks):checked#endif>
             Post commit status
         </label>
-        <p class="field-note text-muted">Posts only the public-test count to a private repository, and needs GitHub submission on and a GitHub App with commit statuses.</p>
+        <p class="field-note field-note--muted">Posts only the public-test count to a private repository, and needs GitHub submission on and a GitHub App with commit statuses.</p>
         <button class="btn action-btn" type="submit">Save GitHub setting</button>
     </form>
     #endif
@@ -343,7 +343,7 @@
             Passing threshold (%)
             <input type="number" name="passingThresholdPercent" min="1" max="100" step="1" class="form-input input-compact" value="#(passingThresholdPercent)" placeholder="off">
         </label>
-        <p class="field-note text-muted">Students whose best grade reaches this appear as passing on the submissions page; grades are unaffected.</p>
+        <p class="field-note field-note--muted">Students whose best grade reaches this appear as passing on the submissions page; grades are unaffected.</p>
         <button class="btn action-btn" type="submit">Save passing threshold</button>
     </form>
 </section>
