@@ -7,7 +7,6 @@
 // graph, pattern families, notebook checks) in 800+ LOC.
 
 import Core
-import Vapor
 
 /// Validates the case key, uniqueness, and label fields of a pattern
 /// family case.  Shared by every `PatternKind`.
@@ -15,11 +14,7 @@ private func validatePatternCaseHeader(
     family: PatternFamily, c: PatternCase, seenCaseKeys: inout Set<String>
 ) throws {
     guard isValidIdentifierFragment(c.key) else {
-        throw Abort(
-            .unprocessableEntity,
-            reason:
-                "Pattern family '\(family.id)': case key '\(c.key)' must contain only letters, digits, and underscore"
-        )
+        throw AuthoringValidationError.patternCaseKeyInvalid(familyID: family.id, caseKey: c.key)
     }
     // A function-calling family auto-generates an existence guard whose
     // filename uses `patternExistenceGuardCaseKey`; forbid a real case from
@@ -27,21 +22,13 @@ private func validatePatternCaseHeader(
     if patternKindHandler(for: family.kind).requiresFunctionName,
         c.key == patternExistenceGuardCaseKey
     {
-        throw Abort(
-            .unprocessableEntity,
-            reason:
-                "Pattern family '\(family.id)': case key '\(c.key)' is reserved for the auto-generated existence guard; choose a different key."
-        )
+        throw AuthoringValidationError.patternCaseKeyReserved(familyID: family.id, caseKey: c.key)
     }
     guard seenCaseKeys.insert(c.key).inserted else {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Pattern family '\(family.id)': duplicate case key '\(c.key)'")
+        throw AuthoringValidationError.duplicatePatternCaseKey(familyID: family.id, caseKey: c.key)
     }
     guard !c.label.trimmingCharacters(in: .whitespaces).isEmpty else {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Pattern family '\(family.id)': case '\(c.key)' is missing a label")
+        throw AuthoringValidationError.patternCaseMissingLabel(familyID: family.id, caseKey: c.key)
     }
 }
 
@@ -74,23 +61,14 @@ private func validateFamilyVariablesAndArgRefs(
     // duplicating each other, the subset had nothing left to protect.
     for v in family.variables {
         guard isValidIdentifier(v.name, language: language) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid "
-                    + identifierKindName(language))
+            throw AuthoringValidationError.patternVariableNameInvalid(
+                familyID: family.id, name: v.name, identifierKind: identifierKindName(language))
         }
         guard seenVarNames.insert(v.name).inserted else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Pattern family '\(family.id)': duplicate variable name '\(v.name)'")
+            throw AuthoringValidationError.duplicatePatternVariableName(familyID: family.id, name: v.name)
         }
         if paramNameSet.contains(v.name) {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': variable name '\(v.name)' collides with a parameter name; the generated test would shadow the family variable."
-            )
+            throw AuthoringValidationError.patternVariableShadowsParameter(familyID: family.id, name: v.name)
         }
     }
     for c in family.cases {
@@ -108,38 +86,28 @@ private func validateFamilyVariablesAndArgRefs(
                 || globalVarNames.contains(ref)
             guard isPerStudent || isLiteralVar else {
                 let paramLabel = (i < family.paramNames.count ? family.paramNames[i] : "arg \(i + 1)")
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'"
-                )
+                throw AuthoringValidationError.patternCaseUnknownVariable(
+                    familyID: family.id, caseKey: c.key, argument: paramLabel, reference: ref)
             }
             // Per-student arg refs are bound by the generated case's
             // personalization preamble, which only the equality kinds emit.
             if isPerStudent, !kindSupportsPerStudentArgRefs(family.kind) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' references per-student input '$\(ref)', which is only supported in \(perStudentArgCapableKindsDescription) families for now."
-                )
+                throw AuthoringValidationError.patternCasePerStudentArgumentUnsupported(
+                    familyID: family.id, caseKey: c.key, reference: ref,
+                    capableKinds: perStudentArgCapableKindsDescription)
             }
         }
         // A per-student expected ref must name a declared `=` expression and
         // is (for now) supported only in the equality kinds.
         if let eref = c.expectedVarRef {
             guard perStudentExpressionNames.contains(eref) else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' expected reference '$\(eref)' must name a per-student input (a global or section `=` expression)."
-                )
+                throw AuthoringValidationError.patternCaseExpectedReferenceNotPerStudent(
+                    familyID: family.id, caseKey: c.key, reference: eref)
             }
             guard kindSupportsPerStudentExpected(family.kind) else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' uses a per-student expected, which is only supported in \(perStudentExpectedCapableKindsDescription) families for now."
-                )
+                throw AuthoringValidationError.patternCasePerStudentExpectedUnsupported(
+                    familyID: family.id, caseKey: c.key,
+                    capableKinds: perStudentExpectedCapableKindsDescription)
             }
         }
     }
@@ -205,14 +173,10 @@ private func validatePatternFamilyHeader(
     seenFamilyIDs: inout Set<String>
 ) throws {
     guard isValidIdentifierFragment(family.id) else {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Pattern family id '\(family.id)' must contain only letters, digits, and underscore")
+        throw AuthoringValidationError.patternFamilyIDInvalid(familyID: family.id)
     }
     guard seenFamilyIDs.insert(family.id).inserted else {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Duplicate pattern family id '\(family.id)'")
+        throw AuthoringValidationError.duplicatePatternFamilyID(familyID: family.id)
     }
     // `functionName` is ignored for kinds that inspect module-level state
     // rather than calling a function (`.variableEquality`), so skip the
@@ -221,27 +185,19 @@ private func validatePatternFamilyHeader(
     // identifier.
     if patternKindHandler(for: family.kind).requiresFunctionName {
         guard isValidFunctionTarget(family.functionName, language: language) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': functionName '\(family.functionName)' is not valid for a "
-                    + "\(language.displayName) assignment — expected \(functionTargetExpectation(for: language))"
-            )
+            throw AuthoringValidationError.patternFunctionNameInvalid(
+                familyID: family.id, functionName: family.functionName, language: language,
+                expectation: functionTargetExpectation(for: language))
         }
     }
     var seenParams: Set<String> = []
     for param in family.paramNames {
         guard isValidIdentifier(param, language: language) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': parameter name '\(param)' is not a valid "
-                    + identifierKindName(language))
+            throw AuthoringValidationError.patternParameterNameInvalid(
+                familyID: family.id, name: param, identifierKind: identifierKindName(language))
         }
         guard seenParams.insert(param).inserted else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Pattern family '\(family.id)': duplicate parameter name '\(param)'")
+            throw AuthoringValidationError.duplicatePatternParameterName(familyID: family.id, name: param)
         }
     }
 }
@@ -352,11 +308,8 @@ func validatePatternFamilies(
             patternFamilyAllGeneratedFilenames(family, language: $0)
         }
         for filename in candidates where rawScripts.contains(filename) {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' would generate '\(filename)', but a hand-written script with that name already exists. Rename the raw script or change the family id/case key."
-            )
+            throw AuthoringValidationError.patternFamilyCollidesWithHandWrittenFile(
+                familyID: family.id, filename: filename)
         }
     }
 
@@ -376,11 +329,8 @@ func validatePatternFamilies(
             })
         for filename in candidates.sorted() {
             if let other = claimedBy[filename], other != family.id {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern families '\(other)' and '\(family.id)' would both generate '\(filename)'. Change one family's id or case key — otherwise one family's cases would silently replace the other's."
-                )
+                throw AuthoringValidationError.patternFamiliesCollide(
+                    familyID: family.id, otherFamilyID: other, filename: filename)
             }
             claimedBy[filename] = family.id
         }
@@ -398,11 +348,8 @@ func validatePatternFamilies(
         let offending = reference.split(separator: "\n", omittingEmptySubsequences: false)
             .first { $0 == generatedSourceHeredocDelimiter }
         if offending != nil {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': the reference implementation contains a line reading exactly '\(generatedSourceHeredocDelimiter)', which would terminate the generated script's heredoc. Remove or indent that line."
-            )
+            throw AuthoringValidationError.patternSourceContainsHeredocDelimiter(
+                familyID: family.id, delimiter: generatedSourceHeredocDelimiter)
         }
     }
 }
