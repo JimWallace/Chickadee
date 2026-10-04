@@ -28,8 +28,8 @@ import Testing
             isAvailable,
             """
             octave is absent in the CI image, so every native Octave grading test skipped \
-            silently. Add it to .github/docker/ci-image/Dockerfile and the WorkerTests apt \
-            fallback in swift-tests.yml.
+            silently. Add it to .github/docker/ci-image/Dockerfile and to the interpreter \
+            table in .github/actions/swift-test-setup/action.yml.
             """)
     }
 
