@@ -156,7 +156,7 @@ jobs:
       - name: Every server child gets an explicit environment
         run: scripts/check-subprocess-environment.sh
 
-      - name: Check generated JS constants match their Swift declarations
+      - name: Check generated JS matches its Swift declarations and runtime helpers
         run: scripts/generate-js-constants.sh --check
 
       - name: Check runner wasm size budget

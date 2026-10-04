@@ -22,14 +22,20 @@
         remove: 'js-global-input-remove'
     }, {});
 
+    // The panels init() has wired, so that init() can run again (#1957).
+    // The workbench calls it after it swaps the edit half: the new half has a
+    // new panel to wire, and a panel wired before is not wired twice.
+    var wiredBlocks = new WeakSet();
+
     function init() {
         var block = document.getElementById('global-inputs-block');
-        if (!block) return;
+        if (!block || wiredBlocks.has(block)) return;
         var tbody = block.querySelector('tbody.js-global-inputs-body');
         var addBtn = document.getElementById('global-input-add');
         var status = document.getElementById('global-inputs-status');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
         if (!tbody || !assignmentID) return;
+        wiredBlocks.add(block);
 
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/global-variables';
 
@@ -111,7 +117,14 @@
         // Expose a global flush hook so the main "Save & Validate"
         // submit can await any pending PUTs before reloading the page.
         window.chickadeeFlushGlobalInputs = saver.flush;
+        // Only a save that is waiting: the workbench swap awaits this before
+        // it discards the panel (surface-swap.js), and must not write for
+        // nothing.
+        window.chickadeeFlushPendingGlobalInputs = saver.flushPending;
     }
+
+    // Called again by ChickadeeEditPage.init() after a workbench swap.
+    window.initGlobalInputsEditor = init;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
