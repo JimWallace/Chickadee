@@ -14,6 +14,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 
 // MARK: - Manifest mutation
 
@@ -29,17 +30,85 @@ import Foundation
 /// such a key, and the suite rebuild (`makeWorkerManifestJSON`) dropped it
 /// anyway.  A typed edit cannot misspell a key or drop a field it did not
 /// think to carry.
+///
+/// The save is conditional on the manifest the edit read (#2019). Two staff
+/// edits on one assignment at once, say `PUT /achievements` and `PUT /suite`,
+/// used to be last-writer-wins: the first edit was lost with no error. Now
+/// the second writer finds the manifest changed, re-reads it, and applies its
+/// edit again on top. `mutate` can run more than once, so it must only change
+/// `props`. After `manifestWriteAttempts` conflicts the edit is refused, so
+/// the author can retry.
 func mutateManifest(
     setup: APITestSetup,
     on db: Database,
     _ mutate: (inout TestProperties) throws -> Void
 ) async throws {
-    guard var props = setup.decodedManifest() else {
-        throw WebAssignmentError.internalFailure(reason: "Test setup manifest could not be decoded.")
+    for _ in 0..<manifestWriteAttempts {
+        guard var props = setup.decodedManifest() else {
+            throw WebAssignmentError.internalFailure(reason: "Test setup manifest could not be decoded.")
+        }
+        try mutate(&props)
+        let written = try encodeManifest(props)
+        if try await replaceManifest(of: setup, with: written, on: db) { return }
+        // Another edit saved first. Start again from what it saved.
+        guard let current = try await APITestSetup.find(setup.id, on: db) else {
+            throw AppError.notFound(resource: "Assignment")
+        }
+        try setup.$manifest.output(from: ManifestRow(manifest: current.manifest))
     }
-    try mutate(&props)
-    setup.manifest = try encodeManifest(props)
-    try await setup.save(on: db)
+    throw AppError.conflict(
+        reason: "Another edit to this assignment saved at the same time. Reload and try again.")
+}
+
+/// How many times `mutateManifest` re-applies an edit that lost a race.
+let manifestWriteAttempts = 3
+
+/// Writes `manifest` only if the stored manifest is still the one `setup`
+/// holds, in one `UPDATE … WHERE manifest = … RETURNING` statement, which is
+/// atomic on SQLite and Postgres (the `SingleUseRecord` pattern). Returns
+/// false when another writer changed it first. On success the model takes the
+/// new value as saved, not as a pending change, so a later `save()` of the
+/// same model does not write the manifest again without this check.
+private func replaceManifest(
+    of setup: APITestSetup, with manifest: String, on db: Database
+) async throws -> Bool {
+    guard let sql = db as? SQLDatabase else {
+        setup.manifest = manifest
+        try await setup.save(on: db)
+        return true
+    }
+    let id = try setup.requireID()
+    let rows = try await sql.raw(
+        """
+        UPDATE \(unsafeRaw: APITestSetup.schema) SET manifest = \(bind: manifest) \
+        WHERE id = \(bind: id) AND manifest = \(bind: setup.manifest) RETURNING id
+        """
+    ).all()
+    guard !rows.isEmpty else { return false }
+    try setup.$manifest.output(from: ManifestRow(manifest: manifest))
+    return true
+}
+
+/// A database row holding only the manifest, so a model can take a value the
+/// database already has without marking the field as changed.
+private struct ManifestRow: DatabaseOutput {
+    let manifest: String
+
+    var description: String { "manifest" }
+
+    func schema(_ schema: String) -> any DatabaseOutput { self }
+
+    func contains(_ key: FieldKey) -> Bool { key == "manifest" }
+
+    func decodeNil(_ key: FieldKey) throws -> Bool { false }
+
+    func decode<T: Decodable>(_ key: FieldKey, as type: T.Type) throws -> T {
+        guard let value = manifest as? T else {
+            throw DecodingError.typeMismatch(
+                T.self, .init(codingPath: [], debugDescription: "The manifest is a String."))
+        }
+        return value
+    }
 }
 
 /// Reads the `gradingMode` of a manifest JSON string, defaulting to "worker"
