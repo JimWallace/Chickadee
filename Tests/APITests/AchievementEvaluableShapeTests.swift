@@ -14,7 +14,7 @@ import Testing
             testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.sh", sectionID: "s1")],
             sections: [TestSuiteSection(id: "s1", name: "One")])
         let data = (try? JSONEncoder().encode(props)) ?? Data()
-        return String(decoding: data, as: UTF8.self)
+        return String(bytes: data, encoding: .utf8) ?? ""
     }()
 
     private func achievement(
@@ -115,7 +115,7 @@ import Testing
             """
         let decoded = try JSONDecoder().decode(Achievement.self, from: Data(json.utf8))
         #expect(decoded.id == "a")
-        let encoded = String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self)
+        let encoded = try #require(String(bytes: try JSONEncoder().encode(decoded), encoding: .utf8))
         #expect(!encoded.contains("sectionID"))
     }
 }
