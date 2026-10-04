@@ -87,3 +87,16 @@ test('a load-phase timeout names the setup cell, a call timeout names the call',
   apply(call, { ok: false, timedOut: true, error: 'timed out' }, env);
   assert.match(call.title, /did not return within 5 seconds/);
 });
+
+test('a solution-load failure shows readable copy, not a sentinel or "Solution raised"', () => {
+  const missing = computedCell();
+  apply(missing, { ok: false, loadFailed: true, error: 'no solution notebook', detail: 'no-solution' }, env);
+  assert.equal(missing.value, '');
+  assert.equal(missing.placeholder, '⚠ no solution notebook');
+  assert.doesNotMatch(missing.title, /Solution raised|no-solution/);
+
+  const network = computedCell();
+  apply(network, { ok: false, loadFailed: true, error: 'solution notebook did not load', detail: 'Failed to fetch' }, env);
+  assert.equal(network.placeholder, '⚠ solution notebook did not load');
+  assert.equal(network.title, 'Load failed: Failed to fetch');
+});

@@ -1905,9 +1905,19 @@
                     return { ok: false, timedOut: true,
                              error: 'solution notebook load timed out after ' + (LOAD_TIMEOUT_MS / 1000) + 's' };
                 }
-                var msg = (err && err.message) ? String(err.message) : String(err);
-                return { ok: false, error: msg || 'error' };
+                // The other load failures are not errors the solution raised,
+                // so they carry their own copy instead of a sentinel code.
+                var detail = (err && err.message) ? String(err.message) : String(err || '');
+                return { ok: false, loadFailed: true, error: loadFailureText(detail), detail: detail };
             });
+        }
+
+        /// Readable copy for a solution-load failure: the two sentinels the
+        /// load raises, else a network or kernel failure.
+        function loadFailureText(code) {
+            if (code === 'no-solution') return 'no solution notebook';
+            if (code === 'empty-solution') return 'solution notebook has no code';
+            return 'solution notebook did not load';
         }
 
         var _autoComputeTimer = null;
@@ -2225,8 +2235,10 @@
             // from run-phase timeouts (the function itself hung).  Pre-fix
             // both surfaced the run-phase tooltip, which pointed instructors
             // at the wrong cell.
+            // The load time includes the kernel boot, so the load title names
+            // no cause and no language.
             cell.title = res.error.indexOf('notebook load') >= 0
-                ? 'A top-level cell in the solution notebook ran longer than ' + (env.loadTimeoutMs / 1000) + ' seconds. Look for an infinite loop, a slow I/O call, or a blocking input() OUTSIDE the function under test (e.g. in a setup cell that runs at notebook open).'
+                ? 'Loading the solution notebook ran longer than ' + (env.loadTimeoutMs / 1000) + ' seconds'
                 : 'Solution call did not return within ' + (env.timeoutMs / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
             env.setCue(cell, 'input-invalid');
             delete cell.dataset.autoComputed;
@@ -2256,7 +2268,13 @@
             // undefined function / etc.
             cell.value = '';
             cell.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
-            cell.title = 'Solution raised: ' + res.error;
+            if (!res.loadFailed) {
+                cell.title = 'Solution raised: ' + res.error;
+            } else if (res.detail === 'no-solution' || res.detail === 'empty-solution') {
+                cell.title = 'Auto-compute runs the solution notebook';
+            } else {
+                cell.title = 'Load failed: ' + res.detail;
+            }
             env.setCue(cell, 'input-invalid');
             delete cell.dataset.autoComputed;
         }
