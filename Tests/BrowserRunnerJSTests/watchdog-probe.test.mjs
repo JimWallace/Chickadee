@@ -1,7 +1,7 @@
 // Tests/BrowserRunnerJSTests/watchdog-probe.test.mjs
 //
-// Regression guards for the iframe-readiness probe used by
-// `Public/notebook.js`'s `armEditorWatchdog`.
+// Regression guards for the iframe-readiness probe in
+// `Public/notebook-core.js`, used by `armEditorWatchdog` in `Public/notebook.js`.
 //
 // History:
 //   * v0.4.149 introduced the watchdog.  Phase-1 signal was
@@ -23,67 +23,15 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import vm from 'node:vm';
+import { createRequire } from 'node:module';
 
-const notebookSource = await fs.readFile(
-  path.resolve('Public/notebook.js'),
-  'utf8',
-);
-
-async function loadHarness() {
-  const hooks = {};
-  const elements = new Map();
-
-  const frame = {
-    dataset: {
-      setupId: 'setup_123',
-      gradingMode: 'browser',
-      notebookUrl: '/api/v1/testsetups/setup_123/assignment',
-      editorUrl: '/jupyterlite/notebooks/index.html?path=assignment.ipynb',
-    },
-    addEventListener() {},
-    getAttribute(name) { return name === 'src' ? this.dataset.editorUrl : null; },
-    contentWindow: null,
-    contentDocument: null,
-    src: '',
-  };
-
-  elements.set('jl-frame', frame);
-  elements.set('nb-status', { textContent: '', className: '' });
-  elements.set('nb-results', { hidden: true, innerHTML: '', appendChild() {}, scrollIntoView() {} });
-
-  const document = {
-    getElementById(id) { return elements.get(id) ?? null; },
-    createElement() {
-      return { className: '', textContent: '', innerHTML: '', appendChild() {} };
-    },
-    head: { appendChild() {} },
-  };
-
-  const fetch = async () => ({ ok: true, async json() { return { cells: [] }; } });
-
-  const context = {
-    console,
-    document,
-    fetch,
-    setTimeout,
-    clearTimeout,
-    setInterval: () => 1,
-    clearInterval: () => {},
-    URL,
-    JSON,
-    Error,
-    Promise,
-    window: { location: { origin: 'https://example.test' } },
-    __CHICKADEE_NOTEBOOK_TEST_HOOKS__: hooks,
-  };
-  context.globalThis = context;
-
-  vm.runInNewContext(notebookSource, context, { filename: 'notebook.js' });
-  return hooks.exports;
-}
+const require = createRequire(import.meta.url);
+const {
+  probeIframeReadiness,
+  kernelFailureEvidence,
+  kernelLivenessReady,
+  planKernelFailureResponse,
+} = require('../../Public/notebook-core.js');
 
 function makeFrame({ winFactory, docFactory } = {}) {
   return {
@@ -112,8 +60,7 @@ function makeDoc({ classList = [], bodyText = '' } = {}) {
 // Shell readiness — unchanged semantics from v0.4.151
 // ----------------------------------------------------------------
 
-test('probeIframeReadiness: Chromium path — jupyterapp truthy on contentWindow', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: Chromium path — jupyterapp truthy on contentWindow', () => {
   const frame = makeFrame({
     winFactory: () => ({ jupyterapp: { serviceManager: null } }),
     docFactory: () => null,
@@ -122,8 +69,7 @@ test('probeIframeReadiness: Chromium path — jupyterapp truthy on contentWindow
   assert.equal(r.shellReady, true);
 });
 
-test('probeIframeReadiness: Safari path — contentWindow inaccessible, DOM has jp-Toolbar', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: Safari path — contentWindow inaccessible, DOM has jp-Toolbar', () => {
   const frame = makeFrame({
     winFactory: () => undefined,
     docFactory: () => makeDoc({ classList: ['jp-Toolbar'] }),
@@ -133,8 +79,7 @@ test('probeIframeReadiness: Safari path — contentWindow inaccessible, DOM has 
     'v0.4.151 regression guard — Safari spurious-phase-1 fix');
 });
 
-test('probeIframeReadiness: Safari path — DOM has .jp-Notebook', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: Safari path — DOM has .jp-Notebook', () => {
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({ classList: ['jp-Notebook'] }),
@@ -143,8 +88,7 @@ test('probeIframeReadiness: Safari path — DOM has .jp-Notebook', async () => {
   assert.equal(r.shellReady, true);
 });
 
-test('probeIframeReadiness: Safari path — DOM has generic jp-* class', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: Safari path — DOM has generic jp-* class', () => {
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({ classList: ['jp-Cell'] }),
@@ -153,8 +97,7 @@ test('probeIframeReadiness: Safari path — DOM has generic jp-* class', async (
   assert.equal(r.shellReady, true);
 });
 
-test('probeIframeReadiness: contentWindow access throws — does not crash', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: contentWindow access throws — does not crash', () => {
   const frame = makeFrame({
     winFactory: () => { throw new Error('cross-origin'); },
     docFactory: () => makeDoc({ classList: ['jp-Toolbar'] }),
@@ -163,8 +106,7 @@ test('probeIframeReadiness: contentWindow access throws — does not crash', asy
   assert.equal(r.shellReady, true, 'must recover from contentWindow access throw');
 });
 
-test('probeIframeReadiness: nothing detectable → not ready', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: nothing detectable → not ready', () => {
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => null,
@@ -178,11 +120,10 @@ test('probeIframeReadiness: nothing detectable → not ready', async () => {
 // Kernel state — v0.4.152 semantics: failure-evidence only
 // ----------------------------------------------------------------
 
-test('probeIframeReadiness: shell up, kernel idle → NOT in failure state', async () => {
+test('probeIframeReadiness: shell up, kernel idle → NOT in failure state', () => {
   // v0.4.152 regression guard — pre-v0.4.152 this required "| Idle" text
   // to confirm health and would false-positive when text wasn't visible.
   // Now we only flag failure on POSITIVE evidence of failure.
-  const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({
@@ -195,8 +136,7 @@ test('probeIframeReadiness: shell up, kernel idle → NOT in failure state', asy
   assert.equal(r.kernelInFailureState, false);
 });
 
-test('probeIframeReadiness: shell up, kernel busy → NOT in failure state', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: shell up, kernel busy → NOT in failure state', () => {
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({
@@ -208,12 +148,11 @@ test('probeIframeReadiness: shell up, kernel busy → NOT in failure state', asy
   assert.equal(r.kernelInFailureState, false);
 });
 
-test('probeIframeReadiness: kernel starting (no idle text visible) → NOT in failure state', async () => {
+test('probeIframeReadiness: kernel starting (no idle text visible) → NOT in failure state', () => {
   // v0.4.152 regression guard — the watchdog must NOT fire kernel-unhealthy
   // just because the kernel is still bootstrapping and the status text
   // hasn't rendered as "| Idle" yet.  Pyodide WASM load can take minutes
   // on slow networks.
-  const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({
@@ -227,11 +166,10 @@ test('probeIframeReadiness: kernel starting (no idle text visible) → NOT in fa
     'starting kernels must not be flagged as failed');
 });
 
-test('probeIframeReadiness: shell up, no kernel status text at all → NOT in failure state', async () => {
+test('probeIframeReadiness: shell up, no kernel status text at all → NOT in failure state', () => {
   // The most defensive case: we can\'t see kernel status text in the DOM
   // (maybe rendered in shadow DOM, maybe different markup version).
   // Absence of evidence must NOT be treated as evidence of failure.
-  const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({
@@ -245,10 +183,9 @@ test('probeIframeReadiness: shell up, no kernel status text at all → NOT in fa
     'v0.4.152 regression guard — no failure evidence means do not fire');
 });
 
-test('probeIframeReadiness: "Kernel Unknown" text in DOM → IN failure state', async () => {
+test('probeIframeReadiness: "Kernel Unknown" text in DOM → IN failure state', () => {
   // The Hans symptom from PR #467.  This IS positive evidence of failure;
   // the watchdog should fire phase-2 kernel-unhealthy.
-  const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({
@@ -262,8 +199,7 @@ test('probeIframeReadiness: "Kernel Unknown" text in DOM → IN failure state', 
     'Kernel Unknown text is positive evidence of failure (Hans symptom)');
 });
 
-test('probeIframeReadiness: ServiceManager reports kernel status "unknown" → IN failure state', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: ServiceManager reports kernel status "unknown" → IN failure state', () => {
   const fakeApp = {
     serviceManager: {
       sessions: {
@@ -279,8 +215,7 @@ test('probeIframeReadiness: ServiceManager reports kernel status "unknown" → I
   assert.equal(r.kernelInFailureState, true);
 });
 
-test('probeIframeReadiness: ServiceManager reports kernel status "dead" → IN failure state', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: ServiceManager reports kernel status "dead" → IN failure state', () => {
   const fakeApp = {
     serviceManager: {
       sessions: {
@@ -296,8 +231,7 @@ test('probeIframeReadiness: ServiceManager reports kernel status "dead" → IN f
   assert.equal(r.kernelInFailureState, true);
 });
 
-test('probeIframeReadiness: ServiceManager reports kernel status "idle" → NOT in failure state', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: ServiceManager reports kernel status "idle" → NOT in failure state', () => {
   const fakeApp = {
     serviceManager: {
       sessions: {
@@ -313,8 +247,7 @@ test('probeIframeReadiness: ServiceManager reports kernel status "idle" → NOT 
   assert.equal(r.kernelInFailureState, false);
 });
 
-test('probeIframeReadiness: ServiceManager reports kernel status "starting" → NOT in failure state', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: ServiceManager reports kernel status "starting" → NOT in failure state', () => {
   const fakeApp = {
     serviceManager: {
       sessions: {
@@ -331,8 +264,7 @@ test('probeIframeReadiness: ServiceManager reports kernel status "starting" → 
     'starting kernels must not be flagged as failed (v0.4.152 regression guard)');
 });
 
-test('kernelFailureEvidence: empty running sessions → null (no evidence)', async () => {
-  const { kernelFailureEvidence } = await loadHarness();
+test('kernelFailureEvidence: empty running sessions → null (no evidence)', () => {
   const fakeWin = {
     jupyterapp: {
       serviceManager: { sessions: { running() { return []; } } },
@@ -342,8 +274,7 @@ test('kernelFailureEvidence: empty running sessions → null (no evidence)', asy
   assert.equal(kernelFailureEvidence(fakeWin), null);
 });
 
-test('kernelFailureEvidence: API access throws → null (no evidence)', async () => {
-  const { kernelFailureEvidence } = await loadHarness();
+test('kernelFailureEvidence: API access throws → null (no evidence)', () => {
   const fakeWin = {
     get jupyterapp() { throw new Error('cross-origin'); },
     document: { body: { textContent: '' } },
@@ -351,8 +282,7 @@ test('kernelFailureEvidence: API access throws → null (no evidence)', async ()
   assert.equal(kernelFailureEvidence(fakeWin), null);
 });
 
-test('kernelFailureEvidence: dead session → returns the status as evidence', async () => {
-  const { kernelFailureEvidence } = await loadHarness();
+test('kernelFailureEvidence: dead session → returns the status as evidence', () => {
   const fakeWin = {
     jupyterapp: {
       serviceManager: { sessions: { running() { return [{ kernel: { status: 'dead' } }]; } } },
@@ -362,8 +292,7 @@ test('kernelFailureEvidence: dead session → returns the status as evidence', a
   assert.equal(kernelFailureEvidence(fakeWin), 'kernel status: dead');
 });
 
-test('kernelFailureEvidence: "Kernel Unknown" DOM text → returns badge evidence', async () => {
-  const { kernelFailureEvidence } = await loadHarness();
+test('kernelFailureEvidence: "Kernel Unknown" DOM text → returns badge evidence', () => {
   const fakeWin = {
     jupyterapp: { serviceManager: null },
     document: { body: { textContent: 'Python (Pyodide) Kernel Unknown' } },
@@ -371,8 +300,7 @@ test('kernelFailureEvidence: "Kernel Unknown" DOM text → returns badge evidenc
   assert.equal(kernelFailureEvidence(fakeWin), 'Kernel Unknown badge');
 });
 
-test('probeIframeReadiness: kernel failure surfaces evidence string', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: kernel failure surfaces evidence string', () => {
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({
@@ -392,8 +320,7 @@ test('probeIframeReadiness: kernel failure surfaces evidence string', async () =
 // kernel that spins forever is no longer logged only as a successful shell.
 // ----------------------------------------------------------------
 
-test('probeIframeReadiness: shell up, kernel idle session → kernelReady true', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: shell up, kernel idle session → kernelReady true', () => {
   const fakeApp = {
     serviceManager: { sessions: { running() { return [{ kernel: { status: 'idle' } }]; } } },
   };
@@ -406,8 +333,7 @@ test('probeIframeReadiness: shell up, kernel idle session → kernelReady true',
   assert.equal(r.kernelReady, true);
 });
 
-test('probeIframeReadiness: shell up via DOM, "| Idle" status text → kernelReady true', async () => {
-  const { probeIframeReadiness } = await loadHarness();
+test('probeIframeReadiness: shell up via DOM, "| Idle" status text → kernelReady true', () => {
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({ classList: ['jp-Toolbar'], bodyText: 'Python (Pyodide) | Idle' }),
@@ -417,11 +343,10 @@ test('probeIframeReadiness: shell up via DOM, "| Idle" status text → kernelRea
   assert.equal(r.kernelReady, true);
 });
 
-test('probeIframeReadiness: shell up but kernel still starting → kernelReady false', async () => {
+test('probeIframeReadiness: shell up but kernel still starting → kernelReady false', () => {
   // The hung-kernel case: the shell mounted (editor_ready fires) but the kernel
   // never reached idle/busy, so kernel_ready must NOT fire — this is exactly
   // the gap that let a spinning kernel be recorded as a success.
-  const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({ classList: ['jp-Toolbar'], bodyText: 'Python (Pyodide) | Starting' }),
@@ -431,16 +356,14 @@ test('probeIframeReadiness: shell up but kernel still starting → kernelReady f
   assert.equal(r.kernelReady, false, 'a kernel that has not reached idle/busy is not ready');
 });
 
-test('kernelLivenessReady: busy session → true; dead session → false', async () => {
-  const { kernelLivenessReady } = await loadHarness();
+test('kernelLivenessReady: busy session → true; dead session → false', () => {
   const busy = { jupyterapp: { serviceManager: { sessions: { running() { return [{ kernel: { status: 'busy' } }]; } } } } };
   const dead = { jupyterapp: { serviceManager: { sessions: { running() { return [{ kernel: { status: 'dead' } }]; } } } } };
   assert.equal(kernelLivenessReady(busy, makeDoc()), true);
   assert.equal(kernelLivenessReady(dead, makeDoc()), false);
 });
 
-test('kernelLivenessReady: access throws → false (never a false positive)', async () => {
-  const { kernelLivenessReady } = await loadHarness();
+test('kernelLivenessReady: access throws → false (never a false positive)', () => {
   const win = { get jupyterapp() { throw new Error('cross-origin'); } };
   assert.equal(kernelLivenessReady(win, null), false);
 });
@@ -451,8 +374,7 @@ test('kernelLivenessReady: access throws → false (never a false positive)', as
 // where the in-place iframe reset re-raced the service-worker control).
 // ----------------------------------------------------------------
 
-test('planKernelFailureResponse: first failure → reload the iframe', async () => {
-  const { planKernelFailureResponse } = await loadHarness();
+test('planKernelFailureResponse: first failure → reload the iframe', () => {
   const plan = planKernelFailureResponse({
     iframeReloadAttempted: false,
     pageReloadAttempted: false,
@@ -463,8 +385,7 @@ test('planKernelFailureResponse: first failure → reload the iframe', async () 
     'a recovery does not post a diagnostic — the editor gets one more chance');
 });
 
-test('planKernelFailureResponse: iframe reload failed → reload the whole page', async () => {
-  const { planKernelFailureResponse } = await loadHarness();
+test('planKernelFailureResponse: iframe reload failed → reload the whole page', () => {
   const plan = planKernelFailureResponse({
     iframeReloadAttempted: true,
     pageReloadAttempted: false,
@@ -476,8 +397,7 @@ test('planKernelFailureResponse: iframe reload failed → reload the whole page'
     'the page reload is still a recovery — no diagnostic yet');
 });
 
-test('planKernelFailureResponse: both reloads failed → fail with annotated diagnostic', async () => {
-  const { planKernelFailureResponse } = await loadHarness();
+test('planKernelFailureResponse: both reloads failed → fail with annotated diagnostic', () => {
   const plan = planKernelFailureResponse({
     iframeReloadAttempted: true,
     pageReloadAttempted: true,
@@ -487,8 +407,7 @@ test('planKernelFailureResponse: both reloads failed → fail with annotated dia
   // The classification fields must be unchanged so the admin browser-diagnostics
   // breakdown still buckets this as watchdog_timeout / kernel-unhealthy.
   assert.equal(plan.diagnostic.kind, 'watchdog_timeout');
-  // Element-wise (the helper runs in a vm realm, so its Array isn't
-  // reference-comparable with deepStrictEqual against the test realm's).
+  // Element-wise checks. They do not depend on the realm that built the array.
   assert.equal(plan.diagnostic.failedChecks.length, 1);
   assert.equal(plan.diagnostic.failedChecks[0], 'kernel-unhealthy');
   assert.equal(plan.diagnostic.source, 'kernel');
@@ -498,8 +417,7 @@ test('planKernelFailureResponse: both reloads failed → fail with annotated dia
     'annotates that recovery was attempted so persistent failures are distinguishable');
 });
 
-test('planKernelFailureResponse: exhausted recovery with no evidence → safe default message', async () => {
-  const { planKernelFailureResponse } = await loadHarness();
+test('planKernelFailureResponse: exhausted recovery with no evidence → safe default message', () => {
   const plan = planKernelFailureResponse({
     iframeReloadAttempted: true,
     pageReloadAttempted: true,

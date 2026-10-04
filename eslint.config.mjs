@@ -21,10 +21,11 @@ import js from '@eslint/js';
 const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
-  // The DOM-free halves of five page scripts, each loaded before its wiring
+  // The DOM-free halves of six page scripts, each loaded before its wiring
   // file and unit-tested under node. The split is the inputs-editor-core
   // pattern: decisions in the core, element lookups and fetches in the wiring.
   ChickadeeAchievementsCore: 'readonly',
+  ChickadeeNotebookCore: 'readonly',
   ChickadeeNotebookPreflightCore: 'readonly',
   ChickadeeCheckRendererCore: 'readonly',
   ChickadeeScriptRendererCore: 'readonly',
