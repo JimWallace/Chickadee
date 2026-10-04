@@ -17,12 +17,10 @@ let mcpTimeLimitRange: ClosedRange<Int> = 1...600
 /// error message. Returns the validated value for convenient inlining.
 @discardableResult
 func validateTimeLimitSeconds(
-    _ seconds: Int, tool: String, field: String = "seconds"
+    _ seconds: Int, field: String = "seconds"
 ) throws -> Int {
     guard mcpTimeLimitRange.contains(seconds) else {
-        throw MCPToolError.invalidArguments(
-            tool: tool,
-            detail:
+        throw MCPToolError.invalidArguments(detail:
                 "\(field) must be an integer between \(mcpTimeLimitRange.lowerBound) and "
                 + "\(mcpTimeLimitRange.upperBound) seconds (got \(seconds)).")
     }
@@ -56,10 +54,10 @@ enum TimeLimitOverrideEdit: Equatable, Sendable {
 /// Parses a per-test time-limit override. Omitted leaves it unchanged, 0
 /// clears it, and any other value must be in `mcpTimeLimitRange`. The one
 /// parser for every tool that takes an override (#1941).
-func parseTimeLimitOverride(_ raw: Int?, tool: String, field: String) throws -> TimeLimitOverrideEdit {
+func parseTimeLimitOverride(_ raw: Int?, field: String) throws -> TimeLimitOverrideEdit {
     guard let raw else { return .unchanged }
     guard raw != 0 else { return .clear }
-    return .set(try validateTimeLimitSeconds(raw, tool: tool, field: field))
+    return .set(try validateTimeLimitSeconds(raw, field: field))
 }
 
 extension MCPSchema {

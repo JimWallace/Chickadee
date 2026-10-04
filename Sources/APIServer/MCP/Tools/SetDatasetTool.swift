@@ -148,14 +148,12 @@ struct SetDatasetTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         // Datasets are content authoring — TA+, matching the web endpoint.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         let remove = input.remove ?? false
         guard let cleaned = FilenameSafety.bareFilename(input.filename), cleaned == input.filename
         else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "filename must be a bare filename with no path components.")
+            throw MCPToolError.invalidArguments(detail: "filename must be a bare filename with no path components.")
         }
 
         // Built once, from the stored spec plus this call's changes, and used
@@ -167,9 +165,7 @@ struct SetDatasetTool: ContentTool {
 
         if !remove {
             guard let sampleSize = input.sampleSize, sampleSize >= 1 else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "sampleSize (>= 1) is required when marking a dataset; "
+                throw MCPToolError.invalidArguments(detail: "sampleSize (>= 1) is required when marking a dataset; "
                         + "pass remove:true to clear a mark.")
             }
             // The file must be a bundled *support* file: a dataset marks
@@ -181,18 +177,14 @@ struct SetDatasetTool: ContentTool {
                 })
             let suiteScripts = Set(setup.decodedManifest()?.testSuites.map(\.script) ?? [])
             guard zipEntries.contains(cleaned) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "\"\(cleaned)\" is not among this assignment's bundled files "
+                throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is not among this assignment's bundled files "
                         + "(list them with get_support_files; upload one with "
                         + "author_script(tier:\"support\")).")
             }
             guard !suiteScripts.contains(cleaned), cleaned != "assignment.ipynb",
                 cleaned != "solution.ipynb"
             else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "\"\(cleaned)\" is not a support file — only support data files can "
+                throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is not a support file — only support data files can "
                         + "be per-student datasets.")
             }
             // The same check the web endpoints run, from the same place: a
@@ -205,7 +197,7 @@ struct SetDatasetTool: ContentTool {
                 sourceCSV: extractZipEntry(zipPath: setup.zipPath, entryName: cleaned)
                     .flatMap { String(data: $0, encoding: .utf8) })
             {
-                throw MCPToolError.invalidArguments(tool: Self.name, detail: issue)
+                throw MCPToolError.invalidArguments(detail: issue)
             }
         }
 

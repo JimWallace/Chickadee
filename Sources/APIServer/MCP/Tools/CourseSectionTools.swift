@@ -81,7 +81,7 @@ struct ListCourseSectionsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveCourse(code: input.courseCode, tool: Self.name, context: context)
+        let course = try await resolveCourse(code: input.courseCode, context: context)
         let courseID = try course.requireID()
         let sections = try await APICourseSection.query(on: context.db)
             .filter(\.$courseID == courseID)
@@ -168,11 +168,11 @@ struct CreateCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Section name must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "Section name must not be empty.")
         }
         let mode = input.defaultGradingMode ?? "browser"
-        _ = try MCPEnumProse<GradingMode>.parse(mode, tool: Self.name, field: "defaultGradingMode")
-        let course = try await resolveCourseForWrite(code: input.courseCode, tool: Self.name, context: context)
+        _ = try MCPEnumProse<GradingMode>.parse(mode, field: "defaultGradingMode")
+        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .instructor)
         let courseID = try course.requireID()
 
         let maxOrder =
@@ -248,7 +248,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         // Placing an assignment into a course section is instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
 
         // Resolve + validate the target section against this assignment's course.
         // A non-empty id that doesn't resolve is rejected rather than silently
@@ -257,15 +257,12 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         let resolvedSectionID: UUID?
         if let raw, !raw.isEmpty, raw.lowercased() != "none" {
             guard let uuid = UUID(uuidString: raw) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "courseSectionID \"\(raw)\" is not a valid id.")
+                throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(raw)\" is not a valid id.")
             }
             guard let section = try await APICourseSection.find(uuid, on: context.db),
                 section.courseID == assignment.courseID
             else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "No course section with id \"\(raw)\" in this assignment's course.")
+                throw MCPToolError.invalidArguments(detail: "No course section with id \"\(raw)\" in this assignment's course.")
             }
             resolvedSectionID = uuid
         } else {
@@ -385,19 +382,18 @@ struct RenameCourseSectionTool: ContentTool {
         let newName = input.name?.trimmingCharacters(in: .whitespacesAndNewlines)
         let newMode = input.defaultGradingMode?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard newName != nil || newMode != nil else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "Provide at least one of: name, defaultGradingMode.")
+            throw MCPToolError.invalidArguments(detail: "Provide at least one of: name, defaultGradingMode.")
         }
         let section = try await resolveCourseSectionForEdit(
-            sectionID: input.courseSectionID, tool: Self.name, context: context)
+            sectionID: input.courseSectionID, context: context, atLeast: .instructor)
         if let newName {
             guard !newName.isEmpty else {
-                throw MCPToolError.invalidArguments(tool: Self.name, detail: "name must not be empty.")
+                throw MCPToolError.invalidArguments(detail: "name must not be empty.")
             }
             section.name = newName
         }
         if let newMode {
-            _ = try MCPEnumProse<GradingMode>.parse(newMode, tool: Self.name, field: "defaultGradingMode")
+            _ = try MCPEnumProse<GradingMode>.parse(newMode, field: "defaultGradingMode")
             section.defaultGradingMode = newMode
         }
         try await section.save(on: context.db)
@@ -461,8 +457,7 @@ struct DeleteCourseSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let raw = input.courseSectionID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let uuid = UUID(uuidString: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "courseSectionID \"\(raw)\" is not a valid id.")
+            throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(raw)\" is not a valid id.")
         }
         // Unknown id is an idempotent no-op (removed=false) — and reports nothing
         // that distinguishes "doesn't exist" from "in a course you can't see".
@@ -471,7 +466,7 @@ struct DeleteCourseSectionTool: ContentTool {
         }
         // Deleting a course section is instructor-level structure (#417); archived blocked too.
         try await context.authorizeCourseWriteAccess(
-            section.courseID, tool: Self.name, atLeast: .instructor)
+            section.courseID, atLeast: .instructor)
         let ungrouped = try await APIAssignment.query(on: context.db)
             .filter(\.$sectionID == uuid)
             .count()
@@ -553,27 +548,23 @@ struct ReorderCourseSectionsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveCourseForWrite(code: input.courseCode, tool: Self.name, context: context)
+        let course = try await resolveCourseForWrite(code: input.courseCode, context: context, atLeast: .instructor)
         let courseID = try course.requireID()
         let uuids = input.orderedSectionIDs.compactMap {
             UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         guard uuids.count == input.orderedSectionIDs.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "orderedSectionIDs contains an invalid section id.")
+            throw MCPToolError.invalidArguments(detail: "orderedSectionIDs contains an invalid section id.")
         }
         guard Set(uuids).count == uuids.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "orderedSectionIDs contains a duplicate section id.")
+            throw MCPToolError.invalidArguments(detail: "orderedSectionIDs contains a duplicate section id.")
         }
         let sections = try await APICourseSection.query(on: context.db)
             .filter(\.$courseID == courseID)
             .all()
         let existing = Set(sections.compactMap { $0.id })
         guard existing == Set(uuids) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "orderedSectionIDs must list exactly the course's current section ids "
+            throw MCPToolError.invalidArguments(detail: "orderedSectionIDs must list exactly the course's current section ids "
                     + "(a permutation of all \(existing.count)).")
         }
         let byID = Dictionary(
@@ -602,17 +593,17 @@ struct ReorderCourseSectionsTool: ContentTool {
 /// delete_course_section — both mutate the section, so the write gate is the
 /// correct floor (#417 Slice D-MCP).
 func resolveCourseSectionForEdit(
-    sectionID raw: String, tool: String, context: ToolContext, atLeast minimum: CourseRole = .instructor
+    sectionID raw: String, context: ToolContext, atLeast minimum: CourseRole
 ) async throws -> APICourseSection {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let uuid = UUID(uuidString: trimmed) else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "courseSectionID \"\(trimmed)\" is not a valid id.")
+        throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(trimmed)\" is not a valid id.")
     }
     guard let section = try await APICourseSection.find(uuid, on: context.db) else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "No course section with id \"\(trimmed)\".")
+        throw MCPToolError.invalidArguments(detail: "No course section with id \"\(trimmed)\".")
     }
     // Course-section structure is instructor-level (#417), matching the web.
-    try await context.authorizeCourseWriteAccess(section.courseID, tool: tool, atLeast: minimum)
+    try await context.authorizeCourseWriteAccess(section.courseID, atLeast: minimum)
     return section
 }
 
@@ -627,9 +618,9 @@ func resolveCourseSectionForEdit(
 /// including the READ `list_course_sections` — so this must NOT carry the
 /// archived-write block.  Returns the course, not only its id, so a tool can
 /// report which offering a bare code resolved to (`courseKey`, `courseTerm`).
-func resolveCourse(code: String, tool: String, context: ToolContext) async throws -> APICourse {
-    let course = try await resolveMCPCourse(key: code, tool: tool, context: context, forWrite: false)
-    try await context.authorizeCourseAccess(try course.requireID(), tool: tool)
+func resolveCourse(code: String, context: ToolContext) async throws -> APICourse {
+    let course = try await resolveMCPCourse(key: code, context: context, forWrite: false)
+    try await context.authorizeCourseAccess(try course.requireID())
     return course
 }
 
@@ -639,11 +630,11 @@ func resolveCourse(code: String, tool: String, context: ToolContext) async throw
 /// reorder_assignments) so they can't mutate an archived course; the read
 /// `list_course_sections` stays on `resolveCourse` (#417 Slice D-MCP).
 func resolveCourseForWrite(
-    code: String, tool: String, context: ToolContext, atLeast minimum: CourseRole = .instructor
+    code: String, context: ToolContext, atLeast minimum: CourseRole
 ) async throws -> APICourse {
-    let course = try await resolveMCPCourse(key: code, tool: tool, context: context, forWrite: true)
+    let course = try await resolveMCPCourse(key: code, context: context, forWrite: true)
     // Course-level structure edits (sections, assignment ordering, new
     // assignments) are instructor-level (#417), matching the web.
-    try await context.authorizeCourseWriteAccess(try course.requireID(), tool: tool, atLeast: minimum)
+    try await context.authorizeCourseWriteAccess(try course.requireID(), atLeast: minimum)
     return course
 }

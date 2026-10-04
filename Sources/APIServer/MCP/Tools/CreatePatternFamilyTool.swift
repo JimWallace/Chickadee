@@ -345,28 +345,25 @@ struct CreatePatternFamilyTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         guard let kind = PatternKind(rawValue: input.kind) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "Unknown kind \"\(input.kind)\".")
+            throw MCPToolError.invalidArguments(detail: "Unknown kind \"\(input.kind)\".")
         }
         let trimmedID = input.id.trimmingCharacters(in: .whitespaces)
         guard !trimmedID.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Family id must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "Family id must not be empty.")
         }
         guard !input.cases.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Provide at least one case.")
+            throw MCPToolError.invalidArguments(detail: "Provide at least one case.")
         }
-        try Self.assertUniqueCaseKeys(input.cases, tool: Self.name)
+        try Self.assertUniqueCaseKeys(input.cases)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
             !payload.items.contains(where: { $0.kind == "family" && $0.family?.id == trimmedID })
         else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "A pattern family with id \"\(trimmedID)\" already exists; use update_pattern_family.")
+            throw MCPToolError.invalidArguments(detail: "A pattern family with id \"\(trimmedID)\" already exists; use update_pattern_family.")
         }
 
         let family = try Self.buildFamily(input, id: trimmedID, kind: kind)
@@ -378,7 +375,7 @@ struct CreatePatternFamilyTool: ContentTool {
         // applySuiteEdit -> applyPatternFamilies -> validatePatternFamilies runs
         // the structural + per-kind checks synchronously; surface those as clean
         // MCP errors rather than opaque protocol failures.
-        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        try await applySuiteEditMapped(setup: setup, body: payload, on: context.db)
         // Close, re-grade, and re-validate (matching the web Save button).
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
@@ -395,16 +392,15 @@ struct CreatePatternFamilyTool: ContentTool {
     /// Rejects empty or duplicate case keys.  Shared with
     /// update_pattern_family's `addCases` path, so it takes the calling tool's
     /// name for the error.
-    static func assertUniqueCaseKeys(_ cases: [CaseInput], tool: String) throws {
+    static func assertUniqueCaseKeys(_ cases: [CaseInput]) throws {
         var seen = Set<String>()
         for c in cases {
             let key = c.key.trimmingCharacters(in: .whitespaces)
             guard !key.isEmpty else {
-                throw MCPToolError.invalidArguments(tool: tool, detail: "A case key must not be empty.")
+                throw MCPToolError.invalidArguments(detail: "A case key must not be empty.")
             }
             guard seen.insert(key).inserted else {
-                throw MCPToolError.invalidArguments(
-                    tool: tool, detail: "Duplicate case key \"\(key)\".")
+                throw MCPToolError.invalidArguments(detail: "Duplicate case key \"\(key)\".")
             }
         }
     }
@@ -414,23 +410,23 @@ struct CreatePatternFamilyTool: ContentTool {
     /// that runs inside applySuiteEdit.
     private static func buildFamily(_ input: Input, id: String, kind: PatternKind) throws -> PatternFamily {
         let defaults = PatternDefaults(
-            tier: try parseOptionalTier(input.defaultTier, tool: Self.name) ?? .pub,
+            tier: try parseOptionalTier(input.defaultTier) ?? .pub,
             points: input.defaultPoints ?? 1,
             hint: normalizedHint(input.defaultHint),
             tolerance: input.tolerance,
             timeLimitSeconds: try parseTimeLimitOverride(
-                input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds"
+                input.defaultTimeLimitSeconds, field: "defaultTimeLimitSeconds"
             ).applied(to: nil),
             failureDetail: try MCPFailureDetailProse.parseValue(
-                input.defaultFailureDetail, tool: Self.name, field: "defaultFailureDetail"))
-        let cases = try input.cases.map { try patternCase(from: $0, tool: Self.name) }
+                input.defaultFailureDetail, field: "defaultFailureDetail"))
+        let cases = try input.cases.map { try patternCase(from: $0) }
         return PatternFamily(
             id: id, name: input.name, kind: kind, functionName: input.function ?? "",
             paramNames: input.paramNames ?? [], defaults: defaults, cases: cases,
             variables: (input.variables ?? []).map { FamilyVariable(name: $0.name, value: $0.value) },
             dependsOn: input.dependsOn ?? [],
             referenceImplementation: input.referenceImplementation,
-            ioComparison: try MCPProgramIOProse.parse(input.ioComparison, tool: Self.name))
+            ioComparison: try MCPProgramIOProse.parse(input.ioComparison))
     }
 
     /// Builds one `PatternCase` from a case input, filling the parallel
@@ -439,25 +435,25 @@ struct CreatePatternFamilyTool: ContentTool {
     /// new case is constructed identically however it is authored; all per-kind /
     /// arity / ref legality is left to the validator that runs inside
     /// applySuiteEdit.
-    static func patternCase(from c: CaseInput, tool: String) throws -> PatternCase {
+    static func patternCase(from c: CaseInput) throws -> PatternCase {
         let args = c.args ?? []
         let provided =
-            try aligned(c.argsProvided, count: args.count, field: "argsProvided", key: c.key, tool: tool)
+            try aligned(c.argsProvided, count: args.count, field: "argsProvided", key: c.key)
             ?? [Bool](repeating: true, count: args.count)
         let refs =
-            try aligned(c.argVarRefs, count: args.count, field: "argVarRefs", key: c.key, tool: tool)
+            try aligned(c.argVarRefs, count: args.count, field: "argVarRefs", key: c.key)
             ?? [String?](repeating: nil, count: args.count)
         let ref = c.expectedVarRef.flatMap { $0.isEmpty ? nil : $0 }
         return PatternCase(
             key: c.key, label: c.label ?? c.key, args: args, expected: c.expected ?? .null,
             argsProvided: provided, argVarRefs: refs, expectedVarRef: ref,
-            hint: normalizedHint(c.hint), tier: try parseOptionalTier(c.tier, tool: tool),
+            hint: normalizedHint(c.hint), tier: try parseOptionalTier(c.tier),
             points: c.points,
             timeLimitSeconds: try parseTimeLimitOverride(
-                c.timeLimitSeconds, tool: tool, field: "cases[\(c.key)].timeLimitSeconds"
+                c.timeLimitSeconds, field: "cases[\(c.key)].timeLimitSeconds"
             ).applied(to: nil),
             failureDetail: try MCPFailureDetailProse.parseValue(
-                c.failureDetail, tool: tool, field: "cases[\(c.key)].failureDetail"),
+                c.failureDetail, field: "cases[\(c.key)].failureDetail"),
             enabled: c.enabled ?? true)
     }
 
@@ -465,13 +461,11 @@ struct CreatePatternFamilyTool: ContentTool {
     /// (or nil when the caller omitted it).  Shared with update_pattern_family's
     /// `addCases` path, so it takes the calling tool's name for the error.
     static func aligned<T>(
-        _ value: [T]?, count: Int, field: String, key: String, tool: String
+        _ value: [T]?, count: Int, field: String, key: String
     ) throws -> [T]? {
         guard let value else { return nil }
         guard value.count == count else {
-            throw MCPToolError.invalidArguments(
-                tool: tool,
-                detail: "case '\(key)': \(field) length (\(value.count)) must match args length (\(count)).")
+            throw MCPToolError.invalidArguments(detail: "case '\(key)': \(field) length (\(value.count)) must match args length (\(count)).")
         }
         return value
     }

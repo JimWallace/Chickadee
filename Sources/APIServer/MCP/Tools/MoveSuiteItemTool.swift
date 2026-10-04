@@ -106,7 +106,7 @@ struct MoveSuiteItemTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let resolved = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         var payload = await buildSuitePayload(fromManifest: resolved.setup.manifest, zipPath: resolved.setup.zipPath)
 
@@ -117,9 +117,7 @@ struct MoveSuiteItemTool: ContentTool {
         let destination = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         if let destination {
             guard payload.sections.contains(where: { $0.id == destination }) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "No section with id \"\(destination)\". Create it with create_suite_section first.")
+                throw MCPToolError.invalidArguments(detail: "No section with id \"\(destination)\". Create it with create_suite_section first.")
             }
         }
 
@@ -148,7 +146,7 @@ struct MoveSuiteItemTool: ContentTool {
         }
 
         try await applySuiteEditMapped(
-            setup: resolved.setup, body: payload, tool: Self.name, on: context.db)
+            setup: resolved.setup, body: payload, on: context.db)
         // Placement-only edit: close + re-validate, but no regrade (move can't
         // change an outcome).
         let finalized = try await finalizeContentEdit(
@@ -180,32 +178,27 @@ struct MoveSuiteItemTool: ContentTool {
 
         let provided = [script, familyID, check].compactMap { $0 }
         guard provided.count == 1 else {
-            throw MCPToolError.invalidArguments(
-                tool: name,
-                detail: "Provide exactly one of script, familyID, or check to identify the item to move.")
+            throw MCPToolError.invalidArguments(detail: "Provide exactly one of script, familyID, or check to identify the item to move.")
         }
 
         if let script {
             guard let i = items.firstIndex(where: { $0.kind == "script" && $0.script?.script == script })
             else {
-                throw MCPToolError.invalidArguments(
-                    tool: name, detail: "No hand-written script named \"\(script)\" in the suite.")
+                throw MCPToolError.invalidArguments(detail: "No hand-written script named \"\(script)\" in the suite.")
             }
             return Target(index: i, kind: "script", id: script)
         }
         if let familyID {
             guard let i = items.firstIndex(where: { $0.kind == "family" && $0.family?.id == familyID })
             else {
-                throw MCPToolError.invalidArguments(
-                    tool: name, detail: "No pattern family with id \"\(familyID)\" in the suite.")
+                throw MCPToolError.invalidArguments(detail: "No pattern family with id \"\(familyID)\" in the suite.")
             }
             return Target(index: i, kind: "family", id: familyID)
         }
         // check
         let cid = check ?? ""
         guard let i = items.firstIndex(where: { $0.kind == "check" && $0.check?.id == cid }) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "No notebook check with id \"\(cid)\" in the suite.")
+            throw MCPToolError.invalidArguments(detail: "No notebook check with id \"\(cid)\" in the suite.")
         }
         return Target(index: i, kind: "check", id: cid)
     }

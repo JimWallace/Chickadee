@@ -123,7 +123,7 @@ struct GetSupportFilesTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
 
         let suiteScripts = Set(setup.decodedManifest()?.testSuites.map(\.script) ?? [])
         let supportNames = await currentSupportFileNames(setup: setup)
@@ -156,23 +156,16 @@ struct GetSupportFilesTool: ContentTool {
         // entry list.
         guard supportNames.contains(filename) else {
             if suiteScripts.contains(filename) {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "\"\(filename)\" is a graded suite script — read it via get_suite.")
+                throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is a graded suite script — read it via get_suite.")
             }
             if Self.reservedNames.contains(filename) {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "\"\(filename)\" is a notebook — read it via get_notebook or get_solution.")
+                throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is a notebook — read it via get_notebook or get_solution.")
             }
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "No support file named \"\(filename)\" in this assignment's setup "
+            throw MCPToolError.invalidArguments(detail: "No support file named \"\(filename)\" in this assignment's setup "
                     + "(call without filename to list them).")
         }
         guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
-            throw MCPToolError.executionFailed(
-                tool: Self.name, detail: "Failed to extract \"\(filename)\" from the setup zip.")
+            throw MCPToolError.executionFailed(detail: "Failed to extract \"\(filename)\" from the setup zip.")
         }
 
         let cap = min(max(input.maxBytes ?? Self.defaultMaxBytes, 1), Self.maxMaxBytes)
@@ -191,9 +184,7 @@ struct GetSupportFilesTool: ContentTool {
     ) throws -> (content: String, truncated: Bool) {
         if data.count <= cap {
             guard let text = String(data: data, encoding: .utf8) else {
-                throw MCPToolError.invalidArguments(
-                    tool: name,
-                    detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
+                throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
             }
             return (text, false)
         }
@@ -206,8 +197,6 @@ struct GetSupportFilesTool: ContentTool {
             }
             head = head.dropLast()
         }
-        throw MCPToolError.invalidArguments(
-            tool: name,
-            detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
+        throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
     }
 }

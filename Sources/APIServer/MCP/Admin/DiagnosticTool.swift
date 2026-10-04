@@ -86,7 +86,7 @@ extension DiagnosticTool {
                 do {
                     input = try arguments.decoded(as: Input.self)
                 } catch {
-                    throw MCPToolError.invalidArguments(tool: Self.name, detail: String(describing: error))
+                    throw MCPToolError.invalidArguments(detail: String(describing: error))
                 }
                 let output = try await self.execute(input, context)
                 return try JSONValue(encoding: output)

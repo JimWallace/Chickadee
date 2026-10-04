@@ -123,30 +123,26 @@ struct ReorderSectionItemsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+            code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
 
         let assignmentIDs = input.orderedItems.filter { $0.type == "assignment" }.map(\.id)
         let contentRaw = input.orderedItems.filter { $0.type == "content" }.map(\.id)
         guard input.orderedItems.allSatisfy({ $0.type == "assignment" || $0.type == "content" }) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "each item type must be \"assignment\" or \"content\".")
+            throw MCPToolError.invalidArguments(detail: "each item type must be \"assignment\" or \"content\".")
         }
         guard assignmentIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "orderedItems contains an invalid assignment public ID.")
+            throw MCPToolError.invalidArguments(detail: "orderedItems contains an invalid assignment public ID.")
         }
         let contentUUIDs = contentRaw.compactMap {
             UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         guard contentUUIDs.count == contentRaw.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "orderedItems contains an invalid content-item id.")
+            throw MCPToolError.invalidArguments(detail: "orderedItems contains an invalid content-item id.")
         }
         guard Set(assignmentIDs).count == assignmentIDs.count, Set(contentUUIDs).count == contentUUIDs.count
         else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "orderedItems contains a duplicate id.")
+            throw MCPToolError.invalidArguments(detail: "orderedItems contains a duplicate id.")
         }
 
         // Scope both fetches to this course so the payload can't renumber another
@@ -162,9 +158,7 @@ struct ReorderSectionItemsTool: ContentTool {
             : try await APICourseContentItem.query(on: context.db)
                 .filter(\.$courseID == courseID).filter(\.$id ~~ contentUUIDs).all()
         guard assignments.count == assignmentIDs.count, contentItems.count == contentUUIDs.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "orderedItems must all be assignments or content items in course \(course.urlKey).")
+            throw MCPToolError.invalidArguments(detail: "orderedItems must all be assignments or content items in course \(course.urlKey).")
         }
         let assignmentByPublicID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
         let contentByID = Dictionary(
@@ -270,21 +264,17 @@ struct ReorderAssignmentsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+            code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
 
         let ids = input.orderedAssignmentPublicIDs.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         guard ids.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "orderedAssignmentPublicIDs contains an invalid assignment public ID.")
+            throw MCPToolError.invalidArguments(detail: "orderedAssignmentPublicIDs contains an invalid assignment public ID.")
         }
         guard Set(ids).count == ids.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "orderedAssignmentPublicIDs contains a duplicate assignment public ID.")
+            throw MCPToolError.invalidArguments(detail: "orderedAssignmentPublicIDs contains a duplicate assignment public ID.")
         }
         guard !ids.isEmpty else {
             return Output(
@@ -298,9 +288,7 @@ struct ReorderAssignmentsTool: ContentTool {
             .filter(\.$publicID ~~ ids)
             .all()
         guard assignments.count == ids.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "orderedAssignmentPublicIDs must all be assignments in course \(course.urlKey).")
+            throw MCPToolError.invalidArguments(detail: "orderedAssignmentPublicIDs must all be assignments in course \(course.urlKey).")
         }
 
         let byID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })

@@ -287,17 +287,17 @@ struct AuthorNotebookCheckTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         guard let kind = NotebookCheckKind(rawValue: input.kind) else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Unknown check kind \"\(input.kind)\".")
+            throw MCPToolError.invalidArguments(detail: "Unknown check kind \"\(input.kind)\".")
         }
         let checkID = input.id.trimmingCharacters(in: .whitespaces)
         guard !checkID.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Check id must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "Check id must not be empty.")
         }
         let tier = try Self.parseTier(input.tier)
         let columnMatch = try Self.parseColumnMatch(input.columnMatch)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         let existingIndex = payload.items.firstIndex { $0.kind == "check" && $0.check?.id == checkID }
@@ -306,9 +306,7 @@ struct AuthorNotebookCheckTool: ContentTool {
         // current section.
         let requestedSection = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         if let requestedSection, !payload.sections.contains(where: { $0.id == requestedSection }) {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "No section with id \"\(requestedSection)\". Create it with create_suite_section first.")
+            throw MCPToolError.invalidArguments(detail: "No section with id \"\(requestedSection)\". Create it with create_suite_section first.")
         }
         let sectionID =
             requestedSection
@@ -330,7 +328,7 @@ struct AuthorNotebookCheckTool: ContentTool {
             created = true
         }
 
-        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        try await applySuiteEditMapped(setup: setup, body: payload, on: context.db)
         // Close, re-grade, and re-validate (matching the web Save button).
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
@@ -346,12 +344,12 @@ struct AuthorNotebookCheckTool: ContentTool {
 
     private static func parseTier(_ raw: String?) throws -> TestTier {
         guard let raw else { return .pub }
-        return try MCPEnumProse<TestTier>.parse(raw, tool: name, field: "tier")
+        return try MCPEnumProse<TestTier>.parse(raw, field: "tier")
     }
 
     private static func parseColumnMatch(_ raw: String?) throws -> ColumnMatchMode? {
         guard let raw, !raw.isEmpty else { return nil }
-        return try MCPEnumProse<ColumnMatchMode>.parse(raw, tool: name, field: "columnMatch")
+        return try MCPEnumProse<ColumnMatchMode>.parse(raw, field: "columnMatch")
     }
 
     /// Builds the `NotebookCheck` from the input; per-kind field legality is left
@@ -371,10 +369,10 @@ struct AuthorNotebookCheckTool: ContentTool {
             sectionID: sectionID,
             hint: input.hint.flatMap { $0.isEmpty ? nil : $0 },
             timeLimitSeconds: try parseTimeLimitOverride(
-                input.timeLimitSeconds, tool: name, field: "timeLimitSeconds"
+                input.timeLimitSeconds, field: "timeLimitSeconds"
             ).applied(to: nil),
             failureDetail: try MCPFailureDetailProse.parseValue(
-                input.failureDetail, tool: name, field: "failureDetail"),
+                input.failureDetail, field: "failureDetail"),
             variable: input.variable,
             expectedRows: input.expectedRows,
             expectedCols: input.expectedCols,

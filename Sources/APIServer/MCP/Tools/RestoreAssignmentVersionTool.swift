@@ -107,11 +107,11 @@ struct RestoreAssignmentVersionTool: ContentTool {
         // The seam also seeds the pre-restore baseline, so the state being
         // replaced is itself recoverable.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
         let setupID = setup.id ?? ""
 
         let target = try await GetAssignmentVersionTool.requireVersion(
-            setupID: setupID, number: input.version, tool: Self.name, on: context.mainDB)
+            setupID: setupID, number: input.version, on: context.mainDB)
 
         let directory = context.request.application.testSetupsDirectory
         let blobs = AssignmentVersionBlobStore(testSetupsDirectory: directory)
@@ -152,7 +152,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
         // `restoredFromVersion` rather than the generic `mcp:<tool>` origin the
         // dispatcher's automatic capture would stamp. That capture still runs
         // afterwards and dedupes to a no-op, since the content now matches.
-        let actor = try? await context.requireEligibleSubject(tool: Self.name)
+        let actor = try? await context.requireEligibleSubject()
         let outcome = try await AssignmentVersionStore.record(
             setup: setup,
             request: AssignmentVersionRequest(

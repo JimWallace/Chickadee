@@ -194,15 +194,13 @@ struct UpdateAssignmentTool: ContentTool {
                 || input.secretRevealEnabled != nil || solutionVisibilityUpdate != nil
                 || thresholdUpdate != .unchanged
         else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility, "
+            throw MCPToolError.invalidArguments(detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility, "
                     + "secretRevealEnabled, solutionVisibility, passingThresholdPercent.")
         }
 
         // Title / due date / open state are lifecycle — instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
         // Fail loudly while authoring: a reveal policy with nothing to reveal
         // would silently promise students a page that cannot resolve.
         if solutionVisibilityUpdate == .afterDue {
@@ -210,9 +208,7 @@ struct UpdateAssignmentTool: ContentTool {
                 assignment: assignment, db: context.db,
                 testSetupsDirectory: context.request.application.testSetupsDirectory)
             guard hasSolution else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name,
-                    detail: "This assignment has no solution on file, so there is nothing to "
+                throw MCPToolError.invalidArguments(detail: "This assignment has no solution on file, so there is nothing to "
                         + "reveal. Set one with update_solution (or upload one in the editor) "
                         + "before enabling solutionVisibility.")
             }
@@ -234,9 +230,7 @@ struct UpdateAssignmentTool: ContentTool {
                     assignment, visibilityUpdate, on: context.db)
             }
         } catch AssignmentAuthoringError.validationNotPassed {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "The assignment cannot be opened until its runner validation has passed.")
+            throw MCPToolError.invalidArguments(detail: "The assignment cannot be opened until its runner validation has passed.")
         }
 
         // Lifecycle audit (#421): metadata changes are the events content
@@ -282,9 +276,7 @@ struct UpdateAssignmentTool: ContentTool {
         guard let raw else { return .unchanged }
         if raw == 0 { return .clear }
         guard PassingThresholdUpdate.validRange.contains(raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name,
-                detail: "passingThresholdPercent must be an integer from 1 to 100, or 0 to turn "
+            throw MCPToolError.invalidArguments(detail: "passingThresholdPercent must be an integer from 1 to 100, or 0 to turn "
                     + "the threshold off.")
         }
         return .set(raw)
@@ -293,14 +285,14 @@ struct UpdateAssignmentTool: ContentTool {
     /// Maps the optional `visibility` argument to an `AssignmentVisibility`
     /// (nil = no change), rejecting unknown values.
     private static func resolveVisibility(_ raw: String?) throws -> AssignmentVisibility? {
-        try MCPEnumProse<AssignmentVisibility>.parseOptional(raw, tool: name, field: "visibility")
+        try MCPEnumProse<AssignmentVisibility>.parseOptional(raw, field: "visibility")
     }
 
     /// Maps the optional `solutionVisibility` argument to a
     /// `SolutionVisibility` (nil = no change), rejecting unknown values with
     /// the accepted list derived from `allCases`.
     private static func resolveSolutionVisibility(_ raw: String?) throws -> SolutionVisibility? {
-        try MCPEnumProse<SolutionVisibility>.parseOptional(raw, tool: name, field: "solutionVisibility")
+        try MCPEnumProse<SolutionVisibility>.parseOptional(raw, field: "solutionVisibility")
     }
 
     /// Maps the optional `dueAt` argument to a `DueDateUpdate`: absent → no
@@ -309,9 +301,7 @@ struct UpdateAssignmentTool: ContentTool {
         guard let raw else { return .unchanged }
         if raw.trimmingCharacters(in: .whitespaces).isEmpty { return .clear }
         guard let date = ISO8601DateFormatter().date(from: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name,
-                detail: "dueAt must be an ISO 8601 datetime (e.g. \"2026-04-22T23:59:00Z\") "
+            throw MCPToolError.invalidArguments(detail: "dueAt must be an ISO 8601 datetime (e.g. \"2026-04-22T23:59:00Z\") "
                     + "or an empty string to clear it.")
         }
         return .set(date)
@@ -323,9 +313,7 @@ struct UpdateAssignmentTool: ContentTool {
         guard let raw else { return .unchanged }
         if raw.trimmingCharacters(in: .whitespaces).isEmpty { return .clear }
         guard let date = ISO8601DateFormatter().date(from: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name,
-                detail: "startsAt must be an ISO 8601 datetime (e.g. \"2026-04-15T09:00:00Z\") "
+            throw MCPToolError.invalidArguments(detail: "startsAt must be an ISO 8601 datetime (e.g. \"2026-04-15T09:00:00Z\") "
                     + "or an empty string to clear it.")
         }
         return .set(date)
@@ -336,7 +324,7 @@ struct UpdateAssignmentTool: ContentTool {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: name, detail: "title must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "title must not be empty.")
         }
         return trimmed
     }

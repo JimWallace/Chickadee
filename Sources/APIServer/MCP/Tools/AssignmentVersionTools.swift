@@ -116,7 +116,7 @@ struct ListAssignmentVersionsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (_, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
         let setupID = setup.id ?? ""
         let limit = min(max(input.limit ?? Self.defaultLimit, 1), Self.maxLimit)
 
@@ -264,7 +264,7 @@ struct GetAssignmentVersionTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (_, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
         let row = try await Self.requireVersion(
             setupID: setup.id ?? "", number: input.version, on: context.mainDB)
 
@@ -303,7 +303,7 @@ struct GetAssignmentVersionTool: ContentTool {
     /// Loads a version, mapping "no such version" to an actionable error rather
     /// than an empty result the agent has to interpret.
     static func requireVersion(
-        setupID: String, number: Int, tool: String = name, on db: any Database
+        setupID: String, number: Int, on db: any Database
     ) async throws -> APIAssignmentVersion {
         guard
             let row = try await APIAssignmentVersion.query(on: db)
@@ -315,8 +315,7 @@ struct GetAssignmentVersionTool: ContentTool {
             let available =
                 newest.map { "Versions 1-\($0.versionNumber) exist." }
                 ?? "This assignment has no recorded versions yet."
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "No version \(number) for this assignment. \(available)")
+            throw MCPToolError.invalidArguments(detail: "No version \(number) for this assignment. \(available)")
         }
         return row
     }
@@ -350,9 +349,7 @@ struct GetAssignmentVersionTool: ContentTool {
         path: String, fileMap: [String: String], blobs: AssignmentVersionBlobStore, input: Input
     ) throws -> (content: String, truncated: Bool) {
         guard let hash = fileMap[path] else {
-            throw MCPToolError.invalidArguments(
-                tool: name,
-                detail:
+            throw MCPToolError.invalidArguments(detail:
                     "No file \"\(path)\" in version \(input.version). Its files: "
                     + fileMap.keys.sorted().joined(separator: ", "))
         }
@@ -363,15 +360,11 @@ struct GetAssignmentVersionTool: ContentTool {
             // A blob that a version row references but that isn't on disk means
             // the store lost bytes — report it as such rather than as an empty
             // file, which would read as "this script used to be blank".
-            throw MCPToolError.executionFailed(
-                tool: name,
-                detail: "Stored content for \"\(path)\" is missing from the version blob store.")
+            throw MCPToolError.executionFailed(detail: "Stored content for \"\(path)\" is missing from the version blob store.")
         }
         let cap = min(max(input.maxBytes ?? defaultMaxBytes, 1), maxMaxBytes)
         guard let text = truncatedUTF8(data, maxBytes: cap) else {
-            throw MCPToolError.invalidArguments(
-                tool: name,
-                detail:
+            throw MCPToolError.invalidArguments(detail:
                     "\"\(path)\" is not UTF-8 text (\(data.count) bytes) — it can be restored, but "
                     + "not read here.")
         }

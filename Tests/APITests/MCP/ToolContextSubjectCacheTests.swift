@@ -37,18 +37,17 @@ import Vapor
         try await withApp(app) { app in
             let (user, _) = try await instructor(on: app)
             let request = Request(application: app, on: app.eventLoopGroup.any())
-            let first = try await context(app, request: request).requireEligibleSubject(tool: "t")
+            let first = try await context(app, request: request).requireEligibleSubject()
             #expect(first.id == user.id)
 
             try await APICourseEnrollment.query(on: app.db).delete()
 
-            let again = try await context(app, request: request).requireEligibleSubject(tool: "t")
+            let again = try await context(app, request: request).requireEligibleSubject()
             #expect(again.id == user.id)
             await #expect(
-                throws: MCPToolError.notAuthorized(
-                    tool: "t", detail: "Students may not use the MCP interface.")
+                throws: MCPToolError.notAuthorized(detail: "Students may not use the MCP interface.")
             ) {
-                _ = try await context(app).requireEligibleSubject(tool: "t")
+                _ = try await context(app).requireEligibleSubject()
             }
         }
     }
@@ -59,9 +58,9 @@ import Vapor
         try await withApp(app) { app in
             _ = try await instructor(on: app)
             let request = Request(application: app, on: app.eventLoopGroup.any())
-            _ = try await context(app, request: request).requireEligibleSubject(tool: "t")
-            await #expect(throws: MCPToolError.notAuthorized(tool: "t", detail: "Unknown token subject.")) {
-                _ = try await context(app, subject: "nobody", request: request).requireEligibleSubject(tool: "t")
+            _ = try await context(app, request: request).requireEligibleSubject()
+            await #expect(throws: MCPToolError.notAuthorized(detail: "Unknown token subject.")) {
+                _ = try await context(app, subject: "nobody", request: request).requireEligibleSubject()
             }
         }
     }
@@ -72,10 +71,10 @@ import Vapor
         try await withApp(app) { app in
             let request = Request(application: app, on: app.eventLoopGroup.any())
             await #expect(throws: MCPToolError.self) {
-                _ = try await context(app, request: request).requireEligibleSubject(tool: "t")
+                _ = try await context(app, request: request).requireEligibleSubject()
             }
             let (user, _) = try await instructor(on: app)
-            let resolved = try await context(app, request: request).requireEligibleSubject(tool: "t")
+            let resolved = try await context(app, request: request).requireEligibleSubject()
             #expect(resolved.id == user.id)
         }
     }
@@ -88,12 +87,11 @@ import Vapor
             let other = try await makeTestCourse(on: app, code: "OTHER", name: "Other")
             let (_, enrolled) = try await instructor(on: app, role: "admin")
             try await context(app).authorizeCourseWriteAccess(
-                enrolled.requireID(), tool: "t", atLeast: .instructor)
+                enrolled.requireID(), atLeast: .instructor)
             await #expect(
-                throws: MCPToolError.notAuthorized(
-                    tool: "t", detail: "The MCP account is not enrolled in the target course.")
+                throws: MCPToolError.notAuthorized(detail: "The MCP account is not enrolled in the target course.")
             ) {
-                try await context(app).authorizeCourseWriteAccess(other.requireID(), tool: "t", atLeast: .ta)
+                try await context(app).authorizeCourseWriteAccess(other.requireID(), atLeast: .ta)
             }
         }
     }
@@ -106,10 +104,9 @@ import Vapor
             let other = try await makeTestCourse(on: app, code: "OTHER", name: "Other")
             _ = try await instructor(on: app)
             await #expect(
-                throws: MCPToolError.notAuthorized(
-                    tool: "t", detail: "The MCP account is not enrolled in the target course.")
+                throws: MCPToolError.notAuthorized(detail: "The MCP account is not enrolled in the target course.")
             ) {
-                try await context(app).authorizeCourseWriteAccess(other.requireID(), tool: "t", atLeast: .ta)
+                try await context(app).authorizeCourseWriteAccess(other.requireID(), atLeast: .ta)
             }
         }
     }

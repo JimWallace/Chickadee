@@ -18,12 +18,11 @@ func notebookCellCount(_ notebook: JSONValue) -> Int {
 /// Validates the minimal shape every Jupyter notebook has: a JSON object with a
 /// `cells` array. Stricter nbformat checks are left to the runner, matching the
 /// web save path's lenient JSON-only validation.
-func validateNotebookShape(_ notebook: JSONValue, tool: String) throws {
+func validateNotebookShape(_ notebook: JSONValue) throws {
     guard case .object(let root) = notebook else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "notebook must be a JSON object.")
+        throw MCPToolError.invalidArguments(detail: "notebook must be a JSON object.")
     }
     guard case .array? = root["cells"] else {
-        throw MCPToolError.invalidArguments(
-            tool: tool, detail: "notebook must contain a \"cells\" array.")
+        throw MCPToolError.invalidArguments(detail: "notebook must contain a \"cells\" array.")
     }
 }
