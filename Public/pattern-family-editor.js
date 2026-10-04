@@ -237,6 +237,7 @@
         var casesHeader      = document.getElementById('family-cases-header');
         var casesBody        = document.getElementById('family-cases-body');
         var casesEmpty       = document.getElementById('family-cases-empty');
+        var autoComputeNote  = document.getElementById('family-auto-compute-note');
         var addCaseBtn       = document.getElementById('add-case-btn');
         var statusEl         = document.getElementById('family-editor-status');
 
@@ -1303,6 +1304,12 @@
             if (functionLabel) {
                 functionLabel.style.display = functionlessParamName(kind) ? 'none' : 'flex';
             }
+            // The note under the cases table explains auto-compute warnings,
+            // so it shows only where auto-compute runs (#1991).
+            if (autoComputeNote) {
+                autoComputeNote.hidden = !(kindUsesAutoCompute(kind)
+                    && ChickadeeLanguage.canEvaluateExpressions());
+            }
         }
 
         /// The one case column a kind that calls no function uses — the
@@ -1312,6 +1319,19 @@
             if (kind === 'variable_equality') return 'variable';
             if (kind === 'program_io') return 'stdin';
             return null;
+        }
+
+        /// Whether auto-compute fills Expected for this kind. Variable
+        /// equality and program I/O call no function. A return type check
+        /// expects a type name, exception expected a class name and
+        /// performance threshold a millisecond budget, so the instructor
+        /// types those. autoComputeRow and the note under the cases table
+        /// both read this.
+        function kindUsesAutoCompute(kind) {
+            if (functionlessParamName(kind)) return false;
+            return kind !== 'return_type_check'
+                && kind !== 'exception_expected'
+                && kind !== 'performance_threshold';
         }
 
         /// Applies the data-model defaults that go with a given kind.
@@ -1779,8 +1799,11 @@
         /// would make it compare as text at grade time.
         function callSolutionOnServer(fnName, args, opts) {
             var captureStdout = !!(opts && opts.captureStdout);
+            // Each result that is not an error the solution raised carries a
+            // tag, so applyAutoComputeResult does not title it "Solution
+            // raised" (#1991).
             if (!urls.computeExpected) {
-                return Promise.resolve({ ok: false, error: 'Auto-compute is unavailable on this page.' });
+                return Promise.resolve({ ok: false, unavailable: true, error: 'Auto-compute is unavailable on this page.' });
             }
             return fetch(urls.computeExpected(), {
                 method: 'POST',
@@ -1791,7 +1814,7 @@
             })
             .then(function (r) { return r.ok ? r.json() : Promise.reject('compute failed'); })
             .then(function (res) {
-                if (res.unsupportedReason) return { ok: false, error: res.unsupportedReason };
+                if (res.unsupportedReason) return { ok: false, unavailable: true, error: res.unsupportedReason };
                 if (!res.ok) return { ok: false, error: res.error || 'The solution raised an error.' };
                 var parsed = tryParseVarValue(res.rendered);
                 if (!parsed.ok || !parsed.strict) {
@@ -1801,12 +1824,13 @@
                     if (scalar) return { ok: true, value: scalar.value };
                     return {
                         ok: false,
+                        notJSON: true,
                         error: 'Computed ' + res.rendered + ' — enter it here in JSON.'
                     };
                 }
                 return { ok: true, value: parsed.value };
             })
-            .catch(function (e) { return { ok: false, error: String(e) }; });
+            .catch(function (e) { return { ok: false, requestFailed: true, error: String(e) }; });
         }
 
         /// Turns a failed auto-compute into the shape the UI reads.
@@ -1975,19 +1999,8 @@
             // the fact rather than assuming it, which is the whole point of the
             // fact existing.
             if (!ChickadeeLanguage.canEvaluateExpressions()) return;
-            // Variable-equality and program-I/O families don't call a
-            // function — skip.
-            if (kindInput && functionlessParamName(kindInput.value)) return;
-            // Return-type-check expected is a type name (e.g. "DataFrame"),
-            // not the function's actual return value — auto-compute would
-            // write the value, which is wrong.  Instructor types the
-            // type name directly.
-            if (kindInput && kindInput.value === 'return_type_check') return;
-            // Exception-expected and performance-threshold are also
-            // instructor-typed (an exception class name and a
-            // millisecond budget respectively); skip auto-compute.
-            if (kindInput && kindInput.value === 'exception_expected') return;
-            if (kindInput && kindInput.value === 'performance_threshold') return;
+            // Skip the kinds whose Expected the instructor types.
+            if (kindInput && !kindUsesAutoCompute(kindInput.value)) return;
             var fnName = (fnInput.value || '').trim();
             if (!fnName) return;
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
@@ -2203,6 +2216,11 @@
     /// with the editor's renderer, cue setter and time limits passed in `env`,
     /// so a test can drive every branch on a plain object.
     ///
+    /// Each title is one phrase of at most 20 words (docs/ui-design.md, "UI
+    /// copy"). What to do about a warning is in docs/auto-compute.md, which
+    /// the note under the cases table links, because a title is not shown on
+    /// a touch screen (#1991).
+    ///
     /// Every failure clears a value that auto-compute filled earlier. A
     /// placeholder is not visible behind a value, so the error would otherwise
     /// be only in the title, which a touch screen never shows (#1998). The
@@ -2212,13 +2230,12 @@
         if (res.ok && res.returnedNone) {
             // The solution function returned None.  Don't write the string
             // "null" to the cell — that used to round-trip as a literal value
-            // and confuse instructors.  Instead leave it empty with a clear
-            // hint, and suggest stdout_equality (which is the most common
-            // reason a function returns None: it print()s instead of
-            // returning).
+            // and confuse instructors.  Instead leave it empty with a
+            // warning.  The usual cause is a function that print()s instead
+            // of returning; docs/auto-compute.md points to Stdout equality.
             cell.value = '';
             cell.placeholder = '⚠ solution returned None';
-            cell.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
+            cell.title = 'Solution function returned None';
             env.setCue(cell, 'input-attention');
             delete cell.dataset.autoComputed;
         } else if (res.ok) {
@@ -2239,16 +2256,16 @@
             // no cause and no language.
             cell.title = res.error.indexOf('notebook load') >= 0
                 ? 'Loading the solution notebook ran longer than ' + (env.loadTimeoutMs / 1000) + ' seconds'
-                : 'Solution call did not return within ' + (env.timeoutMs / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
+                : 'Solution call did not return within ' + (env.timeoutMs / 1000) + ' seconds';
             env.setCue(cell, 'input-invalid');
             delete cell.dataset.autoComputed;
         } else if (res.unsupported) {
             // The solution returned a value of a type that doesn't round-trip
-            // through JSON in a way the runner-side test will accept.  Show
-            // the specific reason so the instructor can decide whether to
-            // change the solution or type Expected manually.
+            // through JSON in a way the runner-side test will accept.  Name
+            // the type; docs/auto-compute.md says how to change the solution
+            // or type Expected manually.
             var reasonText = ({
-                'coroutine':       'an async function (returned a coroutine without awaiting it)',
+                'coroutine':       'an async function',
                 'async-generator': 'an async generator',
                 'generator':       'a generator',
                 'set':             'a set',
@@ -2258,7 +2275,7 @@
             })[res.unsupported] || res.unsupported;
             cell.value = '';
             cell.placeholder = '⚠ solution returned ' + reasonText;
-            cell.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
+            cell.title = 'Auto-compute cannot represent ' + reasonText;
             env.setCue(cell, 'input-attention');
             delete cell.dataset.autoComputed;
         } else {
@@ -2268,7 +2285,13 @@
             // undefined function / etc.
             cell.value = '';
             cell.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
-            if (!res.loadFailed) {
+            if (res.notJSON) {
+                cell.title = 'Computed value is not JSON';
+            } else if (res.unavailable) {
+                cell.title = 'Auto-compute unavailable here';
+            } else if (res.requestFailed) {
+                cell.title = 'Auto-compute request failed';
+            } else if (!res.loadFailed) {
                 cell.title = 'Solution raised: ' + res.error;
             } else if (res.detail === 'no-solution' || res.detail === 'empty-solution') {
                 cell.title = 'Auto-compute runs the solution notebook';
