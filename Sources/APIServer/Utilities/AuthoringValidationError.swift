@@ -16,9 +16,12 @@ import Foundation
 /// 422) lives beside the server code in `AuthoringValidationError+Abort.swift`,
 /// so this file stays free of Vapor.
 ///
-/// Cases are added one validator at a time; `NotebookCheckValidator` is the
-/// first.
+/// Cases are added one validator at a time. They cover
+/// `NotebookCheckValidator` and `ManifestValidation`; the other authoring
+/// validators still throw `Abort`.
 enum AuthoringValidationError: Error, Equatable, Sendable {
+    // MARK: NotebookCheckValidator
+
     /// A notebook check's id is not a valid filename fragment.
     case invalidNotebookCheckID(String)
     /// Two notebook checks share an id.
@@ -45,6 +48,15 @@ enum AuthoringValidationError: Error, Equatable, Sendable {
     /// syntax is not PCRE.
     case notebookCheckRegexUnsupported(
         checkID: String, kind: NotebookCheckKind, language: String, reason: String)
+
+    // MARK: ManifestValidation
+
+    /// A script depends on a script that is not in the suite.
+    case unknownManifestDependency(script: String, dependency: String)
+    /// A script depends on itself.
+    case manifestScriptDependsOnItself(script: String)
+    /// The suite's dependency graph has a cycle.
+    case manifestDependencyCycle
 }
 
 extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
@@ -78,6 +90,14 @@ extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
         case .notebookCheckRegexUnsupported(let checkID, let kind, let language, let reason):
             return "Notebook check '\(checkID)' (\(kind.rawValue)) uses regex matching, "
                 + "which is not available for \(language) assignments: \(reason)"
+
+        case .unknownManifestDependency(let script, let dependency):
+            return
+                "Manifest dependency error: '\(script)' depends on '\(dependency)', which is not listed in testSuites"
+        case .manifestScriptDependsOnItself(let script):
+            return "Manifest dependency error: '\(script)' cannot depend on itself"
+        case .manifestDependencyCycle:
+            return "Manifest dependency error: dependency graph contains a cycle"
         }
     }
 

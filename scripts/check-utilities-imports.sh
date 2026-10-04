@@ -20,7 +20,6 @@ cd "$repo_root"
 
 dir="Sources/APIServer/Utilities"
 abort_validators=(
-  ManifestValidation.swift
   NotebookCheckKindHandler.swift
   PatternFamilyAuthoredGraph.swift
   PatternFamilyValidator.swift
