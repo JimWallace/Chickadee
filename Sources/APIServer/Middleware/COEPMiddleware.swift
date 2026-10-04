@@ -47,23 +47,7 @@ struct COEPMiddleware: AsyncMiddleware {
     ) async throws -> Response {
         let response = try await next.respond(to: request)
         guard needsCOEP(path: request.url.path) else { return response }
-        // The editor's cross-origin isolation now varies by engine — WebKit gets
-        // the non-isolated comlink + service-worker path (see EditorBrowserEngine)
-        // — so any shared cache must key these responses on the User-Agent.
-        response.headers.add(name: "Vary", value: "User-Agent")
-        // WebKit deadlocks on the SharedArrayBuffer/`coincident` kernel transport,
-        // so it must NOT be cross-origin isolated. Leaving COEP off makes
-        // `crossOriginIsolated` false in the iframe and the kernel falls back to
-        // `comlink`; Chrome/Edge/Firefox keep the isolated SharedArrayBuffer path.
-        guard !EditorBrowserEngine.isWebKit(request) else { return response }
-        response.headers.replaceOrAdd(
-            name: "Cross-Origin-Opener-Policy",
-            value: "same-origin"
-        )
-        response.headers.replaceOrAdd(
-            name: "Cross-Origin-Embedder-Policy",
-            value: "require-corp"
-        )
+        response.applyCrossOriginIsolation(for: request)
         return response
     }
 
