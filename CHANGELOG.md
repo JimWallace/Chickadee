@@ -9,6 +9,39 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.400] - 2026-10-04
+
+### Changed
+
+- **The five native-grading suites share one harness (#1954).**
+  `Tests/WorkerTests/Support/NativeGradingHarness.swift` builds the grading
+  workspace and runs the suites. It replaces five copies of `makeWorkspace`,
+  `runSuites` and `item`. Each copy differed only in the language, the
+  submission's file name and the time limit, so those are now the harness's
+  three fields. Every language now writes its runtime through
+  `runtimeHelperFiles(for:)`, as Java and Racket already did.
+
+### Changed
+
+- **The admin GitHub page has its own disclosure, and a muted field note has one spelling.** The "Owner and permissions" disclosure now has a summary with an `.accordion-caret`, which turns while the disclosure is open. It no longer uses `.test-output-details`, which is the disclosure for test results. Every `field-note text-muted` is now `field-note field-note--muted`, the spelling that the component vocabulary names (#1977).
+
+### Changed
+
+- **One composite action holds the CI setup steps (#1985).** `.github/actions/swift-test-setup` gives the toolchain cache key, restores or saves the shared `.build` cache, and probes for the test dependencies. The four test lanes, `build`, `repeat-test`, `test-coverage`, `docker-build` and `browser-probe-setup` use it. Before, each job had its own copy. The cache keys keep the same values, so the existing caches stay valid. The nightly coverage probe now checks every grading interpreter. Before, it checked five tools and no interpreter. On a stale image, the install now fails after three apt-get attempts, and it fails when a command is still missing after the install. `LanguageConformanceMatrixTests` now reads the interpreter table of the action, and fails when a workflow probes for an interpreter itself. `.node-version` (24.21.0, the version of the CI image) is now the one Node pin for each `setup-node` step. Before, the pins were 22, 24 and 24.21.0.
+
+### Changed
+
+- **The two MCP surfaces share one tool registry type and one principal type.** `ToolRegistry` and `DiagnosticToolRegistry` were two structs that differed only in their element type, and `MCPPrincipal` and `AdminMCPPrincipal` differed only in their scope type. They are now `MCPToolRegistry<Tool>` and `MCPSurfacePrincipal<Scope>`, and the old names stay as typealiases. Behaviour does not change. The bearer middlewares follow in a second change (#1944).
+
+### Changed
+
+- **Three retention sweeps moved off the request path onto leased sweeps.** The diagnostics retention prune ran inside a student's submission, a runner's poll and a runner's result report, and once from a boot task. Expired worker nonces were deleted inside the HMAC middleware, and stale login attempts inside the rate-limit middleware. Each was gated by a per-process throttle with no lease, so every server instance pruned. They now run as `PeriodicSweepMonitor`s: diagnostics at `pruneIntervalHours` (0 still turns it off), nonces every minute, login attempts every ten minutes. The two throttle actors and `ObservabilityLifecycleHandler` are gone (#1924).
+
+### Fixed
+
+- **A runner log value that JSON cannot hold no longer erases the line.** `writeStructuredRunnerLog` fell back to only the event name and timestamp when one field was a `Date`, a `URL`, an enum or `NaN`. Such a value is now written as its description, and the other fields stay. No call passes such a value today; this removes the trap (#1932).
+
+
 ## [0.5.399] - 2026-10-04
 
 ### Changed
