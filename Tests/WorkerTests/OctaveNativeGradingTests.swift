@@ -33,42 +33,9 @@ import Testing
             """)
     }
 
-    /// A grading workspace shaped like the one `RunnerDaemon` materializes:
-    /// the injected runtime, the student's submission, and the hint file.
-    static func makeWorkspace(
-        submission: String,
-        scripts: [String: String]
-    ) throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ck-octnative-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // The SAME embedded source the worker injects, not a fixture copy — so
-        // a runtime change that breaks native grading fails here.
-        try testRuntimeSource(for: .octave).write(
-            to: dir.appendingPathComponent("test_runtime.m"), atomically: true, encoding: .utf8)
-        try submission.write(
-            to: dir.appendingPathComponent("solution.m"), atomically: true, encoding: .utf8)
-        try "solution.m".write(
-            to: dir.appendingPathComponent(".chickadee_student_module"),
-            atomically: true, encoding: .utf8)
-        for (name, source) in scripts {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        return dir
-    }
-
-    static func runSuites(_ items: [SuiteItem], in dir: URL) async -> [TestOutcome] {
-        let executor = NativeScriptExecutor(
-            runner: UnsandboxedScriptRunner(), workDir: dir, overrides: [:])
-        return await executeSuites(
-            items, timeLimitSeconds: 30, attemptNumber: 1, executor: executor)
-    }
-
-    static func item(_ script: String) -> SuiteItem {
-        SuiteItem(script: script, tier: .pub, displayName: script, dependsOn: [], points: 1)
-    }
+    /// Builds this suite's workspaces and runs its suites.
+    static let harness = NativeGradingHarness(
+        language: .octave, solutionFilename: "solution.m", timeLimitSeconds: 30)
 
     /// A `.m` test is dispatched to a real interpreter and comes back with a
     /// status, not a command-not-found error.
@@ -83,12 +50,12 @@ import Testing
             end
             chickadee.passed(["Returned " chickadee.format(result)]);
             """
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "function r = double_it(x)\n  r = x * 2;\nend\n",
             scripts: ["publictest_double.m": passing])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_double.m")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_double.m")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == .pass,
@@ -105,7 +72,7 @@ import Testing
     /// boundary — the mapping generated Octave relies on when it calls
     /// `chickadee.failed` / `chickadee.errored`.
     @Test(.requiresOctave) func exitCodesMapToOutcomeStatuses() async throws {
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "x = 1;\n",
             scripts: [
                 "publictest_fails.m": """
@@ -119,8 +86,9 @@ import Testing
             ])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites(
-            [Self.item("publictest_errors.m"), Self.item("publictest_fails.m")], in: dir)
+        let outcomes = await Self.harness.runSuites(
+            [NativeGradingHarness.item("publictest_errors.m"), NativeGradingHarness.item("publictest_fails.m")], in: dir
+        )
         let byName = Dictionary(uniqueKeysWithValues: outcomes.map { ($0.testName, $0) })
 
         let failed = try #require(byName.values.first { $0.shortResult.contains("wrong value") })
@@ -145,7 +113,7 @@ import Testing
             end
             chickadee.passed("ok");
             """
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: """
                 function r = double_it(x)
                   r = x * 2;
@@ -155,7 +123,7 @@ import Testing
             scripts: ["publictest_double.m": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_double.m")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_double.m")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(outcome.status == .pass, "got \(outcome.status): \(outcome.shortResult)")
     }
@@ -186,11 +154,11 @@ import Testing
             end
             chickadee.passed("cells round-tripped");
             """
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: extracted.source, scripts: ["publictest_cells.m": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_cells.m")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_cells.m")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(outcome.status == .pass, "got \(outcome.status): \(outcome.shortResult)")
     }
@@ -210,7 +178,7 @@ import Testing
             end
             chickadee.passed("inputs delivered");
             """
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "x = 1;\n", scripts: ["publictest_inputs.m": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -223,7 +191,7 @@ import Testing
         ]).write(
             to: dir.appendingPathComponent("_ck_inputs.m"), atomically: true, encoding: .utf8)
 
-        let outcomes = await Self.runSuites([Self.item("publictest_inputs.m")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_inputs.m")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(outcome.status == .pass, "got \(outcome.status): \(outcome.shortResult)")
     }
