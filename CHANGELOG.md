@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.407] - 2026-10-04
+
+### Fixed
+
+- **Achievement shapes that nothing evaluates are refused at save time (#2054, audit A17 and A18).** A record without a record dimension used to become "first to solve" silently; it is now refused with the list of dimensions. An individual achievement with a title or points reward, or a class goal with a badge or title reward, saved fine and never fired for anyone; both are refused. A target on a condition whose signal ignores it (a "grade of section X" condition quietly graded the whole assignment) is refused; only `testPass` and `itemsCovered` take a target. The unread `sectionID` field is gone from `Achievement`; a stored manifest that carries it still decodes.
+
+
 ## [0.5.406] - 2026-10-04
 
 ### Changed
