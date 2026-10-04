@@ -112,8 +112,9 @@ struct ResultRoutes: RouteCollection {
             await effects.apply(submission: submission, collection: collection, matches: report.matches)
 
             // An opted-in GitHub submission's public-tier result, on its commit
-            // (docs/github-submissions.md slice 6). Never throws.
-            await GitHubCommitStatusPoster.postIfEnabled(submission: submission, collection: collection, req: req)
+            // (docs/github-submissions.md slice 6). Runs after the response, so
+            // a slow GitHub never holds the report.
+            await GitHubCommitStatusPoster.startPost(submission: submission, collection: collection, req: req)
         }
 
         return ReportResponse(received: true)

@@ -188,8 +188,11 @@ import VaporTesting
     }
 
     /// A GitHub that never answers does not hold the worker's result report:
-    /// the post is abandoned at the deadline and nothing is recorded (#1773).
-    @Test func aHangingGitHubIsAbandonedAtTheDeadline() async throws {
+    /// the post runs as owned background work, so starting it returns at
+    /// once, and shutdown cancels it before anything is recorded (#1773). A
+    /// deadline raced against the post could not cancel a GitHub call, so it
+    /// ended nothing early (#1925).
+    @Test func aHangingGitHubDoesNotHoldTheResultReport() async throws {
         let posted = posted
         app.githubRepoClient = GitHubRepoClient(
             findInstallation: { _, _ in GitHubInstallation(id: 5, accountID: 9_001) },
@@ -217,9 +220,11 @@ import VaporTesting
                 totalTests: 1, passCount: 1, failCount: 0, errorCount: 0, timeoutCount: 0, executionTimeMs: 1,
                 runnerVersion: "test", timestamp: Date())
             let started = Date()
-            await GitHubCommitStatusPoster.postIfEnabled(
-                submission: submission, collection: collection, req: req, deadline: .milliseconds(200))
+            await GitHubCommitStatusPoster.startPost(submission: submission, collection: collection, req: req)
             #expect(Date().timeIntervalSince(started) < 10)
+            #expect(await app.backgroundWork.runningCount == 1)
+            await app.backgroundWork.drain()
+            #expect(await app.backgroundWork.runningCount == 0)
             #expect(posted.withLockedValue { $0 }.isEmpty)
         }
     }
