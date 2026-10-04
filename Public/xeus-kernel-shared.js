@@ -568,8 +568,10 @@
     //   { id, type: 'loadCells', cells: [] } → { id, ok: true, cellErrors: [{index, message}] }
     //   { id, type: 'run', code }            → { id, ok: true, result: <string|null> }
     //   { id, type: 'call', functionName, args, captureStdout }
-    //                                        → as `run`, where the language
-    //                                          builds call snippets
+    //                                        → { id, ok: true, result }, plus
+    //                                          `returnedNone: true` or
+    //                                          `unsupported: <reason>` where the
+    //                                          language reports them
     //   any failure                          → { id, ok: false, error }
     // Every message may carry `runtimeSource`, the code the kernel must define
     // before a snippet can report anything. It is seeded from the server and
@@ -589,9 +591,10 @@
     //                   without one, `runtimeSource` is not used
     //   loadCell      — (source, nonce) => the cell that runs one solution cell
     //   runExpression — (code, nonce) => the cell that evaluates an expression
-    //   callFunction  — optional (name, args, options, nonce) => the cell that
-    //                   calls a solution function; without one, `call` is an
-    //                   unknown message type
+    //   callFunction  — (name, args, options, nonce) => the cell that calls a
+    //                   solution function
+    //   readCallResult — optional (value) => the fields of a `call` reply;
+    //                   without one, the reply is { result: value }
     function serveEvalWorker(config) {
         var protocol = root.ChickadeeEvalProtocol;
         var options = { maxWaitMs: config.maxWaitMs };
@@ -642,7 +645,7 @@
             return run.payload.value;
         }
 
-        var handlers = {
+        serve({
             init: async function (msg) {
                 await ensureBooted(msg.runtimeSource);
                 return {};
@@ -664,22 +667,19 @@
                 });
                 return { result: result };
             },
-        };
-        if (config.callFunction) {
             // The language-neutral request: call this function with these JSON
             // args. The snippet is built in the worker, so rendering values
             // stays in the language's module.
-            handlers.call = async function (msg) {
+            call: async function (msg) {
                 await ensureBooted(msg.runtimeSource);
-                var result = await valueOf(function (nonce) {
+                var value = await valueOf(function (nonce) {
                     return config.callFunction(
                         msg.functionName, msg.args || [],
                         { captureStdout: !!msg.captureStdout }, nonce);
                 });
-                return { result: result };
-            };
-        }
-        serve(handlers);
+                return config.readCallResult ? config.readCallResult(value) : { result: value };
+            },
+        });
     }
 
     var api = {

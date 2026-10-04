@@ -1,0 +1,3 @@
+### Changed
+
+- **Python auto-compute sends the same `call` message as the other languages.** The pattern-family editor built the Python call snippets itself and sent them as `run`. The snippets are now in `python-eval-shared.js`, and the Python eval worker builds them, as the R, Lua and Octave workers do. The kernel runs the same cell as before, so the values, the `None` result, the unsupported types, the stdout capture and the time limits do not change. An R, Lua or Octave solution notebook that does not load now shows its error in the Expected cell. Before, the cell stayed on "computing…" (#1964).

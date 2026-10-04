@@ -1,20 +1,20 @@
-// Regression guard: Pyodide's `eval_code` in `last_expr` mode only returns a
-// value to JS when `body[-1]` of the parsed Python AST is an `ast.Expr`.
-// Every other top-level statement type (If, With, Assign, Import, …)
-// causes `runPythonAsync` to resolve with `undefined`, downstream
-// `JSON.parse(undefined)` to throw, and auto-compute to silently break.
+// Regression guard: the Python auto-compute call cell runs its snippet through
+// `runExpressionPython` (Public/python-eval-shared.js). That wrapper reports a
+// value only when `body[-1]` of the parsed Python AST is an `ast.Expr`. Every
+// other top-level statement type (If, With, Assign, Import, …) reports no
+// value, and auto-compute stops filling cells with no error.
 //
 // v0.4.124 shipped a `callSolution` whose value-mode snippet ended in an
-// `if/else`, hitting exactly that failure mode.  v0.4.125 fixes it by
-// computing the JSON payload into `_payload` and putting a bare
-// `_json.dumps(_payload, default=str)` on the last line.
+// `if/else`, hitting exactly that failure mode (under Pyodide's `eval_code`,
+// which had the same rule). v0.4.125 fixed it by computing the JSON payload
+// into `_payload` and putting a bare `_json.dumps(_payload, default=str)` on
+// the last line.
 //
-// This test extracts each snippet from the live JS file (between
-// `// PYODIDE_SNIPPET_BEGIN: <name>` and `// PYODIDE_SNIPPET_END: <name>`
-// markers in `Public/pattern-family-editor.js`), `eval`s the array
-// literal under fake `fnLit` / `argsLit` substitutions to get the
-// reconstructed Python source, and shells out to `python3 -m ast` (via a
-// tiny inline script) to assert `body[-1]` is an `ast.Expr`.
+// The snippets were built in Public/pattern-family-editor.js and moved to
+// `callSnippetPython` in Public/python-eval-shared.js (#1964). This test
+// builds each snippet with that function under a fake function name `f` and an
+// empty argument list, and shells out to `python3 -m ast` (via a tiny inline
+// script) to assert `body[-1]` is an `ast.Expr`.
 //
 // If you change the snippet shape and CI starts failing here, the right
 // fix is to make sure the LAST top-level Python statement is a bare
@@ -42,31 +42,28 @@ const languageModuleSource = await fs.readFile(
   'utf8',
 );
 
-/// Extract the array literal that follows `pyCode = ` between the
-/// snippet's BEGIN/END marker comments and `eval` it under fake values
-/// for the JS-side substitutions (`fnLit`, `argsLit`).  Returns the
-/// reconstructed Python source as a string.
+// The Python eval module, loaded in the order python-eval-worker.js loads it.
+const pythonEvalContext = { console };
+pythonEvalContext.globalThis = pythonEvalContext;
+vm.createContext(pythonEvalContext);
+for (const file of [
+  'grading-shared.js', 'eval-protocol-shared.js',
+  'python-grading-shared.js', 'python-eval-shared.js',
+]) {
+  vm.runInContext(await fs.readFile(path.resolve('Public', file), 'utf8'),
+    pythonEvalContext, { filename: file });
+}
+const pythonEval = pythonEvalContext.ChickadeePythonEvalShared;
+
+/// Build the snippet `name` ('value' or 'stdout') with `callSnippetPython`,
+/// for a function named `f` called with no arguments. Returns the Python
+/// source as a string.
 function extractSnippet(name) {
-  const begin = `// PYODIDE_SNIPPET_BEGIN: ${name}`;
-  const end = `// PYODIDE_SNIPPET_END: ${name}`;
-  const beginIx = editorSource.indexOf(begin);
-  const endIx = editorSource.indexOf(end, beginIx);
-  assert.ok(beginIx >= 0 && endIx > beginIx,
-    `markers '${begin}' / '${end}' not found in pattern-family-editor.js`);
-  const block = editorSource.slice(beginIx, endIx);
-
-  // Pull the array literal: `pyCode = [ ... ].join('\n')`.
-  const arrMatch = block.match(/pyCode\s*=\s*(\[[\s\S]*?\])\s*\.join\(/);
-  assert.ok(arrMatch, `did not find 'pyCode = [...].join(' inside snippet '${name}'`);
-
-  // The array references `fnLit` and `argsLit` — both are JS strings
-  // produced by `JSON.stringify(<thing>)` (so they're already-quoted
-  // JSON literals).  Substitute realistic placeholders.
-  const fnLit = JSON.stringify('f');
-  const argsLit = JSON.stringify('[]');
-  const lines = new Function('fnLit', 'argsLit', `return ${arrMatch[1]};`)(fnLit, argsLit);
-  assert.ok(Array.isArray(lines), `evaluated array literal for '${name}' is not an array`);
-  return lines.join('\n');
+  assert.equal(typeof pythonEval.callSnippetPython, 'function',
+    'python-eval-shared.js must export callSnippetPython');
+  const source = pythonEval.callSnippetPython('f', [], { captureStdout: name === 'stdout' });
+  assert.equal(typeof source, 'string', `snippet '${name}' is not a string`);
+  return source;
 }
 
 /// Run python3 to AST-parse the source and assert the last top-level
@@ -83,7 +80,7 @@ last = mod.body[-1]
 if not isinstance(last, ast.Expr):
     sys.stderr.write(
         f"snippet last top-level statement is {type(last).__name__}, "
-        f"not ast.Expr — Pyodide eval_code(last_expr) will return None to JS, "
+        f"not ast.Expr — runExpressionPython will report no value, "
         f"breaking JSON.parse downstream.\\n"
     )
     sys.exit(1)
@@ -95,26 +92,26 @@ if not isinstance(last, ast.Expr):
   if (result.status !== 0) {
     const detail = (result.stderr || '').trim() || `exit ${result.status}`;
     assert.fail(
-      `Pyodide snippet '${snippetName}' has the wrong AST shape: ${detail}\n` +
+      `Python call snippet '${snippetName}' has the wrong AST shape: ${detail}\n` +
       `--- reconstructed source ---\n${source}\n--- end ---`
     );
   }
 }
 
-test("Pyodide value-mode snippet ends in an ast.Expr (so runPythonAsync returns a value)", () => {
+test("Python value-mode snippet ends in an ast.Expr (so runExpressionPython reports a value)", () => {
   const src = extractSnippet('value');
   assertEndsInAstExpr(src, 'value');
 });
 
-test("Pyodide stdout-mode snippet ends in an ast.Expr", () => {
+test("Python stdout-mode snippet ends in an ast.Expr", () => {
   const src = extractSnippet('stdout');
   assertEndsInAstExpr(src, 'stdout');
 });
 
 test("Both snippets reference the substituted JS variables (sanity)", () => {
-  // If someone removes the JS interpolation entirely the substitution
-  // logic still passes vacuously — guard against that by asserting the
-  // reconstructed source contains the substituted function name.
+  // If someone removes the JS interpolation entirely the snippet tests
+  // still pass vacuously — guard against that by asserting the built
+  // source contains the function name and the arguments.
   for (const name of ['value', 'stdout']) {
     const src = extractSnippet(name);
     assert.ok(src.includes('globals().get("f")'),
@@ -126,17 +123,16 @@ test("Both snippets reference the substituted JS variables (sanity)", () => {
 
 // ── Runtime semantic tests for v0.4.130 ──────────────────────────────────
 //
-// The AST tests above guarantee Pyodide will return a string to JS.
+// The AST tests above guarantee runExpressionPython reports a string.
 // These tests run the snippets under CPython with `f` defined as various
 // edge cases, parse the JSON the snippet emits, and assert it carries
 // the right `__chickadee_kind__` sentinel so the JS-side handler routes
 // to the right UI feedback (error vs. None vs. unsupported).
 //
-// CPython is close enough to Pyodide's interpreter for `inspect`,
-// `json`, and `isinstance` semantics to match — the production failure
-// modes we're guarding against (coroutine returned without await, set
-// vs. JSON array silent miscompare, …) are language-level, not
-// Pyodide-specific.
+// xeus-python runs CPython, so `inspect`, `json`, and `isinstance`
+// semantics match — the production failure modes we're guarding against
+// (coroutine returned without await, set vs. JSON array silent
+// miscompare, …) are language-level, not kernel-specific.
 
 /// Runs `fSetup; <snippet>` under python3 and returns the parsed JSON
 /// payload the snippet would have handed to JS, or `{ exitError: msg }`
@@ -473,4 +469,24 @@ test("auto-compute returns describeCallFailure's result as is", () => {
     'a failed call must return the described failure');
   assert.equal(/error:\s*describeCallFailure\(/.exec(editorSource), null,
     'the described failure must not be wrapped in another object');
+});
+
+test("the editor sends every in-page language the structured call (#1964)", () => {
+  // The editor built the Python call snippet itself and sent it as `run`,
+  // while every other kernel language got `call`. The snippet now lives in
+  // python-eval-shared.js, and the worker builds it. These assertions read
+  // the code only, because comments may describe the old shape.
+  const code = editorSource
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+  assert.equal(/isPython\(\)/.exec(code), null,
+    'auto-compute must not branch on the language name');
+  assert.equal(/type:\s*'run'/.exec(code), null,
+    'the editor must not send a snippet of its own to run');
+  assert.ok(!code.includes('__chickadee_kind__'),
+    'the Python payload must be read in python-eval-shared.js, not here');
+  assert.ok(/type:\s*'call'/.test(code), 'the editor must send the structured call');
+  // The reply fields that carry Python's None and unsupported cases.
+  assert.ok(code.includes('data.returnedNone'), 'the editor must read returnedNone');
+  assert.ok(code.includes('data.unsupported'), 'the editor must read unsupported');
 });

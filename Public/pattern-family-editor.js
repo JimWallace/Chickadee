@@ -1763,30 +1763,6 @@
             return _solutionLoadedPromise;
         }
 
-        /// Calls `fnName(*args)` on the loaded solution and returns the
-        /// result as a JSON-serialisable value, or an error summary if it
-        /// throws.  When `opts.captureStdout` is set, `redirect_stdout`
-        /// wraps the call and the captured string is returned instead of
-        /// the function's return value (used by the `stdout_equality`
-        /// pattern kind).
-        ///
-        /// Result shape:
-        ///   { ok: true,  value: <parsed>, returnedNone: false }     // value-returning success
-        ///   { ok: true,  value: null,     returnedNone: true  }     // function returned None
-        ///   { ok: false, unsupported: "<reason>" }                  // non-JSON-native return type
-        ///   { ok: false, error: "<msg>" }                           // exception inside Python
-        ///   { ok: false, timedOut: true, error: "..." }             // 5s budget exceeded
-        ///
-        /// The Python boundary uses a sentinel-keyed wrapper
-        /// (`__chickadee_kind__`) instead of bare `_json.dumps(_result)`
-        /// so that a `None` return is unambiguous — pre-fix, `None`
-        /// became the string `"null"` and silently landed in the
-        /// Expected cell as if the instructor had typed it.  v0.4.130
-        /// extends the same sentinel to flag return types that don't
-        /// round-trip cleanly via JSON (coroutines, generators, sets,
-        /// tuples, bytes, complex) so the instructor sees a specific
-        /// reason instead of `default=str` silently storing the repr
-        /// string in the Expected cell.
         /// Auto-compute via the SERVER, in the assignment's own language.
         ///
         /// The browser path below is a Python kernel. It did not fail on an R,
@@ -1835,10 +1811,10 @@
 
         /// Turns a failed auto-compute into the shape the UI reads.
         ///
-        /// Shared by the Python `run` path and the structured `call` path every
-        /// other in-page kernel uses, so an R author gets the same explanation
-        /// a Python author does — including the part that matters most: when a
-        /// function is missing, WHY it is missing.
+        /// Every in-page kernel reaches it through the same `call` path, so an R
+        /// author gets the same explanation a Python author does — including
+        /// the part that matters most: when a function is missing, WHY it is
+        /// missing.
         function describeCallFailure(err, cellErrors) {
             if (err && err.message === '__chickadee_timeout__') {
                 return { ok: false, timedOut: true,
@@ -1860,6 +1836,23 @@
             return { ok: false, error: msg || 'error' };
         }
 
+        /// Calls `fnName(*args)` on the loaded solution and returns the
+        /// result as a JSON-serialisable value, or an error summary if it
+        /// throws.  When `opts.captureStdout` is set, the result is what the
+        /// function printed instead of its return value (used by the
+        /// `stdout_equality` pattern kind).
+        ///
+        /// Result shape:
+        ///   { ok: true,  value: <parsed>, returnedNone: false }     // value-returning success
+        ///   { ok: true,  value: null,     returnedNone: true  }     // function returned None
+        ///   { ok: false, unsupported: "<reason>" }                  // non-JSON-native return type
+        ///   { ok: false, error: "<msg>" }                           // exception inside the solution
+        ///   { ok: false, timedOut: true, error: "..." }             // 5s budget exceeded
+        ///
+        /// `returnedNone` and `unsupported` come from the worker's `call`
+        /// reply. Python sends them: its call snippet in python-eval-shared.js
+        /// marks a `None` return, and each return type that does not
+        /// round-trip through JSON, with a `__chickadee_kind__` payload.
         function callSolution(fnName, args, opts) {
             // IN-PAGE WHEREVER A KERNEL EXISTS, and the language seed decides
             // which — not a name check here.
@@ -1874,140 +1867,30 @@
             if (!ChickadeeLanguage.autoComputeWorker()) {
                 return callSolutionOnServer(fnName, args, opts);
             }
-            var captureStdout = !!(opts && opts.captureStdout);
-            // A NON-PYTHON in-page kernel takes the structured request and
-            // builds its own snippet, because rendering arguments into that
-            // language belongs in that language's module — not here, where
-            // the Python snippet below is assembled.
-            //
-            // Python keeps the `run` path: its snippet handles a None return
-            // and types that do not round-trip through JSON in ways existing
-            // assignments rely on.
-            if (!ChickadeeLanguage.isPython()) {
-                return ensureSolutionLoaded().then(function (loaded) {
-                    var cellErrors = loaded.cellErrors || [];
-                    return workerSend({
-                        type: 'call',
-                        functionName: fnName,
-                        args: args,
-                        captureStdout: captureStdout,
-                        runtimeSource: ChickadeeLanguage.facts().autoComputeRuntimeSource || null
-                    }, TIMEOUT_MS)
-                    .then(function (data) { return { ok: true, value: data.result }; })
-                    .catch(function (err) {
-                        // Already `{ ok: false, error }` — wrapping it again
-                        // showed every R, Lua and Octave error as
-                        // "[object Object]" (#1994).
-                        return describeCallFailure(err, cellErrors);
-                    });
-                });
-            }
+            // Every in-page kernel takes the same structured request, and the
+            // worker builds the snippet. Rendering arguments into a language
+            // belongs in that language's module (`<language>-eval-shared.js`),
+            // not here. Until #1964 this file built the Python snippet itself.
             return ensureSolutionLoaded().then(function (loaded) {
                 var cellErrors = loaded.cellErrors || [];
-                var argsJSON = JSON.stringify(args);
-                var fnLit = JSON.stringify(fnName);
-                var argsLit = JSON.stringify(argsJSON);
-                // The LAST top-level statement of each snippet must be an
-                // expression statement (`ast.Expr`) — that's the only shape
-                // Pyodide's `eval_code` extracts and returns to JS in
-                // `last_expr` mode.  An `if/else` or `with` as the final
-                // top-level statement causes `runPythonAsync` to resolve
-                // with `undefined` and `JSON.parse(undefined)` to throw,
-                // which silently breaks auto-compute.  Pre-v0.4.125 the
-                // value-mode snippet did exactly that.  We now compute the
-                // payload into `_payload` and put a bare `_json.dumps(...)`
-                // on the last line.  The regression test in
-                // PatternFamilyEditorJSTests asserts this structurally —
-                // do not move work below that final dumps line.
-                var pyCode;
-                if (captureStdout) {
-                    // PYODIDE_SNIPPET_BEGIN: stdout
-                    pyCode = [
-                        'import json as _json',
-                        'import io as _io',
-                        'import contextlib as _contextlib',
-                        'import inspect as _inspect',
-                        '_fn = globals().get(' + fnLit + ')',
-                        'if _fn is None:',
-                        '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
-                        '_args = _json.loads(' + argsLit + ')',
-                        '_buf = _io.StringIO()',
-                        'with _contextlib.redirect_stdout(_buf):',
-                        '    _ret = _fn(*_args)',
-                        // An async function used by mistake: `_fn(*_args)`
-                        // returns a coroutine without ever entering the
-                        // body, so `_buf` is empty and the instructor
-                        // would see a blank Expected.  Surface it.
-                        'if _inspect.iscoroutine(_ret):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "coroutine"}',
-                        'elif _inspect.isasyncgen(_ret):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "async-generator"}',
-                        'else:',
-                        '    _captured = _buf.getvalue()',
-                        // Mirror the renderer-side normalisation so the
-                        // auto-computed Expected matches what the
-                        // generated test will compare against.
-                        '    if _captured.endswith("\\n"):',
-                        '        _captured = _captured[:-1]',
-                        '    _payload = {"__chickadee_kind__": "value", "value": _captured}',
-                        '_json.dumps(_payload)'
-                    ].join('\n');
-                    // PYODIDE_SNIPPET_END: stdout
-                } else {
-                    // PYODIDE_SNIPPET_BEGIN: value
-                    pyCode = [
-                        'import json as _json',
-                        'import inspect as _inspect',
-                        '_fn = globals().get(' + fnLit + ')',
-                        'if _fn is None:',
-                        '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
-                        '_args = _json.loads(' + argsLit + ')',
-                        '_result = _fn(*_args)',
-                        // Non-JSON-native return types silently round-tripped
-                        // pre-v0.4.130 via `default=str`, landing the repr
-                        // string in the Expected cell as if the instructor
-                        // typed it.  Detect each common shape and surface a
-                        // specific reason so the instructor sees what
-                        // happened instead of a stringified "<coroutine ...>".
-                        'if _inspect.iscoroutine(_result):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "coroutine"}',
-                        'elif _inspect.isasyncgen(_result):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "async-generator"}',
-                        'elif _inspect.isgenerator(_result):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "generator"}',
-                        'elif isinstance(_result, (set, frozenset)):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "set"}',
-                        // Tuples ARE JSON-serialisable but the runner-side
-                        // test compares with `==` against a Python tuple,
-                        // and a JSON array round-trips back as a `list`,
-                        // so `(1,2) == [1,2]` is False — silent miscompare.
-                        'elif isinstance(_result, tuple):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "tuple"}',
-                        'elif isinstance(_result, (bytes, bytearray)):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "bytes"}',
-                        'elif isinstance(_result, complex):',
-                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "complex"}',
-                        'elif _result is None:',
-                        '    _payload = {"__chickadee_kind__": "none"}',
-                        'else:',
-                        '    _payload = {"__chickadee_kind__": "value", "value": _result}',
-                        '_json.dumps(_payload, default=str)'
-                    ].join('\n');
-                    // PYODIDE_SNIPPET_END: value
-                }
                 return workerSend({
-                    type: 'run', code: pyCode,
+                    type: 'call',
+                    functionName: fnName,
+                    args: args,
+                    captureStdout: !!(opts && opts.captureStdout),
                     runtimeSource: ChickadeeLanguage.facts().autoComputeRuntimeSource || null
-                }, TIMEOUT_MS).then(function (data) {
-                    var parsed = JSON.parse(data.result);
-                    if (parsed && parsed.__chickadee_kind__ === 'none') {
-                        return { ok: true, value: null, returnedNone: true };
-                    }
-                    if (parsed && parsed.__chickadee_kind__ === 'unsupported') {
-                        return { ok: false, unsupported: parsed.reason || 'unknown' };
-                    }
-                    return { ok: true, value: parsed.value, returnedNone: false };
-                }).catch(function (err) { return describeCallFailure(err, cellErrors); });
+                }, TIMEOUT_MS)
+                .then(function (data) {
+                    if (data.returnedNone) return { ok: true, value: null, returnedNone: true };
+                    if (data.unsupported) return { ok: false, unsupported: data.unsupported };
+                    return { ok: true, value: data.result, returnedNone: false };
+                })
+                .catch(function (err) {
+                    // Already `{ ok: false, error }` — wrapping it again
+                    // showed every R, Lua and Octave error as
+                    // "[object Object]" (#1994).
+                    return describeCallFailure(err, cellErrors);
+                });
             }).catch(function (err) {
                 // Solution-load failures (no-solution, empty-solution,
                 // network, load-timeout).  These come *before* any
