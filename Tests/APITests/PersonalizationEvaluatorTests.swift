@@ -229,7 +229,13 @@ import Testing
                         staticVariables: [],
                         expressions: [
                             PersonalizationExpression(name: "v", expression: "seed % 100")
-                        ], language: .python
+                        ], language: .python,
+                        // Six python3 processes start at once under the spawn gate.
+                        // On a loaded CI runner one of them has missed the 5-second
+                        // default (#2059, #2006), which failed the assertion below,
+                        // not the suite's 2-minute limit. 30 seconds is a CI budget,
+                        // not a change in what the gate guarantees.
+                        timeoutSeconds: 30
                     )
                 }
             }
