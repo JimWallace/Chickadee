@@ -34,7 +34,7 @@
 </style>
 <div class="notebook-header">
     <div class="notebook-toolbar">
-        <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
+        <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></span>
         <div class="notebook-actions">
             #if(isStudentSolutionView):
             <span class="nb-closed-notice">Reference solution#if(isReadOnly): &mdash; view only.#endif</span>
@@ -109,7 +109,7 @@
     <div class="toolbar">
         <span><strong class="js-nb-slow-title"></strong> <span class="js-nb-slow-text"></span></span>
         <input type="file" id="nb-slow-upload-file" accept=".ipynb,application/json" aria-label="Upload your .ipynb file">
-        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md#the-editor-is-slow-to-load" target="_blank" rel="noopener noreferrer">More help</a>
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md#the-editor-is-slow-to-load" target="_blank" rel="noopener noreferrer">More help <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>
         <button type="button" id="nb-slow-notice-dismiss" class="btn action-btn" aria-label="Dismiss loading notice">Dismiss</button>
     </div>
 </div>
@@ -137,7 +137,7 @@
         If the problem continues,
         <a id="nb-reset-editor-link" href="/reset-editor">reset the notebook editor</a>
         or read the
-        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md" target="_blank" rel="noopener noreferrer">notebook editor help</a>.
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md" target="_blank" rel="noopener noreferrer">notebook editor help <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>.
     </p>
     <details>
         <summary>Diagnostic details</summary>

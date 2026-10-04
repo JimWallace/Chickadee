@@ -12,6 +12,7 @@ You can always submit without the editor: upload your notebook file
 
 The notice "Editor slow to load" shows when the editor has not started after
 35 seconds. The editor stays on the page, and it can still finish loading.
+When it does, the notice goes away.
 
 Older browsers, and devices with little memory such as some iPads, can take a
 long time to start the editor, or cannot start it. Do one of these:

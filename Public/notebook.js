@@ -482,6 +482,11 @@
             clearTimeout(slowBootNoticeTimer);
             slowBootNoticeTimer = null;
         }
+        // A slow-boot notice shown before the kernel was ready is now out of
+        // date (#2028).
+        if (failures && failures.hideSlowEditorNotice) {
+            failures.hideSlowEditorNotice();
+        }
     }
 
     function armSlowBootNotice() {

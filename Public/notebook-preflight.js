@@ -96,6 +96,22 @@
     let _failureShown = false;
 
     /**
+     * Hide a notice. When `refocus` is set, or focus was inside the notice,
+     * move focus to the page's status line, so a keyboard or screen-reader
+     * user is not left on a hidden element (#2028). A Dismiss click passes
+     * `refocus`, because Safari does not focus a button on a click.
+     */
+    function hideNotice(notice, refocus) {
+        if (!notice) return;
+        const focusInside = notice.contains(document.activeElement);
+        notice.hidden = true;
+        if (refocus || focusInside) {
+            const status = document.getElementById('nb-status');
+            if (status) status.focus();
+        }
+    }
+
+    /**
      * Hide the editor iframe, reveal the fallback panel, and POST a
      * diagnostic record.  Idempotent — calling twice (e.g. preflight
      * failed AND the unmounted iframe later "timed out") only renders
@@ -118,7 +134,7 @@
 
         // The panel replaces the slow-boot notice: one state at a time.
         const slowNotice = document.getElementById('nb-slow-notice');
-        if (slowNotice) slowNotice.hidden = true;
+        if (slowNotice && !slowNotice.hidden) hideNotice(slowNotice, false);
 
         // Memory-crash variant: the editor DID load, but the kernel died on a
         // fatal WASM/OOM crash mid-session — swap in memory-specific copy on the
@@ -254,7 +270,7 @@
             const closeBtn = document.getElementById('nb-device-warning-dismiss');
             if (closeBtn) {
                 closeBtn.addEventListener('click', function () {
-                    banner.hidden = true;
+                    hideNotice(banner, true);
                     try { localStorage.setItem(Core.DEVICE_WARNING_DISMISSED_KEY, '1'); } catch (_) { /* ignore */ }
                 });
             }
@@ -299,13 +315,22 @@
             if (textEl) textEl.textContent = Core.FALLBACK_COPY.slow.text;
             const closeBtn = document.getElementById('nb-slow-notice-dismiss');
             if (closeBtn) {
-                closeBtn.addEventListener('click', function () { notice.hidden = true; });
+                closeBtn.addEventListener('click', function () { hideNotice(notice, true); });
             }
             // Reveal the upload path; do NOT hide the editor — it may still boot.
             notice.hidden = false;
         }
 
         reportEvent(Core.slowBootEvent(navigator.userAgent));
+    }
+
+    /// Hides the slow-boot notice when the kernel becomes ready after it was
+    /// shown, because the notice is then out of date. It stays while focus is
+    /// inside it: the student may be choosing a file to upload.
+    function hideSlowEditorNotice() {
+        const notice = document.getElementById('nb-slow-notice');
+        if (!notice || notice.hidden || notice.contains(document.activeElement)) return;
+        notice.hidden = true;
     }
 
     // ----------------------------------------------------------------
@@ -339,7 +364,7 @@
             const closeBtn = document.getElementById('nb-browser-support-dismiss');
             if (closeBtn) {
                 closeBtn.addEventListener('click', function () {
-                    banner.hidden = true;
+                    hideNotice(banner, true);
                     try { localStorage.setItem(Core.BROWSER_WARNING_DISMISSED_KEY, '1'); } catch (_) { /* ignore */ }
                 });
             }
@@ -360,6 +385,7 @@
         showDeviceWarning:        showDeviceWarning,
         showBrowserSupportWarning: showBrowserSupportWarning,
         showSlowEditorNotice:     showSlowEditorNotice,
+        hideSlowEditorNotice:     hideSlowEditorNotice,
         reportEditorError:        reportEditorError,
         reportEvent:              reportEvent
     };
