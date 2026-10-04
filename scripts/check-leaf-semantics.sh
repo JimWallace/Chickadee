@@ -72,9 +72,9 @@ set -uo pipefail
 # of an HTML comment, so `<!-- ... -->` is raw text to it and a tag written
 # there is lexed as if it stood in the markup. A structural tag name with no
 # parameter list is a 500 at render; an interpolation prints the real context
-# value into the served HTML. CLAUDE.md records the full table. An unknown
-# `#word` (a CSS id in prose) is inert, so only the interpolation opener and
-# the structural tag names are rejected.
+# value into the served HTML. docs/leaf-decomposition-review.md section 0
+# records the full table. An unknown `#word` (a CSS id in prose) is inert, so
+# only the interpolation opener and the structural tag names are rejected.
 #
 # The rule covers `isEmpty` and `count` and stops there. Those are the two a
 # Swift author reaches for on a collection, and both fail silently. Adding
@@ -175,8 +175,8 @@ done
 
 # The line-comment rule. The forbidden sequence is BUILT rather than written,
 # so this script's own prose describing it cannot trip a future guard that
-# scans more than templates — the trap CLAUDE.md records twice, where a guard
-# matched its own documentation.
+# scans more than templates — the trap that shipped twice, where a guard
+# matched its own documentation (docs/leaf-decomposition-review.md section 0).
 tag_indicator='#'
 line_comment_opener="${tag_indicator}/"
 line_comment_header_printed=""
