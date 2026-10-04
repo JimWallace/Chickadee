@@ -392,7 +392,8 @@ struct InstructorMCPContext: Encodable {
     /// `canEdit && isCustomized` — folded so the template gates the Reset
     /// button on one flag (LeafKit 1.14.2 mis-parses `&&`).
     let showResetButton: Bool
-    /// One-line statement of where the current text comes from.
+    /// A noun phrase that names where the current text comes from.  It is
+    /// chrome in a definition list, so it is not a sentence.
     let sourceNote: String
     let maxLength: Int
     /// True when the viewer may save: a per-course instructor or an admin, and

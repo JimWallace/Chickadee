@@ -831,7 +831,7 @@ pattern above and is not counted (`workbench.js`'s `--wb-left-width` and
 
 A page `<style>` block is for styling that genuinely exists on one page only.
 
-- Class names are **role-named** (`.guide-textarea`, `.learn-flag`), never
+- Class names are **role-named** (`.guide-textarea`, `.students-titlebar`), never
   utility-named (`.mt-1`, `.red-text`).
 - A page block may not re-define a selector from the global sheet
   (`.main` is the one allowlisted override).

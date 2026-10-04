@@ -85,8 +85,8 @@ import VaporTesting
 
             let html = try await page("/instructor/students", cookie: cookie, on: app)
             let row = try #require(html.range(of: "learn_flagged"))
-            #expect(html[row.upperBound...].prefix(400).contains("learn-flag"))
-            #expect(html.components(separatedBy: "class=\"learn-flag\"").count - 1 == 1)
+            #expect(html[row.upperBound...].prefix(400).contains("class=\"tier tier-danger\""))
+            #expect(html.components(separatedBy: "if confirmed dropped").count - 1 == 1)
             #expect(!html.contains("learn-check-btn"))
         }
     }
