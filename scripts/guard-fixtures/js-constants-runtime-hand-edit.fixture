@@ -1,0 +1,10 @@
+# A machine writes the runtime helpers in runner-support-sources.js from
+# Tools/runner-support. A hand edit to a helper there is drift.
+guard="scripts/generate-js-constants.sh"
+args="--check"
+files="Public/runner-support-sources.js"
+description="a runtime helper in runner-support-sources.js edited by hand"
+expect="runtime helpers are stale"
+apply() {
+    sed -i 's/"test_runtime.py": "/"test_runtime.py": "# hand edit\\n/' Public/runner-support-sources.js
+}

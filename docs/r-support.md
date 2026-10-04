@@ -422,7 +422,9 @@ none of that. Rather than fork the runtime for the browser,
   a `chickadee_exit` condition carrying the status. `test_runtime.R`'s helpers
   resolve `quit` through their enclosure (the global environment), so the mask is
   what they call — and the canonical runtime stays byte-identical across both
-  runners (pinned by `runtime-drift.test.mjs`).
+  runners (the browser gets it from the generated
+  `Public/runner-support-sources.js`, which `generate-js-constants.sh --check`
+  keeps equal to the canonical file).
 - `commandArgs` is masked to name the script being graded.
 - The global environment is wiped before each script, standing in for the fresh
   process the native runner gets per test.
