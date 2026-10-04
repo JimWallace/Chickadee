@@ -17,8 +17,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaStdoutCaptureTests {
 
-    static let requiresLua: ConditionTrait = .enabled("requires lua on PATH") { await Self.luaAvailable }
-
     static var luaAvailable: Bool {
         get async { await toolIsAvailable("lua", arguments: ["-v"]) }
     }
@@ -70,22 +68,22 @@ import Testing
 
     // The fixture family prints the string "hello" for `classify`.
 
-    @Test(Self.requiresLua) func printIsCaptured() async throws {
+    @Test(.requiresLua) func printIsCaptured() async throws {
         #expect(try await grade(#"function classify(x) print("hello") end"#) == "pass")
     }
 
-    @Test(Self.requiresLua) func ioStdoutWriteIsCaptured() async throws {
+    @Test(.requiresLua) func ioStdoutWriteIsCaptured() async throws {
         // The regression: this escaped the old bare-io.write swap and failed a
         // correct submission with empty output.
         #expect(try await grade("function classify(x) io.stdout:write(\"hello\\n\") end") == "pass")
     }
 
-    @Test(Self.requiresLua) func chainedIoWriteIsCaptured() async throws {
+    @Test(.requiresLua) func chainedIoWriteIsCaptured() async throws {
         // Chained writes used to crash on the collector returning nil.
         #expect(try await grade("function classify(x) io.write(\"hel\"):write(\"lo\") end") == "pass")
     }
 
-    @Test(Self.requiresLua) func wrongOutputStillFails() async throws {
+    @Test(.requiresLua) func wrongOutputStillFails() async throws {
         // The capture is stronger, but the check still bites.
         #expect(try await grade(#"function classify(x) print("goodbye") end"#) == "fail")
     }
