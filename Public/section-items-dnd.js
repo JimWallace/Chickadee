@@ -82,7 +82,6 @@
 
     function makeDraggable(root) {
         root.querySelectorAll(ROW_SELECTOR).forEach(function (row) {
-            row.classList.add('assignment-draggable');
             row.setAttribute('draggable', 'true');
             // Prevent native link / image drag from hijacking the row drag.
             row.querySelectorAll('a, img').forEach(function (el) {
@@ -100,7 +99,7 @@
         dragged = row;
         startTbody = row.parentElement;
         startOrder = orderKey(startTbody);
-        row.classList.add('dragging');
+        row.classList.add('suite-row-dragging');
         if (event.dataTransfer) {
             event.dataTransfer.effectAllowed = 'move';
             var d = descriptor(row);
@@ -157,7 +156,7 @@
 
     document.addEventListener('dragend', function () {
         if (!dragged) return;
-        dragged.classList.remove('dragging');
+        dragged.classList.remove('suite-row-dragging');
         var row = dragged;
         var fromTbody = startTbody;
         var fromOrder = startOrder;

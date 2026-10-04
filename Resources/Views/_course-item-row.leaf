@@ -13,7 +13,7 @@
      section - rendered without them. -->
 #if(item.isContent):
     <tr data-content-item-id="#(item.content.id)"#if(item.content.isHeading): class="section-items-heading"#endif>
-        <td class="section-items-handle"><span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span></td>
+        <td class="section-items-handle"><span class="suite-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span></td>
         #if(item.content.isHeading):
         <td colspan="4"><strong>#(item.content.title)</strong>#if(item.content.itemDescription): <span class="text-muted">#(item.content.itemDescription)</span>#endif</td>
         #else:
@@ -127,7 +127,7 @@
 #else:
     <tr class="#if(item.row.status == "open"):status-open#elseif(item.row.status == "preview"):status-preview#elseif(item.row.status == "closed"):status-closed#endif"
         #if(item.row.assignmentID):data-assignment-id="#(item.row.assignmentID)"#endif>
-        <td class="section-items-handle">#if(item.row.assignmentID):<span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>#endif</td>
+        <td class="section-items-handle">#if(item.row.assignmentID):<span class="suite-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>#endif</td>
         <td class="item-tile-cell">
             #if(item.row.assignmentID):
             <span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span>

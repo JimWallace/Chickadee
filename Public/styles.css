@@ -3006,6 +3006,11 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
 .suite-drag-handle { cursor: grab; user-select: none; color: var(--gray-500); padding: 0 .3rem; }
 .suite-drag-handle:active { cursor: grabbing; }
 .suite-row-dragging { opacity: .35; }
+/* A row that is itself the drag source (the Overview's assignment rows, which
+   section-items-dnd.js marks draggable) shows the grip's cursor across the
+   whole row, since any cell starts the drag. Named in docs/ui-design.md
+   "Drag to reorder". */
+tr[draggable="true"] td { cursor: grab; }
 tr.drop-before td:first-child { border-top: 2px solid var(--blue); }
 tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue); }
 tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }

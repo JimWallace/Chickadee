@@ -286,7 +286,6 @@ test('rows are made draggable and their links are not', () => {
   load({ sections: { labs: [a] } });
 
   assert.equal(a.getAttribute('draggable'), 'true');
-  assert.ok(a.classes.has('assignment-draggable'));
   assert.equal(link.getAttribute('draggable'), 'false',
     'native link drag must not hijack the row drag');
 });

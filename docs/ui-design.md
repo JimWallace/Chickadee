@@ -557,7 +557,12 @@ duplicate.
   "become a child of this", with `.suite-root-drop` the empty tail target and
   `.drop-hover` its lit state.  `.section-dragging` is deliberately shared —
   `assignments.js` and `suite-table.js` both apply it to a `.section-block`.
-  A third reorder surface reuses these; it does not mint a third grip.
+  A third reorder surface reuses these; it does not mint a third grip.  The
+  Overview's assignment rows are that third surface: a row in a table takes
+  `.suite-drag-handle` and `.suite-row-dragging`.  There the whole `<tr>` is
+  the drag source (`section-items-dnd.js` sets `draggable` on the row, where
+  the suite table sets it on the grip), so `tr[draggable="true"] td` carries
+  the grab cursor across the row and the grip is a signpost.
 - **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
   targets.  Unrelated to the reorder cues above despite the shared verb.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.

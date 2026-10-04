@@ -55,7 +55,7 @@ import VaporTesting
             let html = try await getHTML("/instructor", cookie: cookie, on: app)
             #expect(html.contains("<tbody data-section-id=\"\(try section.requireID().uuidString)\">"))
             #expect(html.contains("data-content-item-id=\"\(try item.requireID().uuidString)\""))
-            #expect(html.contains("assignment-drag-handle"))
+            #expect(html.contains("suite-drag-handle"))
             #expect(html.contains("class=\"results-table section-items section-items--manage\""))
         }
     }
