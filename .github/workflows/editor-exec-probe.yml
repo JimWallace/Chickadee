@@ -40,6 +40,7 @@ on:
       # The test runtimes the browser grades with, generated from
       # Tools/runner-support (#1962).
       - "Public/runner-support-sources.js"
+      - "Public/grading-executors.js"
       - "Public/jupyterlite/**"
 
 concurrency:

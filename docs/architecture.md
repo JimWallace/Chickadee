@@ -211,7 +211,7 @@ Student browser
 
 Browser-graded assignments run the *same* `executeSuites` loop, compiled to
 wasm, against a xeus kernel substrate: `RoutingExecutor` in
-`Public/browser-runner.js` sends each script to the vendored kernel for its
+`Public/grading-executors.js` sends each script to the vendored kernel for its
 language (xeus-python, xeus-r, xeus-lua or xeus-octave) through that
 language's `*-grading-worker.js`, seeded through `BrowserRunnerRoutes`, and the
 page posts the results to the server. A worker backstop regrades browser-mode
