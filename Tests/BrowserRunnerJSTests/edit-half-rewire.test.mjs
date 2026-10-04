@@ -33,6 +33,9 @@ const sectionInputsSource = await read('Public/section-inputs-editor.js');
 const globalInputsSource = await read('Public/global-inputs-editor.js');
 const achievementsSource = await read('Public/achievements-editor.js');
 const languageSource = await read('Public/authoring-language.js');
+// The family editor computes through Public/auto-compute-client.js (#1966),
+// which the page loads before it.
+const autoComputeSource = await read('Public/auto-compute-client.js');
 const familyEditorSource = await read('Public/pattern-family-editor.js');
 const inputsCoreSource = await read('Public/inputs-editor-core.js');
 
@@ -481,6 +484,7 @@ function loadFamilyEditor() {
   };
   vm.createContext(ctx);
   vm.runInContext(languageSource, ctx);
+  vm.runInContext(autoComputeSource, ctx);
   vm.runInContext(familyEditorSource, ctx);
 
   const config = {
