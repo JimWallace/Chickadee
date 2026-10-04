@@ -238,6 +238,12 @@ move without the content forking:
   discovered and consumed through MCP) is the natural long-term convergence
   point for this kind of guidance; evaluate once the connector supports it.
 
+At `initialize`, a course that has replaced the default appends its guide as
+a labelled block (`MCPCourseGuidance.swift`). A course whose
+`courses.mcp_instructions` is nil still inherits, and adds nothing, because the
+default is already in the base text. The guidance is
+advisory text only. It never changes tools, scopes or the admin surface.
+
 What an instructor sees on the MCP tab, kept here because each note on the
 page is one sentence: a saved guide reaches an agent through the live resource
 at once, and through the `initialize` instructions the next time the agent
