@@ -65,10 +65,8 @@ extension AdminRoutes {
                 role: role.rawValue
             )
             // Each person's own seeded bird, as on the admin users list. The
-            // staff ring follows this course's role (docs/student-wardrobe.md).
-            let spec = try await AvatarStore.ensureSpec(for: user, on: db)
-            row.avatar = AvatarPresentation(
-                for: spec, size: .roster, accessibility: .decorative, isStaff: role >= .ta)
+            // staff ring follows this course's role.
+            row.avatar = try await AvatarStore.rosterAvatar(for: user, isStaff: role >= .ta, on: db)
             row.hasAvatar = true
             rows.append(row)
         }

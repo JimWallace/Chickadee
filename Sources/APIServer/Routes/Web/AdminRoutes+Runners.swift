@@ -216,9 +216,8 @@ extension AdminRoutes {
             completedAt: metric.completedAt.map(iso8601String)
         )
         if let user, let userID = user.id {
-            let spec = try await AvatarStore.ensureSpec(for: user, on: db)
-            row.avatar = AvatarPresentation(
-                for: spec, size: .roster, accessibility: .decorative, isStaff: staffIDs.contains(userID))
+            row.avatar = try await AvatarStore.rosterAvatar(
+                for: user, isStaff: staffIDs.contains(userID), on: db)
             row.hasAvatar = true
         }
         let status = Self.statusPill(for: row.finalStatus)
