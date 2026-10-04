@@ -196,10 +196,7 @@ extension APIUser {
     /// silently emit a broken URL if the invariant breaks.
     func requireURLToken() throws -> String {
         guard let token = urlToken, !token.isEmpty else {
-            throw Abort(
-                .internalServerError,
-                reason: "APIUser \(id?.uuidString ?? "?") is missing urlToken"
-            )
+            throw AppError.internalFailure(reason: "APIUser \(id?.uuidString ?? "?") is missing urlToken")
         }
         return token
     }

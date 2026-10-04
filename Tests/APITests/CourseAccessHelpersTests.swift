@@ -109,13 +109,13 @@ import Vapor
             let admin = try await makeTestUser(on: app, username: "boss", role: "admin")
 
             let req = Request(application: app, on: app.eventLoopGroup.any())
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await req.cachedRequireCourseEnrollment(caller: outsider, courseID: courseID)
             }
             try await req.cachedRequireCourseEnrollment(caller: member, courseID: courseID)
             // A nil role is memoized too — the denial repeats without a fresh
             // read, and stays a denial.
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await req.cachedRequireCourseEnrollment(caller: outsider, courseID: courseID)
             }
             // Admins bypass, as in `requireCourseEnrollment`.
