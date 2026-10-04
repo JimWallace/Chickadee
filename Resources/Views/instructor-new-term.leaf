@@ -26,33 +26,7 @@ New term
     #if(canClone):
     <form method="post" action="/instructor/new-term" class="form-stack">
         #csrfFormField()
-        <label class="form-label">
-            Code
-            <input class="form-input" type="text" name="code" value="#(courseCode)" required>
-        </label>
-        <label class="form-label">
-            Name
-            <input class="form-input" type="text" name="name" value="#(courseName)" required>
-        </label>
-        <label class="form-label">
-            Year
-            <select class="form-input" name="termYear" required>
-                #for(option in cloneYearOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
-        <label class="form-label">
-            Term
-            <select class="form-input" name="termSeason" required>
-                #if(cloneYear):#else:
-                <option value="" selected disabled>Choose</option>
-                #endif
-                #for(option in cloneTermOptions):
-                <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
-                #endfor
-            </select>
-        </label>
+        #extend("_course-fields", cloneForm)
         <div class="toolbar">
             <button class="btn btn-primary" type="submit">Clone course</button>
         </div>

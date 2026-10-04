@@ -35,9 +35,10 @@ extension AdminRoutes {
                 enrolledUsers: [],
                 assignments: [],
                 isNew: true,
-                error: req.query[String.self, at: "error"],
-                termOptions: CourseTermForm.options(selected: nil),
-                yearOptions: CourseTermForm.yearOptions(selected: nil)
+                courseForm: CourseFieldsContext(
+                    idPrefix: "new-course", code: "", name: "", term: nil,
+                    error: CourseFormError.message(forQuery: req.query[String.self, at: "error"]),
+                    autofocus: true)
             ))
     }
 
@@ -55,15 +56,15 @@ extension AdminRoutes {
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, !name.isEmpty else {
-            return req.redirect(to: "/admin/courses/new?error=course_fields_required")
+            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.fields.rawValue)")
         }
         // A new course declares its term (docs/course-terms.md). Nothing
         // guesses one, and the form starts empty.
         guard case .term(let term) = CourseTermInput(year: body.termYear, season: body.termSeason) else {
-            return req.redirect(to: "/admin/courses/new?error=course_term_required")
+            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.term.rawValue)")
         }
         if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
-            return req.redirect(to: "/admin/courses/new?error=code_taken")
+            return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.codeTaken.rawValue)")
         }
         let course = APICourse(code: code, name: name, term: term)
         try await course.save(on: req.db)
@@ -97,7 +98,7 @@ extension AdminRoutes {
         if course.isArchived,
             try await activeCourseCodeIsTaken(course.code, term: course.term, excluding: courseID, on: req.db)
         {
-            return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
+            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeTaken.rawValue)")
         }
         course.isArchived.toggle()
         // Archiving is Chickadee's "end of term" signal: stamp the moment so
@@ -364,7 +365,7 @@ extension AdminRoutes {
         switch CourseTermInput(year: body.termYear, season: body.termSeason) {
         case .absent: term = course.term
         case .term(let posted): term = posted
-        case .invalid: return req.redirect(to: "/admin/courses/\(idString)?error=course_term_required")
+        case .invalid: return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.term.rawValue)")
         }
 
         // Reject a duplicate of another active course in the same term — the
@@ -373,7 +374,7 @@ extension AdminRoutes {
         if !course.isArchived,
             try await activeCourseCodeIsTaken(code, term: term, excluding: courseID, on: req.db)
         {
-            return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
+            return req.redirect(to: "/admin/courses/\(idString)?error=\(CourseFormError.codeTaken.rawValue)")
         }
 
         course.term = term
@@ -542,16 +543,30 @@ extension AdminRoutes {
                 .filter(\.$role != UserRole.mcp.rawValue)
                 .sort(\.$username)
                 .all()
-            enrolledUsers = users.compactMap { u in
-                guard let uid = u.id else { return nil }
-                return AdminCourseEnrolledUserRow(
+            var rows: [AdminCourseEnrolledUserRow] = []
+            for user in users {
+                guard let uid = user.id else { continue }
+                let role = roleByUserID[uid] ?? .student
+                var row = AdminCourseEnrolledUserRow(
                     id: uid.uuidString,
-                    username: u.username,
-                    displayName: u.displayName,
-                    role: (roleByUserID[uid] ?? .student).rawValue
+                    username: user.username,
+                    displayName: user.displayName,
+                    role: role.rawValue
                 )
+                // Each person's own seeded bird, as on the admin users list. The
+                // staff ring follows this course's role (docs/student-wardrobe.md).
+                let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
+                row.avatar = AvatarPresentation(
+                    for: spec, size: .roster, accessibility: .decorative, isStaff: role >= .ta)
+                row.hasAvatar = true
+                rows.append(row)
             }
+            enrolledUsers = rows
         }
+
+        // One `error` query serves the settings and clone forms; each form
+        // shows only the codes it owns.
+        let errorCode = req.query[String.self, at: "error"]
 
         // Load assignments for this course.
         let assignmentModels = try await APIAssignment.query(on: req.db)
@@ -577,13 +592,15 @@ extension AdminRoutes {
                 enrolledUsers: enrolledUsers,
                 assignments: assignments,
                 isNew: false,
-                error: req.query[String.self, at: "error"],
-                termOptions: CourseTermForm.options(selected: course.term?.season),
-                yearOptions: CourseTermForm.yearOptions(selected: course.termYear),
-                cloneYearOptions: CourseTermForm.yearOptions(selected: course.term?.next?.year),
-                cloneYear: course.term?.next?.year,
-                cloneError: CourseCloneFormError.message(forQuery: req.query[String.self, at: "error"]),
-                cloneTermOptions: CourseTermForm.options(selected: course.term?.next?.season)
+                courseForm: CourseFieldsContext(
+                    idPrefix: "course-settings", code: course.code, name: course.name, term: course.term,
+                    error: CourseFormError.message(forQuery: errorCode)),
+                // The clone defaults to the term after this course's, when it
+                // has one (docs/course-terms.md slice 4): derived from the
+                // course, never from today's date.
+                cloneForm: CourseFieldsContext(
+                    idPrefix: "clone", code: course.code, name: course.name, term: course.term?.next,
+                    error: CourseCloneFormError.message(forQuery: errorCode))
             ))
     }
 

@@ -1,0 +1,40 @@
+<!-- The fields of one course form: the new-course form, a course's settings
+     and clone forms, and the instructor New term tab.  It renders under a
+     sub-context (CourseFieldsContext), so every copy on a page has unique
+     ids.  A validation error shows here, beside the form it belongs to. -->
+#if(error):
+<div class="form-error" role="alert">#(error)</div>
+#endif
+<div class="toolbar">
+    <div class="field-stack field-stack--narrow">
+        <label for="#(idPrefix)-code">Code</label>
+        <input id="#(idPrefix)-code" class="form-input" type="text" name="code"
+               value="#(code)" placeholder="e.g. CS136" required#if(autofocus): autofocus#endif>
+    </div>
+    <div class="field-stack field-stack--grow">
+        <label for="#(idPrefix)-name">Name</label>
+        <input id="#(idPrefix)-name" class="form-input" type="text" name="name"
+               value="#(name)" placeholder="e.g. Elementary Algorithm Design" required>
+    </div>
+</div>
+<div class="toolbar">
+    <div class="field-stack field-stack--narrow">
+        <label for="#(idPrefix)-year">Year</label>
+        <select id="#(idPrefix)-year" class="form-input" name="termYear" required>
+            #for(option in yearOptions):
+            <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+            #endfor
+        </select>
+    </div>
+    <div class="field-stack field-stack--narrow">
+        <label for="#(idPrefix)-term">Term</label>
+        <select id="#(idPrefix)-term" class="form-input" name="termSeason" required>
+            #if(asksForTerm):
+            <option value="" selected disabled>Choose</option>
+            #endif
+            #for(option in termOptions):
+            <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+            #endfor
+        </select>
+    </div>
+</div>

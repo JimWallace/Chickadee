@@ -70,6 +70,27 @@ enum CourseTermForm {
     }
 }
 
+/// Why a new-course or course-settings form was refused. The query codes are
+/// what the create, edit and archive routes redirect with.
+enum CourseFormError: String, CaseIterable {
+    case fields = "course_fields_required"
+    case term = "course_term_required"
+    case codeTaken = "code_taken"
+
+    var message: String {
+        switch self {
+        case .fields: "Course code and name are required."
+        case .term: "Enter a four-digit year and a term."
+        case .codeTaken: "Another course already uses this code."
+        }
+    }
+
+    /// The message for an `error` query value, or nil for any other value.
+    static func message(forQuery value: String?) -> String? {
+        value.flatMap(Self.init(rawValue:))?.message
+    }
+}
+
 /// Why a clone form was refused. The admin clone section and the instructor
 /// New term tab both use it, so the query code and the words are written
 /// once (docs/course-terms.md slices 4 and 5).

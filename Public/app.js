@@ -400,6 +400,8 @@ if (root) {
 // opened. Class toggle only. A control may also carry data-add-kind, which
 // preselects that panel's kind select (the section + Add ▾ material items).
 // Without JS the control is a link to the panel's id and :target opens it.
+// A link from another page can open a panel the same way, so Cancel also sets
+// is-closed, which wins over :target; the opener clears it.
 (function addPanels() {
     document.addEventListener('click', (e) => {
         const target = e.target instanceof Element ? e.target : null;
@@ -412,6 +414,7 @@ if (root) {
             const kind = opener.getAttribute('data-add-kind');
             const select = kind ? panel.querySelector('select[name="kind"]') : null;
             if (select) select.value = kind;
+            panel.classList.remove('is-closed');
             panel.classList.add('is-open');
             const menu = opener.closest('details');
             if (menu) menu.open = false;
@@ -422,7 +425,10 @@ if (root) {
         const cancel = target.closest('.js-add-cancel');
         if (cancel) {
             const open = cancel.closest('.add-panel');
-            if (open) open.classList.remove('is-open');
+            if (open) {
+                open.classList.remove('is-open');
+                open.classList.add('is-closed');
+            }
         }
     });
 }());

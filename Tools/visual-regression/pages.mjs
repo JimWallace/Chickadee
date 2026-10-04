@@ -11,7 +11,7 @@
 //   instructor tabs → instructor-assignments, instructor-students,
 //                     instructor-slip-days
 //   admin tabs      → admin-dashboard, admin-users, admin-alerts
-//   titlebar/form   → admin-course-new
+//   titlebar/form   → admin-course-new, admin-course
 //   error page      → error-404
 //
 // admin-audit is deliberately NOT here: its rows are UUIDs and timestamps
@@ -31,10 +31,11 @@ export const PHONE_PAGE_NAMES = [
   "admin-dashboard",
   "admin-users",
   "admin-alerts",
+  "admin-course",
 ];
 
 export function pageList({
-  setupID, instructorState, studentState, resultsPath, gradedResultsPath,
+  setupID, courseID, instructorState, studentState, resultsPath, gradedResultsPath,
 }) {
   const pages = [
     { name: "login", path: "/login", state: null },
@@ -49,6 +50,7 @@ export function pageList({
     { name: "admin-users", path: "/admin/users", state: instructorState },
     { name: "admin-alerts", path: "/admin/alerts", state: instructorState },
     { name: "admin-course-new", path: "/admin/courses/new", state: instructorState },
+    { name: "admin-course", path: `/admin/courses/${courseID}`, state: instructorState },
   ];
   if (resultsPath) {
     pages.push({ name: "submission-pending", path: resultsPath, state: studentState });

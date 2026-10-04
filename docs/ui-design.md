@@ -458,7 +458,9 @@ duplicate.
   add-material form, the add-staff form, the slip-day settings.  Closed until a
   control carrying `data-add-target` opens it; `app.js` toggles `is-open` (and
   preselects a kind when the control carries `data-add-kind`).  Without JS the
-  control links to the panel's id and `:target` opens it.
+  control links to the panel's id and `:target` opens it.  A link from another
+  page opens a panel the same way, so Cancel also sets `is-closed`, which wins
+  over `:target`.
 - **`.section-items-seen`** — the Students list's last-seen track of a
   `.section-items` list.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,

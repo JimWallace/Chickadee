@@ -412,20 +412,10 @@ struct AdminCourseDetailContext: Encodable {
     let enrolledUsers: [AdminCourseEnrolledUserRow]
     let assignments: [AdminCourseAssignmentRow]
     let isNew: Bool
-    let error: String?
-    /// The term select's options, with the course's (or the suggested)
-    /// season marked.
-    var termOptions: [CourseTermOption] = []
-    /// The year select's options, with the course's (or the current) year marked.
-    var yearOptions: [CourseTermOption] = []
-    var cloneYearOptions: [CourseTermOption] = []
-    /// The clone form's defaults: the term after this course's, when it has
-    /// one (docs/course-terms.md slice 4). Derived from the course, never
-    /// from today's date.
-    var cloneYear: Int?
-    /// The clone form's refusal, from `CourseCloneFormError`.
-    var cloneError: String?
-    var cloneTermOptions: [CourseTermOption] = []
+    /// The new-course form, or a course's settings form.
+    let courseForm: CourseFieldsContext
+    /// The clone form; nil on the new-course page.
+    var cloneForm: CourseFieldsContext?
 }
 
 /// One snapshot drawn as a bar of the utilization chart.
@@ -459,6 +449,11 @@ struct AdminCourseEnrolledUserRow: Encodable {
     let username: String
     let displayName: String?
     let role: String
+    /// The person's own seeded avatar, at the roster size. `hasAvatar` is the
+    /// flat flag the template branches on (a bare optional in a Leaf
+    /// conditional is unreliable).
+    var avatar: AvatarPresentation?
+    var hasAvatar: Bool = false
 }
 
 struct AdminCourseAssignmentRow: Encodable {
