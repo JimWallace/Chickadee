@@ -93,25 +93,18 @@ func reconcileCourseReadiness(
 }
 
 /// Maps the pure reconciler's classification onto the persisted readiness +
-/// a human-readable reason for the instructor.
+/// a human-readable reason for the instructor. The reason text comes from
+/// `LearnUnreachableReason`, which the Students tab also reads.
 private func readinessFor(
     studentID: String, username: String, learnIdentities: BrightSpaceIdentityIndex
 ) -> (LearnSyncReadiness, String?) {
-    switch LearnRosterReconciler.classify(
+    let status = LearnRosterReconciler.classify(
         candidateKeys: [studentID, username],
         hasIdentityKey: !studentID.isEmpty,
         learnIdentities: learnIdentities
-    ) {
-    case .onLearn:
-        return (.confirmed, nil)
-    case .notOnLearn:
-        return (.unreachable, "Not on the LEARN classlist (dropped, or not enrolled in the D2L course).")
-    case .unverifiable:
-        return (
-            .unreachable,
-            "Couldn't match to LEARN — add a student/org-defined ID, or check the username matches LEARN."
-        )
-    }
+    )
+    guard let reason = LearnUnreachableReason(status) else { return (.confirmed, nil) }
+    return (.unreachable, reason.storedDetail)
 }
 
 /// Sweeps every BrightSpace-bound course's roster readiness. Returns the total

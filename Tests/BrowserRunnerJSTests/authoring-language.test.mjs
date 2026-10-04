@@ -192,3 +192,38 @@ test('the authoring editors spell no language literal themselves', async () => {
     assert.equal(literal, null, `${name} spells ${literal && literal[0]} itself`);
   }
 });
+
+test('looseValueTitle names which loose reading gave a value the amber cue', () => {
+  // #1996: both loose readings had one title, "Treated as a bare string",
+  // which was wrong for a pasted literal rewritten to a list or a dict.
+  const py = loadWith(null);
+  assert.equal(py.looseValueTitle('hello'), 'Kept as text');
+  assert.equal(py.looseValueTitle('[1, 2'), 'Kept as text', 'a list with a typing error stays text');
+  assert.equal(py.looseValueTitle(' hello '), 'Kept as text');
+  assert.equal(py.looseValueTitle("['a', 'b']"), 'Read as a pasted literal');
+  assert.equal(py.looseValueTitle("{'k': True}"), 'Read as a pasted literal');
+  assert.equal(py.looseValueTitle("'hello'"), 'Read as a pasted literal', 'a pasted string is rewritten too');
+  // An exact reading, or nothing typed, has no cue and so no title.
+  assert.equal(py.looseValueTitle('42'), '');
+  assert.equal(py.looseValueTitle('"hello"'), '');
+  assert.equal(py.looseValueTitle('None'), '');
+  assert.equal(py.looseValueTitle('   '), '');
+
+  // The spellings are the assignment's: Python's is text on an R assignment.
+  const r = loadWith(R_SEED);
+  assert.equal(r.looseValueTitle('True'), 'Kept as text');
+  assert.equal(r.looseValueTitle('TRUE'), '');
+});
+
+test('the authoring editors take the amber-cue title from looseValueTitle', async () => {
+  // One title for both loose readings lived in two editors, so the wrong
+  // copy had to be fixed twice. Both now ask the module.
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const publicDir = join(require.resolve('../../Public/authoring-language.js'), '..');
+  for (const name of ['pattern-family-editor.js', 'inputs-editor-core.js']) {
+    const source = readFileSync(join(publicDir, name), 'utf8');
+    assert.match(source, /ChickadeeLanguage\.looseValueTitle\(/, name + ' must use looseValueTitle');
+    assert.doesNotMatch(source, /bare string\. Wrap in quotes/, name + ' still carries the old two-sentence title');
+  }
+});

@@ -96,8 +96,7 @@ func attachmentFilename(fromURL urlString: String) -> String {
 /// store. A fetch or validation failure surfaces as an `invalidArguments`
 /// detail so the agent learns why.
 func fetchAndStoreContentAttachments(
-    _ inputs: [ContentAttachmentInput], for item: APICourseContentItem,
-    tool: String, context: ToolContext
+    _ inputs: [ContentAttachmentInput], for item: APICourseContentItem, context: ToolContext
 ) async throws {
     guard !inputs.isEmpty, let itemID = item.id else { return }
     var attachments = item.attachments
@@ -108,7 +107,7 @@ func fetchAndStoreContentAttachments(
             bytes = try await SupportFileURLFetcher.fetchData(
                 urlString: input.sourceUrl, on: context.request)
         } catch let error as SupportFileFetchError {
-            throw MCPToolError.invalidArguments(tool: tool, detail: error.toolDetail)
+            throw MCPToolError.invalidArguments(detail: error.toolDetail)
         }
         do {
             let attachment = try await ContentAttachmentStore.store(
@@ -117,7 +116,7 @@ func fetchAndStoreContentAttachments(
             attachments.append(attachment)
             nextOrder += 1
         } catch let error as ContentAttachmentStore.StoreError {
-            throw MCPToolError.invalidArguments(tool: tool, detail: error.reason)
+            throw MCPToolError.invalidArguments(detail: error.reason)
         }
     }
     item.attachments = attachments
@@ -133,19 +132,17 @@ private func isSafeContentLinkURL(_ url: String) -> Bool {
 
 /// Validates + maps input links to `[ContentLink]`, dropping fully-blank rows,
 /// defaulting a blank label to the URL, and rejecting unsafe schemes.
-func contentLinksFromInput(_ links: [ContentLinkInput], tool: String) throws -> [ContentLink] {
+func contentLinksFromInput(_ links: [ContentLinkInput]) throws -> [ContentLink] {
     var out: [ContentLink] = []
     for link in links {
         let label = (link.label ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let url = link.url.trimmingCharacters(in: .whitespacesAndNewlines)
         if label.isEmpty, url.isEmpty { continue }
         guard !url.isEmpty else {
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "A link labelled \"\(label)\" is missing a url.")
+            throw MCPToolError.invalidArguments(detail: "A link labelled \"\(label)\" is missing a url.")
         }
         guard isSafeContentLinkURL(url) else {
             throw MCPToolError.invalidArguments(
-                tool: tool,
                 detail: "Link url \"\(url)\" must be an http(s) or site-relative (/…) URL.")
         }
         out.append(ContentLink(label: label.isEmpty ? url : label, url: url))
@@ -156,17 +153,16 @@ func contentLinksFromInput(_ links: [ContentLinkInput], tool: String) throws -> 
 /// Resolves a content item by id and authorizes the acting account for a write
 /// to its course (TA+, archived-course block). Shared by update / delete.
 func resolveContentItemForWrite(
-    contentItemID raw: String, tool: String, context: ToolContext, atLeast minimum: CourseRole = .ta
+    contentItemID raw: String, context: ToolContext, atLeast minimum: CourseRole = .ta
 ) async throws -> APICourseContentItem {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let uuid = UUID(uuidString: trimmed) else {
-        throw MCPToolError.invalidArguments(
-            tool: tool, detail: "contentItemID \"\(trimmed)\" is not a valid id.")
+        throw MCPToolError.invalidArguments(detail: "contentItemID \"\(trimmed)\" is not a valid id.")
     }
     guard let item = try await APICourseContentItem.find(uuid, on: context.db) else {
-        throw MCPToolError.invalidArguments(tool: tool, detail: "No content item with id \"\(trimmed)\".")
+        throw MCPToolError.invalidArguments(detail: "No content item with id \"\(trimmed)\".")
     }
-    try await context.authorizeCourseWriteAccess(item.courseID, tool: tool, atLeast: minimum)
+    try await context.authorizeCourseWriteAccess(item.courseID, atLeast: minimum)
     return item
 }
 
@@ -174,19 +170,18 @@ func resolveContentItemForWrite(
 /// empty / "none", a validated UUID otherwise. A non-empty id that doesn't
 /// resolve to a section in this course is rejected (typos surface as errors).
 func resolveContentItemSectionID(
-    _ raw: String?, courseID: UUID, tool: String, context: ToolContext
+    _ raw: String?, courseID: UUID, context: ToolContext
 ) async throws -> UUID? {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let trimmed, !trimmed.isEmpty, trimmed.lowercased() != "none" else { return nil }
     guard let uuid = UUID(uuidString: trimmed) else {
-        throw MCPToolError.invalidArguments(
-            tool: tool, detail: "courseSectionID \"\(trimmed)\" is not a valid id.")
+        throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(trimmed)\" is not a valid id.")
     }
     guard let section = try await APICourseSection.find(uuid, on: context.db),
         section.courseID == courseID
     else {
         throw MCPToolError.invalidArguments(
-            tool: tool, detail: "No course section with id \"\(trimmed)\" in this content item's course.")
+            detail: "No course section with id \"\(trimmed)\" in this content item's course.")
     }
     return uuid
 }
@@ -354,7 +349,7 @@ struct ListContentItemsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveCourse(code: input.courseCode, tool: Self.name, context: context)
+        let course = try await resolveCourse(code: input.courseCode, context: context)
         let courseID = try course.requireID()
         let items = try await APICourseContentItem.query(on: context.db)
             .filter(\.$courseID == courseID)
@@ -454,15 +449,15 @@ struct CreateContentItemTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "title must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "title must not be empty.")
         }
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+            code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
         let kind = ContentItemKind(rawValue: input.kind ?? "") ?? .link
-        let links = try contentLinksFromInput(input.links ?? [], tool: Self.name)
+        let links = try contentLinksFromInput(input.links ?? [])
         let sectionID = try await resolveContentItemSectionID(
-            input.courseSectionID, courseID: courseID, tool: Self.name, context: context)
+            input.courseSectionID, courseID: courseID, context: context)
         let sortOrder = try await nextContentItemLaneSortOrder(
             courseID: courseID, sectionID: sectionID, db: context.db)
 
@@ -478,7 +473,7 @@ struct CreateContentItemTool: ContentTool {
             isPublished: input.isPublished ?? true)
         try await item.save(on: context.db)
         try await fetchAndStoreContentAttachments(
-            input.attachments ?? [], for: item, tool: Self.name, context: context)
+            input.attachments ?? [], for: item, context: context)
         return contentItemDTO(from: item)
     }
 }
@@ -579,28 +574,26 @@ struct UpdateContentItemTool: ContentTool {
                 || input.attachments != nil || input.description != nil || input.updatedLabel != nil
                 || input.isPublished != nil || input.courseSectionID != nil
         else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "Provide at least one field to change.")
+            throw MCPToolError.invalidArguments(detail: "Provide at least one field to change.")
         }
         let item = try await resolveContentItemForWrite(
-            contentItemID: input.contentItemID, tool: Self.name, context: context)
+            contentItemID: input.contentItemID, context: context)
 
         if let title = input.title {
             let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                throw MCPToolError.invalidArguments(tool: Self.name, detail: "title must not be empty.")
+                throw MCPToolError.invalidArguments(detail: "title must not be empty.")
             }
             item.title = trimmed
         }
         if let kind = input.kind {
             guard let parsed = ContentItemKind(rawValue: kind) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "kind \"\(kind)\" is not a recognised content-item kind.")
+                throw MCPToolError.invalidArguments(detail: "kind \"\(kind)\" is not a recognised content-item kind.")
             }
             item.kind = parsed
         }
         if let links = input.links {
-            item.links = try contentLinksFromInput(links, tool: Self.name)
+            item.links = try contentLinksFromInput(links)
         }
         if let description = input.description {
             item.itemDescription = normalizedContentField(description)
@@ -613,7 +606,7 @@ struct UpdateContentItemTool: ContentTool {
         }
         if let rawSection = input.courseSectionID {
             let newSectionID = try await resolveContentItemSectionID(
-                rawSection, courseID: item.courseID, tool: Self.name, context: context)
+                rawSection, courseID: item.courseID, context: context)
             if newSectionID != item.sectionID {
                 item.sectionID = newSectionID
                 item.sortOrder = try await nextContentItemLaneSortOrder(
@@ -622,7 +615,7 @@ struct UpdateContentItemTool: ContentTool {
         }
         try await item.save(on: context.db)
         try await fetchAndStoreContentAttachments(
-            input.attachments ?? [], for: item, tool: Self.name, context: context)
+            input.attachments ?? [], for: item, context: context)
         return contentItemDTO(from: item)
     }
 }
@@ -671,15 +664,14 @@ struct DeleteContentItemTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let raw = input.contentItemID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let uuid = UUID(uuidString: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "contentItemID \"\(raw)\" is not a valid id.")
+            throw MCPToolError.invalidArguments(detail: "contentItemID \"\(raw)\" is not a valid id.")
         }
         // Unknown id is an idempotent no-op, revealing nothing that distinguishes
         // "doesn't exist" from "in a course you can't see".
         guard let item = try await APICourseContentItem.find(uuid, on: context.db) else {
             return Output(contentItemID: raw, removed: false)
         }
-        try await context.authorizeCourseWriteAccess(item.courseID, tool: Self.name, atLeast: .ta)
+        try await context.authorizeCourseWriteAccess(item.courseID, atLeast: .ta)
         if let itemID = item.id {
             ContentAttachmentStore.removeDirectory(context.request.application, itemID: itemID)
         }
@@ -744,18 +736,16 @@ struct ReorderContentItemsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, tool: Self.name, context: context, atLeast: .ta)
+            code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
         let uuids = input.orderedContentItemIDs.compactMap {
             UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         guard uuids.count == input.orderedContentItemIDs.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "orderedContentItemIDs contains an invalid content-item id.")
+            throw MCPToolError.invalidArguments(detail: "orderedContentItemIDs contains an invalid content-item id.")
         }
         guard Set(uuids).count == uuids.count else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "orderedContentItemIDs contains a duplicate content-item id.")
+            throw MCPToolError.invalidArguments(detail: "orderedContentItemIDs contains a duplicate content-item id.")
         }
         guard !uuids.isEmpty else {
             return Output(
@@ -769,7 +759,6 @@ struct ReorderContentItemsTool: ContentTool {
             .all()
         guard items.count == uuids.count else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "orderedContentItemIDs must all be content items in course \(course.urlKey).")
         }
         let byID = Dictionary(

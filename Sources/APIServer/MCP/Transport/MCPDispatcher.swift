@@ -111,12 +111,12 @@ struct MCPDispatcher: Sendable {
         } catch let error as MCPToolError {
             // Unknown/inaccessible resource → invalidParams; a genuine lookup
             // failure → internalError. Mirrors the tool path's error mapping.
-            if case .executionFailed(_, let detail) = error {
+            if case .executionFailed(let detail) = error {
                 return .failure(id: id, error: .internalError(detail))
             }
             let detail: String
             switch error {
-            case .invalidArguments(_, let message), .notAuthorized(_, let message):
+            case .invalidArguments(let message), .notAuthorized(let message):
                 detail = message
             default:
                 detail = "Unknown resource."
@@ -207,7 +207,7 @@ struct MCPDispatcher: Sendable {
             // Tool-originated failures are reported inside the result with
             // isError:true so the model can see and correct them.
             outcome = MCPToolOutcome(error)
-            response = .success(id: id, result: mcpToolErrorResult(error))
+            response = .success(id: id, result: mcpToolErrorResult(error, tool: call.name))
         } catch {
             // A non-MCPToolError throw is opaque to the agent (bare -32603), so
             // the underlying error must at least reach the log ring buffer —

@@ -14,25 +14,25 @@ import Testing
 @Suite struct MCPTimeLimitOverrideTests {
 
     @Test func anOmittedOverrideIsUnchanged() throws {
-        #expect(try parseTimeLimitOverride(nil, tool: "t", field: "f") == .unchanged)
+        #expect(try parseTimeLimitOverride(nil, field: "f") == .unchanged)
     }
 
     @Test func zeroClearsTheOverride() throws {
-        #expect(try parseTimeLimitOverride(0, tool: "t", field: "f") == .clear)
+        #expect(try parseTimeLimitOverride(0, field: "f") == .clear)
     }
 
     @Test(arguments: [mcpTimeLimitRange.lowerBound, 30, mcpTimeLimitRange.upperBound])
     func aValueInRangeSetsTheOverride(seconds: Int) throws {
-        #expect(try parseTimeLimitOverride(seconds, tool: "t", field: "f") == .set(seconds))
+        #expect(try parseTimeLimitOverride(seconds, field: "f") == .set(seconds))
     }
 
     @Test(arguments: [-1, mcpTimeLimitRange.upperBound + 1])
     func aValueOutOfRangeIsRefusedNamingTheField(seconds: Int) {
         #expect {
-            try parseTimeLimitOverride(seconds, tool: "author_script", field: "cases[01].timeLimitSeconds")
+            try parseTimeLimitOverride(seconds, field: "cases[01].timeLimitSeconds")
         } throws: { error in
-            guard case MCPToolError.invalidArguments(let tool, let detail) = error else { return false }
-            return tool == "author_script" && detail.contains("cases[01].timeLimitSeconds")
+            guard case MCPToolError.invalidArguments(let detail) = error else { return false }
+            return detail.contains("cases[01].timeLimitSeconds")
                 && detail.contains("(got \(seconds))")
         }
     }

@@ -22,13 +22,6 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-sqr")
     }
 
-    // MARK: - Auth helper
-
-    /// Seeds an admin user and returns the Set-Cookie header value for subsequent requests.
-    private func loginAsAdmin() async throws -> String {
-        return try await loginUser(username: "testadmin", password: "testpassword", role: "admin", on: app)
-    }
-
     // MARK: - Helpers
 
     @discardableResult
@@ -138,7 +131,7 @@ import VaporTesting
 
     @Test func listSubmissionsEmpty() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/submissions",
@@ -156,7 +149,7 @@ import VaporTesting
 
     @Test func listSubmissionsReturnsAll() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_ls1", testSetupID: "setup_001")
             try await insertSubmission(id: "sub_ls2", testSetupID: "setup_002")
 
@@ -217,7 +210,7 @@ import VaporTesting
 
     @Test func listSubmissionsFilterByTestSetupID() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_f1", testSetupID: "setup_AAA")
             try await insertSubmission(id: "sub_f2", testSetupID: "setup_BBB")
             try await insertSubmission(id: "sub_f3", testSetupID: "setup_AAA")
@@ -239,7 +232,7 @@ import VaporTesting
 
     @Test func listSubmissionsIncludesExpectedFields() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(
                 id: "sub_fields",
                 testSetupID: "setup_001",
@@ -266,7 +259,7 @@ import VaporTesting
 
     @Test func listSubmissionsHonorsLimitAndOffset() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_pg1", testSetupID: "setup_001")
             try await insertSubmission(id: "sub_pg2", testSetupID: "setup_001")
             try await insertSubmission(id: "sub_pg3", testSetupID: "setup_001")
@@ -300,7 +293,7 @@ import VaporTesting
 
     @Test func getSubmissionReturnsStatus() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(
                 id: "sub_gs1",
                 testSetupID: "setup_001",
@@ -327,7 +320,7 @@ import VaporTesting
 
     @Test func getSubmissionReturnsSubmittedAt() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_ts1")
 
             try await app.asyncTest(
@@ -346,7 +339,7 @@ import VaporTesting
 
     @Test func getSubmissionNotFound() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/submissions/nonexistent",
@@ -364,7 +357,7 @@ import VaporTesting
 
     @Test func getResultsNotFoundForUnknownSubmission() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/submissions/no_such_sub/results",
@@ -380,7 +373,7 @@ import VaporTesting
 
     @Test func getResultsNotFoundWhenNoneStored() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_pending")
 
             try await app.asyncTest(
@@ -397,7 +390,7 @@ import VaporTesting
 
     @Test func getResultsReturnsCollection() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_res1")
             let collection = makeCollection(
                 submissionID: "sub_res1",
@@ -427,7 +420,7 @@ import VaporTesting
 
     @Test func getResultsReturnsWarnings() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_res_warn")
             let collection = makeCollection(
                 submissionID: "sub_res_warn",
@@ -452,7 +445,7 @@ import VaporTesting
 
     @Test func getResultsWithFailedBuild() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_fail")
             let collection = TestOutcomeCollection(
                 submissionID: "sub_fail",
@@ -490,7 +483,7 @@ import VaporTesting
 
     @Test func getResultsFiltersBySingleTier() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_tier1")
             let collection = makeCollection(
                 submissionID: "sub_tier1",
@@ -523,7 +516,7 @@ import VaporTesting
 
     @Test func getResultsFiltersByMultipleTiers() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_tier2")
             let collection = makeCollection(
                 submissionID: "sub_tier2",
@@ -555,7 +548,7 @@ import VaporTesting
 
     @Test func getResultsNoTierFilterReturnsAll() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_all")
             let collection = makeCollection(
                 submissionID: "sub_all",
@@ -998,7 +991,7 @@ import VaporTesting
     /// 304 without the server re-decoding the stored collection.
     @Test func getResultsEmitsETagAndReturns304OnMatch() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin", on: app)
             try await insertSubmission(id: "sub_etag1", testSetupID: "setup_etag1")
             let collection = makeCollection(
                 submissionID: "sub_etag1",

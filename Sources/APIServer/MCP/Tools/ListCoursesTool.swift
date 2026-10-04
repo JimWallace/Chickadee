@@ -55,7 +55,7 @@ struct ListCoursesTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         // Students may not use the MCP interface; only instructors/admins/mcp
         // service accounts get past this.
-        let user = try await context.requireEligibleSubject(tool: Self.name)
+        let user = try await context.requireEligibleSubject()
         guard let userID = user.id else { return Output(courses: []) }
         let courses = try await enrolledCourses(for: userID, on: context.db)
         return Output(

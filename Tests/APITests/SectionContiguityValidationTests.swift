@@ -37,7 +37,7 @@ import Vapor
     }
 
     @Test func straddledSectionIsRejected() {
-        #expect(throws: Abort.self) {
+        #expect(throws: AuthoringValidationError.self) {
             try validateAuthoredSectionContiguity([
                 script("a.py", sectionID: "s1"),
                 script("b.py", sectionID: "s2"),
@@ -48,7 +48,7 @@ import Vapor
 
     @Test func straddledUngroupedBlockIsRejected() {
         // nil (ungrouped) is a "section" for contiguity purposes too.
-        #expect(throws: Abort.self) {
+        #expect(throws: AuthoringValidationError.self) {
             try validateAuthoredSectionContiguity([
                 script("a.py"),
                 .family(id: "f1", sectionID: "s1"),
@@ -58,7 +58,7 @@ import Vapor
     }
 
     @Test func straddleViaFamilyAndCheckItemsIsRejected() {
-        #expect(throws: Abort.self) {
+        #expect(throws: AuthoringValidationError.self) {
             try validateAuthoredSectionContiguity([
                 .family(id: "f1", sectionID: "s1"),
                 .check(id: "c1", sectionID: "s2"),

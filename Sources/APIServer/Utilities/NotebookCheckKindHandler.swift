@@ -16,7 +16,7 @@
 // therefore every `spec_hash` and `TestSetupCache` key — stay identical.
 
 import Core
-import Vapor
+import Foundation
 
 /// Behaviour for one `NotebookCheckKind`: how a check renders to Python, its
 /// auto-generated display label, any sidecar files it emits, and how it is
@@ -73,16 +73,12 @@ private func validateRequiredIdentifier(
     language: AssignmentLanguage
 ) throws -> String {
     guard let value, !value.isEmpty else {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Notebook check '\(check.id)' (\(kindLabel)): \(field) is required")
+        throw AuthoringValidationError.notebookCheckFieldMissing(
+            checkID: check.id, kindLabel: kindLabel, field: field)
     }
     guard isValidIdentifier(value, language: language) else {
-        throw Abort(
-            .unprocessableEntity,
-            reason:
-                "Notebook check '\(check.id)' (\(kindLabel)): \(field) '\(value)' is not a valid \(identifierKindName(language))"
-        )
+        throw AuthoringValidationError.notebookCheckFieldNotIdentifier(
+            checkID: check.id, kindLabel: kindLabel, field: field, value: value, language: language)
     }
     return value
 }
@@ -90,14 +86,12 @@ private func validateRequiredIdentifier(
 /// rtol / atol bounds check shared by the float-comparison kinds.
 private func validateTolerances(_ check: NotebookCheck, kindLabel: String) throws {
     if let rtol = check.rtol, !rtol.isFinite || rtol < 0 {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Notebook check '\(check.id)' (\(kindLabel)): rtol must be a non-negative finite number")
+        throw AuthoringValidationError.invalidNotebookCheckTolerance(
+            checkID: check.id, kindLabel: kindLabel, tolerance: "rtol")
     }
     if let atol = check.atol, !atol.isFinite || atol < 0 {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Notebook check '\(check.id)' (\(kindLabel)): atol must be a non-negative finite number")
+        throw AuthoringValidationError.invalidNotebookCheckTolerance(
+            checkID: check.id, kindLabel: kindLabel, tolerance: "atol")
     }
 }
 
@@ -109,10 +103,8 @@ private func validateTolerances(_ check: NotebookCheck, kindLabel: String) throw
 /// miscounted — the bug this replaced compared raw `(`/`)` character counts and
 /// tested `hasSuffix("\\")`, both of which mis-flagged those cases.
 private func validateRegexSanity(_ needle: String, checkID: String) throws {
-    func unbalanced() -> Abort {
-        Abort(
-            .unprocessableEntity,
-            reason: "Notebook check '\(checkID)' (cell_contains): regex has unbalanced parentheses")
+    func unbalanced() -> AuthoringValidationError {
+        AuthoringValidationError.cellContainsRegexUnbalanced(checkID: checkID)
     }
     var depth = 0
     var inClass = false
@@ -134,9 +126,7 @@ private func validateRegexSanity(_ needle: String, checkID: String) throws {
         }
     }
     if escaped {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Notebook check '\(checkID)' (cell_contains): regex ends with a dangling backslash")
+        throw AuthoringValidationError.cellContainsRegexDanglingBackslash(checkID: checkID)
     }
     guard depth == 0 else { throw unbalanced() }
 }
@@ -153,16 +143,12 @@ struct DataFrameShapeKind: NotebookCheckKindHandler {
         _ = try validateRequiredIdentifier(
             check.variable, check: check, kindLabel: "data_frame_shape", field: "variable name", language: language)
         guard let rows = check.expectedRows, rows >= 0 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (data_frame_shape): expectedRows must be a non-negative integer")
+            throw AuthoringValidationError.invalidNotebookCheckCount(
+                checkID: check.id, kindLabel: "data_frame_shape", field: "expectedRows")
         }
         guard let cols = check.expectedCols, cols >= 0 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (data_frame_shape): expectedCols must be a non-negative integer")
+            throw AuthoringValidationError.invalidNotebookCheckCount(
+                checkID: check.id, kindLabel: "data_frame_shape", field: "expectedCols")
         }
     }
 }
@@ -179,18 +165,11 @@ struct DataFrameColumnsKind: NotebookCheckKindHandler {
         _ = try validateRequiredIdentifier(
             check.variable, check: check, kindLabel: "data_frame_columns", field: "variable name", language: language)
         guard let columns = check.expectedColumns, !columns.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (data_frame_columns): expectedColumns must be a non-empty list")
+            throw AuthoringValidationError.dataFrameColumnsEmpty(checkID: check.id)
         }
         for col in columns {
             guard !col.isEmpty else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' (data_frame_columns): expectedColumns contains an empty entry"
-                )
+                throw AuthoringValidationError.dataFrameColumnsEmptyEntry(checkID: check.id)
             }
         }
         // Under .exact, duplicate column names render an unsatisfiable
@@ -200,11 +179,7 @@ struct DataFrameColumnsKind: NotebookCheckKindHandler {
         if (check.columnMatch ?? .exact) == .exact,
             Set(columns).count != columns.count
         {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (data_frame_columns): expectedColumns contains duplicate names under exact matching"
-            )
+            throw AuthoringValidationError.dataFrameColumnsDuplicateNames(checkID: check.id)
         }
     }
 }
@@ -225,11 +200,8 @@ struct DataFrameEqualityKind: NotebookCheckKindHandler {
         _ = try validateRequiredIdentifier(
             check.variable, check: check, kindLabel: "data_frame_equality", field: "variable name", language: language)
         guard let csv = check.expectedCSV, !csv.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (data_frame_equality): expectedCSV must be a non-empty CSV string"
-            )
+            throw AuthoringValidationError.notebookCheckExpectedCSVEmpty(
+                checkID: check.id, kindLabel: "data_frame_equality")
         }
         // Quick sanity: the first line should look like a header (one
         // or more comma-separated tokens or a single non-empty
@@ -237,10 +209,8 @@ struct DataFrameEqualityKind: NotebookCheckKindHandler {
         // `pd.DataFrame(...)` Python code instead of CSV.
         let firstLine = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).first ?? ""
         guard !firstLine.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (data_frame_equality): expectedCSV must begin with a header row")
+            throw AuthoringValidationError.notebookCheckExpectedCSVMissingHeader(
+                checkID: check.id, kindLabel: "data_frame_equality")
         }
         try validateTolerances(check, kindLabel: "data_frame_equality")
     }
@@ -262,26 +232,19 @@ struct SeriesEqualityKind: NotebookCheckKindHandler {
         _ = try validateRequiredIdentifier(
             check.variable, check: check, kindLabel: "series_equality", field: "variable name", language: language)
         guard let csv = check.expectedCSV, !csv.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)' (series_equality): expectedCSV must be a non-empty CSV string"
-            )
+            throw AuthoringValidationError.notebookCheckExpectedCSVEmpty(
+                checkID: check.id, kindLabel: "series_equality")
         }
         // Single-column header check: the first line should not
         // contain a comma (a multi-column CSV would be ambiguous
         // — which column is the Series?).
         let firstLine = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).first ?? ""
         guard !firstLine.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)' (series_equality): expectedCSV must begin with a header row")
+            throw AuthoringValidationError.notebookCheckExpectedCSVMissingHeader(
+                checkID: check.id, kindLabel: "series_equality")
         }
         if firstLine.contains(",") {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (series_equality): expectedCSV must have exactly one column (header had a comma)"
-            )
+            throw AuthoringValidationError.seriesEqualityCSVHasSeveralColumns(checkID: check.id)
         }
         try validateTolerances(check, kindLabel: "series_equality")
     }
@@ -299,11 +262,7 @@ struct NumericArrayCloseKind: NotebookCheckKindHandler {
         _ = try validateRequiredIdentifier(
             check.variable, check: check, kindLabel: "numeric_array_close", field: "variable name", language: language)
         guard let array = check.expectedArray, !array.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (numeric_array_close): expectedArray must be a non-empty list of numbers"
-            )
+            throw AuthoringValidationError.numericArrayCloseEmptyArray(checkID: check.id)
         }
         try validateTolerances(check, kindLabel: "numeric_array_close")
     }
@@ -319,9 +278,8 @@ struct FigureCountKind: NotebookCheckKindHandler {
 
     func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         guard let n = check.minFigures, n >= 0 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)' (figure_count): minFigures must be a non-negative integer")
+            throw AuthoringValidationError.invalidNotebookCheckCount(
+                checkID: check.id, kindLabel: "figure_count", field: "minFigures")
         }
     }
 }
@@ -336,9 +294,7 @@ struct CellContainsKind: NotebookCheckKindHandler {
 
     func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         guard let needle = check.containsText, !needle.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)' (cell_contains): containsText must be a non-empty string")
+            throw AuthoringValidationError.cellContainsEmptyText(checkID: check.id)
         }
         // If regex, sanity-check that it compiles.  We can't run a Python/R
         // regex from Swift, but a small scan catches the most common typos.
@@ -362,21 +318,16 @@ struct FunctionExistsKind: NotebookCheckKindHandler {
         // wording ("function name (variable)" when missing, "function
         // name" when the identifier is malformed); preserve both verbatim.
         guard let name = check.variable, !name.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)' (function_exists): function name (variable) is required")
+            throw AuthoringValidationError.notebookCheckFieldMissing(
+                checkID: check.id, kindLabel: "function_exists", field: "function name (variable)")
         }
         guard isValidIdentifier(name, language: language) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Notebook check '\(check.id)' (function_exists): function name '\(name)' is not a valid \(identifierKindName(language))"
-            )
+            throw AuthoringValidationError.notebookCheckFieldNotIdentifier(
+                checkID: check.id, kindLabel: "function_exists", field: "function name", value: name,
+                language: language)
         }
         if let arity = check.expectedArity, arity < 0 {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)' (function_exists): expectedArity must be non-negative")
+            throw AuthoringValidationError.functionExistsNegativeArity(checkID: check.id)
         }
     }
 }
@@ -399,11 +350,7 @@ struct VariableExistsKind: NotebookCheckKindHandler {
         if let typeName = check.expectedType {
             let trimmed = typeName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' (variable_exists): expectedType must be a non-empty type name when set (e.g. \"int\", \"list\", \"DataFrame\")"
-                )
+                throw AuthoringValidationError.variableExistsBlankType(checkID: check.id)
             }
         }
     }
@@ -419,9 +366,7 @@ struct ASTStructureKind: NotebookCheckKindHandler {
 
     func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         guard let constructs = check.requiredConstructs, !constructs.isEmpty else {
-            throw Abort(
-                .unprocessableEntity,
-                reason: "Notebook check '\(check.id)' (ast_structure): requiredConstructs must be a non-empty list")
+            throw AuthoringValidationError.astStructureNoConstructs(checkID: check.id)
         }
         let knownPredicates: Set<String> = [
             "for_loop", "while_loop", "list_comprehension", "lambda", "recursion",
@@ -433,20 +378,12 @@ struct ASTStructureKind: NotebookCheckKindHandler {
                 guard !mod.isEmpty,
                     mod.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." })
                 else {
-                    throw Abort(
-                        .unprocessableEntity,
-                        reason:
-                            "Notebook check '\(check.id)' (ast_structure): import predicate '\(raw)' has an invalid module name"
-                    )
+                    throw AuthoringValidationError.astStructureInvalidImport(checkID: check.id, predicate: raw)
                 }
                 continue
             }
             guard knownPredicates.contains(predicate) else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Notebook check '\(check.id)' (ast_structure): unknown predicate '\(raw)' — supported: for_loop, while_loop, list_comprehension, lambda, recursion, import:<module>, optional leading `!` for negation"
-                )
+                throw AuthoringValidationError.astStructureUnknownPredicate(checkID: check.id, predicate: raw)
             }
         }
     }

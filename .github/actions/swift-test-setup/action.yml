@@ -1,0 +1,184 @@
+name: Swift test setup
+description: >
+  Shared setup for the jobs that compile or test the Swift package inside the
+  ghcr.io/jimwallace/chickadee/swift or swift-ci container. It gives the
+  toolchain cache key, restores (or restores and saves) the shared .build
+  cache, and makes sure that the image has the test dependencies. Callers run
+  actions/checkout first. The job container stays in each workflow, because a
+  composite action cannot set it and `container` cannot read the `env`
+  context.
+
+  Before this action, these steps were copies in swift-tests.yml (five jobs),
+  repeat-test.yml, test-coverage.yml, docker-build.yml and
+  browser-probe-setup. The copies drifted: the test-coverage.yml probe checked
+  five tools and no interpreter, and the worker-tests install had no retry
+  (#1985).
+
+inputs:
+  build-cache:
+    description: >
+      What to do with the shared .build cache. "save" restores it and saves it
+      when the job ends (the swift-tests.yml build job only). "restore" only
+      restores it. "none" does not touch it.
+    required: true
+  tools:
+    description: >
+      Space-separated commands that the job needs in addition to the grading
+      interpreters. Each command must come from an apt package of the same
+      name. When this input is not empty, the action also probes for every
+      grading interpreter, and installs all of them on a stale image. Empty
+      means no probe.
+    required: false
+    default: ""
+
+outputs:
+  toolchain-key:
+    description: "The SHA-256 of `swift --version`. Put it in each cache key that must change with the toolchain."
+    value: ${{ steps.toolchain.outputs.key }}
+  cache-hit:
+    description: "'true' when the shared .build cache matched the key exactly. Empty when build-cache is none."
+    value: ${{ steps.save.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check the build-cache input
+      shell: bash
+      env:
+        BUILD_CACHE: ${{ inputs.build-cache }}
+      run: |
+        case "$BUILD_CACHE" in
+          save|restore|none) ;;
+          *)
+            echo "::error::build-cache must be save, restore or none. It is '${BUILD_CACHE}'."
+            exit 1
+            ;;
+        esac
+
+    - name: Resolve toolchain cache key
+      id: toolchain
+      shell: bash
+      run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+    # The one place that writes the shared key. Do not change its value: each
+    # change gives a cold build in every job until the build job saves again.
+    # The `v4` is a salt. Increase it only to discard all old caches.
+    - name: Resolve build cache key
+      id: build-key
+      if: inputs.build-cache != 'none'
+      shell: bash
+      env:
+        KEY: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+      run: |
+        echo "key=${KEY}" >> "$GITHUB_OUTPUT"
+        echo "Shared build cache key: ${KEY}"
+
+    # The build cache is EXACT-MATCH ONLY. Do not add `restore-keys`. An
+    # incremental build over a `.build/` from a DIFFERENT tree is unsound:
+    # when a cross-module type changes kind (struct to enum), or a struct's
+    # init gets a new field, the files that refer to it only transitively keep
+    # their old source mtime. llbuild then uses stale object files that were
+    # compiled against the old mangled symbol, and the link fails with
+    # "undefined reference". This occurred on each such change (TestItem
+    # struct to enum, v0.4.228; TestProperties.achievements;
+    # CourseBundleManifest.sections; TestProperties.datasets) and each time
+    # needed a manual salt increase. With an exact match, a tree that has no
+    # cache gets a clean cold build. The cost: each Sources or Tests change
+    # gets a full build. A re-run of the same tree gets a hit and no build.
+    - name: Restore and save the build cache
+      id: save
+      if: inputs.build-cache == 'save'
+      uses: actions/cache@v6
+      with:
+        path: .build
+        key: ${{ steps.build-key.outputs.key }}
+
+    - name: Restore the build cache
+      id: restore
+      if: inputs.build-cache == 'restore'
+      uses: actions/cache/restore@v6
+      with:
+        path: .build
+        key: ${{ steps.build-key.outputs.key }}
+
+    # The swift-ci image has all of these. The apt-get path is the fallback
+    # for a stale image (for example, a toolchain change before mirror-images.yml
+    # builds swift-ci again). It installs the missing tools. It does not fail
+    # the job only because the image is old.
+    #
+    # EVERY grading language's interpreter is in INTERPRETERS, and each job
+    # that probes gets all of them, also a job that runs none of them. When a
+    # probe did not name an interpreter, the execution-path suites skipped
+    # SILENTLY on a stale image, and the job stayed green with no test run in
+    # that language. Rscript was missing from the probe and from the install
+    # list for a long time, and nothing went red. The suites now skip through
+    # a ConditionTrait, and the "No test was skipped" step of each lane fails
+    # the job on a skip.
+    #
+    # The strictest form of the old copies: three apt-get attempts, then a
+    # failure. The step then probes again and fails if a command is still
+    # missing, so a package that does not supply its command fails here, with
+    # the name of the command.
+    - name: Install missing test dependencies
+      if: inputs.tools != ''
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.tools }}
+        # One entry for each grading language: the command that shows that
+        # its toolchain is installed, "=", and the apt package that supplies
+        # it. LanguageConformanceMatrixTests reads these lines and fails when
+        # a language is missing. Add a new language here.
+        INTERPRETERS: >-
+          python3=python3
+          Rscript=r-base
+          lua=lua5.4
+          octave-cli=octave
+          g++=g++
+          racket=racket
+          javac=default-jdk
+      run: |
+        set -euo pipefail
+
+        commands=()
+        packages=()
+        for tool in $TOOLS; do
+          commands+=("$tool")
+          packages+=("$tool")
+        done
+        for entry in $INTERPRETERS; do
+          commands+=("${entry%%=*}")
+          packages+=("${entry#*=}")
+        done
+
+        missing_commands() {
+          missing=()
+          for cmd in "${commands[@]}"; do
+            command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+          done
+        }
+
+        missing_commands
+        if [ "${#missing[@]}" -eq 0 ]; then
+          echo "test dependencies already baked into the image; skipping apt-get"
+          exit 0
+        fi
+
+        echo "::warning::The image does not have ${missing[*]}. Installing ${packages[*]} with apt-get."
+        for attempt in 1 2 3; do
+          if apt-get update -qq && apt-get install -y --no-install-recommends "${packages[@]}"; then
+            break
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            echo "::error::apt-get failed 3 times. The image does not have ${missing[*]}."
+            exit 1
+          fi
+          echo "apt-get failed (attempt $attempt), retrying in 15s..."
+          sleep 15
+        done
+
+        missing_commands
+        if [ "${#missing[@]}" -ne 0 ]; then
+          echo "::error::apt-get installed ${packages[*]}, but ${missing[*]} is still missing."
+          exit 1
+        fi
+        echo "installed ${packages[*]}"

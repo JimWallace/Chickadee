@@ -98,17 +98,16 @@ struct DeleteSuiteItemTool: ContentTool {
         let target = try Self.resolveTarget(input)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard let idx = payload.items.firstIndex(where: { Self.matches($0, target) }) else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "No \(target.kind) \"\(target.id)\" found in the suite (see get_suite).")
         }
         payload.items.remove(at: idx)
 
-        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        try await applySuiteEditMapped(setup: setup, body: payload, on: context.db)
         // Close, re-grade, and re-validate (matching the web Save button).
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
@@ -132,8 +131,7 @@ struct DeleteSuiteItemTool: ContentTool {
         if let f = input.familyID, !f.isEmpty { targets.append(Target(kind: "family", id: f)) }
         if let c = input.check, !c.isEmpty { targets.append(Target(kind: "check", id: c)) }
         guard targets.count == 1 else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "Specify exactly one of: script, familyID, check.")
+            throw MCPToolError.invalidArguments(detail: "Specify exactly one of: script, familyID, check.")
         }
         return targets[0]
     }

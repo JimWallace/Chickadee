@@ -126,17 +126,10 @@ import Testing
     }
 
     /// Parses every Python template through python3's `ast.parse` to catch
-    /// any indentation / syntax regression in the generated source.  Silently
-    /// skipped on machines with no `python3` (expected on a bare dev laptop;
-    /// CI images always install it, so the check runs everywhere it matters).
-    @Test func allPythonTemplateTypes_parseAsValidPython() async throws {
-        guard
-            FileManager.default.fileExists(atPath: "/usr/bin/python3")
-                || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/python3")
-                || FileManager.default.fileExists(atPath: "/usr/local/bin/python3")
-        else {
-            return
-        }
+    /// any indentation / syntax regression in the generated source. Skipped,
+    /// visibly, on a machine with no `python3`. CI images always install it,
+    /// so there a skip fails the job.
+    @Test(.requiresPython3) func allPythonTemplateTypes_parseAsValidPython() async throws {
         for type in PythonTestTemplateType.allCases {
             let source = pythonTestScript(type: type, functionName: "sample_fn", paramNames: ["x", "y"])
             let run = try await runTool(

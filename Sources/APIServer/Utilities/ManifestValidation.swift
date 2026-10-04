@@ -9,11 +9,10 @@
 // live in `IdentifierValidation.swift`.
 
 import Core
-import Vapor
 
 /// Validates the `dependsOn` references and dependency graph in a manifest.
 ///
-/// Throws an `Abort(.unprocessableEntity)` if:
+/// Throws an `AuthoringValidationError` if:
 /// - Any `dependsOn` entry names a script that does not exist in `testSuites`.
 /// - The dependency graph contains a cycle.
 func validateManifestDependencies(_ manifest: TestProperties) throws {
@@ -23,17 +22,10 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
     for entry in manifest.testSuites {
         for dep in entry.dependsOn {
             guard allScripts.contains(dep) else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Manifest dependency error: '\(entry.script)' depends on '\(dep)', which is not listed in testSuites"
-                )
+                throw AuthoringValidationError.unknownManifestDependency(script: entry.script, dependency: dep)
             }
             guard dep != entry.script else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Manifest dependency error: '\(entry.script)' cannot depend on itself"
-                )
+                throw AuthoringValidationError.manifestScriptDependsOnItself(script: entry.script)
             }
         }
     }
@@ -64,9 +56,6 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
     }
 
     guard processed == manifest.testSuites.count else {
-        throw Abort(
-            .unprocessableEntity,
-            reason: "Manifest dependency error: dependency graph contains a cycle"
-        )
+        throw AuthoringValidationError.manifestDependencyCycle
     }
 }

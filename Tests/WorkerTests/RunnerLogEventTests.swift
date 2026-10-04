@@ -120,6 +120,25 @@ import Testing
         #expect(capture.events == ["unencodable_probe"])
     }
 
+    /// #1932: a field JSON cannot hold is written as its description, and
+    /// the other fields of the line stay.
+    @Test func aFieldJSONCannotEncodeKeepsTheOtherFields() async throws {
+        let when = Date(timeIntervalSince1970: 0)
+        let capture = await Self.capturing {
+            writeStructuredRunnerLog(
+                event: "mixed_probe",
+                fields: [
+                    "slot": 1, "when": when, "nested": ["url": testURL("http://example.test/a")],
+                    "ratio": Double.nan,
+                ])
+        }
+        let payload = try #require(Self.payloads("mixed_probe", in: capture).first)
+        #expect(payload["slot"] as? Int == 1)
+        #expect(payload["when"] as? String == String(describing: when))
+        #expect((payload["nested"] as? [String: Any])?["url"] as? String == "http://example.test/a")
+        #expect(payload["ratio"] as? String == "nan")
+    }
+
     // MARK: - Configuration
 
     /// `runner_config_parse_failed` — a present but unparseable setting is

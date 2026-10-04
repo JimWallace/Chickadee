@@ -83,14 +83,14 @@ struct UpdateAchievementsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         let rows: [AchievementRow]
         do {
             rows = try await AchievementsEditing.apply(
                 rows: input.achievements, setup: setup, on: context.db)
         } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
+            throw MCPToolError.from(error)
         }
 
         return Output(assignmentPublicID: assignment.publicID, achievements: rows)

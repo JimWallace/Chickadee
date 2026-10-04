@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/LearnRosterReconciler.swift
+// APIServer/BrightSpace/LearnRosterReconciler.swift
 //
 // Pure roster-vs-LEARN classification.  Given the LEARN classlist identities
 // and a Chickadee roster entry, decides whether the entry is still registered

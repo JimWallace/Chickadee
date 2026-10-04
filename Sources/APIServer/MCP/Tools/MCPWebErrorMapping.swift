@@ -21,10 +21,10 @@ extension MCPToolError {
     /// `WebAssignmentError` is an `AbortError` too, and every one of its cases
     /// but `internalFailure` is a 4xx, so this one function maps it exactly as
     /// the `WebAssignmentError` overload it replaced did.
-    static func from(_ error: any AbortError, tool: String) -> MCPToolError {
+    static func from(_ error: any AbortError) -> MCPToolError {
         if (400..<500).contains(Int(error.status.code)) {
-            return .invalidArguments(tool: tool, detail: error.reason)
+            return .invalidArguments(detail: error.reason)
         }
-        return .executionFailed(tool: tool, detail: error.reason)
+        return .executionFailed(detail: error.reason)
     }
 }

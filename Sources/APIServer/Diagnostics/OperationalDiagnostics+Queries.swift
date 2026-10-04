@@ -250,14 +250,6 @@ extension OperationalDiagnosticsService {
         return String(collapsed.prefix(160))
     }
 
-    func pruneIfNeeded(on db: Database, logger: Logger) async throws {
-        let now = Date()
-        guard await maintenance.shouldPrune(now: now, intervalHours: configuration.pruneIntervalHours) else {
-            return
-        }
-        await performPrune(on: db, logger: logger, now: now)
-    }
-
     func performPrune(on db: Database, logger: Logger, now: Date) async {
         do {
             let jobCutoff = now.addingTimeInterval(Double(-configuration.jobMetricRetentionDays) * 86400)
@@ -297,7 +289,6 @@ extension OperationalDiagnosticsService {
                 .filter(\.$createdAt < jobCutoff)
                 .delete()
 
-            await maintenance.markPruned(at: now)
             logger.info(
                 "observability_prune_complete",
                 metadata: [

@@ -48,17 +48,16 @@ struct AdminToolContext {
     /// when the database is down; the bearer/OAuth layer is the primary admin
     /// gate.
     @discardableResult
-    func requireAdminSubject(tool: String) async throws -> APIUser {
+    func requireAdminSubject() async throws -> APIUser {
         guard
             let user = try await APIUser.query(on: db)
                 .filter(\.$username == subject)
                 .first()
         else {
-            throw MCPToolError.notAuthorized(tool: tool, detail: "Unknown token subject.")
+            throw MCPToolError.notAuthorized(detail: "Unknown token subject.")
         }
         guard user.isAdmin else {
-            throw MCPToolError.notAuthorized(
-                tool: tool, detail: "The admin diagnostic interface requires an admin account.")
+            throw MCPToolError.notAuthorized(detail: "The admin diagnostic interface requires an admin account.")
         }
         return user
     }

@@ -34,18 +34,17 @@ import Testing
     }
 
     @Test func parseAcceptsACase() throws {
-        #expect(try Visibility.parse("preview", tool: "t", field: "visibility") == .preview)
-        #expect(try Visibility.parseOptional(nil, tool: "t", field: "visibility") == nil)
-        #expect(try Visibility.parseOptional("open", tool: "t", field: "visibility") == .open)
+        #expect(try Visibility.parse("preview", field: "visibility") == .preview)
+        #expect(try Visibility.parseOptional(nil, field: "visibility") == nil)
+        #expect(try Visibility.parseOptional("open", field: "visibility") == .open)
     }
 
     @Test func parseRefusesAnUnknownTokenWithTheLegalValues() {
         #expect {
-            try Visibility.parse("public", tool: "update_assignment", field: "visibility")
+            try Visibility.parse("public", field: "visibility")
         } throws: { error in
-            guard case MCPToolError.invalidArguments(let tool, let detail) = error else { return false }
-            return tool == "update_assignment"
-                && detail == "visibility must be one of: closed, preview, open."
+            guard case MCPToolError.invalidArguments(let detail) = error else { return false }
+            return detail == "visibility must be one of: closed, preview, open."
         }
     }
 

@@ -241,6 +241,7 @@
         var casesHeader      = document.getElementById('family-cases-header');
         var casesBody        = document.getElementById('family-cases-body');
         var casesEmpty       = document.getElementById('family-cases-empty');
+        var autoComputeNote  = document.getElementById('family-auto-compute-note');
         var addCaseBtn       = document.getElementById('add-case-btn');
         var statusEl         = document.getElementById('family-editor-status');
 
@@ -612,6 +613,8 @@
         var variablesBody  = document.getElementById('family-variables-body');
         var variablesEmpty = document.getElementById('family-variables-empty');
         var addVariableBtn = document.getElementById('add-family-variable-btn');
+        // The note that links the amber-cue explanation (_value-cue-note.leaf).
+        var variablesCueNote = bodyEl ? bodyEl.querySelector('.js-value-cue-note') : null;
 
         /// Is `s` a name the SERVER will accept for a family variable or
         /// function?
@@ -704,7 +707,7 @@
                   +   '<input type="text" class="form-input cell-input input-mono js-pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database">'
                   + '</td>'
                   + '<td>'
-                  +   '<input type="text" class="form-input cell-input input-mono js-pf-var-value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : JSON.stringify(v.value)) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]">'
+                  +   '<input type="text" class="form-input cell-input input-mono js-pf-var-value" aria-label="Value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : JSON.stringify(v.value)) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]">'
                   + '</td>'
                   + '<td><button type="button" class="btn action-btn btn-xs action-danger js-pf-var-remove" data-var-index="' + i + '">Remove</button></td>';
                 variablesBody.appendChild(tr);
@@ -713,6 +716,8 @@
             if (variablesEmpty) {
                 variablesEmpty.style.display = familyVariables.length ? 'none' : '';
             }
+            // The reverse of the empty note: the cue it explains needs a row.
+            if (variablesCueNote) variablesCueNote.hidden = !familyVariables.length;
             // Variable set may have changed → refresh every arg cell's
             // `$name` highlighting so broken refs show up immediately.
             refreshAllArgCellVarHighlighting();
@@ -752,13 +757,14 @@
             nameEl.classList.toggle('input-invalid', !!nameError);
             nameEl.title = nameError || '';
 
-            // Value validity.  Empty stays silent until typed; a bare-string
-            // fallback — almost always a typo in dict/list JSON — gets the
-            // amber needs-a-look cue.
+            // Value validity.  Empty stays silent until typed; a value that
+            // was not read exactly — a bare-string fallback, almost always a
+            // typo in dict/list JSON, or a rewritten pasted literal — gets the
+            // amber needs-a-look cue, and its title says which (#1996).
             var parsed = tryParseVarValue(rawVal);
             var valueOk = parsed.kind !== 'empty' && parsed.strict;
             var valueError = (parsed.kind !== 'empty' && !parsed.strict)
-                ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict.'
+                ? ChickadeeLanguage.looseValueTitle(rawVal)
                 : null;
             valueEl.classList.toggle('input-attention', !!valueError);
             valueEl.title = valueError || (valueOk ? 'Parsed as ' + parsed.kind : '');
@@ -1307,6 +1313,12 @@
             if (functionLabel) {
                 functionLabel.style.display = functionlessParamName(kind) ? 'none' : 'flex';
             }
+            // The note under the cases table explains auto-compute warnings,
+            // so it shows only where auto-compute runs (#1991).
+            if (autoComputeNote) {
+                autoComputeNote.hidden = !(kindUsesAutoCompute(kind)
+                    && ChickadeeLanguage.canEvaluateExpressions());
+            }
         }
 
         /// The one case column a kind that calls no function uses — the
@@ -1316,6 +1328,19 @@
             if (kind === 'variable_equality') return 'variable';
             if (kind === 'program_io') return 'stdin';
             return null;
+        }
+
+        /// Whether auto-compute fills Expected for this kind. Variable
+        /// equality and program I/O call no function. A return type check
+        /// expects a type name, exception expected a class name and
+        /// performance threshold a millisecond budget, so the instructor
+        /// types those. autoComputeRow and the note under the cases table
+        /// both read this.
+        function kindUsesAutoCompute(kind) {
+            if (functionlessParamName(kind)) return false;
+            return kind !== 'return_type_check'
+                && kind !== 'exception_expected'
+                && kind !== 'performance_threshold';
         }
 
         /// Applies the data-model defaults that go with a given kind.
@@ -1663,19 +1688,8 @@
             // the fact rather than assuming it, which is the whole point of the
             // fact existing.
             if (!ChickadeeLanguage.canEvaluateExpressions()) return;
-            // Variable-equality and program-I/O families don't call a
-            // function — skip.
-            if (kindInput && functionlessParamName(kindInput.value)) return;
-            // Return-type-check expected is a type name (e.g. "DataFrame"),
-            // not the function's actual return value — auto-compute would
-            // write the value, which is wrong.  Instructor types the
-            // type name directly.
-            if (kindInput && kindInput.value === 'return_type_check') return;
-            // Exception-expected and performance-threshold are also
-            // instructor-typed (an exception class name and a
-            // millisecond budget respectively); skip auto-compute.
-            if (kindInput && kindInput.value === 'exception_expected') return;
-            if (kindInput && kindInput.value === 'performance_threshold') return;
+            // Skip the kinds whose Expected the instructor types.
+            if (kindInput && !kindUsesAutoCompute(kindInput.value)) return;
             var fnName = (fnInput.value || '').trim();
             if (!fnName) return;
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);

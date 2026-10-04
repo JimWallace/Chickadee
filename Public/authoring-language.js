@@ -171,6 +171,22 @@
         return { ok: true, value: text, kind: 'string', strict: false };
     }
 
+    /// The title of a value cell that `parseValue` did not read exactly, or ''
+    /// when it did. The editors give both loose readings the same amber cue,
+    /// but they have different causes, so the title names which one (#1996):
+    /// text that matched nothing is kept as a string, and a value pasted in
+    /// the language's own syntax is rewritten to JSON. The bare-string
+    /// fallback is the only reading that returns the text unchanged. A title
+    /// is one phrase; docs/inputs.md ("The amber cue on a value") explains
+    /// both, and the note under each editor links it.
+    function looseValueTitle(raw) {
+        var parsed = parseValue(raw);
+        if (!parsed.ok || parsed.strict) return '';
+        return parsed.value === String(raw == null ? '' : raw)
+            ? 'Kept as text'
+            : 'Read as a pasted literal';
+    }
+
     /// Why this language cannot use notebook-check `kind`, or null when it can.
     ///
     /// Derived server-side from the SAME predicate the save-time refusal uses,
@@ -242,6 +258,7 @@
         matchScalarToken: matchScalarToken,
         reprToJSON: reprToJSON,
         parseValue: parseValue,
+        looseValueTitle: looseValueTitle,
         scriptExtension: scriptExtension,
         canScanFunctions: canScanFunctions,
         canEvaluateExpressions: canEvaluateExpressions,
