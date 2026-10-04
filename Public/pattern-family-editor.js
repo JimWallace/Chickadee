@@ -1882,7 +1882,7 @@
             },
             readSpec: readFamilySpec,
             persistAndSync: persistFamilySpec,
-            cleanup: function () { killWorker(); }
+            cleanup: function () { autoCompute.killWorker(); }
         };
         if (bodyEl) {
             window.ChickadeeTestRenderers = window.ChickadeeTestRenderers || {};

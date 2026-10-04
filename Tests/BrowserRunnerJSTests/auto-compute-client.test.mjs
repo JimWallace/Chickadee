@@ -194,6 +194,23 @@ test('the solution loads once, and later calls reuse it', async () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
+test('killWorker stops the worker, and the next call loads the solution again', async () => {
+  const { AutoCompute, workers } = loadClient();
+  const client = AutoCompute.createClient({ urls: URLS });
+
+  await client.callSolution('f', [1], {});
+  // The editor calls this from its renderer's cleanup, so a replaced editor
+  // does not leave a booted kernel behind.
+  client.killWorker();
+  assert.equal(workers[0].terminated, true);
+  // Nothing is running, so a second kill is a no-op.
+  client.killWorker();
+
+  await client.callSolution('f', [2], {});
+  assert.equal(workers.length, 2, 'the next call starts a new worker');
+  assert.deepEqual(workers[1].messages.map((m) => m.type), ['loadCells', 'call']);
+});
+
 test("the worker's None and unsupported replies keep their shapes", async () => {
   let reply = { ok: true, returnedNone: true };
   const { AutoCompute } = loadClient({
@@ -238,9 +255,10 @@ test('a language with no in-page worker computes on the server', async () => {
   rendered = '[1, 2]';
   assert.deepEqual(plain(await client.callSolution('f', [], {})), { ok: true, value: [1, 2] });
   // A composite in the language's own syntax is reported, not stored as text.
+  // The tag tells applyAutoComputeResult the solution did not raise (#1991).
   rendered = '{1, 2}';
   assert.deepEqual(plain(await client.callSolution('f', [], {})),
-    { ok: false, error: 'Computed {1, 2} — enter it here in JSON.' });
+    { ok: false, notJSON: true, error: 'Computed {1, 2} — enter it here in JSON.' });
 
   assert.equal(workers.length, 0, 'no worker may start for a language without one');
   assert.equal(fetchCalls[0].url, '/compute-expected');
@@ -255,18 +273,20 @@ test('the server route reports its own failures', async () => {
   const { AutoCompute, fetchCalls } = loadClient({ seed: CPP_SEED, fetchImpl: async () => response });
 
   const client = AutoCompute.createClient({ urls: URLS });
+  // Each failure that the solution did not raise carries its tag (#1991).
   assert.deepEqual(plain(await client.callSolution('f', [], {})),
-    { ok: false, error: 'No driver for this language.' });
+    { ok: false, unavailable: true, error: 'No driver for this language.' });
   response = { ok: true, json: async () => ({ ok: false, error: 'boom' }) };
   assert.deepEqual(plain(await client.callSolution('f', [], {})), { ok: false, error: 'boom' });
   response = { ok: false, json: async () => ({}) };
-  assert.deepEqual(plain(await client.callSolution('f', [], {})), { ok: false, error: 'compute failed' });
+  assert.deepEqual(plain(await client.callSolution('f', [], {})),
+    { ok: false, requestFailed: true, error: 'compute failed' });
 
   // A page that gives no compute-expected URL says so, and fetches nothing.
   const before = fetchCalls.length;
   const noServer = AutoCompute.createClient({ urls: { solutionNotebook: URLS.solutionNotebook } });
   assert.deepEqual(plain(await noServer.callSolution('f', [], {})),
-    { ok: false, error: 'Auto-compute is unavailable on this page.' });
+    { ok: false, unavailable: true, error: 'Auto-compute is unavailable on this page.' });
   assert.equal(fetchCalls.length, before);
 });
 

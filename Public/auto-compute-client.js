@@ -76,7 +76,10 @@
     ///   loadTimeoutMs  — test seams. The editor passes neither, so it gets
     ///                    TIMEOUT_MS and LOAD_TIMEOUT_MS.
     ///
-    /// Returns `{ callSolution, timeoutMs, loadTimeoutMs }`.
+    /// Returns `{ callSolution, killWorker, timeoutMs, loadTimeoutMs }`.
+    /// `killWorker` stops the in-page worker, if one is running; the editor
+    /// calls it when its renderer is cleaned up, so a replaced editor does
+    /// not leak a booted kernel. The next call starts a new worker.
     function createClient(options) {
         options = options || {};
         var csrfToken = options.csrfToken || '';
@@ -371,6 +374,7 @@
 
         return {
             callSolution: callSolution,
+            killWorker: killWorker,
             timeoutMs: timeoutMs,
             loadTimeoutMs: loadTimeoutMs
         };
