@@ -44,6 +44,9 @@ on:
       - "Tools/editor-smoke-test/**"
       - ".github/workflows/grading-hang-probe.yml"
       - "Public/browser-runner.js"
+      # The test runtimes the browser grades with, generated from
+      # Tools/runner-support (#1962).
+      - "Public/runner-support-sources.js"
       # grading-worker.js became one worker per language; a glob, so the next
       # language is covered without an edit here (#1981).
       - "Public/*-grading-worker.js"
