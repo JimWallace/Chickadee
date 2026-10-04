@@ -1,9 +1,9 @@
 # The Vapor allowance for Abort validators only shrinks (#1730): a listed file
 # that no longer imports Vapor must fail the guard, so its name is deleted.
 guard="scripts/check-utilities-imports.sh"
-files="Sources/APIServer/Utilities/PatternFamilyAuthoredGraph.swift"
+files="Sources/APIServer/Utilities/PatternFamilyValidator.swift"
 description="an Abort-validator allowance for a file that no longer imports Vapor"
 expect="allows Vapor in a file"
 apply() {
-    sed -i '/^import Vapor$/d' Sources/APIServer/Utilities/PatternFamilyAuthoredGraph.swift
+    sed -i '/^import Vapor$/d' Sources/APIServer/Utilities/PatternFamilyValidator.swift
 }

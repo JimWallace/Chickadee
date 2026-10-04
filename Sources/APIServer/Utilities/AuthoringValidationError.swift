@@ -17,9 +17,9 @@ import Foundation
 /// so this file stays free of Vapor.
 ///
 /// Cases are added one validator at a time. They cover
-/// `NotebookCheckValidator`, `ManifestValidation`, `PatternKindHandler` and
-/// `NotebookCheckKindHandler`. `PatternFamilyValidator` and
-/// `PatternFamilyAuthoredGraph` still throw `Abort`, because tests assert
+/// `NotebookCheckValidator`, `ManifestValidation`, `PatternKindHandler`,
+/// `NotebookCheckKindHandler` and `PatternFamilyAuthoredGraph`.
+/// `PatternFamilyValidator` still throws `Abort`, because a test asserts
 /// that concrete type.
 enum AuthoringValidationError: Error, Equatable, Sendable {
     // MARK: NotebookCheckValidator
@@ -150,6 +150,22 @@ enum AuthoringValidationError: Error, Equatable, Sendable {
     case astStructureInvalidImport(checkID: String, predicate: String)
     /// An `astStructure` check lists an unknown predicate.
     case astStructureUnknownPredicate(checkID: String, predicate: String)
+
+    // MARK: PatternFamilyAuthoredGraph
+
+    /// The authored graph of scripts and families has a cycle.
+    case authoredDependencyCycle
+    /// The items of one section do not form one block. A nil `sectionID`
+    /// is the ungrouped block.
+    case authoredSectionNotContiguous(sectionID: String?)
+    /// A script depends on a pattern family that does not exist.
+    case scriptDependsOnUnknownFamily(script: String, familyID: String)
+    /// A pattern family depends on itself.
+    case familyDependsOnItself(familyID: String)
+    /// A pattern family depends on a family that does not exist.
+    case familyDependsOnUnknownFamily(familyID: String, dependency: String)
+    /// A notebook check depends on a pattern family that does not exist.
+    case notebookCheckDependsOnUnknownFamily(checkID: String, familyID: String)
 }
 
 extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
@@ -298,6 +314,21 @@ extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
         case .astStructureUnknownPredicate(let checkID, let predicate):
             return
                 "Notebook check '\(checkID)' (ast_structure): unknown predicate '\(predicate)' — supported: for_loop, while_loop, list_comprehension, lambda, recursion, import:<module>, optional leading `!` for negation"
+
+        case .authoredDependencyCycle:
+            return "Dependency graph contains a cycle among scripts and/or pattern families."
+        case .authoredSectionNotContiguous(let sectionID):
+            let label = sectionID ?? "<ungrouped>"
+            return "Items with sectionID '\(label)' are not contiguous; "
+                + "group all items of a section together before saving."
+        case .scriptDependsOnUnknownFamily(let script, let familyID):
+            return "Script '\(script)' depends on unknown pattern family '\(familyID)'."
+        case .familyDependsOnItself(let familyID):
+            return "Pattern family '\(familyID)' cannot depend on itself."
+        case .familyDependsOnUnknownFamily(let familyID, let dependency):
+            return "Pattern family '\(familyID)' depends on unknown family '\(dependency)'."
+        case .notebookCheckDependsOnUnknownFamily(let checkID, let familyID):
+            return "Notebook check '\(checkID)' depends on unknown pattern family '\(familyID)'."
         }
     }
 
