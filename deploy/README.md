@@ -99,19 +99,21 @@ env var takes precedence over it.
 ### Test-script sandbox
 
 The Compose runner starts with `--sandbox`. Each test script then runs in its
-own user and network namespace: it has no network and no real privileges.
-Docker's default seccomp and AppArmor profiles refuse the `unshare` call that
-creates the namespaces, so the runner service sets `seccomp=unconfined` and
-`apparmor=unconfined`. The runner keeps `cap_drop: ALL`, `no-new-privileges`,
-a read-only root file system and `pids_limit`.
+own user, network and mount namespace: it has no network, no real privileges,
+and no view of the other jobs on the runner, because the work root is covered
+inside the namespace and only the job's own directories are bound back.
+Docker's default seccomp and AppArmor profiles refuse the `unshare` and
+`mount` calls that create the namespaces, so the runner service sets
+`seccomp=unconfined` and `apparmor=unconfined`. The runner keeps `cap_drop:
+ALL`, `no-new-privileges`, a read-only root file system and `pids_limit`.
 
-The host must also allow unprivileged user namespaces. Check it before the
-first `docker compose up` with this file. The check runs `unshare` in the
-runner service, with the same settings a job uses, and prints `sandbox OK`
-when it works:
+The host must also allow unprivileged user namespaces, with mounts inside
+them. Check it before the first `docker compose up` with this file. The check
+runs `unshare` in the runner service, with the same namespaces a job uses,
+mounts a tmpfs inside them, and prints `sandbox OK` when it works:
 
 ```bash
-docker compose run --rm --no-deps --entrypoint /usr/bin/unshare runner --fork --user --net --map-root-user /bin/echo sandbox OK
+docker compose run --rm --no-deps --entrypoint /usr/bin/unshare runner --fork --user --net --mount --map-root-user /bin/sh -c "mount -t tmpfs tmpfs /mnt && echo sandbox OK"
 ```
 
 If the check fails, the host refuses user namespaces. On Ubuntu 23.10 and
