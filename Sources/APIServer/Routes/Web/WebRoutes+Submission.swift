@@ -13,6 +13,31 @@ import Fluent
 import Foundation
 import Vapor
 
+/// The badges one graded submission earns by itself: the per-submission
+/// badges and the authored individual badges.  The submission page, the
+/// student dashboard and the staff per-student page all call this, so a
+/// badge shows on all three pages or on none (#2020).  Class-wide badges are
+/// appended by each caller.
+///
+/// Every badge reads `context.gradePercent`, the raw autograded grade.  A
+/// class-goal bonus is extra credit for the class, not a part of this
+/// submission's result, so it never earns a badge.
+func badgesEarnedBySubmission(
+    _ context: BadgeContext,
+    props: TestProperties?,
+    standings: (standing: Int, matchesWon: Int)? = nil
+) -> [AchievementBadge] {
+    AchievementBadge.forSubmission(
+        context,
+        achievements: BuiltInAchievements.manifestPerSubmission(props: props),
+        disabled: Set(props?.disabledBuiltInAwardIDs ?? []))
+        + earnedIndividualBadges(
+            props: props,
+            gradePercent: context.gradePercent,
+            outcomes: context.outcomes,
+            standings: standings)
+}
+
 /// The class-record badges one submission holds, resolved against the
 /// manifest so a custom or renamed record shows its authored name.
 func classRecordBadges(

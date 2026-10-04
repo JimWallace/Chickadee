@@ -44,31 +44,6 @@ func earnedIndividualBadges(
     }
 }
 
-/// The badges one graded submission earns by itself: the per-submission
-/// badges and the authored individual badges.  The submission page, the
-/// student dashboard and the staff per-student page all call this, so a
-/// badge shows on all three pages or on none (#2020).  Class-wide badges are
-/// appended by each caller.
-///
-/// Every badge reads `context.gradePercent`, the raw autograded grade.  A
-/// class-goal bonus is extra credit for the class, not a part of this
-/// submission's result, so it never earns a badge.
-func badgesEarnedBySubmission(
-    _ context: BadgeContext,
-    props: TestProperties?,
-    standings: (standing: Int, matchesWon: Int)? = nil
-) -> [AchievementBadge] {
-    AchievementBadge.forSubmission(
-        context,
-        achievements: BuiltInAchievements.manifestPerSubmission(props: props),
-        disabled: Set(props?.disabledBuiltInAwardIDs ?? []))
-        + earnedIndividualBadges(
-            props: props,
-            gradePercent: context.gradePercent,
-            outcomes: context.outcomes,
-            standings: standings)
-}
-
 /// The student's current round-robin place for each assignment that needs
 /// it: a standings activity that authors an individual badge.  Every other
 /// assignment is skipped, so a page with no such assignment makes no query.
