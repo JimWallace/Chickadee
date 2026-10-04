@@ -22,7 +22,7 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite struct RunnerProfileDetectorTests {
+@Suite(.timeLimit(.minutes(2))) struct RunnerProfileDetectorTests {
 
     /// The real banner each interpreter prints, as observed. Pinned as data so
     /// a parser change is checked against every language at once rather than
@@ -115,7 +115,7 @@ import Testing
 /// v0.5.33) — and nothing tested it. Both directions matter: failing open
 /// advertises a capability the host does not have and every C++ job dies at
 /// `exec`; failing closed advertises nothing and every C++ job queues forever.
-@Suite struct RunnerExecProbeTests {
+@Suite(.timeLimit(.minutes(2))) struct RunnerExecProbeTests {
 
     static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") { await Self.gppIsAvailable() }
 
