@@ -112,7 +112,7 @@ reason.
 A network error or a kernel error stopped the load. Reload the page to try
 again.
 
-### A computed value that is not JSON
+### Computed value is not JSON
 
 Placeholder: "⚠ Computed" and the value, then "enter it here in JSON".
 
@@ -121,3 +121,26 @@ server sends back the value in the language's own syntax. The editor stores it
 when it is JSON or a single true, false or null value in that syntax. Any other
 value is not stored, because a generated test would then compare it as text.
 Type the value in Expected as JSON.
+
+### Auto-compute unavailable here
+
+Placeholder: "⚠" and the reason.
+
+The server cannot compute this value. The reason in the placeholder is one of
+these:
+
+- The assignment declares no language, so there is no solution to call. Set
+  the assignment's language.
+- The language has no expression driver on the server.
+- The kind is Stdout equality, and the language cannot capture printed output
+  automatically. Type the expected output yourself.
+
+The page can also have no route to the server for auto-compute. Type the
+Expected value yourself.
+
+### Auto-compute request failed
+
+Placeholder: "⚠" and the error.
+
+The request to the server did not complete, for example because of a network
+error. Reload the page to try again.

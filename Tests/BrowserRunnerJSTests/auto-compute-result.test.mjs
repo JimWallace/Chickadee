@@ -119,6 +119,9 @@ test('every auto-compute title is one phrase within the hover word budget', () =
     { ok: false, loadFailed: true, error: 'no solution notebook', detail: 'no-solution' },
     { ok: false, loadFailed: true, error: 'solution notebook has no code', detail: 'empty-solution' },
     { ok: false, loadFailed: true, error: 'solution notebook did not load', detail: 'Failed to fetch' },
+    { ok: false, notJSON: true, error: 'Computed (1 2) — enter it here in JSON.' },
+    { ok: false, unavailable: true, error: 'This assignment declares no language, so there is no solution to call.' },
+    { ok: false, requestFailed: true, error: 'compute failed' },
   ];
   for (const res of results) {
     const cell = computedCell();
@@ -139,4 +142,32 @@ test('a timeout title names no language function', () => {
     apply(cell, { ok: false, timedOut: true, error }, env);
     assert.doesNotMatch(cell.title, /\w+\(\)/, cell.title);
   }
+});
+
+test('a server-route result that is not a solution error has its own title', () => {
+  // C++, Racket and Java compute on the server. Its non-JSON value, its
+  // refusal and a failed request used to read "Solution raised: ...".
+  const cases = [
+    [{ ok: false, notJSON: true, error: 'Computed (1 2) — enter it here in JSON.' }, 'Computed value is not JSON'],
+    [{ ok: false, unavailable: true, error: 'This assignment declares no language, so there is no solution to call.' }, 'Auto-compute unavailable here'],
+    [{ ok: false, requestFailed: true, error: 'compute failed' }, 'Auto-compute request failed'],
+  ];
+  for (const [res, title] of cases) {
+    const cell = computedCell();
+    apply(cell, res, env);
+    assert.equal(cell.title, title);
+    // The reason stays visible in the cell.
+    assert.equal(cell.placeholder, '⚠ ' + res.error);
+  }
+});
+
+test('the note under the cases table links a heading that docs/auto-compute.md has', async () => {
+  const template = await fs.readFile(path.resolve('Resources/Views/_family-editor-body.leaf'), 'utf8');
+  const doc = await fs.readFile(path.resolve('docs/auto-compute.md'), 'utf8');
+  const link = /docs\/auto-compute\.md#([a-z0-9-]+)/.exec(template);
+  assert.ok(link, 'the note must link a section of docs/auto-compute.md');
+  // GitHub's anchor for a heading: lower case, punctuation dropped, spaces to hyphens.
+  const anchors = [...doc.matchAll(/^#+ (.+)$/gm)].map((m) =>
+    m[1].toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/ /g, '-'));
+  assert.ok(anchors.includes(link[1]), '#' + link[1] + ' names no heading in docs/auto-compute.md');
 });
