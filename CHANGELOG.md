@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.413] - 2026-10-04
+
+### Changed
+
+- **One `SelectOption` type for every form select (#2109).** Seven web view models each held the same three fields, `value`, `label` and `selected`. They are now one `SelectOption`. The builders that fill each select keep their names and return the shared type. `AdminMCPCourseRef` and `AdminUserCourseRow`, two copies of one course reference, are now one `AdminCourseRef`. The templates do not change.
+
+
 ## [0.5.412] - 2026-10-04
 
 ### Security
