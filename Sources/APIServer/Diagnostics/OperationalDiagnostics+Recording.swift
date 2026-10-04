@@ -58,7 +58,6 @@ extension OperationalDiagnosticsService {
                     ]
                 )
             )
-            try await pruneIfNeeded(on: db, logger: logger)
         } catch {
             logger.warning(
                 "diagnostics_submission_create_failed",
@@ -116,7 +115,6 @@ extension OperationalDiagnosticsService {
                     ]
                 )
             )
-            try await pruneIfNeeded(on: db, logger: logger)
         } catch {
             logger.warning(
                 "diagnostics_runner_snapshot_failed",
@@ -413,7 +411,6 @@ extension OperationalDiagnosticsService {
                 finalStatus: finalStatus,
                 logger: logger
             )
-            try await pruneIfNeeded(on: db, logger: logger)
         } catch {
             logger.warning(
                 "diagnostics_job_finish_failed",

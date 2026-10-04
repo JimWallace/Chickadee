@@ -25,18 +25,6 @@ import VaporTesting
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
 
-    private func get(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var body: String?
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                body = res.body.string
-            })
-        return try #require(body)
-    }
-
     private func staffCookie(on app: Application) async throws -> String {
         let cookie = try await wrLoginAsInstructor(on: app)
         let instructor = try #require(
@@ -55,7 +43,7 @@ import VaporTesting
             try await wrInsertSetup(id: "setup_lbh", manifest: try activityManifest(visible: false), on: app)
             try await wrInsertAssignment(testSetupID: "setup_lbh", title: "Hidden Race", isOpen: true, on: app)
 
-            let html = try await get("/", cookie: cookie, on: app)
+            let html = try await getHTML("/", cookie: cookie, on: app)
             #expect(html.contains("Visible Race"))
             #expect(html.contains("Hidden Race"))
             #expect(html.contains("href=\"/testsetups/setup_lbv/leaderboard\""))
@@ -71,7 +59,7 @@ import VaporTesting
             try await wrInsertSetup(id: "setup_lbp", on: app)
             try await wrInsertAssignment(testSetupID: "setup_lbp", title: "Plain Lab", isOpen: false, on: app)
 
-            let html = try await get("/instructor", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor", cookie: cookie, on: app)
             #expect(html.contains("Staff Race"))
             #expect(html.contains("Plain Lab"))
             #expect(html.contains("href=\"/testsetups/setup_lbi/leaderboard\""))

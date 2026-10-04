@@ -95,11 +95,11 @@ struct GetRunnerDetailTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject(tool: Self.name)
+        try await context.requireAdminSubject()
 
         let runnerID = input.runnerID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !runnerID.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "runnerID must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "runnerID must not be empty.")
         }
         let sampleSize = min(max(input.sampleSize ?? 50, 1), 200)
         let db = context.db
@@ -150,7 +150,7 @@ struct GetRunnerDetailTool: DiagnosticTool {
                 .sort(\.$recordedAt, .descending)
                 .first()
         else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Unknown runner '\(runnerID)'.")
+            throw MCPToolError.invalidArguments(detail: "Unknown runner '\(runnerID)'.")
         }
         let processed = try await APISubmission.query(on: req.db)
             .filter(\.$workerID == runnerID)

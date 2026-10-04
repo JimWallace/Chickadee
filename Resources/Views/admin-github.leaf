@@ -77,8 +77,8 @@ GitHub
             <button class="btn btn-primary" type="submit">Create App on GitHub</button>
         </div>
     </form>
-    <details class="test-output-details"#if(organizationOpen): open#endif>
-        <summary>Owner and permissions</summary>
+    <details id="github-app-options"#if(organizationOpen): open#endif>
+        <summary class="disclosure-summary"><span class="accordion-caret" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></span>Owner and permissions</summary>
         <form method="get" action="/admin/github" class="form-stack">
             <div class="field-stack">
                 <label for="github-org">Organization</label>
@@ -89,17 +89,17 @@ GitHub
                 <input type="checkbox" name="courseRepositories"#if(courseRepositories): checked#endif>
                 Allow course repositories
             </label>
-            <p class="field-note text-muted">Adds write access to repository administration and read access to organization members.</p>
+            <p class="field-note field-note--muted">Adds write access to repository administration and read access to organization members.</p>
             <label class="form-label">
                 <input type="checkbox" name="pushEvents"#if(pushEvents): checked#endif>
                 Receive push events
             </label>
-            <p class="field-note text-muted">Shows staff the last push to each course repository.</p>
+            <p class="field-note field-note--muted">Shows staff the last push to each course repository.</p>
             <label class="form-label">
                 <input type="checkbox" name="commitStatuses"#if(commitStatuses): checked#endif>
                 Post commit statuses
             </label>
-            <p class="field-note text-muted">Adds write access to commit statuses, so an assignment can post its public-test count.</p>
+            <p class="field-note field-note--muted">Adds write access to commit statuses, so an assignment can post its public-test count.</p>
             <div class="toolbar toolbar--end">
                 <button class="btn" type="submit">Apply</button>
             </div>

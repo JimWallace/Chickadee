@@ -33,18 +33,6 @@ import VaporTesting
         return item
     }
 
-    private func overviewHTML(cookie: String, on app: Application) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, "/instructor",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     /// The text of the first `<tr …data-attr="value"…>` row, tag open to `</tr>`.
     private func row(containing marker: String, in html: String) throws -> String {
         let start = try #require(html.range(of: marker), "no row carrying \(marker)")
@@ -64,10 +52,10 @@ import VaporTesting
             let item = try await makeItem(courseID: courseID, sectionID: section.id)
             try await item.save(on: app.db)
 
-            let html = try await overviewHTML(cookie: cookie, on: app)
+            let html = try await getHTML("/instructor", cookie: cookie, on: app)
             #expect(html.contains("<tbody data-section-id=\"\(try section.requireID().uuidString)\">"))
             #expect(html.contains("data-content-item-id=\"\(try item.requireID().uuidString)\""))
-            #expect(html.contains("assignment-drag-handle"))
+            #expect(html.contains("suite-drag-handle"))
             #expect(html.contains("class=\"results-table section-items section-items--manage\""))
         }
     }
@@ -81,7 +69,7 @@ import VaporTesting
                 testSetupID: "setup_ov_pub", title: "Lab Overview", isOpen: true,
                 validationStatus: "passed", on: app)
 
-            let html = try await overviewHTML(cookie: cookie, on: app)
+            let html = try await getHTML("/instructor", cookie: cookie, on: app)
             let row = try row(
                 containing: "data-assignment-id=\"\(assignment.publicID)\"", in: html)
             #expect(row.contains("class=\"state-select\" data-state=\"open\""))
@@ -104,7 +92,7 @@ import VaporTesting
                 testSetupID: "setup_ov_fail", title: "Broken Lab", isOpen: false,
                 validationStatus: "failed", on: app)
 
-            let html = try await overviewHTML(cookie: cookie, on: app)
+            let html = try await getHTML("/instructor", cookie: cookie, on: app)
             let row = try row(
                 containing: "data-assignment-id=\"\(assignment.publicID)\"", in: html)
             #expect(row.contains("Validation failed"))
@@ -120,7 +108,7 @@ import VaporTesting
             try await item.save(on: app.db)
             let itemID = try item.requireID().uuidString
 
-            let html = try await overviewHTML(cookie: cookie, on: app)
+            let html = try await getHTML("/instructor", cookie: cookie, on: app)
             let row = try row(containing: "data-content-item-id=\"\(itemID)\"", in: html)
             #expect(row.contains("action=\"/instructor/content-items/\(itemID)/visibility\""))
             #expect(row.contains("class=\"state-select\" data-state=\"hidden\""))
@@ -136,7 +124,7 @@ import VaporTesting
             let item = try await makeItem(courseID: courseID, title: "Week Two", kind: .heading)
             try await item.save(on: app.db)
 
-            let html = try await overviewHTML(cookie: cookie, on: app)
+            let html = try await getHTML("/instructor", cookie: cookie, on: app)
             let row = try row(
                 containing: "data-content-item-id=\"\(try item.requireID().uuidString)\"", in: html)
             #expect(row.contains("section-items-heading"))
@@ -153,7 +141,7 @@ import VaporTesting
             try await section.save(on: app.db)
             try await makeItem(courseID: courseID, sectionID: section.id).save(on: app.db)
 
-            let html = try await overviewHTML(cookie: cookie, on: app)
+            let html = try await getHTML("/instructor", cookie: cookie, on: app)
             #expect(html.contains("href=\"/instructor/new?sectionID=\(try section.requireID().uuidString)\""))
             for kind in ["slides", "notebook", "document", "link", "outline", "heading"] {
                 #expect(html.contains("data-add-kind=\"\(kind)\""), "missing + Add item for \(kind)")

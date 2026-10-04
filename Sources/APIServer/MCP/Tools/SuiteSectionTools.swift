@@ -76,17 +76,17 @@ struct CreateSuiteSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Section name must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "Section name must not be empty.")
         }
         let resolved = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
         let newID = UUID().uuidString
         do {
             try await mutateManifest(setup: resolved.setup, on: context.db) { props in
                 props.sections.append(TestSuiteSection(id: newID, name: name))
             }
         } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
+            throw MCPToolError.from(error)
         }
         return Output(assignmentPublicID: resolved.assignment.publicID, sectionID: newID, name: name)
     }
@@ -148,23 +148,22 @@ struct RenameSuiteSectionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let name = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "Section name must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "Section name must not be empty.")
         }
         guard !input.sectionID.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "sectionID must not be empty.")
         }
         let resolved = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
         do {
             try await mutateManifest(setup: resolved.setup, on: context.db) { props in
                 guard let idx = props.sections.firstIndex(where: { $0.id == input.sectionID }) else {
-                    throw MCPToolError.invalidArguments(
-                        tool: Self.name, detail: "No section with id \"\(input.sectionID)\".")
+                    throw MCPToolError.invalidArguments(detail: "No section with id \"\(input.sectionID)\".")
                 }
                 props.sections[idx].name = name
             }
         } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
+            throw MCPToolError.from(error)
         }
         return Output(assignmentPublicID: resolved.assignment.publicID, sectionID: input.sectionID, name: name)
     }
@@ -225,10 +224,10 @@ struct DeleteSuiteSectionTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         guard !input.sectionID.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "sectionID must not be empty.")
         }
         let resolved = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
         // Captured inside the mutation closure so the response reflects what
         // actually changed.
         var removed = false
@@ -246,7 +245,7 @@ struct DeleteSuiteSectionTool: ContentTool {
                 }
             }
         } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
+            throw MCPToolError.from(error)
         }
         return Output(
             assignmentPublicID: resolved.assignment.publicID,

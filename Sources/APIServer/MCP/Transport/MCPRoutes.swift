@@ -135,8 +135,7 @@ struct MCPRoutes: RouteCollection {
         // Authorize against the assignment's course; on failure fall back to the
         // generic dispatch, which produces the proper not-authorized result.
         do {
-            try await context.authorizeCourseAccess(
-                assignment.courseID, tool: ValidateAssignmentTool.name)
+            try await context.authorizeCourseAccess(assignment.courseID)
         } catch {
             return nil
         }

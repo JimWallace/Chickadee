@@ -169,7 +169,7 @@ import Vapor
 
             // Per-course student: meets .student, not .instructor.
             try await requireCourseRole(caller: asStudent, courseID: courseID, atLeast: .student, db: app.db)
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await requireCourseRole(
                     caller: asStudent, courseID: courseID, atLeast: .instructor, db: app.db)
             }
@@ -182,14 +182,14 @@ import Vapor
             try await requireCourseRole(caller: admin, courseID: courseID, atLeast: .instructor, db: app.db)
 
             // Unenrolled non-admin is forbidden even at the student bar.
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await requireCourseRole(
                     caller: unenrolled, courseID: courseID, atLeast: .student, db: app.db)
             }
 
             // requireCourseEnrollment still behaves as the `.student` case.
             try await requireCourseEnrollment(caller: asStudent, courseID: courseID, db: app.db)
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await requireCourseEnrollment(caller: unenrolled, courseID: courseID, db: app.db)
             }
         }
@@ -269,18 +269,18 @@ import Vapor
             // Per-course instructor: may write to the active course…
             try await requireCourseWriteAccess(caller: instructor, courseID: activeID, atLeast: .instructor, db: app.db)
             // …but not the archived one (read-only for instructors/TAs).
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await requireCourseWriteAccess(
                     caller: instructor, courseID: archivedID, atLeast: .instructor, db: app.db)
             }
 
             // Per-course student: forbidden on the active course (role too low),
             // and on the archived one.
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await requireCourseWriteAccess(
                     caller: student, courseID: activeID, atLeast: .instructor, db: app.db)
             }
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await requireCourseWriteAccess(
                     caller: student, courseID: archivedID, atLeast: .instructor, db: app.db)
             }
@@ -315,7 +315,7 @@ import Vapor
             ).save(on: app.db)
 
             // Only one instructor: a non-admin cannot remove them…
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await ensureNotLastInstructor(
                     caller: inst1, courseID: courseID, removing: try inst1.requireID(), db: app.db)
             }

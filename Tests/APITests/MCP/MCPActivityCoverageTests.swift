@@ -12,25 +12,8 @@ import Testing
 
 @Suite struct MCPActivityCoverageTests {
 
-    /// Every piece of text an agent can read: instructions plus each tool's
-    /// name, description and both schemas rendered as JSON.
-    private static let servedText: String = {
-        var parts = [MCPServerInstructions.text]
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        for tool in MCPToolCatalog.live.all {
-            parts.append(tool.name)
-            parts.append(tool.description)
-            for schema in [tool.inputSchema, tool.outputSchema] {
-                guard let schema,
-                    let data = try? encoder.encode(schema),
-                    let json = String(data: data, encoding: .utf8)
-                else { continue }
-                parts.append(json)
-            }
-        }
-        return parts.joined(separator: "\n")
-    }()
+    /// Every piece of text an agent can read on either MCP surface.
+    private static let servedText = MCPServedText.text
 
     /// Every schema `enum` that names one kind names them all. This is the
     /// guard that works at two kinds, where a proper-prefix scan (the language
@@ -38,7 +21,7 @@ import Testing
     @Test func everySchemaEnumNamingAKindNamesEveryKind() {
         let kinds = Set(ActivityKind.allCases.map(\.rawValue))
         var enumsSeen = 0
-        for tool in MCPToolCatalog.live.all {
+        for tool in MCPServedText.tools {
             for schema in [tool.inputSchema, tool.outputSchema].compactMap({ $0 }) {
                 for values in Self.enumArrays(in: schema) {
                     let named = Set(values.compactMap { if case .string(let s) = $0 { return s } else { return nil } })

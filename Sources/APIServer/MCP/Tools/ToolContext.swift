@@ -91,7 +91,7 @@ struct ToolContext {
     /// asks for it to authorize, and again to attribute the retest and the
     /// re-validation, and each ask was two queries.
     @discardableResult
-    func requireEligibleSubject(tool: String) async throws -> APIUser {
+    func requireEligibleSubject() async throws -> APIUser {
         if let resolved = request.storage[MCPEligibleSubjectKey.self], resolved.subject == subject {
             return resolved.user
         }
@@ -100,7 +100,7 @@ struct ToolContext {
                 .filter(\.$username == subject)
                 .first()
         else {
-            throw MCPToolError.notAuthorized(tool: tool, detail: "Unknown token subject.")
+            throw MCPToolError.notAuthorized(detail: "Unknown token subject.")
         }
         // MCP eligibility is coarse: course staff (TA+ in any course) or an
         // `mcp` service account — never a plain student. Per-course access is
@@ -111,8 +111,7 @@ struct ToolContext {
             eligible = try await isStaffAnywhere(user, db: db)
         }
         guard eligible else {
-            throw MCPToolError.notAuthorized(
-                tool: tool, detail: "Students may not use the MCP interface.")
+            throw MCPToolError.notAuthorized(detail: "Students may not use the MCP interface.")
         }
         request.storage[MCPEligibleSubjectKey.self] = MCPEligibleSubject(subject: subject, user: user)
         return user
@@ -145,21 +144,19 @@ struct ToolContext {
     /// acting user so downstream policy checks and attribution don't have to
     /// re-resolve the subject (#1113).
     @discardableResult
-    func authorizeCourseAccess(_ courseID: UUID, tool: String) async throws -> APIUser {
-        let user = try await requireEligibleSubject(tool: tool)
-        try await requireEnrollment(of: user, in: courseID, tool: tool)
+    func authorizeCourseAccess(_ courseID: UUID) async throws -> APIUser {
+        let user = try await requireEligibleSubject()
+        try await requireEnrollment(of: user, in: courseID)
         return user
     }
 
     /// Throws unless `user` holds an enrollment row in `courseID`.
-    private func requireEnrollment(of user: APIUser, in courseID: UUID, tool: String) async throws {
+    private func requireEnrollment(of user: APIUser, in courseID: UUID) async throws {
         guard let userID = user.id else {
-            throw MCPToolError.notAuthorized(tool: tool, detail: "Token subject is not a valid user.")
+            throw MCPToolError.notAuthorized(detail: "Token subject is not a valid user.")
         }
         guard try await userIsEnrolled(userID: userID, inCourse: courseID, db: db) else {
-            throw MCPToolError.notAuthorized(
-                tool: tool,
-                detail: "The MCP account is not enrolled in the target course.")
+            throw MCPToolError.notAuthorized(detail: "The MCP account is not enrolled in the target course.")
         }
     }
 
@@ -169,10 +166,9 @@ struct ToolContext {
     /// throwing the standard `invalidArguments` error if none matches. Does
     /// not check authorization — prefer `authorizedAssignment` unless the
     /// caller authorizes by other means.
-    func requireAssignment(publicID: String, tool: String) async throws -> APIAssignment {
+    func requireAssignment(publicID: String) async throws -> APIAssignment {
         guard let assignment = try await assignmentByPublicID(publicID, on: db) else {
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "No assignment found with public ID \"\(publicID)\".")
+            throw MCPToolError.invalidArguments(detail: "No assignment found with public ID \"\(publicID)\".")
         }
         return assignment
     }
@@ -180,9 +176,9 @@ struct ToolContext {
     /// Resolves the assignment and authorizes the acting subject for its course
     /// (`authorizeCourseAccess`). The standard entry point for a tool acting on
     /// a single assignment.
-    func authorizedAssignment(publicID: String, tool: String) async throws -> APIAssignment {
-        let assignment = try await requireAssignment(publicID: publicID, tool: tool)
-        try await authorizeCourseAccess(assignment.courseID, tool: tool)
+    func authorizedAssignment(publicID: String) async throws -> APIAssignment {
+        let assignment = try await requireAssignment(publicID: publicID)
+        try await authorizeCourseAccess(assignment.courseID)
         return assignment
     }
 
@@ -199,34 +195,30 @@ struct ToolContext {
     /// funnels through; the *read* resolvers stay on `authorizeCourseAccess`
     /// (enrollment only) so archived courses remain readable (#417 Slice D-MCP).
     func authorizeCourseWriteAccess(
-        _ courseID: UUID, tool: String, atLeast minimum: CourseRole
+        _ courseID: UUID, atLeast minimum: CourseRole
     ) async throws {
-        let user = try await requireEligibleSubject(tool: tool)
+        let user = try await requireEligibleSubject()
         // `evaluateCourseWrite` reads a non-admin's enrollment row itself, as
         // their course role, and refuses one with none. It exempts an admin,
         // but an agent acting for one stays enrollment-scoped, so only an
         // admin needs the separate check (#1942).
         if user.isAdmin {
-            try await requireEnrollment(of: user, in: courseID, tool: tool)
+            try await requireEnrollment(of: user, in: courseID)
         }
         switch try await evaluateCourseWrite(user: user, courseID: courseID, atLeast: minimum, db: db) {
         case nil:
             return
         case .notEnrolled:
-            throw MCPToolError.notAuthorized(
-                tool: tool, detail: "The MCP account is not enrolled in the target course.")
+            throw MCPToolError.notAuthorized(detail: "The MCP account is not enrolled in the target course.")
         case .roleTooLow(let held, let required):
             throw MCPToolError.notAuthorized(
-                tool: tool,
                 detail:
                     "This action requires the \(required.rawValue) role in the course; the MCP account holds \(held.rawValue)."
             )
         case .courseMissing:
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "The target course could not be found.")
+            throw MCPToolError.invalidArguments(detail: "The target course could not be found.")
         case .archived:
-            throw MCPToolError.notAuthorized(
-                tool: tool, detail: "This course is archived and is read-only.")
+            throw MCPToolError.notAuthorized(detail: "This course is archived and is read-only.")
         }
     }
 
@@ -236,10 +228,10 @@ struct ToolContext {
     /// listing/resource surface, so this closes the by-public-ID write path an
     /// agent could still reach with a remembered id (#417 Slice C/D-MCP).
     func authorizedAssignmentForWrite(
-        publicID: String, tool: String, atLeast minimum: CourseRole
+        publicID: String, atLeast minimum: CourseRole
     ) async throws -> APIAssignment {
-        let assignment = try await requireAssignment(publicID: publicID, tool: tool)
-        try await authorizeCourseWriteAccess(assignment.courseID, tool: tool, atLeast: minimum)
+        let assignment = try await requireAssignment(publicID: publicID)
+        try await authorizeCourseWriteAccess(assignment.courseID, atLeast: minimum)
         return assignment
     }
 
@@ -251,14 +243,13 @@ struct ToolContext {
     /// working on archived courses. Mutating tools use
     /// `authorizedAssignmentAndSetupForWrite`.
     func authorizedAssignmentAndSetup(
-        publicID: String, tool: String
+        publicID: String
     ) async throws
         -> (assignment: APIAssignment, setup: APITestSetup)
     {
-        let assignment = try await authorizedAssignment(publicID: publicID, tool: tool)
+        let assignment = try await authorizedAssignment(publicID: publicID)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "The assignment's test setup could not be found.")
+            throw MCPToolError.invalidArguments(detail: "The assignment's test setup could not be found.")
         }
         return (assignment, setup)
     }
@@ -273,15 +264,14 @@ struct ToolContext {
     /// gets version history without its author wiring anything
     /// (`MCPVersionCapture.swift`).
     func authorizedAssignmentAndSetupForWrite(
-        publicID: String, tool: String, atLeast minimum: CourseRole
+        publicID: String, atLeast minimum: CourseRole
     ) async throws
         -> (assignment: APIAssignment, setup: APITestSetup)
     {
         let assignment = try await authorizedAssignmentForWrite(
-            publicID: publicID, tool: tool, atLeast: minimum)
+            publicID: publicID, atLeast: minimum)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "The assignment's test setup could not be found.")
+            throw MCPToolError.invalidArguments(detail: "The assignment's test setup could not be found.")
         }
         await beginContentWrite(setup: setup)
         return (assignment, setup)

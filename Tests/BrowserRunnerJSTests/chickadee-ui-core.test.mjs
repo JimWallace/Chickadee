@@ -6,12 +6,9 @@
 // the CSRF token, the shared fetch-error extractor, and the JSON fetch
 // wrapper.
 //
-// NOT covered here: `runInlineScripts`, which re-executes script elements from
-// swapped HTML. It is internal to `swapHalf` and unexported, so reaching it
-// would mean widening the public API to suit a test. Its CONTRACT is now
-// written down in the source; covering its behaviour needs a `swapHalf`
-// harness (DOMParser, importNode, the keepElement identity rule), which is its
-// own slice.
+// NOT covered here: the pane swap, which moved to surface-swap.js. Its
+// behaviour, including the re-wire of the edit half (#1957), is covered by
+// swap-half.test.mjs and refresh-edit-surface.test.mjs.
 //
 // Each of these exists because it replaced drifted copies — escapeHtml
 // replaced per-file variants that disagreed on which characters they escaped,

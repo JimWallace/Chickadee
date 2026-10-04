@@ -87,7 +87,7 @@ extension ToolContext {
         let setups = versionCapture.drain()
         guard !setups.isEmpty else { return }
 
-        let actor = try? await requireEligibleSubject(tool: tool)
+        let actor = try? await requireEligibleSubject()
         for setup in setups {
             // Re-read: the tool mutated its own in-memory copy, and for a
             // manifest edit that copy is the one that was saved — but a tool

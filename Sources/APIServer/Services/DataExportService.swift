@@ -157,7 +157,7 @@ private func buildDataExport(exportID: UUID, userID: UUID, app: Application) asy
     try Task.checkCancellation()
     let db = app.db
     guard let user = try await APIUser.find(userID, on: db) else {
-        throw Abort(.notFound, reason: "User \(userID.uuidString) not found for data export")
+        throw AppError.notFound(resource: "User \(userID.uuidString)")
     }
 
     let generatedAt = Date()

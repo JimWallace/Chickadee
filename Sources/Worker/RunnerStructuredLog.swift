@@ -78,8 +78,22 @@ func writeToStandardError(_ message: String) {
     FileHandle.standardError.write(Data(message.utf8))
 }
 
+/// A value `JSONSerialization` can write. A value it cannot write (a `Date`,
+/// a `URL`, an enum) becomes its description, so one bad field cannot erase
+/// the other fields of the line (#1932).
+func jsonSafeRunnerLogValue(_ value: Any) -> Any {
+    switch value {
+    case let object as [String: Any]:
+        return object.mapValues(jsonSafeRunnerLogValue)
+    case let array as [Any]:
+        return array.map(jsonSafeRunnerLogValue)
+    default:
+        return JSONSerialization.isValidJSONObject([value]) ? value : String(describing: value)
+    }
+}
+
 func writeStructuredRunnerLog(event: String, fields: [String: Any]) {
-    var payload = fields
+    var payload = fields.mapValues(jsonSafeRunnerLogValue)
     payload["timestamp"] = ISO8601DateFormatter().string(from: Date())
     payload["event"] = event
     guard JSONSerialization.isValidJSONObject(payload),

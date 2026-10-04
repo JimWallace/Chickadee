@@ -94,6 +94,8 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
 /// or convert to the typed case if they have meaningful context to
 /// add at the site.
 enum AppError: AbortError, CustomStringConvertible {
+    /// The caller is not signed in, or has no saved identity to check.
+    case unauthenticated
     /// A required entity could not be found.  The `resource` label is
     /// plain English so the rendered 404 reads naturally
     /// (e.g. "Submission 'abc123' not found", "User account").
@@ -129,6 +131,7 @@ enum AppError: AbortError, CustomStringConvertible {
 
     var status: HTTPResponseStatus {
         switch self {
+        case .unauthenticated: return .unauthorized
         case .notFound: return .notFound
         case .badRequest, .invalidParameter: return .badRequest
         case .noActiveCourse, .validationRequired: return .badRequest
@@ -143,6 +146,8 @@ enum AppError: AbortError, CustomStringConvertible {
 
     var description: String {
         switch self {
+        case .unauthenticated:
+            return "Please sign in to continue."
         case .notFound(let resource):
             return "\(resource) not found"
         case .badRequest(let reason):

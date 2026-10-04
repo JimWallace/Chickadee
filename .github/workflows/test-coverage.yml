@@ -55,27 +55,29 @@ jobs:
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
           restore-keys: ${{ runner.os }}-spm-
 
-      - name: Install system dependencies
-        run: |
-          # python3: the resolute base image (unlike jammy) does not bundle it, and
-          # APITests run generated pattern-family cases / seed-expression grading
-          # that shell out to `#!/usr/bin/env python3`.  swift-tests.yml installs
-          # it in every test job for the same reason; this clean-build run executes
-          # *all* targets in one process, so it must match — without it the
-          # python3-dependent tests trap (broken pipe / leaked test Application →
-          # ServeCommand deinit assertion → SIGILL) and take down the whole run.
-          # All five are baked into the swift-ci image; the apt-get path is the
-          # stale-image fallback (see mirror-images.yml).
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v curl >/dev/null \
-            && command -v file >/dev/null && command -v python3 >/dev/null; then
-            echo "test dependencies already baked into the image; skipping apt-get"
-            exit 0
-          fi
-          for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl file python3 && break
-            echo "apt-get failed (attempt $i), retrying in 15s..."
-            sleep 15
-          done
+      # This run executes ALL targets in one process, so it needs the tools of
+      # EVERY swift-tests.yml lane: zip and unzip (core-tests, api-tests),
+      # file and make (worker-tests), and curl, which only this job had.
+      # The action adds every grading interpreter. This probe had drifted to
+      # five tools and no interpreter, although its comment said that it must
+      # match swift-tests.yml (#1985). The swift-ci image has all of them, and
+      # the apt-get path is the stale-image fallback (see mirror-images.yml).
+      #
+      # python3 is necessary: the resolute base image does not bundle it, and
+      # APITests run generated pattern-family cases and seed-expression
+      # grading through `#!/usr/bin/env python3`. Without it the
+      # python3-dependent tests trap (broken pipe, then a leaked test
+      # Application, then the ServeCommand deinit assertion, then SIGILL) and
+      # stop the whole run.
+      #
+      # `build-cache: none` is necessary. This is the clean-build canary, and
+      # it must not restore the compiled `.build` cache (see the top of this
+      # file).
+      - name: Swift test setup
+        uses: ./.github/actions/swift-test-setup
+        with:
+          build-cache: none
+          tools: zip unzip curl file make
 
       - name: Run tests with coverage
         # Swift Testing schedules many class-suite instances in parallel

@@ -37,7 +37,13 @@
             </td>
             <td class="due-col col-hide-phone">
                 #if(row.effectiveDueAtText):
-                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span class="card-meta">+ extension</span></span>
+                    #(row.effectiveDueAtText)<br>
+                    <span class="card-meta">+ extension</span><br>
+                    #if(row.dueAtText):
+                    <span class="card-meta">class due #(row.dueAtText)</span>
+                    #else:
+                    <span class="card-meta">no class due date</span>
+                    #endif
                 #elseif(row.dueAtText):
                     #(row.dueAtText)
                 #else:

@@ -54,17 +54,16 @@ enum MCPEnumProse<Value: CaseIterable & RawRepresentable> where Value.RawValue =
 
     /// The case for `raw`, or a tool error that names `field` and the legal
     /// values.
-    static func parse(_ raw: String, tool: String, field: String) throws -> Value {
+    static func parse(_ raw: String, field: String) throws -> Value {
         guard let value = Value(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "\(field) must be one of: \(oneOfList).")
+            throw MCPToolError.invalidArguments(detail: "\(field) must be one of: \(oneOfList).")
         }
         return value
     }
 
     /// `parse` for an optional argument: nil in, nil out.
-    static func parseOptional(_ raw: String?, tool: String, field: String) throws -> Value? {
+    static func parseOptional(_ raw: String?, field: String) throws -> Value? {
         guard let raw else { return nil }
-        return try parse(raw, tool: tool, field: field)
+        return try parse(raw, field: field)
     }
 }

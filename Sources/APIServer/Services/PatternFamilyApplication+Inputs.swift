@@ -59,7 +59,7 @@ struct ResolvedApplyInputs {
         var seen: Set<String> = []
         for s in self.sections {
             guard seen.insert(s.id).inserted else {
-                throw Abort(.unprocessableEntity, reason: "Duplicate section id '\(s.id)'.")
+                throw AppError.unprocessable(reason: "Duplicate section id '\(s.id)'.")
             }
         }
         self.knownSectionIDs = seen
