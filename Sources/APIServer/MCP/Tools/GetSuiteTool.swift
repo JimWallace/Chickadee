@@ -220,7 +220,7 @@ struct GetSuiteTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
 
         // Pass the zip path so raw hand-written script bodies are filled in
         // (generated family/check files are derived from their specs and need

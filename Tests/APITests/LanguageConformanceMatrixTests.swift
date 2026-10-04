@@ -34,9 +34,9 @@
 // stops being executed. So both images are asserted from `allCases` rather
 // than described here — `theRunnerImageProvidesEveryInterpreter` for the
 // production Dockerfile, `theCIImageAndItsProbeProvideEveryInterpreter` for the
-// swift-ci image and the swift-tests.yml probe that falls back to installing
-// it. Neither can drift; this comment deliberately names no package list,
-// because a list in prose is the thing that was wrong.
+// swift-ci image and the probe in .github/actions/swift-test-setup that falls
+// back to installing it. Neither can drift; this comment deliberately names no
+// package list, because a list in prose is the thing that was wrong.
 
 import ChickadeeTestSupport
 import Core
@@ -428,6 +428,13 @@ import Testing
     /// install list in swift-tests.yml for the entire time Lua, Octave and C++
     /// were being added to them, and nothing went red — invisible precisely
     /// because the only symptom is a test that does not run.
+    ///
+    /// The probe has ONE copy now, in the swift-test-setup composite action
+    /// (#1985). This test read only swift-tests.yml, so the copy in
+    /// test-coverage.yml drifted to five tools and no interpreter, and nothing
+    /// saw it. Each `command=package` line of the action's interpreter table
+    /// binds the probe to the install. No workflow can keep its own probe for
+    /// an interpreter.
     @Test(arguments: AssignmentLanguage.allCases)
     func theCIImageAndItsProbeProvideEveryInterpreter(_ language: AssignmentLanguage) throws {
         let adapter = Self.adapter(for: language)
@@ -444,40 +451,39 @@ import Testing
             assertion skips. CI stays green having run none of them.
             """)
 
-        let lines = try Self.codeLines(
+        let action = try Self.codeLines(
             of: String(
                 contentsOf: Self.repoRoot.appendingPathComponent(
-                    ".github/workflows/swift-tests.yml"), encoding: .utf8))
-
-        let probes = lines.filter { $0.contains("command -v ") }
-        #expect(!probes.isEmpty, "swift-tests.yml has no dependency probe to check.")
+                    ".github/actions/swift-test-setup/action.yml"), encoding: .utf8))
+        let entry = "\(adapter.toolchainProbeCommand)=\(adapter.debianPackage)"
         #expect(
-            probes.allSatisfy { $0.contains("command -v \(adapter.toolchainProbeCommand) ") },
+            action.contains { $0.trimmingCharacters(in: .whitespaces) == entry },
             """
-            A dependency probe in swift-tests.yml does not check for \
-            \(adapter.toolchainProbeCommand), so a stale swift-ci image missing \
-            \(adapter.debianPackage) goes undetected, the apt-get fallback never runs, \
-            and every \(language) execution-path assertion skips silently.
+            The interpreter table in .github/actions/swift-test-setup/action.yml has no \
+            `\(entry)` line. A stale swift-ci image without \(adapter.debianPackage) then \
+            goes undetected, the apt-get fallback does not install it, and every \
+            \(language) execution-path assertion skips silently.
             """)
 
-        // The fallback installs are the ones the PROBE guards — the `apt-get`
-        // that runs when `command -v` says the image is stale. Identified by
-        // that pairing rather than by `--no-install-recommends` alone, which
-        // also matches unrelated installs: the browser-runner-tests job
-        // installs lua5.4 and octave for the eval-snippet execution suites, on
-        // a plain ubuntu runner with no swift-ci image and no reason to carry
-        // r-base or racket. Matching it here demanded every language be
-        // installed in a job that needs two of them.
-        let installs = lines.filter {
-            $0.contains("--no-install-recommends") && $0.contains("apt-get update")
+        // A probe that a workflow writes by hand is the copy that drifts. The
+        // interpreter half of every probe is in the action, so no workflow
+        // code line can probe for an interpreter itself.
+        let workflowDirectory = Self.repoRoot.appendingPathComponent(".github/workflows")
+        let workflows = try FileManager.default.contentsOfDirectory(atPath: workflowDirectory.path)
+            .filter { $0.hasSuffix(".yml") }
+        #expect(!workflows.isEmpty, ".github/workflows holds no workflow to check.")
+        let probe = "command -v \(adapter.toolchainProbeCommand)"
+        for workflow in workflows {
+            let lines = try Self.codeLines(
+                of: String(contentsOf: workflowDirectory.appendingPathComponent(workflow), encoding: .utf8))
+            #expect(
+                !lines.contains { $0.contains("\(probe) ") || $0.hasSuffix(probe) },
+                """
+                .github/workflows/\(workflow) probes for \(adapter.toolchainProbeCommand) itself. \
+                Use .github/actions/swift-test-setup with a `tools` input. It probes for every \
+                grading interpreter, so its list cannot drift from the other lanes.
+                """)
         }
-        #expect(!installs.isEmpty, "swift-tests.yml has no probe-guarded fallback install.")
-        #expect(
-            installs.allSatisfy { $0.contains(adapter.debianPackage) },
-            """
-            A fallback install in swift-tests.yml omits \(adapter.debianPackage), so a \
-            stale swift-ci image leaves \(language) untested rather than failing.
-            """)
     }
 
     /// Runner capability matching has to know the language exists, in BOTH
@@ -552,7 +558,8 @@ import Testing
                 """
                 \(language)'s interpreter (`\(probe.command)`) is absent in CI, so its execution \
                 tests skipped silently and its grading path has no coverage. Add it to \
-                .github/docker/ci-image/Dockerfile and the per-job apt fallback in swift-tests.yml.
+                .github/docker/ci-image/Dockerfile and to the interpreter table in \
+                .github/actions/swift-test-setup/action.yml.
                 """)
         }
     }

@@ -91,25 +91,23 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
 
     // MARK: - App factory
 
+    /// The standard test app in `authMode`, with two additions: the session
+    /// authenticator on every route, and a mock OIDC configuration.
+    ///
+    /// `oidc` is the OIDC part of the app's configuration. It is the default
+    /// unless a test passes `.fromEnvironment()`, so the OIDC settings of the
+    /// machine that runs the tests cannot change a result.
     private func makeApp(
         authMode: AuthMode = .sso,
-        oidcConfig: OIDCConfiguration? = nil
+        oidcConfig: OIDCConfiguration? = nil,
+        oidc: OIDCEnvConfig = .default
     ) async throws -> Application {
-        try await makeTestingApplication { app in
-            app.authMode = authMode
-
-            app.sessions.use(.memory)
-            app.middleware.use(app.sessions.middleware)
-            app.middleware.use(UserSessionAuthenticator())
-            configureLeaf(app)
-
-            try await configureTestDatabase(app)
-
-            // Inject mock OIDC config — no network calls needed
-            app.oidcConfig = oidcConfig ?? Self.mockOIDCConfig
-
-            try routes(app)
-        }
+        let app = try await makeTestApp(
+            authMode: authMode, appConfig: .testDefaults(authMode: authMode, oidc: oidc))
+        app.middleware.use(UserSessionAuthenticator())
+        // Inject mock OIDC config — no network calls needed
+        app.oidcConfig = oidcConfig ?? Self.mockOIDCConfig
+        return app
     }
 
     private func signedToken(
@@ -905,7 +903,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
 
     @Test func customOIDCCallbackRouteUsesConfiguredPath() async throws {
         try await withTestEnvironment(["OIDC_CALLBACK": "oidc/custom/callback"]) {
-            try await withApp(try await makeApp()) { app in
+            try await withApp(try await makeApp(oidc: .fromEnvironment())) { app in
                 try await app.asyncTest(
                     .GET, "/oidc/custom/callback?error=access_denied",
                     afterResponse: { res in

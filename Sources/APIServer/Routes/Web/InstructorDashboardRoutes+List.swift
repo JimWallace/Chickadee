@@ -173,7 +173,11 @@ extension InstructorDashboardRoutes {
                 for: spec, size: .roster, accessibility: .decorative,
                 isStaff: (rolesByUserID[userID] ?? .student) >= .ta)
             rows[index].hasAvatar = true
-            rows[index].learnFlag = Self.learnFlag(for: enrollmentsByUserID[userID])
+            if let reason = Self.learnFlag(for: enrollmentsByUserID[userID]) {
+                rows[index].learnFlag = reason.badge
+                rows[index].learnFlagReason = reason.reason
+                rows[index].learnFlagAdvice = reason.advice
+            }
         }
         let pendingPreEnrollments = try await APIPreEnrollment.query(on: req.db)
             .filter(\.$course.$id == activeCourseUUID)
@@ -191,14 +195,13 @@ extension InstructorDashboardRoutes {
         return (rows, activeStudentCount + pendingPreEnrollments.count)
     }
 
-    /// The badge text for a student LEARN cannot deliver a grade to, or nil.
-    /// Reads what the readiness sweep stored; nothing is fetched here.
-    static func learnFlag(for enrollment: APICourseEnrollment?) -> String? {
+    /// Why LEARN cannot receive this student's grade, or nil. Reads what the
+    /// readiness sweep stored; nothing is fetched here.
+    static func learnFlag(for enrollment: APICourseEnrollment?) -> LearnUnreachableReason? {
         guard let enrollment, enrollment.role == .student,
             enrollment.learnSyncReadiness == .unreachable
         else { return nil }
-        let detail = enrollment.brightspaceSyncDetail ?? ""
-        return detail.isEmpty ? "Not on LEARN classlist" : detail
+        return LearnUnreachableReason(storedDetail: enrollment.brightspaceSyncDetail)
     }
 
     /// Loads the enrolled users for the course, sorted last-seen-desc then

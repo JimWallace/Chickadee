@@ -30,6 +30,13 @@
     var wiredForms = new WeakMap();
     var wiredAddButtons = new WeakSet();
 
+    /// Shows the form's amber-cue note (_value-cue-note.leaf) only while its
+    /// table has a row, since the cue it explains is drawn on a row (#1996).
+    function syncCueNote(form, tbody) {
+        var note = form.querySelector('.js-value-cue-note');
+        if (note) note.hidden = !tbody.querySelector('tr');
+    }
+
     /// Per-form auto-save with debounce + in-flight coalescing.  Returns
     /// a public { flush } object that the main-form submit handler can
     /// await before letting the assignment save through.
@@ -81,9 +88,11 @@
             if (btn && form.contains(btn)) {
                 var tr = btn.closest('tr.js-section-var-row');
                 if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
+                syncCueNote(form, tbody);
             }
         });
         form.addEventListener('submit', function (e) { e.preventDefault(); saver.flush(); });
+        syncCueNote(form, tbody);
 
         var wired = {
             flush: saver.flush,
@@ -120,7 +129,10 @@
                 var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
                 if (!form) return;
                 var tbody = form.querySelector('tbody.js-section-vars-body');
-                if (tbody) editor.addEmptyRow(tbody);
+                if (tbody) {
+                    editor.addEmptyRow(tbody);
+                    syncCueNote(form, tbody);
+                }
             });
         });
     }

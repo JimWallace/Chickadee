@@ -64,7 +64,7 @@ struct GetDeployHistoryTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject(tool: Self.name)
+        try await context.requireAdminSubject()
 
         let limit = min(max(input.limit ?? 20, 1), 100)
         let path = URL(fileURLWithPath: context.request.application.deployStateDirectory)

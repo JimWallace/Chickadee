@@ -97,15 +97,14 @@ struct CloneAssignmentTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let title = input.newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "newTitle must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "newTitle must not be empty.")
         }
 
         let source = try await context.authorizedAssignment(
-            publicID: input.sourceAssignmentPublicID, tool: Self.name)
+            publicID: input.sourceAssignmentPublicID)
 
         guard let sourceSetup = try await APITestSetup.find(source.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The source assignment's test setup could not be found.")
+            throw MCPToolError.invalidArguments(detail: "The source assignment's test setup could not be found.")
         }
 
         // Resolve the target course: same as source unless a code is given.
@@ -114,11 +113,10 @@ struct CloneAssignmentTool: ContentTool {
             !code.isEmpty
         {
             targetCourse = try await resolveMCPCourse(
-                key: code, tool: Self.name, context: context, forWrite: true)
+                key: code, context: context, forWrite: true)
         } else {
             guard let sourceCourse = try await APICourse.find(source.courseID, on: context.db) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "The source assignment's course could not be found.")
+                throw MCPToolError.invalidArguments(detail: "The source assignment's course could not be found.")
             }
             targetCourse = sourceCourse
         }
@@ -130,7 +128,7 @@ struct CloneAssignmentTool: ContentTool {
         // the destination is write-gated (#417 Slice D-MCP).
         // Creating an assignment (clone) into the destination is instructor-level (#417).
         try await context.authorizeCourseWriteAccess(
-            targetCourseID, tool: Self.name, atLeast: .instructor)
+            targetCourseID, atLeast: .instructor)
 
         let cloned: AuthoredAssignment
         do {
@@ -146,10 +144,9 @@ struct CloneAssignmentTool: ContentTool {
         } catch let error as AssignmentAuthoringError {
             switch error {
             case .setupCopyFailed(let reason):
-                throw MCPToolError.executionFailed(
-                    tool: Self.name, detail: "Could not copy the source test setup: \(reason)")
+                throw MCPToolError.executionFailed(detail: "Could not copy the source test setup: \(reason)")
             case .validationNotPassed:
-                throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
+                throw MCPToolError.executionFailed(detail: "\(error)")
             }
         }
 

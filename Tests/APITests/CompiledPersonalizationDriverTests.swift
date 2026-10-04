@@ -20,13 +20,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct CompiledPersonalizationDriverTests {
 
-    static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") {
-        await cachedToolIsAvailable("g++")
-    }
-    static let requiresJavac: ConditionTrait = .enabled("requires javac on PATH") {
-        await cachedToolIsAvailable("javac")
-    }
-
     /// A support directory holding `files`, plus the leftovers an evaluation
     /// before this fix left behind, which the lister must ignore.
     private static func supportDirectory(files: [String: String], leftovers: [String]) throws -> URL {
@@ -59,7 +52,7 @@ import Testing
         return answers
     }
 
-    @Test(Self.requiresGpp) func cppEvaluatesTwiceAgainstOneSupportDirectory() async throws {
+    @Test(.requiresGpp) func cppEvaluatesTwiceAgainstOneSupportDirectory() async throws {
         let dir = try Self.supportDirectory(
             files: ["helper.hpp": "inline int twice(int x) { return 2 * x; }\n"],
             leftovers: [".ck_personalize_driver.cpp", ".ck_personalize_driver"])
@@ -72,7 +65,7 @@ import Testing
         #expect(listing == ["helper.hpp", ".ck_personalize_driver.cpp", ".ck_personalize_driver"])
     }
 
-    @Test(Self.requiresJavac) func javaEvaluatesTwiceAgainstOneSupportDirectory() async throws {
+    @Test(.requiresJavac) func javaEvaluatesTwiceAgainstOneSupportDirectory() async throws {
         let dir = try Self.supportDirectory(
             files: ["Helper.java": "public class Helper { public static int twice(int x) { return 2 * x; } }\n"],
             leftovers: ["CkPersonalizeDriver.java"])

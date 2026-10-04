@@ -107,11 +107,13 @@ jobs:
           swift sdk install "$url" --checksum "$checksum"
           swift sdk list
 
+      # `.node-version` is the one Node pin of the repository (#1985). It is
+      # also the Node that browser-runner-tests uses on this artifact.
       - name: Setup Node (esbuild + wasm-opt via npx)
         if: steps.gate.outputs.changed == 'true'
         uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version-file: .node-version
 
       - name: Rebuild + re-vendor the browser wasm
         if: steps.gate.outputs.changed == 'true'

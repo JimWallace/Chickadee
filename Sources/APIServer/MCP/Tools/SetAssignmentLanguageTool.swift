@@ -76,27 +76,24 @@ struct SetAssignmentLanguageTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let raw = input.language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard let parsed = AssignmentLanguage(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: unknownLanguageMessage(input.language))
+            throw MCPToolError.invalidArguments(detail: unknownLanguageMessage(input.language))
         }
         // Which language an assignment is decides how every generated test
         // renders — lifecycle-shaped, so instructor-level like its neighbours.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
         // Surface the shared helper's refusals as arguments errors; the helper
         // keeps its own guards for any path that skips this one.
         if requiresUploadOnlySubmission(parsed),
             currentManifestSubmissionMode(setup.manifest) != SubmissionMode.uploadOnly.rawValue,
             currentManifestLanguage(setup.manifest) != raw
         {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: requiresUploadOnlyMessage(parsed))
+            throw MCPToolError.invalidArguments(detail: requiresUploadOnlyMessage(parsed))
         }
         if currentManifestLanguage(setup.manifest) != raw,
             manifestHasGeneratedScripts(setup.manifest)
         {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: languageChangeAfterGenerationMessage)
+            throw MCPToolError.invalidArguments(detail: languageChangeAfterGenerationMessage)
         }
         let effective = try await setManifestLanguage(setup: setup, to: raw, on: context.db)
         return Output(

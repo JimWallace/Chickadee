@@ -81,7 +81,15 @@
 
         var saver = core.makeDebouncedSaver(doSave, 500);
 
+        // The amber-cue note (_value-cue-note.leaf) shows only while the
+        // table has a row, since the cue it explains is drawn on a row (#1996).
+        var cueNote = block.querySelector('.js-value-cue-note');
+        function syncCueNote() {
+            if (cueNote) cueNote.hidden = !tbody.querySelector('tr');
+        }
+
         editor.refreshAllRows(tbody);
+        syncCueNote();
 
         block.addEventListener('input', function (e) {
             var tr = e.target.closest && e.target.closest('tr.js-global-input-row');
@@ -95,11 +103,15 @@
             if (btn && block.contains(btn)) {
                 var tr = btn.closest('tr.js-global-input-row');
                 if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
+                syncCueNote();
             }
         });
 
         if (addBtn) {
-            addBtn.addEventListener('click', function () { editor.addEmptyRow(tbody); });
+            addBtn.addEventListener('click', function () {
+                editor.addEmptyRow(tbody);
+                syncCueNote();
+            });
         }
 
         // Expose a global flush hook so the main "Save & Validate"

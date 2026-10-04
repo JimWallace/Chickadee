@@ -115,14 +115,18 @@
                 // Expression mode: green tint to signal "per-student"; no
                 // local syntax check — server validates at save time.
                 valueOk = !classified.empty;
+                // A title is one phrase; docs/inputs.md says how the server
+                // evaluates an expression.
                 hint = classified.empty
-                    ? 'Expression body is empty after the leading `=`.'
-                    : 'Per-student expression. Server evaluates with `seed` bound and substitutes the result.';
+                    ? 'Empty expression'
+                    : 'Per-student expression';
             } else {
+                // A loose reading gets the amber cue; the title names which
+                // kind of loose reading it was (#1996).
                 valueOk = classified.strict;
                 hint = classified.strict
                     ? ''
-                    : 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.';
+                    : ChickadeeLanguage.looseValueTitle(rawVal);
             }
 
             // Classification cues are classes (styles.css: .input-expression is
@@ -161,7 +165,7 @@
               +   '<span class="' + classes.valid + ' section-var-valid"></span>'
               +   '<input type="text" class="form-input cell-input cell-input--with-check input-mono ' + classes.name + '" value="" placeholder="Input Name">'
               + '</td>'
-              + '<td><input type="text" class="form-input cell-input input-mono ' + classes.value + '" value="" placeholder=\'12, "hello", [1, 2, 3], or = seed % 26\'></td>'
+              + '<td><input type="text" class="form-input cell-input input-mono ' + classes.value + '" aria-label="Value" value="" placeholder=\'12, "hello", [1, 2, 3], or = seed % 26\'></td>'
               + removeCellOpen
               +   '<button type="button" class="btn action-btn action-danger' + removeBtnClass + ' ' + classes.remove + '" title="Remove input" aria-label="Remove input">'
               +   TRASH_SVG + '</button></td>';

@@ -77,7 +77,7 @@ struct ValidateAssignmentTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let assignment = try await context.authorizedAssignment(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
 
         let timeout = Self.clampTimeout(input.timeoutSeconds)
         let outcome = try await watchValidation(

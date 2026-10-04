@@ -66,18 +66,17 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject(tool: Self.name)
+        try await context.requireAdminSubject()
 
         let code = input.courseCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "courseCode must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "courseCode must not be empty.")
         }
         guard
             let course = try await findActiveCourse(byKey: code, viewer: nil, on: context.db),
             let courseUUID = course.id
         else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No active course with code '\(code)'.")
+            throw MCPToolError.invalidArguments(detail: "No active course with code '\(code)'.")
         }
 
         let setupIDs = try await APITestSetup.query(on: context.db)

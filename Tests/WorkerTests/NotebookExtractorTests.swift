@@ -409,18 +409,13 @@ import Testing
 
     // MARK: - End-to-end: run the generated module through a real python3
 
-    @Test func generatedModuleLoadsUnderRealPython3() async throws {
+    @Test(.requiresPython3) func generatedModuleLoadsUnderRealPython3() async throws {
         // The shape-level tests above can't catch an emitted-Python bug that
         // still *looks* plausible — the v0.4.220 `\/` regression compiled fine
         // as a Swift string but made the inner compile() throw. Only a real
         // interpreter catches that whole class, so here we extract a notebook
         // (division cell, syntax-error cell, comment-only cell, and a trailing
         // cell) and ask python3 which names actually resolve after import.
-        let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
-        guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
-            return  // python3 unavailable on this platform — skip
-        }
-
         let cells: [[String: Any]] = [
             ["cell_type": "code", "source": ["good = 1\n"]],
             ["cell_type": "code", "source": ["daily_ml = 2450\ndaily_l = daily_ml / 1000\n"]],  // division

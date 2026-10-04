@@ -18,43 +18,6 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-vanity")
     }
 
-    // MARK: - slugify
-
-    @Test func slugify_stripsSpaces() async throws {
-        try await withApp(app) { _ in
-            #expect(VanityURLRoutes.slugify("Lab 1") == "lab-1")
-
-        }
-    }
-
-    @Test func slugify_stripsSpecialChars() async throws {
-        try await withApp(app) { _ in
-            #expect(VanityURLRoutes.slugify("Lab 1: Intro") == "lab-1-intro")
-
-        }
-    }
-
-    @Test func slugify_lowercases() async throws {
-        try await withApp(app) { _ in
-            #expect(VanityURLRoutes.slugify("Assignment2") == "assignment2")
-
-        }
-    }
-
-    @Test func slugify_handlesHyphensAndSlashes() async throws {
-        try await withApp(app) { _ in
-            #expect(VanityURLRoutes.slugify("A2 - Sorting/Searching") == "a2-sorting-searching")
-
-        }
-    }
-
-    @Test func slugify_emptyString() async throws {
-        try await withApp(app) { _ in
-            #expect(VanityURLRoutes.slugify("").isEmpty)
-
-        }
-    }
-
     // MARK: - Route helpers
 
     private func seedCourse(code: String, archived: Bool = false) async throws -> APICourse {
@@ -419,5 +382,28 @@ import VaporTesting
                 })
 
         }
+    }
+}
+
+/// `VanityURLRoutes.slugify` is a pure function, so these tests need no app.
+@Suite struct VanityURLSlugifyTests {
+    @Test func slugify_stripsSpaces() {
+        #expect(VanityURLRoutes.slugify("Lab 1") == "lab-1")
+    }
+
+    @Test func slugify_stripsSpecialChars() {
+        #expect(VanityURLRoutes.slugify("Lab 1: Intro") == "lab-1-intro")
+    }
+
+    @Test func slugify_lowercases() {
+        #expect(VanityURLRoutes.slugify("Assignment2") == "assignment2")
+    }
+
+    @Test func slugify_handlesHyphensAndSlashes() {
+        #expect(VanityURLRoutes.slugify("A2 - Sorting/Searching") == "a2-sorting-searching")
+    }
+
+    @Test func slugify_emptyString() {
+        #expect(VanityURLRoutes.slugify("").isEmpty)
     }
 }

@@ -137,15 +137,9 @@ import Vapor
 /// loaded, `runpy` on the test), against real programs.
 @Suite(.timeLimit(.minutes(3))) struct ProgramIOPythonExecutionTests {
 
-    static let requiresPython3: ConditionTrait = .enabled("requires python3 on PATH") { await Self.pythonAvailable }
-
-    static var pythonAvailable: Bool {
-        get async { await toolIsAvailable("python3", arguments: ["--version"]) }
-    }
-
     /// The did-not-skip proof for the APITests job.
     @Test(.ciOnly) func pythonIsPresentInCI() async {
-        let isAvailable = await Self.pythonAvailable
+        let isAvailable = await cachedToolIsAvailable("python3")
         #expect(isAvailable, "python3 absent: every program-I/O execution test skipped silently")
     }
 
@@ -196,7 +190,7 @@ import Vapor
 
     private static let unguardedSum = "a = int(input())\nb = int(input())\nprint(a + b)\n"
 
-    @Test(Self.requiresPython3) func anUnguardedProgramReadingInputPassesAndFails() async throws {
+    @Test(.requiresPython3) func anUnguardedProgramReadingInputPassesAndFails() async throws {
         let family = ProgramIOPatternKindTests.family()
         let good = try await Self.grade(family, program: Self.unguardedSum)
         #expect(good.code == 0, Comment(rawValue: good.stdout))
@@ -210,7 +204,7 @@ import Vapor
     /// must neither block on the real stdin nor leak the program's output into
     /// the test's — the first line of stdout is the verdict's, not the
     /// program's.
-    @Test(Self.requiresPython3) func theBootstrapImportOfAnUnguardedProgramLeaksNothing() async throws {
+    @Test(.requiresPython3) func theBootstrapImportOfAnUnguardedProgramLeaksNothing() async throws {
         let family = ProgramIOPatternKindTests.family(expected: .string("8"))
         let result = try await Self.grade(family, program: "print('banner')\n" + Self.unguardedSum)
         #expect(result.code == 1)
@@ -218,7 +212,7 @@ import Vapor
         #expect(result.stdout.contains("'banner\\n7'"))
     }
 
-    @Test(Self.requiresPython3) func aMainGuardedProgramRuns() async throws {
+    @Test(.requiresPython3) func aMainGuardedProgramRuns() async throws {
         let family = ProgramIOPatternKindTests.family()
         let program = """
             def main():
@@ -233,7 +227,7 @@ import Vapor
         #expect(try await Self.grade(family, program: program).code == 0)
     }
 
-    @Test(Self.requiresPython3) func promptsArePartOfTheOutputAsOnATerminal() async throws {
+    @Test(.requiresPython3) func promptsArePartOfTheOutputAsOnATerminal() async throws {
         let program = "a = int(input('A: '))\nb = int(input('B: '))\nprint(a + b)\n"
         let exact = ProgramIOPatternKindTests.family(expected: .string("A: B: 7"))
         #expect(try await Self.grade(exact, program: program).code == 0)
@@ -241,14 +235,14 @@ import Vapor
         #expect(try await Self.grade(included, program: program).code == 0)
     }
 
-    @Test(Self.requiresPython3) func regexComparisonMatchesAcrossLines() async throws {
+    @Test(.requiresPython3) func regexComparisonMatchesAcrossLines() async throws {
         let family = ProgramIOPatternKindTests.family(expected: .string("^sum=7$"), comparison: .regex)
         let program = "a = int(input())\nb = int(input())\nprint('header')\nprint(f'sum={a + b}')\n"
         #expect(try await Self.grade(family, program: program).code == 0)
         #expect(try await Self.grade(family, program: "print('sum=8')\n").code == 1)
     }
 
-    @Test(Self.requiresPython3) func aProgramThatExitsAfterItsAnswerIsStillGraded() async throws {
+    @Test(.requiresPython3) func aProgramThatExitsAfterItsAnswerIsStillGraded() async throws {
         let family = ProgramIOPatternKindTests.family()
         let good = try await Self.grade(
             family, program: "import sys\nprint(int(input()) + int(input()))\nsys.exit(0)\n")
@@ -257,7 +251,7 @@ import Vapor
         #expect(bad.code == 1, "a sys.exit(0) after a wrong answer read as a pass: \(bad.stdout)")
     }
 
-    @Test(Self.requiresPython3) func aCrashIsAGradedFailureCarryingTheError() async throws {
+    @Test(.requiresPython3) func aCrashIsAGradedFailureCarryingTheError() async throws {
         let family = ProgramIOPatternKindTests.family()
         let crashed = try await Self.grade(family, program: "print(1 / 0)\n")
         #expect(crashed.code == 1)
@@ -265,14 +259,14 @@ import Vapor
         #expect(crashed.stdout.contains("ZeroDivisionError"))
     }
 
-    @Test(Self.requiresPython3) func readingPastTheInputIsAGradedFailure() async throws {
+    @Test(.requiresPython3) func readingPastTheInputIsAGradedFailure() async throws {
         let family = ProgramIOPatternKindTests.family(stdin: "3\n")
         let starved = try await Self.grade(family, program: Self.unguardedSum)
         #expect(starved.code == 1)
         #expect(starved.stdout.contains("EOFError"))
     }
 
-    @Test(Self.requiresPython3) func trailingWhitespaceIsIgnoredUnderExact() async throws {
+    @Test(.requiresPython3) func trailingWhitespaceIsIgnoredUnderExact() async throws {
         let family = ProgramIOPatternKindTests.family(expected: .string("7"))
         #expect(try await Self.grade(family, program: "print('7  ')\nprint()\nprint()\n").code == 0)
     }

@@ -82,6 +82,70 @@ private struct FakeReadinessClient: BrightSpaceGrading {
         }
     }
 
+    // MARK: - What the Students tab shows
+
+    /// The sweep stores a full sentence, so the Students tab must not put the
+    /// stored detail in the badge. The two kinds of unreachable student also
+    /// need different advice: only a student whose ID LEARN does not list is a
+    /// candidate for removal, and a student with no ID needs one added.
+    @Test func studentsTabShowsAShortBadgeAndTheRightAdviceForWhatTheSweepStored() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let course = try #require(try await APICourse.find(courseID, on: app.db))
+
+            // A student ID that the classlist does not list: not on LEARN.
+            let dropped = try await arInsertStudent(username: "sweep_dropped", on: app)
+            dropped.studentID = "20999999"
+            try await dropped.save(on: app.db)
+            try await arEnrollStudentInTestCourse(dropped, on: app)
+            // No student ID, and the classlist does not list the username.
+            let unmatched = try await arInsertStudent(username: "sweep_unmatched", on: app)
+            try await arEnrollStudentInTestCourse(unmatched, on: app)
+
+            let client = FakeReadinessClient(classlist: [
+                BrightSpaceClasslistEntry(orgDefinedID: "20000001", username: "someone_else", userID: "d2l-9")
+            ])
+            let outcome = try await reconcileCourseReadiness(
+                course: course, orgUnitID: "12345", client: client,
+                on: app.db, application: app)
+            #expect(outcome.unreachable == 2)
+
+            var html = ""
+            try await app.asyncTest(
+                .GET, "/instructor/students",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    html = res.body.string
+                })
+
+            // The rest of a student's row, from the name cell to the row end.
+            func row(_ username: String) throws -> Substring {
+                let start = try #require(html.range(of: "data-sort-value=\"\(username)\""))
+                let end = try #require(html.range(of: "</tr>", range: start.upperBound..<html.endIndex))
+                return html[start.upperBound..<end.lowerBound]
+            }
+            let droppedRow = try row("sweep_dropped")
+            #expect(droppedRow.contains(">Not on LEARN</span>"))
+            #expect(droppedRow.contains("Remove from course if confirmed dropped"))
+            #expect(!droppedRow.contains("Add a student ID"))
+            let unmatchedRow = try row("sweep_unmatched")
+            #expect(unmatchedRow.contains(">No LEARN match</span>"))
+            #expect(unmatchedRow.contains("Add a student ID to match LEARN"))
+            #expect(!unmatchedRow.contains("if confirmed dropped"))
+        }
+    }
+
+    /// A badge is a label of two or three words (docs/ui-design.md, "UI copy").
+    @Test(arguments: LearnUnreachableReason.allCases)
+    func everyLearnBadgeIsAShortLabel(_ reason: LearnUnreachableReason) {
+        let words = reason.badge.split(separator: " ").count
+        #expect((2...3).contains(words))
+        #expect(reason.badge != reason.storedDetail)
+        #expect(LearnUnreachableReason(storedDetail: reason.storedDetail) == reason)
+    }
+
     @Test func enrollmentReadinessDefaultsToUnconfirmed() async throws {
         try await withAssignmentRoutesApp { app in
             let student = try await arInsertStudent(username: "fresh_user", on: app)
