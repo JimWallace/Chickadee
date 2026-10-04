@@ -45,8 +45,8 @@ import Testing
             isAvailable,
             """
             lua5.4 is absent in the CI image, so every native Lua grading test skipped silently. \
-            Add it to .github/docker/ci-image/Dockerfile and the WorkerTests apt fallback in \
-            swift-tests.yml.
+            Add it to .github/docker/ci-image/Dockerfile and to the interpreter table in \
+            .github/actions/swift-test-setup/action.yml.
             """)
     }
 

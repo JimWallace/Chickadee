@@ -206,31 +206,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      # Build-artifact cache is EXACT-MATCH ONLY — no `restore-keys` prefix
-      # fallback.  Incrementally rebuilding over a `.build/` restored from a
-      # *different* tree is unsound: when a cross-module type changes kind
-      # (struct↔enum) or a struct's init gains a field, files that reference it
-      # only transitively keep their old source mtime, so `git restore-mtime`
-      # marks them "fresh" and llbuild reuses stale object files compiled
-      # against the old mangled symbol → "undefined reference" link errors.
-      # This recurred on every such change (TestItem struct→enum, v0.4.228;
-      # TestProperties.achievements; CourseBundleManifest.sections;
-      # TestProperties.datasets) and used to need a manual cache-salt bump each
-      # time.  Exact-match-only removes the failure class outright: a tree that
-      # doesn't match an existing cache does a clean cold build instead of an
-      # unsound incremental one.  Trade-off: any Sources/Tests change pays a
-      # full rebuild (no partial reuse); an exact re-run of the same tree still
-      # hits and skips the build.
-      - name: Cache build artifacts
-        id: build-cache
-        uses: actions/cache@v6
+      # The toolchain key and the shared `.build` cache. This job is the only
+      # one that SAVES the cache. The cache is exact-match only, and the
+      # action tells why.
+      - name: Swift test setup
+        id: setup
+        uses: ./.github/actions/swift-test-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          build-cache: save
 
       # Exact cache hit: artifacts already match this exact tree, skip even the
       # near-no-op build.  Any miss = clean cold build (no stale-object reuse).
@@ -242,7 +225,7 @@ jobs:
       # any compile (docs/ci-flakiness.md, Family 7; swiftlang/swift-build#1786).
       # Any other failure fails the step on the first attempt.
       - name: Build all targets and tests
-        if: steps.build-cache.outputs.cache-hit != 'true'
+        if: steps.setup.outputs.cache-hit != 'true'
         run: scripts/ci-build-retry.sh
 
   core-tests:
@@ -264,41 +247,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v6
+      - name: Swift test setup
+        id: setup
+        uses: ./.github/actions/swift-test-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Install core test dependencies
-        # `zip`/`unzip` back ZipSubprocessTests (`.requiresZipTools`). Both are
-        # baked into the swift-ci image; the apt-get path is the stale-image
-        # fallback, and the "No test was skipped" step fails the job if
-        # either is still missing. The probe and the install name every
-        # graded-language interpreter as well, although CoreTests spawns
-        # none of them: LanguageConformanceMatrixTests holds every
-        # dependency step in this file to the same all-of-them list, so a
-        # language added to one lane cannot be forgotten in another.
-        run: |
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null && command -v racket >/dev/null && command -v javac >/dev/null; then
-            echo "test dependencies already baked into the image; skipping apt-get"
-            exit 0
-          fi
-          for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 r-base lua5.4 octave g++ racket default-jdk && break
-            echo "apt-get failed (attempt $i), retrying in 15s..."
-            sleep 15
-          done
+          build-cache: restore
+          # zip and unzip are for ZipSubprocessTests (`.requiresZipTools`).
+          # The action also probes for every grading interpreter, although
+          # CoreTests starts none of them. The interpreter list is in the
+          # action only, so a new language cannot be forgotten in one lane.
+          tools: zip unzip
 
       - name: Run CoreTests
         run: |
           mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
             swift test --skip-build --parallel --filter CoreTests --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
           else
             swift test --parallel --filter CoreTests --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
@@ -364,43 +327,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v6
+      # The swift-ci image has the test dependencies, so the probe normally
+      # only does a check. The action tells why each lane probes for EVERY
+      # grading interpreter (the Rscript silent-skip trap).
+      - name: Swift test setup
+        id: setup
+        uses: ./.github/actions/swift-test-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Install system test dependencies
-        # These are baked into the swift-ci image, so this normally just
-        # verifies and exits.  The apt-get path remains as the fallback for a
-        # stale image (e.g. a toolchain bump before the swift-ci rebuild — see
-        # mirror-images.yml), degrading to the old per-job install instead of
-        # failing the job.
-        #
-        # EVERY graded language's interpreter belongs in BOTH the probe and the
-        # install list.  Omitting one used to escape a red job: the
-        # execution-path suites guarded on availability and skipped SILENTLY,
-        # so the job stayed green having executed nothing in that language.
-        # Rscript was missing from both here — the identical silent-skip trap
-        # that r-base and lua5.4 each hit on the image itself, recorded in
-        # .github/docker/ci-image/Dockerfile.  Those suites now skip through a
-        # ConditionTrait, and the "No test was skipped" step below fails the
-        # job on any skip, naming the test and the tool.
-        run: |
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null && command -v racket >/dev/null && command -v javac >/dev/null; then
-            echo "test dependencies already baked into the image; skipping apt-get"
-            exit 0
-          fi
-          for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 r-base lua5.4 octave g++ racket default-jdk && break
-            echo "apt-get failed (attempt $i), retrying in 15s..."
-            sleep 15
-          done
+          build-cache: restore
+          tools: zip unzip
 
       - name: Run APITests
         # Swift Testing schedules many class-suite instances in parallel
@@ -416,7 +351,7 @@ jobs:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
           mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
             swift test --skip-build --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
           else
             swift test --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
@@ -480,43 +415,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v6
+      # The same setup as the api-tests job.
+      - name: Swift test setup
+        id: setup
+        uses: ./.github/actions/swift-test-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Install system test dependencies
-        # These are baked into the swift-ci image, so this normally just
-        # verifies and exits.  The apt-get path remains as the fallback for a
-        # stale image (e.g. a toolchain bump before the swift-ci rebuild — see
-        # mirror-images.yml), degrading to the old per-job install instead of
-        # failing the job.
-        #
-        # EVERY graded language's interpreter belongs in BOTH the probe and the
-        # install list.  Omitting one used to escape a red job: the
-        # execution-path suites guarded on availability and skipped SILENTLY,
-        # so the job stayed green having executed nothing in that language.
-        # Rscript was missing from both here — the identical silent-skip trap
-        # that r-base and lua5.4 each hit on the image itself, recorded in
-        # .github/docker/ci-image/Dockerfile.  Those suites now skip through a
-        # ConditionTrait, and the "No test was skipped" step below fails the
-        # job on any skip, naming the test and the tool.
-        run: |
-          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null && command -v racket >/dev/null && command -v javac >/dev/null; then
-            echo "test dependencies already baked into the image; skipping apt-get"
-            exit 0
-          fi
-          for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 r-base lua5.4 octave g++ racket default-jdk && break
-            echo "apt-get failed (attempt $i), retrying in 15s..."
-            sleep 15
-          done
+          build-cache: restore
+          tools: zip unzip
 
       - name: Run APITests against PostgreSQL
         # Swift Testing schedules many class-suite instances in parallel
@@ -532,7 +437,7 @@ jobs:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
           mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
             swift test --skip-build --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
           else
             swift test --filter APITests --xunit-output "${RUNNER_TEMP}/xunit/api-tests.xml"
@@ -581,10 +486,12 @@ jobs:
       - uses: actions/checkout@v7
 
       # Pinned rather than taking the image's node: the suite targets 24 and
-      # `node --test` semantics move between majors.
+      # `node --test` semantics move between majors. `.node-version` is the
+      # one Node pin of the repository. It is the exact version that the
+      # swift-ci image installs, not only the major (#1985).
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Lint first-party frontend JS
         run: scripts/eslint.sh
@@ -617,33 +524,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v6
+      - name: Swift test setup
+        id: setup
+        uses: ./.github/actions/swift-test-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Install worker test dependencies
-        # `file` backs SubmissionNormalizer's MIME detection; `python3` runs the
-        # real local HTTP servers (LocalHTTPTestServer) and notebook probes in
-        # WorkerDaemonTests / NotebookExtractorTests, which otherwise fail (not
-        # skip) when the interpreter is absent; `make` is the runner's pre-test
-        # build step, which WorkerDaemonTests' hung-make timeout test needs
-        # (`.requiresMake`).  All are baked into the swift-ci image; the
-        # apt-get path is the stale-image fallback.  The graded-language
-        # interpreters follow the same all-of-them rule as the api-tests job —
-        # see that job's note; a skip fails this job too.
-        run: |
-          if command -v file >/dev/null && command -v make >/dev/null && command -v python3 >/dev/null && command -v Rscript >/dev/null && command -v lua >/dev/null && command -v octave-cli >/dev/null && command -v g++ >/dev/null && command -v racket >/dev/null && command -v javac >/dev/null; then
-            echo "test dependencies already baked into the image; skipping apt-get"
-            exit 0
-          fi
-          apt-get update -qq && apt-get install -y --no-install-recommends file make python3 r-base lua5.4 octave g++ racket default-jdk
+          build-cache: restore
+          # `file` is for the MIME detection of SubmissionNormalizer. `make`
+          # is the pre-test build step of the runner, which the hung-make
+          # timeout test of WorkerDaemonTests needs (`.requiresMake`). The
+          # action adds every grading interpreter. That includes `python3`,
+          # which runs the local HTTP servers (LocalHTTPTestServer) and the
+          # notebook probes in WorkerDaemonTests and NotebookExtractorTests.
+          # Those tests fail (they do not skip) when python3 is missing.
+          tools: file make
 
       - name: Run WorkerTests
         # Five minutes inside the job's ceiling, so a stall fails this step
@@ -667,7 +560,7 @@ jobs:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
           mkdir -p "${RUNNER_TEMP}/xunit"
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
             swift test --skip-build --filter WorkerTests --xunit-output "${RUNNER_TEMP}/xunit/worker-tests.xml"
           else
             swift test --filter WorkerTests --xunit-output "${RUNNER_TEMP}/xunit/worker-tests.xml"

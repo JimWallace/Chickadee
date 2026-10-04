@@ -1077,7 +1077,8 @@ the recorder's `io_full`.
    be `--filter` regexes over suite names, and a new suite landing outside
    every shard's filter would never run and never fail — the silent-skip trap
    this repository has been burned by repeatedly (see the `browser-runner-tests`
-   and Rscript notes in `swift-tests.yml`). It needs a guard proving the
+   note in `swift-tests.yml` and the Rscript note in
+   `.github/actions/swift-test-setup`). It needs a guard proving the
    shards' union is the whole target before it is worth doing. Revisit if the
    `main` population still shows kills once the tmpfs change has a few weeks
    of history.
