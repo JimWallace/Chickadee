@@ -8,7 +8,8 @@
 // exactly as for the other three, so the native and browser graders cannot
 // drift.
 //
-// Loading: classic script, no dependencies.
+// Loading: classic script. Requires /grading-shared.js first (makeNonce,
+// parseStatusRunOutput).
 //   - Public/octave-grading-worker.js: importScripts('/octave-grading-shared.js' + search)
 //   - Node tests: read + eval, then read globalThis.ChickadeeOctaveGradingShared.
 // Exposes exactly one global: ChickadeeOctaveGradingShared.
@@ -259,19 +260,11 @@
         return 'setenv("CHICKADEE_ASSIGNMENT_SEED", ' + octaveStringLiteral(seed) + ');';
     }
 
-    // A fresh, unguessable delimiter for one script run.  crypto.getRandomValues
-    // is available in every browser worker; Math.random is a test-harness
-    // fallback only.
+    // One copy of the nonce, in Public/grading-shared.js (#1963). Every
+    // worker and the notebook page load that file before this one. Read at
+    // call time, so a harness that loads only this module still loads.
     function makeNonce() {
-        try {
-            const bytes = new Uint8Array(16);
-            (root.crypto || globalThis.crypto).getRandomValues(bytes);
-            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch (_) {
-            let out = '';
-            for (let i = 0; i < 4; i++) out += Math.random().toString(16).slice(2, 10);
-            return out;
-        }
+        return root.ChickadeeGradingShared.makeNonce();
     }
 
     // The Octave source for grading ONE script: a single call into the harness
@@ -281,29 +274,10 @@
             + octaveStringLiteral(nonce) + ');';
     }
 
-    // Pull the status and the script's stdout back out of the kernel's
-    // concatenated stdout stream.
-    //
-    // Anchored on the LAST occurrence of the marker, so a submission that
-    // echoes an earlier line cannot shadow the real one.  Returns null when
-    // the run never reached the status line — the caller turns that into a
-    // substrate error rather than guessing at an exit code.
+    // The status line this wrapper ends with is the shape Lua and Octave
+    // share, so the parser is one copy in Public/grading-shared.js (#1963).
     function parseRunOutput(stdoutText, nonce) {
-        const text = String(stdoutText == null ? '' : stdoutText);
-        const statusMark = '\n' + nonce + ':status:';
-
-        const statusAt = text.lastIndexOf(statusMark);
-        if (statusAt < 0) return null;
-        const statusFrom = statusAt + statusMark.length;
-        const statusEnd = text.indexOf('\n', statusFrom);
-        if (statusEnd < 0) return null;
-        const exitCode = parseInt(text.slice(statusFrom, statusEnd).trim(), 10);
-        if (!Number.isFinite(exitCode)) return null;
-
-        // The marker's own leading newline is not the script's, so the slice
-        // ends before it: a script whose last write had no trailing newline
-        // must not gain one.
-        return { exitCode: exitCode, stdout: text.slice(0, statusAt) };
+        return root.ChickadeeGradingShared.parseStatusRunOutput(stdoutText, nonce);
     }
 
     // The Octave sibling of personalizationInputsSource / ...SourceR /

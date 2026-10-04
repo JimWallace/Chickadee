@@ -15,12 +15,16 @@ import vm from 'node:vm';
 // assumes; no kernel is booted here. That half is Tools/browser-grading-smoke,
 // which grades real scripts through the real xeus-lua kernel in a real browser.
 
+// The module takes makeNonce and parseRunOutput from Public/grading-shared.js
+// (#1963), which the page and the workers load first.
+const sharedSource = await fs.readFile(path.resolve('Public/grading-shared.js'), 'utf8');
 const source = await fs.readFile(path.resolve('Public/lua-grading-shared.js'), 'utf8');
 
 function load() {
   const context = { console };
   context.globalThis = context;
   const vmContext = vm.createContext(context);
+  vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
   vm.runInContext(source, vmContext, { filename: 'lua-grading-shared.js' });
   return context.ChickadeeLuaGradingShared;
 }
