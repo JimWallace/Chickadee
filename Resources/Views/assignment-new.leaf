@@ -323,12 +323,6 @@ Create Assignment
          `PUT /instructor/new/draft/suite`.  Section CRUD goes through the
          draft-scoped endpoints in AssignmentRoutes+DraftSections.swift. -->
     #extend("_suite-sections")
-    <!-- The edit page carries this note under its Global Inputs table; this
-         page has none, so the note sits under the section inputs. -->
-    <p class="field-note">
-        If an input value has an amber border, read
-        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/inputs.md#the-amber-cue-on-a-value" target="_blank" rel="noopener noreferrer">the amber cue on a value</a>.
-    </p>
 </div>
 
 <!-- Suite seed (full reconciled GET /suite payload) — same shape the

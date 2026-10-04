@@ -377,6 +377,7 @@
                 </td>
                 <td>
                     <input type="text" class="form-input cell-input input-mono js-global-input-value"
+                           aria-label="Value"
                            value="#(v.valueJSON)"
                            placeholder='12, "hello", [1, 2, 3], or = seed % 26'>
                 </td>
@@ -390,10 +391,7 @@
             #endfor
         </tbody>
     </table>
-    <p class="field-note">
-        If a value has an amber border, read
-        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/inputs.md#the-amber-cue-on-a-value" target="_blank" rel="noopener noreferrer">the amber cue on a value</a>.
-    </p>
+    #extend("_value-cue-note")
 </section>
 
 <!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form

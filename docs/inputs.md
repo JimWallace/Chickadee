@@ -85,9 +85,13 @@ order:
 4. plain text.
 
 A value read by step 1 or 2 is exact. A value read by step 3 or 4 gets an
-amber border, and its title tells you which step read it. The editors link
+amber border; hover the value to see which step read it. The editors link
 this section from the note under each table, because a touch screen does not
 show a title (#1996).
+
+In practice, a value with single quotes, such as `'hello'` or `['a', 'b']`, or
+a list or dictionary that contains the language's own spelling of true, false
+or null, such as Python's `[True, None]`, is read as a pasted literal.
 
 - **Kept as text** (step 4). The value is not JSON and not a pasted value, so
   the editor stores it as a string. This is usually a typing error in a list or
@@ -100,8 +104,9 @@ show a title (#1996).
   what you mean. To remove the border, type the value as JSON.
 
 On the Global Inputs panel and a section's inputs, a value that starts with `=`
-is a per-student expression (see above). It has a green tint, not the amber
-border, unless nothing follows the `=`.
+is a per-student expression (see above). It has a green tint and the title
+"Per-student expression". When nothing follows the `=`, it also gets the amber
+border and the title "Empty expression".
 
 ## How values flow
 
