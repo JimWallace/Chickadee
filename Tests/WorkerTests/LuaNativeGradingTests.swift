@@ -50,43 +50,9 @@ import Testing
             """)
     }
 
-    /// A grading workspace shaped like the one `RunnerDaemon` materializes:
-    /// the injected runtime, the student's submission, and the hint file that
-    /// tells `chickadee.student_file()` which upload to grade.
-    static func makeWorkspace(
-        submission: String,
-        scripts: [String: String]
-    ) throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ck-luanative-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // The SAME embedded source the worker injects, not a fixture copy — so
-        // a runtime change that breaks native grading fails here.
-        try testRuntimeSource(for: .lua).write(
-            to: dir.appendingPathComponent("test_runtime.lua"), atomically: true, encoding: .utf8)
-        try submission.write(
-            to: dir.appendingPathComponent("solution.lua"), atomically: true, encoding: .utf8)
-        try "solution.lua".write(
-            to: dir.appendingPathComponent(".chickadee_student_module"),
-            atomically: true, encoding: .utf8)
-        for (name, source) in scripts {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        return dir
-    }
-
-    static func runSuites(_ items: [SuiteItem], in dir: URL) async -> [TestOutcome] {
-        let executor = NativeScriptExecutor(
-            runner: UnsandboxedScriptRunner(), workDir: dir, overrides: [:])
-        return await executeSuites(
-            items, timeLimitSeconds: 30, attemptNumber: 1, executor: executor)
-    }
-
-    static func item(_ script: String) -> SuiteItem {
-        SuiteItem(script: script, tier: .pub, displayName: script, dependsOn: [], points: 1)
-    }
+    /// Builds this suite's workspaces and runs its suites.
+    static let harness = NativeGradingHarness(
+        language: .lua, solutionFilename: "solution.lua", timeLimitSeconds: 30)
 
     /// The regression test for the defect: a `.lua` test is dispatched to a real
     /// interpreter and comes back with a status, not a command-not-found error.
@@ -101,12 +67,12 @@ import Testing
             end
             chickadee.passed("Returned " .. chickadee.format(result))
             """
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "function double(x) return x * 2 end\n",
             scripts: ["publictest_double.lua": passing])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_double.lua")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_double.lua")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == .pass,
@@ -123,7 +89,7 @@ import Testing
     /// boundary rather than a stubbed runner — the mapping generated Lua relies
     /// on when it calls `chickadee.failed` / `chickadee.errored`.
     @Test(Self.requiresLua) func exitCodesMapToOutcomeStatuses() async throws {
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "function double(x) return x end\n",
             scripts: [
                 "publictest_fails.lua": """
@@ -137,8 +103,9 @@ import Testing
             ])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites(
-            [Self.item("publictest_errors.lua"), Self.item("publictest_fails.lua")], in: dir)
+        let outcomes = await Self.harness.runSuites(
+            [NativeGradingHarness.item("publictest_errors.lua"), NativeGradingHarness.item("publictest_fails.lua")],
+            in: dir)
         let byName = Dictionary(uniqueKeysWithValues: outcomes.map { ($0.testName, $0) })
 
         let failed = try #require(byName.values.first { $0.shortResult.contains("wrong value") })
@@ -160,7 +127,7 @@ import Testing
             if not ok or result ~= 8 then chickadee.failed("double(4) should be 8") end
             chickadee.passed("ok")
             """
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: """
                 function double(x) return x * 2 end
                 error("this line blows up after the function is defined")
@@ -168,7 +135,7 @@ import Testing
             scripts: ["publictest_double.lua": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_double.lua")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_double.lua")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(outcome.status == .pass, "got \(outcome.status): \(outcome.shortResult)")
     }
@@ -188,7 +155,7 @@ import Testing
             end
             chickadee.passed("inputs delivered")
             """
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "x = 1\n", scripts: ["publictest_inputs.lua": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -203,7 +170,7 @@ import Testing
         """.write(
             to: dir.appendingPathComponent("_ck_inputs.lua"), atomically: true, encoding: .utf8)
 
-        let outcomes = await Self.runSuites([Self.item("publictest_inputs.lua")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_inputs.lua")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(outcome.status == .pass, "got \(outcome.status): \(outcome.shortResult)")
     }

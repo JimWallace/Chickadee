@@ -69,40 +69,9 @@ import Testing
         """ + "\n"
     }
 
-    static func makeWorkspace(
-        submission: String,
-        scripts: [String: String]
-    ) throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ck-cppnative-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // The SAME embedded source the worker injects, not a fixture copy —
-        // so a runtime change that breaks native grading fails here.
-        try testRuntimeSource(for: .cpp).write(
-            to: dir.appendingPathComponent("test_runtime.hpp"), atomically: true, encoding: .utf8)
-        try submission.write(
-            to: dir.appendingPathComponent("solution.cpp"), atomically: true, encoding: .utf8)
-        try "solution.cpp".write(
-            to: dir.appendingPathComponent(".chickadee_student_module"),
-            atomically: true, encoding: .utf8)
-        for (name, source) in scripts {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        return dir
-    }
-
-    static func runSuites(_ items: [SuiteItem], in dir: URL) async -> [TestOutcome] {
-        let executor = NativeScriptExecutor(
-            runner: UnsandboxedScriptRunner(), workDir: dir, overrides: [:])
-        return await executeSuites(
-            items, timeLimitSeconds: 30, attemptNumber: 1, executor: executor)
-    }
-
-    static func item(_ script: String) -> SuiteItem {
-        SuiteItem(script: script, tier: .pub, displayName: script, dependsOn: [], points: 1)
-    }
+    /// Builds this suite's workspaces and runs its suites.
+    static let harness = NativeGradingHarness(
+        language: .cpp, solutionFilename: "solution.cpp", timeLimitSeconds: 30)
 
     /// The whole chain, pass case: compile the runtime + submission + test
     /// as one TU, run the binary, read the shortResult JSON off stdout.
@@ -116,12 +85,12 @@ import Testing
                     }
                     ck::passed("Returned " + ck::format(result));
                 """)
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "int double_it(int x) { return x * 2; }\n",
             scripts: ["publictest_dbl.sh": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_dbl.sh")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_dbl.sh")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == TestStatus.pass,
@@ -146,21 +115,21 @@ import Testing
                     ck::passed("ok");
                 """)
 
-        let wrongDir = try Self.makeWorkspace(
+        let wrongDir = try Self.harness.makeWorkspace(
             submission: "int double_it(int x) { return x + 2; }\n",
             scripts: ["publictest_dbl.sh": script])
         defer { try? FileManager.default.removeItem(at: wrongDir) }
         let wrong = try #require(
-            await Self.runSuites([Self.item("publictest_dbl.sh")], in: wrongDir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_dbl.sh")], in: wrongDir).first)
         #expect(wrong.status == TestStatus.fail)
         #expect(wrong.shortResult.contains("wrong value"))
 
-        let brokenDir = try Self.makeWorkspace(
+        let brokenDir = try Self.harness.makeWorkspace(
             submission: "int double_it(int x) { return x * 2\n",
             scripts: ["publictest_dbl.sh": script])
         defer { try? FileManager.default.removeItem(at: brokenDir) }
         let broken = try #require(
-            await Self.runSuites([Self.item("publictest_dbl.sh")], in: brokenDir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_dbl.sh")], in: brokenDir).first)
         #expect(broken.status == TestStatus.error)
         #expect((broken.longResult ?? "").contains("error"))
     }
@@ -174,7 +143,7 @@ import Testing
                     if (!ck::equal(double_it(4), 8)) { ck::failed("wrong"); }
                     ck::passed("graded a main-bearing submission");
                 """)
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: """
                 #include <iostream>
                 int double_it(int x) { return x * 2; }
@@ -187,7 +156,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let outcome = try #require(
-            await Self.runSuites([Self.item("publictest_m.sh")], in: dir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_m.sh")], in: dir).first)
         #expect(outcome.status == TestStatus.pass, "got \(outcome.status): \(outcome.shortResult)")
     }
 
@@ -209,7 +178,7 @@ import Testing
             of: "#include \"test_runtime.hpp\"",
             with: "#include \"test_runtime.hpp\"\n#include \"_ck_inputs.hpp\"")
 
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "bool over(long long x) { return x > 100; }\n",
             scripts: ["publictest_thr.sh": withInclude])
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -221,7 +190,7 @@ import Testing
             to: dir.appendingPathComponent("_ck_inputs.hpp"), atomically: true, encoding: .utf8)
 
         let outcome = try #require(
-            await Self.runSuites([Self.item("publictest_thr.sh")], in: dir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_thr.sh")], in: dir).first)
         #expect(outcome.status == TestStatus.pass, "got \(outcome.status): \(outcome.shortResult)")
     }
 }

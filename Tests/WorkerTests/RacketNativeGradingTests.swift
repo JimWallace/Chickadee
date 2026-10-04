@@ -44,51 +44,16 @@ import Testing
             """)
     }
 
-    /// A workspace shaped like the one `RunnerDaemon` materializes: the injected
-    /// runtime, the student's submission, and the hint naming it.
-    static func makeWorkspace(submission: String, scripts: [String: String]) throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ck-racketnative-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // The SAME embedded source the worker injects — reached through
-        // `runtimeHelperFiles(for:)` rather than the constant, so this also
-        // proves the helper a Racket workspace gets is the one the loop
-        // installs. That indirection is the F2 fix; before it, this file was
-        // never written at all.
-        for (name, source) in runtimeHelperFiles(for: .racket) {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        try submission.write(
-            to: dir.appendingPathComponent("solution.rkt"), atomically: true, encoding: .utf8)
-        try "solution.rkt".write(
-            to: dir.appendingPathComponent(".chickadee_student_module"),
-            atomically: true, encoding: .utf8)
-        for (name, source) in scripts {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        return dir
-    }
-
-    static func runSuites(_ items: [SuiteItem], in dir: URL) async -> [TestOutcome] {
-        let executor = NativeScriptExecutor(
-            runner: UnsandboxedScriptRunner(), workDir: dir, overrides: [:])
-        return await executeSuites(
-            items, timeLimitSeconds: 30, attemptNumber: 1, executor: executor)
-    }
-
-    static func item(_ script: String) -> SuiteItem {
-        SuiteItem(script: script, tier: .pub, displayName: script, dependsOn: [], points: 1)
-    }
+    /// Builds this suite's workspaces and runs its suites.
+    static let harness = NativeGradingHarness(
+        language: .racket, solutionFilename: "solution.rkt", timeLimitSeconds: 30)
 
     /// The regression test for F1. The script opens with `; Test: …` — the exact
     /// shape that defeated the shebang check and the Python content sniff and
     /// fell through to `/bin/sh`, where the leading `;` is a syntax error and
     /// the run exits 2.
     @Test(Self.requiresRacket) func aRacketTestIsGradedByTheNativeWorker() async throws {
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: """
                 #lang racket/base
                 (define (double x) (* 2 x))
@@ -102,7 +67,7 @@ import Testing
             ])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_fam_01.rkt")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_fam_01.rkt")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == .pass,
@@ -116,7 +81,7 @@ import Testing
     /// The exit-code contract holds through the real interpreter, not just
     /// through the classifier.
     @Test(Self.requiresRacket) func exitCodesMapToOutcomeStatuses() async throws {
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "#lang racket/base\n(define (f) 1)\n",
             scripts: [
                 "publictest_pass.rkt": "; pass\n#lang racket/base\n(exit 0)",
@@ -125,11 +90,11 @@ import Testing
             ])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites(
+        let outcomes = await Self.harness.runSuites(
             [
-                Self.item("publictest_pass.rkt"),
-                Self.item("publictest_fail.rkt"),
-                Self.item("publictest_error.rkt"),
+                NativeGradingHarness.item("publictest_pass.rkt"),
+                NativeGradingHarness.item("publictest_fail.rkt"),
+                NativeGradingHarness.item("publictest_error.rkt"),
             ], in: dir)
         let byName = Dictionary(uniqueKeysWithValues: outcomes.map { ($0.testName, $0.status) })
         #expect(byName["publictest_pass.rkt"] == .pass)
@@ -144,7 +109,7 @@ import Testing
     /// — so this is the assertion that the helper actually lands and parses,
     /// rather than that a constant exists in the binary.
     @Test(Self.requiresRacket) func theInstalledRuntimeIsRequirableByAGeneratedTest() async throws {
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "#lang racket/base\n(define (f) 1)\n",
             scripts: [
                 "publictest_requires.rkt": """
@@ -156,7 +121,7 @@ import Testing
             ])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_requires.rkt")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_requires.rkt")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == .pass,
@@ -191,7 +156,7 @@ import Testing
             (check "name" "Ada \"A.\" Lovelace")
             (chickadee-passed "inputs delivered")
             """#
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "#lang racket/base\n(define (f) 1)\n",
             scripts: ["publictest_inputs.rkt": script])
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -208,7 +173,7 @@ import Testing
         try inputsFile.write(
             to: dir.appendingPathComponent("_ck_inputs.rkt"), atomically: true, encoding: .utf8)
 
-        let outcomes = await Self.runSuites([Self.item("publictest_inputs.rkt")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_inputs.rkt")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == .pass,
