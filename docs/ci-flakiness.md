@@ -1162,7 +1162,8 @@ the recorder's `io_full`.
    | `DELETE` sweep, one `DO` block | **1.7 ms** | **244x** |
 
    So the shipped mechanism is a process-wide pool of pre-migrated schemas
-   (`MigratedPostgresSchemaPool` in `Tests/APITests/TestHelpers.swift`), one
+   (`MigratedPostgresSchemaPool`, now in
+   `Tests/APITests/MigratedPostgresSchemaPool.swift`), one
    checked out per test application and DELETE-swept on return. Measured on
    the same machine, same command, 3,2xx tests green both ways:
    **`Run APITests` 418.9 s -> 117.9 s (-72 %)**, against a naive projection
@@ -1801,7 +1802,7 @@ wedge watchdog never run, because the process that dies is SwiftPM.
    `.target`, because a `.testTarget` cannot be depended on and SwiftPM
    assigns each source file to exactly one target, so there is no
    shared-`sources:` trick that does not compile two copies of the type). It
-   is armed in `APITests` at `withApp` in `TestHelpers.swift` — 172 of the
+   is armed in `APITests` at `withApp` (now in `TestApp.swift`) — 172 of the
    target's 315 files call it directly, and `withWebRoutesApp` /
    `withAssignmentRoutesApp` funnel into it; `withPatternFamilyFixture`
    builds its app directly and so arms itself. `WedgeWatchdogArmingTests`
