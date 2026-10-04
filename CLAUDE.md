@@ -608,14 +608,14 @@ needs no edit to any MCP prose.
 
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —
-and Chickadee expands each enabled case into an ordinary Python test script
-at save time. Families live in `TestProperties.patternFamilies`; generated
-entries in `testSuites` carry `generatedBy: <familyID>` so the raw-script edit
-endpoints refuse to mutate them (you edit the family instead). Two kinds
-ship: `.boundaryEquality` (single-arg equality) and `.approximateEquality`
-(float tolerance, v0.4.80). Generated filenames are deterministic
-(`{tier}test_{familyID}_{caseKey}.py`) and embed a `spec_hash` header so
-manifest bytes change when any case changes.
+and Chickadee expands each enabled case into an ordinary test script in the
+assignment's language at save time. Families live in
+`TestProperties.patternFamilies`; generated entries in `testSuites` carry
+`generatedBy: <familyID>` so the raw-script edit endpoints refuse to mutate
+them (you edit the family instead). Ten kinds ship; `PatternKind` lists them.
+Generated filenames are deterministic (`{tier}test_{familyID}_{caseKey}`, with
+the language's generated extension) and embed a `spec_hash` header so manifest
+bytes change when any case changes.
 
 **Server-authoritative suite editor (v0.4.79+).** The instructor assignment
 edit page is wired to `PUT /instructor/:assignmentID/suite` and
@@ -773,106 +773,34 @@ resolved level onto the entries they generate. See
 
 ---
 
-## Data Models (Core/)
+## Data Models
 
-### TestOutcomeStatus
-```swift
-enum TestOutcomeStatus: String, Codable {
-    case pass, fail, error, timeout
-}
-```
+The source is the reference; this section names where each type lives and the
+rules the code alone does not state.
 
-### TestTier
-```swift
-enum TestTier: String, Codable {
-    case pub       // "public"
-    case release
-    case secret
-    case student
-}
-```
+- `TestStatus` — `Sources/RunnerCore/TestStatus.swift`: `pass`, `fail`,
+  `error`, `timeout`. There is no `couldNotRun`; a build failure is
+  `buildStatus: "failed"` on the collection.
+- `TestTier` — `Sources/RunnerCore/TestTier.swift`: `public` (`.pub`),
+  `release`, `secret`. There is no student tier (see Key Design Decisions).
+- `TestOutcome` — `Sources/RunnerCore/TestOutcome.swift`: one test's result,
+  including `score` (0...1 credit), `points`, and the optional ranking `metric`.
+- `TestOutcomeCollection` — `Sources/Core/Models/TestOutcomeCollection.swift`:
+  one submission run, with the counts and `buildStatus`.
+- `TestProperties` — `Sources/Core/TestProperties.swift`: the manifest
+  (`test.properties.json`), with `testSuites`, `patternFamilies`,
+  `timeLimitSeconds` and the optional `makefile`.
+- `PatternFamily` and `PatternKind` — `Sources/Core/Models/PatternFamily.swift`.
 
-### TestOutcome
-Single test case result.
-```swift
-struct TestOutcome: Codable {
-    let testName: String
-    let testClass: String?          // always nil (shell scripts have no class)
-    let tier: TestTier
-    let status: TestOutcomeStatus
-    let shortResult: String
-    let longResult: String?
-    let score: Double               // fraction of points earned, 0...1
-    let points: Int                 // grade weight, default 1
-    let metric: Double?             // footer `metric` for ranking; nil when none
-    let executionTimeMs: Int
-    let memoryUsageBytes: Int?      // nullable until measured
-    let attemptNumber: Int
-    let isFirstPassSuccess: Bool
-}
-```
+Two manifest rules worth knowing:
 
-### TestOutcomeCollection
-Complete result for one submission run.
-```swift
-struct TestOutcomeCollection: Codable {
-    let submissionID: String
-    let testSetupID: String
-    let attemptNumber: Int
-    let buildStatus: BuildStatus
-    let compilerOutput: String?
-    let outcomes: [TestOutcome]
-    let totalTests: Int
-    let passCount: Int
-    let failCount: Int
-    let errorCount: Int
-    let timeoutCount: Int
-    let executionTimeMs: Int
-    let runnerVersion: String       // "shell-runner/1.0"
-    let timestamp: Date
-}
-```
-
-### TestProperties
-Stored as `test.properties.json` inside the instructor-uploaded test setup zip.
-
-```json
-{
-  "schemaVersion": 1,
-  "requiredFiles": ["warmup.py"],
-  "testSuites": [
-    { "tier": "public",  "script": "test_bit_count.sh"  },
-    { "tier": "release", "script": "test_first_digit.sh",
-      "dependsOn": ["family:bmi"] },
-    { "tier": "public",  "script": "publictest_bmi_01.py",
-      "generatedBy": "bmi" },
-    { "tier": "student", "script": "test_student.sh" }
-  ],
-  "patternFamilies": [
-    {
-      "id": "bmi",
-      "function": "classify_bmi",
-      "kind": "boundaryEquality",
-      "defaults": { "tier": "public", "points": 1 },
-      "cases": [
-        { "key": "01", "args": [18.49], "expected": "underweight" }
-      ]
-    }
-  ],
-  "timeLimitSeconds": 10,
-  "makefile": null
-}
-```
-
-`makefile` is optional. When present, a `make` step runs before the test
-scripts. If `target` is `null`, bare `make` is invoked; otherwise
-`make <target>` is used.
-
-`patternFamilies` is the canonical spec for generated test families; each
-enabled case expands to a `testSuites` entry with `generatedBy: <familyID>`.
-`dependsOn` entries in authored form accept `family:<id>` tokens, which the
-server expands to the family's concrete generated filenames before
-persisting.
+- `makefile` is optional. When present, a `make` step runs before the test
+  scripts: bare `make` when `target` is `null`, else `make <target>`.
+- `patternFamilies` is the canonical spec for generated test families; each
+  enabled case expands to a `testSuites` entry with `generatedBy: <familyID>`.
+  `dependsOn` entries in authored form accept `family:<id>` tokens, which the
+  server expands to the family's concrete generated filenames before
+  persisting.
 
 ---
 
@@ -1732,7 +1660,7 @@ shim); and archived finished-era docs under `docs/archive/`.
 ## What Not To Do
 
 - Do not import Vapor in `Core/`.
-- Do not add `CouldNotRun` as a `TestOutcomeStatus`. Build failures are
+- Do not add `CouldNotRun` as a `TestStatus`. Build failures are
   represented at the collection level (`buildStatus: "failed"`).
 - Do not write a runner JSON protocol — the runner interprets exit codes directly.
 - Do not add per-language build strategies in Swift — test suites are plain shell scripts.
@@ -1769,9 +1697,9 @@ shim); and archived finished-era docs under `docs/archive/`.
 - `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
 - `docs/archive/xeus-python-grading-spike.md` and `docs/archive/xeus-python-grading-migration-plan.md` — the finished Pyodide → xeus-python migration (#1271): the measured execution and boot costs, which R lessons did NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), and the slice-by-slice record of what shipped and what it cost. Archived 2026-09-20; the live state is the "Pyodide is gone (v0.5.19)" section above
-- `docs/cpp-assignment-language-decision.md` — why C++ stays on the shell-script + makefile path rather than becoming an `AssignmentLanguage`: the one-file-one-command invocation mismatch, the typed-literal impossibility, and the Clang-REPL-vs-course-toolchain pedagogy problem; the priced revisit condition
+- `docs/cpp-assignment-language-decision.md` — the 2026 memo on whether C++ should become an `AssignmentLanguage`, now superseded in part: C++ is one (see `docs/cpp-support.md`). What it still governs is the browser half — its pedagogy analysis is why no xeus-cpp kernel is vendored and C++ is upload-only
 - `docs/authoring-parity.md` — what an instructor authoring in R, Lua, Octave, C++ or Racket can and cannot do that a Python author can, which differences are defects and which are correct refusals. Its work list is complete; what survives is the reasoning behind the parity checklist in `adding-a-xeus-kernel.md`, including the gaps that are correct as they stand and have been re-litigated more than once
-- `docs/multi-language-audit.md` — architecture audit of the Lua→Racket arc and the fixes it produced: the three stacking Racket runner defects (two still open — `.rkt` dispatching to `/bin/sh`, and `racket --version`'s letter-led token defeating the runner's version parser, confirmed against the production fleet), the upload-only rule that generalised at two of five sites, and the recurring shape behind all of them — a hand-written list of languages in a place whose types are language-generic, failing open. Carries a "Status at merge" section separating closed from deliberately open, so a later reader does not chase a fixed defect
+- `docs/multi-language-audit.md` — architecture audit of the Lua→Racket arc and the fixes it produced: the three stacking Racket runner defects (all since fixed, the last two being `.rkt` dispatching to `/bin/sh` and `racket --version`'s letter-led token defeating the runner's version parser), the upload-only rule that generalised at two of five sites, and the recurring shape behind all of them — a hand-written list of languages in a place whose types are language-generic, failing open. Carries a "Status at merge" section separating closed from deliberately open, so a later reader does not chase a fixed defect
 - `docs/java-support.md` — first-class Java support: why both upload-only arguments hold at once, why generated cases are `.sh` wrappers (single-file source mode compiles exactly one file), the three measured traps (`System.exit` hijacking the exit code, type-strict boxed numeric equality, `CLASSPATH` replacing the default `.`), the literal rules that replace C++'s refusal table, and why the capability probe is `javac` rather than `java`
 - `docs/program-io.md` — the `programIO` pattern kind: a whole submission run as a program with a case's stdin text and graded on its stdout under `exact` / `included` / `regex`; how each of the seven languages feeds input in-process (or, for C++ and Java, on a real stdin), why prompts count as output, the exit masks, and why the Python runtime now imports a submission with an empty stdin and captured streams
 - `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 27 compiler-named switch arms across 17 files, the **nine** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r : .python`, which type-check forever and route the new language to Python; the sixth runner capability matching, which fails in both directions and whose worse direction queues an assignment's jobs forever; the seventh the submission policy; the ninth whether the generated scripts DISPATCH at all, which the RunnerCore/Core dependency direction means the compiler probably never will see), the authoring-UI section that exists to stop you working (a seventh language needs ZERO JavaScript edits, and the failure mode is going to look for one), the browser half's own checklist, the one judgement (`moduleResolution`) that replaced three and the scorecard that sized it against Octave/Java/C++ — including the two axes the model cannot see (interpreted-vs-compiled, and dynamically-vs-statically-typed literals) and the reframe that a language need not be an `AssignmentLanguage` to be graded at all, the submission-guarantee policy (a policy value with named exemptions rather than a protocol, because a protocol makes opting out invisible), and a done test that requires the generated code be executed rather than parsed. Extended after the in-page auto-compute and `differential` work: the eval-worker half a kernel language also owes the editor (renderer → snippets → worker → smoke row → and only THEN the descriptor, because a descriptor naming a worker that does not exist makes the editor spawn a 404 silently), a per-kernel eval-quirk table (each of the three kernels needed a different shape rule and none inherited its neighbour's), the per-language literal traps (three of four are a null-ish value silently changing a container's length, and all three needed different rules), and a **parity checklist** separating what a seventh language now gets free from `allCases` — all 10 pattern kinds, both Add Test renderings, the authoring UI, the whole MCP surface, the browser inputs filename, the vendoring guard — from the four things that remain genuinely per-language
