@@ -16,7 +16,7 @@
 # passes every check here. That is how scipy/sympy/scikit-learn/statsmodels were
 # declared and shipped absent. scripts/check-env-vendored-sync.sh covers that
 # axis. Rebuild with .github/workflows/revendor-kernels.yml, or locally with
-# scripts/build-jupyterlite.sh. See docs/xeus-r-kernel-spike.md.
+# scripts/build-jupyterlite.sh. See docs/adding-a-xeus-kernel.md.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

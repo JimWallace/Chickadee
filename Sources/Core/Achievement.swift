@@ -333,7 +333,7 @@ public enum ConditionComparator: String, Codable, Sendable {
 }
 
 /// Whether all conditions (AND) or any condition (OR) must hold.
-public enum ConditionMatch: String, Codable, Sendable {
+public enum ConditionMatch: String, Codable, Sendable, CaseIterable {
     case all
     case any
 }

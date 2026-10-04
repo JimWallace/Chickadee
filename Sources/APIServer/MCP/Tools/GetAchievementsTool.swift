@@ -86,7 +86,7 @@ let achievementRowSchema: JSONValue = .object([
         ]),
         "match": .object([
             "type": .string("string"),
-            "enum": .array([.string("all"), .string("any")]),
+            "enum": MCPEnumProse<ConditionMatch>.jsonEnum,
             "description": .string("Whether all conditions (AND) or any (OR) must hold. Default all."),
         ]),
         "conditions": .object([

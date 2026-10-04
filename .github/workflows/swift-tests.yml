@@ -142,6 +142,9 @@ jobs:
       - name: Block defaulted language parameters
         run: scripts/no-language-defaults.sh
 
+      - name: Every guard has a fixture or a stated exemption
+        run: scripts/check-guard-coverage.sh
+
       - name: Require a reason on every unchecked Sendable
         run: scripts/check-unchecked-sendable.sh
       - name: Shared code does not call up into the routes
@@ -152,9 +155,6 @@ jobs:
         run: scripts/check-secret-files-ignored.sh
       - name: Every server child gets an explicit environment
         run: scripts/check-subprocess-environment.sh
-
-      - name: Block Swift property access in Leaf templates
-        run: scripts/check-leaf-semantics.sh
 
       - name: Check generated JS constants match their Swift declarations
         run: scripts/generate-js-constants.sh --check

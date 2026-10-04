@@ -92,6 +92,69 @@
         }
     }
 
+    // Each native test is a fresh `python3` process; in the browser every
+    // script shares one kernel. So the grader puts the kernel back the way it
+    // was before every script (#1959), as the R, Lua and Octave graders do.
+    //
+    // `cleanStateCellPython` runs ONCE, after the seed and before the
+    // environment config, and records what a fresh process would have: the
+    // __main__ globals, the builtins, the loaded modules and os.environ. It also
+    // defines `_ck_reset`, which RESET_CELL_PYTHON calls before each script:
+    //
+    //   * globals and builtins go back to the record: names added since are
+    //     deleted, and names a test rebound get their old value back;
+    //   * every module loaded since whose file is in the workspace is dropped,
+    //     so test_runtime, the student's files and any helper are imported
+    //     afresh — a test that changed the student's module cannot change the
+    //     next test's verdict;
+    //   * library modules (numpy, pandas) stay loaded. They are not graded
+    //     state, and importing pandas again costs seconds per test;
+    //   * matplotlib's open figures are closed, so a figure count starts at 0;
+    //   * os.environ goes back to the record, and the environment config that
+    //     follows the reset changes into the workspace again.
+    //
+    // The reset is a function so its loop variables stay local, rather than
+    // leaving names in the globals it has just cleaned.
+    function cleanStateCellPython(workDir) {
+        return [
+            'def _ck_reset():',
+            '    import sys, os, builtins',
+            '    clean = _ck_clean',
+            '    names = globals()',
+            '    for name in [n for n in names if n not in clean["globals"]]:',
+            '        del names[name]',
+            '    names.update(clean["globals"])',
+            '    builtin_names = vars(builtins)',
+            '    for name in [n for n in builtin_names if n not in clean["builtins"]]:',
+            '        del builtin_names[name]',
+            '    builtin_names.update(clean["builtins"])',
+            '    workdir = os.path.realpath(clean["workdir"]) + os.sep',
+            '    for name in [n for n in sys.modules if n not in clean["modules"]]:',
+            '        path = getattr(sys.modules[name], "__file__", None)',
+            '        if path and os.path.realpath(path).startswith(workdir):',
+            '            del sys.modules[name]',
+            '    pyplot = sys.modules.get("matplotlib.pyplot")',
+            '    if pyplot is not None:',
+            '        try:',
+            '            pyplot.close("all")',
+            '        except Exception:',
+            '            pass',
+            '    os.environ.clear()',
+            '    os.environ.update(clean["environ"])',
+            'import sys as _ck_sys, os as _ck_os, builtins as _ck_builtins',
+            '_ck_clean = {',
+            '    "workdir": ' + JSON.stringify(String(workDir)) + ',',
+            '    "globals": dict(globals()),',
+            '    "builtins": dict(vars(_ck_builtins)),',
+            '    "modules": frozenset(_ck_sys.modules),',
+            '    "environ": dict(_ck_os.environ),',
+            '}',
+            '_ck_clean["globals"]["_ck_clean"] = _ck_clean',
+        ].join('\n');
+    }
+
+    var RESET_CELL_PYTHON = '_ck_reset()';
+
     // The cell that grades ONE script.
     //
     // Structure mirrors what the Pyodide path does across several
@@ -187,6 +250,8 @@
         PYTHON_KERNEL: PYTHON_KERNEL,
         makeNonce: makeNonce,
         runScriptCellPython: runScriptCellPython,
+        cleanStateCellPython: cleanStateCellPython,
+        RESET_CELL_PYTHON: RESET_CELL_PYTHON,
         parseRunOutput: parseRunOutput,
     };
 })(typeof self !== 'undefined' ? self : globalThis);

@@ -108,6 +108,12 @@ struct AdminMCPDispatcher: Sendable {
         let response: JSONRPCResponse
         let outcome: String
         do {
+            // The admin re-check, run here once for every tool instead of as a
+            // line each tool must remember (#1943). A refusal is a tool error
+            // and is audited, as it was when each tool ran it itself.
+            if tool.rechecksAdminRole {
+                try await context.requireAdminSubject(tool: tool.name)
+            }
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
             outcome = MCPToolOutcome.success.rawValue
             response = .success(id: id, result: mcpToolSuccessResult(output))

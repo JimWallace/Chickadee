@@ -259,7 +259,7 @@ enum MCPServerInstructions {
         a \(LanguageProse.uploadOnlyTokens) assignment must be uploadOnly, and the change is \
         refused once any pattern family or notebook check has generated a test), \
         set_time_limit (the assignment's default per-test timeout in seconds; a per-test \
-        timeLimitSeconds override, 1–600s, can be set on a hand-written script via author_script / \
+        timeLimitSeconds override, \(mcpTimeLimitRangeText)s, can be set on a hand-written script via author_script / \
         update_suite, on a pattern family via create_pattern_family / update_pattern_family \
         (family-wide defaultTimeLimitSeconds and/or per-case timeLimitSeconds), and on a notebook \
         check via author_notebook_check — 0 clears an override; the same four doors take a \
@@ -297,9 +297,8 @@ enum MCPServerInstructions {
         A function-calling family auto-generates a 0-point `<function> is defined` existence guard \
         that its cases depend on, so a missing/non-callable function fails once and the cases skip — \
         you rarely need a standalone function_exists check alongside a family. \
-        Notebook-check kinds (author_notebook_check): data_frame_shape, data_frame_columns, \
-        data_frame_equality, series_equality, numeric_array_close, figure_count, cell_contains, \
-        function_exists, variable_exists, and ast_structure. Native checks are validated structurally \
+        Notebook-check kinds (author_notebook_check): \(MCPNotebookCheckKindProse.glossedList). \
+        Native checks are validated structurally \
         when you save (arg count, the expected's shape for the kind, $ref resolution), they \
         personalize per student ($name / expectedVarRef), and get_suite returns their full spec so a \
         later reader can see exactly what they assert. author_script is the escape hatch: it writes \

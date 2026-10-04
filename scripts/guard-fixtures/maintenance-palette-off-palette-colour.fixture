@@ -1,0 +1,9 @@
+# The nginx maintenance page cannot link styles.css, so it copies the palette
+# by value. A colour that is not in the palette is a copy that has drifted.
+guard="scripts/check-maintenance-palette.sh"
+files="deploy/error-pages/maintenance.html"
+description="a colour in the maintenance page that styles.css does not have"
+expect="uses a colour that does not exist"
+apply() {
+    sed -i 's|^    </style>$|      .guard-fixture { color: #123457; }\n    </style>|' deploy/error-pages/maintenance.html
+}

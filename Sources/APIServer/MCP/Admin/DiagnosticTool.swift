@@ -28,6 +28,11 @@ protocol DiagnosticTool: Sendable {
     static var annotations: MCPToolAnnotations? { get }
     /// Scopes the caller's token must carry (defaults to `diagnostics:read`).
     static var requiredScopes: Set<DiagnosticScope> { get }
+    /// Whether the dispatcher confirms the token subject is an admin before it
+    /// runs the tool (defaults to true). The re-check used to be a line every
+    /// tool had to remember, and a tool that forgot it was protected only by
+    /// the bearer layer (#1943). Opting out is a stated decision.
+    static var rechecksAdminRole: Bool { get }
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output
 }
@@ -41,6 +46,7 @@ extension DiagnosticTool {
     /// The admin surface is read-only, so every tool requires exactly
     /// `diagnostics:read` unless it overrides this.
     static var requiredScopes: Set<DiagnosticScope> { [.read] }
+    static var rechecksAdminRole: Bool { true }
 }
 
 // MARK: - Type erasure
@@ -56,6 +62,7 @@ struct AnyDiagnosticTool: Sendable {
     let outputSchema: JSONValue?
     let annotations: MCPToolAnnotations?
     let requiredScopes: Set<DiagnosticScope>
+    let rechecksAdminRole: Bool
     let invoke: @Sendable (_ arguments: JSONValue, _ context: AdminToolContext) async throws -> JSONValue
 }
 
@@ -73,6 +80,7 @@ extension DiagnosticTool {
             outputSchema: Self.outputSchema,
             annotations: Self.annotations,
             requiredScopes: Self.requiredScopes,
+            rechecksAdminRole: Self.rechecksAdminRole,
             invoke: { arguments, context in
                 let input: Input
                 do {

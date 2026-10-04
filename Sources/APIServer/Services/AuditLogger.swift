@@ -59,7 +59,7 @@ enum AuditLogger {
             targetID: targetID,
             remoteAddr: clientIPAddress(from: req, trustForwardedFor: trust),
             userAgent: req.headers.first(name: "User-Agent"),
-            metadata: metadata.flatMap(encodeMetadata),
+            metadata: metadata.flatMap(APIAuditLogEntry.encodeMetadata),
             // Fall back to the metadata key every course-scoped call site has
             // always set. That is what makes the existing enrollment/staff
             // events show up in a course's activity view without touching any
@@ -85,25 +85,12 @@ enum AuditLogger {
     static func updateMetadata(
         _ entry: APIAuditLogEntry, merging extra: [String: String], on req: Request
     ) async {
-        var dict = entry.metadata.flatMap(decodeMetadata) ?? [:]
-        for (key, value) in extra { dict[key] = value }
-        entry.metadata = encodeMetadata(dict)
+        entry.metadataDictionary.merge(extra) { _, new in new }
         do {
             try await entry.update(on: req.db)
         } catch {
             req.logger.error("audit_log metadata update failed: \(error.localizedDescription)")
         }
-    }
-
-    private static func encodeMetadata(_ dict: [String: String]) -> String? {
-        guard !dict.isEmpty else { return nil }
-        let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
-        return data.flatMap { String(data: $0, encoding: .utf8) }
-    }
-
-    private static func decodeMetadata(_ json: String) -> [String: String]? {
-        guard let data = json.data(using: .utf8) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
     }
 }
 

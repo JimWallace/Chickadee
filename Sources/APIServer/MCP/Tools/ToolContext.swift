@@ -86,8 +86,15 @@ struct ToolContext {
     /// students. Students can't obtain a token today (consent requires
     /// instructor), but this enforces "students may not use MCP" at the tool
     /// layer too, so the guarantee doesn't rest solely on token issuance.
+    ///
+    /// The answer is kept for the rest of the request (#1942): one write call
+    /// asks for it to authorize, and again to attribute the retest and the
+    /// re-validation, and each ask was two queries.
     @discardableResult
     func requireEligibleSubject(tool: String) async throws -> APIUser {
+        if let resolved = request.storage[MCPEligibleSubjectKey.self], resolved.subject == subject {
+            return resolved.user
+        }
         guard
             let user = try await APIUser.query(on: db)
                 .filter(\.$username == subject)
@@ -107,6 +114,7 @@ struct ToolContext {
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "Students may not use the MCP interface.")
         }
+        request.storage[MCPEligibleSubjectKey.self] = MCPEligibleSubject(subject: subject, user: user)
         return user
     }
 
@@ -139,6 +147,12 @@ struct ToolContext {
     @discardableResult
     func authorizeCourseAccess(_ courseID: UUID, tool: String) async throws -> APIUser {
         let user = try await requireEligibleSubject(tool: tool)
+        try await requireEnrollment(of: user, in: courseID, tool: tool)
+        return user
+    }
+
+    /// Throws unless `user` holds an enrollment row in `courseID`.
+    private func requireEnrollment(of user: APIUser, in courseID: UUID, tool: String) async throws {
         guard let userID = user.id else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Token subject is not a valid user.")
         }
@@ -147,7 +161,6 @@ struct ToolContext {
                 tool: tool,
                 detail: "The MCP account is not enrolled in the target course.")
         }
-        return user
     }
 
     // MARK: - Assignment resolution
@@ -188,7 +201,14 @@ struct ToolContext {
     func authorizeCourseWriteAccess(
         _ courseID: UUID, tool: String, atLeast minimum: CourseRole
     ) async throws {
-        let user = try await authorizeCourseAccess(courseID, tool: tool)
+        let user = try await requireEligibleSubject(tool: tool)
+        // `evaluateCourseWrite` reads a non-admin's enrollment row itself, as
+        // their course role, and refuses one with none. It exempts an admin,
+        // but an agent acting for one stays enrollment-scoped, so only an
+        // admin needs the separate check (#1942).
+        if user.isAdmin {
+            try await requireEnrollment(of: user, in: courseID, tool: tool)
+        }
         switch try await evaluateCourseWrite(user: user, courseID: courseID, atLeast: minimum, db: db) {
         case nil:
             return
@@ -266,4 +286,15 @@ struct ToolContext {
         await beginContentWrite(setup: setup)
         return (assignment, setup)
     }
+}
+
+/// The eligible user `requireEligibleSubject` resolved, and the subject it
+/// resolved it for, kept on the request.
+private struct MCPEligibleSubject: Sendable {
+    let subject: String
+    let user: APIUser
+}
+
+private struct MCPEligibleSubjectKey: StorageKey {
+    typealias Value = MCPEligibleSubject
 }

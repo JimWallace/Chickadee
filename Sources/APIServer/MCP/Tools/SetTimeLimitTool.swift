@@ -47,8 +47,7 @@ struct SetTimeLimitTool: ContentTool {
                 "minimum": .int(mcpTimeLimitRange.lowerBound),
                 "maximum": .int(mcpTimeLimitRange.upperBound),
                 "description": .string(
-                    "Default per-test time limit in seconds (integer, "
-                        + "\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound))."),
+                    "Default per-test time limit in seconds (integer, \(mcpTimeLimitRangeText))."),
             ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("seconds")]),

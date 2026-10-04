@@ -46,9 +46,7 @@ enum MCPLanguageProse {
     ///
     /// Distinct from `displayNames` because these are values, not names — an
     /// agent setting `language` sends `cpp`, not `C++`.
-    static var tokens: String {
-        prose(AssignmentLanguage.allCases.map(\.rawValue))
-    }
+    static var tokens: String { MCPEnumProse<AssignmentLanguage>.orList }
 
     /// The alternatives of a JSON string field, as a schema-style union:
     /// `"\"python\" | \"r\" | \"lua\" | \"octave\" | \"cpp\" | \"racket\""`.
@@ -56,9 +54,7 @@ enum MCPLanguageProse {
     /// For a field's `description`, where the value set reads better as a union
     /// than as a sentence. The quoting is part of the rendering so no call site
     /// has to escape it.
-    static var quotedTokenAlternatives: String {
-        AssignmentLanguage.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: " | ")
-    }
+    static var quotedTokenAlternatives: String { MCPEnumProse<AssignmentLanguage>.quotedUnion }
 
     /// `["a", "b", "c"]` → `"a, b or c"`; a one-element list is itself.
     ///

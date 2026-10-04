@@ -11,30 +11,28 @@ CSV Enrollment Result
 
 <section class="page-section">
     <h2>Results</h2>
-    <dl class="csv-result-list">
-        <dt class="csv-result-term">Enrolled (existing accounts)</dt>
-        <dd class="csv-result-def">#(enrolledCount)</dd>
-        <dt class="csv-result-term">Pre-enrolled (resolved on first login)</dt>
-        <dd class="csv-result-def">#(preEnrolledCount)</dd>
-        <dt class="csv-result-term">Already enrolled (skipped)</dt>
-        <dd class="csv-result-def">#(alreadyEnrolledCount)</dd>
-        <dt class="csv-result-term">Rejected (invalid format)</dt>
-        <dd class="csv-result-def">#(rejectedCount)</dd>
+    <div class="card section-gap">
+    <dl class="detail-grid">
+        <dt>Enrolled (existing accounts)</dt>
+        <dd>#(enrolledCount)</dd>
+        <dt>Pre-enrolled</dt>
+        <dd>#(preEnrolledCount)</dd>
+        <dt>Already enrolled (skipped)</dt>
+        <dd>#(alreadyEnrolledCount)</dd>
+        <dt>Rejected (invalid format)</dt>
+        <dd>#count(rejectedUsernames)</dd>
     </dl>
-    #if(hasPreEnrolled):
-    <p class="csv-result-pre-note">
-        Pre-enrolled usernames are recorded as pending; each one is automatically added to the roster the first time that student signs in.  No action needed from you.
-    </p>
+    </div>
+    #if(preEnrolledCount > 0):
+    <p class="section-note">Each pre-enrolled username joins the roster the first time that student signs in.</p>
     #endif
 </section>
 
-#if(hasRejected):
+#if(count(rejectedUsernames) > 0):
 <section class="page-section">
     <h2>Rejected usernames</h2>
-    <p class="csv-result-reject-note">
-        These rows in the CSV had a format we couldn't accept (empty, too long, or contained unsafe characters).  Fix the CSV and re-upload.
-    </p>
-    <ul class="csv-result-reject-list">
+    <p class="section-note">These usernames are too long or hold unsupported characters; correct them and submit again.</p>
+    <ul class="csv-rejected-list">
     #for(name in rejectedUsernames):
         <li><code>#(name)</code></li>
     #endfor
@@ -43,34 +41,7 @@ CSV Enrollment Result
 #endif
 
 <style>
-.csv-result-list {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: .4rem 1.5rem;
-    max-width: 480px;
-    margin: 0;
-}
-.csv-result-term {
-    font-weight: 600;
-}
-.csv-result-def {
-    margin: 0;
-}
-.csv-result-pre-note {
-    font-size: var(--text-base);
-    color: var(--gray-600);
-    margin-top: .75rem;
-    margin-bottom: 0;
-}
-.csv-result-reject-note {
-    font-size: var(--text-base);
-    color: var(--gray-600);
-    margin-top: 0;
-}
-.csv-result-reject-list {
-    margin: .25rem 0 0 1.25rem;
-    padding: 0;
-}
+.csv-rejected-list { margin-left: 1.25rem; }
 </style>
 #endexport
 #endextend

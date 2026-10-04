@@ -51,8 +51,10 @@ public func runAPIServer() async throws {
             // left it blocking, so an IdP that black-holes packets still held
             // startup for the connect timeout before the port was bound — and
             // the blue-green health gate has a deadline. Startup now waits on
-            // nothing outside this host.
-            Task {
+            // nothing outside this host. The fetch belongs to `backgroundWork`,
+            // which awaits it at shutdown, including the shutdown that follows
+            // a failed `execute()` (#1923).
+            await app.backgroundWork.start {
                 if await app.resolvedOIDCConfiguration() == nil {
                     app.logger.warning(
                         "Starting without SSO: OIDC discovery is unavailable. Other authentication and all non-SSO routes are unaffected; discovery retries when an SSO route is next used."

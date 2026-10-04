@@ -13,7 +13,7 @@
 ///   involved.
 ///
 /// Default when the field is absent from JSON: `.worker`.
-public enum GradingMode: String, Codable, Sendable, Equatable {
+public enum GradingMode: String, Codable, Sendable, Equatable, CaseIterable {
     case browser
     case worker
 }
@@ -42,7 +42,7 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 /// assignment's starter empty while drafting. Same principle as recording
 /// `language` explicitly. Default when the field is absent from JSON:
 /// `.notebook` (every manifest written before the field existed).
-public enum SubmissionMode: String, Codable, Sendable, Equatable {
+public enum SubmissionMode: String, Codable, Sendable, Equatable, CaseIterable {
     case notebook
     case uploadOnly
 }

@@ -416,7 +416,7 @@ private func gatherAuditEntries(
     }
     for entry in metadataCandidates {
         guard let id = entry.id, byID[id] == nil else { continue }
-        let details = decodeAuditMetadata(entry.metadata)
+        let details = entry.metadataDictionary
         if details["student_username"] == user.username
             || details["subject_username"] == user.username
             || details["subject_user_id"] == uuidString
@@ -430,7 +430,7 @@ private func gatherAuditEntries(
         .map { entry in
             let isActor = entry.actorUserID == userID
             let display = AuditActionDisplay.categoryLabel(forRaw: entry.action)
-            let details = decodeAuditMetadata(entry.metadata)
+            let details = entry.metadataDictionary
             return DataExportAuditEntry(
                 occurredAt: entry.createdAt,
                 action: entry.action,
@@ -444,11 +444,6 @@ private func gatherAuditEntries(
                 details: details.isEmpty ? nil : details
             )
         }
-}
-
-private func decodeAuditMetadata(_ json: String?) -> [String: String] {
-    guard let json, let data = json.data(using: .utf8) else { return [:] }
-    return ((try? JSONSerialization.jsonObject(with: data)) as? [String: String]) ?? [:]
 }
 
 // MARK: - Grading adjustments

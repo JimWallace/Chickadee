@@ -55,8 +55,8 @@ struct GetServerInfoTool: ContentTool {
         + "with, for each, its wire token and display name, its script/generated/source file "
         + "extensions, whether it has an in-browser editor kernel or is upload-only, whether "
         + "per-student expressions can be evaluated and by which interpreter, and exactly which "
-        + "pattern-family and notebook-check kinds it can render (with the reason for every "
-        + "exclusion). Read `languages` BEFORE authoring for an unfamiliar language: the kinds are "
+        + "pattern-family and notebook-check kinds it can render, and which options inside a kind it "
+        + "refuses (with the reason for every exclusion). Read `languages` BEFORE authoring for an unfamiliar language: the kinds are "
         + "NOT uniform across languages, and this is the same predicate that refuses a save, so it "
         + "will not disagree with what you are allowed to write. `activityKinds` lists every class-"
         + "activity kind (\(MCPActivityProse.tokens)) with what each does and how the class's results "
@@ -102,6 +102,13 @@ struct GetServerInfoTool: ContentTool {
                         "unsupportedNotebookCheckKinds": .object([
                             "type": .string("object"),
                             "description": .string("Kind → why this language cannot render it."),
+                        ]),
+                        "unsupportedFields": .object([
+                            "type": .string("object"),
+                            "description": .string(
+                                "An option refused inside a supported kind → why. Keyed "
+                                    + "\"<kind>.<field>\" for a notebook-check field, or "
+                                    + "\"<kind>.<field>=<value>\" for one value of a pattern-family field."),
                         ]),
                     ]),
                 ]),

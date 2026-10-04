@@ -9,6 +9,213 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.387] - 2026-10-03
+
+### Changed
+
+- **One driver for the in-browser kernel workers.** The eight kernel workers (grading and auto-compute, for Python, R, Lua and Octave) now share two drivers in `xeus-kernel-shared.js`, and each worker file is a short config. A grading worker now stops its setup when the cell that sets the assignment seed fails. Before, it ignored that failure and graded every test with the wrong per-student inputs. A new protocol test drives every worker file against a fake kernel (#1963).
+
+### Changed
+
+- **One generic rendering for every MCP enum list.** Each MCP prose module wrote its own slash list, comma list, "or" list and schema `enum` for its own enum, three parsers were written by hand, and four tool schemas typed their `enum` arrays and error messages by hand: assignment visibility, grading mode, submission mode and notebook-check column match. `MCPEnumProse<Value>` now renders all of these from `allCases`, and the existing modules keep their names and delegate to it. `GradingMode`, `SubmissionMode`, `ColumnMatchMode` and `ConditionMatch` are now `CaseIterable`. The admin `get_active_users_series` window and the achievement `match` field are derived too. A dump of the whole served catalog (both MCP surfaces, every description and schema, and the initialize instructions) is byte-identical before and after, except the window description. Rejected values now read "must be one of: …" everywhere. Closes #1938.
+
+
+## [0.5.386] - 2026-10-03
+
+### Fixed
+
+- **Python tests graded in the browser no longer see what the previous test left behind.** Each native test runs in a fresh `python3` process, but the browser grades every script of a submission in one xeus-python kernel, and unlike R, Lua and Octave it did not reset between scripts. A test that set a global, rebound a builtin, changed `os.environ` or changed the student's module could change the next test's verdict. The grader now records the kernel's state before the environment config and restores it before every script: globals and builtins go back, workspace modules (`test_runtime`, the student's files, helpers) are dropped and imported afresh, matplotlib figures are closed, and the environment config runs again. Library modules stay loaded, so a script pays about 15 to 30 ms for the reset rather than a second pandas import. The browser grading smoke and a new `python3` execution test both run a script that leaves state behind and one that checks for it. Closes #1959.
+
+
+## [0.5.385] - 2026-10-03
+
+### Changed
+
+- **The admin MCP dispatcher re-checks the admin role for every tool.** Eighteen of the nineteen admin diagnostic tools started with `requireAdminSubject`, and a new tool that forgot the line was protected only by the bearer layer. `DiagnosticTool` now has a `rechecksAdminRole` flag, true by default, and `AdminMCPDispatcher` runs the check before it calls the tool. `get_deployment_info` opts out so that it still answers when the database is down. The per-tool checks stay. A side effect: a non-admin who calls a tool with bad arguments now gets "not authorized" instead of "invalid arguments". Closes #1943.
+
+### Changed
+
+- **One change detector for the three CI jobs that skip when nothing they test changed.** `editor-smoke`, `codeql-js` and `browser-grading-smoke` each carried a copy of the same bash block, and the third had drifted: it did not fetch the base branch, and it skipped the browser grading smoke on an empty diff instead of running it. All three now use `.github/actions/changed-paths`, which takes a pattern and an optional exclude pattern and answers `relevant=true` for a non-PR event, a missing base commit or an empty diff. A change to the action runs all three jobs. Closes #1979.
+
+### Added
+
+- **A guard that every task the server starts has an owner.** A new test reads `Sources/APIServer` for a task created and not kept (a line that starts `Task {`, `Task(`, `Task.detached` or `_ = Task`) and fails unless an allowlist says why it is safe. The allowlist is empty. A task nobody keeps can outlive the application, and one that uses the database then queries a closed one (#1700). The last such task, the diagnostics prune at boot, now runs on `Application.backgroundWork`, which shutdown waits for. Closes #1948.
+
+
+## [0.5.384] - 2026-10-03
+
+### Fixed
+
+- **Two MCP tool descriptions name every case of their lists again.** `author_script` described seven of the ten pattern kinds, and its notebook-check summary left out two kinds. `get_health_alerts` named six of its nine rules, although it reports all nine. Both lists now come from the enums (`PatternKind`, `NotebookCheckKind` and `HealthRule`), so a new case appears without an edit. This is part 1 of #1935.
+
+
+## [0.5.383] - 2026-10-03
+
+### Fixed
+
+- **Work the server starts and does not wait for now ends before the database closes.** A "Sync now" or "Push all" grade push, the IdP token revocation at logout, and the OIDC discovery fetch at boot each ran on a bare `Task` that nothing kept, so it could outlive the application. The grade push uses the database, and a query after Fluent closes it fails and can trap the process. All three now run on `Application.backgroundWork`, which a shutdown handler cancels and awaits while the database is still open, as `DataExportManager` does for exports. Closes #1923.
+- **A manual BrightSpace sweep no longer runs beside the periodic one.** A sweep reads every pending row without claiming it, so two overlapping sweeps pushed the same grades twice, and the one that read a row first could push the old grade after the other pushed the new one, then clear the pending flag. "Sync now" now runs only on the instance that holds the periodic sweep's lease, and only when no other grade-sync sweep is running in the process. When it does not run, the next periodic sweep pushes the requeued rows within a minute.
+
+
+## [0.5.382] - 2026-10-03
+
+### Removed
+
+- **Ten stylesheet rules and one partial that nothing used.** The redesigns in #1611, #1613, #1622 and #2025 removed the last users of `.assignment-table`, `.content-lane`, `.content-item-title`, `.content-item-desc`, `.content-item-links`, `.content-item-actions`, `.section-action`, `.cell-subrow`, `.status-toggle-btn` and `.form-stack--wide`, and no template includes `_assignment-table-head.leaf`. They are deleted, and the undocumented-component ratchet goes from 246 to 236. The student dashboard's "(extension)" marker now uses `.card-meta`, as the staff view of a student's submissions does, so `.due-extension-note` is gone too. Closes #1970.
+
+
+## [0.5.381] - 2026-10-03
+
+### Fixed
+
+- **The CSV enrollment result page shows the rejected usernames again.** Its template read three computed properties (`rejectedCount`, `hasPreEnrolled`, `hasRejected`), and synthesized `Encodable` does not encode computed properties. So the Rejected row was empty, and the pre-enrolled note and the rejected-usernames section never showed. The template now derives them from the stored fields with the `count` tag (#1973).
+
+### Changed
+
+- **Three pages use the shared facts card, note and toolbar.** The CSV enrollment and bundle import result pages show their counts as a `.detail-grid` in a `.card`, with one-sentence `.section-note`s, and the import page's buttons sit in a `.toolbar`. The BrightSpace instructor page's two forms and two action rows use `.toolbar`. `PAGE_STYLE_BASELINE` drops from 397 to 351 (#1973).
+
+
+## [0.5.380] - 2026-10-03
+
+### Changed
+
+- **Notebook-check validation throws a typed error, one case per rule.** `NotebookCheckValidator` built nine `Abort(.unprocessableEntity, reason:)` values with hand-written sentences, and imported Vapor for nothing else. It now throws `AuthoringValidationError`, whose description is the same sentence word for word and which leaves a route or an MCP tool as the same 422. The file no longer imports Vapor and leaves the Utilities allowlist. This is the first slice of #1929.
+
+### Changed
+
+- **The OIDC configuration provider uses `Mutex`.** It held the last `NIOLockedValueBox` in the server after #1668. It now uses `Synchronization.Mutex` like the rest of the code base, and `import NIOConcurrencyHelpers` is gone (#1928, part 1).
+
+
+## [0.5.379] - 2026-10-03
+
+### Changed
+
+- **Grade fields and audit metadata are decoded once, with `Decodable`.** Four functions read a result's four grade fields from the collection JSON, each with its own `JSONSerialization` pass, and the legacy grade path parsed one blob three times. `CollectionGradeFields` now decodes the blob once, field by field, and `APIResult`'s column accessors use the same formulas. Three private decoders of `audit_log.metadata` became one `metadataDictionary` accessor on `APIAuditLogEntry` (#1931).
+
+### Fixed
+
+- **Two CI path filters named files that no longer exist.** `editor-smoke.yml` listed `assignment-validate.js` and `embedded-activity.js`, and only three of the eight grading and eval workers, so a change to a Lua or Octave worker, or to the shared grading scripts the notebook page loads, skipped the editor smoke. It now matches the per-language scripts with a pattern, as `browser-grading-smoke.yml` does. `grading-hang-probe.yml` filtered on `grading-worker.js`, which became one worker per language; it now uses globs (#1981).
+
+
+## [0.5.378] - 2026-10-03
+
+### Fixed
+
+- **The merge-queue runbook names the checks that run in the queue.** It listed eight separate `Swift Tests` jobs, where `swift-tests.yml` says to require only `swift-tests-gate`, and it listed `build-and-verify`, which never ran in the queue. `jupyterlite.yml` now runs on `merge_group` (its guards take under a second), and the runbook says to keep the two browser smoke gates required for pull requests only (#1980).
+
+### Changed
+
+- **The notebook page's notices use the shared components.** The browser and low-memory notices are now `.flash-warning` banners with a "Dismiss" action button, and each is one sentence. The "Editor didn't load" panel and the small-screen notice use `.standin-panel`. The panel now sits above the editor, so the slow-boot notice that reuses it is in view. The page no longer styles `js-` hooks, and the "Save to assignment" button has `type="button"`. `PAGE_STYLE_BASELINE` drops from 427 to 397 (#1976).
+
+
+## [0.5.377] - 2026-10-03
+
+### Fixed
+
+- **`check-leaf-semantics.sh` reads a whole tag parameter list.** Its regex stopped at the first `)`, so `#if(count(rows) > 0 && other.isEmpty)` passed, and the `count()` fix is what produces that shape. It now counts parenthesis depth. It also rejects Leaf tag syntax inside an HTML comment (an interpolation, or a structural tag name such as the extend), which Leaf runs as if it were in the markup (#1971).
+
+### Added
+
+- **Fixtures for five `check-styles.sh` rules that had none:** the page-style and JS-style ratchets, the cross-page duplicate selector rule, the per-datum inline property rule and the list-filter rule. The two ratchet fixtures add one line more than the baseline, so they hold whatever today's count is (#1971).
+
+
+## [0.5.376] - 2026-10-03
+
+### Added
+
+- **Every guard in `format-lint` now has a fixture, or a stated reason why it cannot.** Five guards ran with nothing to show they could fail: `no-language-defaults.sh`, `no-new-xctest.sh`, `check-maintenance-palette.sh`, `generate-js-constants.sh --check` and `ci-compose-env.sh --check`. Each now has a fixture. A fixture can give its guard arguments (`args=`), because the last two are a check only under `--check`. The new `scripts/check-guard-coverage.sh` fails when `format-lint`, or a guard it runs, runs a guard with no fixture and no entry in its exemption list, and when an exemption names a guard that no longer runs (#1983).
+
+### Changed
+
+- **A student's submissions page uses the shared row classes.** Its 20-line page `<style>` block re-created four global rules and ended in a stray `}`. It is gone: the section headings use `.assignment-section-heading`, the "+ extension" note uses `.card-meta`, and the row actions use `.row-actions-tight`. `.row-actions-tight` no longer sets `white-space: nowrap` or button padding, because the extension and grade-override popover forms open inside the cell and inherited both: their inputs ran past the panel edge. `PAGE_STYLE_BASELINE` drops to 427 and `CATALOG_BASELINE` to 246 (#1969).
+
+
+## [0.5.375] - 2026-10-03
+
+### Changed
+
+- **The instructor MCP tab shows its own page skeleton.** It is the exemplar for instructor-tabbed pages, but its only `.page-section` was the no-course empty state. The main content is now a `.page-section` too, as on the admin exemplar, and its two notes are one sentence each; the rest moved to `docs/mcp-2026-07-28-revision.md` (#1968).
+
+
+## [0.5.374] - 2026-10-03
+
+### Changed
+
+- **Four finished docs moved to `docs/archive/`.** `xeus-r-kernel-spike.md` (shipped), `mutation-testing-spike.md` (its verdict was reversed; CI runs a patched Muter), `audit-2026-07.md` (every item closed) and `adding-octave-then-cpp.md` (both languages shipped) each carry an archival banner that points at the live doc. Their inbound links are updated, and the R lab trial README no longer calls the xeus-r kernel a spike (#1987).
+
+### Changed
+
+- **`scripts/check-styles.sh` runs `check-leaf-semantics.sh`.** It was a separate CI step, so the one local entry point CLAUDE.md names missed it. `docs/ui-design.md` now lists it and `check-ui-vocabulary.sh` in "Definition of done", says the audit log's When cell leads with the absolute time (as it has since #1632), and gives four catalog entries their own bullets (#1978).
+
+
+## [0.5.373] - 2026-10-03
+
+### Fixed
+
+- **Class resolution no longer counts names that appear only in stylesheet comments.** Its single-line comment strip kept every line of a multi-line comment but the first, so 19 class names that appear only in prose counted as defined, among them the retired `admin-section`, and a template using one passed. The five style guards now share one multi-line stripper and one page `<style>` extractor in `scripts/lib/css.sh`, and a filter in `check-ui-vocabulary.sh` that matched nothing is gone. A new guard fixture proves the defect is caught (#1982).
+
+
+## [0.5.372] - 2026-10-03
+
+### Changed
+
+- **An MCP call looks up its user once.** `requireEligibleSubject` ran two queries, and one write call asked it up to three times (to authorize, then to attribute the retest and the re-validation). The answer is now kept on the request. Write authorization also checked a non-admin's enrollment twice; it now checks it once, and checks it separately only for an admin, whom `evaluateCourseWrite` exempts (#1942).
+
+### Removed
+
+- **`scripts/check-version.sh`.** No workflow, script or test ran it, and it called `rg`, which the CI images may not carry. `docs/release-process.md` said it enforced `VERSION == ChickadeeVersion.current`; it now says what does: `scripts/assemble-release.sh` writes both from one variable (#1984).
+
+### Changed
+
+- **Doc status lines and workflow comments match the code.** `docs/lti-1-3.md` said only slice 1 was built; `docs/architecture.md` described a Pyodide substrate and `Public/pyodide/`; `docs/notebook-editor-smoke-test.md` called the smoke test advisory and path-filtered; `docs/personalization-eval-runtime.md` named two interpreters; `jupyterlite.yml` said CI cannot rebuild the kernels; `editor-smoke.yml` named the Pyodide kernel; `docker-build.yml` claimed the same cache scheme as `swift-tests.yml`; and `docs/achievements-unification.md` said "in progress". Each now says what is true (#1986).
+
+
+## [0.5.371] - 2026-10-03
+
+### Changed
+
+- **One retry for a transient SQLite lock.** Worker claims and the attempt-number transaction had two retry loops with two different "is this a lock?" classifiers, so a lock one of them retried could fail at once in the other. `withTransientDatabaseLockRetry` (in `Helpers/TransientDatabaseLockRetry.swift`) is now the only one: each caller keeps its own attempt count and backoff, and the classifier accepts every lock either old one did (#1926).
+
+
+## [0.5.370] - 2026-10-03
+
+### Changed
+
+- **`OperationalDiagnosticsService` is checked by the compiler.** Its four stored properties are constants (three actors and a `Sendable` struct), so it no longer needs `@unchecked Sendable` (#1927).
+
+
+## [0.5.369] - 2026-10-03
+
+### Fixed
+
+- **Periodic sweeps finish before the database closes at shutdown.** `PeriodicSweepMonitor.stop()` cancelled its loop and returned at once, and it kept no handle on the boot sweep. A sweep that was running at shutdown (fifteen monitors use the type, and every blue-green deploy stops the old colour) kept querying `application.db` while Fluent closed it. `stop()` now cancels both tasks and waits for them, through `shutdownAsync`, and the BrightSpace and LTI grade-push sweeps stop between rows. The monitor is now plainly `Sendable` (#1922).
+
+
+## [0.5.368] - 2026-10-03
+
+### Fixed
+
+- **Every MCP tool reports a refusal's reason.** A refusal from a shared web path (a `WebAssignmentError` or a Vapor `Abort` with a 4xx status) reached the agent with its reason only from the tools that mapped it themselves. `set_grading_mode`, `set_time_limit` and `set_minimum_runner_version` did not, so the agent saw an opaque internal error. The tool erasure now maps every 4xx refusal for every tool; a 5xx stays opaque to the agent and is logged (#1940).
+
+
+## [0.5.367] - 2026-10-03
+
+### Changed
+
+- **Every MCP time-limit override field states its bounds.** The seven `timeLimitSeconds` and `defaultTimeLimitSeconds` schema properties now carry `minimum: 0` and `maximum: 600`, taken from the one range constant, and no description types the range by hand. The five tools that take an override parse it with one function, `parseTimeLimitOverride`, where omitted leaves it unchanged, 0 clears it, and any other value must be in range (#1941).
+
+
+## [0.5.366] - 2026-10-03
+
+### Changed
+
+- **The MCP prose derives every kind list.** The ten notebook-check kinds in the `initialize` instructions and the `author_notebook_check` description, and the kinds that accept `expectedVarRef` in both pattern-family tools, were typed by hand. They now come from `NotebookCheckKind.allCases` and from the predicate the save refuses with, and the instructions describe each check kind in a phrase (#1936).
+
+### Changed
+
+- **`get_server_info` reports the options a language refuses inside a kind.** Each language now carries `unsupportedFields`, for example Lua's `cell_contains.regex` and `program_io.ioComparison=regex`, with the reason for each. Before, an agent learned of these two refusals only when a save failed. The `program_io` regex refusal now comes from one predicate, `programIOComparisonUnsupportedReason`, which the save, the schema prose and the payload all read (#1937).
+
+
 ## [0.5.365] - 2026-10-03
 
 ### Fixed

@@ -231,16 +231,22 @@ the equivalent, because getting it wrong fails at boot with an opaque error.
 
 ### 6. Write the worker
 
-`Public/<lang>-grading-worker.js` — about 150 lines, mostly protocol. Copy
-`r-grading-worker.js`; it is the shorter of the two. You supply:
+`Public/<lang>-grading-worker.js` is a config handed to `serveGradingWorker` in
+`xeus-kernel-shared.js` (#1963). The driver owns the message protocol, the boot,
+the workspace mount, the order of the setup cells, the per-script retry and the
+error replies. Copy `lua-grading-worker.js`. You supply:
 
-- `boot(spec, { seeds })`
+- the kernel spec (its `bootSeeds`, when present, boot a subset)
+- the setup cells: an optional harness, the seed cell, and optional workspace
+  cells. The driver checks every one, so a cell that fails fails the init.
+- the run cell, its nonce and its parser
 - the missing-package regex, and where in the reply to look for it
 - an optional post-install step (Python needs `importlib.invalidate_caches()`;
   R needs nothing)
 
 The retry loop itself is `runInstallingMissingPackages` in the shared substrate.
-Do not reimplement it.
+Do not reimplement it. `kernel-worker-drivers.test.mjs` drives every worker
+file against a fake kernel; add the new worker to its table.
 
 ### 7. Route to it
 
@@ -927,11 +933,13 @@ editor spawn a 404 and auto-compute stop with no message at all.
    trap gets pinned (see the table below).
 2. **`<lang>-eval-shared.js`** — the snippets. `loadCell`, `runExpression`,
    `callFunction`. Arguments are rendered here, by the renderer above.
-3. **`<lang>-eval-worker.js`** — mirrors `python-eval-worker.js` exactly; the
-   message protocol is identical across languages, so the editor's client code
-   does not change. Every message may carry `runtimeSource`, seeded from
+3. **`<lang>-eval-worker.js`** — a config handed to `serveEvalWorker` in
+   `xeus-kernel-shared.js`; copy `lua-eval-worker.js`. The message protocol is
+   the driver's, so the editor's client code does not change. Every message may
+   carry `runtimeSource`, seeded from
    `AssignmentLanguage.autoComputeRuntimeSource` so the serializer that reports
-   a value is the one the personalization driver uses rather than a copy.
+   a value is the one the personalization driver uses rather than a copy; the
+   config's `bootCell` defines it once.
 4. **A smoke row** `{ language: <x>, mode: eval }`, and only then the
    descriptor's `.inPageKernel(workerScript:)`.
 

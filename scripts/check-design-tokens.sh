@@ -49,25 +49,8 @@ SPACING_STEPS=" -.25rem -.75rem .1rem .15rem .2rem .25rem .3rem .35rem .4rem .45
 
 # Strip /* ... */ comments (multi-line aware) so commented-out examples and
 # prose mentioning a hex value don't false-positive.
-strip_comments() {
-  awk '
-  {
-    line = $0; out = ""
-    while (length(line) > 0) {
-      if (incomment) {
-        p = index(line, "*/")
-        if (p == 0) { line = ""; break }
-        line = substr(line, p + 2); incomment = 0
-      } else {
-        p = index(line, "/*")
-        if (p == 0) { out = out line; break }
-        out = out substr(line, 1, p - 1)
-        line = substr(line, p + 2); incomment = 1
-      }
-    }
-    print out
-  }'
-}
+# shellcheck source=lib/css.sh
+. "scripts/lib/css.sh"
 
 # Emit "<label>:<text>" for each declaration of the given property found in
 # comment-stripped CSS on stdin.
@@ -156,11 +139,11 @@ check_source() {
 # check_source must run in THIS shell (not a pipeline subshell) so the
 # accumulator variables survive — hence process substitution, not a pipe.
 for f in "${css_files[@]}"; do
-  check_source "$f" < <(strip_comments < "$f")
+  check_source "$f" < <(strip_css_comments "$f")
 done
 
 for f in "${views[@]}"; do
-  check_source "$f" < <(sed -n '/<style>/,/<\/style>/p' "$f" | strip_comments)
+  check_source "$f" < <(page_style_blocks "$f" | strip_css_comments)
 done
 
 if [ -n "$hex_violations" ]; then

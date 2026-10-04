@@ -74,6 +74,30 @@ func patternKindHandler(for kind: PatternKind) -> any PatternKindHandler {
 
 // MARK: - programIO
 
+/// Why `language` cannot use `comparison` on a `programIO` family, or nil when
+/// it can.
+///
+/// The pattern-family sibling of `notebookCheckFieldUnsupportedReason`. The
+/// save-time refusal and `get_server_info` both read it, so an agent is told
+/// the same thing before it writes as when it is refused (#1937). Exhaustive,
+/// so a new language must answer it.
+func programIOComparisonUnsupportedReason(
+    _ comparison: ProgramIOComparison, language: AssignmentLanguage
+) -> String? {
+    guard comparison == .regex else { return nil }
+    switch language {
+    case .python, .r, .octave, .cpp, .racket, .java:
+        // Each renderer uses a PCRE-like engine: Python `re`, R `grepl(perl =
+        // TRUE)`, Octave `regexp`, C++ `std::regex`, Racket `pregexp`, Java
+        // `java.util.regex`.
+        return nil
+    case .lua:
+        // The `cellContains` rule applies for the same reason.
+        return "Lua patterns are not regular expressions, so an authored pattern would quietly "
+            + "match the wrong thing. Use exact or included."
+    }
+}
+
 /// Runs the submission as a program with each case's stdin and compares its
 /// stdout. See `PatternKind.programIO`.
 struct ProgramIOKind: PatternKindHandler {
@@ -117,18 +141,14 @@ struct ProgramIOKind: PatternKindHandler {
                     "Pattern family '\(family.id)' (program_io): case '\(c.key)' expected must not be "
                     + "empty for the \(comparison.rawValue) comparison — it would match any output")
         }
+        if let reason = programIOComparisonUnsupportedReason(comparison, language: language) {
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Pattern family '\(family.id)' (program_io): the \(comparison.rawValue) comparison "
+                    + "is not available on a \(language.displayName) assignment — \(reason)")
+        }
         if comparison == .regex {
-            // Lua patterns are a different language from PCRE; the
-            // `cellContains` rule applies here for the same reason.
-            guard language != .lua else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)' (program_io): the regex comparison is not "
-                        + "available on a Lua assignment — Lua patterns are not regular expressions, "
-                        + "so an authored pattern would quietly match the wrong thing. Use exact or "
-                        + "included.")
-            }
             // A cheap compile check; each language's own engine has the last
             // word, but an unbalanced group is a typo in every dialect.
             guard (try? NSRegularExpression(pattern: expected)) != nil else {

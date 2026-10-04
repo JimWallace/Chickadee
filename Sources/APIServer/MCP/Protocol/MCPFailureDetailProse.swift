@@ -12,14 +12,10 @@ import Core
 enum MCPFailureDetailProse {
 
     /// `"full/actualOnly/verdictOnly"` for an inline parenthetical.
-    static var slashAlternatives: String {
-        FailureDetail.allCases.map(\.rawValue).joined(separator: "/")
-    }
+    static var slashAlternatives: String { MCPEnumProse<FailureDetail>.slashAlternatives }
 
     /// `"full, actualOnly, verdictOnly"` for a "must be one of" error.
-    static var oneOfList: String {
-        FailureDetail.allCases.map(\.rawValue).joined(separator: ", ")
-    }
+    static var oneOfList: String { MCPEnumProse<FailureDetail>.oneOfList }
 
     /// Each level with its one-line meaning, for a tool description:
     /// `"full" (…); "actualOnly" (…); "verdictOnly" (…)`.
@@ -29,11 +25,7 @@ enum MCPFailureDetailProse {
 
     /// The JSON-schema property every tool that takes a level shares.
     static func schema(_ description: String) -> JSONValue {
-        .object([
-            "type": .string("string"),
-            "enum": .array(FailureDetail.allCases.map { .string($0.rawValue) }),
-            "description": .string(description),
-        ])
+        MCPEnumProse<FailureDetail>.stringSchema(description)
     }
 
     /// Parses an optional wire value: absent or empty → nil (no value, or
@@ -45,10 +37,7 @@ enum MCPFailureDetailProse {
         guard let raw else { return .none }
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return .some(nil) }
-        guard let detail = FailureDetail(rawValue: trimmed) else {
-            throw MCPToolError.invalidArguments(
-                tool: tool, detail: "\(field) must be one of: \(oneOfList).")
-        }
+        let detail = try MCPEnumProse<FailureDetail>.parse(trimmed, tool: tool, field: field)
         return .some(detail == .full ? nil : detail)
     }
 

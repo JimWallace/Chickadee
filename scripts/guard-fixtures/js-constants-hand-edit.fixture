@@ -1,0 +1,10 @@
+# A machine writes the language constants in browser-runner.js from their
+# Swift declarations. A hand edit inside a generated block is drift.
+guard="scripts/generate-js-constants.sh"
+args="--check"
+files="Public/browser-runner.js"
+description="a generated block in browser-runner.js with its line removed"
+expect="language constants are stale"
+apply() {
+    sed -i '/CHICKADEE_GENERATED:R_KERNEL_NAMES:BEGIN/{n;d}' Public/browser-runner.js
+}

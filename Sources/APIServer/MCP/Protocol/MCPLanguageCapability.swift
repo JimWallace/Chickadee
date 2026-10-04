@@ -82,7 +82,7 @@ struct MCPLanguageCapability: Encodable, Sendable, Equatable {
 
     /// Pattern-family kinds this language can render, sorted.
     ///
-    /// Every language currently renders all eight — `performanceThreshold` on
+    /// Every language currently renders every kind — `performanceThreshold` on
     /// C++ is supportable precisely BECAUSE it is native-only — so there is no
     /// per-language predicate to consult and this is `PatternKind.allCases`.
     /// It is reported anyway, and as a derived list rather than a documented
@@ -98,6 +98,17 @@ struct MCPLanguageCapability: Encodable, Sendable, Equatable {
     /// is told here and what it is told when it tries cannot disagree.
     let supportedNotebookCheckKinds: [String]
     let unsupportedNotebookCheckKinds: [String: String]
+
+    /// Options this language refuses inside a kind it otherwise supports, with
+    /// the reason for each. A notebook-check field is keyed `"<kind>.<field>"`
+    /// (Lua: `"cell_contains.regex"`); one value of a pattern-family field is
+    /// keyed `"<kind>.<field>=<value>"` (Lua: `"program_io.ioComparison=regex"`).
+    ///
+    /// Both come from the predicates the save-time refusals call —
+    /// `notebookCheckFieldUnsupportedReason` and
+    /// `programIOComparisonUnsupportedReason` — so a refusal an agent can hit
+    /// is one it could have read first (#1937).
+    let unsupportedFields: [String: String]
 
     init(_ language: AssignmentLanguage) {
         let descriptor = language.descriptor
@@ -130,6 +141,21 @@ struct MCPLanguageCapability: Encodable, Sendable, Equatable {
         }
         self.supportedNotebookCheckKinds = supported.sorted()
         self.unsupportedNotebookCheckKinds = unsupported
+
+        var fields: [String: String] = [:]
+        for kind in NotebookCheckKind.allCases where unsupported[kind.rawValue] == nil {
+            for field in formFields(for: kind) {
+                if let reason = notebookCheckFieldUnsupportedReason(field.name, kind: kind, language: language) {
+                    fields["\(kind.rawValue).\(field.name)"] = reason
+                }
+            }
+        }
+        for comparison in ProgramIOComparison.allCases {
+            if let reason = programIOComparisonUnsupportedReason(comparison, language: language) {
+                fields["\(PatternKind.programIO.rawValue).ioComparison=\(comparison.rawValue)"] = reason
+            }
+        }
+        self.unsupportedFields = fields
     }
 
     /// Every language the server has, in `allCases` order.

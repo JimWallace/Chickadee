@@ -20,7 +20,7 @@
 #if(hasSections):
 #for(section in sections):
 #if(count(section.rows) > 0):
-<h2 class="section-group-heading">#(section.name)</h2>
+<h2 class="assignment-section-heading">#(section.name)</h2>
 #extend("_student-assignment-rows", section)
 #endif
 #endfor
@@ -28,33 +28,11 @@
 
 #if(hasUngrouped):
 #if(hasSections):
-<h2 class="section-group-heading">Ungrouped</h2>
+<h2 class="assignment-section-heading">Ungrouped</h2>
 #endif
 #extend("_student-assignment-rows", ungroupedRowsContext)
 #endif
 
 #endif
-<style>
-.section-group-heading {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    margin-top: 1.5rem;
-    margin-bottom: .4rem;
-}
-.submissions-table {
-    margin-bottom: .5rem;
-}
-.extension-note {
-    font-size: var(--text-xs);
-    color: var(--gray-600);
-}
-.student-row-actions {
-    display: flex;
-    gap: .3rem;
-    flex-wrap: nowrap;
-    align-items: center;
-}
-}
-</style>
 #endexport
 #endextend

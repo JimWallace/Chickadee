@@ -240,10 +240,7 @@ struct SubmissionDiagnosticsContext {
     let assignmentID: UUID?
 }
 
-final class OperationalDiagnosticsService: @unchecked Sendable {
-    // @unchecked Sendable: all stored properties are immutable (`let`); the
-    // mutable state lives behind the internally-synchronized
-    // DiagnosticsMaintenanceStore / CompatibilityCounterStore collaborators.
+final class OperationalDiagnosticsService: Sendable {
     let configuration: DiagnosticsConfiguration
     let maintenance = DiagnosticsMaintenanceStore()
     let compatibilityCounters = CompatibilityCounterStore()
@@ -325,8 +322,12 @@ struct OperationalDiagnosticsServiceKey: StorageKey {
 }
 
 struct ObservabilityLifecycleHandler: LifecycleHandler {
-    func didBoot(_ application: Application) throws {
-        Task {
+    /// The boot-time prune runs in the background, so boot does not wait for
+    /// it. It belongs to `backgroundWork`, which awaits it at shutdown: it used
+    /// to be a bare `Task` on `application.db` that a quick shutdown could
+    /// outlive (#1948).
+    func didBootAsync(_ application: Application) async throws {
+        await application.backgroundWork.start {
             await application.diagnostics.pruneNow(on: application.db, logger: application.logger)
         }
     }

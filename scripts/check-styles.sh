@@ -21,6 +21,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# shellcheck source=lib/css.sh
+. "scripts/lib/css.sh"
 
 views=(Resources/Views/*.leaf)
 status=0
@@ -287,7 +289,7 @@ ALLOW_GLOBAL_OVERRIDE="^\.main$"
 extract_selectors() {
   # `|| true` on the greps so no-match (e.g. a file with no <style> block)
   # doesn't trip pipefail.
-  sed -E 's#/\*.*\*/##g' \
+  strip_css_comments \
     | { grep '{' || true; } \
     | sed -E 's/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
     | { grep -vE '^$|^@|^/\*' || true; }
@@ -299,7 +301,7 @@ global_sel="$(extract_selectors < Public/styles.css | sort -u)"
 pairs="$(
   for f in "${views[@]}"; do
     base="$(basename "$f")"
-    sed -n '/<style>/,/<\/style>/p' "$f" | extract_selectors \
+    page_style_blocks "$f" | extract_selectors \
       | while IFS= read -r sel; do [ -n "$sel" ] && printf '%s\t%s\n' "$sel" "$base"; done
   done | sort -u
 )"
@@ -345,7 +347,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=447
+PAGE_STYLE_BASELINE=351
 page_style_count="$(
   awk '
     FNR==1 { inblock = 0 }
@@ -518,6 +520,12 @@ scripts/check-class-resolution.sh || status=1
 # plus the two things nothing else looks at: the affordances that tell a user
 # an element is interactive, and how much prose a tooltip carries.
 scripts/check-ui-vocabulary.sh || status=1
+
+# ── 7. Leaf idioms that render fine and resolve wrong ───────────────────────
+# A Swift property on a collection (`rows.isEmpty`) and a `#//` line comment
+# both render without an error, so no render test sees them. CI ran this as
+# its own step, so this, the one local entry point, missed it (#1978).
+scripts/check-leaf-semantics.sh || status=1
 
 if [ "$status" -eq 0 ]; then
   echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors; ratchets within baseline)"

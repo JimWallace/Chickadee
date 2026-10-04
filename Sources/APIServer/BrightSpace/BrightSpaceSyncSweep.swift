@@ -134,6 +134,9 @@ struct GradeSyncSweep {
         targets += try await pendingOverrideTargets(coveredKeys: coveredKeys, cutoff: cutoff)
 
         for target in targets {
+            // Stop between pushes at shutdown; an unsent row stays pending
+            // for the next sweep (#1922).
+            try Task.checkCancellation()
             let syncRows = target.syncRows
             do {
                 // Explicitly excluded from LEARN sync (instructor chose "Do not
@@ -682,17 +685,24 @@ extension Application {
             ) { application in
                 guard let app = application.brightSpaceAppCredentials else { return }
                 let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
-                let n = try await sweepBrightSpaceGradeSync(
-                    on: application.db,
-                    debounceSecs: debounce,
-                    resolveClient: { course in
-                        try await application.brightSpaceClient(forCourse: course)
-                    },
-                    logger: application.logger,
-                    application: application
-                )
-                if n > 0 {
-                    application.logger.info("BrightSpace grade sync: pushed \(n) grade(s)")
+                let pushed = try await application.brightSpaceGradeSyncSlot.runIfFree {
+                    try await sweepBrightSpaceGradeSync(
+                        on: application.db,
+                        debounceSecs: debounce,
+                        resolveClient: { course in
+                            try await application.brightSpaceClient(forCourse: course)
+                        },
+                        logger: application.logger,
+                        application: application
+                    )
+                }
+                guard let pushed else {
+                    application.logger.debug(
+                        "BrightSpace grade sync skipped: a manual sweep is running in this process")
+                    return
+                }
+                if pushed > 0 {
+                    application.logger.info("BrightSpace grade sync: pushed \(pushed) grade(s)")
                 }
             }
         }

@@ -1,8 +1,12 @@
 # Adding Octave, then C++: two briefs
 
+> **Archived 2026-10-03.** Both languages shipped. The live runbook is
+> [adding-a-xeus-kernel.md](../adding-a-xeus-kernel.md), and C++ is in
+> [cpp-support.md](../cpp-support.md).
+
 *Written 2026-08-07, after the Lua audit series (#1283–#1287). Hand either half
 to an agent as its task. Both assume
-[docs/adding-a-xeus-kernel.md](adding-a-xeus-kernel.md) is read first — that
+[docs/adding-a-xeus-kernel.md](../adding-a-xeus-kernel.md) is read first — that
 runbook **is** the plan; this document only carries what is specific to these two
 languages, and what the runbook cannot know about them.*
 
@@ -235,7 +239,7 @@ lessons did not generalise to Lua.
 
 ## Done test
 
-The checklist at the end of [docs/adding-a-xeus-kernel.md](adding-a-xeus-kernel.md).
+The checklist at the end of [docs/adding-a-xeus-kernel.md](../adding-a-xeus-kernel.md).
 In particular: **execute** the generated scripts against a correct submission
 *and* a wrong one, and confirm the executed half of the conformance matrix did
 not skip. A parse-only check passes on code that cannot grade — a `#`-commented

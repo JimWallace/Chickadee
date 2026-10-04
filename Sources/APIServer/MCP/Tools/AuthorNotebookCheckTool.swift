@@ -139,13 +139,12 @@ struct AuthorNotebookCheckTool: ContentTool {
         + "Create or replace a notebook check on an assignment, by public ID — a single-shot assertion "
         + "about a student's notebook (e.g. is `df` a (rows, cols) DataFrame, did the notebook produce "
         + ">= N figures, does the source use a list comprehension). Provide a stable `id` (reusing an "
-        + "existing id replaces that check), a `kind` (data_frame_shape / data_frame_columns / "
-        + "data_frame_equality / series_equality / numeric_array_close / figure_count / cell_contains / "
-        + "function_exists / variable_exists / ast_structure), and that kind's config fields — e.g. "
+        + "existing id replaces that check), a `kind` (\(MCPNotebookCheckKindProse.slashSeparated)), "
+        + "and that kind's config fields — e.g. "
         + "data_frame_shape needs variable + expectedRows + expectedCols; figure_count needs minFigures; "
         + "cell_contains needs containsText; ast_structure needs requiredConstructs. Optional tier "
         + "(\(MCPTierProse.slashAlternatives), default public), points, dependsOn, sectionID, a \"💡 "
-        + "Hint\" shown on failure, a per-test timeLimitSeconds (1–600s, overriding the assignment "
+        + "Hint\" shown on failure, a per-test timeLimitSeconds (\(mcpTimeLimitRangeText)s, overriding the assignment "
         + "default; 0 inherits it), and a failureDetail (\(MCPFailureDetailProse.slashAlternatives) — how "
         + "much of a failing check the student sees). Saving renders the check's script, validates it synchronously "
         + "(rejecting missing/!malformed kind fields), closes the assignment if it was open (reported as "
@@ -183,12 +182,9 @@ struct AuthorNotebookCheckTool: ContentTool {
                 "type": .string("string"),
                 "description": .string("\"💡 Hint\" shown to the student only when this check fails."),
             ]),
-            "timeLimitSeconds": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Per-test execution time limit (seconds, 1–600) for this check, overriding the "
-                        + "assignment default. Omit / 0 to inherit the default."),
-            ]),
+            "timeLimitSeconds": MCPSchema.timeLimit(
+                "Per-test execution time limit (seconds, \(mcpTimeLimitRangeText)) for this check, "
+                    + "overriding the assignment default. Omit / 0 to inherit the default."),
             "failureDetail": MCPFailureDetailProse.schema(MCPFailureDetailProse.fieldDescription),
             "variable": .object([
                 "type": .string("string"),
@@ -207,7 +203,7 @@ struct AuthorNotebookCheckTool: ContentTool {
                 "description": .string("data_frame_columns: the expected column names."),
             ]),
             "columnMatch": .object([
-                "type": .string("string"), "enum": .array([.string("exact"), .string("superset")]),
+                "type": .string("string"), "enum": MCPEnumProse<ColumnMatchMode>.jsonEnum,
                 "description": .string("data_frame_columns: match mode (default exact)."),
             ]),
             "expectedCSV": .object([
@@ -350,27 +346,12 @@ struct AuthorNotebookCheckTool: ContentTool {
 
     private static func parseTier(_ raw: String?) throws -> TestTier {
         guard let raw else { return .pub }
-        guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: \(MCPTierProse.oneOfList).")
-        }
-        return tier
+        return try MCPEnumProse<TestTier>.parse(raw, tool: name, field: "tier")
     }
 
     private static func parseColumnMatch(_ raw: String?) throws -> ColumnMatchMode? {
         guard let raw, !raw.isEmpty else { return nil }
-        guard let mode = ColumnMatchMode(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "columnMatch must be \"exact\" or \"superset\".")
-        }
-        return mode
-    }
-
-    /// Normalizes the check-level time limit: nil/0 → nil (inherit the default),
-    /// any non-zero value bound-checked to `1...600`.
-    private static func normalizedTimeLimit(_ raw: Int?) throws -> Int? {
-        guard let raw, raw != 0 else { return nil }
-        return try validateTimeLimitSeconds(raw, tool: name, field: "timeLimitSeconds")
+        return try MCPEnumProse<ColumnMatchMode>.parse(raw, tool: name, field: "columnMatch")
     }
 
     /// Builds the `NotebookCheck` from the input; per-kind field legality is left
@@ -389,7 +370,9 @@ struct AuthorNotebookCheckTool: ContentTool {
             dependsOn: input.dependsOn ?? [],
             sectionID: sectionID,
             hint: input.hint.flatMap { $0.isEmpty ? nil : $0 },
-            timeLimitSeconds: try normalizedTimeLimit(input.timeLimitSeconds),
+            timeLimitSeconds: try parseTimeLimitOverride(
+                input.timeLimitSeconds, tool: name, field: "timeLimitSeconds"
+            ).applied(to: nil),
             failureDetail: try MCPFailureDetailProse.parseValue(
                 input.failureDetail, tool: name, field: "failureDetail"),
             variable: input.variable,

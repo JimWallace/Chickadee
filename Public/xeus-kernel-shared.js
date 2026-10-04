@@ -1,16 +1,17 @@
 // Public/xeus-kernel-shared.js
 //
-// Booting a vendored xeus kernel in a plain Web Worker, and driving one cell
-// through it.  Substrate mechanics only: nothing here knows what grading is,
-// what a test script is, or what an exit code means.  The language-specific
-// halves live beside it —
+// Booting a vendored xeus kernel in a plain Web Worker, driving one cell
+// through it, and the two message protocols every kernel worker speaks.
+// Nothing here knows a language, what a test script is, or what an exit code
+// means.  The language-specific halves live beside it —
 //
-//   Public/r-grading-shared.js       — the R wrapper + its reply parsing
-//   Public/python-grading-shared.js  — the Python cell + its reply parsing
+//   Public/<language>-grading-shared.js  — the grading wrapper + its reply parsing
+//   Public/<language>-eval-shared.js     — the auto-compute snippets
 //
-// and the two thin workers (`r-grading-worker.js`, `python-grading-worker.js`)
-// wire one to the other.  RunnerCore (Swift/wasm) still owns the suite loop and
-// the interpretation of a raw ScriptOutput into a TestOutcome for both, so the
+// and each worker file (`<language>-grading-worker.js`,
+// `<language>-eval-worker.js`) is a config handed to `serveGradingWorker` or
+// `serveEvalWorker` below.  RunnerCore (Swift/wasm) still owns the suite loop
+// and the interpretation of a raw ScriptOutput into a TestOutcome, so the
 // native and browser graders cannot drift.
 //
 // Why we boot the kernel ourselves rather than reusing JupyterLite's: the
@@ -390,7 +391,298 @@
         return { stdout: stdout, stderr: stderr, failure: failure };
     }
 
-    root.ChickadeeXeusKernel = {
+    // -----------------------------------------------------------------------
+    // The two worker protocols.
+    //
+    // The four grading workers and the four auto-compute workers each carried
+    // their own copy of the message dispatch, the boot sequence and the error
+    // handling (#1963). The copies had drifted in one way that mattered: no
+    // grading worker checked its seed cell, so a seed that failed to set graded
+    // every test with the wrong per-student inputs. A worker is now a config:
+    // the cells only its language can write, and its labels.
+    //
+    // Both drivers call the kernel through the exported object, never through
+    // the functions above, so a test can replace `boot`, `execute`,
+    // `mountWorkspace` and `runInstallingMissingPackages` on it with a fake.
+
+    // Install `handlers` as the worker's message handler. A handler takes the
+    // message and returns the fields of its success reply; a throw becomes the
+    // error reply. Every reply carries the request's `id`.
+    function serve(handlers) {
+        root.onmessage = async function (e) {
+            var msg = e.data || {};
+            var id = msg.id;
+            try {
+                if (!Object.prototype.hasOwnProperty.call(handlers, msg.type)) {
+                    api.reply({ id: id, ok: false, error: 'unknown message type: ' + msg.type });
+                    return;
+                }
+                var fields = await handlers[msg.type](msg);
+                api.reply(Object.assign({ id: id, ok: true }, fields));
+            } catch (err) {
+                api.reply({
+                    id: id, ok: false,
+                    error: (err && err.message) ? String(err.message) : String(err),
+                });
+            }
+        };
+    }
+
+    // Run `cells` in order and stop at the first that fails. A setup cell that
+    // fails leaves every later script graded against the wrong state, so it
+    // fails the whole init rather than one test.
+    async function runSetupCells(cells) {
+        for (var i = 0; i < cells.length; i++) {
+            var reply = await api.execute(cells[i].source);
+            if (reply.failure) throw new Error(cells[i].what + ': ' + reply.failure);
+        }
+    }
+
+    // Grade one script and return RAW output { exitCode, stdout, stderr }. No
+    // interpretation happens here: RunnerCore maps the exit code to a status
+    // and reads the last stdout line for the shortResult, byte-for-byte as it
+    // does for the native subprocess.
+    async function gradeScript(config, workDir, scriptName) {
+        var parsed = null;
+        var reply = await api.runInstallingMissingPackages(
+            async function () {
+                // Inside the attempt, so a re-run after an on-demand install
+                // starts from the same state as the first run.
+                parsed = null;
+                if (config.beforeEachScript) {
+                    var before = await api.execute(config.beforeEachScript(workDir));
+                    if (before.failure) return before;
+                }
+                var nonce = config.makeNonce();
+                var attempt = await api.execute(config.runScript(scriptName, nonce));
+                parsed = config.parseRunOutput(attempt.stdout, nonce);
+                return attempt;
+            },
+            {
+                pattern: config.missingPackage.pattern,
+                textOf: function (result) { return config.missingPackage.textOf(result, parsed); },
+                afterInstall: config.missingPackage.afterInstall,
+                onInstall: function (added) {
+                    api.reply({
+                        type: 'phase',
+                        phase: config.phasePrefix + '_package_installed',
+                        packages: added.join(','),
+                    });
+                },
+            });
+        if (parsed) {
+            // A wrapper that captures stderr itself reports it. Otherwise the
+            // kernel's stderr stream is the script's.
+            return {
+                exitCode: parsed.exitCode,
+                stdout: parsed.stdout,
+                stderr: parsed.stderr !== undefined ? parsed.stderr : (reply.stderr || ''),
+            };
+        }
+        // The wrapper never reported. Surface it as a substrate error (exit 2)
+        // with whatever the kernel did say, rather than inventing a pass/fail.
+        // This is also the path a kernel killed mid-cell takes.
+        var detail = reply.failure || (reply.stderr || '').trim()
+            || 'the ' + config.label + ' kernel produced no result for this test';
+        return {
+            exitCode: 2,
+            stdout: config.label + ' grading failed: ' + detail,
+            stderr: reply.stderr || '',
+        };
+    }
+
+    // The browser-grading protocol. Every reply carries the originating `id`:
+    //   { id, type: 'init', files: { <relativePath>: <string | number[]> }, seed }
+    //     → boot the kernel, materialize the file map into a fresh work dir and
+    //       chdir there, then run the setup cells: the harness, the line that
+    //       sets CHICKADEE_ASSIGNMENT_SEED when `seed` is non-null, and the
+    //       workspace cells
+    //     → posts back { id, ok: true }  (or { id, ok: false, error })
+    //   { id, type: 'run', script: <name>, limit: <seconds> }
+    //     → grade one script, capturing its stdout/stderr and exit code
+    //     → posts back { id, ok: true, result: { exitCode, stdout, stderr } }
+    //                or { id, ok: false, error }
+    // Breadcrumbs with no `id` mark the slow steps, so a wedge in the kernel
+    // boot can be told apart from a wedge in file setup: `<phasePrefix>_kernel_booted`,
+    // `<phasePrefix>_env_configured` and `<phasePrefix>_package_installed`.
+    // browser-runner.js forwards them to the submit-phase telemetry.
+    //
+    // There is NO timeout here: the main thread races the reply against a real
+    // timer and calls Worker.terminate() to kill run-away student code, the
+    // only kill path that works against a synchronous CPU-bound loop.
+    //
+    // `config`:
+    //   label            — the language's display name, for messages
+    //   phasePrefix      — the breadcrumb prefix
+    //   kernel           — the kernel spec; its `bootSeeds`, when present,
+    //                      boot that subset and install the rest on demand
+    //   harness          — optional { source, what }, the first setup cell
+    //   seedCell         — (seed) => the cell that sets the assignment seed
+    //   workspaceCells   — optional (workDir) => [{ source, what }], run last
+    //   beforeEachScript — optional (workDir) => a cell run before every attempt
+    //   makeNonce        — () => a fresh nonce for one run
+    //   runScript        — (scriptName, nonce) => the cell that grades a script
+    //   parseRunOutput   — (stdout, nonce) => { exitCode, stdout, stderr? }, or
+    //                      null when the wrapper never reported
+    //   missingPackage   — { pattern, textOf(reply, parsed), afterInstall? },
+    //                      see runInstallingMissingPackages
+    // A setup cell's `what` is the start of the error message when it fails.
+    function serveGradingWorker(config) {
+        var workDir = null;
+        serve({
+            init: async function (msg) {
+                var t0 = Date.now();
+                await api.boot(config.kernel, { seeds: config.kernel.bootSeeds });
+                api.reply({
+                    type: 'phase', phase: config.phasePrefix + '_kernel_booted',
+                    ms: Date.now() - t0,
+                });
+                var dir = '/chickadee_work_' + Date.now();
+                api.mountWorkspace(
+                    dir, msg.files, root.ChickadeeGradingShared.writeFilesToEmscriptenFS);
+                workDir = dir;
+                var cells = config.harness ? [config.harness] : [];
+                if (msg.seed !== null && msg.seed !== undefined) {
+                    cells.push({
+                        source: config.seedCell(msg.seed),
+                        what: 'the ' + config.label + ' kernel did not set the assignment seed',
+                    });
+                }
+                if (config.workspaceCells) cells = cells.concat(config.workspaceCells(dir));
+                await runSetupCells(cells);
+                api.reply({
+                    type: 'phase', phase: config.phasePrefix + '_env_configured',
+                    ms: Date.now() - t0,
+                });
+                return {};
+            },
+            run: async function (msg) {
+                return { result: await gradeScript(config, workDir, msg.script) };
+            },
+        });
+    }
+
+    // The auto-compute protocol, which the pattern-family editor speaks to
+    // every language alike:
+    //   { id, type: 'init' }                 → { id, ok: true }
+    //   { id, type: 'loadCells', cells: [] } → { id, ok: true, cellErrors: [{index, message}] }
+    //   { id, type: 'run', code }            → { id, ok: true, result: <string|null> }
+    //   { id, type: 'call', functionName, args, captureStdout }
+    //                                        → as `run`, where the language
+    //                                          builds call snippets
+    //   any failure                          → { id, ok: false, error }
+    // Every message may carry `runtimeSource`, the code the kernel must define
+    // before a snippet can report anything. It is seeded from the server and
+    // runs once, at boot.
+    //
+    // Why a worker at all: auto-compute runs the instructor's own solution, and
+    // a synchronous CPU-bound loop in it never yields, so only
+    // `Worker.terminate()` from the main thread can stop it.
+    //
+    // `config`:
+    //   label         — the language's display name, for messages
+    //   kernel        — the kernel spec, booted whole: auto-compute has no
+    //                   on-demand install, so the solution sees every package
+    //   maxWaitMs     — the dead-kernel backstop for one cell (see `execute`)
+    //   makeNonce     — () => a fresh nonce for one snippet
+    //   bootCell      — optional (runtimeSource) => the cell that defines it;
+    //                   without one, `runtimeSource` is not used
+    //   loadCell      — (source, nonce) => the cell that runs one solution cell
+    //   runExpression — (code, nonce) => the cell that evaluates an expression
+    //   callFunction  — optional (name, args, options, nonce) => the cell that
+    //                   calls a solution function; without one, `call` is an
+    //                   unknown message type
+    function serveEvalWorker(config) {
+        var protocol = root.ChickadeeEvalProtocol;
+        var options = { maxWaitMs: config.maxWaitMs };
+        var noResult = 'the ' + config.label + ' kernel produced no result';
+        var booted = false;
+
+        async function ensureBooted(runtimeSource) {
+            if (booted) return;
+            await api.boot(config.kernel);
+            if (runtimeSource && config.bootCell) {
+                var reply = await api.execute(config.bootCell(runtimeSource), options);
+                // A runtime that fails to define leaves every later snippet
+                // calling an undefined helper, which reports as a confusing
+                // per-cell error rather than as the substrate failure it is.
+                if (reply.failure) {
+                    throw new Error('the ' + config.label
+                        + ' auto-compute runtime failed to load: ' + reply.failure);
+                }
+            }
+            booted = true;
+        }
+
+        // Run the cell `build(nonce)` and read its payload back. `build` takes
+        // the nonce, so the nonce the parser reads and the nonce the cell
+        // prints cannot drift apart.
+        async function evaluate(build) {
+            var nonce = config.makeNonce();
+            var reply = await api.execute(build(nonce), options);
+            return { reply: reply, payload: protocol.parseEvalOutput(reply.stdout, nonce) };
+        }
+
+        function kernelSaid(reply) {
+            return reply.failure || (reply.stderr || '').trim() || noResult;
+        }
+
+        // A solution cell's error message, or null. A cell that never reported
+        // is attributed to the cell rather than failing the whole load, so the
+        // remaining cells still get a chance to define their functions.
+        async function loadOneCell(source) {
+            var run = await evaluate(function (nonce) { return config.loadCell(source, nonce); });
+            return run.payload ? run.payload.error : kernelSaid(run.reply);
+        }
+
+        async function valueOf(build) {
+            var run = await evaluate(build);
+            if (!run.payload) throw new Error(kernelSaid(run.reply));
+            if (run.payload.error) throw new Error(run.payload.error);
+            return run.payload.value;
+        }
+
+        var handlers = {
+            init: async function (msg) {
+                await ensureBooted(msg.runtimeSource);
+                return {};
+            },
+            loadCells: async function (msg) {
+                await ensureBooted(msg.runtimeSource);
+                var cells = Array.isArray(msg.cells) ? msg.cells : [];
+                var cellErrors = [];
+                for (var i = 0; i < cells.length; i++) {
+                    var message = await loadOneCell(cells[i]);
+                    if (message) cellErrors.push({ index: i, message: message });
+                }
+                return { cellErrors: cellErrors };
+            },
+            run: async function (msg) {
+                await ensureBooted(msg.runtimeSource);
+                var result = await valueOf(function (nonce) {
+                    return config.runExpression(msg.code || '', nonce);
+                });
+                return { result: result };
+            },
+        };
+        if (config.callFunction) {
+            // The language-neutral request: call this function with these JSON
+            // args. The snippet is built in the worker, so rendering values
+            // stays in the language's module.
+            handlers.call = async function (msg) {
+                await ensureBooted(msg.runtimeSource);
+                var result = await valueOf(function (nonce) {
+                    return config.callFunction(
+                        msg.functionName, msg.args || [],
+                        { captureStdout: !!msg.captureStdout }, nonce);
+                });
+                return { result: result };
+            };
+        }
+        serve(handlers);
+    }
+
+    var api = {
         boot: boot,
         addPackages: addPackages,
         canInstall: canInstall,
@@ -404,5 +696,8 @@
         mountWorkspace: mountWorkspace,
         // The worker's protocol replies must bypass the interception above.
         reply: passThrough,
+        serveGradingWorker: serveGradingWorker,
+        serveEvalWorker: serveEvalWorker,
     };
+    root.ChickadeeXeusKernel = api;
 })(typeof self !== 'undefined' ? self : globalThis);

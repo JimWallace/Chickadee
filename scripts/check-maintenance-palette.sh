@@ -32,9 +32,12 @@ normalize() {
   tr -d ' \t' | tr '[:upper:]' '[:lower:]' | sort -u
 }
 
-# Strip block comments so prose mentioning a colour cannot false-positive.
+# Strip block comments so prose mentioning a colour cannot false-positive:
+# CSS comments through the shared stripper, then HTML comments in the page.
+# shellcheck source=lib/css.sh
+. "scripts/lib/css.sh"
 strip_comments() {
-  sed -E 's#/\*[^*]*\*+([^/*][^*]*\*+)*/##g; s#<!--([^-]|-[^-])*-->##g'
+  strip_css_comments | sed -E 's#<!--([^-]|-[^-])*-->##g'
 }
 
 palette="$(strip_comments < "$sheet" | grep -oE "$COLOUR_LITERAL" | normalize)"

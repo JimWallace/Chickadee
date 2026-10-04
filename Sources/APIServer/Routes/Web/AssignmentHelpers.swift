@@ -194,59 +194,23 @@ func nextAssignmentSortOrder(
     return Swift.max(maxAssignment, maxContent) + 1
 }
 
-/// Returns the earned points for a submission result, suitable for LEARN-style CSV export.
-/// Tries Double first (for fractional points), falls back to Int for older results.
-/// When earnedPoints/totalPoints are absent, falls back to passCount.
+/// The earned points recorded on a submission result, for LEARN-style CSV
+/// export: weighted points when present, else the pass count.
 func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
-    guard let data = collectionJSON.data(using: .utf8),
-        let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-        return nil
-    }
-    // Prefer weighted points when present (non-nil and non-zero totalPoints).
-    let totalPoints = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
-    if let total = totalPoints, total > 0 {
-        let earned = (root["earnedPoints"] as? Double) ?? (root["earnedPoints"] as? Int).map(Double.init)
-        if let e = earned { return e }
-    }
-    // Fall back to pass count for old results.
-    let passCount = (root["passCount"] as? Double) ?? (root["passCount"] as? Int).map(Double.init)
-    return passCount
+    CollectionGradeFields(json: collectionJSON)?.gradePoints
 }
 
-/// Returns the total possible points recorded on a submission result, used as
-/// the denominator when converting a percent grade override into BrightSpace
-/// points.  Nil when the result predates weighted grading (no `totalPoints`).
+/// The total possible points recorded on a submission result, used as the
+/// denominator when converting a percent grade override into BrightSpace
+/// points. Nil when the result predates weighted grading (no `totalPoints`).
 func gradeTotalPointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
-    guard let data = collectionJSON.data(using: .utf8),
-        let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-        return nil
-    }
-    let totalPoints = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
-    if let total = totalPoints, total > 0 { return total }
-    return nil
+    CollectionGradeFields(json: collectionJSON)?.gradeTotalPoints
 }
 
+/// The grade percent recorded on a submission result: weighted when present,
+/// else passed tests over all tests.
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
-    guard let data = collectionJSON.data(using: .utf8),
-        let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-        return nil
-    }
-    // Prefer weighted points when present (non-nil and non-zero totalPoints).
-    // earnedPoints can be fractional (partial credit), so read it as Double.
-    let earned = (root["earnedPoints"] as? Double) ?? (root["earnedPoints"] as? Int).map(Double.init)
-    let total = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
-    if let earned, let total, total > 0 {
-        return Int((earned / total * 100).rounded())
-    }
-    // Fall back to unweighted count for old results.
-    guard let passCount = root["passCount"] as? Int,
-        let totalTests = root["totalTests"] as? Int,
-        totalTests > 0
-    else { return nil }
-    return Int((Double(passCount) / Double(totalTests) * 100).rounded())
+    CollectionGradeFields(json: collectionJSON)?.gradePercent
 }
 
 /// Formats a (possibly fractional) points value for display: whole numbers show

@@ -1,0 +1,10 @@
+# The same selector in two page blocks is a shared rule that belongs in
+# styles.css, where review sees it next to the component it may duplicate.
+guard="scripts/check-styles.sh"
+files="Resources/Views/admin-audit.leaf Resources/Views/enroll.leaf"
+description="the same selector in two page style blocks"
+expect="defined in more than one page <style> block"
+apply() {
+    printf '<style>\n.guard-fixture-twin { padding: 1rem; }\n</style>\n' >> Resources/Views/admin-audit.leaf
+    printf '<style>\n.guard-fixture-twin { padding: 1rem; }\n</style>\n' >> Resources/Views/enroll.leaf
+}

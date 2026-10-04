@@ -33,9 +33,11 @@ jobs:
   # ── Compile the release binaries once, with caching ───────────────────────
   # The image build used to `swift build -c release` inside the Dockerfile, so
   # any source change busted the compile layer and triggered a cold ~13 min
-  # rebuild every push.  Compiling here instead — with the same actions/cache +
-  # git-restore-mtime incremental scheme as swift-tests.yml's `build` job — lets
-  # a source-only change recompile incrementally, and the image build below
+  # rebuild every push.  Compiling here instead — with actions/cache plus
+  # `git restore-mtime`, so a cache restored by prefix builds incrementally
+  # (swift-tests.yml's `build` job dropped restore-mtime because its cache
+  # matches exactly) — lets a source-only change recompile incrementally, and
+  # the image build below
   # just packages the prebuilt binaries (seconds).  Debug-for-tests and
   # release-for-ship stay two separate caches; tests are never built in release.
   build-release:

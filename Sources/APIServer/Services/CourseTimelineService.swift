@@ -253,7 +253,7 @@ enum CourseTimelineService {
         return entries.compactMap { entry in
             guard let createdAt = entry.createdAt else { return nil }
             let display = AuditActionDisplay.categoryLabel(forRaw: entry.action)
-            let metadata = decodedMetadata(entry.metadata)
+            let metadata = entry.metadataDictionary
             return Entry(
                 sortKey: createdAt,
                 actor: entry.actorUsername ?? "system",
@@ -276,12 +276,5 @@ enum CourseTimelineService {
             return "\(key): \(value)"
         }
         return parts.joined(separator: " · ")
-    }
-
-    private static func decodedMetadata(_ raw: String?) -> [String: String] {
-        guard let raw, let data = raw.data(using: .utf8),
-            let decoded = try? JSONDecoder().decode([String: String].self, from: data)
-        else { return [:] }
-        return decoded
     }
 }

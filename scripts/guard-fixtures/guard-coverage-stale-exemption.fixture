@@ -1,0 +1,9 @@
+# An exemption for a guard that no longer runs hides nothing today, but the
+# list of reasons is only worth reading while each entry is true.
+guard="scripts/check-guard-coverage.sh"
+files=".github/workflows/swift-tests.yml"
+description="an exemption for a guard that format-lint no longer runs"
+expect="no longer runs"
+apply() {
+    sed -i '/^        run: scripts\/lint.sh$/d' .github/workflows/swift-tests.yml
+}

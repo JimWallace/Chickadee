@@ -1,0 +1,9 @@
+# Live list filtering is Public/list-filter.js. A page-local filter function is
+# the idiom it replaced.
+guard="scripts/check-styles.sh"
+files="Resources/Views/enroll.leaf"
+description="a page-local list-filter function in a template"
+expect="re-implements the shared list-filter idiom"
+apply() {
+    printf 'function applyGuardFixtureFilter(rows) {}\n' >> Resources/Views/enroll.leaf
+}
