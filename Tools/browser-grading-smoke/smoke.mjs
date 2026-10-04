@@ -527,6 +527,8 @@ window.__result = null;
     'import math\\n\\ndef classify(bmi):\\n    return "under" if bmi < 18.5 else "ok"',
     'this_name_does_not_exist()',
     'def area(r):\\n    return round(math.pi * r * r, 2)',
+    'def shout(word):\\n    print(word + "!")',
+    'def pair(a, b):\\n    return (a, b)',
   ] });
   if (!load.ok) { window.__result = { ok: false, stage: 'loadCells', error: load.error }; return; }
 
@@ -548,14 +550,27 @@ window.__result = null;
     const reply = await call({ type: 'run', code });
     runs[key] = reply.ok ? { ok: true, result: reply.result } : { ok: false, error: reply.error };
   }
-  window.__result = { ok: true, bootMs, cellErrors: load.cellErrors, runs };
+  // The structured call the editor sends (#1964). The whole reply is kept,
+  // because returnedNone and unsupported are fields beside the result.
+  const calls = {};
+  for (const [key, payload] of Object.entries({
+    value: { functionName: 'classify', args: [18.49] },
+    later: { functionName: 'area', args: [2] },
+    none: { functionName: 'shout', args: ['hi'] },
+    stdout: { functionName: 'shout', args: ['hi'], captureStdout: true },
+    tuple: { functionName: 'pair', args: [1, 2] },
+    missing: { functionName: 'no_such_function', args: [] },
+  })) {
+    calls[key] = await call(Object.assign({ type: 'call' }, payload));
+  }
+  window.__result = { ok: true, bootMs, cellErrors: load.cellErrors, runs, calls };
 })().catch((err) => { window.__result = { ok: false, stage: 'page', error: String(err) }; });
 </script>`;
 
 // The auto-compute probe for a kernel language — R and Lua so far, and Octave
-// next. Same shape as the Python one (solution cells, one of which raises) but
-// exercising the STRUCTURED `call` path every non-Python in-page kernel uses,
-// where the worker renders the arguments.
+// next. Same shape as the Python one (solution cells, one of which raises, and
+// the STRUCTURED `call` path, where the worker renders the arguments), but with
+// the runtime the server seeds.
 //
 // Only a real kernel proves any of this: the snippets print behind a nonce, the
 // seeded runtime has to be defined before any of them runs, and each language
@@ -856,6 +871,23 @@ if (mode === 'eval') {
     check('every package the environment declares actually imports',
         result.runs.declared?.result === 'all declared packages imported',
         JSON.stringify(result.runs.declared));
+
+    // The structured call. The worker builds the cell and reads the
+    // `__chickadee_kind__` payload back into the reply.
+    const calls = result.calls || {};
+    check('a call returns its value',
+        calls.value?.ok === true && calls.value.result === 'under', JSON.stringify(calls.value));
+    check('a call returns a number as a number',
+        calls.later?.ok === true && calls.later.result === 12.57, JSON.stringify(calls.later));
+    check('a None return is returnedNone',
+        calls.none?.ok === true && calls.none.returnedNone === true, JSON.stringify(calls.none));
+    check('stdout capture returns the printed text',
+        calls.stdout?.ok === true && calls.stdout.result === 'hi!', JSON.stringify(calls.stdout));
+    check('a tuple is unsupported, with its reason',
+        calls.tuple?.ok === true && calls.tuple.unsupported === 'tuple', JSON.stringify(calls.tuple));
+    check('a missing function is an error that says "not defined"',
+        calls.missing?.ok === false && /not defined/.test(calls.missing.error || ''),
+        JSON.stringify(calls.missing));
 
     if (failures.length) {
         console.log(`\nFAILED: ${failures.length} check(s)`);

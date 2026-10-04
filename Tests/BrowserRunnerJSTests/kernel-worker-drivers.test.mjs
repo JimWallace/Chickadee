@@ -236,21 +236,22 @@ const RUNTIME = 'RUNTIME_SOURCE';
 const EVALUATORS = [
     {
         file: 'python-eval-worker.js', label: 'Python', kernelName: 'xpython', maxWaitMs: 60000,
-        // Python defines no seeded runtime and builds call snippets on the
-        // main thread.
-        bootCell: null, call: false,
+        // Python defines no seeded runtime. Its call cell reports a
+        // `__chickadee_kind__` payload, and the worker reads the value out.
+        bootCell: null,
+        callValue: JSON.stringify({ __chickadee_kind__: 'value', value: 7 }), callResult: 7,
     },
     {
         file: 'r-eval-worker.js', label: 'R', kernelName: 'xr', maxWaitMs: 60000,
-        bootCell: () => RUNTIME, call: true,
+        bootCell: () => RUNTIME,
     },
     {
         file: 'lua-eval-worker.js', label: 'Lua', kernelName: 'xlua', maxWaitMs: 60000,
-        bootCell: (c) => c.ChickadeeLuaEvalShared.bootCell(RUNTIME), call: true,
+        bootCell: (c) => c.ChickadeeLuaEvalShared.bootCell(RUNTIME),
     },
     {
         file: 'octave-eval-worker.js', label: 'Octave', kernelName: 'xoctave', maxWaitMs: 90000,
-        bootCell: (c) => c.ChickadeeOctaveEvalShared.bootCell(RUNTIME), call: true,
+        bootCell: (c) => c.ChickadeeOctaveEvalShared.bootCell(RUNTIME),
     },
 ];
 
@@ -317,13 +318,69 @@ for (const evaluator of EVALUATORS) {
             [{ id: 3, ok: false, error: `the ${evaluator.label} kernel produced no result` }]);
     });
 
-    test(`${evaluator.file}: call is served ${evaluator.call ? '' : 'nowhere but the main thread'}`.trim(), async () => {
+    test(`${evaluator.file}: call is served`, async () => {
         const worker = loadWorker(evaluator.file);
-        fakeKernel(worker.context, (code) => (code.includes('solve') ? payload(code, { value: '7', error: null }) : null));
+        const reported = evaluator.callValue ?? '7';
+        fakeKernel(worker.context, (code) => (code.includes('solve') ? payload(code, { value: reported, error: null }) : null));
         const replies = await send(worker,
             { id: 1, type: 'call', functionName: 'solve', args: [1, 2], captureStdout: false });
-        assert.deepEqual(replies, evaluator.call
-            ? [{ id: 1, ok: true, result: '7' }]
-            : [{ id: 1, ok: false, error: 'unknown message type: call' }]);
+        assert.deepEqual(replies, [{ id: 1, ok: true, result: evaluator.callResult ?? '7' }]);
     });
 }
+
+// --- Python's call reply (#1964) ---------------------------------------------
+//
+// The editor built the Python call snippet and sent it as `run` until #1964.
+// Now the worker builds it, and it reads the `__chickadee_kind__` payload into
+// the reply fields the editor reads for every language.
+
+/// A Python worker whose call cell reports `kind` as its payload.
+async function pythonCall(kind, message = {}) {
+    const worker = loadWorker('python-eval-worker.js');
+    const calls = fakeKernel(worker.context, (code) => (code.includes('solve')
+        ? payload(code, { value: JSON.stringify(kind), error: null }) : null));
+    const replies = await send(worker, {
+        id: 1, type: 'call', functionName: 'solve', args: [1, 2], captureStdout: false, ...message,
+    });
+    return { worker, calls, replies };
+}
+
+test('python-eval-worker.js: call runs the cell python-eval-shared.js builds', async () => {
+    for (const captureStdout of [false, true]) {
+        const { worker, calls } = await pythonCall(
+            { __chickadee_kind__: 'value', value: 3 }, { args: ['a"b', [1, null]], captureStdout });
+        const [cell] = executed(calls);
+        const nonce = cell.match(NONCE)[0];
+        assert.equal(cell, worker.context.ChickadeePythonEvalShared.callFunctionPython(
+            'solve', ['a"b', [1, null]], { captureStdout }, nonce));
+    }
+});
+
+test('python-eval-worker.js: a None return is returnedNone, not the value null', async () => {
+    const { replies } = await pythonCall({ __chickadee_kind__: 'none' });
+    assert.deepEqual(replies, [{ id: 1, ok: true, result: null, returnedNone: true }]);
+});
+
+test('python-eval-worker.js: a type that does not round-trip is unsupported, with its reason', async () => {
+    for (const reason of ['coroutine', 'async-generator', 'generator', 'set', 'tuple', 'bytes', 'complex']) {
+        const { replies } = await pythonCall({ __chickadee_kind__: 'unsupported', reason });
+        assert.deepEqual(replies, [{ id: 1, ok: true, unsupported: reason }]);
+    }
+});
+
+test('python-eval-worker.js: a value of any JSON shape comes back parsed', async () => {
+    const value = { a: [1, 2], b: true, c: 'line\nbreak' };
+    const { replies } = await pythonCall({ __chickadee_kind__: 'value', value });
+    assert.deepEqual(replies, [{ id: 1, ok: true, result: value }]);
+});
+
+test('python-eval-worker.js: an exception in the call is an error reply', async () => {
+    const worker = loadWorker('python-eval-worker.js');
+    fakeKernel(worker.context, (code) => (code.includes('solve')
+        ? payload(code, { value: null, error: 'NameError: solve not defined in solution notebook' })
+        : null));
+    const replies = await send(worker,
+        { id: 1, type: 'call', functionName: 'solve', args: [], captureStdout: false });
+    assert.deepEqual(replies,
+        [{ id: 1, ok: false, error: 'NameError: solve not defined in solution notebook' }]);
+});

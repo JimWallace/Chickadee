@@ -7,9 +7,11 @@
 // test asserts, on the same interpreter and the same package set.
 //
 // The protocol, the boot and the error handling are `serveEvalWorker` in
-// xeus-kernel-shared.js, shared with the other three languages.  Python does
-// not take part in `call`: the editor builds Python snippets on the main thread
-// and sends them as `run`.
+// xeus-kernel-shared.js, shared with the other three languages.  As for them,
+// the editor sends `call`, and python-eval-shared.js builds the cell.  Python
+// also supplies `readCallResult`.  Its call cell reports a `__chickadee_kind__`
+// payload, and that payload tells a `None` return or a type that does not
+// round-trip through JSON apart from a value.
 //
 // This page is NOT cross-origin isolated (/instructor/:id/edit deliberately is
 // not) and does not need to be: the kernel is booted directly through its
@@ -36,4 +38,6 @@ self.ChickadeeXeusKernel.serveEvalWorker({
     makeNonce: _eval.makeNonce,
     loadCell: _eval.loadCellPython,
     runExpression: _eval.runExpressionPython,
+    callFunction: _eval.callFunctionPython,
+    readCallResult: _eval.readCallResultPython,
 });

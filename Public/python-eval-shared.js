@@ -20,6 +20,10 @@
 // solution output from forging the boundary by printing something that looks
 // like a payload.
 //
+// The call snippets are here too, as they are for the other languages. The
+// editor sends the structured `call` message, and the worker builds the cell
+// (#1964). Before, the editor built the Python snippets itself and sent `run`.
+//
 // Loading: classic script (importScripts). Requires /python-grading-shared.js
 // first, whose `makeNonce` and kernel spec are reused rather than duplicated —
 // one definition of which kernel "the Python kernel" means; and
@@ -62,8 +66,8 @@
 
     // Evaluate `source` and report its last expression's value as a string.
     //
-    // `str()` rather than `repr()`: the editor's snippets already produce a JSON
-    // string, and the Pyodide path handed that value straight back. A value that
+    // `str()` rather than `repr()`: the call snippets below already produce a
+    // JSON string, and `readCallResultPython` parses it as it is. A value that
     // is None (the snippet ended in a statement, not an expression) comes back
     // as null so the caller can tell "evaluated to nothing" from "evaluated to
     // the string 'None'".
@@ -97,6 +101,122 @@
         ].join('\n');
     }
 
+    /// The Python that one auto-compute call runs. It finds `functionName` in
+    /// the loaded solution, calls it with `args`, and ends on an expression
+    /// whose value is a JSON payload.
+    ///
+    /// The payload has a `__chickadee_kind__` key. It is not the bare return
+    /// value, because `json.dumps(None)` is the string "null", and that string
+    /// once went into the Expected cell as if the instructor had typed it. The
+    /// same key flags the return types that do not round-trip through JSON
+    /// (coroutines, generators, sets, tuples, bytes, complex). The instructor
+    /// then sees the reason, and not a repr that `default=str` stored.
+    /// `readCallResultPython` reads the key back.
+    ///
+    /// THE LAST TOP-LEVEL STATEMENT MUST BE AN EXPRESSION (`ast.Expr`).
+    /// `runExpressionPython` reports only the value of a trailing expression.
+    /// A snippet that ends in an `if`, a `with` or an assignment reports no
+    /// value, and auto-compute stops with no error. Thus each snippet puts its
+    /// payload in `_payload` and ends on a bare `_json.dumps(...)`.
+    /// pattern-family-editor.test.mjs parses both snippets to check this. Do
+    /// not move work below that last line.
+    ///
+    /// With `options.captureStdout`, the payload holds what the function
+    /// PRINTED, not what it returned. A stdout-equality case needs this.
+    function callSnippetPython(functionName, args, options) {
+        var fnLit = JSON.stringify(functionName);
+        // The arguments go in as one JSON string, and Python parses it. A JSON
+        // string literal is also a valid Python string literal.
+        var argsLit = JSON.stringify(JSON.stringify(args));
+        if (options && options.captureStdout) {
+            return [
+                'import json as _json',
+                'import io as _io',
+                'import contextlib as _contextlib',
+                'import inspect as _inspect',
+                '_fn = globals().get(' + fnLit + ')',
+                'if _fn is None:',
+                '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
+                '_args = _json.loads(' + argsLit + ')',
+                '_buf = _io.StringIO()',
+                'with _contextlib.redirect_stdout(_buf):',
+                '    _ret = _fn(*_args)',
+                // An async function used by mistake: `_fn(*_args)` returns a
+                // coroutine and does not run the body. Thus `_buf` is empty,
+                // and the instructor would see a blank Expected. Report it.
+                'if _inspect.iscoroutine(_ret):',
+                '    _payload = {"__chickadee_kind__": "unsupported", "reason": "coroutine"}',
+                'elif _inspect.isasyncgen(_ret):',
+                '    _payload = {"__chickadee_kind__": "unsupported", "reason": "async-generator"}',
+                'else:',
+                '    _captured = _buf.getvalue()',
+                // The renderer removes one trailing newline too. Thus the
+                // computed Expected is the text the generated test compares.
+                '    if _captured.endswith("\\n"):',
+                '        _captured = _captured[:-1]',
+                '    _payload = {"__chickadee_kind__": "value", "value": _captured}',
+                '_json.dumps(_payload)'
+            ].join('\n');
+        }
+        return [
+            'import json as _json',
+            'import inspect as _inspect',
+            '_fn = globals().get(' + fnLit + ')',
+            'if _fn is None:',
+            '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
+            '_args = _json.loads(' + argsLit + ')',
+            '_result = _fn(*_args)',
+            // Each return type below would go through `default=str` as a repr
+            // string. Report a specific reason for it instead.
+            'if _inspect.iscoroutine(_result):',
+            '    _payload = {"__chickadee_kind__": "unsupported", "reason": "coroutine"}',
+            'elif _inspect.isasyncgen(_result):',
+            '    _payload = {"__chickadee_kind__": "unsupported", "reason": "async-generator"}',
+            'elif _inspect.isgenerator(_result):',
+            '    _payload = {"__chickadee_kind__": "unsupported", "reason": "generator"}',
+            'elif isinstance(_result, (set, frozenset)):',
+            '    _payload = {"__chickadee_kind__": "unsupported", "reason": "set"}',
+            // A tuple serializes to JSON, but it comes back as a list. The
+            // generated test compares with `==`, and `(1, 2) == [1, 2]` is
+            // False, so the test would fail with no clear cause.
+            'elif isinstance(_result, tuple):',
+            '    _payload = {"__chickadee_kind__": "unsupported", "reason": "tuple"}',
+            'elif isinstance(_result, (bytes, bytearray)):',
+            '    _payload = {"__chickadee_kind__": "unsupported", "reason": "bytes"}',
+            'elif isinstance(_result, complex):',
+            '    _payload = {"__chickadee_kind__": "unsupported", "reason": "complex"}',
+            'elif _result is None:',
+            '    _payload = {"__chickadee_kind__": "none"}',
+            'else:',
+            '    _payload = {"__chickadee_kind__": "value", "value": _result}',
+            '_json.dumps(_payload, default=str)'
+        ].join('\n');
+    }
+
+    /// The cell that the `call` message runs: the call snippet, evaluated by
+    /// `runExpressionPython`. Its value is the snippet's JSON payload, and
+    /// `readCallResultPython` reads it.
+    function callFunctionPython(functionName, args, options, nonce) {
+        return runExpressionPython(callSnippetPython(functionName, args, options), nonce);
+    }
+
+    /// The fields of a `call` reply, from the payload of a call snippet:
+    ///   { result }                            the function returned a value
+    ///   { result: null, returnedNone: true }  the function returned None
+    ///   { unsupported: <reason> }             the value does not round-trip
+    ///                                         through JSON
+    /// The editor reads the same fields for every language.
+    function readCallResultPython(text) {
+        var payload = JSON.parse(text);
+        if (payload && payload.__chickadee_kind__ === 'none') {
+            return { result: null, returnedNone: true };
+        }
+        if (payload && payload.__chickadee_kind__ === 'unsupported') {
+            return { unsupported: payload.reason || 'unknown' };
+        }
+        return { result: payload.value };
+    }
+
     /// Indents every line by four spaces so arbitrary cell source can sit inside
     /// a `try:` block. A blank line stays blank — trailing whitespace in a cell
     /// is not worth preserving and some linters reject it.
@@ -112,6 +232,9 @@
         makeNonce: grading.makeNonce,
         loadCellPython: loadCellPython,
         runExpressionPython: runExpressionPython,
+        callSnippetPython: callSnippetPython,
+        callFunctionPython: callFunctionPython,
+        readCallResultPython: readCallResultPython,
         parseEvalOutput: protocol.parseEvalOutput,
     };
 })(typeof self !== 'undefined' ? self : globalThis);
