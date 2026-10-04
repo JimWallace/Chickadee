@@ -2,7 +2,7 @@
 
 > **Archived 2026-10-04.** Point-in-time audit. #2018 and #2019 fixed A8 and
 > A11, and A15 moved to #2020. A12 and A18, and parts of A16 and A17, were
-> still open at archival, and no issue holds them. The live design is
+> still open at archival; #2054 holds them. The live design is
 > [achievements-unification.md](../achievements-unification.md). The file and
 > line references below are stale.
 
