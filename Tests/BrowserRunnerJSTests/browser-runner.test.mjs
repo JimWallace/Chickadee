@@ -161,96 +161,6 @@ function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-class FakeFS {
-  constructor() {
-    this.entries = new Map([['/', { type: 'dir' }]]);
-    this.writes = [];
-  }
-
-  mkdir(targetPath) {
-    if (this.entries.has(targetPath)) {
-      const existing = this.entries.get(targetPath);
-      if (existing.type !== 'dir') throw new Error(`Path exists as file: ${targetPath}`);
-      return;
-    }
-    const parent = parentDir(targetPath);
-    if (!this.entries.has(parent) || this.entries.get(parent).type !== 'dir') {
-      throw new Error(`Missing parent directory: ${parent}`);
-    }
-    this.entries.set(targetPath, { type: 'dir' });
-  }
-
-  writeFile(targetPath, value) {
-    const parent = parentDir(targetPath);
-    if (!this.entries.has(parent) || this.entries.get(parent).type !== 'dir') {
-      throw new Error(`Missing parent directory: ${parent}`);
-    }
-    this.writes.push({ targetPath, value });
-    this.entries.set(targetPath, { type: 'file', value });
-  }
-
-  readFile(targetPath, options = {}) {
-    const entry = this.entries.get(targetPath);
-    if (!entry || entry.type !== 'file') throw new Error(`No such file: ${targetPath}`);
-    if (options.encoding === 'utf8') {
-      return typeof entry.value === 'string'
-        ? entry.value
-        : new TextDecoder().decode(toUint8Array(entry.value));
-    }
-    return toUint8Array(entry.value);
-  }
-
-  stat(targetPath) {
-    const entry = this.entries.get(targetPath);
-    if (!entry) throw new Error(`No such path: ${targetPath}`);
-    return { mode: entry.type === 'dir' ? 0o040000 : 0o100000 };
-  }
-
-  isDir(mode) {
-    return (mode & 0o040000) === 0o040000;
-  }
-
-  readdir(targetPath) {
-    const entry = this.entries.get(targetPath);
-    if (!entry || entry.type !== 'dir') throw new Error(`No such directory: ${targetPath}`);
-    const children = new Set(['.', '..']);
-    const prefix = targetPath === '/' ? '/' : `${targetPath}/`;
-    for (const key of this.entries.keys()) {
-      if (!key.startsWith(prefix) || key === targetPath) continue;
-      const remainder = key.slice(prefix.length);
-      if (!remainder || remainder.includes('/')) continue;
-      children.add(remainder);
-    }
-    return [...children];
-  }
-
-  unlink(targetPath) {
-    const entry = this.entries.get(targetPath);
-    if (!entry || entry.type !== 'file') throw new Error(`No such file: ${targetPath}`);
-    this.entries.delete(targetPath);
-  }
-
-  rmdir(targetPath) {
-    for (const key of this.entries.keys()) {
-      if (key !== targetPath && key.startsWith(`${targetPath}/`)) {
-        throw new Error(`Directory not empty: ${targetPath}`);
-      }
-    }
-    this.entries.delete(targetPath);
-  }
-
-  exists(targetPath) {
-    return this.entries.has(targetPath);
-  }
-}
-
-function parentDir(targetPath) {
-  if (targetPath === '/') return '/';
-  const idx = targetPath.lastIndexOf('/');
-  if (idx <= 0) return '/';
-  return targetPath.slice(0, idx);
-}
-
 function toUint8Array(value) {
   if (value instanceof Uint8Array) return value;
   if (typeof value === 'string') return new TextEncoder().encode(value);
@@ -269,119 +179,14 @@ function makeZipEntry(value) {
   };
 }
 
-function makeTuple(value) {
-  return {
-    toJs() {
-      return value;
-    },
-    destroy() {},
-  };
-}
-
-function createPyodideHarness(options = {}) {
-  const fs = new FakeFS();
-  const state = {
-    cwd: '/',
-    stdout: '',
-    stderr: '',
-    exitCode: null,
-    loadPackageCalls: [],
-    configuredScripts: [],
-    assignmentSeedEnv: null,
-  };
-
-  const py = {
-    FS: fs,
-    state,
-    async loadPackagesFromImports(src) {
-      state.loadPackageCalls.push(src);
-      if (options.packageError) throw options.packageError;
-    },
-    async runPythonAsync(code) {
-      if (code.includes("os.environ['CHICKADEE_ASSIGNMENT_SEED']")) {
-        const m = code.match(/CHICKADEE_ASSIGNMENT_SEED'\]\s*=\s*"([^"]*)"/);
-        if (m) state.assignmentSeedEnv = m[1];
-        return null;
-      }
-
-      if (code.includes("os.chdir('")) {
-        const match = code.match(/os\.chdir\('([^']+)'\)/);
-        if (match) state.cwd = match[1];
-        return null;
-      }
-
-      if (code.includes('_br_stdout = io.StringIO()')) {
-        state.stdout = '';
-        state.stderr = '';
-        state.exitCode = null;
-        return null;
-      }
-
-      if (code.includes("compile(open('")) {
-        const match = code.match(/compile\(open\('([^']+)'/);
-        const scriptName = match ? match[1] : null;
-        if (!scriptName) throw new Error(`Could not determine script name from code: ${code}`);
-        state.configuredScripts.push(scriptName);
-        const behavior = resolveScriptBehavior(scriptName, fs, state.cwd, options.scriptBehaviors);
-        if (behavior.pending) return new Promise(() => {});
-        if (behavior.reject) return Promise.reject(behavior.reject);
-        state.stdout = behavior.stdout ?? '';
-        state.stderr = behavior.stderr ?? '';
-        state.exitCode = behavior.exitCode ?? null;
-        return null;
-      }
-
-      if (code.includes('str(_br_stdout.getvalue())')) {
-        return makeTuple([state.stdout, state.stderr, state.exitCode]);
-      }
-
-      if (code.includes('sys.stdout = sys.__stdout__')) {
-        return null;
-      }
-
-      return null;
-    },
-  };
-
-  fs.mkdir('/tmp');
-  return py;
-}
-
-function resolveScriptBehavior(scriptName, fs, cwd, configured = {}) {
-  if (configured[scriptName]) return configured[scriptName];
-
-  const raw = fs.readFile(`${cwd}/${scriptName}`, { encoding: 'utf8' });
-  const lines = raw.trim().split('\n');
-  const lastLine = lines[lines.length - 1] || '';
-  if (lastLine.includes('JSON_RESULT_PASS')) {
-    return {
-      stdout: `${JSON.stringify({ shortResult: `${scriptName}: passed`, status: 'pass' })}\n`,
-      stderr: '',
-      exitCode: 0,
-    };
-  }
-  if (lastLine.includes('JSON_RESULT_FAIL')) {
-    return {
-      stdout: `${JSON.stringify({ shortResult: `${scriptName}: failed`, status: 'fail' })}\n`,
-      stderr: 'assertion failed\n',
-      exitCode: 1,
-    };
-  }
-  return {
-    stdout: '',
-    stderr: '',
-    exitCode: 0,
-  };
-}
-
-// A fake grading worker (Public/grading-worker.js stand-in) for the
-// GradingWorkerExecutor path.  It speaks the same postMessage protocol:
+// A fake grading worker (a stand-in for the Public/*-grading-worker.js files)
+// for the GradingWorkerExecutor path.  It speaks the same postMessage protocol:
 //   { id, type:'init', files, seed } -> { id, ok:true }
 //   { id, type:'run', script, limit } -> { id, ok:true, result:{exitCode,stdout,stderr} }
 // A `{ pending: true }` behavior NEVER replies — simulating a real worker stuck
 // in a synchronous CPU-bound loop (the exact case that hung the old
 // main-thread Promise.race).  The real worker can't be loaded under `node
-// --test` (it needs real Pyodide), so this double exercises the kill/respawn
+// --test` (it needs a real xeus kernel), so this double exercises the kill/respawn
 // glue the executor wraps around it.  The factory tracks every worker it spawns
 // so a test can assert a fresh worker was created after a terminate().
 function makeFakeGradingWorkerFactory(options) {
@@ -434,9 +239,10 @@ function makeFakeGradingWorkerFactory(options) {
       if (msg.type === 'init') {
         this.files = msg.files || {};
         this.seed = msg.seed ?? null;
-        // `initPending` simulates a worker whose loadPyodide()/env-config never
-        // completes (the intermittent Pyodide-314 init hang) — it NEVER replies,
-        // so the executor's bounded-init timeout must terminate + retry it.
+        // `initPending` simulates a worker whose runtime boot/env-config never
+        // completes (first seen as the intermittent Pyodide-314 init hang) — it
+        // NEVER replies, so the executor's bounded-init timeout must terminate +
+        // retry it.
         //
         // `initPendingFor` does the same for ONE substrate, named by its worker
         // path, so a test can hang R's runtime while Python's stays healthy —
@@ -470,9 +276,10 @@ function makeFakeGradingWorkerFactory(options) {
     }
   }
 
-  // browser-runner passes the worker script path so one factory can serve both
-  // substrates (/grading-worker.js and /r-grading-worker.js); record it so a
-  // routing test can assert which runtime a script was sent to.
+  // browser-runner passes the worker script path so one factory can serve
+  // every substrate (/python-grading-worker.js, /r-grading-worker.js, and so
+  // on); record it so a routing test can assert which runtime a script was
+  // sent to.
   const factory = (scriptPath) => {
     const worker = new FakeGradingWorker();
     worker.scriptPath = scriptPath ?? null;
@@ -489,7 +296,6 @@ async function loadRunnerHarness(options = {}) {
   const fetchCalls = [];
   const breadcrumbs = [];
   const testHooks = {};
-  const py = options.pyodide ?? createPyodideHarness(options);
 
   const zipFiles = options.zipFiles ?? {};
   const zipEntries = {};
@@ -559,8 +365,6 @@ async function loadRunnerHarness(options = {}) {
             // The server resolves the assignment's language here so the browser
             // knows which per-student inputs FILE to write (#1271).
             language: options.assignmentLanguage ?? null,
-            // ...and which runtime executes Python test scripts.
-            pythonSubstrate: options.assignmentPythonSubstrate ?? 'pyodide',
           });
         },
       };
@@ -643,16 +447,10 @@ async function loadRunnerHarness(options = {}) {
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
-  // Web-Worker executor seam.  By default the harness exposes NO Worker and no
-  // factory override, so the runner falls back to the main-thread Pyodide path
-  // (the rest of the suite exercises that).  When a test opts in via
-  // `useGradingWorker`, install a fake-worker factory so the GradingWorkerExecutor
-  // path runs without real Pyodide.
-  // Every substrate is a Web Worker running a vendored xeus kernel — there is
-  // no main-thread path any more (#1271), so the harness always installs the
-  // fake worker unless a test is deliberately proving the Worker-less failover.
-  // `useGradingWorker` is kept as an opt-OUT marker (`noWorker: true`) rather
-  // than the old opt-in, since "no Worker" is now the exceptional case.
+  // Web-Worker executor seam.  Every substrate is a Web Worker running a
+  // vendored xeus kernel — there is no main-thread path (#1271) — so the
+  // harness always installs the fake worker, unless a test passes
+  // `noWorker: true` to prove the Worker-less failover.
   let gradingWorkerFactory = null;
   if (!options.noWorker) {
     gradingWorkerFactory = options.workerFactory ?? makeFakeGradingWorkerFactory(options);
@@ -668,7 +466,6 @@ async function loadRunnerHarness(options = {}) {
   context.window = {
     document,
     fetch: fetchImpl,
-    loadPyodide: async () => py,
     JSZip: {
       async loadAsync() {
         return { files: zipEntries };
@@ -697,7 +494,6 @@ async function loadRunnerHarness(options = {}) {
     postBodies,
     fetchCalls,
     breadcrumbs,
-    py,
     gradingWorkerFactory,
   };
 }
@@ -1564,7 +1360,7 @@ test('manifest and setup download failures bubble up with browser-runner context
   );
 });
 
-test('extractNotebook delegates Python to RunnerCore (module + introspectable sidecar + hints) and keeps R on the JS path', async () => {
+test('extractNotebookToMap delegates Python to RunnerCore (module + introspectable sidecar + hints) and R to extractR', async () => {
   // The per-cell extraction logic now lives in RunnerCore (Swift/wasm) and is
   // covered by Tests/WorkerTests/NotebookExtractionTests.swift. Here we assert
   // the browser glue: cells handed to the shared extractor, and its outputs
@@ -1580,12 +1376,13 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
       };
     },
   });
-  const { extractNotebook } = harness.hooks;
+  const { loadRunnerCore, extractNotebookToMap } = harness.hooks;
+  const core = await loadRunnerCore();
 
-  harness.py.FS.mkdir('/course');
-  await extractNotebook(
-    harness.py,
-    '/course',
+  const files = {};
+  extractNotebookToMap(
+    files,
+    core,
     'submission.ipynb',
     JSON.stringify({
       nbformat: 4,
@@ -1604,28 +1401,16 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
     { cell_type: 'code', source: 'x = 1\n' },
   ]);
   // Executable module + introspectable sidecar both written, with both hints.
-  assert.equal(
-    harness.py.FS.readFile('/course/submission.py', { encoding: 'utf8' }),
-    '# exec module\nMODULE_BODY\n',
-  );
-  assert.equal(
-    harness.py.FS.readFile('/course/submission.source.py', { encoding: 'utf8' }),
-    '# real source\ndef tax():\n    pass\n',
-  );
-  assert.equal(
-    harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
-    'submission.py',
-  );
-  assert.equal(
-    harness.py.FS.readFile('/course/.chickadee_student_source', { encoding: 'utf8' }),
-    'submission.source.py',
-  );
+  assert.equal(files['submission.py'], '# exec module\nMODULE_BODY\n');
+  assert.equal(files['submission.source.py'], '# real source\ndef tax():\n    pass\n');
+  assert.equal(files['.chickadee_student_module'], 'submission.py');
+  assert.equal(files['.chickadee_student_source'], 'submission.source.py');
 
   // R extracts through the shared extractR seam (marker-bearing, matching the
   // native worker); no introspectable sidecar for R.
-  await extractNotebook(
-    harness.py,
-    '/course',
+  extractNotebookToMap(
+    files,
+    core,
     'lab.ipynb',
     JSON.stringify({
       nbformat: 4,
@@ -1634,13 +1419,10 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
     }),
   );
   assert.equal(
-    harness.py.FS.readFile('/course/lab.R', { encoding: 'utf8' }),
+    files['lab.R'],
     '# Generated from lab.ipynb\n\n# ---- chickadee:cell 1 ----\nx <- 2\n\n',
   );
-  assert.equal(
-    harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
-    'lab.R',
-  );
+  assert.equal(files['.chickadee_student_module'], 'lab.R');
 });
 
 test('R notebook extraction feeds the extractR seam cells + filename and writes its result verbatim', async () => {
@@ -1658,12 +1440,13 @@ test('R notebook extraction feeds the extractR seam cells + filename and writes 
       };
     },
   });
-  const { extractNotebook } = harness.hooks;
+  const { loadRunnerCore, extractNotebookToMap } = harness.hooks;
+  const core = await loadRunnerCore();
 
-  harness.py.FS.mkdir('/course');
-  await extractNotebook(
-    harness.py,
-    '/course',
+  const files = {};
+  extractNotebookToMap(
+    files,
+    core,
     'lab.ipynb',
     JSON.stringify({
       nbformat: 4,
@@ -1683,13 +1466,10 @@ test('R notebook extraction feeds the extractR seam cells + filename and writes 
     { cell_type: 'code', source: 'x <- 2\n' },
   ]);
   assert.equal(
-    harness.py.FS.readFile('/course/lab.R', { encoding: 'utf8' }),
+    files['lab.R'],
     '# Generated from lab.ipynb\n\n# ---- chickadee:cell 1 ----\nx <- 2\n\n',
   );
-  assert.equal(
-    harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
-    'lab.R',
-  );
+  assert.equal(files['.chickadee_student_module'], 'lab.R');
 });
 
 test('failure detail strips the trailing JSON envelope so students never see the raw payload', async () => {
@@ -1785,7 +1565,8 @@ test('omits CHICKADEE_ASSIGNMENT_SEED when the assignment is not personalized (n
     'setup_noseed',
   );
 
-  assert.equal(harness.py.state.assignmentSeedEnv, null);
+  // The seed reaches the substrate over the worker's init message.
+  assert.equal(harness.gradingWorkerFactory.created[0].seed, null);
 });
 
 test('writes _ck_inputs.py from the seed endpoint personalizedInputs (parity with the worker)', async () => {
@@ -1836,8 +1617,9 @@ test('omits _ck_inputs.py when the seed endpoint returns no personalizedInputs',
     'setup_noinputs',
   );
 
+  // The file map is handed to the substrate over the worker's init message.
   assert.equal(
-    harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py')),
+    harness.gradingWorkerFactory.created[0].files['_ck_inputs.py'],
     undefined,
     'no _ck_inputs.py when there are no per-student inputs',
   );
@@ -1956,12 +1738,6 @@ test('groupBySection sends a stale/unknown sectionID to the Ungrouped block', as
     ],
   );
 });
-
-// Regression: Pyodide's loadPackagesFromImports only scans the source string it
-// is handed and does not follow imports into local modules. A test script that
-// imports a bundled helper which itself imports numpy therefore ran with numpy
-// unloaded — green on the native validation run (numpy installed system-wide),
-// ModuleNotFoundError for every student in the browser.
 
 test('only the declared language\'s substrate is booted up front', async () => {
   // C, from the ensureReady discussion: an assignment is written in ONE

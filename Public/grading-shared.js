@@ -1,29 +1,32 @@
 // Public/grading-shared.js
 //
-// Python grading semantics — the pieces that describe WHAT Python runs and how
-// its outcome is read, independent of which runtime executes it.
+// Grading semantics that more than one browser grading worker needs: the
+// Python environment config, the seed cell, the exit-code mapping and the
+// file writer for an emscripten file system.
 //
 // It began life as the shared copy between a Pyodide worker and a main-thread
 // Pyodide fallback, which is why it is a separate module. Both of those are
-// gone (#1271): Python now grades on the xeus-python kernel via
-// Public/python-grading-worker.js, and there is no main-thread path, because a
-// kernel needs importScripts and the old fallback could not kill a CPU-bound
-// runaway anyway.
+// gone (#1271). Python now grades on the xeus-python kernel, and every grading
+// worker boots a xeus kernel through Public/xeus-kernel-shared.js.
 //
 // What remains here is still worth keeping separate: `envConfigPython` and
 // `deriveExitCode` encode the contract a test script sees and how a crashed
 // script scores, and both are asserted against the native worker's behaviour by
 // tests that should not have to boot a kernel to run.
 //
-// Consumers: Public/python-grading-worker.js (the grading cell) and
-// Public/browser-runner.js (deriveExitCode, re-exported for tests).
+// Consumers:
+//   - Public/python-grading-worker.js: envConfigPython, assignmentSeedPython.
+//   - Public/python-grading-shared.js: deriveExitCode.
+//   - Public/xeus-kernel-shared.js: writeFilesToEmscriptenFS, for every
+//     grading worker.
+//   - Public/browser-runner.js: deriveExitCode, re-exported on its test hooks.
 //
 // Loading: classic script, no dependencies.
 //   - Workers: importScripts('/grading-shared.js' + self.location.search)
 //     (forwarding the worker's own ?v= cache-buster pins all grading files to
 //     one release).
 //   - Pages: a <script src="/grading-shared.js?v=..."> tag BEFORE
-//     browser-runner.js (see notebook.leaf).
+//     browser-runner.js (see _notebook-body.leaf).
 // Exposes exactly one global: ChickadeeGradingShared.
 //
 // The Swift/native grading parity is pinned separately by
@@ -49,9 +52,9 @@ for _key in list(sys.modules.keys()):
     if _key in ('sitecustomize', 'test_runtime') or _key.startswith('student_'):
         del sys.modules[_key]
 
-# Import test_runtime — set functions in BOTH __main__ globals and builtins.
-# Pyodide may not resolve builtins the same way CPython does, so we need
-# them as __main__ globals too (runPythonAsync runs in __main__).
+# Import test_runtime. The import puts the helpers in the __main__ globals,
+# where a test script runs. Also put them in builtins, so that other modules
+# can call them.
 from test_runtime import passed, failed, errored, require_function
 from test_runtime import load_student_modules, load_student_module
 from test_runtime import student_module_names_in_load_order
@@ -85,40 +88,6 @@ for _module_name in student_module_names_in_load_order():
         return `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(seed)}`;
     }
 
-    // Redirect sys.stdout / sys.stderr to in-memory buffers for one script run.
-    const STDOUT_REDIRECT_PY = `
-import sys, io
-_br_stdout = io.StringIO()
-_br_stderr = io.StringIO()
-sys.stdout = _br_stdout
-sys.stderr = _br_stderr
-`;
-
-    // compile(source, scriptName) gives inspect.stack() the real filename so
-    // test_runtime reads the correct test label; `except SystemExit` catches the
-    // exit that passed()/failed()/errored() raise (a clean subprocess exit on the
-    // native side); imports + exec share one globals dict.
-    function runScriptPython(scriptName) {
-        return `
-from test_runtime import passed, failed, errored, require_function
-_br_exit_code = None
-try:
-    _br_code = compile(open('${scriptName}', encoding='utf-8').read(), '${scriptName}', 'exec')
-    exec(_br_code, globals())
-except SystemExit as _e:
-    _br_exit_code = _e.code
-`;
-    }
-
-    const CAPTURE_OUTPUT_PY = `
-(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
-`;
-
-    const RESTORE_STREAMS_PY = `
-sys.stdout = sys.__stdout__
-sys.stderr = sys.__stderr__
-`;
-
     // Derive the script's exit code from the captured SystemExit code
     // (preferred) or — when none was captured — from the raised JS error,
     // mirroring a `python3 script` subprocess: 0 on clean completion, 1 on an
@@ -144,13 +113,15 @@ sys.stderr = sys.__stderr__
         return { exitCode, stderr };
     }
 
-    // Materialize a plain file map { <relativePath>: <string|bytes> } into the
-    // Pyodide MEMFS under workDir, creating parent directories as needed.
+    // Materialize a plain file map { <relativePath>: <string|bytes> } into an
+    // emscripten module's in-memory file system under workDir, creating parent
+    // directories as needed. It only touches `module.FS`, which every
+    // emscripten module exposes, so every xeus kernel uses this one copy.
     // Byte values may arrive as a typed array OR a plain Array (postMessage
     // serialization in the worker path), so array-likes are coerced to
     // Uint8Array before writing — FS.writeFile stores a plain Array as text
     // otherwise, corrupting binary support files.
-    function writeFilesToPyFS(py, workDir, files) {
+    function writeFilesToEmscriptenFS(module, workDir, files) {
         Object.keys(files).forEach(function (relPath) {
             const value = files[relPath];
             const parts = relPath.split('/');
@@ -158,61 +129,21 @@ sys.stderr = sys.__stderr__
                 let cur = workDir;
                 for (let i = 0; i < parts.length - 1; i++) {
                     cur += '/' + parts[i];
-                    try { py.FS.mkdir(cur); } catch (e) { /* already exists */ }
+                    try { module.FS.mkdir(cur); } catch (e) { /* already exists */ }
                 }
             }
             let data = value;
             if (value && typeof value !== 'string' && typeof value.length === 'number') {
                 data = new Uint8Array(value);
             }
-            py.FS.writeFile(workDir + '/' + relPath, data);
+            module.FS.writeFile(workDir + '/' + relPath, data);
         });
-    }
-
-    // Preload the Pyodide packages every bundled .py file imports.
-    //
-    // loadPackagesFromImports only scans the one source string it is handed,
-    // and does NOT follow imports into local modules.  A test script that
-    // imports a bundled helper which in turn imports numpy would therefore run
-    // with numpy unloaded and die on ModuleNotFoundError — green on the native
-    // validation run (where numpy is installed system-wide) and broken for
-    // every student.  Scanning the whole setup up front closes that gap.
-    //
-    // Per-file rather than one concatenated blob, so a single unparseable file
-    // (a student's half-finished submission) cannot suppress every other
-    // file's imports.  Non-fatal throughout: a name Pyodide doesn't ship must
-    // never block the run.
-    async function preloadPackagesForFiles(py, files) {
-        const names = Object.keys(files || {});
-        for (let i = 0; i < names.length; i++) {
-            if (!/\.py$/.test(names[i])) continue;
-            const value = files[names[i]];
-            let text = null;
-            if (typeof value === 'string') {
-                text = value;
-            } else if (value) {
-                try { text = new TextDecoder().decode(new Uint8Array(value)); } catch (e) { text = null; }
-            }
-            if (!text) continue;
-            try { await py.loadPackagesFromImports(text); } catch (e) { /* non-fatal */ }
-        }
     }
 
     root.ChickadeeGradingShared = {
         envConfigPython: envConfigPython,
         assignmentSeedPython: assignmentSeedPython,
-        STDOUT_REDIRECT_PY: STDOUT_REDIRECT_PY,
-        runScriptPython: runScriptPython,
-        CAPTURE_OUTPUT_PY: CAPTURE_OUTPUT_PY,
-        RESTORE_STREAMS_PY: RESTORE_STREAMS_PY,
         deriveExitCode: deriveExitCode,
-        writeFilesToPyFS: writeFilesToPyFS,
-        // Same function, substrate-neutral name. writeFilesToPyFS only ever
-        // touches `.FS`, which every emscripten module exposes, so the R
-        // grading worker materializes its workspace with this one copy rather
-        // than a second implementation that could lose the byte-array
-        // coercion above.
-        writeFilesToEmscriptenFS: writeFilesToPyFS,
-        preloadPackagesForFiles: preloadPackagesForFiles
+        writeFilesToEmscriptenFS: writeFilesToEmscriptenFS
     };
 })(typeof self !== 'undefined' ? self : globalThis);
