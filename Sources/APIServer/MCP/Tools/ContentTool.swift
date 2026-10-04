@@ -161,19 +161,4 @@ extension ContentTool {
 // MARK: - Registry
 
 /// Name-keyed registry of content tools.
-struct ToolRegistry: Sendable {
-    private let toolsByName: [String: AnyContentTool]
-
-    init(_ tools: [AnyContentTool]) {
-        toolsByName = Dictionary(tools.map { ($0.name, $0) }, uniquingKeysWith: { existing, _ in existing })
-    }
-
-    /// All registered tools, sorted by name for stable `tools/list` output.
-    var all: [AnyContentTool] {
-        toolsByName.values.sorted { $0.name < $1.name }
-    }
-
-    func tool(named name: String) -> AnyContentTool? {
-        toolsByName[name]
-    }
-}
+typealias ToolRegistry = MCPToolRegistry<AnyContentTool>
