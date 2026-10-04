@@ -39,12 +39,19 @@
     };
 
     var _cached = null;
+    var _cachedSeed = null;
 
-    /// The assignment's authoring facts. Cached per page load; the seed is
-    /// static once rendered.
+    /// The assignment's authoring facts.
+    ///
+    /// Cached per seed ELEMENT, not per page load. The workbench swaps its edit
+    /// half after an in-place save, and the new half carries a new seed. That
+    /// save can change the language, so a new seed element is read again
+    /// (#1957). One render keeps one seed element, so the cache still holds
+    /// for the life of a render.
     function facts() {
-        if (_cached) return _cached;
-        var el = global.document && global.document.getElementById('assignment-language-seed');
+        var el = (global.document && global.document.getElementById('assignment-language-seed')) || null;
+        if (_cached && el === _cachedSeed) return _cached;
+        _cachedSeed = el;
         if (!el) { _cached = PYTHON_FALLBACK; return _cached; }
         var parsed;
         try { parsed = JSON.parse(el.textContent || '{}'); } catch (_) { parsed = null; }

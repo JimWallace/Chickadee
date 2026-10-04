@@ -1,4 +1,4 @@
-// Unit tests for the pane swap in Public/chickadee-ui.js — the mechanism that
+// Unit tests for the pane swap in Public/surface-swap.js — the mechanism that
 // re-renders half of the merged workbench without navigating.
 //
 // `refresh-edit-surface.test.mjs` covers the swap's OUTER decisions: swap vs.
@@ -7,11 +7,13 @@
 // of the swap's rules were never exercised by anything. Both are the kind that
 // fail silently:
 //
-//   * `runInlineScripts`, the one place in the frontend that turns markup into
-//     running code on purpose. A `<script>` inserted by parsing HTML does not
-//     run — a deliberate platform rule — so the swap re-creates the element to
-//     get the page's wiring back. Get its exclusions wrong and you either
-//     double-load a module or execute a JSON seed island.
+//   * the re-wire of the edit half (#1957). A `<script>` that the parser makes
+//     does not run, and the CSP blocks inline scripts, so the swapped markup
+//     has no running code. The swap calls ONE hook, `ChickadeeEditPage.init()`,
+//     after the new nodes are in place. Before #1957 it re-created inline
+//     script elements instead, and after #1417 the edit half had none, so
+//     nothing re-ran: the suite table came back empty and every editor in the
+//     half was dead, with no error.
 //   * `keepElement`, which carries `#jl-frame` across the swap by object
 //     identity. 34 closures in notebook.js captured that element; rebuilding it
 //     leaves every one of them on a detached node, and the page still LOOKS
@@ -69,7 +71,7 @@ function node(tagName, attrs = {}, children = []) {
 
     appendChild(child) {
       // A DocumentFragment MOVES its children rather than being inserted
-      // itself. Modelled, because `runInlineScripts` runs against the half
+      // itself. Modelled, because the re-wire hook runs against the half
       // AFTER the append and would find nothing if the fragment stayed whole.
       if (child.isFragment) {
         child.children.slice().forEach((c) => this.appendChild(c));
@@ -99,8 +101,10 @@ function node(tagName, attrs = {}, children = []) {
 
     get childNodes() { return this.children.slice(); },
 
-    /// Depth-first search for `#id` and for the two script selectors the swap
-    /// uses. Deliberately narrow: an over-general matcher would let a wrong
+    /// Depth-first search for `#id`, `.class` and a tag name — the selectors
+    /// the swap uses — and for `script:not([src])`, the selector of the
+    /// script re-run that #1957 removed, so the test that forbids a re-run can
+    /// see one. Deliberately narrow: an over-general matcher would let a wrong
     /// selector in the source still pass here.
     querySelector(sel) {
       return descendants(this).find((n) => matches(n, sel)) ?? null;
@@ -143,11 +147,15 @@ function importNode(n) {
 
 // ── The harness ─────────────────────────────────────────────────────────────
 
-/// Load chickadee-ui.js with `freshHalf` as the subtree the refresh fetches.
+/// Load surface-swap.js with `freshHalf` as the subtree the refresh fetches.
 ///
 /// `keptID` seeds an element already in the live document, so the carried-over
 /// path has something with identity to carry.
-function load({ freshHalf, selector = '.wb-pane-edit', keptID = null, fetchFails = false } = {}) {
+///
+/// `editPage` installs a `ChickadeeEditPage` whose `init()` records what the
+/// half held, and its scroll offset, at the moment of each call. Pass
+/// `editPage: 'throws'` for an init that fails.
+function load({ freshHalf, selector = '.wb-pane-edit', keptID = null, fetchFails = false, editPage = null } = {}) {
   const calls = [];
   const half = node('div', { class: selector.slice(1) }, [node('p', {}, [])]);
   half.scrollTop = 420;
@@ -187,6 +195,19 @@ function load({ freshHalf, selector = '.wb-pane-edit', keptID = null, fetchFails
   };
   window.parent = window;
 
+  const inits = [];
+  if (editPage) {
+    window.ChickadeeEditPage = {
+      init() {
+        inits.push({
+          children: half.children.map((n) => n.tagName),
+          scrollTop: half.scrollTop,
+        });
+        if (editPage === 'throws') throw new Error('init failed');
+      },
+    };
+  }
+
   // `self`, because surface-swap.js resolves its global as
   // `typeof self !== 'undefined' ? self : this` — the same shape every split-out
   // module uses.
@@ -196,7 +217,7 @@ function load({ freshHalf, selector = '.wb-pane-edit', keptID = null, fetchFails
     Array, Object, String, Promise, Error, setTimeout,
   });
   vm.runInContext(source, context);
-  return { ui: window.ChickadeeSurfaceSwap, calls, half, kept, created, document, window };
+  return { ui: window.ChickadeeSurfaceSwap, calls, half, kept, created, document, window, inits };
 }
 
 /// The subtree the server sends back for the edit half.
@@ -210,22 +231,73 @@ function scriptNode(text, attrs = {}) {
   return s;
 }
 
-// ── runInlineScripts ────────────────────────────────────────────────────────
+// ── Re-wiring the edit half (#1957) ─────────────────────────────────────────
 
-test('an inline script is RE-CREATED, because a parsed one would never run', async () => {
-  const original = scriptNode('initSuiteTable();');
-  const { ui, half } = load({ freshHalf: freshEditHalf([original]) });
+test('a swapped edit half is re-wired through ChickadeeEditPage.init(), once', async () => {
+  const { ui, inits } = load({
+    freshHalf: freshEditHalf([node('h2'), node('table')]),
+    editPage: 'records',
+  });
+
+  assert.equal(await ui.refreshEditSurface(), true);
+
+  assert.equal(inits.length, 1,
+    'without this hook the new half has no running code: an empty suite table and dead editors');
+  assert.deepEqual(inits[0].children, ['H2', 'TABLE'],
+    'init() must run AFTER the new nodes are in the half, or it wires the old ones');
+});
+
+test('init() runs before the scroll restore, so rows it renders count toward the offset', async () => {
+  const { ui, half, inits } = load({
+    freshHalf: freshEditHalf([node('table')]),
+    editPage: 'records',
+  });
 
   await ui.refreshEditSurface();
 
-  const live = half.querySelectorAll('script:not([src])');
-  assert.equal(live.length, 1);
-  assert.equal(live[0].textContent, 'initSuiteTable();');
-  assert.notEqual(live[0].nodeID, original.nodeID,
-    'a script element inserted by parsing HTML is inert; only a freshly created one executes');
+  assert.equal(inits[0].scrollTop, 0, 'the restore had already run when init() was called');
+  assert.equal(half.scrollTop, 420);
 });
 
-test('a src= script is left alone, so a swap never re-runs a module', async () => {
+test('no script element is re-created: the swap re-wires through the hook only', async () => {
+  const inline = scriptNode('initSuiteTable();');
+  const module = scriptNode('', { src: '/suite-table.js' });
+  const { ui, created } = load({
+    freshHalf: freshEditHalf([inline, module]),
+    editPage: 'records',
+  });
+
+  await ui.refreshEditSurface();
+
+  assert.deepEqual(created.map((n) => n.tagName), [],
+    'a re-created inline script would be blocked by the CSP, and a re-created src= script '
+    + 're-runs its module and double-binds every listener it installs');
+});
+
+test('an init() that throws falls back to a reload, like any failed refresh', async () => {
+  const { ui, calls } = load({
+    freshHalf: freshEditHalf([node('table')]),
+    editPage: 'throws',
+  });
+
+  assert.equal(await ui.refreshEditSurface(), false);
+  assert.equal(calls.filter((c) => c.kind === 'reload').length, 1,
+    'a half with no wiring is a half-swapped page');
+});
+
+test('a notebook swap does not re-wire the edit half', async () => {
+  const { ui, inits } = load({
+    freshHalf: node('div', { class: 'wb-notebook-body' }, [node('iframe', { id: 'jl-frame' })]),
+    selector: '.wb-notebook-body',
+    keptID: 'jl-frame',
+    editPage: 'records',
+  });
+
+  assert.equal(await ui.refreshNotebookSurface('/x'), true);
+  assert.equal(inits.length, 0, 'the edit half was not touched, so its wiring is still live');
+});
+
+test('a src= script is left as markup, so a swap never re-runs a module', async () => {
   const module = scriptNode('', { src: '/suite-table.js' });
   const { ui, half } = load({ freshHalf: freshEditHalf([module]) });
 
@@ -234,8 +306,6 @@ test('a src= script is left alone, so a swap never re-runs a module', async () =
   const live = half.children.filter((n) => n.tagName === 'SCRIPT');
   assert.equal(live.length, 1);
   assert.equal(live[0].getAttribute('src'), '/suite-table.js');
-  // Re-created it would re-fetch and re-run the module's IIFE, double-binding
-  // every listener it installs.
   assert.equal(live[0].children.length, 0);
   assert.equal(live[0].textContent, '');
 });
@@ -251,20 +321,6 @@ test('a JSON seed island is data: not re-run, and it keeps its type', async () =
   assert.equal(live.getAttribute('type'), 'application/json',
     'a re-created element without its type would be executed as script by the browser');
   assert.equal(live.textContent, '{"language":"r"}');
-});
-
-test('scripts nested inside the swapped subtree are re-run too, not just top-level ones', async () => {
-  const inner = scriptNode('initSection();');
-  const { ui, half } = load({
-    freshHalf: freshEditHalf([node('section', { class: 'section-block' }, [inner])]),
-  });
-
-  await ui.refreshEditSurface();
-
-  const live = half.querySelectorAll('script:not([src])');
-  assert.equal(live.length, 1);
-  assert.notEqual(live[0].nodeID, inner.nodeID);
-  assert.equal(live[0].parentNode.tagName, 'SECTION', 'and it stays where the markup put it');
 });
 
 test('a swapped half with no scripts at all is fine', async () => {

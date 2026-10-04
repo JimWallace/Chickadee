@@ -23,10 +23,19 @@
         remove: 'js-section-var-remove'
     }, { removeCell: 'icon' });
 
+    // The elements init() has wired, so that init() can run again (#1957).
+    // The workbench calls it after it swaps the edit half: the new half has
+    // new elements to wire, and an element wired before is not wired twice.
+    // A form maps to its { flush } object.
+    var wiredForms = new WeakMap();
+    var wiredAddButtons = new WeakSet();
+
     /// Per-form auto-save with debounce + in-flight coalescing.  Returns
     /// a public { flush } object that the main-form submit handler can
     /// await before letting the assignment save through.
     function wireAutoSave(form) {
+        var known = wiredForms.get(form);
+        if (known) return known;
         var tbody = form.querySelector('tbody.js-section-vars-body');
         if (!tbody) return { flush: function () { return Promise.resolve(); } };
 
@@ -73,9 +82,13 @@
         });
         form.addEventListener('submit', function (e) { e.preventDefault(); saver.flush(); });
 
-        return { flush: saver.flush };
+        var wired = { flush: saver.flush };
+        wiredForms.set(form, wired);
+        return wired;
     }
 
+    /// Wire the section forms and "+ Add Input" buttons on the page.
+    /// Idempotent: see `wiredForms`.
     function init() {
         var forms = Array.from(document.querySelectorAll('form.section-vars-form'))
             .map(wireAutoSave);
@@ -88,6 +101,8 @@
         // section header, not inside the form, so look up the form by
         // data-section-id.
         document.querySelectorAll('button.js-section-var-add').forEach(function (btn) {
+            if (wiredAddButtons.has(btn)) return;
+            wiredAddButtons.add(btn);
             btn.addEventListener('click', function () {
                 var sid = btn.getAttribute('data-section-id') || '';
                 var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
@@ -97,6 +112,9 @@
             });
         });
     }
+
+    // Called again by ChickadeeEditPage.init() after a workbench swap.
+    window.initSectionInputsEditor = init;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

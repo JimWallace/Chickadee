@@ -56,6 +56,15 @@
     // in-place write would otherwise stack one more writer per save, and each
     // of them PUTs.
     var boundDatasetControls = false;
+    // The first-paint step of the bound control.  A re-init after a workbench
+    // swap (#1957) brings server-rendered rows whose estimate chips are empty,
+    // so each later init paints them again with this, and binds nothing.
+    var resyncDatasetControls = null;
+
+    // The Remove listener is on <body> too, so it has the same guard.  It reads
+    // the config of the latest init rather than the first one.
+    var boundDeleteClicks = false;
+    var deleteConfig = null;
 
     // ── Per-student dataset marks ───────────────────────────────────────────
     //
@@ -66,7 +75,10 @@
     // agent marked on a file that has since been renamed, say).
     function initDatasetControls(config, csrfToken) {
         if (typeof config.datasetsURL !== 'function') return;
-        if (boundDatasetControls) return;
+        if (boundDatasetControls) {
+            if (resyncDatasetControls) resyncDatasetControls();
+            return;
+        }
         boundDatasetControls = true;
 
         // Writes are serialized. Each PUT carries the whole array, so two
@@ -346,6 +358,7 @@
 
         // First paint of the estimates: the controls are server-rendered, but
         // the numbers come from the same GET the controls sync against.
+        resyncDatasetControls = resync;
         resync();
     }
 
@@ -402,16 +415,20 @@
 
         initDatasetControls(config, csrfToken);
 
+        deleteConfig = config;
+        if (boundDeleteClicks) return;
+        boundDeleteClicks = true;
         document.body.addEventListener('click', async function (ev) {
             var btn = ev.target.closest && ev.target.closest('.js-support-file-delete-btn');
             if (!btn) return;
             var filename = btn.getAttribute('data-filename');
             if (!filename) return;
+            var current = deleteConfig;
             if (!await ChickadeeUI.confirmAction('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
             try {
-                var resp = await fetch(config.deleteURL(filename), {
+                var resp = await fetch(current.deleteURL(filename), {
                     method: 'DELETE',
-                    headers: { 'x-csrf-token': csrfToken },
+                    headers: { 'x-csrf-token': current.csrfToken || '' },
                     credentials: 'same-origin'
                 });
                 if (!resp.ok) {
@@ -419,7 +436,7 @@
                     ChickadeeUI.showActionError('Remove failed: ' + resp.status + ' ' + errText, btn);
                     return;
                 }
-                config.onChange();
+                current.onChange();
             } catch (e) {
                 ChickadeeUI.showActionError('Remove failed: ' + e.message, btn);
             }

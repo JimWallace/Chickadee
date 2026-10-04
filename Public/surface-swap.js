@@ -6,8 +6,13 @@
 // Split out of chickadee-ui.js, which had accumulated eighteen unrelated
 // functions behind one name. This is the largest of those concerns and the one
 // with the most rules of its own: a fetch, a parse, a node-identity discipline,
-// and the only place in the frontend that deliberately turns markup into
-// running code.
+// and a re-wire step for the new markup.
+//
+// The swapped markup has no running code. A `<script>` that the parser makes
+// does not run, and the CSP blocks inline scripts. So after a swap of the edit
+// half, this file calls ONE explicit hook, `ChickadeeEditPage.init()`
+// (assignment-edit-page.js), which wires the new render (#1957). It does not
+// re-create script elements.
 //
 //   ChickadeeSurfaceSwap.refreshEditSurface()
 //   ChickadeeSurfaceSwap.refreshNotebookSurface(url)
@@ -39,55 +44,19 @@
 
     var EDIT_HALF_SELECTOR = '.wb-pane-edit';
 
-    /// Re-execute the inline `<script>` blocks in a freshly swapped subtree.
-    ///
-    /// `innerHTML` never executes scripts, so without this the new markup is
-    /// inert — no suite table, no editors. Only inline blocks are re-run:
-    /// `src=` modules are already loaded and merely *define* the globals the
-    /// inline blocks call, so re-fetching them would re-run their IIFEs and
-    /// double-bind. The inline blocks bind nothing to `document`/`window`
-    /// themselves; the two module-level listeners that do (suite-table's
-    /// dragover and pageshow) carry their own once-per-document guards.
-    /// Re-execute the inline scripts in a freshly swapped pane.
-    ///
-    /// CONTRACT, which this function had never had written down. A `<script>`
-    /// inserted by parsing HTML does not run — that is a deliberate platform
-    /// rule — so a pane swap has to re-create the elements to get their page
-    /// wiring back. That makes this the one place in the frontend that turns
-    /// markup into running code on purpose, and the boundary is therefore:
-    ///
-    ///   * `root` must be a fragment the SERVER rendered for this same-origin
-    ///     page (what `swapHalf` fetched). Never call it on markup that came
-    ///     from a user, a message body, or any other document.
-    ///   * `[src]` scripts are excluded by the selector: a swap re-runs page
-    ///     wiring, it does not re-fetch modules.
-    ///   * a `type` other than `text/javascript` is DATA — the JSON seed
-    ///     islands the authoring pages carry — and is left untouched, both
-    ///     because re-running it is meaningless and because a re-created
-    ///     element must keep its type to still be findable.
-    ///
-    /// It is internal on purpose: `swapHalf` is the only caller and the only
-    /// context where the first rule can be guaranteed. Exporting it would make
-    /// that guarantee someone else's to keep.
-    function runInlineScripts(pane) {
-        var scripts = pane.querySelectorAll('script:not([src])');
-        Array.prototype.forEach.call(scripts, function (old) {
-            // JSON seed blocks are data, not code — re-running them is
-            // meaningless and `type` must be preserved for the ones that are.
-            if (old.type && old.type !== 'text/javascript') return;
-            var s = document.createElement('script');
-            s.textContent = old.textContent;
-            old.parentNode.replaceChild(s, old);
-        });
-    }
-
     var NOTEBOOK_HALF_SELECTOR = '.wb-notebook-body';
 
     /// Fetch `url` and swap one half's subtree from the response.
     ///
-    /// Shared by both halves so the failure handling, the "am I even on the
-    /// merged workbench" test, and the inline-script re-execution cannot drift
-    /// between them.
+    /// Shared by both halves so the failure handling and the "am I even on the
+    /// merged workbench" test cannot drift between them.
+    ///
+    /// `opts.rewire` runs after the new nodes are in the document and before
+    /// the scroll position is restored. The order is important: the rewire
+    /// renders rows (the suite table fills its tbodies from the JSON seed), and
+    /// a restore before those rows exist can clamp the offset to a shorter
+    /// pane. A rewire that throws goes to the same reload fallback as a failed
+    /// fetch, because a half with no wiring is a half-swapped page.
     ///
     /// `opts.keepElement` names an element (by id) to carry across the swap
     /// rather than let `innerHTML` destroy. The notebook half needs this for
@@ -144,7 +113,7 @@
 
             half.textContent = '';
             half.appendChild(frag);
-            runInlineScripts(half);
+            if (typeof opts.rewire === 'function') opts.rewire();
             half.scrollTop = scrollTop;
             return true;
         }).catch(function () {
@@ -162,8 +131,18 @@
     /// already names exactly what to re-render, including which notebook is
     /// open, so there is no second URL to keep in sync (and no DOM-sourced
     /// navigation target to validate).
+    ///
+    /// The new half is wired by `ChickadeeEditPage.init()`. That function is
+    /// idempotent, so this call is safe on any page. A page that does not load
+    /// assignment-edit-page.js has no hook, and the swap is then all there is.
     function refreshEditSurface() {
-        return swapHalf(EDIT_HALF_SELECTOR, global.location.href);
+        return swapHalf(EDIT_HALF_SELECTOR, global.location.href, { rewire: rewireEditHalf });
+    }
+
+    /// Wire the edit half that a swap just put in the document (#1957).
+    function rewireEditHalf() {
+        var page = global.ChickadeeEditPage;
+        if (page && typeof page.init === 'function') page.init();
     }
 
     /// Open a different notebook (file and/or view) without leaving the page.

@@ -53,9 +53,9 @@ function makeEl(marker = '') {
       this.scrollTop = 0;
       return n;
     },
-    // The swap re-executes inline scripts; no fixture here carries one, so an
-    // empty list is honest rather than convenient. The re-execution path itself
-    // is exercised by the browser check, which has a real DOM.
+    // The swap re-wires the edit half through ChickadeeEditPage.init(), which
+    // no fixture here installs. The hook is pinned in swap-half.test.mjs, and
+    // the wired half is exercised by the browser check, which has a real DOM.
     querySelectorAll: () => [],
     querySelector: () => null,
   };

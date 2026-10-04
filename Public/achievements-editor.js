@@ -80,14 +80,20 @@
     var esc = ChickadeeUI.escapeHtml;
     function n(v) { return v == null ? '' : v; }
 
+    // The panels init() has wired, so that init() can run again (#1957).
+    // The workbench calls it after it swaps the edit half: the new half has a
+    // new panel to wire and load, and a panel wired before is not wired twice.
+    var wiredBlocks = new WeakSet();
+
     function init() {
         var block = document.getElementById('achievements-block');
-        if (!block) return;
+        if (!block || wiredBlocks.has(block)) return;
         var tbody = block.querySelector('tbody.achievements-body');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
         var template = document.getElementById('achievement-editor-template');
         var condTemplate = document.getElementById('achievement-condition-template');
         if (!tbody || !assignmentID || !template || !condTemplate) return;
+        wiredBlocks.add(block);
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/achievements';
         var status = document.getElementById('achievements-status');
 
@@ -384,6 +390,9 @@
                     + ') — editing is disabled; refresh the page.', 'error');
             });
     }
+
+    // Called again by ChickadeeEditPage.init() after a workbench swap.
+    window.initAchievementsEditor = init;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
