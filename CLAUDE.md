@@ -1105,207 +1105,51 @@ Full design, runbook, and host steps:
 
 ## Current State
 
-**The 0.4 series is closed.** v0.5.0 marks the conclusion of the first full
-course offering run on Chickadee and the pivot to next year's feature work.
-The system is a working client–server autograder: Python, R, Lua, Octave, C++,
-Racket and Java assignments;
-browser (xeus/wasm) and native worker grading paths sharing one RunnerCore
-implementation; per-student personalization; pattern-generated test families
-(10 kinds) and notebook checks (10 kinds); achievements; student slip days;
-per-course roles; BrightSpace grade sync (awaiting UW IST prod credentials);
-an MCP authoring surface of 56 tools plus a read-only admin-diagnostics MCP
-of 19 (`MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the count's
-source of truth); OIDC SSO; and zero-downtime auto-deploys.
+**The 0.4 series is closed.** v0.5.0 marks the end of the first full course
+offering run on Chickadee. The system is a working client–server autograder:
+Python, R, Lua, Octave, C++, Racket and Java assignments; browser (xeus/wasm)
+and native worker grading that share one RunnerCore; per-student
+personalization; pattern-generated test families (10 kinds) and notebook checks
+(10 kinds); achievements; student slip days; per-course roles; BrightSpace grade
+sync (awaiting UW IST prod credentials); an MCP authoring surface of 56 tools
+plus a read-only admin-diagnostics MCP of 19 (`MCPToolCatalog.live` in
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source of
+truth for the count); OIDC SSO; and zero-downtime auto-deploys. The 0.4 arc is
+summarised at the top of `CHANGELOG-0.4.md`. The 0.5-boundary cleanup is in the
+0.5.0 entry of `CHANGELOG.md`. Both browser graders and every editor kernel are
+xeus (#1271, done); the measurements are in `docs/archive/xeus-python-grading-*`.
 
-Per-release history for 0.1.0–0.4.x lives in `CHANGELOG-0.4.md` (split out of
-`CHANGELOG.md` at the 0.5.0 cut). The 0.4 arc, one line per theme:
+Instructor validation is a `kind == .validation` submission, graded by the
+**native worker** (`WorkerJobRoutes.collectClaimCandidates`). It never runs a
+kernel. There is no `assignment-validate.js`.
 
-- **Grading core.** Shell-script contract → sandboxing → browser grading →
-  the RunnerCore extraction (#764–#775): one Swift grading core compiled
-  natively and to wasm, pinned by `Tests/Fixtures/output-contract.json`;
-  R became first-class in #1207.
-- **Authoring.** Instructor editor → server-authoritative suite editor →
-  pattern families + notebook checks → suite sections, hints, datasets,
-  per-student personalization (the #461 arc) → assignment versioning with
-  restore (#1223–#1225) → the MCP authoring surface with per-course
-  authoring-voice guides.
-- **Course management.** Courses/enrollment/archival → `.chickadee` course
-  bundles → per-course enrollment roles (#417 arc: `student` < `ta` <
-  `instructor` per course; deployment roles collapsed to `user`/`admin`) →
-  course sections, content items, activity timeline (#1227), slip days
-  (#1228).
-- **Identity & compliance.** Local auth → OIDC/PKCE SSO (UWaterloo DUO) →
-  lockout/rate-limit/audit hardening → the UW approval package under
-  `docs/compliance/` (student-data audits of both MCP surfaces, tool and
-  data-flow inventories).
-- **Operations.** Docker Compose → HMAC runner auth → capability profiles,
-  runner-side LRU setup cache, health alerts, diagnostics tables →
-  blue-green zero-downtime auto-deploy (`chickadee-deployer`) → CI
-  hardening (the #1139 fork/exec postmortem, the #1233 pool-saturation
-  wedge fix, the prebuilt swift-ci test image #1238/#1239, a
-  real-Postgres test lane).
-- **Editor reliability.** Embedded JupyterLite → kernel-boot telemetry +
-  watchdog → the exec_hang root cause (v0.4.526 chdir patch) → JupyterLite
-  0.8, service-worker-free/SAB-only isolation, the xeus-r kernel for R
-  notebooks, the parselmouth CSP stub (#1241/#1243).
+**Leaf templates: rules that fail silently.** A render test proves that a
+template resolves, not that it resolves right. The evidence is in
+`docs/leaf-decomposition-review.md` §0. `scripts/check-leaf-semantics.sh`
+enforces the first three rules.
 
-The 0.5-boundary cleanup pass additionally: put R execution and
-pandas/matplotlib on the CI image (their suites were silently skipped
-everywhere); deduplicated the browser grading semantics into
-`Public/grading-shared.js` (one copy for the grading worker and the
-main-thread fallback — the bespoke drift test is gone); ran the second
-migration consolidation (post-#502 increments folded into `Create*` files,
-removing the #1077 boot-order hazard class); retired the pre-0.5 shims
-(`WORKER_SHARED_SECRET` alias, `/admin/workers` alias, the two per-boot
-legacy sweeps, the bundle `isOpen` write side, the scanner realignment
-shim); and archived finished-era docs under `docs/archive/`.
+- **No Leaf tag syntax in a template comment or in template prose.** Leaf's
+  lexer has no notion of an HTML comment. In a comment, a bare structural tag
+  name fails at render (`extend only supports one or two parameters []`), a
+  field interpolation prints the real value, and a complete include resolves.
+  Commenting a tag out does not disable it. Write "the extend" instead.
+- **Leaf has no line-comment syntax.** A `#` followed by a slash is raw text,
+  so the "comment" prints into the page. Use an HTML comment.
+- **Use the `count` tag, not `.isEmpty`.** Leaf resolves no Swift properties,
+  so `rows.isEmpty` on an array is nil: the plain form never fires and the
+  negated form always fires. Write `#if(count(rows) == 0)` or
+  `#if(count(rows) > 0)`. Two struct properties are allowlisted in the script.
+- **The sub-context include takes a bare second parameter:**
+  `extend("_partial", subObject)`. The labelled `with:` form does not lex.
+- **A scanner that cannot tell markup from prose about markup matches its own
+  documentation.** This shipped twice in drift guards. Parse structure, and
+  describe forbidden syntax instead of quoting it.
 
-**Near-term roadmap:**
-
-- **Leaf partial decomposition — DONE (2026-08, #1266 + #1269). The
-  long-standing "multi-extend parser bug" was a misdiagnosis.** Multiple inline
-  partial includes work fine on LeafKit 1.14.3. The real cause of
-  `LeafError.500: extend only supports one or two parameters []` is that
-  **Leaf's lexer has no notion of an HTML comment.** `<!-- ... -->` is raw text
-  to it, so tag syntax written inside one is lexed exactly as if it stood in
-  the markup. A bare structural tag name lexes to a tag with *no* parameter
-  list, and `Extend.init` rejects that — hence the empty `[]` in the message.
-
-  Verified against a control (a probe comment inserted into an otherwise
-  untouched `notebook.leaf` — 7 lines, one include — with a no-probe baseline
-  proving the harness measured anything at all):
-
-  | In a comment | Result |
-  |---|---|
-  | bare `extend` / `if` / `else` / `elseif` / `endif` / `for` / `endfor` / `import` / `export` / `endextend` | **500 at render** |
-  | `#(someField)` | **silently interpolated** — the real context value lands in the served HTML |
-  | `#someTag()` | parens consumed, name left as literal text |
-  | a *complete* `extend("_partial")` | **resolves the partial**, exactly as if uncommented |
-  | unknown `#word` (`#wb-single-edit`, `#jl-frame`), `C#`, `id="#main"` | genuinely inert |
-
-  That last row is why existing comments naming CSS ids are safe, and why the
-  rule is narrower than "never write `#` in prose".
-
-  **That row has a second edge, and it cost a leaked page header (v0.5.233).
-  Leaf has NO LINE-COMMENT SYNTAX.** `LeafLexer.lexCheckTagIndicator` pops the
-  `#`, peeks the next character, and takes the tag path only when it is a letter
-  or an open paren — so a `#` followed by a slash emits a raw `#` and returns to
-  raw state. It is the same rule that makes `C#` inert, seen from the other
-  side: "passes through as text" is invisible only inside an HTML comment.
-  Outside one it means the comment **prints**. A thirteen-line `#//` header on
-  `_leaderboard-body.leaf` rendered above the results, rode every five-second
-  background refresh, and emitted the unclosed heading tag inside its own prose
-  for real. Render tests could not see it — the template resolves, it just
-  resolves wrong, the same blind spot as the `isEmpty` finding below. Comment a
-  template with an HTML comment; `scripts/check-leaf-semantics.sh` now fails on
-  the other form, with a `check-guards.sh` fixture proving it still does.
-
-  **Practical rule:** never write Leaf *tag* syntax in template prose or
-  comments — not a bare structural tag name, not `#(field)`, not a complete
-  include. Say "the extend" or "an `extend(...)` include" instead. Commenting a
-  tag out does not disable it.
-
-  The historical bisection was almost certainly toggling heavily-commented
-  blocks whose prose named a tag, which is why the failure looked template-wide
-  and size-dependent rather than like a one-line typo.
-
-  Inline partial includes themselves are unrestricted, and the **sub-context
-  form** `extend("_partial", subObject)` works — that is what lets one partial
-  serve both a standalone page (flat context) and a composite page (nested), as
-  `_assignment-edit-body` / `_notebook-body` do for the workbench. Note the
-  syntax: a bare second parameter, **not** the labelled `with:` form, which
-  does not lex (`invalidParameterToken(":")`).
-
-  **What the corrected rule actually unblocked, measured (#1269).** Less than
-  the old rule appeared to be holding up. Diffing the two authoring templates
-  rather than counting marker strings, the shared-markup opportunity was **one
-  block of ~70 lines**, now `_suite-sections.leaf` — parameterized on a
-  per-page endpoint base, a trailing query string, and whether its forms carry
-  `data-ck-inplace`. The files table only *looks* shared and stays in two
-  honest copies: its notebook rows differ structurally (optional-notebook
-  draft actions vs. a guaranteed notebook plus workbench hooks).
-
-  The duplication that was actually costing correctness was **JavaScript**,
-  which the Leaf rule never blocked, and in every case the create page was the
-  stale fork. Fixing it removed three live defects: per-student `=` expressions
-  degrading to literal strings in section inputs, section drag-reorder
-  persisting nothing while showing a failure alert, and a double confirmation
-  dialog on section delete. `assignment-new.leaf` went 1,059 → 711 lines,
-  `_assignment-edit-body.leaf` 918 → 811. Full analysis and the slice plan:
-  [docs/leaf-decomposition-review.md](docs/leaf-decomposition-review.md).
-
-  A corollary of the comment finding, learned twice more while doing it: the
-  same blindness applies to *any* scanner that cannot tell markup from prose
-  about markup. Two new drift guards matched their own documentation — one
-  quoting the pattern it forbade, one naming an attribute it asserted absent.
-  Prefer parsing structure (as `InstructorWorkbenchRoutesTests` does with form
-  open tags) over searching the document, and describe forbidden syntax rather
-  than quoting it.
-
-  (Render tests catch all of this — they prove templates *resolve*; they don't
-  exercise page JS, so a JS-driven widget still wants a manual check.)
-
-  **Leaf resolves no Swift properties, and says nothing when it fails to
-  (v0.5.165).** The comment finding above has a twin, found the same way and
-  costing more. `Dictionary+LeafData.swift` walks a keypath by requiring every
-  intermediate to be a **dictionary**, so `rows.isEmpty` — where `rows` is an
-  array — resolves to **nil**, not to an error. Nil then flows two ways and
-  both read as success: `LeafSerializer`'s conditional guard is
-  `(evaluated.bool ?? false) || (!evaluated.isNil && …)`, so `#if(rows.isEmpty)`
-  **never fires**; `ParameterResolver`'s `.not` is `rhs.bool ?? !rhs.isNil`, so
-  `#if(!rows.isEmpty)` **always fires**.
-
-  Thirty-three sites across 22 templates shipped this way: 22 empty states that
-  never appeared (a "No submissions yet" replaced by a header-only table
-  promising rows and listing none — on the student dashboard, enrollment, five
-  admin pages) and 11 blocks that always did (an "Auto-detected:" note with
-  nothing after it, a Section picker on a course with no sections, empty badge
-  containers). **Render tests cannot see any of it** — the template resolves
-  fine, it just resolves wrong — which is why it survived every guard the repo
-  has and was found only by reading LeafKit's source.
-
-  Use the built-in `count` **tag**, which handles arrays and dictionaries
-  properly: `#if(count(rows) == 0)` and `#if(count(rows) > 0)`. Not the
-  `isEmpty` tag — `#isEmpty(rows)` stringifies its parameter and throws on an
-  array. `count()` throws on a missing or non-collection key, so confirm the
-  receiver is a non-optional array on the context struct; that trade is
-  deliberate, since loud-while-rendering beats silent-forever.
-
-  The idiom is legitimate in exactly one shape: when the receiver is a struct
-  that **declares** the property, the key is a real dictionary member
-  (`SparklineBar.isEmpty`, `ActivityBucket.count`). Those two are
-  indistinguishable to a reader from the broken form, so
-  `scripts/check-leaf-semantics.sh` names them in a pair allowlist and forbids
-  everything else, with a `check-guards.sh` fixture proving it still fails. That
-  script carries the line-comment rule above too: both are Leaf idioms that
-  render fine and resolve wrong, which is the one thing a render test cannot
-  catch.
-- **Consolidating on xeus (#1271) — DONE.** Both browser graders and both
-  editor kernels are xeus; `Public/pyodide` went in v0.5.19 (see "Pyodide is
-  gone" above). The package-set question that gated it was settled the way
-  the spike predicted: the kernel env is fixed at build time, students are
-  already held to it by the editor, and `PythonImportGuard` refuses a
-  browser-graded script at authoring time whose imports the vendored kernel
-  cannot satisfy. The measurements that decided it (xeus-python's 5 ms per
-  cell versus Pyodide's ~0 ms; boot a wash once Pyodide's on-demand
-  numpy/pandas fetch is counted; R's ~180 ms per-expression yield NOT
-  generalising) are kept in `docs/archive/xeus-python-grading-spike.md` and
-  `docs/archive/xeus-python-grading-migration-plan.md`. One correction from
-  that arc worth keeping here: instructor validation is enqueued as a
-  `kind == .validation` submission and graded by the **native worker**
-  (`WorkerJobRoutes.collectClaimCandidates`), so it never ran Pyodide and
-  never runs a kernel; earlier notes citing an `assignment-validate.js`
-  described a file that does not exist.
-- **Feature backlog:** continued personalization / notebook-check
-  expansion (e.g. per-student refs in pattern kinds beyond the three
-  equality kinds); pattern kinds beyond the ten shipped
-  (`boundaryEquality` / `approximateEquality` / `variableEquality` /
-  `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
-  `stdoutEquality` / `unorderedEquality` / `differential` / `programIO`);
-  multi-provider SSO testing beyond UWaterloo DUO;
-  refresh-token handling; gamification expansion (leaderboards, more
-  badges beyond First-Try Perfect).
+**Feature backlog:** continued personalization / notebook-check expansion
+(e.g. per-student refs in pattern kinds beyond the three equality kinds);
+pattern kinds beyond the ten shipped (`PatternKind`); multi-provider SSO
+testing beyond UWaterloo DUO; refresh-token handling; gamification expansion
+(leaderboards, more badges beyond First-Try Perfect).
 
 ---
 

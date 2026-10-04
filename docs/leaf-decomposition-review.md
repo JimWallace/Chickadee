@@ -14,6 +14,89 @@ live, user-visible defects trace directly to it.
 
 ---
 
+## 0. The Leaf rules in force
+
+CLAUDE.md keeps these rules as one-line bullets, because each one fails
+silently. This section keeps the evidence. `scripts/check-leaf-semantics.sh`
+enforces the first three, and its header explains the mechanism of each.
+Render tests cannot see any of them: a render test proves that a template
+resolves, not that it resolves right. Render tests also do not run page JS,
+so a JS-driven widget still needs a manual check.
+
+### Leaf's lexer has no notion of an HTML comment
+
+The long-standing "multi-extend parser bug" was a misdiagnosis (#1266).
+Multiple inline partial includes work on LeafKit 1.14.3. The real cause of
+`LeafError.500: extend only supports one or two parameters []` is that
+`<!-- ... -->` is raw text to Leaf's lexer. Tag syntax written inside a comment
+is lexed exactly as if it stood in the markup. A bare structural tag name lexes
+to a tag with no parameter list, and `Extend.init` rejects that. That is the
+empty `[]` in the message.
+
+This was verified against a control: a probe comment inserted into an
+otherwise untouched `notebook.leaf` (7 lines, one include), with a no-probe
+baseline that proved the harness measured something.
+
+| In a comment | Result |
+|---|---|
+| a bare structural tag name: extend, if, else, elseif, endif, for, endfor, import, export, endextend | **500 at render** |
+| a field interpolation (the hash, an open parenthesis, a field name) | **silently interpolated**: the real context value lands in the served HTML |
+| a tag name followed by parentheses | the parentheses are consumed; the name stays as literal text |
+| a complete include of a partial | **resolves the partial**, exactly as if it were not in a comment |
+| an unknown hash-word (`#wb-single-edit`, `#jl-frame`), `C#`, `id="#main"` | inert |
+
+The last row is why existing comments that name CSS ids are safe, and why the
+rule is narrower than "never write `#` in prose".
+
+**The rule:** never write Leaf tag syntax in template prose or comments. That
+includes a bare structural tag name, a field interpolation and a complete
+include. Say "the extend" or "an `extend(...)` include" instead. Commenting a
+tag out does not disable it.
+
+The historical bisection almost certainly toggled heavily-commented blocks
+whose prose named a tag. That is why the failure looked template-wide and
+size-dependent, and not like a one-line typo.
+
+### Leaf has no line-comment syntax (v0.5.233)
+
+A hash followed by a slash is not a comment. It is raw text, so the
+"comment" prints into the page. A thirteen-line header of that form on
+`_leaderboard-body.leaf` rendered above the results and rode every
+five-second refresh. It is the same lexer rule that makes `C#` inert, seen from
+the other side. Comment a template with an HTML comment. The
+`check-leaf-semantics.sh` header has the lexer detail, and a `check-guards.sh`
+fixture proves that the guard still fails on it.
+
+### Leaf resolves no Swift properties (v0.5.165)
+
+`rows.isEmpty` on an array resolves to nil, not to an error. The plain
+conditional then never fires, and the negated conditional always fires.
+Thirty-three sites across 22 templates shipped this way. Twenty-two were empty
+states that never appeared, on the student dashboard, enrollment and five admin
+pages. Eleven were blocks that always appeared. It was found only by reading
+LeafKit's source. Use the `count` tag. The `check-leaf-semantics.sh` header has
+the mechanism, the working idiom and the allowlist of the two struct
+properties that resolve legitimately.
+
+### The sub-context include
+
+Inline partial includes are unrestricted. The **sub-context form**, an
+`extend(...)` include with a bare second parameter that names a sub-object,
+works. It lets one partial serve both a standalone page (flat context) and a
+composite page (nested), as `_assignment-edit-body` and `_notebook-body` do for
+the workbench. The labelled `with:` form does not lex
+(`invalidParameterToken(":")`).
+
+### A scanner that cannot tell markup from prose about markup
+
+The comment finding applies to any scanner, not only to Leaf. Two drift guards
+written during this work matched their own documentation: one quoted the
+pattern it forbade, and one named an attribute it asserted absent (see 4a).
+Parse structure, as `InstructorWorkbenchRoutesTests` does with form open tags,
+instead of searching the document. Describe forbidden syntax; do not quote it.
+
+---
+
 ## 1. The rule, re-verified
 
 #1266 established that multiple inline partial includes work and that the

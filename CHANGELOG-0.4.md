@@ -6,6 +6,43 @@ lines). Current releases live in [CHANGELOG.md](CHANGELOG.md).
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows Semantic Versioning.
 
+## The 0.4 arc, one line per theme
+
+This summary was in CLAUDE.md until #1989. The release entries below are the
+record; this section is the map.
+
+- **Grading core.** Shell-script contract → sandboxing → browser grading →
+  the RunnerCore extraction (#764–#775): one Swift grading core compiled
+  natively and to wasm, pinned by `Tests/Fixtures/output-contract.json`;
+  R became first-class in #1207.
+- **Authoring.** Instructor editor → server-authoritative suite editor →
+  pattern families + notebook checks → suite sections, hints, datasets,
+  per-student personalization (the #461 arc) → assignment versioning with
+  restore (#1223–#1225) → the MCP authoring surface with per-course
+  authoring-voice guides.
+- **Course management.** Courses/enrollment/archival → `.chickadee` course
+  bundles → per-course enrollment roles (#417 arc: `student` < `ta` <
+  `instructor` per course; deployment roles collapsed to `user`/`admin`) →
+  course sections, content items, activity timeline (#1227), slip days
+  (#1228).
+- **Identity & compliance.** Local auth → OIDC/PKCE SSO (UWaterloo DUO) →
+  lockout/rate-limit/audit hardening → the UW approval package under
+  `docs/compliance/` (student-data audits of both MCP surfaces, tool and
+  data-flow inventories).
+- **Operations.** Docker Compose → HMAC runner auth → capability profiles,
+  runner-side LRU setup cache, health alerts, diagnostics tables →
+  blue-green zero-downtime auto-deploy (`chickadee-deployer`) → CI
+  hardening (the #1139 fork/exec postmortem, the #1233 pool-saturation
+  wedge fix, the prebuilt swift-ci test image #1238/#1239, a
+  real-Postgres test lane).
+- **Editor reliability.** Embedded JupyterLite → kernel-boot telemetry +
+  watchdog → the exec_hang root cause (v0.4.526 chdir patch) → JupyterLite
+  0.8, service-worker-free/SAB-only isolation, the xeus-r kernel for R
+  notebooks, the parselmouth CSP stub (#1241/#1243).
+
+The 0.5-boundary cleanup pass that closed the series is in the 0.5.0 entry of
+[CHANGELOG.md](CHANGELOG.md).
+
 ## [0.4.669] - 2026-07-31
 
 ### Added
