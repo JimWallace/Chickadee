@@ -34,6 +34,19 @@ const editorSource = await fs.readFile(
   'utf8',
 );
 
+// Auto-compute moved out of the editor into Public/auto-compute-client.js
+// (#1966). The auto-compute source-shape tests below read that file. Their
+// "must not" assertions read both files, so the editor cannot take a defect
+// back either.
+const clientSource = await fs.readFile(
+  path.resolve('Public/auto-compute-client.js'),
+  'utf8',
+);
+const autoComputeSources = [
+  ['pattern-family-editor.js', editorSource],
+  ['auto-compute-client.js', clientSource],
+];
+
 // The editor reads its language facts through the shared module the page loads
 // ahead of it (Public/authoring-language.js). Any context that evaluates the
 // editor must evaluate that first, in the same order the template does.
@@ -446,29 +459,33 @@ test("auto-compute picks its substrate from the language seed", () => {
   // So this asserts the seam rather than either rule: which worker runs comes
   // from the descriptor, and the server is the fallback for a language that
   // declares none.
-  assert.ok(editorSource.includes('callSolutionOnServer'),
+  assert.ok(clientSource.includes('callSolutionOnServer'),
     'a server-side compute path must exist');
-  assert.ok(editorSource.includes('compute-expected') || editorSource.includes('computeExpected'),
+  assert.ok(clientSource.includes('compute-expected') || clientSource.includes('computeExpected'),
     'the server path must call the compute-expected endpoint');
-  assert.ok(/ChickadeeLanguage\.autoComputeWorker\(\)/.test(editorSource),
+  assert.ok(/ChickadeeLanguage\.autoComputeWorker\(\)/.test(clientSource),
     'the worker must come from the language seed, not from a name check here');
 
   // No hardcoded worker path. A literal `/x-eval-worker.js` in this file is the
   // shape that made auto-compute Python-only: the editor reached for one
   // kernel by name and no seed could redirect it.
-  const hardcodedWorker = /['"]\/[a-z-]*eval-worker\.js['"]/.exec(editorSource);
-  assert.equal(hardcodedWorker, null,
-    `the editor must not name a worker itself (found ${hardcodedWorker && hardcodedWorker[0]})`);
+  for (const [name, source] of autoComputeSources) {
+    const hardcodedWorker = /['"]\/[a-z-]*eval-worker\.js['"]/.exec(source);
+    assert.equal(hardcodedWorker, null,
+      `${name} must not name a worker itself (found ${hardcodedWorker && hardcodedWorker[0]})`);
+  }
 });
 
 test("auto-compute returns describeCallFailure's result as is", () => {
   // describeCallFailure already returns `{ ok: false, error }`. Wrapping it in
   // another object made the Expected cell show "[object Object]" for every R,
   // Lua and Octave solution error (#1994).
-  assert.ok(editorSource.includes('return describeCallFailure(err, cellErrors);'),
+  assert.ok(clientSource.includes('return describeCallFailure(err, cellErrors);'),
     'a failed call must return the described failure');
-  assert.equal(/error:\s*describeCallFailure\(/.exec(editorSource), null,
-    'the described failure must not be wrapped in another object');
+  for (const [name, source] of autoComputeSources) {
+    assert.equal(/error:\s*describeCallFailure\(/.exec(source), null,
+      `the described failure must not be wrapped in another object (${name})`);
+  }
 });
 
 test("the editor sends every in-page language the structured call (#1964)", () => {
@@ -476,15 +493,19 @@ test("the editor sends every in-page language the structured call (#1964)", () =
   // while every other kernel language got `call`. The snippet now lives in
   // python-eval-shared.js, and the worker builds it. These assertions read
   // the code only, because comments may describe the old shape.
-  const code = editorSource
+  const codeOf = (source) => source
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/.*$/gm, '');
-  assert.equal(/isPython\(\)/.exec(code), null,
-    'auto-compute must not branch on the language name');
-  assert.equal(/type:\s*'run'/.exec(code), null,
-    'the editor must not send a snippet of its own to run');
-  assert.ok(!code.includes('__chickadee_kind__'),
-    'the Python payload must be read in python-eval-shared.js, not here');
+  for (const [name, source] of autoComputeSources) {
+    const code = codeOf(source);
+    assert.equal(/isPython\(\)/.exec(code), null,
+      `auto-compute must not branch on the language name (${name})`);
+    assert.equal(/type:\s*'run'/.exec(code), null,
+      `the editor must not send a snippet of its own to run (${name})`);
+    assert.ok(!code.includes('__chickadee_kind__'),
+      `the Python payload must be read in python-eval-shared.js, not here (${name})`);
+  }
+  const code = codeOf(clientSource);
   assert.ok(/type:\s*'call'/.test(code), 'the editor must send the structured call');
   // The reply fields that carry Python's None and unsupported cases.
   assert.ok(code.includes('data.returnedNone'), 'the editor must read returnedNone');
