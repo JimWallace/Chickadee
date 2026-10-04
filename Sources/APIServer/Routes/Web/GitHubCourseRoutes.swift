@@ -368,11 +368,11 @@ struct GitHubCourseRoutes: RouteCollection {
                 .filter(\.$testSetupID == assignment.testSetupID).count()
             let options =
                 [
-                    GitHubSubmitOption(
+                    SelectOption(
                         value: "", label: "None", selected: chosen == nil)
                 ]
                 + templates.map {
-                    GitHubSubmitOption(
+                    SelectOption(
                         value: String($0.id), label: $0.fullName, selected: $0.id == chosen?.templateRepoID)
                 }
             rows.append(

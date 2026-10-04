@@ -7,12 +7,6 @@
 import Foundation
 import Vapor
 
-struct GitHubSubmitOption: Encodable, Equatable {
-    let value: String
-    let label: String
-    let selected: Bool
-}
-
 struct GitHubSubmitCommitView: Encodable, Equatable {
     let repositoryID: String
     let repositoryName: String
@@ -54,8 +48,8 @@ struct GitHubSubmitState: Encodable {
     var loaded = false
     /// Where the student changes which repositories the App can read.
     var configureURL: String?
-    var repositories: [GitHubSubmitOption] = []
-    var branches: [GitHubSubmitOption] = []
+    var repositories: [SelectOption] = []
+    var branches: [SelectOption] = []
     var commit: GitHubSubmitCommitView?
 
     /// Fills the lists. A repository is selected when the query names one of
@@ -72,7 +66,7 @@ struct GitHubSubmitState: Encodable {
             repositoryID.flatMap { id in owned.first { $0.id == id } }
             ?? (owned.count == 1 ? owned.first : nil)
         repositories = owned.map {
-            GitHubSubmitOption(value: String($0.id), label: $0.fullName, selected: $0.id == selected?.id)
+            SelectOption(value: String($0.id), label: $0.fullName, selected: $0.id == selected?.id)
         }
         guard let selected else { return }
 
@@ -80,7 +74,7 @@ struct GitHubSubmitState: Encodable {
         let branch =
             requestedBranch.flatMap { names.contains($0) ? $0 : nil }
             ?? (names.contains(selected.defaultBranch) ? selected.defaultBranch : names.first)
-        branches = names.map { GitHubSubmitOption(value: $0, label: $0, selected: $0 == branch) }
+        branches = names.map { SelectOption(value: $0, label: $0, selected: $0 == branch) }
         guard let branch else { return }
 
         let head = try await access.commit(branch, in: selected, req: req)

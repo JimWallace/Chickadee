@@ -137,9 +137,9 @@ extension AdminRoutes {
         // Newest term first, as every course list sorts (`courseListPrecedes`);
         // each account's enrolled courses keep this order.
         let courses = try await APICourse.query(on: req.db).all().sorted(by: courseListPrecedes)
-        let allCourses = courses.compactMap { course -> AdminMCPCourseRef? in
+        let allCourses = courses.compactMap { course -> AdminCourseRef? in
             guard let id = course.id else { return nil }
-            return AdminMCPCourseRef(
+            return AdminCourseRef(
                 id: id.uuidString, code: course.code, name: course.name, termLabel: course.term?.displayName)
         }
 

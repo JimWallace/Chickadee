@@ -91,7 +91,7 @@ struct NewAssignmentContext: Encodable {
     let detectedCapabilities: [String]
     /// The required Language select's options, same builder the edit page
     /// uses. Declared at creation so nothing downstream has to derive it.
-    let assignmentLanguageOptions: [AssignmentLanguageOption]
+    let assignmentLanguageOptions: [SelectOption]
     /// "C++ or Racket" — the languages whose assignments are upload-only,
     /// derived so the fine print cannot name fewer of them than the rule
     /// enforces. It named only C++ for the whole of Racket's existence.
@@ -269,7 +269,7 @@ struct EditAssignmentContext: Encodable {
     /// than written out in the template so a sixth language needs no Leaf edit —
     /// the same discovered-not-enumerated rule the kernel-alias generator and
     /// the runner's capability probe follow.
-    let assignmentLanguageOptions: [AssignmentLanguageOption]
+    let assignmentLanguageOptions: [SelectOption]
     /// "C++ or Racket" — see the identically-named field on
     /// `NewAssignmentContext`. Both pages carry the same fine print and both
     /// had gone stale the same way.
@@ -303,13 +303,9 @@ struct EditAssignmentContext: Encodable {
     let embedded: Bool?
 }
 
-/// One entry in the edit page's Language select.
-struct AssignmentLanguageOption: Encodable {
-    /// An `AssignmentLanguage` raw value, or "" for the derive-it entry.
-    let value: String
-    let label: String
-    let selected: Bool
-
+/// The edit page's Language select. Each value is an `AssignmentLanguage`
+/// raw value, or "" for the no-language entry.
+enum AssignmentLanguageOption {
     /// Builds the whole list for an assignment whose manifest records
     /// `recorded` (nil when no language is recorded).
     ///
@@ -320,16 +316,16 @@ struct AssignmentLanguageOption: Encodable {
     /// It doubles as the way to undo a declaration, since
     /// `AssignmentLanguage.resolve` treats a recorded value as authoritative
     /// over the notebook and the suite.
-    static func options(recorded: String?) -> [AssignmentLanguageOption] {
+    static func options(recorded: String?) -> [SelectOption] {
         let normalized = recorded?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let noLanguage = AssignmentLanguageOption(
+        let noLanguage = SelectOption(
             value: noLanguageChoice,
             label: "None — plain shell scripts",
             selected: normalized == nil || AssignmentLanguage(rawValue: normalized ?? "") == nil
         )
         return [noLanguage]
             + AssignmentLanguage.allCases.map { language in
-                AssignmentLanguageOption(
+                SelectOption(
                     value: language.rawValue,
                     label: language.displayName,
                     selected: normalized == language.rawValue
@@ -344,7 +340,7 @@ struct AssignmentLanguageOption: Encodable {
 struct ActivityEditFacts: Encodable {
     /// The "Class activity" select's options: "None" first, then every
     /// `ActivityKind` in `allCases` order — derived, never written out.
-    let kindOptions: [ActivityKindOption]
+    let kindOptions: [SelectOption]
     /// True once a student has submitted: the select renders disabled and the
     /// fine print says why (`ActivityAuthoring.kindLockedMessage`'s rule).
     let locked: Bool
@@ -365,7 +361,7 @@ struct ActivityEditFacts: Encodable {
     /// The Opponent file select: "None chosen" first, then every support file
     /// of the setup (the same listing `get_support_files` reports), marking
     /// the stored one selected.
-    let opponentFileOptions: [OpponentFileOption]
+    let opponentFileOptions: [SelectOption]
     /// The live-session window's bounds as a `datetime-local` input reads
     /// them — "2026-09-22T14:00", local time, no zone — or "" when unset.
     ///
@@ -402,37 +398,29 @@ struct ActivityEditFacts: Encodable {
     }
 }
 
-/// One entry in the Activity section's "Opponent file" select.
-struct OpponentFileOption: Encodable {
-    /// A support filename, or "" for none.
-    let value: String
-    let label: String
-    let selected: Bool
-
+/// The Activity section's "Opponent file" select. Each value is a support
+/// filename, or "" for none.
+enum OpponentFileOption {
     /// The empty choice followed by every support file. A stored file the
     /// setup no longer contains (deleted after it was chosen) is listed too,
     /// marked selected, so the page shows what the worker will fail on rather
     /// than silently showing "None chosen".
-    static func options(supportFiles: [String], current: String?) -> [OpponentFileOption] {
+    static func options(supportFiles: [String], current: String?) -> [SelectOption] {
         var names = supportFiles
         if let current, !names.contains(current) { names.append(current) }
-        return [OpponentFileOption(value: "", label: "None chosen", selected: current == nil)]
-            + names.map { OpponentFileOption(value: $0, label: $0, selected: $0 == current) }
+        return [SelectOption(value: "", label: "None chosen", selected: current == nil)]
+            + names.map { SelectOption(value: $0, label: $0, selected: $0 == current) }
     }
 }
 
-/// One entry in the edit page's "Class activity" select.
-struct ActivityKindOption: Encodable {
-    /// An `ActivityKind` raw value, or `SetActivityTool.noActivityChoice`.
-    let value: String
-    let label: String
-    let selected: Bool
-
+/// The edit page's "Class activity" select. Each value is an `ActivityKind`
+/// raw value, or `SetActivityTool.noActivityChoice`.
+enum ActivityKindOption {
     /// "None" followed by every kind, marking the stored one selected.
-    static func options(current: ActivityKind?) -> [ActivityKindOption] {
-        [ActivityKindOption(value: SetActivityTool.noActivityChoice, label: "None", selected: current == nil)]
+    static func options(current: ActivityKind?) -> [SelectOption] {
+        [SelectOption(value: SetActivityTool.noActivityChoice, label: "None", selected: current == nil)]
             + ActivityKind.allCases.map { kind in
-                ActivityKindOption(value: kind.rawValue, label: kind.displayName, selected: kind == current)
+                SelectOption(value: kind.rawValue, label: kind.displayName, selected: kind == current)
             }
     }
 }

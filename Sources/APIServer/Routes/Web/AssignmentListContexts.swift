@@ -276,7 +276,7 @@ struct TournamentControlFacts: Encodable {
     /// before superseding it.
     let hasRunInProgress: Bool
     /// The schedule select: every `TournamentSchedule`, the bracket selected.
-    let scheduleOptions: [TournamentScheduleOption]
+    let scheduleOptions: [SelectOption]
     let leaderboardURL: String
 
     static let none = TournamentControlFacts(
@@ -296,14 +296,12 @@ struct TournamentControlFacts: Encodable {
     }
 }
 
-struct TournamentScheduleOption: Encodable {
-    let value: String
-    let label: String
-    let selected: Bool
-
-    static func options(selected: TournamentSchedule = .bracket) -> [TournamentScheduleOption] {
+/// The tournament form's schedule select.
+enum TournamentScheduleOption {
+    /// Every schedule, with `selected` marked.
+    static func options(selected: TournamentSchedule = .bracket) -> [SelectOption] {
         TournamentSchedule.allCases.map {
-            TournamentScheduleOption(value: $0.rawValue, label: $0.displayName, selected: $0 == selected)
+            SelectOption(value: $0.rawValue, label: $0.displayName, selected: $0 == selected)
         }
     }
 }

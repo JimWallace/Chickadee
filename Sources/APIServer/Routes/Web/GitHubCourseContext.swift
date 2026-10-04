@@ -65,7 +65,7 @@ struct InstructorGitHubAssignmentRow: Encodable {
     let testSetupID: String
     let title: String
     /// "None" first, then the organization's templates.
-    let templateOptions: [GitHubSubmitOption]
+    let templateOptions: [SelectOption]
     let templateName: String?
     let repositoryCount: Int
 }
