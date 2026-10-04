@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.396] - 2026-10-04
+
+### Changed
+
+- **`docs/architecture.md` states what in-process grading does not protect.** Most generated tests load the submission into the test's own process, so a submission can read the expected value of the test that runs it. It can also read every file in its working directory, which on the native worker includes every test script, the grader-only files and the per-student inputs file. The new section also states what the process boundary still protects (the server, and the host when the runner uses `--sandbox`) and that concurrent jobs on one runner are not isolated from each other (#2017).
+
+
 ## [0.5.395] - 2026-10-04
 
 ### Fixed
