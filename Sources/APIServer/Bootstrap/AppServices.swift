@@ -20,7 +20,11 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     try reconcileLegacyMigrationNamespace(on: app)
 
     try app.autoMigrate().wait()
-    app.lifecycle.use(ObservabilityLifecycleHandler())
+    // Retention for the diagnostics tables, worker nonces and login attempts:
+    // leased sweeps, not work inside a student's or a runner's request (#1924).
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.diagnosticsPruneMonitor })
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.workerNonceReaperMonitor })
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.loginAttemptReaperMonitor })
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.assignmentDeadlineMonitor })
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.stuckSubmissionReaperMonitor })
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.achievementEvaluationMonitor })
