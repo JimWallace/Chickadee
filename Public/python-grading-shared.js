@@ -1,8 +1,9 @@
 // Public/python-grading-shared.js
 //
 // Grading semantics for the xeus-python browser grader — the Python analogue of
-// Public/r-grading-shared.js, and the counterpart to Public/grading-shared.js
-// (which holds the Python that BOTH substrates run).
+// Public/r-grading-shared.js.  Public/grading-shared.js holds the Python
+// environment config, the seed cell and the exit-code mapping that the Python
+// grader also uses.
 //
 // Loading: classic script.  Requires /grading-shared.js first.
 // Exposes exactly one global: ChickadeePythonGradingShared.
@@ -12,14 +13,12 @@
 // -------------------------
 // The R port had to re-create a process contract from scratch, because
 // test_runtime.R calls `quit()` and reads `commandArgs()` and a kernel has
-// neither.  Python needs almost none of that, for one reason: grading-shared.js
-// already captures output IN-PROCESS — it swaps sys.stdout/sys.stderr for
-// StringIO and catches SystemExit itself — rather than relying on the substrate
-// to hand it two pipes.  All of that is ordinary Python and behaves identically
-// inside a kernel.  So `envConfigPython`, `STDOUT_REDIRECT_PY`,
-// `RESTORE_STREAMS_PY`, `assignmentSeedPython` and `deriveExitCode` are reused
-// verbatim, and the Pyodide and xeus-python graders share them the way the
-// worker and main-thread Pyodide graders already do.
+// neither.  Python needs almost none of that, for one reason: the grading cell
+// captures output IN-PROCESS — it swaps sys.stdout/sys.stderr for StringIO and
+// catches SystemExit itself — rather than relying on the substrate to hand it
+// two pipes.  All of that is ordinary Python and behaves identically inside a
+// kernel.  So `envConfigPython`, `assignmentSeedPython` and `deriveExitCode`
+// come from grading-shared.js unchanged.
 //
 // Two things that were true of R are deliberately NOT repeated here:
 //
@@ -35,9 +34,8 @@
 //     twenty.  Write it for clarity.
 //
 //
-// The one thing that genuinely changes
-// ------------------------------------
-// `py.runPythonAsync(CAPTURE_OUTPUT_PY)` RETURNS the captured tuple to JS.
+// How the result gets back to JS
+// ------------------------------
 // `execute_request` returns nothing — a kernel replies with messages, not
 // values.  So the payload is printed on the last line of the cell behind a
 // per-run nonce and parsed back.  JSON, because it is stdlib and removes every
@@ -56,9 +54,8 @@
 
     // The vendored kernel the Python grader boots — mirroring
     // Public/jupyterlite/xeus/kernels.json and chickadee-python/xpython/kernel.json.
-    // This is the SAME env the notebook editor boots for Python notebooks, which
-    // is the property the Pyodide grader does not have (editor xeus-python 3.13,
-    // grading Pyodide 3.14).
+    // This is the SAME env the notebook editor boots for Python notebooks, so a
+    // script that runs in the editor runs the same way here.
     var PYTHON_KERNEL = {
         envName: 'chickadee-python',
         kernelName: 'xpython',
@@ -157,15 +154,13 @@
 
     // The cell that grades ONE script.
     //
-    // Structure mirrors what the Pyodide path does across several
-    // runPythonAsync calls, collapsed into one cell because a kernel round-trip
-    // is per-cell: redirect the streams, run the script catching SystemExit the
-    // way a `python3 script` subprocess would report an exit status, restore the
-    // streams, then print the payload.
+    // One cell, because a kernel round-trip is per cell.  The cell redirects
+    // the streams, runs the script, catches SystemExit the way a
+    // `python3 script` subprocess would report an exit status, restores the
+    // streams, then prints the payload.
     //
     // `compile(source, scriptName, 'exec')` gives inspect.stack() the real
-    // filename, which is how test_runtime reads the correct test label — the
-    // same reason grading-shared.js's runScriptPython does it.
+    // filename, which is how test_runtime reads the correct test label.
     function runScriptCellPython(scriptName, nonce) {
         var name = JSON.stringify(String(scriptName));
         var marker = JSON.stringify('\n' + nonce + ':');
@@ -235,8 +230,8 @@
         if (!payload || typeof payload !== 'object') return null;
 
         // One implementation of "exit code from a captured SystemExit, else from
-        // the raised error" — the same helper the Pyodide path uses, so the two
-        // substrates cannot disagree about what a crashed script scores.
+        // the raised error": deriveExitCode in grading-shared.js.
+        // python-grading-shared.test.mjs pins it without booting a kernel.
         var derived = shared.deriveExitCode(
             payload.exit, payload.error || null, payload.err || '');
         return {

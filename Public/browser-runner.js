@@ -3,14 +3,15 @@
 // Chickadee browser-side WASM runner for labs (gradingMode: "browser").
 //
 // Submit-triggered (not polling): notebook.js calls window.BrowserRunner.runAndSubmit()
-// when the student clicks Submit.  Tests run locally in Pyodide; the notebook
-// bytes and TestOutcomeCollection are submitted to the server in one atomic call.
+// when the student clicks Submit.  Tests run locally on xeus kernels in Web
+// Workers; the notebook bytes and TestOutcomeCollection are submitted to the
+// server in one atomic call.
 //
 // Workflow:
 //   1. Fetch test setup zip from /api/v1/browser-runner/testsetups/:id/download
-//   2. Unpack zip into the kernel's in-memory filesystem
+//   2. Unpack zip into a file map that each kernel writes to its own filesystem
 //   3. Write the test_runtime helper libraries
-//   4. Write notebook bytes and extract code cells to .py (equiv. of nb_to_py.py)
+//   4. Write notebook bytes and extract the code cells through RunnerCore
 //   5. Run each test script on its kernel; capture stdout/stderr
 //   6. POST notebook bytes + TestOutcomeCollection to /api/v1/submissions/browser-result
 //
@@ -21,12 +22,12 @@
 //   .R   → the vendored xeus-r kernel, via /r-grading-worker.js
 //   .lua → the vendored xeus-lua kernel, via /lua-grading-worker.js
 //   .m   → the vendored xeus-octave kernel, via /octave-grading-worker.js
-// All are Web Workers running a xeus kernel.  For Python, R and Octave it is
-// the SAME environment the notebook editor boots, so "it ran in the editor"
-// implies "it grades here"; Lua is a grading substrate only, with no editor
-// kernel to skew from.  Only the substrates an assignment actually needs are booted, so an R
-// lab never pays for the Python env (and vice versa).  Shell scripts (.sh) are
-// not supported in the browser environment on any substrate.
+// All are Web Workers running a xeus kernel.  Each one is the SAME environment
+// the notebook editor boots for that language, so "it ran in the editor"
+// implies "it grades here".  Only the substrates an assignment actually needs
+// are booted, so an R lab never pays for the Python env (and vice versa).
+// Shell scripts (.sh) are not supported in the browser environment on any
+// substrate.
 
 (function () {
     'use strict';
@@ -40,20 +41,17 @@
     const statusEl = document.getElementById('browser-runner-status');
     if (statusEl) statusEl.hidden = false;
 
-    // Grading semantics shared with the grading worker — the Python snippets,
-    // exit-code derivation, MEMFS writer, and package preloader come from
-    // Public/grading-shared.js (a <script> tag before this file on the
-    // notebook page), so the worker grader and this main-thread fallback
-    // cannot drift.  Throws loudly here if the tag is missing.
-    // The one piece of grading-shared.js this file still needs: the exit-code
-    // mapping, used nowhere here directly but re-exported for the tests that pin
-    // it. Everything else in that module is consumed inside the grading workers.
+    // Public/grading-shared.js is a <script> tag before this file on the
+    // notebook page (see _notebook-body.leaf).  The grading workers use it;
+    // this file does not call into it.  The exit-code mapping is only
+    // re-exported on the test hooks below.  Throws loudly here if the tag is
+    // missing.
     const { deriveExitCode } = ChickadeeGradingShared;
 
-    // R grading semantics — the per-script wrapper and the per-student inputs
-    // file, shared with /r-grading-worker.js the same way the Python snippets
-    // are shared with /r-grading-worker.js.  Loaded by a <script> tag alongside
-    // grading-shared.js (see notebook.leaf).
+    // The per-student inputs file renderers for R, Lua and Octave.  Each comes
+    // from that language's grading-shared.js, which its grading worker also
+    // loads.  Loaded by <script> tags alongside grading-shared.js (see
+    // _notebook-body.leaf).
     const { personalizationInputsSourceR } = ChickadeeRGradingShared;
     const { personalizationInputsSourceLua } = ChickadeeLuaGradingShared;
     const { personalizationInputsSourceOctave } = ChickadeeOctaveGradingShared;
@@ -298,16 +296,16 @@
         }
         // Submit-phase breadcrumb (student submit path only — instructor
         // validation calls runScripts without reportPhase, so it stays silent).
-        // The heavy Pyodide load is now deferred into the executor (worker init
-        // or main-thread _ensureReady) and is covered by the suite_started →
-        // suite_done window, so a Pyodide-load hang shows up as "stuck after
-        // suite_started" rather than disappearing before runtime_loaded.
+        // The heavy kernel boot happens inside the executor (the worker's init)
+        // and is covered by the suite_started → suite_done window, so a boot
+        // hang shows up as "stuck after suite_started" rather than disappearing
+        // before runtime_loaded.
         if (options.reportPhase) options.reportPhase('runtime_loaded');
 
         // 1. Download and unpack the test setup zip into a plain JS file map
         //    { <relativePath>: <string|Uint8Array> }. This is the canonical
-        //    workspace; the chosen executor (worker or main-thread Pyodide)
-        //    materializes it into its own filesystem.
+        //    workspace; each grading worker materializes it into its kernel's
+        //    filesystem.
         setRunnerStatus('loading', 'Fetching test setup…');
         let setupZip;
         try {
@@ -479,14 +477,11 @@
         const sectionIDPerSuite = (manifest.testSuites || []).map(entry =>
             (entry && typeof entry.sectionID === 'string' && entry.sectionID) ? entry.sectionID : null);
 
-        // 5. Pick the executor. The Web-Worker executor is preferred: it runs
-        //    Pyodide off the main thread, so a CPU-bound infinite loop in student
-        //    code (which never yields to JS) can be killed via Worker.terminate()
-        //    when the per-test timeout fires — something the main-thread
-        //    Promise.race fallback cannot do (the timer never gets a turn). The
-        //    fallback path is preserved for environments with no Worker (and for
-        //    the Node test harness, which has neither Worker nor a factory
-        //    override, so it deterministically exercises the fallback).
+        // 5. Pick the executor. Every substrate runs its kernel in a Web Worker,
+        //    off the main thread, so a CPU-bound infinite loop in student code
+        //    (which never yields to JS) can be killed via Worker.terminate()
+        //    when the per-test timeout fires. A browser with no Worker fails
+        //    the grade over to the native worker (see executorForKind).
         const executor = makeExecutor(
             files, assignmentSeed, runnerCore, options.reportPhase, suites, assignmentLanguage);
         try {
@@ -507,14 +502,14 @@
             if (options.reportPhase) options.reportPhase('suite_started', 'tests=' + suites.length);
 
             // Probe the grading runtime BEFORE the shared executeSuites loop. If
-            // Pyodide can't initialize at all — e.g. the Pyodide-3.14 WebKit
-            // `call_indirect to a null table entry` trap that bricks grading on
-            // some Safari/iOS builds — abort the whole grade by THROWING here, so
-            // submitBrowserNotebook's catch (notebook.js) fails the submission
-            // over to server-side grading (/submissions/browser-failover → the
-            // native worker backstop). Without this probe the failure is invisible
-            // to the caller: the shared RunnerCore wasm catches each rejected
-            // run() and returns an exit-2 `error` ScriptOutput
+            // a required substrate can't initialize at all — a kernel that never
+            // boots, or a browser with no Worker — abort the whole grade by
+            // THROWING here, so submitBrowserNotebook's catch (notebook.js)
+            // fails the submission over to server-side grading
+            // (/submissions/browser-failover → the native worker backstop).
+            // Without this probe the failure is invisible to the caller: the
+            // shared RunnerCore wasm catches each rejected run() and returns an
+            // exit-2 `error` ScriptOutput
             // (wasm/Sources/RunnerWasm/main.swift, "browser executor: script run
             // rejected"), so executeSuites COMPLETES with an all-`error`
             // collection that runAndSubmit then posts as a real 0% result — the
@@ -543,12 +538,12 @@
     }
 
     // -------------------------------------------------------------------------
-    // Executor selection (Web-Worker preferred, main-thread Pyodide fallback)
+    // Executor selection (one Web Worker per substrate, no main-thread path)
     // -------------------------------------------------------------------------
 
     // A grading worker can be used when the environment exposes the Worker
     // constructor OR a test/embed override factory is present. The factory seam
-    // lets the Node harness inject a fake Worker (no real Pyodide); production
+    // lets the Node harness inject a fake Worker (no real kernel); production
     // spawns the substrate's worker with the page's ?v= cache-buster so the
     // worker (and the grading-shared.js it importScripts with the same query)
     // pin to this release's bytes.
@@ -750,26 +745,26 @@
     }
 
     // -------------------------------------------------------------------------
-    // GradingWorkerExecutor — Pyodide in a Web Worker so run-aways can be killed.
+    // GradingWorkerExecutor — a xeus kernel in a Web Worker, so run-aways can be
+    // killed.
     //
     // Holds the file map + seed and lazily spawns a grading worker (via the
     // injectable factory), sending it `init`. Each run posts `{type:'run', …}`
-    // and races the reply against a real setTimeout: classification (non-python
-    // kinds) is decided on the MAIN thread (so a shell/R/unsupported script never
-    // touches the worker), and a python script that blows the timeout is killed
-    // with Worker.terminate(). The next run detects the dead worker and spawns +
-    // re-inits a fresh one — re-sending the same file map + seed — before
-    // proceeding. This is the kill path the main-thread Promise.race could not
-    // provide against a synchronous CPU-bound loop.
+    // and races the reply against a real setTimeout. Classification is decided
+    // upstream, on the MAIN thread, by RoutingExecutor (so a shell or
+    // unsupported script never touches a worker). A script that blows the
+    // timeout is killed with Worker.terminate(). The next run detects the dead
+    // worker and spawns + re-inits a fresh one — re-sending the same file map +
+    // seed — before proceeding. Worker.terminate() is the only kill path that
+    // works against a synchronous CPU-bound loop.
     // -------------------------------------------------------------------------
 
     // Bounded init: how long to wait for a grading worker to finish booting its
-    // kernel +
-    // env-config before declaring it wedged, terminating it, and retrying once on
-    // a fresh worker. The init path used to be UNBOUNDED — unlike run(), which
-    // races a timer — so a Pyodide load/boot that never completed (observed
-    // intermittently when the editor kernel boots a SECOND Pyodide beside the
-    // grader under cross-origin isolation) hung the whole grade forever, with no
+    // kernel + env-config before declaring it wedged, terminating it, and
+    // retrying once on a fresh worker. The init path used to be UNBOUNDED —
+    // unlike run(), which races a timer — so a runtime boot that never completed
+    // (first observed when the editor booted a SECOND runtime beside the grader
+    // under cross-origin isolation) hung the whole grade forever, with no
     // telemetry, since the per-test timer only covers the 'run' message. A real
     // cold init is seconds, so a generous default never trips a healthy boot; it
     // only converts an infinite hang into a bounded, observable, self-healing
@@ -785,9 +780,10 @@
             this.assignmentSeed = assignmentSeed ?? null;
             this.runnerCore = runnerCore;
             this.factory = factory;
-            // Which substrate this instance drives ('Python' | 'R') — used only
-            // in error text and telemetry, so a failed init says which runtime
-            // failed. The protocol and lifecycle are identical for both.
+            // Which substrate this instance drives (a display label such as
+            // 'Python' or 'R') — used only in error text and telemetry, so a
+            // failed init says which runtime failed. The protocol and lifecycle
+            // are identical for every substrate.
             this.label = label || 'Python';
             // Submit-phase breadcrumb sink (student submit path only). Undefined
             // on the instructor-validation path, so init telemetry stays silent
@@ -833,7 +829,7 @@
             };
             worker.onerror = (err) => {
                 // A hard worker error rejects every in-flight call; the next run
-                // rebuilds. (Pyodide load failures surface here.)
+                // rebuilds. (A worker script that fails to load surfaces here.)
                 const reason = (err && (err.message || err.filename)) || 'grading worker error';
                 for (const [, entry] of this._pending) entry.reject(new Error(String(reason)));
                 this._pending.clear();
@@ -953,8 +949,9 @@
             await this._ensureWorker();
 
             // Race the worker reply against a REAL timer. Because the worker runs
-            // Pyodide on its own thread, the timer always fires even when student
-            // code is in a synchronous CPU-bound loop — so terminate() can kill it.
+            // the kernel on its own thread, the timer always fires even when
+            // student code is in a synchronous CPU-bound loop — so terminate()
+            // can kill it.
             const reply = await this._postWithTimeout(
                 { type: 'run', script: name, limit: limitSeconds }, limitSeconds * 1000);
 
@@ -980,7 +977,7 @@
             };
         }
 
-        // Eagerly spawn + init the grading worker so a wedged or trapping Pyodide
+        // Eagerly spawn + init the grading worker so a wedged or trapping kernel
         // init rejects HERE (for the caller to fail over) instead of being
         // swallowed into per-script `error` outcomes by the wasm run() catch.
         // Idempotent: shares the cached _ensureWorker() init the run() path uses.
@@ -989,7 +986,7 @@
         }
 
         async dispose() {
-            // Terminate the worker so Pyodide's memory is reclaimed. This counts
+            // Terminate the worker so the kernel's memory is reclaimed. This counts
             // as a terminate, but a fresh run() would spawn a new worker anyway.
             if (this.worker) {
                 try { this.worker.terminate(); } catch (_) { /* best-effort */ }
@@ -1000,8 +997,6 @@
             this._pending.clear();
         }
     }
-
-    // writeFilesToPyFS comes from grading-shared.js (shared with the worker).
 
     // Decode a file-map value (UTF-8 string or byte array) to text — used to
     // classify a script on the main thread without round-tripping the worker.
@@ -1022,29 +1017,15 @@
     }
 
     // -------------------------------------------------------------------------
-    // Notebook extraction (mirrors runner-support nb_to_py.py / RunnerDaemon.swift)
+    // Notebook extraction (RunnerCore, shared with the native worker)
     // -------------------------------------------------------------------------
 
-    async function extractNotebook(py, workDir, filename, notebookText) {
-        const core = await loadRunnerCore();
-        const extracted = {};
-        extractNotebookToMap(extracted, core, filename, notebookText);
-        // Replay the produced relative paths into the live Pyodide FS — the
-        // map-based extractor (used by runScripts) and this py.FS variant (kept
-        // for the standalone extractNotebook test + any direct caller) share one
-        // implementation; only the sink differs.
-        for (const [relPath, value] of Object.entries(extracted)) {
-            py.FS.writeFile(`${workDir}/${relPath}`, value);
-        }
-    }
-
     // Notebook extraction into a plain file map { <relativePath>: <string> }.
-    // Mirrors extractNotebook but writes to a JS object instead of py.FS, so the
-    // grading worker (which holds its own Pyodide FS) and the main-thread
-    // fallback both consume the same extraction result. BOTH languages extract
-    // through the shared RunnerCore wasm (already loaded as `core`): Python via
-    // extractPython, R via extractR — the same marker-emitting implementation
-    // the native worker runs, so the two extractors cannot drift.
+    // runScripts adds the result to the workspace, and each grading worker
+    // writes that workspace into its kernel's filesystem. Every language
+    // extracts through the shared RunnerCore wasm (already loaded as `core`):
+    // extractPython, extractR, extractLua or extractOctave — the same Swift
+    // code the native worker runs, so the two extractors cannot drift.
     function extractNotebookToMap(files, core, filename, notebookText) {
         let notebook;
         try { notebook = JSON.parse(notebookText); } catch (_) { return; }
@@ -1203,8 +1184,9 @@
     }
 
     // Map a RunnerCore interpreter raw value to how the browser dispatches it.
-    // The browser can only execute Python (Pyodide); other interpreters get a
-    // precise "not here" message.
+    // Each kernel language maps to its substrate kind.  Shell and the other
+    // interpreters have no browser substrate, so RoutingExecutor.run gives them
+    // a precise "not here" message.
     function interpreterToKind(interp) {
         if (interp === 'python') return 'python';
         if (interp === 'rscript') return 'r';
@@ -1220,7 +1202,7 @@
     // extractNotebookToMap above.
 
     // -------------------------------------------------------------------------
-    // Python script execution
+    // Script helpers
     // -------------------------------------------------------------------------
 
     // Lowercased file extension of a script name, or '' when there is none —
@@ -1242,13 +1224,6 @@
         return { exitCode: 2, stdout: message, stderr: '', executionTimeMs: 0, timedOut: false };
     }
 
-    // Execute a Python test script in Pyodide and capture RAW output. The exit
-    // code comes from the SystemExit that test_runtime's passed/failed/errored
-    // raise — the SAME codes the native subprocess exits with — so RunnerCore's
-    // exit-code → status mapping is identical across runners. No interpretation
-    // happens here.
-    // deriveExitCode comes from grading-shared.js (shared with the worker).
-
     // -------------------------------------------------------------------------
     // Outcome / collection builders
     // -------------------------------------------------------------------------
@@ -1257,7 +1232,7 @@
     // traceback extraction, longResult assembly) now live in RunnerCore
     // (interpretScriptOutput), shared with the native worker and applied inside
     // `executeSuites`. The browser no longer interprets output in JS — it only
-    // produces raw ScriptOutput (see runPyScriptRaw).
+    // produces raw ScriptOutput (see GradingWorkerExecutor.run).
 
     function buildCollection(setupID, outcomes) {
         const passCount    = outcomes.filter(o => o.status === 'pass').length;
@@ -1358,17 +1333,16 @@
     }
 
     // -------------------------------------------------------------------------
-    // Shared Python snippets (env config + per-script exec) live in
-    // Public/grading-shared.js — one copy run by BOTH this main-thread
-    // fallback and the grading worker, destructured at the top of the IIFE.
+    // Embedded runtime helpers (copies of the files in Tools/runner-support/)
+    //
+    // The native runner compiles those files into its binary. The browser
+    // cannot read them, so each one has a copy here.
+    // Tests/BrowserRunnerJSTests/runtime-drift.test.mjs fails if a copy
+    // drifts from its file.
     // -------------------------------------------------------------------------
 
-    // -------------------------------------------------------------------------
-    // Embedded runtime helpers (kept in sync with Sources/Worker/RunnerDaemon.swift)
-    // -------------------------------------------------------------------------
-
-    // test_runtime.py — mirrors the testRuntimePy string in RunnerDaemon.swift.
-    // Update both locations when making changes.
+    // test_runtime.py — a copy of Tools/runner-support/test_runtime.py.
+    // Change both together.
     const TEST_RUNTIME_PY = `\
 import inspect
 import importlib.util
@@ -1795,7 +1769,7 @@ def _require_num_args(fn: Any, name: str, num_args: int) -> None:
 `;
 
     // sitecustomize.py — auto-imported by Python; makes helpers available as builtins.
-    // Mirrors the sitecustomizePy constant in RunnerDaemon.swift.
+    // A copy of Tools/runner-support/sitecustomize.py.
     const SITECUSTOMIZE_PY = `\
 import builtins
 import test_runtime as _tr
@@ -1821,8 +1795,7 @@ for _module_name in _tr.student_module_names_in_load_order():
 `;
 
 
-    // test_runtime.R — mirrors Tools/runner-support/test_runtime.R (and the
-    // testRuntimeR* literals in Sources/Worker/TestRuntimeSources.swift).
+    // test_runtime.R — mirrors Tools/runner-support/test_runtime.R.
     // Written into every browser grading workspace so an R test script's
     // `source("test_runtime.R")` resolves to the same helpers the native runner
     // injects. Pinned by Tests/BrowserRunnerJSTests/runtime-drift.test.mjs.
@@ -2097,8 +2070,7 @@ chickadee_require_fn <- function(env, name) {
 }
 `;
 
-    // test_runtime.lua — mirrors Tools/runner-support/test_runtime.lua (and the
-    // testRuntimeLua string in Sources/Worker/TestRuntimeSources.swift). Written
+    // test_runtime.lua — mirrors Tools/runner-support/test_runtime.lua. Written
     // into every browser grading workspace alongside the Python and R helpers,
     // for the same reason they are: the assignment's language is not known until
     // after the seed fetch, and a spare copy is a reserved filename every
@@ -2468,8 +2440,7 @@ end
 return M
 `;
 
-    // test_runtime.m — mirrors Tools/runner-support/test_runtime.m (and the
-    // testRuntimeOctave string in Sources/Worker/TestRuntimeSources.swift).
+    // test_runtime.m — mirrors Tools/runner-support/test_runtime.m.
     // Written into every browser grading workspace alongside the other
     // languages' helpers, for the same reason: the assignment's language is
     // not known until after the seed fetch, and a spare copy is a reserved
@@ -2993,20 +2964,20 @@ end
     if (testHooks) {
         testHooks.exports = {
             // Embedded runtime sources, exposed so the drift test can assert
-            // they stay in sync with Tools/runner-support/*.py.
+            // they stay in sync with Tools/runner-support/.
             TEST_RUNTIME_PY,
             SITECUSTOMIZE_PY,
             TEST_RUNTIME_R,
             TEST_RUNTIME_LUA,
             TEST_RUNTIME_OCTAVE,
-            // Shared grading semantics (re-exported from grading-shared.js).
             runAndSubmit,
             runScripts,
             scriptExtension,
-            extractNotebook,
+            loadRunnerCore,
             extractNotebookToMap,
             personalizationInputsSource,
             personalizationInputsSourceR,
+            // Re-exported from grading-shared.js.
             deriveExitCode,
             buildCollection,
             fileAsText,

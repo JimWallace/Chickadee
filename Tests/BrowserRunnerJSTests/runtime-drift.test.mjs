@@ -5,8 +5,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 // Guards against the embedded runtime helpers in Public/browser-runner.js
-// drifting from the canonical copies in Tools/runner-support/.  The Swift embeds
-// are checked separately by Tests/WorkerTests/RuntimeSourceDriftTests.swift.
+// drifting from the canonical copies in Tools/runner-support/.  The native
+// runner has no copy to drift: it compiles those files into its binary.
 //
 // Comparison is over executable code only: blank lines and full-line comments
 // are stripped, since the embeds intentionally omit some documentation comments
@@ -62,25 +62,24 @@ test('embedded TEST_RUNTIME_PY stays in sync with Tools/runner-support/test_runt
     normalizeCode(embeds.TEST_RUNTIME_PY),
     normalizeCode(canon),
     'Public/browser-runner.js TEST_RUNTIME_PY drifted from Tools/runner-support/test_runtime.py — '
-      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+      + 're-sync both.',
   );
 });
 
 test('embedded TEST_RUNTIME_R stays in sync with Tools/runner-support/test_runtime.R', async () => {
   // The browser R grader writes this into every grading workspace so an R test
   // script's `source("test_runtime.R")` resolves to the same helpers the native
-  // runner injects (#1271). Three copies now exist — this embed, the canonical
-  // file, and the testRuntimeR* literals in Sources/Worker/TestRuntimeSources.swift
-  // (pinned by Tests/WorkerTests/RuntimeSourceDriftTests.swift) — and a drift in
-  // any of them would make a submission grade differently depending on whether it
-  // was graded in the browser or by the worker.
+  // runner injects (#1271). Two copies exist — this embed and the canonical
+  // file, which the native runner compiles into its binary — and a drift between
+  // them would make a submission grade differently depending on whether it was
+  // graded in the browser or by the worker.
   const embeds = await loadEmbeds();
   const canon = await fs.readFile(path.resolve('Tools/runner-support/test_runtime.R'), 'utf8');
   assert.equal(
     normalizeCode(embeds.TEST_RUNTIME_R),
     normalizeCode(canon),
     'Public/browser-runner.js TEST_RUNTIME_R drifted from Tools/runner-support/test_runtime.R — '
-      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+      + 're-sync both.',
   );
 });
 
@@ -91,7 +90,7 @@ test('embedded SITECUSTOMIZE_PY stays in sync with Tools/runner-support/sitecust
     normalizeCode(embeds.SITECUSTOMIZE_PY),
     normalizeCode(canon),
     'Public/browser-runner.js SITECUSTOMIZE_PY drifted from Tools/runner-support/sitecustomize.py — '
-      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+      + 're-sync both.',
   );
 });
 
@@ -102,7 +101,7 @@ test('embedded TEST_RUNTIME_LUA stays in sync with Tools/runner-support/test_run
     normalizeCode(embeds.TEST_RUNTIME_LUA, '--'),
     normalizeCode(canon, '--'),
     'Public/browser-runner.js TEST_RUNTIME_LUA drifted from Tools/runner-support/test_runtime.lua — '
-      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+      + 're-sync both.',
   );
 });
 
@@ -113,6 +112,6 @@ test('embedded TEST_RUNTIME_OCTAVE stays in sync with Tools/runner-support/test_
     normalizeCode(embeds.TEST_RUNTIME_OCTAVE, '%'),
     normalizeCode(canon, '%'),
     'Public/browser-runner.js TEST_RUNTIME_OCTAVE drifted from Tools/runner-support/test_runtime.m — '
-      + 're-sync both, and Sources/Worker/TestRuntimeSources.swift.',
+      + 're-sync both.',
   );
 });
