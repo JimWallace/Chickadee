@@ -17,17 +17,13 @@ import VaporTesting
 // real Vapor `Application` + DB.  TODO(migration): relax after Phase 4.
 @Suite(.serialized) struct AuthModeGatingTests {
 
-    private func makeApp(authMode: AuthMode) async throws -> Application {
-        try await makeTestingApplication { app in
-            app.authMode = authMode
-
-            app.sessions.use(.memory)
-            app.middleware.use(app.sessions.middleware)
-
-            try await configureTestDatabase(app)
-
-            try routes(app)
-        }
+    /// The standard test app in `authMode`.
+    ///
+    /// `oidc` is the OIDC part of the app's configuration. It is the default
+    /// unless a test passes `.fromEnvironment()`, so the OIDC settings of the
+    /// machine that runs the tests cannot change a result.
+    private func makeApp(authMode: AuthMode, oidc: OIDCEnvConfig = .default) async throws -> Application {
+        try await makeTestApp(authMode: authMode, appConfig: .testDefaults(authMode: authMode, oidc: oidc))
     }
 
     // MARK: - Local mode: SSO routes absent
@@ -148,7 +144,7 @@ import VaporTesting
         // environment, so this cannot race OIDCTests (or anything else) the way
         // the old `setenv`/`unsetenv` pair did (#603 first run).
         try await withTestEnvironment(["OIDC_CALLBACK": "/oidc/duo/callback/"]) {
-            try await withApp(try await makeApp(authMode: .sso)) { app in
+            try await withApp(try await makeApp(authMode: .sso, oidc: .fromEnvironment())) { app in
                 try await app.asyncTest(
                     .GET, "/oidc/duo/callback",
                     afterResponse: { res in
