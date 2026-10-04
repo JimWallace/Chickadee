@@ -1494,6 +1494,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/personalization-pattern-families.md` — per-student values in pattern families
 - `docs/personalization-eval-runtime.md` — where, and in which language, personalization expressions run
 - `docs/archive/xeus-python-grading-spike.md`, `docs/archive/xeus-python-grading-migration-plan.md` — the finished Pyodide-to-xeus migration (#1271), measured; the live state is in the JupyterLite section above
+- `docs/cpp-support.md` — first-class C++: upload-only, the `.sh` wrapper, single-TU inclusion, the literal refusals
 - `docs/cpp-assignment-language-decision.md` — the C++ memo, superseded in part; it still governs why C++ has no browser kernel
 - `docs/authoring-parity.md` — what a non-Python author can and cannot do, and which gaps are correct refusals
 - `docs/multi-language-audit.md` — the Lua-to-Racket audit, with a "Status at merge" section
