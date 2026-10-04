@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.388] - 2026-10-04
+
+### Changed
+
+- **The admin course page follows the other admin pages.** The course settings show as facts, and the settings and clone forms open on demand. Archive moves into a ⋯ menu, and the roster uses the same rows as the instructor Students page, with "Remove from course" in each row's ⋯ menu. One fields partial now renders the new-course, settings and clone forms and the instructor New term tab (#1974).
+
+### Fixed
+
+- **R `unordered_equality` no longer passes wrong answers.** It flattened both values and compared them as sorted strings, so a number matched a string, a nested list matched a flat one, and two different sets of pairs matched. It now compares each top-level element with `chickadee_equal`, as Lua does. `chickadee_equal` also matches a JSON null (`NA`) with `NA`, so a correct answer that contains a null passes in both kinds (#2016).
+
+
 ## [0.5.387] - 2026-10-03
 
 ### Changed
