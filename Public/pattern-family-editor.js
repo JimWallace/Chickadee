@@ -2157,68 +2157,12 @@
             callSolution(fnName, args, { captureStdout: captureStdout }).then(function (res) {
                 if (!row.parentElement) return;
                 if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
-                if (res.ok && res.returnedNone) {
-                    // The solution function returned None.  Don't write
-                    // the string "null" to the cell — that used to
-                    // round-trip as a literal value and confuse
-                    // instructors.  Instead leave it empty with a
-                    // clear hint, and suggest stdout_equality (which
-                    // is the most common reason a function returns
-                    // None: it print()s instead of returning).
-                    expectedEl.value = '';
-                    expectedEl.placeholder = '⚠ solution returned None';
-                    expectedEl.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
-                    setValueCue(expectedEl, 'input-attention');
-                    delete expectedEl.dataset.autoComputed;
-                } else if (res.ok) {
-                    expectedEl.placeholder = 'e.g. underweight';
-                    expectedEl.value = renderTypedCellValue(res.value);
-                    expectedEl.dataset.autoComputed = '1';
-                    expectedEl.title = 'Auto-computed from solution notebook';
-                    setValueCue(expectedEl, 'input-computed');
-                } else if (res.timedOut) {
-                    expectedEl.value = '';
-                    expectedEl.placeholder = '⚠ ' + res.error;
-                    // v0.4.137: distinguish load-phase timeouts (a
-                    // top-level cell hung — e.g. `while True: pass`
-                    // outside the function under test) from run-phase
-                    // timeouts (the function itself hung).  Pre-fix
-                    // both surfaced the run-phase tooltip, which
-                    // pointed instructors at the wrong cell.
-                    expectedEl.title = res.error.indexOf('notebook load') >= 0
-                        ? 'A top-level cell in the solution notebook ran longer than ' + (LOAD_TIMEOUT_MS / 1000) + ' seconds. Look for an infinite loop, a slow I/O call, or a blocking input() OUTSIDE the function under test (e.g. in a setup cell that runs at notebook open).'
-                        : 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
-                    setValueCue(expectedEl, 'input-invalid');
-                } else if (res.unsupported) {
-                    // The solution returned a value of a type that
-                    // doesn't round-trip through JSON in a way the
-                    // runner-side test will accept.  Show the specific
-                    // reason so the instructor can decide whether to
-                    // change the solution or type Expected manually.
-                    var reasonText = ({
-                        'coroutine':       'an async function (returned a coroutine without awaiting it)',
-                        'async-generator': 'an async generator',
-                        'generator':       'a generator',
-                        'set':             'a set',
-                        'tuple':           'a tuple',
-                        'bytes':           'bytes',
-                        'complex':         'a complex number'
-                    })[res.unsupported] || res.unsupported;
-                    expectedEl.value = '';
-                    expectedEl.placeholder = '⚠ solution returned ' + reasonText;
-                    expectedEl.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
-                    setValueCue(expectedEl, 'input-attention');
-                    delete expectedEl.dataset.autoComputed;
-                } else {
-                    // v0.4.112: surface the failure in the cell itself
-                    // (not just the title tooltip) — typical user
-                    // doesn't think to hover.  "computing…" → "⚠ <err>"
-                    // is enough to flag malformed input / undefined
-                    // function / etc.
-                    expectedEl.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
-                    expectedEl.title = 'Solution raised: ' + res.error;
-                    setValueCue(expectedEl, 'input-invalid');
-                }
+                applyAutoComputeResult(expectedEl, res, {
+                    render: renderTypedCellValue,
+                    setCue: setValueCue,
+                    timeoutMs: TIMEOUT_MS,
+                    loadTimeoutMs: LOAD_TIMEOUT_MS
+                });
             });
         }
 
@@ -2361,6 +2305,80 @@
         };
     }
 
+    /// Writes one auto-compute result into an Expected cell: the value, or a
+    /// warning in the placeholder with the reason in the title. Module scope,
+    /// with the editor's renderer, cue setter and time limits passed in `env`,
+    /// so a test can drive every branch on a plain object.
+    ///
+    /// Every failure clears a value that auto-compute filled earlier. A
+    /// placeholder is not visible behind a value, so the error would otherwise
+    /// be only in the title, which a touch screen never shows (#1998). The
+    /// caller has already returned for a manual value, so a value here was
+    /// computed.
+    function applyAutoComputeResult(cell, res, env) {
+        if (res.ok && res.returnedNone) {
+            // The solution function returned None.  Don't write the string
+            // "null" to the cell — that used to round-trip as a literal value
+            // and confuse instructors.  Instead leave it empty with a clear
+            // hint, and suggest stdout_equality (which is the most common
+            // reason a function returns None: it print()s instead of
+            // returning).
+            cell.value = '';
+            cell.placeholder = '⚠ solution returned None';
+            cell.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
+            env.setCue(cell, 'input-attention');
+            delete cell.dataset.autoComputed;
+        } else if (res.ok) {
+            cell.placeholder = 'e.g. underweight';
+            cell.value = env.render(res.value);
+            cell.dataset.autoComputed = '1';
+            cell.title = 'Auto-computed from solution notebook';
+            env.setCue(cell, 'input-computed');
+        } else if (res.timedOut) {
+            cell.value = '';
+            cell.placeholder = '⚠ ' + res.error;
+            // v0.4.137: distinguish load-phase timeouts (a top-level cell
+            // hung — e.g. `while True: pass` outside the function under test)
+            // from run-phase timeouts (the function itself hung).  Pre-fix
+            // both surfaced the run-phase tooltip, which pointed instructors
+            // at the wrong cell.
+            cell.title = res.error.indexOf('notebook load') >= 0
+                ? 'A top-level cell in the solution notebook ran longer than ' + (env.loadTimeoutMs / 1000) + ' seconds. Look for an infinite loop, a slow I/O call, or a blocking input() OUTSIDE the function under test (e.g. in a setup cell that runs at notebook open).'
+                : 'Solution call did not return within ' + (env.timeoutMs / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
+            env.setCue(cell, 'input-invalid');
+            delete cell.dataset.autoComputed;
+        } else if (res.unsupported) {
+            // The solution returned a value of a type that doesn't round-trip
+            // through JSON in a way the runner-side test will accept.  Show
+            // the specific reason so the instructor can decide whether to
+            // change the solution or type Expected manually.
+            var reasonText = ({
+                'coroutine':       'an async function (returned a coroutine without awaiting it)',
+                'async-generator': 'an async generator',
+                'generator':       'a generator',
+                'set':             'a set',
+                'tuple':           'a tuple',
+                'bytes':           'bytes',
+                'complex':         'a complex number'
+            })[res.unsupported] || res.unsupported;
+            cell.value = '';
+            cell.placeholder = '⚠ solution returned ' + reasonText;
+            cell.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
+            env.setCue(cell, 'input-attention');
+            delete cell.dataset.autoComputed;
+        } else {
+            // v0.4.112: surface the failure in the cell itself (not just the
+            // title tooltip) — typical user doesn't think to hover.
+            // "computing…" → "⚠ <err>" is enough to flag malformed input /
+            // undefined function / etc.
+            cell.value = '';
+            cell.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
+            cell.title = 'Solution raised: ' + res.error;
+            env.setCue(cell, 'input-invalid');
+            delete cell.dataset.autoComputed;
+        }
+    }
+
     /// Reads a `/instructor/scan-notebook` response into
     /// `{ functions, unsupportedReason }`.
     ///
@@ -2417,6 +2435,7 @@
     }
 
     global.chickadeeApplyScanPayload = applyScanPayload;
+    global.chickadeeApplyAutoComputeResult = applyAutoComputeResult;
     global.chickadeeReadScanPayload = readScanPayload;
     global.initPatternFamilyEditor = initPatternFamilyEditor;
 })(window);
