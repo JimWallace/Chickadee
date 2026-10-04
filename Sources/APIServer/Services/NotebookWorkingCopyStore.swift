@@ -507,11 +507,11 @@ func notebookDataForHistorySelection(
         throw AppError.notFound(resource: "Submission")
     }
     guard submission.kind == APISubmission.Kind.student else {
-        throw Abort(.forbidden)
+        throw AppError.forbidden(action: "open this submission")
     }
     let isStaff = try await isSubmissionStaff(caller, submission: submission, on: db)
     if !isStaff && submission.userID != userID {
-        throw Abort(.forbidden)
+        throw AppError.forbidden(action: "open this submission")
     }
     guard submission.testSetupID == setupID else {
         throw AppError.badRequest(reason: "Submission does not belong to this assignment")

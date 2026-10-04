@@ -21,23 +21,17 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct CppNativeGradingTests {
 
-    static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") { await Self.gppAvailable }
-
-    static var gppAvailable: Bool {
-        get async { await toolIsAvailable("g++", arguments: ["--version"]) }
-    }
-
-    /// The did-not-skip proof (audit F2). Every test below guards
-    /// `gppAvailable` and returns silently when g++ is absent — right on a
-    /// laptop, a silent hole in CI. Under `CI`, g++ MUST be present.
+    /// The did-not-skip proof (audit F2). Every test below carries
+    /// `.requiresGpp` and skips when g++ is absent — right on a laptop, a
+    /// hole in CI. Under `CI`, g++ MUST be present.
     @Test(.ciOnly) func gppIsPresentInCI() async {
-        let isAvailable = await Self.gppAvailable
+        let isAvailable = await cachedToolIsAvailable("g++")
         #expect(
             isAvailable,
             """
             g++ is absent in the CI image, so every native C++ grading test skipped \
-            silently. Add it to .github/docker/ci-image/Dockerfile and the WorkerTests \
-            apt fallback in swift-tests.yml.
+            silently. Add it to .github/docker/ci-image/Dockerfile and to the interpreter \
+            table in .github/actions/swift-test-setup/action.yml.
             """)
     }
 
@@ -69,44 +63,13 @@ import Testing
         """ + "\n"
     }
 
-    static func makeWorkspace(
-        submission: String,
-        scripts: [String: String]
-    ) throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ck-cppnative-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // The SAME embedded source the worker injects, not a fixture copy —
-        // so a runtime change that breaks native grading fails here.
-        try testRuntimeSource(for: .cpp).write(
-            to: dir.appendingPathComponent("test_runtime.hpp"), atomically: true, encoding: .utf8)
-        try submission.write(
-            to: dir.appendingPathComponent("solution.cpp"), atomically: true, encoding: .utf8)
-        try "solution.cpp".write(
-            to: dir.appendingPathComponent(".chickadee_student_module"),
-            atomically: true, encoding: .utf8)
-        for (name, source) in scripts {
-            try source.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        return dir
-    }
-
-    static func runSuites(_ items: [SuiteItem], in dir: URL) async -> [TestOutcome] {
-        let executor = NativeScriptExecutor(
-            runner: UnsandboxedScriptRunner(), workDir: dir, overrides: [:])
-        return await executeSuites(
-            items, timeLimitSeconds: 30, attemptNumber: 1, executor: executor)
-    }
-
-    static func item(_ script: String) -> SuiteItem {
-        SuiteItem(script: script, tier: .pub, displayName: script, dependsOn: [], points: 1)
-    }
+    /// Builds this suite's workspaces and runs its suites.
+    static let harness = NativeGradingHarness(
+        language: .cpp, solutionFilename: "solution.cpp", timeLimitSeconds: 30)
 
     /// The whole chain, pass case: compile the runtime + submission + test
     /// as one TU, run the binary, read the shortResult JSON off stdout.
-    @Test(Self.requiresGpp) func aCppTestIsGradedByTheNativeWorker() async throws {
+    @Test(.requiresGpp) func aCppTestIsGradedByTheNativeWorker() async throws {
         let script = Self.wrapper(
             stem: "dbl",
             body: """
@@ -116,12 +79,12 @@ import Testing
                     }
                     ck::passed("Returned " + ck::format(result));
                 """)
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "int double_it(int x) { return x * 2; }\n",
             scripts: ["publictest_dbl.sh": script])
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let outcomes = await Self.runSuites([Self.item("publictest_dbl.sh")], in: dir)
+        let outcomes = await Self.harness.runSuites([NativeGradingHarness.item("publictest_dbl.sh")], in: dir)
         let outcome = try #require(outcomes.first)
         #expect(
             outcome.status == TestStatus.pass,
@@ -135,7 +98,7 @@ import Testing
 
     /// Exit 1 is a fail; a submission that does not compile is an error with
     /// the g++ diagnostic captured as longResult.
-    @Test(Self.requiresGpp) func failAndErrorMapThroughTheWrapper() async throws {
+    @Test(.requiresGpp) func failAndErrorMapThroughTheWrapper() async throws {
         let script = Self.wrapper(
             stem: "dbl",
             body: """
@@ -146,35 +109,35 @@ import Testing
                     ck::passed("ok");
                 """)
 
-        let wrongDir = try Self.makeWorkspace(
+        let wrongDir = try Self.harness.makeWorkspace(
             submission: "int double_it(int x) { return x + 2; }\n",
             scripts: ["publictest_dbl.sh": script])
         defer { try? FileManager.default.removeItem(at: wrongDir) }
         let wrong = try #require(
-            await Self.runSuites([Self.item("publictest_dbl.sh")], in: wrongDir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_dbl.sh")], in: wrongDir).first)
         #expect(wrong.status == TestStatus.fail)
         #expect(wrong.shortResult.contains("wrong value"))
 
-        let brokenDir = try Self.makeWorkspace(
+        let brokenDir = try Self.harness.makeWorkspace(
             submission: "int double_it(int x) { return x * 2\n",
             scripts: ["publictest_dbl.sh": script])
         defer { try? FileManager.default.removeItem(at: brokenDir) }
         let broken = try #require(
-            await Self.runSuites([Self.item("publictest_dbl.sh")], in: brokenDir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_dbl.sh")], in: brokenDir).first)
         #expect(broken.status == TestStatus.error)
         #expect((broken.longResult ?? "").contains("error"))
     }
 
     /// A main-bearing submission (an intro "write a program" file) still has
     /// its functions graded — the wrapper's `#define main` rename.
-    @Test(Self.requiresGpp) func aMainBearingSubmissionStillExposesItsFunctions() async throws {
+    @Test(.requiresGpp) func aMainBearingSubmissionStillExposesItsFunctions() async throws {
         let script = Self.wrapper(
             stem: "m",
             body: """
                     if (!ck::equal(double_it(4), 8)) { ck::failed("wrong"); }
                     ck::passed("graded a main-bearing submission");
                 """)
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: """
                 #include <iostream>
                 int double_it(int x) { return x * 2; }
@@ -187,14 +150,14 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let outcome = try #require(
-            await Self.runSuites([Self.item("publictest_m.sh")], in: dir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_m.sh")], in: dir).first)
         #expect(outcome.status == TestStatus.pass, "got \(outcome.status): \(outcome.shortResult)")
     }
 
     /// The per-student inputs header — written through the real renderer,
     /// with a beyond-int32 value so the LL suffix is exercised — reads back
     /// through `ck_inputs::` in the same TU.
-    @Test(Self.requiresGpp) func perStudentInputsAreReadableOnTheNativePath() async throws {
+    @Test(.requiresGpp) func perStudentInputsAreReadableOnTheNativePath() async throws {
         let script = Self.wrapper(
             stem: "thr",
             body: """
@@ -209,7 +172,7 @@ import Testing
             of: "#include \"test_runtime.hpp\"",
             with: "#include \"test_runtime.hpp\"\n#include \"_ck_inputs.hpp\"")
 
-        let dir = try Self.makeWorkspace(
+        let dir = try Self.harness.makeWorkspace(
             submission: "bool over(long long x) { return x > 100; }\n",
             scripts: ["publictest_thr.sh": withInclude])
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -221,7 +184,7 @@ import Testing
             to: dir.appendingPathComponent("_ck_inputs.hpp"), atomically: true, encoding: .utf8)
 
         let outcome = try #require(
-            await Self.runSuites([Self.item("publictest_thr.sh")], in: dir).first)
+            await Self.harness.runSuites([NativeGradingHarness.item("publictest_thr.sh")], in: dir).first)
         #expect(outcome.status == TestStatus.pass, "got \(outcome.status): \(outcome.shortResult)")
     }
 }

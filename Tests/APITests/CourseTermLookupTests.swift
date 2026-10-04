@@ -109,15 +109,6 @@ import VaporTesting
         }
     }
 
-    // MARK: - URL key
-
-    @Test func urlKeyIsTheCodeAloneWithoutATerm() async throws {
-        try await withApp(app) { _ in
-            #expect(APICourse(code: "CS135", name: "").urlKey == "CS135")
-            #expect(APICourse(code: "CS135", name: "", term: fall26).urlKey == "CS135-F26")
-        }
-    }
-
     // MARK: - findActiveCourse(byKey:viewer:on:)
 
     @Test func aKeyNamesItsTerm() async throws {
@@ -219,11 +210,11 @@ import VaporTesting
             try await enroll(instructor, in: newer, role: .instructor)
             let context = toolContext(subject: "term_mcp")
 
-            let read = try await resolveMCPCourse(key: "CS246", tool: "t", context: context, forWrite: false)
+            let read = try await resolveMCPCourse(key: "CS246", context: context, forWrite: false)
             #expect(read.id == newer.id)
 
             do {
-                _ = try await resolveMCPCourse(key: "CS246", tool: "t", context: context, forWrite: true)
+                _ = try await resolveMCPCourse(key: "CS246", context: context, forWrite: true)
                 Issue.record("An ambiguous write must be refused")
             } catch let error as MCPToolError {
                 let text = String(describing: error)
@@ -231,7 +222,7 @@ import VaporTesting
                 #expect(text.contains("CS246-F26 (Fall 2026)"))
             }
 
-            let keyed = try await resolveMCPCourse(key: "CS246-F26", tool: "t", context: context, forWrite: true)
+            let keyed = try await resolveMCPCourse(key: "CS246-F26", context: context, forWrite: true)
             #expect(keyed.id == older.id)
         }
     }
@@ -249,7 +240,7 @@ import VaporTesting
             // The archived offering loses to the active ones, and the one the
             // account teaches beats the newer one it does not, so even a
             // write resolves.
-            let chosen = try await resolveMCPCourse(key: "CS247", tool: "t", context: context, forWrite: true)
+            let chosen = try await resolveMCPCourse(key: "CS247", context: context, forWrite: true)
             #expect(chosen.id == active.id)
         }
     }
@@ -269,14 +260,14 @@ import VaporTesting
             try await enroll(instructor, in: termed, role: .instructor)
             let context = toolContext(subject: "term_mcp3")
 
-            let overMCP = try await resolveMCPCourse(key: "CS243-F26", tool: "t", context: context, forWrite: true)
+            let overMCP = try await resolveMCPCourse(key: "CS243-F26", context: context, forWrite: true)
             let onTheWeb = try await findActiveCourse(byKey: "CS243-F26", viewer: nil, on: app.db)
             #expect(overMCP.id == termed.id)
             #expect(onTheWeb?.id == termed.id)
 
             // With no active match the archived course is still reachable.
             let archivedOnly = try await course("CS250", nil, archived: true)
-            let fallback = try await resolveMCPCourse(key: "CS250", tool: "t", context: context, forWrite: false)
+            let fallback = try await resolveMCPCourse(key: "CS250", context: context, forWrite: false)
             #expect(fallback.id == archivedOnly.id)
         }
     }
@@ -294,5 +285,16 @@ import VaporTesting
             #expect(output.courses.map(\.key) == ["CS248-F26", "CS249"])
             #expect(output.courses.map(\.term) == ["Fall 2026", nil])
         }
+    }
+}
+
+/// `APICourse.urlKey` reads only the course's own fields, so this test
+/// needs no app.
+@Suite struct CourseURLKeyTests {
+    private let fall26 = AcademicTerm(year: 2026, season: .fall)
+
+    @Test func urlKeyIsTheCodeAloneWithoutATerm() {
+        #expect(APICourse(code: "CS135", name: "").urlKey == "CS135")
+        #expect(APICourse(code: "CS135", name: "", term: fall26).urlKey == "CS135-F26")
     }
 }

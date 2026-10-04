@@ -223,10 +223,9 @@ struct GetAssignmentTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let assignment = try await context.authorizedAssignment(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
         guard let course = try await APICourse.find(assignment.courseID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's course could not be found.")
+            throw MCPToolError.invalidArguments(detail: "The assignment's course could not be found.")
         }
         // Grading mode + the minimum-runner-version gate live in the test setup's
         // manifest; default to "worker" (TestProperties' own default) when the

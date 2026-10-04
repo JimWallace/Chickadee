@@ -41,11 +41,11 @@ struct GetActiveUsersSeriesTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject(tool: Self.name)
+        try await context.requireAdminSubject()
 
         let window: ActivityWindow
         if let raw = input.window, !raw.isEmpty {
-            window = try MCPEnumProse<ActivityWindow>.parse(raw, tool: Self.name, field: "window")
+            window = try MCPEnumProse<ActivityWindow>.parse(raw, field: "window")
         } else {
             window = .day
         }

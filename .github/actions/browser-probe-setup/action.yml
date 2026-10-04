@@ -19,22 +19,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Resolve toolchain cache key
-      id: toolchain
-      shell: bash
-      run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
     # Read-only restore of the shared build cache (same exact key as the Swift
-    # Tests `build` job). EXACT-MATCH ONLY — a restore-keys prefix fallback
-    # would incrementally build over a mismatched tree, which is unsound for
-    # the mangled-symbol reason documented in swift-tests.yml. On a hit,
-    # building the server product is near-no-op; on a miss it builds cold.
-    - name: Restore build artifacts
-      id: shared-build-cache
-      uses: actions/cache/restore@v6
+    # Tests `build` job, from the same action). EXACT-MATCH ONLY — a
+    # restore-keys prefix fallback would incrementally build over a mismatched
+    # tree, which is unsound for the mangled-symbol reason documented in
+    # swift-test-setup. On a hit, building the server product is near-no-op;
+    # on a miss it builds cold. No `tools`: the probes need no test
+    # interpreter, and a stale image must not apt-get all of them here.
+    - name: Swift test setup
+      id: swift
+      uses: ./.github/actions/swift-test-setup
       with:
-        path: .build
-        key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+        build-cache: restore
 
     # Fallback cache, owned by the probes, used only when the shared key missed.
     #
@@ -53,11 +49,11 @@ runs:
     # chickadee-server, and the swift-tests jobs restoring it would have to
     # rebuild the test targets — trading their time for ours.
     - name: Restore/save probe build cache
-      if: steps.shared-build-cache.outputs.cache-hit != 'true'
+      if: steps.swift.outputs.cache-hit != 'true'
       uses: actions/cache@v6
       with:
         path: .build
-        key: ${{ runner.os }}-probebuild-v1-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+        key: ${{ runner.os }}-probebuild-v1-${{ steps.swift.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
     - name: Build chickadee-server
       shell: bash
@@ -79,15 +75,26 @@ runs:
       shell: bash
       working-directory: ${{ inputs.node-project }}
       env:
-        # Keep NODE_VERSION in step with .github/docker/ci-image/Dockerfile's
-        # ARG NODE_VERSION. They are allowed to differ briefly — that is the
-        # point of this fallback — but a permanent gap means every probe job
-        # pays a ~40 MB download the image should have baked in.
-        NODE_VERSION: "24.21.0"
         # Playwright's floor. Raise when Playwright raises its engine requirement.
         MIN_NODE_MAJOR: "20"
       run: |
         set -eu
+
+        # `.node-version` is the one Node pin of the repository (#1985). The
+        # setup-node steps read it too. ARG NODE_VERSION in
+        # .github/docker/ci-image/Dockerfile must have the same value, but
+        # that build context cannot read the repository root. So this step
+        # compares the image's node with the pin, and gives a warning when
+        # they are different.
+        NODE_VERSION="$(tr -d '[:space:]' < "${GITHUB_WORKSPACE}/.node-version")"
+        NODE_VERSION="${NODE_VERSION#v}"
+        if [ -z "$NODE_VERSION" ]; then
+          echo "::error::.node-version is empty."
+          exit 1
+        fi
+        if command -v node >/dev/null 2>&1 && [ "$(node --version)" != "v${NODE_VERSION}" ]; then
+          echo "::warning::The image has node $(node --version), but .node-version is ${NODE_VERSION}. Make ARG NODE_VERSION in .github/docker/ci-image/Dockerfile the same as .node-version."
+        fi
 
         # The check is on the VERSION, not just presence. Playwright dropped
         # Node 18 at 1.63, and Ubuntu noble's node was 18.19.1 — `npx playwright

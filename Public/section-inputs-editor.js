@@ -23,12 +23,31 @@
         remove: 'js-section-var-remove'
     }, { removeCell: 'icon' });
 
+    // The elements init() has wired, so that init() can run again (#1957).
+    // The workbench calls it after it swaps the edit half: the new half has
+    // new elements to wire, and an element wired before is not wired twice.
+    // A form maps to its { flush, flushPending } object.
+    var wiredForms = new WeakMap();
+    var wiredAddButtons = new WeakSet();
+
+    /// Shows the form's amber-cue note (_value-cue-note.leaf) only while its
+    /// table has a row, since the cue it explains is drawn on a row (#1996).
+    function syncCueNote(form, tbody) {
+        var note = form.querySelector('.js-value-cue-note');
+        if (note) note.hidden = !tbody.querySelector('tr');
+    }
+
     /// Per-form auto-save with debounce + in-flight coalescing.  Returns
     /// a public { flush } object that the main-form submit handler can
     /// await before letting the assignment save through.
     function wireAutoSave(form) {
+        var known = wiredForms.get(form);
+        if (known) return known;
         var tbody = form.querySelector('tbody.js-section-vars-body');
-        if (!tbody) return { flush: function () { return Promise.resolve(); } };
+        if (!tbody) {
+            var none = function () { return Promise.resolve(); };
+            return { flush: none, flushPending: none };
+        }
 
         function doPost() {
             var payload = editor.buildPayload(tbody);
@@ -69,13 +88,22 @@
             if (btn && form.contains(btn)) {
                 var tr = btn.closest('tr.js-section-var-row');
                 if (tr) { tr.remove(); editor.refreshAllRows(tbody); saver.schedule(); }
+                syncCueNote(form, tbody);
             }
         });
         form.addEventListener('submit', function (e) { e.preventDefault(); saver.flush(); });
+        syncCueNote(form, tbody);
 
-        return { flush: saver.flush };
+        var wired = {
+            flush: saver.flush,
+            flushPending: saver.flushPending || function () { return Promise.resolve(); }
+        };
+        wiredForms.set(form, wired);
+        return wired;
     }
 
+    /// Wire the section forms and "+ Add Input" buttons on the page.
+    /// Idempotent: see `wiredForms`.
     function init() {
         var forms = Array.from(document.querySelectorAll('form.section-vars-form'))
             .map(wireAutoSave);
@@ -83,20 +111,34 @@
         window.chickadeeFlushSectionVars = function () {
             return Promise.all(forms.map(function (f) { return f.flush(); }));
         };
+        // Only the saves that are waiting: the workbench swap awaits this
+        // before it discards the forms (surface-swap.js), and must not write
+        // for nothing.
+        window.chickadeeFlushPendingSectionVars = function () {
+            return Promise.all(forms.map(function (f) { return f.flushPending(); }));
+        };
 
         // "+ Add Input" buttons (one per section).  Buttons live in the
         // section header, not inside the form, so look up the form by
         // data-section-id.
         document.querySelectorAll('button.js-section-var-add').forEach(function (btn) {
+            if (wiredAddButtons.has(btn)) return;
+            wiredAddButtons.add(btn);
             btn.addEventListener('click', function () {
                 var sid = btn.getAttribute('data-section-id') || '';
                 var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
                 if (!form) return;
                 var tbody = form.querySelector('tbody.js-section-vars-body');
-                if (tbody) editor.addEmptyRow(tbody);
+                if (tbody) {
+                    editor.addEmptyRow(tbody);
+                    syncCueNote(form, tbody);
+                }
             });
         });
     }
+
+    // Called again by ChickadeeEditPage.init() after a workbench swap.
+    window.initSectionInputsEditor = init;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

@@ -116,7 +116,7 @@ struct MCPResourceProvider: Sendable {
     /// act on. Result shape: `{ "resources": [ { uri, name, description,
     /// mimeType } ] }`.
     func list(context: ToolContext) async throws -> JSONValue {
-        let user = try await context.requireEligibleSubject(tool: "resources/list")
+        let user = try await context.requireEligibleSubject()
 
         // The shared visibility resolver: non-archived enrolled courses, for
         // every role — an admin's agent sees its enrolments, not the world.
@@ -215,7 +215,7 @@ struct MCPResourceProvider: Sendable {
     /// throws the same "unknown resource" error the manifest path uses when
     /// the slug is unknown or the file is unreadable.
     private func readDoc(uri: String, context: ToolContext) async throws -> JSONValue {
-        try await context.requireEligibleSubject(tool: "resources/read")
+        try await context.requireEligibleSubject()
         if let inline = Self.inlineDocResources.first(where: { $0.uri == uri }) {
             return Self.textContents(uri: uri, text: inline.text)
         }
@@ -223,8 +223,7 @@ struct MCPResourceProvider: Sendable {
             let data = FileManager.default.contents(atPath: Self.docPath(doc, context: context)),
             let text = String(data: data, encoding: .utf8)
         else {
-            throw MCPToolError.invalidArguments(
-                tool: "resources/read", detail: "Unknown or inaccessible resource: \(uri)")
+            throw MCPToolError.invalidArguments(detail: "Unknown or inaccessible resource: \(uri)")
         }
         return Self.textContents(uri: uri, text: text)
     }
@@ -243,11 +242,10 @@ struct MCPResourceProvider: Sendable {
     private func readCourseGuidance(
         courseCode: String, uri: String, context: ToolContext
     ) async throws -> JSONValue {
-        try await context.requireEligibleSubject(tool: "resources/read")
+        try await context.requireEligibleSubject()
         let courses = try await mcpAuthorableCourses(forSubject: context.subject, db: context.db)
         guard let course = coursesMatching(key: courseCode, in: courses).min(by: courseListPrecedes) else {
-            throw MCPToolError.invalidArguments(
-                tool: "resources/read", detail: "Unknown or inaccessible resource: \(uri)")
+            throw MCPToolError.invalidArguments(detail: "Unknown or inaccessible resource: \(uri)")
         }
         return Self.textContents(uri: uri, text: courseAuthoringVoice(course))
     }
@@ -280,20 +278,17 @@ struct MCPResourceProvider: Sendable {
         guard let publicID = Self.manifestPublicID(fromURI: uri),
             let assignment = try await assignmentByPublicID(publicID, on: context.db)
         else {
-            throw MCPToolError.invalidArguments(
-                tool: "resources/read", detail: "Unknown or inaccessible resource: \(uri)")
+            throw MCPToolError.invalidArguments(detail: "Unknown or inaccessible resource: \(uri)")
         }
         do {
-            try await context.authorizeCourseAccess(assignment.courseID, tool: "resources/read")
+            try await context.authorizeCourseAccess(assignment.courseID)
         } catch {
             // Collapse a course-authorization failure into the same "unknown
             // resource" response so the URI space can't be enumerated.
-            throw MCPToolError.invalidArguments(
-                tool: "resources/read", detail: "Unknown or inaccessible resource: \(uri)")
+            throw MCPToolError.invalidArguments(detail: "Unknown or inaccessible resource: \(uri)")
         }
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.executionFailed(
-                tool: "resources/read", detail: "The assignment's test setup could not be found.")
+            throw MCPToolError.executionFailed(detail: "The assignment's test setup could not be found.")
         }
         return .object([
             "contents": .array([

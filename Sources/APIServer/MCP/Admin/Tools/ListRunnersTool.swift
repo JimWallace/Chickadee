@@ -30,7 +30,7 @@ struct ListRunnersTool: DiagnosticTool {
     static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject(tool: Self.name)
+        try await context.requireAdminSubject()
         let runners = try await makeWorkerRows(req: context.request)
         return Output(generatedAt: Date(), activeRunnerCount: runners.count, runners: runners)
     }

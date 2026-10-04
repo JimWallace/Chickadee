@@ -56,15 +56,9 @@ import VaporTesting
     }
 
     private func page(_ app: Application) async throws -> String {
-        let cookie = try await loginUser(
-            username: "mcp_page_admin", password: "testpassword", role: "admin", on: app)
+        let cookie = try await loginAsAdmin("mcp_page_admin", on: app)
         _ = try await makeTestUser(on: app, username: "svc-bot", role: UserRole.mcp.rawValue)
-        var html = ""
-        try await app.asyncTest(
-            .GET, "/admin/mcp",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        return html
+        return try await getHTML("/admin/mcp", cookie: cookie, on: app)
     }
 
     @Test func readWriteModeOffersTheScopeMenu() async throws {
@@ -167,10 +161,6 @@ import VaporTesting
         "jwksURL": "https://learn.example.edu/d2l/.well-known/jwks",
     ]
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "lti_page_admin", password: "testpassword", role: "admin", on: app)
-    }
-
     private func post(_ path: String, _ fields: [String: String], cookie: String) async throws -> String {
         let (token, boundCookie) = try await csrfFields(for: "/admin/lti", cookie: cookie, on: app)
         var body = fields
@@ -186,18 +176,10 @@ import VaporTesting
         return html
     }
 
-    private func page(cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, "/admin/lti",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        return html
-    }
-
     @Test func everyToolURLHasACopyButton() async throws {
         try await withApp(app) { _ in
-            let html = try await page(cookie: try await loginAsAdmin())
+            let html = try await getHTML(
+                "/admin/lti", cookie: try await loginAsAdmin("lti_page_admin", on: app), on: app)
             #expect(html.components(separatedBy: "data-copy-url=\"").count - 1 == 4)
             #expect(html.contains("+ Register platform"))
             #expect(html.contains("0 platform(s) enabled"))
@@ -206,10 +188,10 @@ import VaporTesting
 
     @Test func aPlatformRowHasAnEnabledSelectThatSavesOnChangeAndAMutedRowWhenOff() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_page_admin", on: app)
             _ = try await post("/admin/lti/platforms", Self.form, cookie: cookie)
             let platform = try #require(try await APILTIPlatform.query(on: app.db).first())
-            var html = try await page(cookie: cookie)
+            var html = try await getHTML("/admin/lti", cookie: cookie, on: app)
             #expect(html.contains("1 platform(s) enabled"))
             #expect(html.contains("<option value=\"true\" selected>Enabled</option>"))
             #expect(html.contains("data-ck-submit-on-change"))
@@ -218,7 +200,7 @@ import VaporTesting
             _ = try await post(
                 "/admin/lti/platforms/\(try platform.requireID())/enabled", ["enabled": "false"],
                 cookie: cookie)
-            html = try await page(cookie: cookie)
+            html = try await getHTML("/admin/lti", cookie: cookie, on: app)
             #expect(html.contains("<option value=\"false\" selected>Disabled</option>"))
             #expect(html.contains("class=\"row-muted\""))
         }
@@ -226,7 +208,7 @@ import VaporTesting
 
     @Test func aFailedEditReopensItsPanel() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_page_admin", on: app)
             _ = try await post("/admin/lti/platforms", Self.form, cookie: cookie)
             let id = try #require(try await APILTIPlatform.query(on: app.db).first()).requireID()
             var bad = Self.form
@@ -239,9 +221,9 @@ import VaporTesting
 
     @Test func deletingKeepsItsConfirmation() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("lti_page_admin", on: app)
             _ = try await post("/admin/lti/platforms", Self.form, cookie: cookie)
-            let html = try await page(cookie: cookie)
+            let html = try await getHTML("/admin/lti", cookie: cookie, on: app)
             #expect(html.contains("Delete the platform UW LEARN? Launches from it stop immediately"))
             #expect(html.contains("Delete platform"))
         }
@@ -256,17 +238,8 @@ import VaporTesting
     }
 
     private func get(_ path: String) async throws -> String {
-        let cookie = try await loginUser(
-            username: "integrations_admin", password: "testpassword", role: "admin", on: app)
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
+        let cookie = try await loginAsAdmin("integrations_admin", on: app)
+        return try await getHTML(path, cookie: cookie, on: app)
     }
 
     @Test func learnWithoutCredentialsShowsOnlyTheNotice() async throws {

@@ -150,7 +150,7 @@ The "mandatory before July 28" checklist in the migration guides targets
 | Scale behind a round-robin LB, no sticky sessions | Follows from the above — nothing to re-architect or load-test. |
 | OAuth 2.1 + PKCE | Full authorization server, Auth Code + PKCE (S256). |
 | `.well-known` metadata / RFC 9728 protected-resource metadata | `MCPMetadataRoutes.swift`; `WWW-Authenticate` carries `resource_metadata`. |
-| RFC 8707 resource indicators; `iss`/`aud` token validation | `MCPBearerAuthMiddleware.swift:35`; `MCPAccessTokenClaims.swift`. |
+| RFC 8707 resource indicators; `iss`/`aud` token validation | `MCPBearerVerification.swift`; `MCPAccessTokenClaims.swift`. |
 | Roots / sampling / logging deprecated | Non-event — v1 deliberately never implemented any of them. The deprecation vindicates the "tools + resources only" scoping. |
 
 ## The one gap worth closing now: RFC 9207 `iss`

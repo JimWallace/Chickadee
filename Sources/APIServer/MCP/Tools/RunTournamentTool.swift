@@ -80,18 +80,17 @@ struct RunTournamentTool: ContentTool {
         let token =
             input.schedule?.trimmingCharacters(in: .whitespacesAndNewlines) ?? TournamentSchedule.bracket.rawValue
         guard let schedule = TournamentSchedule(rawValue: token) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "schedule must be \(MCPActivityProse.scheduleTokens).")
+            throw MCPToolError.invalidArguments(detail: "schedule must be \(MCPActivityProse.scheduleTokens).")
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
-        let actor = try await context.requireEligibleSubject(tool: Self.name)
+            publicID: input.assignmentPublicID, atLeast: .instructor)
+        let actor = try await context.requireEligibleSubject()
         let run: APITournamentRun
         do {
             run = try await startTournament(
                 setup: setup, schedule: schedule, startedBy: actor.id, on: context.db)
         } catch let error as TournamentStartError {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: error.reason)
+            throw MCPToolError.invalidArguments(detail: error.reason)
         }
         return Output(
             assignmentPublicID: assignment.publicID,

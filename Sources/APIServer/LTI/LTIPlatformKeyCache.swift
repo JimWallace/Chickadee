@@ -81,9 +81,10 @@ extension Application {
                 let client = self.client
                 return LTIPlatformKeyCache { url in
                     let response = try await client.get(URI(string: url))
-                    guard response.status == .ok, var body = response.body else {
-                        throw Abort(.badGateway, reason: "LTI platform key set fetch failed: \(response.status.code)")
+                    guard response.status == .ok else {
+                        throw LTIServiceError.rejected(.keySet, status: response.status.code)
                     }
+                    guard var body = response.body else { throw LTIServiceError.unreadableResponse(.keySet) }
                     return body.readString(length: body.readableBytes) ?? ""
                 }
             }

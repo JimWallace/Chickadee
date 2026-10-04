@@ -173,7 +173,7 @@ The corrected inventory, by kind of invariant:
 | Kind | Instances | Mechanism |
 |---|---|---|
 | Shared *behaviour*, one implementation | suite execution, output interpretation, Python extraction | RunnerCore compiled twice; `output-contract.json` asserts the two builds agree (native + real vendored wasm) |
-| Mirrored *source*, two copies required | `test_runtime.py` / `.R` / `sitecustomize.py` embeds (Swift + JS) | normalized-source comparison (`RuntimeSourceDriftTests.swift`, `runtime-drift.test.mjs`). *(The browser graders' shared Python snippets left this row in the 0.5 cleanup: they became one module, `Public/grading-shared.js`, and their fenced-region guard was deleted.)* |
+| Mirrored *source*, two copies required | `test_runtime.py` / `.R` / `sitecustomize.py` embeds (Swift + JS) | normalized-source comparison (`RuntimeSourceDriftTests.swift`, `runtime-drift.test.mjs`). *(The browser graders' shared Python snippets left this row in the 0.5 cleanup: they became one module, `Public/grading-shared.js`, and their fenced-region guard was deleted. The embeds left it later, for row 2 of the hierarchy below: `Plugins/EmbedRunnerSupport` compiles the canonical files into the runner, and `generate-js-constants.sh` writes them into `Public/runner-support-sources.js`. `runtime-drift.test.mjs` is retired, and `RuntimeSourceDriftTests.swift` now checks only what the plugin cannot.)* |
 | Mirrored *value / constant* | `rKernelNames` ↔ `R_KERNEL_NAMES`; cell marker ↔ runtime regex | textual parse of both sources (`r-kernel-names-drift.test.mjs`); writer↔reader pin (`NotebookExtractorRCellMarkerTests`) |
 
 Read as a hierarchy, best to worst:

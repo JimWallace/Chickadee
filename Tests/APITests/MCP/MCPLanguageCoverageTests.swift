@@ -24,29 +24,8 @@ import Testing
 
 @Suite struct MCPLanguageCoverageTests {
 
-    /// Every piece of text an agent can actually read: the server instructions,
-    /// plus each tool's name, description, and both schemas rendered as JSON.
-    ///
-    /// Schemas are included deliberately — the `cpp`-truncated list in
-    /// `get_assignment` lived in a description, but field `description`s inside
-    /// a schema are just as agent-facing and just as hand-written.
-    private static let servedText: String = {
-        var parts = [MCPServerInstructions.text]
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        for tool in MCPToolCatalog.live.all {
-            parts.append(tool.name)
-            parts.append(tool.description)
-            for schema in [tool.inputSchema, tool.outputSchema] {
-                guard let schema,
-                    let data = try? encoder.encode(schema),
-                    let json = String(data: data, encoding: .utf8)
-                else { continue }
-                parts.append(json)
-            }
-        }
-        return parts.joined(separator: "\n")
-    }()
+    /// Every piece of text an agent can read on either MCP surface.
+    private static let servedText = MCPServedText.text
 
     // MARK: - No truncated language list survives anywhere
 
