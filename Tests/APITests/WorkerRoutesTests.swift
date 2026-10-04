@@ -732,7 +732,7 @@ import VaporTesting
             // Application is always shut down.  An early `return` before withApp
             // leaks the app, and its deinit then trips Vapor's
             // `ServeCommand did not shutdown before deinit` assertion → SIGILL,
-            // which kills the whole test process (see TestHelpers.swift).
+            // which kills the whole test process (see TestApp.swift).
             let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
             guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
                 return  // python3 unavailable on this platform — skip
