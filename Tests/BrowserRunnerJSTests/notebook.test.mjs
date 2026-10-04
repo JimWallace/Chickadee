@@ -1,79 +1,17 @@
+// Unit tests for the results formatting in Public/notebook-core.js, the pure
+// half of the notebook page. The core has a node export, so these tests load
+// it directly. They do not boot notebook.js under a stub DOM.
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import vm from 'node:vm';
+import { createRequire } from 'node:module';
 
-const notebookSource = await fs.readFile(
-  path.resolve('Public/notebook.js'),
-  'utf8',
-);
+const require = createRequire(import.meta.url);
+const notebook = require('../../Public/notebook-core.js');
 
-async function loadNotebookHarness() {
-  const hooks = {};
-  const elements = new Map();
-
-  const frame = {
-    dataset: {
-      setupId: 'setup_123',
-      gradingMode: 'browser',
-      notebookUrl: '/api/v1/testsetups/setup_123/assignment',
-      editorUrl: '/jupyterlite/notebooks/index.html?path=assignment.ipynb',
-    },
-    addEventListener() {},
-    getAttribute(name) {
-      return name === 'src' ? this.dataset.editorUrl : null;
-    },
-    contentWindow: null,
-    contentDocument: null,
-    src: '',
-  };
-
-  elements.set('jl-frame', frame);
-  elements.set('nb-status', { textContent: '', className: '' });
-  elements.set('nb-results', { hidden: true, innerHTML: '', appendChild() {}, scrollIntoView() {} });
-  elements.set('nb-frame-error', { style: { display: 'none' } });
-
-  const document = {
-    getElementById(id) {
-      return elements.get(id) ?? null;
-    },
-    createElement() {
-      return {
-        className: '',
-        textContent: '',
-        innerHTML: '',
-        appendChild() {},
-      };
-    },
-    head: { appendChild() {} },
-  };
-
-  const fetch = async () => ({ ok: true, async json() { return { cells: [] }; } });
-
-  const context = {
-    console,
-    document,
-    fetch,
-    setTimeout,
-    clearTimeout,
-    setInterval: () => 1,
-    clearInterval: () => {},
-    URL,
-    JSON,
-    Error,
-    Promise,
-    window: { location: { origin: 'https://example.test' } },
-    __CHICKADEE_NOTEBOOK_TEST_HOOKS__: hooks,
-  };
-  context.globalThis = context;
-
-  vm.runInNewContext(notebookSource, context, { filename: 'notebook.js' });
-  return hooks.exports;
-}
-
-test('notebook formatting uses human-readable labels and traceback-only details', async () => {
-  const notebook = await loadNotebookHarness();
+test('notebook formatting uses human-readable labels and traceback-only details', () => {
   const outcome = {
     testName: 'test_q1_bmi',
     scriptName: 'test_q1_bmi.py',
@@ -94,4 +32,11 @@ test('notebook formatting uses human-readable labels and traceback-only details'
   const displayMap = notebook.buildOutcomeDisplayNameMap([outcome]);
   assert.equal(displayMap.get('test_q1_bmi'), 'Q1: BMI Calculation');
   assert.equal(displayMap.get('test_q1_bmi.py'), 'Q1: BMI Calculation');
+});
+
+test('the notebook page loads the core before notebook.js', async () => {
+  const src = await fs.readFile(path.resolve('Resources/Views/_notebook-body.leaf'), 'utf8');
+  const core = src.indexOf('/notebook-core.js');
+  const wiring = src.indexOf('/notebook.js');
+  assert.ok(core >= 0 && wiring >= 0 && core < wiring, 'core must be loaded before notebook.js');
 });

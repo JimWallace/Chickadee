@@ -1,7 +1,8 @@
 // Tests/BrowserRunnerJSTests/sync-force-reseed.test.mjs
 //
 // Regression guards for the cache-bust decision logic in
-// `Public/notebook.js`'s `shouldForceReseed`.
+// `Public/notebook-core.js`'s `shouldForceReseed`, used by the notebook sync in
+// `Public/notebook.js`.
 //
 // History:
 //   * v0.4.153 introduced cache-busting via `data-working-copy-mtime` on
@@ -20,84 +21,35 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import vm from 'node:vm';
+import { createRequire } from 'node:module';
 
-const notebookSource = await fs.readFile(
-  path.resolve('Public/notebook.js'),
-  'utf8',
-);
-
-async function loadHarness() {
-  const hooks = {};
-  const elements = new Map();
-
-  const frame = {
-    dataset: {
-      setupId: 'setup_123',
-      gradingMode: 'browser',
-      notebookUrl: '/api/v1/testsetups/setup_123/assignment',
-      editorUrl: '/jupyterlite/notebooks/index.html?path=assignment.ipynb',
-    },
-    addEventListener() {},
-    getAttribute(name) { return name === 'src' ? this.dataset.editorUrl : null; },
-    contentWindow: null,
-    contentDocument: null,
-    src: '',
-  };
-
-  elements.set('jl-frame', frame);
-  elements.set('nb-status', { textContent: '', className: '' });
-  elements.set('nb-results', { hidden: true, innerHTML: '', appendChild() {}, scrollIntoView() {} });
-
-  const document = {
-    getElementById(id) { return elements.get(id) ?? null; },
-    createElement() { return { className: '', textContent: '', innerHTML: '', appendChild() {} }; },
-    head: { appendChild() {} },
-  };
-
-  const context = {
-    console,
-    document,
-    fetch: async () => ({ ok: true, async json() { return { cells: [] }; } }),
-    setTimeout,
-    clearTimeout,
-    setInterval: () => 1,
-    clearInterval: () => {},
-    URL, JSON, Error, Promise,
-    window: { location: { origin: 'https://example.test' } },
-    __CHICKADEE_NOTEBOOK_TEST_HOOKS__: hooks,
-  };
-  context.globalThis = context;
-  vm.runInNewContext(notebookSource, context, { filename: 'notebook.js' });
-  return hooks.exports;
-}
+const require = createRequire(import.meta.url);
+const {
+  shouldForceReseed,
+  reseedPlan,
+} = require('../../Public/notebook-core.js');
 
 // ----------------------------------------------------------------
 // Critical safety cases (v0.4.154)
 // ----------------------------------------------------------------
 
-test('shouldForceReseed: first visit after deploy (seenMtime=0, serverMtime>0) → FALSE', async () => {
+test('shouldForceReseed: first visit after deploy (seenMtime=0, serverMtime>0) → FALSE', () => {
   // This is THE bug that v0.4.154 fixes.  Without the guard, every
   // existing student's IndexedDB work would be wiped on their first
   // post-v0.4.153-deploy visit.
-  const { shouldForceReseed } = await loadHarness();
   assert.equal(shouldForceReseed({ serverMtime: 1747106462, seenMtime: 0 }), false,
     'No localStorage baseline → must NOT force-reseed, regardless of server mtime');
 });
 
-test('shouldForceReseed: first visit ever (both 0) → FALSE', async () => {
+test('shouldForceReseed: first visit ever (both 0) → FALSE', () => {
   // Edge case: server hasn't created the working copy yet (rare; the
   // template always seeds before render, but defensive).
-  const { shouldForceReseed } = await loadHarness();
   assert.equal(shouldForceReseed({ serverMtime: 0, seenMtime: 0 }), false);
 });
 
-test('shouldForceReseed: server mtime missing/0 (stat failed) → FALSE', async () => {
+test('shouldForceReseed: server mtime missing/0 (stat failed) → FALSE', () => {
   // We never force-reseed when we can't read the server file's mtime,
   // even if localStorage has a previous baseline.
-  const { shouldForceReseed } = await loadHarness();
   assert.equal(shouldForceReseed({ serverMtime: 0, seenMtime: 1747106462 }), false,
     'Missing server mtime is "no signal", not "newer than my baseline"');
 });
@@ -106,35 +58,30 @@ test('shouldForceReseed: server mtime missing/0 (stat failed) → FALSE', async 
 // Working-as-designed cases
 // ----------------------------------------------------------------
 
-test('shouldForceReseed: returning visit, server unchanged → FALSE', async () => {
-  const { shouldForceReseed } = await loadHarness();
+test('shouldForceReseed: returning visit, server unchanged → FALSE', () => {
   assert.equal(shouldForceReseed({ serverMtime: 1747106462, seenMtime: 1747106462 }), false,
     'Equal mtimes mean nothing has changed — preserve IndexedDB');
 });
 
-test('shouldForceReseed: server mtime older than baseline → FALSE', async () => {
+test('shouldForceReseed: server mtime older than baseline → FALSE', () => {
   // Defensive: clock skew or file restore could make server mtime
   // appear older.  Never force-reseed in that case.
-  const { shouldForceReseed } = await loadHarness();
   assert.equal(shouldForceReseed({ serverMtime: 1747106000, seenMtime: 1747106462 }), false);
 });
 
-test('shouldForceReseed: after instructor reset (server mtime > baseline by 1s) → TRUE', async () => {
+test('shouldForceReseed: after instructor reset (server mtime > baseline by 1s) → TRUE', () => {
   // The happy path: the student visited recently (baseline saved),
   // then the instructor clicked Reset, then the student returns.
-  const { shouldForceReseed } = await loadHarness();
   assert.equal(shouldForceReseed({ serverMtime: 1747106463, seenMtime: 1747106462 }), true);
 });
 
-test('shouldForceReseed: after instructor reset (server mtime newer by hours) → TRUE', async () => {
-  const { shouldForceReseed } = await loadHarness();
+test('shouldForceReseed: after instructor reset (server mtime newer by hours) → TRUE', () => {
   assert.equal(shouldForceReseed({ serverMtime: 1747200000, seenMtime: 1747106462 }), true);
 });
 
-test('shouldForceReseed: negative or NaN inputs → FALSE', async () => {
+test('shouldForceReseed: negative or NaN inputs → FALSE', () => {
   // Defensive against parseInt('') = NaN, or somehow getting a
   // negative timestamp out of the file system.
-  const { shouldForceReseed } = await loadHarness();
   assert.equal(shouldForceReseed({ serverMtime: -1, seenMtime: 0 }), false);
   assert.equal(shouldForceReseed({ serverMtime: NaN, seenMtime: 100 }), false);
   assert.equal(shouldForceReseed({ serverMtime: 100, seenMtime: NaN }), false);
@@ -155,43 +102,37 @@ test('shouldForceReseed: negative or NaN inputs → FALSE', async () => {
 // the student's unsaved edits).
 // ----------------------------------------------------------------
 
-// `reseedPlan` returns a plain object built inside the vm realm, whose
-// prototype differs from the test realm's — so `deepStrictEqual` (the
-// `assert/strict` default) would fail on prototype identity even for
-// identical content.  Assert the two boolean fields individually, as the
-// `shouldForceReseed` cases above do.
+// `reseedPlan` returns a plain object.  Assert the two boolean fields
+// individually, as the `shouldForceReseed` cases above do.  These checks do
+// not depend on the realm that built the object.
 
-test('reseedPlan: instructor reset (local copy present, server newer) → seed + reload', async () => {
-  const { reseedPlan } = await loadHarness();
+test('reseedPlan: instructor reset (local copy present, server newer) → seed + reload', () => {
   const plan = reseedPlan({ hasLocalContent: true, serverIsNewer: true });
   assert.equal(plan.shouldSeed, true);
   assert.equal(plan.reloadOpenDoc, true,
     'A reset over an already-restored local copy must reload the open widget');
 });
 
-test('reseedPlan: normal revisit (local copy present, server unchanged) → preserve', async () => {
+test('reseedPlan: normal revisit (local copy present, server unchanged) → preserve', () => {
   // The student's in-progress work: don't seed, and crucially don't
   // reload the open editor (that would wipe unsaved edits).
-  const { reseedPlan } = await loadHarness();
   const plan = reseedPlan({ hasLocalContent: true, serverIsNewer: false });
   assert.equal(plan.shouldSeed, false);
   assert.equal(plan.reloadOpenDoc, false,
     'Must never revert an unchanged revisit — that would discard unsaved edits');
 });
 
-test('reseedPlan: first visit (no local copy, server not newer) → seed, no reload', async () => {
+test('reseedPlan: first visit (no local copy, server not newer) → seed, no reload', () => {
   // A fresh seed opens the document from the just-written contents
   // anyway, so there's no stale widget to revert.
-  const { reseedPlan } = await loadHarness();
   const plan = reseedPlan({ hasLocalContent: false, serverIsNewer: false });
   assert.equal(plan.shouldSeed, true);
   assert.equal(plan.reloadOpenDoc, false);
 });
 
-test('reseedPlan: no local copy AND server newer → seed, no reload', async () => {
+test('reseedPlan: no local copy AND server newer → seed, no reload', () => {
   // Both reasons to seed; still no open stale widget on a first-ever
   // open, so reload stays off (the open below loads fresh contents).
-  const { reseedPlan } = await loadHarness();
   const plan = reseedPlan({ hasLocalContent: false, serverIsNewer: true });
   assert.equal(plan.shouldSeed, true);
   assert.equal(plan.reloadOpenDoc, false);

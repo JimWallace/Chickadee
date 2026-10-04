@@ -50,8 +50,8 @@ page."*
 
 ## What shipped now (mitigation A): a real recovery ladder
 
-The parent-side watchdog in `Public/notebook.js` (`armEditorWatchdog` /
-`planKernelFailureResponse`) previously did **one** in-place iframe `src`
+The parent-side watchdog in `Public/notebook.js` (`armEditorWatchdog`, with
+its decision `planKernelFailureResponse` in `Public/notebook-core.js`) previously did **one** in-place iframe `src`
 reset and then gave up — which is why failures showed up annotated
 "persisted after auto-reload": the reset re-raced the same SW startup it was
 trying to dodge.
