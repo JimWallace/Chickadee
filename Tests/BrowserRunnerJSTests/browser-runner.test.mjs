@@ -24,6 +24,12 @@ const octaveSharedSource = await fs.readFile(
   path.resolve('Public/octave-grading-shared.js'),
   'utf8',
 );
+// The generated runtime-helper map (scripts/generate-js-constants.sh). The
+// runner reads it at IIFE start, as it reads the shared modules above.
+const runnerSupportSourcesSource = await fs.readFile(
+  path.resolve('Public/runner-support-sources.js'),
+  'utf8',
+);
 
 // Shared producer/parser contract for the dependency-skip wording; the worker
 // side is pinned by Tests/CoreTests/DependencySkipMessageTests.swift.
@@ -477,12 +483,15 @@ async function loadRunnerHarness(options = {}) {
   // The shared-semantics modules first (they define ChickadeeGradingShared,
   // ChickadeeRGradingShared, ChickadeeLuaGradingShared and
   // ChickadeeOctaveGradingShared, which the runner destructures at IIFE
-  // start), then the runner — same order as _notebook-body.leaf loads them.
+  // start), then the generated ChickadeeRunnerSupportSources, which the runner
+  // also reads at IIFE start, then the runner — same order as
+  // _notebook-body.leaf loads them.
   const vmContext = vm.createContext(context);
   vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
   vm.runInContext(rSharedSource, vmContext, { filename: 'r-grading-shared.js' });
   vm.runInContext(luaSharedSource, vmContext, { filename: 'lua-grading-shared.js' });
   vm.runInContext(octaveSharedSource, vmContext, { filename: 'octave-grading-shared.js' });
+  vm.runInContext(runnerSupportSourcesSource, vmContext, { filename: 'runner-support-sources.js' });
   vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
 
   return {
@@ -1094,6 +1103,43 @@ test('test_runtime.R is written into every grading workspace', async () => {
   const worker = harness.gradingWorkerFactory.created[0];
   assert.ok(worker.files['test_runtime.R'], 'test_runtime.R must reach the R workspace');
   assert.match(String(worker.files['test_runtime.R']), /chickadee_student_file/);
+});
+
+test('every runtime helper reaches the grading workspace byte for byte', async () => {
+  // The helpers come from the generated Public/runner-support-sources.js. A
+  // test script loads its helper by filename, so each helper must reach the
+  // workspace that the substrate materializes, with no change. The set is the
+  // one Plugins/EmbedRunnerSupport takes for the native runner: every
+  // test_runtime.* plus sitecustomize.py.
+  const helperNames = (await fs.readdir(path.resolve('Tools/runner-support')))
+    .filter((name) => name.startsWith('test_runtime.') || name === 'sitecustomize.py')
+    .sort();
+  assert.ok(helperNames.length > 0, 'found no runtime helpers in Tools/runner-support');
+
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'test_reference.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_reference.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runScripts(
+    new TextEncoder().encode('answer = 42\n'),
+    'setup_helpers',
+    { filename: 'solution.py' },
+  );
+
+  const workerFiles = harness.gradingWorkerFactory.created[0].files;
+  for (const name of helperNames) {
+    const canonical = await fs.readFile(path.resolve('Tools/runner-support', name));
+    assert.equal(typeof workerFiles[name], 'string', `${name} must reach the grading workspace`);
+    assert.ok(
+      Buffer.from(workerFiles[name], 'utf8').equals(canonical),
+      `${name} in the grading workspace is not Tools/runner-support/${name}`,
+    );
+  }
 });
 
 test('an R assignment gets _ck_inputs.R, not _ck_inputs.py', async () => {

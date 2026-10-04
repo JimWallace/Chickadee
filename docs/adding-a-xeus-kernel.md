@@ -287,6 +287,14 @@ and in the kernel, which have no process contract in common. See
 `commandArgs()` had to be masked in the global environment so one file works in
 both.
 
+Neither runner keeps a copy. `Plugins/EmbedRunnerSupport` compiles the file
+into the native runner, and the exhaustive switch in
+`Sources/Worker/TestRuntimeSources.swift` names it. For the browser,
+`scripts/generate-js-constants.sh` writes every `test_runtime.*` into
+`Public/runner-support-sources.js`, with no list to edit. Run that script after
+you add or edit the file, and commit the result: format-lint runs it with
+`--check`.
+
 ### 10. Prove it on a real kernel
 
 Add a fixture to `Tools/browser-grading-smoke/smoke.mjs` and run:
