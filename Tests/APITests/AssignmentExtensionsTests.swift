@@ -634,7 +634,8 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = res.body.string
-                    #expect(body.contains("+ extension (was \(classDueText))"))
+                    #expect(body.contains("+ extension"))
+                    #expect(body.contains("class due \(classDueText)"))
                     #expect(!body.contains("Assignment-wide due date"))
                 }
             )

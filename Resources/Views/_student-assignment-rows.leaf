@@ -38,10 +38,11 @@
             <td class="due-col col-hide-phone">
                 #if(row.effectiveDueAtText):
                     #(row.effectiveDueAtText)<br>
+                    <span class="card-meta">+ extension</span><br>
                     #if(row.dueAtText):
-                    <span class="card-meta">+ extension (was #(row.dueAtText))</span>
+                    <span class="card-meta">class due #(row.dueAtText)</span>
                     #else:
-                    <span class="card-meta">+ extension (no class due date)</span>
+                    <span class="card-meta">no class due date</span>
                     #endif
                 #elseif(row.dueAtText):
                     #(row.dueAtText)
