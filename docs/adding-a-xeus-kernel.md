@@ -1295,6 +1295,16 @@ it would: a language that can be **graded** and not one that can be **authored**
 no pattern-family or notebook-check renderer, and no personalization driver. So
 the boundary in "Where the second half begins" is real and was not crossed.
 
+**Status since this run.** Lua later became a full `AssignmentLanguage`
+(`.lua`). It has a literal renderer, a pattern-family renderer for every kind, a
+notebook-check renderer for four of the ten kinds, and a personalization driver.
+The six other check kinds are refused at save time, not left out. The four
+data-frame kinds and `figureCount` need packages that Lua does not have.
+`astStructure` is Python-only. `cellContains` also refuses `regex: true`.
+`docs/authoring-parity.md` gives the reason for each refusal. The native worker
+injects `Tools/runner-support/test_runtime.lua` beside the Python and R helpers,
+so one file serves `lua script.lua` and the kernel.
+
 ### What held
 
 The claim that **the browser substrate is language-agnostic** survived contact.
@@ -1409,6 +1419,13 @@ The fourth language, done a second time by this runbook — and the first run
 whose worklist was mostly *reading the answers off tables the audit
 generalised*. Recorded here the way the Lua section is: what held, what the
 measurements corrected, and the quirks no manifest predicted.
+
+**What shipped.** Octave (`.octave`) grades `.m` scripts natively with
+`octave-cli` and in the browser with the vendored `xeus-octave` kernel
+(`chickadee-octave`). All pattern kinds render and execute. Five of the ten
+notebook-check kinds are supported: `variableExists`, `functionExists`,
+`numericArrayClose`, `cellContains` and `figureCount`. The four data-frame
+kinds and `astStructure` are refused at save time.
 
 ### The headline: the invisible surface SHRANK
 
