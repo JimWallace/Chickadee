@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.406] - 2026-10-04
+
+### Changed
+
+- **The Overview's row drag uses the shared drag vocabulary.** The assignment rows on the instructor Overview rendered their own `.assignment-drag-handle` grip and `.assignment-draggable` / `.dragging` row classes, styled in the page's own style block as copies of the global rules. They now use `.suite-drag-handle` and `.suite-row-dragging`, and the whole-row grab cursor is one global rule keyed on `tr[draggable="true"]`. The page style block shrinks by 15 lines (#1972).
+
+### Changed
+
+- **CLAUDE.md states the seven assignment languages as one table.** The per-language paragraphs moved to the language docs, and CLAUDE.md keeps the rules that fail silently: declare a language and never infer one, no `language:` defaults, fail loudly only while authoring, mask the exit call. `docs/adding-a-xeus-kernel.md` now records what Lua and Octave support after their runs (#1989).
+
+### Fixed
+
+- **A CI-tolerant time budget for the concurrent evaluator test.** `EvaluatorSpawnGateTests.concurrentEvaluationsAllComplete` starts six `python3` evaluations at once. On a loaded CI runner one of them missed the 5-second default and the test failed (`PersonalizationEvaluatorTests.swift:242`, on #2059 and #2006). The test now passes a 30-second budget to each evaluation. The default the server uses does not change.
+
+
 ## [0.5.405] - 2026-10-04
 
 ### Fixed
