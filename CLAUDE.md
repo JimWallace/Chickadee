@@ -104,7 +104,7 @@ Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
 **Browser grading has four substrates, routed per script (#1271).**
-`RoutingExecutor` in `Public/browser-runner.js` sends each script to the xeus
+`RoutingExecutor` in `Public/grading-executors.js` sends each script to the xeus
 kernel for its language. It classifies with the same `RunnerCore.classifyScript`
 that the native worker uses. It boots only the runtimes that the assignment
 contains. `RunnerCore` owns the suite loop and output interpretation for all
