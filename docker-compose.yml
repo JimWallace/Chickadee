@@ -119,12 +119,15 @@ services:
         --api-base-url http://server:8080
         --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
         --max-jobs "${RUNNER_MAX_JOBS:-4}"
-      # Note: --sandbox is intentionally omitted here.
-      # Docker already provides container-level process isolation.
-      # To enable OS-level sandboxing (Linux unshare namespaces), add
-      # "--sandbox" here. That buys network isolation for test scripts;
-      # it does not restrict filesystem access, which is why the data
-      # volume is unmounted above rather than sandboxed around.
+        --sandbox
+      # --sandbox runs each test script in its own user and network namespace
+      # (unshare). The script then has no network, so it cannot reach the
+      # server or the internet, and no real privileges. It does not restrict
+      # filesystem access, which is why the data volume is unmounted above
+      # rather than sandboxed around. Docker's default seccomp and AppArmor
+      # profiles refuse unshare, so security_opt below relaxes both; see
+      # deploy/README.md for the host check to run first. If the host still
+      # refuses user namespaces, the runner refuses to start and says why.
     networks:
       - chickadee
     depends_on:
@@ -144,10 +147,16 @@ services:
     # Least privilege. This container executes untrusted student code, so it
     # gets no capabilities, cannot acquire new ones, and cannot fork without
     # bound. None of the three costs anything a test script legitimately needs.
+    # The two unconfined profiles are the price of --sandbox: Docker's default
+    # seccomp profile allows unshare only with CAP_SYS_ADMIN, and its default
+    # AppArmor profile does not allow a user namespace. The namespaces then
+    # isolate each script; the capability drop still applies to the runner.
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+      - seccomp=unconfined
+      - apparmor=unconfined
     pids_limit: 64
     read_only: true
     # The runner's work root — where it stages a test setup, and where a

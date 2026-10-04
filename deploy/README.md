@@ -96,6 +96,34 @@ If you are upgrading a deployment that predates this change, set
 the now-unused `/data/.worker-secret` inside the data volume as stale — the
 env var takes precedence over it.
 
+### Test-script sandbox
+
+The Compose runner starts with `--sandbox`. Each test script then runs in its
+own user and network namespace: it has no network and no real privileges.
+Docker's default seccomp and AppArmor profiles refuse the `unshare` call that
+creates the namespaces, so the runner service sets `seccomp=unconfined` and
+`apparmor=unconfined`. The runner keeps `cap_drop: ALL`, `no-new-privileges`,
+a read-only root file system and `pids_limit`.
+
+The host must also allow unprivileged user namespaces. Check it before the
+first `docker compose up` with this file. The check runs `unshare` in the
+runner service, with the same settings a job uses, and prints `sandbox OK`
+when it works:
+
+```bash
+docker compose run --rm --no-deps --entrypoint /usr/bin/unshare runner --fork --user --net --map-root-user /bin/echo sandbox OK
+```
+
+If the check fails, the host refuses user namespaces. On Ubuntu 23.10 and
+later, the usual cause is the `kernel.apparmor_restrict_unprivileged_userns`
+setting. A runner that cannot start the sandbox does not start at all. Its log
+says `--sandbox is set, but this host cannot start the sandbox`, and the admin
+runner page shows it offline. It never grades without the sandbox it was told
+to use.
+
+To run without the sandbox, remove `--sandbox` from the runner command and the
+two `unconfined` lines from its `security_opt`.
+
 ### Optional PostgreSQL service example
 
 The default deployment path stays on SQLite. If you want to prepare a Postgres
