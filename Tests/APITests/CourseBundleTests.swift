@@ -25,10 +25,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsAdmin() async throws -> String {
-        return try await loginUser(username: "testadmin_cb", password: "testpassword", role: "admin", on: app)
-    }
-
     private func loginAsStudent() async throws -> String {
         return try await loginUser(username: "teststudent_cb", password: "testpassword", role: "student", on: app)
     }
@@ -195,7 +191,7 @@ import VaporTesting
 
     @Test func exportNotFoundForUnknownCourse() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             try await app.asyncTest(
                 .GET, "/admin/courses/\(UUID().uuidString)/export",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
@@ -207,7 +203,7 @@ import VaporTesting
 
     @Test func exportEmptyCourseReturnsZip() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "EXP_EMPTY")
             let id = try course.requireID().uuidString
 
@@ -229,7 +225,7 @@ import VaporTesting
 
     @Test func exportManifestContainsCorrectCounts() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "EXP_COUNTS")
             let courseID = try course.requireID()
 
@@ -290,7 +286,7 @@ import VaporTesting
 
     @Test func importRejectsMissingBundleJSON() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             let stagingDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("cb-no-manifest-\(UUID().uuidString)", isDirectory: true)
@@ -309,7 +305,7 @@ import VaporTesting
 
     @Test func importRejectsInvalidBundleJSON() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             let stagingDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("cb-bad-json-\(UUID().uuidString)", isDirectory: true)
@@ -328,7 +324,7 @@ import VaporTesting
 
     @Test func importRejectsWrongSchemaVersion() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             let badJSON = """
                 {"schemaVersion":99,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
@@ -353,7 +349,7 @@ import VaporTesting
 
     @Test func importRejectsMissingSetupFile() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             // Manifest references a setup zip that isn't in the archive
             let badJSON = """
@@ -382,7 +378,7 @@ import VaporTesting
 
     @Test func importRejectsActiveCourseDuplicate() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             _ = try await makeTestCourse(code: "DUPLICATE101")  // active course
 
             let zipData = try await makeMinimalBundleZip(courseCode: "DUPLICATE101")
@@ -394,7 +390,7 @@ import VaporTesting
 
     @Test func importAllowsArchivedCourseDuplicate() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let archived = try await makeTestCourse(code: "ARCHIVED_IMP")
             archived.isArchived = true
             try await archived.save(on: app.db)
@@ -413,7 +409,7 @@ import VaporTesting
 
     @Test func importCreatesExpectedDBRecords() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let zipData = try await makeMinimalBundleZip(courseCode: "IMP_RECORDS")
 
             let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
@@ -452,7 +448,7 @@ import VaporTesting
     /// round trip that proves it travels.
     @Test func bundleRoundTripCarriesTheReferenceSolution() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "SOLN_RT")
             let courseID = try course.requireID()
             let setup = try await insertSetupWithZip(id: "setup_soln_rt", courseID: courseID)
@@ -523,7 +519,7 @@ import VaporTesting
     /// directory it built from the zip alone (#1742).
     @Test func importWritesTheSolutionSource() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "SOLN_SRC")
             let courseID = try course.requireID()
             let setup = try await insertSetupWithZip(id: "setup_soln_src", courseID: courseID)
@@ -571,7 +567,7 @@ import VaporTesting
     /// (#1736).
     @Test func roundTripCarriesTheEditedStarterNotebook() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "NB_RT")
             let courseID = try course.requireID()
             let setup = try await insertSetupWithZip(id: "setup_nb_rt", courseID: courseID)
@@ -612,7 +608,7 @@ import VaporTesting
     /// arrived by import (#1741), as a clone or a creation does.
     @Test func importSeedsAnInitialVersion() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "VERS_RT")
             let courseID = try course.requireID()
             let setup = try await insertSetupWithZip(id: "setup_vers_rt", courseID: courseID)
@@ -647,7 +643,7 @@ import VaporTesting
     /// `receivedAt` from the bundle (#1739), not the import time.
     @Test func bundleRoundTripCarriesTimestamps() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "TIME_RT")
             let courseID = try course.requireID()
             let setup = try await insertSetupWithZip(id: "setup_time_rt", courseID: courseID)
@@ -710,7 +706,7 @@ import VaporTesting
     /// legitimate imports can trip is one that has to be watered down.
     @Test func importDeclaresALanguageForAnUndeclaredBundle() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let zipData = try await makeMinimalBundleZip(courseCode: "IMP_LANG")
 
             let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
@@ -735,7 +731,7 @@ import VaporTesting
 
     @Test func importMatchesExistingUser() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             // Pre-create the user that the bundle will reference
             let hash = try testPasswordHash("existing-pw")
@@ -773,7 +769,7 @@ import VaporTesting
 
     @Test func importCreatesPlaceholderUser() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             let zipData = try await makeBundleZipWithUser(
                 courseCode: "PLACEHOLDER_CB",
@@ -798,7 +794,7 @@ import VaporTesting
 
     @Test func roundTripExportImport() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             // Set up source course
             let course = try await makeTestCourse(code: "ROUNDTRIP_CB")
@@ -855,7 +851,7 @@ import VaporTesting
     /// open state and the course authoring guide as they were (#1737).
     @Test func roundTripPreservesAssignmentPoliciesAndTheGuide() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "POLICY_RT")
             course.mcpInstructions = "Write every hint as one sentence."
             try await course.save(on: app.db)
@@ -906,7 +902,7 @@ import VaporTesting
     /// role, and import enrolls the matched user in that role (#1740).
     @Test func roundTripPreservesEnrollmentRoles() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "ROLES_RT")
             let courseID = try course.requireID()
             let hash = try testPasswordHash("roles-pw")
@@ -955,7 +951,7 @@ import VaporTesting
     /// rather than writing that word into `users.role` (#1740).
     @Test func importReadsALegacyUserRoleAsUser() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let zipData = try await makeBundleZipWithUser(
                 courseCode: "LEGACYROLE_CB", username: "cb_legacy_role_user")
             let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
@@ -970,7 +966,7 @@ import VaporTesting
 
     @Test func roundTripPreservesSections() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
 
             let course = try await makeTestCourse(code: "RT_SECTS")
             let courseID = try course.requireID()
@@ -1073,7 +1069,7 @@ import VaporTesting
 
     @Test func roundTripPreservesContentItems() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "RT_CONTENT")
             let courseID = try course.requireID()
 
@@ -1152,7 +1148,7 @@ import VaporTesting
 
     @Test func roundTripPreservesContentAttachments() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
             let course = try await makeTestCourse(code: "RT_ATTACH")
             let courseID = try course.requireID()
 

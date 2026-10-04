@@ -103,29 +103,13 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-admin-overview")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "overview_admin", password: "testpassword", role: "admin", on: app)
-    }
-
-    private func body(of path: String, cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     @Test func runnerFragmentRendersTheRowShapeWithItsDataAttributes() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             await app.workerActivityStore.markActive(
                 workerID: "pip-runner", hostname: "pip-host", runnerVersion: "v1",
                 maxConcurrentJobs: 3, activeJobs: 0, lastHeartbeatAt: Date())
-            let html = try await body(of: "/admin/runners?fragment=rows", cookie: cookie)
+            let html = try await getHTML("/admin/runners?fragment=rows", cookie: cookie, on: app)
             #expect(!html.contains("<table"))
             #expect(html.contains("data-load=\"0\""))
             #expect(html.contains("data-max-jobs=\"3\""))
@@ -138,12 +122,12 @@ import VaporTesting
 
     @Test func anOfflineRunnerShowsThePillInsteadOfPips() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             await app.workerActivityStore.markActive(
                 workerID: "gone-runner", hostname: "", runnerVersion: "v1",
                 maxConcurrentJobs: 2, activeJobs: 0,
                 at: Date().addingTimeInterval(-10 * 60))
-            let html = try await body(of: "/admin/runners?fragment=rows", cookie: cookie)
+            let html = try await getHTML("/admin/runners?fragment=rows", cookie: cookie, on: app)
             #expect(html.contains("runner-row-offline"))
             #expect(html.contains(">Offline<"))
             #expect(!html.contains("class=\"pip\""))
@@ -152,12 +136,12 @@ import VaporTesting
 
     @Test func overviewPageAndFragmentRenderTheSameRows() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             await app.workerActivityStore.markActive(
                 workerID: "same-runner", hostname: "", runnerVersion: "v2",
                 maxConcurrentJobs: 2, activeJobs: 0, lastHeartbeatAt: Date())
-            let page = try await body(of: "/admin", cookie: cookie)
-            let fragment = try await body(of: "/admin/runners?fragment=rows", cookie: cookie)
+            let page = try await getHTML("/admin", cookie: cookie, on: app)
+            let fragment = try await getHTML("/admin/runners?fragment=rows", cookie: cookie, on: app)
             let row = "data-load=\"0\"\n                    data-max-jobs=\"2\""
             #expect(page.contains(row))
             #expect(fragment.contains(row))
@@ -168,9 +152,9 @@ import VaporTesting
 
     @Test func coursesGetAnAddMenuAndARowMenu() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             _ = try await makeTestCourse(on: app, code: "OVW101", name: "Overview Course")
-            let html = try await body(of: "/admin", cookie: cookie)
+            let html = try await getHTML("/admin", cookie: cookie, on: app)
             #expect(html.contains("Create course"))
             #expect(html.contains("id=\"importCourseBtn\""))
             #expect(html.contains("Import course bundle"))
@@ -185,9 +169,9 @@ import VaporTesting
 
     @Test func peoplePageCountsUsersAndAdmins() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             _ = try await makeTestUser(on: app, username: "plain_person", role: "user")
-            let html = try await body(of: "/admin/users", cookie: cookie)
+            let html = try await getHTML("/admin/users", cookie: cookie, on: app)
             let total = try await APIUser.query(on: app.db).count()
             let admins = try await APIUser.query(on: app.db).filter(\.$role == "admin").count()
             #expect(html.contains("\(total) users · \(admins) admins"))
@@ -196,9 +180,9 @@ import VaporTesting
 
     @Test func theRoleSelectSubmitsOnChangeAndHasNoSaveButton() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             _ = try await makeTestUser(on: app, username: "role_person", role: "user")
-            let html = try await body(of: "/admin/users-data?fragment=rows", cookie: cookie)
+            let html = try await getHTML("/admin/users-data?fragment=rows", cookie: cookie, on: app)
             #expect(html.contains("data-ck-submit-on-change"))
             #expect(html.contains("<option value=\"user\" selected>User</option>"))
             #expect(!html.contains(">Save<"))
@@ -211,10 +195,10 @@ import VaporTesting
     /// page, so it gets no cosmetic row written (#1764).
     @Test func anMCPServiceAccountGetsNoAvatarWritten() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             _ = try await makeTestUser(on: app, username: "svc_bird", role: "mcp")
             _ = try await makeTestUser(on: app, username: "human_bird", role: "user")
-            _ = try await body(of: "/admin/users-data?fragment=rows", cookie: cookie)
+            _ = try await getHTML("/admin/users-data?fragment=rows", cookie: cookie, on: app)
             let service = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "svc_bird").first())
             let human = try #require(
@@ -226,9 +210,9 @@ import VaporTesting
 
     @Test func anMCPServiceAccountGetsAPillInsteadOfASelect() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             _ = try await makeTestUser(on: app, username: "svc_account", role: "mcp")
-            let html = try await body(of: "/admin/users-data?fragment=rows", cookie: cookie)
+            let html = try await getHTML("/admin/users-data?fragment=rows", cookie: cookie, on: app)
             #expect(html.contains("MCP service"))
             #expect(!html.contains("for=\"role-\(try await userID("svc_account"))\""))
         }
@@ -236,9 +220,9 @@ import VaporTesting
 
     @Test func everyPersonRowCarriesTheirOwnAvatarAndADeleteMenu() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             _ = try await makeTestUser(on: app, username: "avatar_person", role: "user")
-            let html = try await body(of: "/admin/users-data?fragment=rows", cookie: cookie)
+            let html = try await getHTML("/admin/users-data?fragment=rows", cookie: cookie, on: app)
             #expect(html.contains("class=\"avatar"))
             #expect(html.contains("Delete user"))
             #expect(html.contains("Delete @avatar_person?"))
@@ -253,7 +237,7 @@ import VaporTesting
 
     @Test func runnerDetailShowsTheChartTheHiddenTableAndTheJobs() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             try await RunnerSnapshot(
                 runnerID: "detail-runner", recordedAt: Date().addingTimeInterval(-120),
                 activeJobs: 2, maxJobs: 2, availableCapacity: 0, hostname: "h", runnerVersion: "v",
@@ -267,7 +251,7 @@ import VaporTesting
             await app.workerActivityStore.markActive(
                 workerID: "detail-runner", hostname: "h", runnerVersion: "v",
                 maxConcurrentJobs: 2, activeJobs: 0, lastHeartbeatAt: Date())
-            let html = try await body(of: "/admin/runners/detail-runner", cookie: cookie)
+            let html = try await getHTML("/admin/runners/detail-runner", cookie: cookie, on: app)
             #expect(html.contains("Overview</a> › Runners"))
             #expect(html.contains("style=\"--bar-h:100%\""))
             #expect(html.contains("style=\"--bar-h:2%\""))
@@ -288,7 +272,7 @@ import VaporTesting
 
     @Test func anOfflineRunnerSaysHowLongItHasBeenSilent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("overview_admin", on: app)
             try await RunnerSnapshot(
                 runnerID: "quiet-runner", recordedAt: Date().addingTimeInterval(-600),
                 activeJobs: 0, maxJobs: 1, availableCapacity: 1, hostname: "h", runnerVersion: "v",
@@ -297,7 +281,7 @@ import VaporTesting
             await app.workerActivityStore.markActive(
                 workerID: "quiet-runner", hostname: "h", runnerVersion: "v",
                 maxConcurrentJobs: 1, activeJobs: 0, at: Date().addingTimeInterval(-10 * 60))
-            let html = try await body(of: "/admin/runners/quiet-runner", cookie: cookie)
+            let html = try await getHTML("/admin/runners/quiet-runner", cookie: cookie, on: app)
             #expect(html.contains("<strong>No heartbeat for "))
             #expect(html.contains("None since it went offline."))
         }
