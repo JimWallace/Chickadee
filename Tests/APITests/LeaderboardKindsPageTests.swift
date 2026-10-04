@@ -20,15 +20,6 @@ import VaporTesting
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
 
-    private func get(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var captured: TestingHTTPResponse?
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in captured = res })
-        return try #require(captured).body.string
-    }
-
     private func seedSetup(
         _ id: String, kind: ActivityKind, on app: Application
     ) async throws -> APIUser {
@@ -61,7 +52,7 @@ import VaporTesting
                     losses: place, scoreSum: Double(12 - place), updatedAt: Date()
                 ).save(on: app.db)
             }
-            let html = try await get("/testsetups/lk_robin/leaderboard", cookie: cookie, on: app)
+            let html = try await getHTML("/testsetups/lk_robin/leaderboard", cookie: cookie, on: app)
             #expect(html.contains("P 4 · W 4 · D 0 · L 8"))
             #expect(html.contains("9th"))
             #expect(html.contains("of 12"))
@@ -94,7 +85,7 @@ import VaporTesting
             row.completedAt = Date()
             try await row.save(on: app.db)
 
-            let html = try await get("/testsetups/lk_union/leaderboard", cookie: cookie, on: app)
+            let html = try await getHTML("/testsetups/lk_union/leaderboard", cookie: cookie, on: app)
             #expect(html.contains("1 fault found"))
             #expect(html.contains("Your code is not tested yet · tested 1 classmate, tested by 0"))
             #expect(html.contains("class=\"you-card-kicker\">You · "))
@@ -115,7 +106,7 @@ import VaporTesting
             let viewer = try await seedSetup("lk_hill", kind: .kingOfTheHill, on: app)
             let holder = try await classmate("lk_hill_holder", on: app)
 
-            let none = try await get("/testsetups/lk_hill/leaderboard", cookie: cookie, on: app)
+            let none = try await getHTML("/testsetups/lk_hill/leaderboard", cookie: cookie, on: app)
             #expect(none.contains("No student holds the hill yet."))
             #expect(!none.contains("champion-card"))
 
@@ -123,7 +114,7 @@ import VaporTesting
                 testSetupID: "lk_hill", userID: try holder.requireID(), submissionID: "lk_hill_h",
                 crownedAt: Date(), defences: 1
             ).save(on: app.db)
-            let other = try await get("/testsetups/lk_hill/leaderboard", cookie: cookie, on: app)
+            let other = try await getHTML("/testsetups/lk_hill/leaderboard", cookie: cookie, on: app)
             #expect(other.contains("class=\"champion-card card\""))
             #expect(other.contains("Holds the hill"))
             #expect(other.contains("1 defence"))
@@ -134,7 +125,7 @@ import VaporTesting
                 try await APIActivityChampion.query(on: app.db).first())
             champion.userID = try viewer.requireID()
             try await champion.update(on: app.db)
-            let mine = try await get("/testsetups/lk_hill/leaderboard", cookie: cookie, on: app)
+            let mine = try await getHTML("/testsetups/lk_hill/leaderboard", cookie: cookie, on: app)
             #expect(mine.contains("class=\"champion-card card you-card\""))
             #expect(mine.contains("you-pill"))
         }
@@ -171,7 +162,7 @@ import VaporTesting
                 matchSubmissionID: nil, completedAt: nil
             ).save(on: app.db)
 
-            let html = try await get("/testsetups/lk_cup/leaderboard", cookie: cookie, on: app)
+            let html = try await getHTML("/testsetups/lk_cup/leaderboard", cookie: cookie, on: app)
             #expect(html.contains(">Round 1<"))
             #expect(html.contains(">Final<"))
             #expect(html.contains("class=\"bracket\""))
@@ -185,7 +176,7 @@ import VaporTesting
             run.status = APITournamentRun.Status.complete
             run.winnerUserID = try viewer.requireID()
             try await run.update(on: app.db)
-            let done = try await get("/testsetups/lk_cup/leaderboard", cookie: cookie, on: app)
+            let done = try await getHTML("/testsetups/lk_cup/leaderboard", cookie: cookie, on: app)
             #expect(done.contains("aria-label=\"Winner\""))
             #expect(done.contains("champion-card card you-card"))
         }

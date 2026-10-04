@@ -27,6 +27,14 @@ struct GitHubCodeExchange: Sendable, Equatable {
     let redirectURI: String
 }
 
+/// GitHub answered a token revocation with a status other than 204 or 200.
+/// Revocation is best effort, so this only reaches the log.
+struct GitHubTokenRevokeRefused: Error, Equatable, CustomStringConvertible {
+    let status: UInt
+
+    var description: String { "GitHub refused to revoke the user token (HTTP \(status))." }
+}
+
 /// An installation of the App that a user can reach (slice 4).
 struct GitHubUserInstallation: Sendable, Equatable {
     let installationID: Int64
@@ -166,7 +174,7 @@ extension GitHubOAuthClient {
                     try req.content.encode(["access_token": token], as: .json)
                 }
                 guard response.status == .noContent || response.status == .ok else {
-                    throw Abort(response.status)
+                    throw GitHubTokenRevokeRefused(status: response.status.code)
                 }
             },
             userInstallations: { token in

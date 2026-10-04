@@ -21,10 +21,6 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-course-clone")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "clone_admin", password: "testpassword", role: "admin", on: app)
-    }
-
     private func postClone(
         _ sourceID: UUID, form: [String: String], cookie: String
     ) async throws -> String? {
@@ -108,7 +104,7 @@ import VaporTesting
 
     @Test func cloneCopiesContentIntoTheNewTerm() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("clone_admin", on: app)
             let (source, attachmentID) = try await makeSource()
             let sourceID = try source.requireID()
 
@@ -200,7 +196,7 @@ import VaporTesting
     ])
     func cloneRefusesAnInvalidForm(form: [String: String], error: String) async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("clone_admin", on: app)
             let source = APICourse(code: "CL200", name: "Source", term: AcademicTerm(year: 2026, season: .fall))
             try await source.save(on: app.db)
             let sourceID = try source.requireID()
@@ -214,7 +210,7 @@ import VaporTesting
 
     @Test func coursePageOffersTheNextTermToCloneInto() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("clone_admin", on: app)
             let source = APICourse(code: "CL300", name: "Source", term: AcademicTerm(year: 2026, season: .fall))
             try await source.save(on: app.db)
             var html = ""
@@ -243,7 +239,7 @@ import VaporTesting
     /// it lands in the same term as a sandbox beside the source.
     @Test func oneClickCopyKeepsTheSourceTerm() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("clone_admin", on: app)
             let source = APICourse(code: "CL400", name: "Source", term: AcademicTerm(year: 2026, season: .fall))
             try await source.save(on: app.db)
             let path = "/admin/courses/\(try source.requireID().uuidString)"
@@ -268,7 +264,7 @@ import VaporTesting
     @Test(arguments: [CourseEnrollmentMode.auto, .open])
     func aCloneStartsWithEnrollmentClosed(sourceMode: CourseEnrollmentMode) async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("clone_admin", on: app)
             let source = APICourse(
                 code: "CL500", name: "Source", enrollmentMode: sourceMode,
                 term: AcademicTerm(year: 2026, season: .fall))

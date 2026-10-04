@@ -11,9 +11,9 @@ func routes(_ app: Application) throws {
 
     try app.register(collection: HealthRoutes())
     // LTI 1.3 tool endpoints (docs/lti-1-3.md). Public: the platform fetches
-    // the key set with no session. Creating the key provider here, before any
+    // the key set with no session. Creating the key cache here, before any
     // request, keeps two concurrent first requests from each generating a key.
-    _ = app.ltiToolKeyProvider
+    _ = app.ltiToolKeyCache
     _ = app.ltiPlatformKeyCache
     try app.register(collection: LTIRoutes())
     // The deep-linking picker's choice (docs/lti-1-3.md "Deep Linking").

@@ -23,7 +23,7 @@ import Testing
 
 @testable import APIServer
 
-@Suite struct AuditTockRegressionTests {
+@Suite(.timeLimit(.minutes(2))) struct AuditTockRegressionTests {
 
     // MARK: - Personalization M1: no server-secret leakage
 

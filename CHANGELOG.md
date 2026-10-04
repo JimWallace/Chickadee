@@ -9,6 +9,68 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.398] - 2026-10-04
+
+### Changed
+
+- **The APITests helper file is now eight files, one job each (#1945).**
+  `Tests/APITests/TestHelpers.swift` had 1,717 lines and six unrelated jobs.
+  The code moves without change to `TestDatabase.swift`,
+  `MigratedSQLiteTemplate.swift`, `MigratedPostgresSchemaPool.swift`,
+  `SchemaMutatingSuites.swift`, `TestApp.swift`, `TestRequests.swift`,
+  `TestLogin.swift` and `WorkerHMACTestHeaders.swift`. Two functions lose
+  `private` so that the next file can call them. The comment on
+  `SchemaMutatingSuites` now names all five suites. No test body changes.
+
+### Changed
+
+- **A worker heartbeat test now waits for the daemon with a limit (#1949).**
+  `workerDaemonHeartbeatFailuresDoNotStopPolling` cancelled the daemon and
+  then waited for it with no limit. It now calls `awaitCancelledDaemon`, which
+  waits 30 seconds at most and records an issue when the daemon does not stop.
+
+### Changed
+
+- **Seventeen pure-function tests no longer build a Vapor app (#1950).** They
+  were in class suites that build an app in `init`, so each of them paid for
+  an app that it did not use. They now sit in struct suites in the same
+  files, with no `withApp` wrapper. No assertion changes.
+
+### Changed
+
+- **An enrollment render assertion can fail again (#2036).**
+  `bulkEnrollCSV_enrollsMatchedUsers` checked the CSV result page with a
+  disjunction that held `html.contains("2")`, which almost any page
+  satisfies. It now reads each count from its own row of the page: 2
+  enrolled, 1 pre-enrolled, 0 already enrolled and 0 rejected.
+
+
+## [0.5.397] - 2026-10-04
+
+### Changed
+
+- **CLAUDE.md agrees with the code again.** The Data Models section copied six types and a manifest example that no longer matched the source (`TestOutcomeStatus` is `TestStatus`, there is no `student` tier, and the example would not decode). It now names where each type lives and keeps only the two manifest rules the code does not state. The pattern-family paragraph says ten kinds ship in the assignment's language, not two Python kinds, and two Reference Material bullets no longer call C++ a non-language or the Racket defects open (#1988).
+- **`@unchecked Sendable` is now refused outside a Fluent model, with or without a comment.** The guard used to accept any site that carried a comment, and no site in `Sources/` needs that permission any more. A new guard fixture proves a commented site now fails (#1927).
+
+### Changed
+
+- **The LTI tool key loads through `SingleFlightCache`.** `LTIToolKeyProvider` was a second copy of `SingleFlightCache` with an infinite TTL. It is now `LTIToolKeyCache`, a typealias with an infinite TTL, the same pattern as `MetricsCardCache`. `SingleFlightCache` moves from `Diagnostics/` to `Helpers/`, because it is no longer only a diagnostics type. Behaviour does not change (#1928).
+
+
+## [0.5.396] - 2026-10-04
+
+### Changed
+
+- **`docs/architecture.md` states what in-process grading does not protect.** Most generated tests load the submission into the test's own process, so a submission can read the expected value of the test that runs it. It can also read every file in its working directory, which on the native worker includes every test script, the grader-only files and the per-student inputs file. The new section also states what the process boundary still protects (the server, and the host when the runner uses `--sandbox`) and that concurrent jobs on one runner are not isolated from each other (#2017).
+
+
+## [0.5.395] - 2026-10-04
+
+### Fixed
+
+- **A slow GitHub no longer holds the runner's result report, and logout revocation has a real time limit.** The commit-status post and the IdP token revocation each raced their work against a timer. A task group waits for all its children, and a pending HTTP call ignores cancellation, so the timer ended nothing early. The status post now runs as owned background work after the report's response, so the runner never waits on GitHub; each GitHub call keeps its 30-second request timeout. Each revocation call now has a 5-second request timeout (#1925).
+
+
 ## [0.5.394] - 2026-10-04
 
 ### Security

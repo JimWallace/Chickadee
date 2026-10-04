@@ -1,6 +1,6 @@
-// Sources/APIServer/Diagnostics/SingleFlightCache.swift
+// Sources/APIServer/Helpers/SingleFlightCache.swift
 //
-// A single-flight, short-TTL cache in front of one expensive computation.
+// A single-flight, TTL cache in front of one expensive computation.
 //
 // The actor guarantees at most one in-flight computation at a time
 // (concurrent callers await the same task) and serves a cached value for
@@ -11,8 +11,10 @@
 //
 // Two admin surfaces front their heaviest query with this: the metrics card
 // series (`MetricsCardCache`) and the storage breakdown (`StorageUsageCache`).
-// Each is a typealias plus a named accessor, so the call sites read as what
-// they cache rather than as a generic `value(...)`.
+// The LTI tool key uses it with an infinite TTL (`LTIToolKeyCache`), so the key
+// loads once and concurrent first callers share that one load. Each is a
+// typealias plus a named accessor, so the call sites read as what they cache
+// rather than as a generic `value(...)`.
 
 import Foundation
 

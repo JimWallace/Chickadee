@@ -17,6 +17,7 @@ import CSRF
 import Core
 import Fluent
 import Foundation
+import NIOCore
 import Vapor
 
 struct AuthRoutes: RouteCollection {
@@ -306,8 +307,7 @@ struct AuthRoutes: RouteCollection {
                         endpoint: endpoint,
                         config: config,
                         app: app,
-                        logger: logger,
-                        deadlineSeconds: 5
+                        logger: logger
                     )
                 }
             }
@@ -345,48 +345,38 @@ struct AuthRoutes: RouteCollection {
 
 // MARK: - Token revocation helpers
 
-/// Revokes all supplied tokens concurrently, bounded by `deadlineSeconds`.
-/// Per-token failures and the overall deadline are logged; the function
+/// How long one revocation call may take. A request timeout ends the call
+/// itself; the deadline this replaced could not stop the calls it raced
+/// (#1925).
+private let tokenRevocationTimeout: TimeAmount = .seconds(5)
+
+/// Revokes all supplied tokens concurrently, each call limited by
+/// `tokenRevocationTimeout`. Per-token failures are logged; the function
 /// always returns normally so callers can fire-and-forget without a leak.
 private func revokeTokensInParallel(
     tokens: [(token: String, hint: String)],
     endpoint: String,
     config: OIDCConfiguration,
     app: Application,
-    logger: Logger,
-    deadlineSeconds: Int
+    logger: Logger
 ) async {
-    await withTaskGroup(of: Bool.self) { group in
-        // Outer race: all revocations vs. a deadline timer.
-        group.addTask {
-            await withTaskGroup(of: Void.self) { revocations in
-                for entry in tokens {
-                    revocations.addTask {
-                        do {
-                            try await revokeToken(
-                                token: entry.token,
-                                tokenTypeHint: entry.hint,
-                                endpoint: endpoint,
-                                config: config,
-                                app: app,
-                                logger: logger
-                            )
-                        } catch {
-                            logger.warning("Token revocation failed (non-fatal): \(error)")
-                        }
-                    }
+    await withTaskGroup(of: Void.self) { revocations in
+        for entry in tokens {
+            revocations.addTask {
+                do {
+                    try await revokeToken(
+                        token: entry.token,
+                        tokenTypeHint: entry.hint,
+                        endpoint: endpoint,
+                        config: config,
+                        app: app,
+                        logger: logger
+                    )
+                } catch {
+                    logger.warning("Token revocation failed (non-fatal): \(error)")
                 }
             }
-            return true
         }
-        group.addTask {
-            try? await Task.sleep(nanoseconds: UInt64(deadlineSeconds) * 1_000_000_000)
-            return false
-        }
-        if let completedNormally = await group.next(), !completedNormally {
-            logger.warning("Token revocation deadline (\(deadlineSeconds)s) reached; cancelling remaining work")
-        }
-        group.cancelAll()
     }
 }
 
@@ -401,6 +391,7 @@ private func revokeToken(
     logger: Logger
 ) async throws {
     let response = try await app.client.post(URI(string: endpoint)) { tokenReq in
+        tokenReq.timeout = tokenRevocationTimeout
         tokenReq.headers.contentType = .urlEncodedForm
         tokenReq.headers.basicAuthorization = BasicAuthorization(
             username: config.clientID,

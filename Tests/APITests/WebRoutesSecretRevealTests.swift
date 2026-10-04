@@ -74,29 +74,13 @@ import VaporTesting
         return status
     }
 
-    private func submissionPageHTML(
-        app: Application, subID: String, cookie: String
-    ) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, "/submissions/\(subID)",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     // MARK: - Offer rendering
 
     @Test func offerRendersForEligibleStudent() async throws {
         try await withWebRoutesApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr1", subID: "sub_sr1")
-            let html = try await submissionPageHTML(app: app, subID: "sub_sr1", cookie: cookie)
+            let html = try await getHTML("/submissions/sub_sr1", cookie: cookie, on: app)
             #expect(html.contains("/testsetups/setup_sr1/reveal-secret"))
             #expect(html.contains("one reveal token"))
             // Secret stays aggregated pre-spend.
@@ -109,7 +93,7 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr2", subID: "sub_sr2", secretRevealEnabled: false)
-            let html = try await submissionPageHTML(app: app, subID: "sub_sr2", cookie: cookie)
+            let html = try await getHTML("/submissions/sub_sr2", cookie: cookie, on: app)
             #expect(!html.contains("/testsetups/setup_sr2/reveal-secret"))
         }
     }
@@ -121,7 +105,7 @@ import VaporTesting
                 manifest: """
                     {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
                     """)
-            let html = try await submissionPageHTML(app: app, subID: "sub_sr3", cookie: cookie)
+            let html = try await getHTML("/submissions/sub_sr3", cookie: cookie, on: app)
             #expect(!html.contains("reveal-secret"))
         }
     }
@@ -134,8 +118,7 @@ import VaporTesting
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
             try await wrEnrollUser(instructor, on: app)
-            let html = try await submissionPageHTML(
-                app: app, subID: "sub_sr4", cookie: instructorCookie)
+            let html = try await getHTML("/submissions/sub_sr4", cookie: instructorCookie, on: app)
             #expect(!html.contains("reveal-secret"))
             // Staff itemize secret regardless of any token.
             #expect(html.contains("SecretTraceback"))
@@ -156,7 +139,7 @@ import VaporTesting
                 userID: student.requireID(), assignmentID: assignment.requireID(), on: app.db)
             #expect(spent)
 
-            let html = try await submissionPageHTML(app: app, subID: "sub_sr5", cookie: cookie)
+            let html = try await getHTML("/submissions/sub_sr5", cookie: cookie, on: app)
             #expect(html.contains("Secret tests revealed"), "active banner shows post-spend")
             #expect(html.contains("secrettest.sh"), "secret row is itemized")
             #expect(html.contains("SecretTraceback"), "secret output shows like public output")
@@ -227,7 +210,7 @@ import VaporTesting
             assignment.secretRevealEnabled = false
             try await assignment.save(on: app.db)
 
-            let html = try await submissionPageHTML(app: app, subID: "sub_sr9", cookie: cookie)
+            let html = try await getHTML("/submissions/sub_sr9", cookie: cookie, on: app)
             #expect(html.contains("hidden test 1"), "masked itemization returns")
             #expect(!html.contains("SecretTraceback"), "secret output is hidden again")
             #expect(!html.contains("reveal-secret"), "no offer while the toggle is off")
@@ -318,7 +301,7 @@ import VaporTesting
                 userID: student.requireID(), assignmentID: assignment.requireID(), on: app.db)
             #expect(spent == false)
 
-            let html = try await submissionPageHTML(app: app, subID: "sub_sr11", cookie: cookie)
+            let html = try await getHTML("/submissions/sub_sr11", cookie: cookie, on: app)
             #expect(html.contains("reveal-secret"), "offer returns after the re-grant")
             #expect(!html.contains("SecretTraceback"), "secret output is hidden again")
         }

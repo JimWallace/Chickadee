@@ -231,18 +231,6 @@ import VaporTesting
     // of the HTML: a checked toggle and the saved row count on the marked file,
     // an unchecked toggle and a hidden field on the plain one.
 
-    private func page(_ path: String, _ fx: Fixture) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: fx.cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok, "GET \(path) — \(res.status)")
-                html = res.body.string
-            })
-        return html
-    }
-
     /// The support-file row's markup, from its `data-support-file` anchor to
     /// the end of that table row.
     private func rowMarkup(for filename: String, in html: String) throws -> String {
@@ -275,7 +263,7 @@ import VaporTesting
                 body: #"{"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":25}]}"#,
                 expect: .ok, "marking a bundled file is accepted")
 
-            let html = try await page("/instructor/\(fx.assignmentID)/edit", fx)
+            let html = try await getHTML("/instructor/\(fx.assignmentID)/edit", cookie: fx.cookie, on: app)
             let marked = try rowMarkup(for: "cases.csv", in: html)
             #expect(marked.contains("js-dataset-toggle"))
             #expect(marked.contains("checked"), "a marked file renders a checked toggle")
@@ -301,7 +289,7 @@ import VaporTesting
                 body: #"{"datasets":[{"file":"cases.csv","kind":"rowSample","sampleSize":8}]}"#,
                 expect: .ok, "a draft accepts a mark on a bundled file")
 
-            let html = try await page("/instructor/new?draftID=\(fx.draftID)", fx)
+            let html = try await getHTML("/instructor/new?draftID=\(fx.draftID)", cookie: fx.cookie, on: app)
             let marked = try rowMarkup(for: "cases.csv", in: html)
             #expect(marked.contains("js-dataset-toggle"))
             #expect(marked.contains("checked"))
@@ -378,7 +366,7 @@ import VaporTesting
                     #"{"datasets":[{"file":"cases.csv","kind":"stratifiedSample","sampleSize":2,"stratumColumn":"ward"}]}"#,
                 expect: .ok, "a valid stratified spec")
 
-            let html = try await page("/instructor/\(fx.assignmentID)/edit", fx)
+            let html = try await getHTML("/instructor/\(fx.assignmentID)/edit", cookie: fx.cookie, on: app)
             let marked = try rowMarkup(for: "cases.csv", in: html)
             #expect(marked.contains("js-dataset-stratum"))
             #expect(marked.contains("value=\"ward\""), "the saved column reaches the control")

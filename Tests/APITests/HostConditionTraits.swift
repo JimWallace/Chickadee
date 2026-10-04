@@ -53,6 +53,17 @@ extension ConditionTrait {
     static let requiresRacket: ConditionTrait = .enabled("requires racket on PATH") {
         await cachedToolIsAvailable("racket")
     }
+
+    /// Skips, visibly, when `lua` does not answer `-v`. Lua has no
+    /// `--version` flag, so the probe asks for `-v`.
+    static let requiresLua: ConditionTrait = .enabled("requires lua on PATH") {
+        await cachedToolIsAvailable("lua", arguments: ["-v"])
+    }
+
+    /// Skips, visibly, when `python3` does not answer `--version`.
+    static let requiresPython3: ConditionTrait = .enabled("requires python3 on PATH") {
+        await cachedToolIsAvailable("python3")
+    }
 }
 
 /// `@Test(.ciOnly)` resolves through `any TestTrait`, so the implicit-member
@@ -65,4 +76,6 @@ extension Trait where Self == ConditionTrait {
     static var requiresGpp: Self { ConditionTrait.requiresGpp }
     static var requiresJavac: Self { ConditionTrait.requiresJavac }
     static var requiresRacket: Self { ConditionTrait.requiresRacket }
+    static var requiresLua: Self { ConditionTrait.requiresLua }
+    static var requiresPython3: Self { ConditionTrait.requiresPython3 }
 }

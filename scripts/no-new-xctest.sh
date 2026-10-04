@@ -9,7 +9,7 @@ set -euo pipefail
 # "test failures not being reported" warning) when called from a Swift
 # Testing `@Test`.  The HTTP-test surface is on Vapor's Swift-Testing-native
 # `VaporTesting` module (`app.testing()` + `Issue.record`) instead — see
-# Tests/APITests/TestHelpers.swift.  Re-introducing XCTVapor brings the
+# Tests/APITests/TestRequests.swift.  Re-introducing XCTVapor brings the
 # flaky bridge back, so it's blocked here too.
 #
 # If you ever genuinely need XCTest (e.g. measure blocks not yet

@@ -43,36 +43,29 @@ enum GitHubCommitStatusPoster {
         "chickadee/" + (assignmentSlug ?? "assignment")
     }
 
-    /// How long the post may hold the worker's result report. The result is
-    /// already committed when this runs, so a GitHub that stops answering
-    /// must not keep the runner waiting for its acknowledgement: the post is
-    /// abandoned, and a status is advisory (#1773).
-    static let deadline: Duration = .seconds(20)
-
-    /// Posts the status when the submission, the assignment and the
-    /// repository all allow it, and gives up after `deadline`. Never throws.
-    static func postIfEnabled(
-        submission: APISubmission, collection: TestOutcomeCollection, req: Request,
-        deadline: Duration = deadline
+    /// Starts the post as owned background work and returns at once, so the
+    /// worker's result report never waits on GitHub (#1925). The result is
+    /// already committed, and the runner gives up on its report after 30
+    /// seconds of silence and sends it again. Each GitHub call has its own
+    /// request timeout (`GitHubTransport.callTimeout`), and shutdown cancels
+    /// the work. The post gets a request of its own, because the report's
+    /// request ends when its response is sent.
+    static func startPost(
+        submission: APISubmission, collection: TestOutcomeCollection, req: Request
     ) async {
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                await post(submission: submission, collection: collection, req: req)
-                return true
-            }
-            group.addTask {
-                try? await Task.sleep(for: deadline)
-                return false
-            }
-            if await group.next() == false {
-                req.logger.warning(
-                    "GitHub status abandoned", metadata: ["deadline": "\(deadline)"])
-            }
-            group.cancelAll()
+        let app = req.application
+        let logger = req.logger
+        await app.backgroundWork.start {
+            let request = Request(application: app, logger: logger, on: app.eventLoopGroup.any())
+            await postIfEnabled(submission: submission, collection: collection, req: request)
         }
     }
 
-    private static func post(submission: APISubmission, collection: TestOutcomeCollection, req: Request) async {
+    /// Posts the status when the submission, the assignment and the
+    /// repository all allow it. Never throws.
+    static func postIfEnabled(
+        submission: APISubmission, collection: TestOutcomeCollection, req: Request
+    ) async {
         guard submission.kind == APISubmission.Kind.student,
             submission.sourceKind == SubmissionSource.github.rawValue,
             let sha = submission.sourceCommit, let repositoryID = submission.sourceRepoID,
