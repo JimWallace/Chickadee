@@ -110,11 +110,6 @@ enum SupportedBrowserMatrix {
         assess(userAgent: request.headers.first(name: "User-Agent"))
     }
 
-    /// True only for a confidently-identified, below-floor browser.
-    static func isUnsupported(userAgent: String?) -> Bool {
-        assess(userAgent: userAgent).tier == .unsupported
-    }
-
     // MARK: - Helpers
 
     private static func classify(engine: String, version: Int?, floor: Int?) -> BrowserSupportAssessment {

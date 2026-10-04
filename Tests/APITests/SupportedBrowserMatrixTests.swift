@@ -39,7 +39,7 @@ import Testing
     ])
     func classifiesSupported(_ ua: String) {
         #expect(SupportedBrowserMatrix.assess(userAgent: ua).tier == .supported)
-        #expect(!SupportedBrowserMatrix.isUnsupported(userAgent: ua))
+        #expect(SupportedBrowserMatrix.assess(userAgent: ua).tier != .unsupported)
     }
 
     // MARK: - Unsupported (known engine, below floor)
@@ -54,7 +54,7 @@ import Testing
     ])
     func classifiesUnsupported(_ ua: String) {
         #expect(SupportedBrowserMatrix.assess(userAgent: ua).tier == .unsupported)
-        #expect(SupportedBrowserMatrix.isUnsupported(userAgent: ua))
+        #expect(SupportedBrowserMatrix.assess(userAgent: ua).tier == .unsupported)
     }
 
     // MARK: - Unknown (don't nag — degrade-safe)
@@ -67,12 +67,12 @@ import Testing
     ])
     func classifiesUnknown(_ ua: String) {
         #expect(SupportedBrowserMatrix.assess(userAgent: ua).tier == .unknown)
-        #expect(!SupportedBrowserMatrix.isUnsupported(userAgent: ua))
+        #expect(SupportedBrowserMatrix.assess(userAgent: ua).tier != .unsupported)
     }
 
     @Test func absentUserAgentIsUnknown() {
         #expect(SupportedBrowserMatrix.assess(userAgent: nil).tier == .unknown)
-        #expect(!SupportedBrowserMatrix.isUnsupported(userAgent: nil))
+        #expect(SupportedBrowserMatrix.assess(userAgent: nil).tier != .unsupported)
     }
 
     // MARK: - Safari is floorless (no version warning, ever)
