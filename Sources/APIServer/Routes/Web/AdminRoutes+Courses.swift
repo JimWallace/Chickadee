@@ -501,88 +501,18 @@ extension AdminRoutes {
             throw Abort(.notFound)
         }
 
-        async let enrollmentCountFetch = enrolledStudentCount(forCourse: courseID, on: req.db)
-        async let assignmentCountFetch = APIAssignment.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .count()
-        async let submissionCountFetch = SubmissionRetentionService.submissionCountsByCourse(
-            courseIDs: [courseID], on: req.db)
-        let courseRow = AdminCourseRow(
-            id: idString,
-            code: course.code,
-            name: course.name,
-            isArchived: course.isArchived,
-            enrollmentMode: course.enrollmentMode.rawValue,
-            enrollmentCount: try await enrollmentCountFetch,
-            assignmentCount: try await assignmentCountFetch,
-            submissionCount: (try await submissionCountFetch)[courseID] ?? 0,
-            createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-            brightspaceOrgUnitID: course.brightspaceOrgUnitID,
-            brightspaceOrgUnitName: course.brightspaceOrgUnitName,
-            brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil
-        ).withTerm(course.term)
-
-        // Load enrollments for this course, then fetch the corresponding users.
+        let courseRow = try await Self.courseDetailRow(
+            for: course, id: idString, courseID: courseID,
+            brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil, on: req.db)
         let enrollments = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseID)
             .all()
-
-        let enrolledUserIDs = enrollments.map { $0.userID }
-        // Per-course role (from the enrollment row), not the global user role —
-        // this is what the staff selector reads/writes (#417 Slice B).
-        let roleByUserID = Dictionary(
-            enrollments.map { ($0.userID, $0.role) }, uniquingKeysWith: { first, _ in first })
-        let enrolledUsers: [AdminCourseEnrolledUserRow]
-        if enrolledUserIDs.isEmpty {
-            enrolledUsers = []
-        } else {
-            let users = try await APIUser.query(on: req.db)
-                .filter(\.$id ~~ enrolledUserIDs)
-                // Exclude `mcp` service accounts: enrolled to scope an agent's
-                // access (admin MCP tab), not human roster members.
-                .filter(\.$role != UserRole.mcp.rawValue)
-                .sort(\.$username)
-                .all()
-            var rows: [AdminCourseEnrolledUserRow] = []
-            for user in users {
-                guard let uid = user.id else { continue }
-                let role = roleByUserID[uid] ?? .student
-                var row = AdminCourseEnrolledUserRow(
-                    id: uid.uuidString,
-                    username: user.username,
-                    displayName: user.displayName,
-                    role: role.rawValue
-                )
-                // Each person's own seeded bird, as on the admin users list. The
-                // staff ring follows this course's role (docs/student-wardrobe.md).
-                let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
-                row.avatar = AvatarPresentation(
-                    for: spec, size: .roster, accessibility: .decorative, isStaff: role >= .ta)
-                row.hasAvatar = true
-                rows.append(row)
-            }
-            enrolledUsers = rows
-        }
+        let enrolledUsers = try await Self.enrolledUserRows(for: enrollments, on: req.db)
+        let assignments = try await Self.assignmentRows(forCourse: courseID, on: req.db)
 
         // One `error` query serves the settings and clone forms; each form
         // shows only the codes it owns.
         let errorCode = req.query[String.self, at: "error"]
-
-        // Load assignments for this course.
-        let assignmentModels = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .sort(\.$dueAt)
-            .all()
-        let df = waterlooDateTimeFormatter()
-        let assignments = assignmentModels.map { a in
-            AdminCourseAssignmentRow(
-                id: a.publicID,
-                title: a.title,
-                dueAt: a.dueAt.map { df.string(from: $0) },
-                isOpen: a.isOpen,
-                visibility: a.visibility.rawValue
-            )
-        }
 
         return try await req.view.render(
             "admin-course",
