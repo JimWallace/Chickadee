@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.389] - 2026-10-04
+
+### Fixed
+
+- **Only a full mark reads 100%.** A grade percent was rounded, so 199 of 200 points read 100% and earned the Ace badge, perfect-score records, authored "100%" badges and class-goal credit. One rule in Core now rounds as before but never up to 100 unless every point is earned. The displayed grade and the grades CSV follow the same rule, so 199 of 200 now shows 99% (#2018).
+
+### Fixed
+
+- **Two edits to one assignment at the same time no longer lose one.** A manifest edit decoded, changed and saved the whole manifest with no check, so `PUT /achievements` and `PUT /suite`, or two MCP tools, at once kept only the last. The save is now conditional on the manifest it read. When another edit saved first, the edit is applied again on top of it, and after three such races it is refused so the author can retry (#2019).
+
+### Changed
+
+- **C++, Java and Racket personalization expressions get 15 seconds.** The evaluator's limit per evaluation was 5 seconds for every language. It also covers the interpreter's start-up and, for C++ and Java, a compile: on an idle host, one Java evaluation with one support helper takes about 3.5 s, C++ 2.75 s and Racket 1.5 s, so a loaded server could refuse an instructor's preview or a student's first open. Python, R, Lua and Octave keep 5 seconds. The refusal message now states the language's limit (#2001).
+
+
 ## [0.5.388] - 2026-10-04
 
 ### Changed
