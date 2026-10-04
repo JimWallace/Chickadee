@@ -56,6 +56,14 @@ import VaporTesting
         return cookie
     }
 
+    /// The value that the CSV result page shows in the row labelled `label`.
+    private static func resultRowValue(_ label: String, in html: String) throws -> String {
+        let row = try #require(html.range(of: "<dt>\(label)</dt>"), "no row labelled \(label)")
+        let open = try #require(html.range(of: "<dd>", range: row.upperBound..<html.endIndex))
+        let close = try #require(html.range(of: "</dd>", range: open.upperBound..<html.endIndex))
+        return String(html[open.upperBound..<close.lowerBound])
+    }
+
     // MARK: - POST /courses/:courseID/enrollment-mode
 
     @Test func setEnrollmentMode_instructorCanSetToOpen() async throws {
@@ -191,6 +199,7 @@ import VaporTesting
 
             let csvData = "csv_alice\ncsv_bob\ncsv_notexist\n"
 
+            var html = ""
             try await app.asyncTest(
                 .POST, "/courses/\(courseID)/enroll-csv",
                 beforeRequest: { req in
@@ -209,12 +218,14 @@ import VaporTesting
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok)
-                    let html = res.body.string
-                    // The result page shows enrolled count and notFound usernames
-                    #expect(
-                        html.contains("csv_notexist") || html.contains("2") || html.contains("enrolled"),
-                        "Result page should report enrollment results")
+                    html = res.body.string
                 })
+            // Each count is in its own row of the result page. The two known
+            // users are enrolled, and the unknown username is pre-enrolled.
+            #expect(try Self.resultRowValue("Enrolled (existing accounts)", in: html) == "2")
+            #expect(try Self.resultRowValue("Pre-enrolled", in: html) == "1")
+            #expect(try Self.resultRowValue("Already enrolled (skipped)", in: html) == "0")
+            #expect(try Self.resultRowValue("Rejected (invalid format)", in: html) == "0")
 
             let enrollments = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$course.$id == course.requireID())
