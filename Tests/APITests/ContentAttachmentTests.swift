@@ -53,33 +53,6 @@ import VaporTesting
 
     // MARK: - Store validation
 
-    @Test func storeRejectsDisallowedType() async throws {
-        try await withApp(app) { _ in
-            #expect(throws: ContentAttachmentStore.StoreError.self) {
-                _ = try ContentAttachmentStore.validate(
-                    bytes: Data("x".utf8), originalName: "malware.exe")
-            }
-        }
-    }
-
-    @Test func storeRejectsUnsafeName() async throws {
-        try await withApp(app) { _ in
-            #expect(throws: ContentAttachmentStore.StoreError.self) {
-                _ = try ContentAttachmentStore.validate(
-                    bytes: Data("x".utf8), originalName: "../escape.pdf")
-            }
-        }
-    }
-
-    @Test func storeRejectsOversize() async throws {
-        try await withApp(app) { _ in
-            let tooBig = Data(count: ContentAttachmentStore.maxFileBytes + 1)
-            #expect(throws: ContentAttachmentStore.StoreError.self) {
-                _ = try ContentAttachmentStore.validate(bytes: tooBig, originalName: "big.pdf")
-            }
-        }
-    }
-
     @Test func storeWritesFileAndMetadata() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "AT_STORE")
@@ -195,6 +168,31 @@ import VaporTesting
                         description: nil, updatedLabel: nil, courseSectionID: nil, isPublished: nil),
                     context)
             }
+        }
+    }
+}
+
+/// `ContentAttachmentStore.validate` reads no app state, so these tests need
+/// no app.
+@Suite struct ContentAttachmentValidationTests {
+    @Test func storeRejectsDisallowedType() {
+        #expect(throws: ContentAttachmentStore.StoreError.self) {
+            _ = try ContentAttachmentStore.validate(
+                bytes: Data("x".utf8), originalName: "malware.exe")
+        }
+    }
+
+    @Test func storeRejectsUnsafeName() {
+        #expect(throws: ContentAttachmentStore.StoreError.self) {
+            _ = try ContentAttachmentStore.validate(
+                bytes: Data("x".utf8), originalName: "../escape.pdf")
+        }
+    }
+
+    @Test func storeRejectsOversize() {
+        let tooBig = Data(count: ContentAttachmentStore.maxFileBytes + 1)
+        #expect(throws: ContentAttachmentStore.StoreError.self) {
+            _ = try ContentAttachmentStore.validate(bytes: tooBig, originalName: "big.pdf")
         }
     }
 }

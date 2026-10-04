@@ -9,6 +9,25 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.397] - 2026-10-04
+
+### Changed
+
+- **CLAUDE.md agrees with the code again.** The Data Models section copied six types and a manifest example that no longer matched the source (`TestOutcomeStatus` is `TestStatus`, there is no `student` tier, and the example would not decode). It now names where each type lives and keeps only the two manifest rules the code does not state. The pattern-family paragraph says ten kinds ship in the assignment's language, not two Python kinds, and two Reference Material bullets no longer call C++ a non-language or the Racket defects open (#1988).
+- **`@unchecked Sendable` is now refused outside a Fluent model, with or without a comment.** The guard used to accept any site that carried a comment, and no site in `Sources/` needs that permission any more. A new guard fixture proves a commented site now fails (#1927).
+
+### Changed
+
+- **The LTI tool key loads through `SingleFlightCache`.** `LTIToolKeyProvider` was a second copy of `SingleFlightCache` with an infinite TTL. It is now `LTIToolKeyCache`, a typealias with an infinite TTL, the same pattern as `MetricsCardCache`. `SingleFlightCache` moves from `Diagnostics/` to `Helpers/`, because it is no longer only a diagnostics type. Behaviour does not change (#1928).
+
+
+## [0.5.396] - 2026-10-04
+
+### Changed
+
+- **`docs/architecture.md` states what in-process grading does not protect.** Most generated tests load the submission into the test's own process, so a submission can read the expected value of the test that runs it. It can also read every file in its working directory, which on the native worker includes every test script, the grader-only files and the per-student inputs file. The new section also states what the process boundary still protects (the server, and the host when the runner uses `--sandbox`) and that concurrent jobs on one runner are not isolated from each other (#2017).
+
+
 ## [0.5.395] - 2026-10-04
 
 ### Fixed

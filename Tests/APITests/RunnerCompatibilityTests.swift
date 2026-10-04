@@ -17,76 +17,6 @@ import VaporTesting
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
     }
 
-    @Test func versionComparatorSupportsMinimumAndExactMatches() async throws {
-        try await withApp(app) { _ in
-            let comparator = VersionComparator()
-            #expect(comparator.compare("3.11", "3.10") == .orderedDescending)
-            #expect(comparator.compare("3.9", "3.10") == .orderedAscending)
-            #expect(comparator.compare("6.0", "6.0") == .orderedSame)
-            #expect(comparator.compare("6.0", "6.1") == .orderedAscending)
-
-        }
-    }
-
-    @Test func capabilityAndLanguageMatchingReportsDetailedFailures() async throws {
-        try await withApp(app) { _ in
-            let matcher = CompatibilityMatcher()
-            let runner = RunnerCapabilityProfile(
-                platform: "linux",
-                architecture: "x86_64",
-                languageVersions: [
-                    LanguageVersion(language: "python", version: "3.9"),
-                    LanguageVersion(language: "swift", version: "6.0"),
-                ],
-                capabilities: [RunnerCapability(name: "numpy")]
-            )
-            let requirements = AssignmentRequirementSpec(
-                requiredPlatform: "linux",
-                requiredArchitecture: "x86_64",
-                requiredLanguages: [
-                    AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10"),
-                    AssignmentLanguageRequirement(language: "swift", exactVersion: "6.1"),
-                    AssignmentLanguageRequirement(language: "r", minimumVersion: "4.2"),
-                ],
-                requiredCapabilities: [
-                    RunnerCapability(name: "numpy"),
-                    RunnerCapability(name: "pandas"),
-                ]
-            )
-
-            let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
-            #expect(result.isCompatible == false)
-            #expect(result.reasons.contains("python version 3.9 < required 3.10"))
-            #expect(result.reasons.contains("swift version 6.0 != required 6.1"))
-            #expect(result.reasons.contains("missing language r"))
-            #expect(result.reasons.contains("missing capability pandas"))
-
-        }
-    }
-
-    @Test func platformAndArchitectureMatchingPassesWhenExactMatchExists() async throws {
-        try await withApp(app) { _ in
-            let matcher = CompatibilityMatcher()
-            let runner = RunnerCapabilityProfile(
-                platform: "linux",
-                architecture: "arm64",
-                languageVersions: [LanguageVersion(language: "python", version: "3.11.8")],
-                capabilities: [RunnerCapability(name: "numpy"), RunnerCapability(name: "pandas")]
-            )
-            let requirements = AssignmentRequirementSpec(
-                requiredPlatform: "linux",
-                requiredArchitecture: "arm64",
-                requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10")],
-                requiredCapabilities: [RunnerCapability(name: "numpy")]
-            )
-
-            let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
-            #expect(result.isCompatible)
-            #expect(result.reasons.isEmpty)
-
-        }
-    }
-
     @Test func runnerProfileInsertedAndUpdatedOnHeartbeat() async throws {
         try await withApp(app) { _ in
             let initial = WorkerActivityPayload(
@@ -382,5 +312,70 @@ import VaporTesting
         )
         try await submission.save(on: app.db)
         return submission
+    }
+}
+
+/// The version comparator and the compatibility matcher are pure, so these
+/// tests need no app.
+@Suite struct RunnerCompatibilityMatchingTests {
+    @Test func versionComparatorSupportsMinimumAndExactMatches() {
+        let comparator = VersionComparator()
+        #expect(comparator.compare("3.11", "3.10") == .orderedDescending)
+        #expect(comparator.compare("3.9", "3.10") == .orderedAscending)
+        #expect(comparator.compare("6.0", "6.0") == .orderedSame)
+        #expect(comparator.compare("6.0", "6.1") == .orderedAscending)
+    }
+
+    @Test func capabilityAndLanguageMatchingReportsDetailedFailures() {
+        let matcher = CompatibilityMatcher()
+        let runner = RunnerCapabilityProfile(
+            platform: "linux",
+            architecture: "x86_64",
+            languageVersions: [
+                LanguageVersion(language: "python", version: "3.9"),
+                LanguageVersion(language: "swift", version: "6.0"),
+            ],
+            capabilities: [RunnerCapability(name: "numpy")]
+        )
+        let requirements = AssignmentRequirementSpec(
+            requiredPlatform: "linux",
+            requiredArchitecture: "x86_64",
+            requiredLanguages: [
+                AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10"),
+                AssignmentLanguageRequirement(language: "swift", exactVersion: "6.1"),
+                AssignmentLanguageRequirement(language: "r", minimumVersion: "4.2"),
+            ],
+            requiredCapabilities: [
+                RunnerCapability(name: "numpy"),
+                RunnerCapability(name: "pandas"),
+            ]
+        )
+
+        let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
+        #expect(result.isCompatible == false)
+        #expect(result.reasons.contains("python version 3.9 < required 3.10"))
+        #expect(result.reasons.contains("swift version 6.0 != required 6.1"))
+        #expect(result.reasons.contains("missing language r"))
+        #expect(result.reasons.contains("missing capability pandas"))
+    }
+
+    @Test func platformAndArchitectureMatchingPassesWhenExactMatchExists() {
+        let matcher = CompatibilityMatcher()
+        let runner = RunnerCapabilityProfile(
+            platform: "linux",
+            architecture: "arm64",
+            languageVersions: [LanguageVersion(language: "python", version: "3.11.8")],
+            capabilities: [RunnerCapability(name: "numpy"), RunnerCapability(name: "pandas")]
+        )
+        let requirements = AssignmentRequirementSpec(
+            requiredPlatform: "linux",
+            requiredArchitecture: "arm64",
+            requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10")],
+            requiredCapabilities: [RunnerCapability(name: "numpy")]
+        )
+
+        let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
+        #expect(result.isCompatible)
+        #expect(result.reasons.isEmpty)
     }
 }

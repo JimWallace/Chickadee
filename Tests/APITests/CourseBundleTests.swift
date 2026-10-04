@@ -1219,25 +1219,6 @@ import VaporTesting
         }
     }
 
-    /// A bundle exported before content items existed omits the key entirely;
-    /// it must decode (contentItems == nil) and import without error. Wrapped in
-    /// `withApp` so the per-test app created in `init()` shuts down cleanly.
-    @Test func manifestWithoutContentItemsDecodesToNil() async throws {
-        try await withApp(app) { _ in
-            let json = """
-                {"schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
-                 "chickadeeVersion":"0.0.0","course":{"code":"OLD","name":"Old"},
-                 "users":[],"enrolledUserBundleIDs":[],"assignments":[],"testSetups":[],
-                 "submissions":[],"results":[]}
-                """
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let manifest = try decoder.decode(CourseBundleManifest.self, from: Data(json.utf8))
-            #expect(manifest.contentItems == nil)
-            #expect(manifest.sections == nil)
-        }
-    }
-
     // MARK: - Bundle builder with a user (used by user-matching tests)
 
     private func makeBundleZipWithUser(courseCode: String, username: String) async throws -> Data {
@@ -1279,5 +1260,24 @@ import VaporTesting
         try Data(Self.dummyZipBytes).write(to: setupsDir.appendingPathComponent("\(setupOrigID).zip"))
 
         return try await zipDir(stagingDir)
+    }
+}
+
+/// Decoding a bundle manifest needs no app.
+@Suite struct CourseBundleManifestDecodingTests {
+    /// A bundle exported before content items existed omits the key entirely;
+    /// it must decode (contentItems == nil) and import without error.
+    @Test func manifestWithoutContentItemsDecodesToNil() throws {
+        let json = """
+            {"schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
+             "chickadeeVersion":"0.0.0","course":{"code":"OLD","name":"Old"},
+             "users":[],"enrolledUserBundleIDs":[],"assignments":[],"testSetups":[],
+             "submissions":[],"results":[]}
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let manifest = try decoder.decode(CourseBundleManifest.self, from: Data(json.utf8))
+        #expect(manifest.contentItems == nil)
+        #expect(manifest.sections == nil)
     }
 }
