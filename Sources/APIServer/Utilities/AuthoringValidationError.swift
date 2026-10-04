@@ -17,8 +17,10 @@ import Foundation
 /// so this file stays free of Vapor.
 ///
 /// Cases are added one validator at a time. They cover
-/// `NotebookCheckValidator`, `ManifestValidation` and `PatternKindHandler`;
-/// the other authoring validators still throw `Abort`.
+/// `NotebookCheckValidator`, `ManifestValidation`, `PatternKindHandler` and
+/// `NotebookCheckKindHandler`. `PatternFamilyValidator` and
+/// `PatternFamilyAuthoredGraph` still throw `Abort`, because tests assert
+/// that concrete type.
 enum AuthoringValidationError: Error, Equatable, Sendable {
     // MARK: NotebookCheckValidator
 
@@ -104,6 +106,50 @@ enum AuthoringValidationError: Error, Equatable, Sendable {
     case stdoutEqualityExpectedNotString(familyID: String, caseKey: String)
     /// An `unorderedEquality` case's expected value is not a list.
     case unorderedEqualityExpectedNotList(familyID: String, caseKey: String)
+
+    // MARK: NotebookCheckKindHandler
+
+    /// A notebook check has no value for a required name field.
+    case notebookCheckFieldMissing(checkID: String, kindLabel: String, field: String)
+    /// A notebook check's name field is not a valid identifier in the
+    /// assignment's language.
+    case notebookCheckFieldNotIdentifier(
+        checkID: String, kindLabel: String, field: String, value: String, language: AssignmentLanguage)
+    /// A notebook check's `rtol` or `atol` is negative or not finite.
+    case invalidNotebookCheckTolerance(checkID: String, kindLabel: String, tolerance: String)
+    /// A notebook check's count field is missing or negative.
+    case invalidNotebookCheckCount(checkID: String, kindLabel: String, field: String)
+    /// A notebook check's expected CSV is missing or empty.
+    case notebookCheckExpectedCSVEmpty(checkID: String, kindLabel: String)
+    /// A notebook check's expected CSV does not start with a header row.
+    case notebookCheckExpectedCSVMissingHeader(checkID: String, kindLabel: String)
+    /// A `cellContains` regex has unbalanced parentheses.
+    case cellContainsRegexUnbalanced(checkID: String)
+    /// A `cellContains` regex ends with a backslash that escapes nothing.
+    case cellContainsRegexDanglingBackslash(checkID: String)
+    /// A `cellContains` check has no text to find.
+    case cellContainsEmptyText(checkID: String)
+    /// A `dataFrameColumns` check lists no columns.
+    case dataFrameColumnsEmpty(checkID: String)
+    /// A `dataFrameColumns` check lists an empty column name.
+    case dataFrameColumnsEmptyEntry(checkID: String)
+    /// A `dataFrameColumns` check lists a column name twice under exact
+    /// matching.
+    case dataFrameColumnsDuplicateNames(checkID: String)
+    /// A `seriesEquality` check's expected CSV has more than one column.
+    case seriesEqualityCSVHasSeveralColumns(checkID: String)
+    /// A `numericArrayClose` check has no expected array.
+    case numericArrayCloseEmptyArray(checkID: String)
+    /// A `functionExists` check has a negative expected arity.
+    case functionExistsNegativeArity(checkID: String)
+    /// A `variableExists` check's expected type is blank.
+    case variableExistsBlankType(checkID: String)
+    /// An `astStructure` check lists no constructs.
+    case astStructureNoConstructs(checkID: String)
+    /// An `astStructure` import predicate names an invalid module.
+    case astStructureInvalidImport(checkID: String, predicate: String)
+    /// An `astStructure` check lists an unknown predicate.
+    case astStructureUnknownPredicate(checkID: String, predicate: String)
 }
 
 extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
@@ -206,6 +252,52 @@ extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
         case .unorderedEqualityExpectedNotList(let familyID, let caseKey):
             return
                 "Pattern family '\(familyID)' (unordered_equality): case '\(caseKey)' expected must be a list (the elements to match, in any order)"
+
+        case .notebookCheckFieldMissing(let checkID, let kindLabel, let field):
+            return "Notebook check '\(checkID)' (\(kindLabel)): \(field) is required"
+        case .notebookCheckFieldNotIdentifier(let checkID, let kindLabel, let field, let value, let language):
+            return
+                "Notebook check '\(checkID)' (\(kindLabel)): \(field) '\(value)' is not a valid \(identifierKindName(language))"
+        case .invalidNotebookCheckTolerance(let checkID, let kindLabel, let tolerance):
+            return "Notebook check '\(checkID)' (\(kindLabel)): \(tolerance) must be a non-negative finite number"
+        case .invalidNotebookCheckCount(let checkID, let kindLabel, let field):
+            return "Notebook check '\(checkID)' (\(kindLabel)): \(field) must be a non-negative integer"
+        case .notebookCheckExpectedCSVEmpty(let checkID, let kindLabel):
+            return "Notebook check '\(checkID)' (\(kindLabel)): expectedCSV must be a non-empty CSV string"
+        case .notebookCheckExpectedCSVMissingHeader(let checkID, let kindLabel):
+            return "Notebook check '\(checkID)' (\(kindLabel)): expectedCSV must begin with a header row"
+        case .cellContainsRegexUnbalanced(let checkID):
+            return "Notebook check '\(checkID)' (cell_contains): regex has unbalanced parentheses"
+        case .cellContainsRegexDanglingBackslash(let checkID):
+            return "Notebook check '\(checkID)' (cell_contains): regex ends with a dangling backslash"
+        case .cellContainsEmptyText(let checkID):
+            return "Notebook check '\(checkID)' (cell_contains): containsText must be a non-empty string"
+        case .dataFrameColumnsEmpty(let checkID):
+            return "Notebook check '\(checkID)' (data_frame_columns): expectedColumns must be a non-empty list"
+        case .dataFrameColumnsEmptyEntry(let checkID):
+            return "Notebook check '\(checkID)' (data_frame_columns): expectedColumns contains an empty entry"
+        case .dataFrameColumnsDuplicateNames(let checkID):
+            return
+                "Notebook check '\(checkID)' (data_frame_columns): expectedColumns contains duplicate names under exact matching"
+        case .seriesEqualityCSVHasSeveralColumns(let checkID):
+            return
+                "Notebook check '\(checkID)' (series_equality): expectedCSV must have exactly one column (header had a comma)"
+        case .numericArrayCloseEmptyArray(let checkID):
+            return
+                "Notebook check '\(checkID)' (numeric_array_close): expectedArray must be a non-empty list of numbers"
+        case .functionExistsNegativeArity(let checkID):
+            return "Notebook check '\(checkID)' (function_exists): expectedArity must be non-negative"
+        case .variableExistsBlankType(let checkID):
+            return
+                "Notebook check '\(checkID)' (variable_exists): expectedType must be a non-empty type name when set (e.g. \"int\", \"list\", \"DataFrame\")"
+        case .astStructureNoConstructs(let checkID):
+            return "Notebook check '\(checkID)' (ast_structure): requiredConstructs must be a non-empty list"
+        case .astStructureInvalidImport(let checkID, let predicate):
+            return
+                "Notebook check '\(checkID)' (ast_structure): import predicate '\(predicate)' has an invalid module name"
+        case .astStructureUnknownPredicate(let checkID, let predicate):
+            return
+                "Notebook check '\(checkID)' (ast_structure): unknown predicate '\(predicate)' — supported: for_loop, while_loop, list_comprehension, lambda, recursion, import:<module>, optional leading `!` for negation"
         }
     }
 
