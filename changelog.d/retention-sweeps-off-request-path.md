@@ -1,0 +1,3 @@
+### Changed
+
+- **Three retention sweeps moved off the request path onto leased sweeps.** The diagnostics retention prune ran inside a student's submission, a runner's poll and a runner's result report, and once from a boot task. Expired worker nonces were deleted inside the HMAC middleware, and stale login attempts inside the rate-limit middleware. Each was gated by a per-process throttle with no lease, so every server instance pruned. They now run as `PeriodicSweepMonitor`s: diagnostics at `pruneIntervalHours` (0 still turns it off), nonces every minute, login attempts every ten minutes. The two throttle actors and `ObservabilityLifecycleHandler` are gone (#1924).

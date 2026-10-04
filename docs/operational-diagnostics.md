@@ -259,8 +259,9 @@ Environment flags:
 - `RUNNER_RETRY_MAX_DELAY_MS`
   - default: `30000`
 
-Pruning runs opportunistically on server startup and then whenever the service
-next needs to prune after the configured interval.
+Pruning runs as a leased periodic sweep ("Diagnostics prune"): once at server
+start and then every `OBSERVABILITY_PRUNE_INTERVAL_HOURS`. Only the server that
+holds the lease prunes. A value of `0` turns pruning off.
 
 Runner retry behavior is intentionally stage-specific:
 

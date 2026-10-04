@@ -155,20 +155,6 @@ struct CompatibilityCountersResponse: Content, Sendable {
     let jobsBlockedNoCompatibleRunner: Int
 }
 
-actor DiagnosticsMaintenanceStore {
-    private var lastPrunedAt: Date?
-
-    func shouldPrune(now: Date, intervalHours: Int) -> Bool {
-        guard intervalHours > 0 else { return false }
-        guard let lastPrunedAt else { return true }
-        return now.timeIntervalSince(lastPrunedAt) >= Double(intervalHours) * 3600
-    }
-
-    func markPruned(at date: Date) {
-        lastPrunedAt = date
-    }
-}
-
 /// Decides whether a runner check-in persists a `RunnerSnapshot` row.
 /// Runners poll at up to 1/s, and one INSERT per poll made `runner_snapshots`
 /// the dominant idle write load (~2,880 rows/day/runner even at the 30 s
@@ -242,7 +228,6 @@ struct SubmissionDiagnosticsContext {
 
 final class OperationalDiagnosticsService: Sendable {
     let configuration: DiagnosticsConfiguration
-    let maintenance = DiagnosticsMaintenanceStore()
     let compatibilityCounters = CompatibilityCounterStore()
     let snapshotSampler = RunnerSnapshotSampleStore()
 
@@ -319,18 +304,6 @@ struct DiagnosticsConfigurationKey: StorageKey {
 
 struct OperationalDiagnosticsServiceKey: StorageKey {
     typealias Value = OperationalDiagnosticsService
-}
-
-struct ObservabilityLifecycleHandler: LifecycleHandler {
-    /// The boot-time prune runs in the background, so boot does not wait for
-    /// it. It belongs to `backgroundWork`, which awaits it at shutdown: it used
-    /// to be a bare `Task` on `application.db` that a quick shutdown could
-    /// outlive (#1948).
-    func didBootAsync(_ application: Application) async throws {
-        await application.backgroundWork.start {
-            await application.diagnostics.pruneNow(on: application.db, logger: application.logger)
-        }
-    }
 }
 
 extension Application {

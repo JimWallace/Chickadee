@@ -97,12 +97,6 @@ struct LoginRateLimitMiddleware: AsyncMiddleware {
                 "Login rate limit exceeded", metadata: ["ip": .string(ip)])
             return try Self.tooManyRequestsResponse()
         }
-        await LoginAttemptService.purgeStaleIfDue(
-            application: request.application,
-            db: request.db,
-            lockoutWindowSeconds: configuration.lockoutWindowSeconds,
-            logger: request.logger
-        )
         return try await next.respond(to: request)
     }
 
@@ -143,9 +137,6 @@ func clientIPAddress(from request: Request, trustForwardedFor: Bool) -> String {
 /// covered by the (scope, attempt_key, occurred_at) index; per-key rows are
 /// pruned on each write so a key's row count is bounded by its own window.
 enum LoginAttemptService {
-    /// How often (at most) a request triggers the global stale-row sweep.
-    static let purgeInterval: TimeInterval = 600
-
     /// Records a request from `ip` and reports whether it should be allowed
     /// under a sliding-window cap of `max` per `windowSeconds`.  The request
     /// is counted regardless of the return value (rejected requests still
@@ -222,17 +213,13 @@ enum LoginAttemptService {
     }
 
     /// Sweeps rows old enough to be outside every window (keys that never
-    /// came back and so were never pruned on-write). Throttled per process;
-    /// best-effort.
-    static func purgeStaleIfDue(
-        application: Application,
+    /// came back and so were never pruned on-write). Runs on
+    /// `loginAttemptReaperMonitor`; best-effort.
+    static func purgeStale(
         db: Database,
         lockoutWindowSeconds: TimeInterval,
         logger: Logger
     ) async {
-        let due = await application.loginAttemptPurgeThrottle.shouldRun(
-            now: Date(), interval: purgeInterval)
-        guard due else { return }
         let horizon = Date().addingTimeInterval(-Swift.max(lockoutWindowSeconds, 3600))
         do {
             try await LoginAttempt.query(on: db)
@@ -250,23 +237,9 @@ struct LoginRateLimitConfigurationKey: StorageKey {
     typealias Value = LoginRateLimitConfiguration
 }
 
-struct LoginAttemptPurgeThrottleKey: StorageKey {
-    typealias Value = PurgeThrottle
-}
-
 extension Application {
     var loginRateLimitConfiguration: LoginRateLimitConfiguration {
         get { storage[LoginRateLimitConfigurationKey.self] ?? .default }
         set { storage[LoginRateLimitConfigurationKey.self] = newValue }
-    }
-
-    var loginAttemptPurgeThrottle: PurgeThrottle {
-        get {
-            if let existing = storage[LoginAttemptPurgeThrottleKey.self] { return existing }
-            let created = PurgeThrottle()
-            storage[LoginAttemptPurgeThrottleKey.self] = created
-            return created
-        }
-        set { storage[LoginAttemptPurgeThrottleKey.self] = newValue }
     }
 }
