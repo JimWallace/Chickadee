@@ -34,4 +34,22 @@ extension Response {
         headers.replaceOrAdd(name: "Cross-Origin-Embedder-Policy", value: "require-corp")
         headers.replaceOrAdd(name: "Cross-Origin-Resource-Policy", value: "same-origin")
     }
+
+    /// Isolates this response for the engine that asked for it: the trio
+    /// above for every engine but WebKit, which gets no isolation header.
+    ///
+    /// WebKit deadlocks on the SharedArrayBuffer (`coincident`) kernel
+    /// transport, so it must NOT be cross-origin isolated. With COEP off,
+    /// `crossOriginIsolated` is false in the iframe and the kernel falls back
+    /// to `comlink`; Chrome, Edge and Firefox keep the isolated path. See
+    /// `EditorBrowserEngine`. Because the answer varies by engine, the
+    /// response always carries `Vary: User-Agent`, so a shared cache keys on
+    /// it. The two middlewares that isolate by engine (`COEPMiddleware` for
+    /// the pages, `NotebookAssetIsolationMiddleware` for the editor documents
+    /// and worker scripts) both call this, so they cannot drift.
+    func applyCrossOriginIsolation(for request: Request) {
+        headers.add(name: "Vary", value: "User-Agent")
+        guard !EditorBrowserEngine.isWebKit(request) else { return }
+        setCrossOriginIsolationHeaders()
+    }
 }

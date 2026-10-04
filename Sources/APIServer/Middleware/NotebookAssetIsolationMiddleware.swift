@@ -93,14 +93,7 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
         let path = request.url.path
         guard enabled, path.hasPrefix("/jupyterlite/") || Self.isolatedWorkerScripts.contains(path)
         else { return response }
-        // Isolation now varies by engine (WebKit → non-isolated comlink + SW),
-        // so caches must key these responses on the User-Agent.
-        response.headers.add(name: "Vary", value: "User-Agent")
-        // WebKit gets the non-isolated comlink path; don't stamp the isolation
-        // trio for it, or the iframe HTML becomes cross-origin isolated and the
-        // kernel picks the deadlocking `coincident` transport. See EditorBrowserEngine.
-        guard !EditorBrowserEngine.isWebKit(request) else { return response }
-        response.setCrossOriginIsolationHeaders()
+        response.applyCrossOriginIsolation(for: request)
         return response
     }
 }
