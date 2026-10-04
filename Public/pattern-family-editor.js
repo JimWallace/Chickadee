@@ -609,6 +609,8 @@
         var variablesBody  = document.getElementById('family-variables-body');
         var variablesEmpty = document.getElementById('family-variables-empty');
         var addVariableBtn = document.getElementById('add-family-variable-btn');
+        // The note that links the amber-cue explanation (_value-cue-note.leaf).
+        var variablesCueNote = bodyEl ? bodyEl.querySelector('.js-value-cue-note') : null;
 
         /// Is `s` a name the SERVER will accept for a family variable or
         /// function?
@@ -701,7 +703,7 @@
                   +   '<input type="text" class="form-input cell-input input-mono js-pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database">'
                   + '</td>'
                   + '<td>'
-                  +   '<input type="text" class="form-input cell-input input-mono js-pf-var-value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : JSON.stringify(v.value)) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]">'
+                  +   '<input type="text" class="form-input cell-input input-mono js-pf-var-value" aria-label="Value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : JSON.stringify(v.value)) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]">'
                   + '</td>'
                   + '<td><button type="button" class="btn action-btn btn-xs action-danger js-pf-var-remove" data-var-index="' + i + '">Remove</button></td>';
                 variablesBody.appendChild(tr);
@@ -710,6 +712,8 @@
             if (variablesEmpty) {
                 variablesEmpty.style.display = familyVariables.length ? 'none' : '';
             }
+            // The reverse of the empty note: the cue it explains needs a row.
+            if (variablesCueNote) variablesCueNote.hidden = !familyVariables.length;
             // Variable set may have changed → refresh every arg cell's
             // `$name` highlighting so broken refs show up immediately.
             refreshAllArgCellVarHighlighting();
@@ -749,13 +753,14 @@
             nameEl.classList.toggle('input-invalid', !!nameError);
             nameEl.title = nameError || '';
 
-            // Value validity.  Empty stays silent until typed; a bare-string
-            // fallback — almost always a typo in dict/list JSON — gets the
-            // amber needs-a-look cue.
+            // Value validity.  Empty stays silent until typed; a value that
+            // was not read exactly — a bare-string fallback, almost always a
+            // typo in dict/list JSON, or a rewritten pasted literal — gets the
+            // amber needs-a-look cue, and its title says which (#1996).
             var parsed = tryParseVarValue(rawVal);
             var valueOk = parsed.kind !== 'empty' && parsed.strict;
             var valueError = (parsed.kind !== 'empty' && !parsed.strict)
-                ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict.'
+                ? ChickadeeLanguage.looseValueTitle(rawVal)
                 : null;
             valueEl.classList.toggle('input-attention', !!valueError);
             valueEl.title = valueError || (valueOk ? 'Parsed as ' + parsed.kind : '');

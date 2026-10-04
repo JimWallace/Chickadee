@@ -377,6 +377,7 @@
                 </td>
                 <td>
                     <input type="text" class="form-input cell-input input-mono js-global-input-value"
+                           aria-label="Value"
                            value="#(v.valueJSON)"
                            placeholder='12, "hello", [1, 2, 3], or = seed % 26'>
                 </td>
@@ -390,6 +391,7 @@
             #endfor
         </tbody>
     </table>
+    #extend("_value-cue-note")
 </section>
 
 <!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form
