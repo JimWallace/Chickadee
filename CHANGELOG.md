@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.404] - 2026-10-04
+
+### Changed
+
+- **Four more authoring validators throw a typed error, one case per rule.** `ManifestValidation`, `PatternKindHandler`, `NotebookCheckKindHandler` and `PatternFamilyAuthoredGraph` built 52 `Abort(.unprocessableEntity, reason:)` values with hand-written sentences, and imported Vapor for nothing else. They now throw `AuthoringValidationError`, whose description is the same sentence word for word and which leaves a route or an MCP tool as the same 422. The four files no longer import Vapor and leave the Utilities allowlist. `PatternFamilyValidator` still throws `Abort`, because a test asserts that type. This continues #1929.
+
+
 ## [0.5.403] - 2026-10-04
 
 ### Fixed
