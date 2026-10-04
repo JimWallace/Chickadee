@@ -110,7 +110,7 @@ import VaporTesting
                 let body = res.body.string
                 #expect(body.contains("action=\"https://github.com/settings/apps/new?state="))
                 #expect(body.contains("name=\"manifest\""))
-                #expect(!body.contains("<details class=\"test-output-details\" open>"))
+                #expect(body.contains("<details id=\"github-app-options\">"))
                 #expect(body.contains("https://courses.example.edu/admin/github/callback"))
                 let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
                 #expect(csp.contains("form-action 'self' https://github.com"))
@@ -127,7 +127,7 @@ import VaporTesting
                 #expect(
                     body.contains("action=\"https://github.com/organizations/uwaterloo-cs/settings/apps/new?state="))
                 #expect(body.contains("the organization uwaterloo-cs"))
-                #expect(body.contains("<details class=\"test-output-details\" open>"))
+                #expect(body.contains("<details id=\"github-app-options\" open>"))
             }
         }
     }
