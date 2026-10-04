@@ -52,9 +52,6 @@ public struct Achievement: Codable, Equatable, Sendable {
     public let classFraction: Double?
     /// Which dimension a `record` ranks students on.  nil for other scopes.
     public let recordDimension: RecordDimension?
-    /// Suite section this achievement renders under; nil = the trailing
-    /// "Achievements" block.
-    public let sectionID: String?
 
     public init(
         id: String,
@@ -65,8 +62,7 @@ public struct Achievement: Codable, Equatable, Sendable {
         match: ConditionMatch = .all,
         reward: AchievementReward,
         classFraction: Double? = nil,
-        recordDimension: RecordDimension? = nil,
-        sectionID: String? = nil
+        recordDimension: RecordDimension? = nil
     ) {
         self.id = id
         self.name = name
@@ -77,14 +73,13 @@ public struct Achievement: Codable, Equatable, Sendable {
         self.reward = reward
         self.classFraction = classFraction
         self.recordDimension = recordDimension
-        self.sectionID = sectionID
     }
 
     // MARK: Codable (new shape out; new-or-legacy in)
 
     enum CodingKeys: String, CodingKey {
         case id, name, detail, scope, conditions, match, reward, classFraction
-        case recordDimension, sectionID
+        case recordDimension
         // Legacy keys (decode-only; never written).
         case kind, threshold, target, attemptThreshold, timeThresholdMs, jumpThresholdPercent
     }
@@ -96,7 +91,6 @@ public struct Achievement: Codable, Equatable, Sendable {
         detail = try c.decodeIfPresent(String.self, forKey: .detail)
         reward = try c.decode(AchievementReward.self, forKey: .reward)
         classFraction = try c.decodeIfPresent(Double.self, forKey: .classFraction)
-        sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
 
         // A `conditions` key marks the new shape; otherwise this is a manifest
         // authored against the old `kind` enum, which we project into conditions.
@@ -125,7 +119,6 @@ public struct Achievement: Codable, Equatable, Sendable {
         try c.encode(reward, forKey: .reward)
         try c.encodeIfPresent(classFraction, forKey: .classFraction)
         try c.encodeIfPresent(recordDimension, forKey: .recordDimension)
-        try c.encodeIfPresent(sectionID, forKey: .sectionID)
     }
 
     /// Projects a legacy (`kind` + flat-field) achievement into the composable
