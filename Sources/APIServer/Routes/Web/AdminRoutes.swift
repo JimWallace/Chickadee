@@ -220,10 +220,8 @@ struct AdminRoutes: RouteCollection {
                 lastSeenAt: user.lastSeenAt.map { iso.string(from: $0) },
                 isCurrentUser: user.id != nil && user.id == viewerID)
             if user.roleValue != .mcp {
-                let spec = try await AvatarStore.ensureSpec(for: user, on: db)
-                row.avatar = AvatarPresentation(
-                    for: spec, size: .roster, accessibility: .decorative,
-                    isStaff: user.id.map(staff.contains) ?? false)
+                row.avatar = try await AvatarStore.rosterAvatar(
+                    for: user, isStaff: user.id.map(staff.contains) ?? false, on: db)
                 row.hasAvatar = true
             }
             rows.append(row)

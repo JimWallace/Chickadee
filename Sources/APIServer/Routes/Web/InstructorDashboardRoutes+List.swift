@@ -166,12 +166,10 @@ extension InstructorDashboardRoutes {
             enrolledUsers.compactMap { u in u.id.map { ($0, u) } }, uniquingKeysWith: { first, _ in first })
         for index in rows.indices {
             guard let userID = UUID(uuidString: rows[index].id), let user = usersByID[userID] else { continue }
-            let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
             // Course staff on the roster wear the staff ring, from their role in
-            // THIS course (docs/student-wardrobe.md, "The staff ring").
-            rows[index].avatar = AvatarPresentation(
-                for: spec, size: .roster, accessibility: .decorative,
-                isStaff: (rolesByUserID[userID] ?? .student) >= .ta)
+            // THIS course.
+            rows[index].avatar = try await AvatarStore.rosterAvatar(
+                for: user, isStaff: (rolesByUserID[userID] ?? .student) >= .ta, on: req.db)
             rows[index].hasAvatar = true
             if let reason = Self.learnFlag(for: enrollmentsByUserID[userID]) {
                 rows[index].learnFlag = reason.badge

@@ -314,7 +314,8 @@ extension InstructorDashboardRoutes {
                     refundedAtText: spend.refundedAt.map { fmt.string(from: $0) } ?? "",
                     canRefund: spend.refundedAt == nil && canManageLedger)
             }
-            let spec = try await AvatarStore.ensureSpec(for: user, on: db)
+            // A students-only ledger: staff hold no slip days.
+            let avatar = try await AvatarStore.rosterAvatar(for: user, isStaff: false, on: db)
             let refundable = spendRows.filter(\.canRefund)
             rows.append(
                 SlipDayStudentRow(
@@ -327,9 +328,7 @@ extension InstructorDashboardRoutes {
                     adjustment: adjustment,
                     hasSpends: !spendRows.isEmpty,
                     spends: spendRows,
-                    // A students-only ledger: staff hold no slip days.
-                    avatar: AvatarPresentation(
-                        for: spec, size: .roster, accessibility: .decorative, isStaff: false),
+                    avatar: avatar,
                     pips: SlipDayPip.pips(total: total, used: used, extra: adjustment),
                     leftText: "\(max(total - used, 0)) of \(max(total, 0)) left",
                     adjustmentText: adjustment > 0

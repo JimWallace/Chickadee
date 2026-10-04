@@ -15,6 +15,19 @@ import Vapor
 
 enum AvatarStore {
 
+    /// This person's own seeded bird as a roster cell: the roster size, and
+    /// decorative because the row names them beside it. `isStaff` draws the
+    /// staff ring; the caller decides it from the role the page is about
+    /// (docs/student-wardrobe.md, "The staff ring").
+    static func rosterAvatar(
+        for user: APIUser, isStaff: Bool, on db: Database
+    ) async throws
+        -> AvatarPresentation
+    {
+        let spec = try await ensureSpec(for: user, on: db)
+        return AvatarPresentation(for: spec, size: .roster, accessibility: .decorative, isStaff: isStaff)
+    }
+
     /// This user's stored avatar, drawing and saving one on first call, and
     /// filling any axis added since it was stored.
     ///

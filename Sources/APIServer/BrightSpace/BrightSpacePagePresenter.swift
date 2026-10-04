@@ -503,7 +503,8 @@ enum BrightSpacePagePresenter {
             case .unconfirmed: unconfirmed += 1
             case .unreachable:
                 let uid = enrollment.userID.uuidString
-                let spec = try await AvatarStore.ensureSpec(for: student, on: db)
+                // `enrollments` is student-role only, so no row is staff.
+                let avatar = try await AvatarStore.rosterAvatar(for: student, isStaff: false, on: db)
                 unreachable.append(
                     BrightspaceReadinessRow(
                         username: student.username,
@@ -511,9 +512,7 @@ enum BrightSpacePagePresenter {
                         detail: enrollment.brightspaceSyncDetail ?? "Not on the LEARN classlist.",
                         userID: uid,
                         unenrollURL: "/courses/\(courseUUID.uuidString)/unenroll/\(uid)",
-                        // `enrollments` is student-role only, so no row is staff.
-                        avatar: AvatarPresentation(
-                            for: spec, size: .roster, accessibility: .decorative, isStaff: false),
+                        avatar: avatar,
                         hasAvatar: true))
             }
         }
