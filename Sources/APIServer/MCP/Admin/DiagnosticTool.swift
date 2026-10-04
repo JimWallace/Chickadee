@@ -98,19 +98,4 @@ extension DiagnosticTool {
 // MARK: - Registry
 
 /// Name-keyed registry of admin diagnostic tools.
-struct DiagnosticToolRegistry: Sendable {
-    private let toolsByName: [String: AnyDiagnosticTool]
-
-    init(_ tools: [AnyDiagnosticTool]) {
-        toolsByName = Dictionary(tools.map { ($0.name, $0) }, uniquingKeysWith: { existing, _ in existing })
-    }
-
-    /// All registered tools, sorted by name for stable `tools/list` output.
-    var all: [AnyDiagnosticTool] {
-        toolsByName.values.sorted { $0.name < $1.name }
-    }
-
-    func tool(named name: String) -> AnyDiagnosticTool? {
-        toolsByName[name]
-    }
-}
+typealias DiagnosticToolRegistry = MCPToolRegistry<AnyDiagnosticTool>
