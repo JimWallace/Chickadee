@@ -6,5 +6,10 @@
 // the binary; the library split removes that cost).
 
 import APIServer
+import CProcessHardening
+
+// Before anything reads a secret: a child process that runs staff-authored
+// code must not be able to read this process's environment through /proc.
+_ = chickadee_refuse_process_inspection()
 
 try await runAPIServer()

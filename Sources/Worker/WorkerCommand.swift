@@ -6,6 +6,7 @@
 // actor itself stays in RunnerDaemon.swift.
 
 import ArgumentParser
+import CProcessHardening
 import Core
 import Foundation
 
@@ -52,6 +53,12 @@ struct WorkerCommand: AsyncParsableCommand {
     }
 
     mutating func run() async throws {
+        // A test script runs as the runner's user. Without this it can read
+        // RUNNER_SHARED_SECRET from /proc/<runner pid>/environ and sign worker
+        // API calls, for example to report its own result. `--sandbox` blocks
+        // the read too, but only where the host allows user namespaces.
+        let inspectionRefused = chickadee_refuse_process_inspection() == 0
+
         guard let baseURL = URL(string: apiBaseURL) else {
             throw Self.startupFailure("Error: invalid --api-base-url '\(apiBaseURL)'\n")
         }
@@ -149,6 +156,7 @@ struct WorkerCommand: AsyncParsableCommand {
                 "api_base_url": apiBaseURL,
                 "max_jobs": maxJobs,
                 "sandbox_mode": sandboxLabel,
+                "process_inspection": inspectionRefused ? "refused" : "allowed",
                 "test_setup_cache_dir": cacheDirPath,
             ])
         if let runnerProfile {

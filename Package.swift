@@ -127,10 +127,21 @@ let package = Package(
         .executableTarget(
             name: "chickadee-server",
             dependencies: [
-                .target(name: "APIServer")
+                .target(name: "APIServer"),
+                .target(name: "CProcessHardening"),
             ],
             path: "Sources/chickadee-server",
             swiftSettings: strictWarnings
+        ),
+
+        // MARK: - Process hardening (C)
+        //
+        // One call both executables make at start, so a child process of the
+        // same user cannot read their environment through /proc. C because
+        // prctl(2) is variadic, and Swift does not import variadic C functions.
+        .target(
+            name: "CProcessHardening",
+            path: "Sources/CProcessHardening"
         ),
 
         // MARK: - Worker executable
@@ -139,6 +150,7 @@ let package = Package(
             dependencies: [
                 .target(name: "Core"),
                 .target(name: "RunnerCore"),
+                .target(name: "CProcessHardening"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Subprocess", package: "swift-subprocess"),
                 .product(name: "SystemPackage", package: "swift-system"),
@@ -219,6 +231,7 @@ let package = Package(
             dependencies: [
                 .target(name: "chickadee-runner"),
                 .target(name: "RunnerCore"),
+                .target(name: "CProcessHardening"),
                 .target(name: "ChickadeeTestSupport"),
                 // LocalHTTPTestServer launches its servers through
                 // Subprocess, like the runner (docs/ci-flakiness.md Family 6).
