@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.415] - 2026-10-04
+
+### Changed
+
+- **The admin course page builds its rows outside the handler (#2111).** `courseDetail` built the course row, the roster rows with their avatars and the assignment rows inline. Three static builders in `AdminRoutes+CourseRows.swift` do that now, the shape the account page uses, so the handler is loads plus render. The page does not change.
+
+
 ## [0.5.414] - 2026-10-04
 
 ### Changed
