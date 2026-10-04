@@ -131,7 +131,7 @@ import VaporTesting
                 afterResponse: { res in
                     let html = res.body.string
                     #expect(html.contains("Use metric units throughout."))
-                    #expect(html.contains("<dd>Course-authored</dd>"))
+                    #expect(html.contains("<dd>Customized</dd>"))
                     #expect(html.contains("Reset to Chickadee default"))
                 })
 

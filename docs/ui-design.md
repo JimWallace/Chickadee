@@ -307,7 +307,9 @@ duplicate.
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
   pass/fail colouring to an inline count.  `.tier` + `.tier-*` — status
   badges (defined variants only:
-  open/closed/extended/preview/unpublished/danger).  `.tier-danger` is the one
+  open/closed/extended/preview/unpublished/danger).  A bare `.tier` is the
+  neutral state badge, for a state with no status colour ("Secret tests
+  revealed").  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
   and must not be borrowed for it.
 - **`.account-identity`** — the account page's identity header: the student's

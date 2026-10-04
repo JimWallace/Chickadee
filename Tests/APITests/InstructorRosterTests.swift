@@ -80,7 +80,8 @@ import VaporTesting
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == flagged.requireID()).first())
             enrollment.learnSyncReadiness = .unreachable
-            enrollment.brightspaceSyncDetail = "Not on the LEARN classlist"
+            // The sentence the sweep really stores, not a short stand-in.
+            enrollment.brightspaceSyncDetail = LearnUnreachableReason.notOnClasslist.storedDetail
             try await enrollment.save(on: app.db)
 
             let html = try await page("/instructor/students", cookie: cookie, on: app)
@@ -99,7 +100,10 @@ import VaporTesting
         enrollment.learnSyncReadiness = .confirmed
         #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == nil)
         enrollment.learnSyncReadiness = .unreachable
-        #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == "Not on LEARN classlist")
+        // With no stored detail, the flag gives the advice that does no harm.
+        #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == .noMatch)
+        enrollment.brightspaceSyncDetail = LearnUnreachableReason.notOnClasslist.storedDetail
+        #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == .notOnClasslist)
         enrollment.role = .ta
         #expect(InstructorDashboardRoutes.learnFlag(for: enrollment) == nil)
     }

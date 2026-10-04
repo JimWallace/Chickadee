@@ -142,7 +142,7 @@
                 #if(item.row.dueAt):Due #(item.row.dueAt)#else:No due date#endif
                 #if(item.row.variantState == "failed"):
                 · <span class="tier tier-danger" title="Reference solution graded on synthetic per-student seeds">#(item.row.variantSummaryText)</span>
-                · students on those variants would fail too
+                · Students on those variants fail too
                 #if(item.row.failedVariantSubmissionID):
                 · <a href="/submissions/#(item.row.failedVariantSubmissionID)">View variant</a>
                 #endif

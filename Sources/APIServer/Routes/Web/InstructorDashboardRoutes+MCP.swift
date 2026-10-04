@@ -79,7 +79,7 @@ extension InstructorDashboardRoutes {
             // Precomputed so the template branches on flat bools (LeafKit
             // 1.14.2 mis-parses compound conditions).
             showResetButton: canEdit && isCustomized,
-            sourceNote: isCustomized ? "Course-authored" : "Chickadee default",
+            sourceNote: isCustomized ? "Customized" : "Chickadee default",
             maxLength: Self.mcpGuidanceMaxLength,
             canEdit: canEdit,
             readOnlyNote: readOnlyNote,
