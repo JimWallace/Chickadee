@@ -9,6 +9,15 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.403] - 2026-10-04
+
+### Fixed
+
+- **Text that only a hover title held is now on the page.** A failed variant badge on the instructor Overview says that students on those variants fail too. The assignment editor says beside Save & Validate that suite edits save as you make them. A spent secret-reveal token shows as a "Secret tests revealed" badge, not as an emoji with no label (#1975).
+- **The LEARN flag on the Students tab is a short badge with the correct advice.** The badge was the full sentence that the roster-readiness sweep stores. It is now "Not on LEARN" or "No LEARN match", and the reason and the advice are on the row. Only a student whose ID LEARN does not list gets the advice to remove them if they dropped. A student with no ID gets the advice to add one (#1975).
+- **The Source line on the instructor MCP tab is a short phrase.** It now reads "Chickadee default" or "Customized", the same as the badge in the heading. The old text was two sentences and referred to "the text below", which is not correct on a narrow screen (#2023).
+
+
 ## [0.5.402] - 2026-10-04
 
 ### Changed
