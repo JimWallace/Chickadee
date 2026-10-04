@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 /// The four grade fields of a serialized `TestOutcomeCollection`, and the
@@ -50,13 +51,13 @@ struct CollectionGradeFields: Decodable, Equatable, Sendable {
 
     /// The grade as a percent: weighted (earned / total) when `totalPoints` is
     /// above zero, else passed tests over all tests. Nil when neither is
-    /// available.
+    /// available. Only a full mark reads 100 (`GradePercent`).
     var gradePercent: Int? {
         if let earnedPoints, let totalPoints, totalPoints > 0 {
-            return Int((earnedPoints / totalPoints * 100).rounded())
+            return GradePercent.of(earned: earnedPoints, total: totalPoints)
         }
-        guard let passCount, let totalTests, totalTests > 0 else { return nil }
-        return Int((Double(passCount) / Double(totalTests) * 100).rounded())
+        guard let passCount, let totalTests else { return nil }
+        return GradePercent.of(earned: Double(passCount), total: Double(totalTests))
     }
 
     /// The earned points for CSV and LEARN export: weighted points when

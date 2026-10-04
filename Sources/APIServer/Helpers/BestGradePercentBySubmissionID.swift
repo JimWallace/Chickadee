@@ -13,6 +13,7 @@
 // of re-implementing it inline — the drift that produced #1111's stale
 // per-student drilldown grade.
 
+import Core
 import Fluent
 import Foundation
 
@@ -51,10 +52,10 @@ struct GradeResultSummary: Sendable, GradeValueCarrying {
     var gradePercentValue: Int? {
         if let legacyGradePercent { return legacyGradePercent }
         if let earned = earnedPoints, let total = totalPoints, total > 0 {
-            return Int((earned / total * 100).rounded())
+            return GradePercent.of(earned: earned, total: total)
         }
-        guard let pass = passCount, let total = totalTests, total > 0 else { return nil }
-        return Int((Double(pass) / Double(total) * 100).rounded())
+        guard let pass = passCount, let total = totalTests else { return nil }
+        return GradePercent.of(earned: Double(pass), total: Double(total))
     }
 
     var gradePointsValue: Double? {

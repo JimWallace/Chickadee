@@ -243,10 +243,7 @@ extension WebRoutes {
         processed.totalPoints = collection.totalPoints
         processed.rawEarnedPoints = collection.earnedPoints
         processed.earnedPoints = formatPoints(collection.earnedPoints)
-        processed.gradePercent =
-            collection.totalPoints > 0
-            ? Int((collection.earnedPoints / Double(collection.totalPoints) * 100).rounded())
-            : 0
+        processed.gradePercent = gradePercent(from: collection) ?? 0
         processed.badgeContext = BadgeContext(
             attemptNumber: submission.attemptNumber ?? 1,
             gradePercent: processed.gradePercent,
