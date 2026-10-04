@@ -7,7 +7,8 @@
 // (Swift/wasm) still owns the interpretation into a TestOutcome, exactly as for
 // the other two, so the native and browser graders cannot drift.
 //
-// Loading: classic script, no dependencies.
+// Loading: classic script. Requires /grading-shared.js first (makeNonce,
+// parseStatusRunOutput).
 //   - Public/lua-grading-worker.js: importScripts('/lua-grading-shared.js' + search)
 //   - Node tests: read + eval, then read globalThis.ChickadeeLuaGradingShared.
 // Exposes exactly one global: ChickadeeLuaGradingShared.
@@ -265,21 +266,11 @@ end)()`;
         return '_ck.setenv("CHICKADEE_ASSIGNMENT_SEED", ' + luaStringLiteral(seed) + ')';
     }
 
-    // A fresh, unguessable delimiter for one script run.  The wrapper writes it
-    // around the status the grader reads back; student code cannot forge a
-    // boundary because it cannot see the nonce.  crypto.getRandomValues is
-    // available in every browser worker; Math.random is a test-harness fallback
-    // only.
+    // One copy of the nonce, in Public/grading-shared.js (#1963). Every
+    // worker and the notebook page load that file before this one. Read at
+    // call time, so a harness that loads only this module still loads.
     function makeNonce() {
-        try {
-            const bytes = new Uint8Array(16);
-            (root.crypto || globalThis.crypto).getRandomValues(bytes);
-            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch (_) {
-            let out = '';
-            for (let i = 0; i < 4; i++) out += Math.random().toString(16).slice(2, 10);
-            return out;
-        }
+        return root.ChickadeeGradingShared.makeNonce();
     }
 
     // The Lua source for grading ONE script: a single call into the harness
@@ -289,30 +280,10 @@ end)()`;
             + luaStringLiteral(nonce) + ')';
     }
 
-    // Pull the status and the script's stdout back out of the kernel's
-    // concatenated stdout stream.
-    //
-    // Anchored on the LAST occurrence of the marker, so a submission that echoes
-    // an earlier line cannot shadow the real one.  Returns null when the run
-    // never reached the status line — the caller turns that into a substrate
-    // error rather than guessing at an exit code, since a missing status means
-    // the cell died before it could report anything.
+    // The status line this wrapper ends with is the shape Lua and Octave
+    // share, so the parser is one copy in Public/grading-shared.js (#1963).
     function parseRunOutput(stdoutText, nonce) {
-        const text = String(stdoutText == null ? '' : stdoutText);
-        const statusMark = '\n' + nonce + ':status:';
-
-        const statusAt = text.lastIndexOf(statusMark);
-        if (statusAt < 0) return null;
-        const statusFrom = statusAt + statusMark.length;
-        const statusEnd = text.indexOf('\n', statusFrom);
-        if (statusEnd < 0) return null;
-        const exitCode = parseInt(text.slice(statusFrom, statusEnd).trim(), 10);
-        if (!Number.isFinite(exitCode)) return null;
-
-        // The marker's own leading newline is not the script's, so the slice
-        // ends before it: a script whose last write had no trailing newline
-        // must not gain one.
-        return { exitCode: exitCode, stdout: text.slice(0, statusAt) };
+        return root.ChickadeeGradingShared.parseStatusRunOutput(stdoutText, nonce);
     }
 
     // The Lua sibling of personalizationInputsSource / ...SourceR: byte-for-byte
