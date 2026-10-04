@@ -547,8 +547,8 @@ extension WebRoutes {
             earned: processed.rawEarnedPoints,
             total: Double(processed.totalPoints),
             bonus: bonus)
-        processed.gradePercent = Int(
-            (bonused / Double(processed.totalPoints) * 100).rounded())
+        processed.gradePercent =
+            GradePercent.of(earned: bonused, total: Double(processed.totalPoints)) ?? 0
         processed.earnedPoints = formatPoints(bonused)
     }
 
@@ -654,12 +654,7 @@ extension WebRoutes {
         for o in priorCollection.outcomes {
             outcomeMap[o.testName] = o.status
         }
-        let gradePercent: Int? =
-            priorCollection.totalPoints > 0
-            ? Int(
-                (priorCollection.earnedPoints / Double(priorCollection.totalPoints) * 100).rounded()
-            )
-            : nil
+        let gradePercent = gradePercent(from: priorCollection)
         return PriorAttemptDelta(outcomeMap: outcomeMap, gradePercent: gradePercent)
     }
 

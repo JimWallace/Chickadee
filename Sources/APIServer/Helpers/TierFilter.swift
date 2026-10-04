@@ -160,6 +160,5 @@ func hasSecretTierTests(_ props: TestProperties?) -> Bool {
 }
 
 func gradePercent(from collection: TestOutcomeCollection) -> Int? {
-    guard collection.totalPoints > 0 else { return nil }
-    return Int((collection.earnedPoints / Double(collection.totalPoints) * 100).rounded())
+    GradePercent.of(earned: collection.earnedPoints, total: Double(collection.totalPoints))
 }
