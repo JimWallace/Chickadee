@@ -363,7 +363,8 @@ struct CreatePatternFamilyTool: ContentTool {
         guard
             !payload.items.contains(where: { $0.kind == "family" && $0.family?.id == trimmedID })
         else {
-            throw MCPToolError.invalidArguments(detail: "A pattern family with id \"\(trimmedID)\" already exists; use update_pattern_family.")
+            throw MCPToolError.invalidArguments(
+                detail: "A pattern family with id \"\(trimmedID)\" already exists; use update_pattern_family.")
         }
 
         let family = try Self.buildFamily(input, id: trimmedID, kind: kind)
@@ -465,7 +466,8 @@ struct CreatePatternFamilyTool: ContentTool {
     ) throws -> [T]? {
         guard let value else { return nil }
         guard value.count == count else {
-            throw MCPToolError.invalidArguments(detail: "case '\(key)': \(field) length (\(value.count)) must match args length (\(count)).")
+            throw MCPToolError.invalidArguments(
+                detail: "case '\(key)': \(field) length (\(value.count)) must match args length (\(count)).")
         }
         return value
     }

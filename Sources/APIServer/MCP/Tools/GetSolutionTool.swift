@@ -60,7 +60,8 @@ struct GetSolutionTool: ContentTool {
 
         guard let solution = try await loadExistingSolution(assignment: assignment, on: context.db)
         else {
-            throw MCPToolError.invalidArguments(detail:
+            throw MCPToolError.invalidArguments(
+                detail:
                     "This assignment has no solution notebook on file. Upload one in the editor, or set "
                     + "one with update_solution.")
         }
@@ -69,7 +70,8 @@ struct GetSolutionTool: ContentTool {
         do {
             notebook = try JSONDecoder().decode(JSONValue.self, from: solution.data)
         } catch {
-            throw MCPToolError.executionFailed(detail: "The stored solution (\(solution.filename)) is not valid notebook JSON.")
+            throw MCPToolError.executionFailed(
+                detail: "The stored solution (\(solution.filename)) is not valid notebook JSON.")
         }
 
         return Output(

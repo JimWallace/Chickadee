@@ -175,7 +175,8 @@ struct UpdateSolutionTool: ContentTool {
             return language
         }()
         if let uploadOnlyLanguage, input.notebook != nil {
-            throw MCPToolError.invalidArguments(detail:
+            throw MCPToolError.invalidArguments(
+                detail:
                     "\(uploadOnlyLanguage.rawValue) has no notebook workflow, so a notebook cannot "
                     + "serve as its reference solution. Pass solutionFile ({filename, content}) instead.")
         }
@@ -188,7 +189,8 @@ struct UpdateSolutionTool: ContentTool {
             guard !name.isEmpty, !name.contains("/"), !name.contains("\\"), name != ".",
                 name != ".."
             else {
-                throw MCPToolError.invalidArguments(detail: "solutionFile.filename must be a bare filename with no path separators.")
+                throw MCPToolError.invalidArguments(
+                    detail: "solutionFile.filename must be a bare filename with no path separators.")
             }
             // Which extensions are acceptable IS a language question, and it
             // cannot be answered for an assignment that declares none — the
@@ -197,7 +199,8 @@ struct UpdateSolutionTool: ContentTool {
             // for a reason nothing in the assignment supported. Refusing is an
             // authoring-time refusal that names its own fix.
             guard let language else {
-                throw MCPToolError.invalidArguments(detail:
+                throw MCPToolError.invalidArguments(
+                    detail:
                         "This assignment declares no language, so there is no set of solution-file "
                         + "extensions to check \"\(name)\" against. Set the assignment's language "
                         + "with set_assignment_language first.")
@@ -205,7 +208,8 @@ struct UpdateSolutionTool: ContentTool {
             let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
             guard language.scriptExtensions.contains(ext) else {
                 let allowed = language.scriptExtensions.sorted().joined(separator: ", ")
-                throw MCPToolError.invalidArguments(detail:
+                throw MCPToolError.invalidArguments(
+                    detail:
                         "solutionFile.filename must end in an extension \(language.rawValue) "
                         + "recognizes (\(allowed)); got \"\(name)\".")
             }

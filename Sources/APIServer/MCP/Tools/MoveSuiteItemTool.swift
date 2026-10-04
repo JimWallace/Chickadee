@@ -117,7 +117,8 @@ struct MoveSuiteItemTool: ContentTool {
         let destination = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         if let destination {
             guard payload.sections.contains(where: { $0.id == destination }) else {
-                throw MCPToolError.invalidArguments(detail: "No section with id \"\(destination)\". Create it with create_suite_section first.")
+                throw MCPToolError.invalidArguments(
+                    detail: "No section with id \"\(destination)\". Create it with create_suite_section first.")
             }
         }
 
@@ -178,7 +179,8 @@ struct MoveSuiteItemTool: ContentTool {
 
         let provided = [script, familyID, check].compactMap { $0 }
         guard provided.count == 1 else {
-            throw MCPToolError.invalidArguments(detail: "Provide exactly one of script, familyID, or check to identify the item to move.")
+            throw MCPToolError.invalidArguments(
+                detail: "Provide exactly one of script, familyID, or check to identify the item to move.")
         }
 
         if let script {

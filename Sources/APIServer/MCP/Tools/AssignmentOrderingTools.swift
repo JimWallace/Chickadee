@@ -158,7 +158,8 @@ struct ReorderSectionItemsTool: ContentTool {
             : try await APICourseContentItem.query(on: context.db)
                 .filter(\.$courseID == courseID).filter(\.$id ~~ contentUUIDs).all()
         guard assignments.count == assignmentIDs.count, contentItems.count == contentUUIDs.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedItems must all be assignments or content items in course \(course.urlKey).")
+            throw MCPToolError.invalidArguments(
+                detail: "orderedItems must all be assignments or content items in course \(course.urlKey).")
         }
         let assignmentByPublicID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
         let contentByID = Dictionary(
@@ -271,10 +272,12 @@ struct ReorderAssignmentsTool: ContentTool {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         guard ids.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw MCPToolError.invalidArguments(detail: "orderedAssignmentPublicIDs contains an invalid assignment public ID.")
+            throw MCPToolError.invalidArguments(
+                detail: "orderedAssignmentPublicIDs contains an invalid assignment public ID.")
         }
         guard Set(ids).count == ids.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedAssignmentPublicIDs contains a duplicate assignment public ID.")
+            throw MCPToolError.invalidArguments(
+                detail: "orderedAssignmentPublicIDs contains a duplicate assignment public ID.")
         }
         guard !ids.isEmpty else {
             return Output(
@@ -288,7 +291,8 @@ struct ReorderAssignmentsTool: ContentTool {
             .filter(\.$publicID ~~ ids)
             .all()
         guard assignments.count == ids.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedAssignmentPublicIDs must all be assignments in course \(course.urlKey).")
+            throw MCPToolError.invalidArguments(
+                detail: "orderedAssignmentPublicIDs must all be assignments in course \(course.urlKey).")
         }
 
         let byID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })

@@ -211,7 +211,8 @@ struct ToolContext {
         case .notEnrolled:
             throw MCPToolError.notAuthorized(detail: "The MCP account is not enrolled in the target course.")
         case .roleTooLow(let held, let required):
-            throw MCPToolError.notAuthorized(detail:
+            throw MCPToolError.notAuthorized(
+                detail:
                     "This action requires the \(required.rawValue) role in the course; the MCP account holds \(held.rawValue)."
             )
         case .courseMissing:

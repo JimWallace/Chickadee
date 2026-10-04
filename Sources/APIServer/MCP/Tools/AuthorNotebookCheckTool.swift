@@ -306,7 +306,8 @@ struct AuthorNotebookCheckTool: ContentTool {
         // current section.
         let requestedSection = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         if let requestedSection, !payload.sections.contains(where: { $0.id == requestedSection }) {
-            throw MCPToolError.invalidArguments(detail: "No section with id \"\(requestedSection)\". Create it with create_suite_section first.")
+            throw MCPToolError.invalidArguments(
+                detail: "No section with id \"\(requestedSection)\". Create it with create_suite_section first.")
         }
         let sectionID =
             requestedSection

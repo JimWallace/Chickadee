@@ -156,12 +156,15 @@ struct GetSupportFilesTool: ContentTool {
         // entry list.
         guard supportNames.contains(filename) else {
             if suiteScripts.contains(filename) {
-                throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is a graded suite script — read it via get_suite.")
+                throw MCPToolError.invalidArguments(
+                    detail: "\"\(filename)\" is a graded suite script — read it via get_suite.")
             }
             if Self.reservedNames.contains(filename) {
-                throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is a notebook — read it via get_notebook or get_solution.")
+                throw MCPToolError.invalidArguments(
+                    detail: "\"\(filename)\" is a notebook — read it via get_notebook or get_solution.")
             }
-            throw MCPToolError.invalidArguments(detail: "No support file named \"\(filename)\" in this assignment's setup "
+            throw MCPToolError.invalidArguments(
+                detail: "No support file named \"\(filename)\" in this assignment's setup "
                     + "(call without filename to list them).")
         }
         guard let data = await extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
@@ -184,7 +187,8 @@ struct GetSupportFilesTool: ContentTool {
     ) throws -> (content: String, truncated: Bool) {
         if data.count <= cap {
             guard let text = String(data: data, encoding: .utf8) else {
-                throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
+                throw MCPToolError.invalidArguments(
+                    detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
             }
             return (text, false)
         }
@@ -197,6 +201,7 @@ struct GetSupportFilesTool: ContentTool {
             }
             head = head.dropLast()
         }
-        throw MCPToolError.invalidArguments(detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
+        throw MCPToolError.invalidArguments(
+            detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
     }
 }

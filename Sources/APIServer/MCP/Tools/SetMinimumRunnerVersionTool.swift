@@ -78,7 +78,8 @@ struct SetMinimumRunnerVersionTool: ContentTool {
         // blank/nil value is not an error — it means "clear the gate".
         let requested = input.minimumRunnerVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let requested, !requested.isEmpty, !RunnerVersionGate.isParseable(requested) {
-            throw MCPToolError.invalidArguments(detail: "minimumRunnerVersion must be a version like \"0.5.0\" (got \"\(requested)\"); "
+            throw MCPToolError.invalidArguments(
+                detail: "minimumRunnerVersion must be a version like \"0.5.0\" (got \"\(requested)\"); "
                     + "pass null or an empty string to clear the gate.")
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(

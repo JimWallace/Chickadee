@@ -97,12 +97,14 @@ struct DeleteSupportFileTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let cleaned = sanitizeSuiteFilename(input.filename)
         guard !cleaned.isEmpty, cleaned == input.filename else {
-            throw MCPToolError.invalidArguments(detail:
+            throw MCPToolError.invalidArguments(
+                detail:
                     "filename must be a bare filename with no path separators (got \"\(input.filename)\").")
         }
 
         guard !Self.reservedFilenames.contains(cleaned) else {
-            throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is a reserved part of the test setup, not a support file. "
+            throw MCPToolError.invalidArguments(
+                detail: "\"\(cleaned)\" is a reserved part of the test setup, not a support file. "
                     + "Edit it with update_notebook / update_solution, or the suite tools.")
         }
 
@@ -112,17 +114,20 @@ struct DeleteSupportFileTool: ContentTool {
         // A graded row is owned by the suite tools; point at the right one
         // rather than tearing the file out from under its manifest entry.
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: cleaned) {
-            throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is generated from pattern family \"\(familyID)\"; "
+            throw MCPToolError.invalidArguments(
+                detail: "\"\(cleaned)\" is generated from pattern family \"\(familyID)\"; "
                     + "remove the family with delete_suite_item(familyID: \"\(familyID)\") instead.")
         }
         let manifest = setup.decodedManifest()
         if manifest?.testSuites.contains(where: { $0.script == cleaned }) == true {
-            throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is a graded test, not a support file. Remove it with "
+            throw MCPToolError.invalidArguments(
+                detail: "\"\(cleaned)\" is a graded test, not a support file. Remove it with "
                     + "delete_suite_item(script: \"\(cleaned)\").")
         }
 
         guard await listZipEntries(zipPath: setup.zipPath).contains(cleaned) else {
-            throw MCPToolError.invalidArguments(detail: "No support file \"\(cleaned)\" in this test setup (see get_support_files).")
+            throw MCPToolError.invalidArguments(
+                detail: "No support file \"\(cleaned)\" in this test setup (see get_support_files).")
         }
 
         do {

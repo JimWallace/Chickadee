@@ -236,7 +236,8 @@ struct AuthorScriptTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let cleaned = sanitizeSuiteFilename(input.filename)
         guard !cleaned.isEmpty, cleaned == input.filename else {
-            throw MCPToolError.invalidArguments(detail: "filename must be a bare filename with no path separators (got \"\(input.filename)\").")
+            throw MCPToolError.invalidArguments(
+                detail: "filename must be a bare filename with no path separators (got \"\(input.filename)\").")
         }
 
         // Validate the content/sourceUrl one-of up front (cheap, no I/O); the
@@ -251,7 +252,8 @@ struct AuthorScriptTool: ContentTool {
         // Never clobber a pattern-family / notebook-check generated script —
         // those are owned by the family/check, mirroring the web 409.
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: cleaned) {
-            throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is generated from pattern family \"\(familyID)\"; edit the family instead.")
+            throw MCPToolError.invalidArguments(
+                detail: "\"\(cleaned)\" is generated from pattern family \"\(familyID)\"; edit the family instead.")
         }
 
         let manifest = setup.decodedManifest()
@@ -283,7 +285,8 @@ struct AuthorScriptTool: ContentTool {
             // tools instead. Promotion (support → test) is fine via the suite
             // path below.
             if existingTestEntry != nil {
-                throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is currently a graded test; change its tier with update_suite "
+                throw MCPToolError.invalidArguments(
+                    detail: "\"\(cleaned)\" is currently a graded test; change its tier with update_suite "
                         + "or delete it before re-authoring it as a support file.")
             }
             // A grader-only file is only safe under worker grading — the browser
@@ -291,7 +294,8 @@ struct AuthorScriptTool: ContentTool {
             if input.graderOnly == true,
                 (setup.decodedManifest()?.effectiveGradingMode ?? .worker) != .worker
             {
-                throw MCPToolError.invalidArguments(detail: "graderOnly requires worker grading, but this assignment is browser-graded. "
+                throw MCPToolError.invalidArguments(
+                    detail: "graderOnly requires worker grading, but this assignment is browser-graded. "
                         + "Switch it with set_grading_mode(\"worker\") first.")
             }
             try await authorSupportFile(
@@ -339,7 +343,8 @@ struct AuthorScriptTool: ContentTool {
         case (true, true):
             throw MCPToolError.invalidArguments(detail: "Provide either `content` or `sourceUrl`, not both.")
         case (false, false):
-            throw MCPToolError.invalidArguments(detail: "Provide `content` (the body inline) or `sourceUrl` (an https URL to fetch).")
+            throw MCPToolError.invalidArguments(
+                detail: "Provide `content` (the body inline) or `sourceUrl` (an https URL to fetch).")
         case (true, false):
             return .inline(inline ?? "")
         case (false, true):

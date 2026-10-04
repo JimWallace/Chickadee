@@ -20,7 +20,8 @@ func validateTimeLimitSeconds(
     _ seconds: Int, field: String = "seconds"
 ) throws -> Int {
     guard mcpTimeLimitRange.contains(seconds) else {
-        throw MCPToolError.invalidArguments(detail:
+        throw MCPToolError.invalidArguments(
+            detail:
                 "\(field) must be an integer between \(mcpTimeLimitRange.lowerBound) and "
                 + "\(mcpTimeLimitRange.upperBound) seconds (got \(seconds)).")
     }

@@ -262,7 +262,8 @@ struct SetAssignmentCourseSectionTool: ContentTool {
             guard let section = try await APICourseSection.find(uuid, on: context.db),
                 section.courseID == assignment.courseID
             else {
-                throw MCPToolError.invalidArguments(detail: "No course section with id \"\(raw)\" in this assignment's course.")
+                throw MCPToolError.invalidArguments(
+                    detail: "No course section with id \"\(raw)\" in this assignment's course.")
             }
             resolvedSectionID = uuid
         } else {
@@ -564,7 +565,8 @@ struct ReorderCourseSectionsTool: ContentTool {
             .all()
         let existing = Set(sections.compactMap { $0.id })
         guard existing == Set(uuids) else {
-            throw MCPToolError.invalidArguments(detail: "orderedSectionIDs must list exactly the course's current section ids "
+            throw MCPToolError.invalidArguments(
+                detail: "orderedSectionIDs must list exactly the course's current section ids "
                     + "(a permutation of all \(existing.count)).")
         }
         let byID = Dictionary(

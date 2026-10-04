@@ -102,7 +102,8 @@ struct DeleteSuiteItemTool: ContentTool {
 
         var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard let idx = payload.items.firstIndex(where: { Self.matches($0, target) }) else {
-            throw MCPToolError.invalidArguments(detail: "No \(target.kind) \"\(target.id)\" found in the suite (see get_suite).")
+            throw MCPToolError.invalidArguments(
+                detail: "No \(target.kind) \"\(target.id)\" found in the suite (see get_suite).")
         }
         payload.items.remove(at: idx)
 

@@ -323,7 +323,8 @@ struct UpdatePatternFamilyTool: ContentTool {
                 || !addCases.isEmpty || input.dependsOn != nil
                 || input.referenceImplementation != nil || input.ioComparison != nil
         else {
-            throw MCPToolError.invalidArguments(detail:
+            throw MCPToolError.invalidArguments(
+                detail:
                     "Specify at least one of: defaultTier, defaultPoints, defaultHint, "
                     + "defaultTimeLimitSeconds, defaultFailureDetail, enableCases, disableCases, "
                     + "cases, addCases, dependsOn, referenceImplementation, ioComparison.")
@@ -359,14 +360,16 @@ struct UpdatePatternFamilyTool: ContentTool {
         let caseKeys = Set(family.cases.map(\.key))
         let unknown = enable.union(disable).union(editsByKey.keys).subtracting(caseKeys)
         guard unknown.isEmpty else {
-            throw MCPToolError.invalidArguments(detail: "Unknown case key(s): \(unknown.sorted().joined(separator: ", ")).")
+            throw MCPToolError.invalidArguments(
+                detail: "Unknown case key(s): \(unknown.sorted().joined(separator: ", ")).")
         }
         // New cases can't reuse an existing key (that would be an edit, not an
         // add); per-kind/arity legality is left to the save-time validator.
         let addKeys = Set(addCases.map { $0.key.trimmingCharacters(in: .whitespaces) })
         let collisions = addKeys.intersection(caseKeys)
         guard collisions.isEmpty else {
-            throw MCPToolError.invalidArguments(detail:
+            throw MCPToolError.invalidArguments(
+                detail:
                     "addCases key(s) already exist: \(collisions.sorted().joined(separator: ", ")). "
                     + "Use `cases` to edit an existing case.")
         }
@@ -526,7 +529,8 @@ struct UpdatePatternFamilyTool: ContentTool {
     ) throws -> [T] {
         if let explicit {
             guard explicit.count == argCount else {
-                throw MCPToolError.invalidArguments(detail:
+                throw MCPToolError.invalidArguments(
+                    detail:
                         "case '\(caseKey)': \(field) length (\(explicit.count)) must match args length (\(argCount)).")
             }
             return explicit

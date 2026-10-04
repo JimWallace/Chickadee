@@ -49,7 +49,8 @@ func resolveMCPCourse(
         let choices = ordered.map { course in
             course.term.map { "\(course.urlKey) (\($0.displayName))" } ?? course.urlKey
         }
-        throw MCPToolError.invalidArguments(detail: "The course code \"\(key)\" names more than one offering: "
+        throw MCPToolError.invalidArguments(
+            detail: "The course code \"\(key)\" names more than one offering: "
                 + choices.joined(separator: ", ")
                 + ". Pass the course key of the one to change.")
     }

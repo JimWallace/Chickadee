@@ -349,7 +349,8 @@ struct GetAssignmentVersionTool: ContentTool {
         path: String, fileMap: [String: String], blobs: AssignmentVersionBlobStore, input: Input
     ) throws -> (content: String, truncated: Bool) {
         guard let hash = fileMap[path] else {
-            throw MCPToolError.invalidArguments(detail:
+            throw MCPToolError.invalidArguments(
+                detail:
                     "No file \"\(path)\" in version \(input.version). Its files: "
                     + fileMap.keys.sorted().joined(separator: ", "))
         }
@@ -360,11 +361,13 @@ struct GetAssignmentVersionTool: ContentTool {
             // A blob that a version row references but that isn't on disk means
             // the store lost bytes — report it as such rather than as an empty
             // file, which would read as "this script used to be blank".
-            throw MCPToolError.executionFailed(detail: "Stored content for \"\(path)\" is missing from the version blob store.")
+            throw MCPToolError.executionFailed(
+                detail: "Stored content for \"\(path)\" is missing from the version blob store.")
         }
         let cap = min(max(input.maxBytes ?? defaultMaxBytes, 1), maxMaxBytes)
         guard let text = truncatedUTF8(data, maxBytes: cap) else {
-            throw MCPToolError.invalidArguments(detail:
+            throw MCPToolError.invalidArguments(
+                detail:
                     "\"\(path)\" is not UTF-8 text (\(data.count) bytes) — it can be restored, but "
                     + "not read here.")
         }

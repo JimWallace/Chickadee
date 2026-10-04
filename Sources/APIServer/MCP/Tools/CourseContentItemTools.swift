@@ -142,7 +142,8 @@ func contentLinksFromInput(_ links: [ContentLinkInput]) throws -> [ContentLink] 
             throw MCPToolError.invalidArguments(detail: "A link labelled \"\(label)\" is missing a url.")
         }
         guard isSafeContentLinkURL(url) else {
-            throw MCPToolError.invalidArguments(detail: "Link url \"\(url)\" must be an http(s) or site-relative (/…) URL.")
+            throw MCPToolError.invalidArguments(
+                detail: "Link url \"\(url)\" must be an http(s) or site-relative (/…) URL.")
         }
         out.append(ContentLink(label: label.isEmpty ? url : label, url: url))
     }
@@ -179,7 +180,8 @@ func resolveContentItemSectionID(
     guard let section = try await APICourseSection.find(uuid, on: context.db),
         section.courseID == courseID
     else {
-        throw MCPToolError.invalidArguments(detail: "No course section with id \"\(trimmed)\" in this content item's course.")
+        throw MCPToolError.invalidArguments(
+            detail: "No course section with id \"\(trimmed)\" in this content item's course.")
     }
     return uuid
 }
@@ -756,7 +758,8 @@ struct ReorderContentItemsTool: ContentTool {
             .filter(\.$id ~~ uuids)
             .all()
         guard items.count == uuids.count else {
-            throw MCPToolError.invalidArguments(detail: "orderedContentItemIDs must all be content items in course \(course.urlKey).")
+            throw MCPToolError.invalidArguments(
+                detail: "orderedContentItemIDs must all be content items in course \(course.urlKey).")
         }
         let byID = Dictionary(
             uniqueKeysWithValues: items.compactMap { item -> (UUID, APICourseContentItem)? in

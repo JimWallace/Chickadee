@@ -165,7 +165,8 @@ struct SetDatasetTool: ContentTool {
 
         if !remove {
             guard let sampleSize = input.sampleSize, sampleSize >= 1 else {
-                throw MCPToolError.invalidArguments(detail: "sampleSize (>= 1) is required when marking a dataset; "
+                throw MCPToolError.invalidArguments(
+                    detail: "sampleSize (>= 1) is required when marking a dataset; "
                         + "pass remove:true to clear a mark.")
             }
             // The file must be a bundled *support* file: a dataset marks
@@ -177,14 +178,16 @@ struct SetDatasetTool: ContentTool {
                 })
             let suiteScripts = Set(setup.decodedManifest()?.testSuites.map(\.script) ?? [])
             guard zipEntries.contains(cleaned) else {
-                throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is not among this assignment's bundled files "
+                throw MCPToolError.invalidArguments(
+                    detail: "\"\(cleaned)\" is not among this assignment's bundled files "
                         + "(list them with get_support_files; upload one with "
                         + "author_script(tier:\"support\")).")
             }
             guard !suiteScripts.contains(cleaned), cleaned != "assignment.ipynb",
                 cleaned != "solution.ipynb"
             else {
-                throw MCPToolError.invalidArguments(detail: "\"\(cleaned)\" is not a support file — only support data files can "
+                throw MCPToolError.invalidArguments(
+                    detail: "\"\(cleaned)\" is not a support file — only support data files can "
                         + "be per-student datasets.")
             }
             // The same check the web endpoints run, from the same place: a
