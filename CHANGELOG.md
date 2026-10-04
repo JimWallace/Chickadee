@@ -9,6 +9,70 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.399] - 2026-10-04
+
+### Changed
+
+- **Each interpreter trait is declared once per test target (#1946).**
+  Seventeen suites declared their own `requiresLua`, `requiresPython3`,
+  `requiresGpp`, `requiresJavac`, `requiresOctave`, `requiresRacket` or
+  `requiresRscript`, and most of them probed through the uncached
+  `toolIsAvailable`. The traits are now in `HostConditionTraits.swift`
+  (APITests) and `WorkerTestSkip.swift` (WorkerTests), on
+  `cachedToolIsAvailable`, and 117 tests use them. The probe cache is now
+  keyed by the whole command, because `lua` answers `-v` and fails
+  `--version`. The pandas and matplotlib traits stay local.
+
+### Changed
+
+- **Four silent test skips are now traits (#1947).** Four tests returned
+  early, with no report, when `python3` or the vendored editor was absent.
+  They now carry `.requiresPython3` or a trait for the vendored editor, so a
+  skip shows in the report and fails CI. A guard in `LuaStdoutCaptureTests`
+  that the trait already made unreachable is gone. The python3 guard in the
+  pattern-family syntax helper stays, and its comment now says why a trait
+  cannot replace it.
+
+### Changed
+
+- **Page tests share one `getHTML` and one `loginAsAdmin` helper (#1951).**
+  Thirty APITests suites carried a private copy of "GET a page and return
+  its HTML", of an admin sign-in, or of both. The new
+  `Tests/APITests/TestPageHelpers.swift` holds one of each, and the private
+  copies are gone. `getHTML` expects `200 OK` unless told otherwise and
+  records a failure at the caller's line.
+
+### Changed
+
+- **One helper signs in a per-course test instructor (#1952).**
+  `loginAsCourseInstructor(username:courseCode:on:)` signs in an instructor
+  and enrols them as course staff through `enrollAsTestInstructor`.
+  `arLoginAsInstructor` no longer repeats that upsert line for line, and five
+  suites lose a private copy of the same two steps.
+
+### Changed
+
+- **Three hand-built test apps now get the standard test wiring (#1953).**
+  `SSOAuthFlowTests` and `AuthModeGatingTests` now build on `makeTestApp`,
+  and `NotebookWebRoutesTests` adds the same registrations itself: the
+  version-capture middleware, the data-export drain and the kernel
+  inventory. All three now seed `appConfig`, so they do not read the
+  configuration of the machine that runs them. The two OIDC callback tests
+  read the callback path through `OIDCEnvConfig.fromEnvironment()`.
+
+### Changed
+
+- **Five suites that start subprocesses now have a time limit (#1955).**
+  `SectionInputsTests`, `AuditTockRegressionTests`, `SupportImportTests`,
+  `RunnerProfileDetectorTests` and `RunnerExecProbeTests` start `python3` or
+  an interpreter probe. They now carry `.timeLimit(.minutes(2))`, so a stall
+  fails a named test and does not hold the CI job until its kill.
+
+### Changed
+
+- **The service, helper, model, OIDC, LTI and GitHub layers throw typed errors, not `Abort`.** Twenty-three sites below `Routes/` threw `Abort` beside the house error enums. They now throw `AppError` (with a new `unauthenticated` case), a new `OIDCConfigurationError` for the startup checks, `LTIServiceError` for a failed platform key set fetch, and `GitHubTokenRevokeRefused` for a refused token revocation. HTTP statuses do not change. Some messages are now sentences where they were bare statuses: for example, a course role check says "You do not have permission to do this in this course." (#1930).
+
+
 ## [0.5.398] - 2026-10-04
 
 ### Changed

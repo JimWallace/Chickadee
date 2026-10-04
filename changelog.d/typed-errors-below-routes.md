@@ -1,3 +1,0 @@
-### Changed
-
-- **The service, helper, model, OIDC, LTI and GitHub layers throw typed errors, not `Abort`.** Twenty-three sites below `Routes/` threw `Abort` beside the house error enums. They now throw `AppError` (with a new `unauthenticated` case), a new `OIDCConfigurationError` for the startup checks, `LTIServiceError` for a failed platform key set fetch, and `GitHubTokenRevokeRefused` for a refused token revocation. HTTP statuses do not change. Some messages are now sentences where they were bare statuses: for example, a course role check says "You do not have permission to do this in this course." (#1930).
