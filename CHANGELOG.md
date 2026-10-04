@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.417] - 2026-10-04
+
+### Changed
+
+- **Four page view models are private to their route files, and `SubmitChips` moves to a context file (#2113).** `StudentRowsFragmentContext`, `LeaderboardPresentContext`, `SlipDayConfirmContext` and `InstructorNewTermContext` have no reader outside their file. `SubmitChips` is read by the upload form and the GitHub submit page, so it now lives in `GitHubSubmitContext.swift`. Placement only.
+
+### Changed
+
+- **One helper builds the roster avatar cell (#2114).** Six pages each loaded a person's avatar spec and then built the same roster-sized decorative presentation. `AvatarStore.rosterAvatar(for:isStaff:on:)` does that once, and each site is one line. The leaderboard pages, which choose a labelled presentation, are unchanged.
+
+
 ## [0.5.416] - 2026-10-04
 
 ### Changed
