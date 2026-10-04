@@ -250,8 +250,8 @@ file against a fake kernel; add the new worker to its table.
 
 ### 7. Route to it
 
-- `Public/browser-runner.js` — `RoutingExecutor` picks a worker by script
-  extension.
+- `Public/grading-executors.js` — `RoutingExecutor` picks a worker by script
+  extension, from the generated table `browser-runner.js` hands it.
 - `Sources/RunnerCore/ScriptClassification.swift` — `classifyScriptInterpreter`
   maps the same extension to a native subprocess command, so the worker and the
   browser agree.

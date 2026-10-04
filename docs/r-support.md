@@ -395,7 +395,7 @@ operation — run a script, report its exit code and its two streams — which i
 exactly the seam `ScriptExecutor` was carved out for. Nothing about how an exit
 code becomes a `TestOutcome` is duplicated for R.
 
-`Public/browser-runner.js`'s `RoutingExecutor` picks the substrate **per
+`Public/grading-executors.js`'s `RoutingExecutor` picks the substrate **per
 script**, from the same `classifyScript` the native worker uses to choose a
 subprocess command, and boots only the runtimes an assignment actually contains:
 an R lab never downloads Pyodide, and a Python lab never fetches the 52 MB R

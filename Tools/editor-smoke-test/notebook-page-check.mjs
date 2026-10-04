@@ -2,8 +2,9 @@
 //
 // Full authenticated END-TO-END check of the REAL student notebook page
 // (`/testsetups/:id/notebook`) — the isolated parent page that embeds the
-// JupyterLite editor iframe AND loads notebook.js + browser-runner.js, which
-// spawn our own Web Workers (grading, freeze failover) under cross-origin
+// JupyterLite editor iframe AND loads notebook.js, grading-executors.js and
+// browser-runner.js, which spawn our own Web Workers (grading, freeze
+// failover) under cross-origin
 // isolation. The standalone editor smoke (editor-check.mjs) drives
 // `/jupyterlite/repl` beside the workers; it does NOT exercise the real page —
 // which is exactly the gap that let the grading-worker COEP block (#986) ship.
@@ -249,7 +250,7 @@ async function main() {
   //   grading_init_start without grading_init_done  → stuck in worker init
   //   pyodide_loaded without env_configured          → stuck after Pyodide load
   //   grading_init_done without suite_done           → stuck in a test run
-  // See Public/browser-runner.js GradingWorkerExecutor + the per-language
+  // See Public/grading-executors.js GradingWorkerExecutor + the per-language
   // grading workers (Public/python-grading-worker.js, r-grading-worker.js).
   const gradingPhases = [];
   page.on("request", (req) => {
