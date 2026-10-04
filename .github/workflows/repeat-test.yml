@@ -88,23 +88,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
       # Exact-match only, like every test lane: an incremental build over a
-      # different tree's `.build` is unsound (swift-tests.yml explains). A
+      # different tree's `.build` is unsound (the action explains). A
       # miss pays a clean build, which is the honest cost of running a
       # tree CI has not built.
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v6
+      - name: Swift test setup
+        id: setup
+        uses: ./.github/actions/swift-test-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          build-cache: restore
 
       - name: Build all targets and tests
-        if: steps.build-cache.outputs.cache-hit != 'true'
+        if: steps.setup.outputs.cache-hit != 'true'
         run: swift build --build-tests
 
       - name: Point APITests at the Postgres service

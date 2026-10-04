@@ -109,13 +109,13 @@ import Vapor
             let admin = try await makeTestUser(on: app, username: "boss", role: "admin")
 
             let req = Request(application: app, on: app.eventLoopGroup.any())
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await req.cachedRequireCourseEnrollment(caller: outsider, courseID: courseID)
             }
             try await req.cachedRequireCourseEnrollment(caller: member, courseID: courseID)
             // A nil role is memoized too — the denial repeats without a fresh
             // read, and stays a denial.
-            await #expect(throws: Abort.self) {
+            await #expect(throws: AppError.self) {
                 try await req.cachedRequireCourseEnrollment(caller: outsider, courseID: courseID)
             }
             // Admins bypass, as in `requireCourseEnrollment`.
@@ -136,17 +136,17 @@ import Vapor
                 grantedScopes: [.read, .write])
 
             await #expect(throws: MCPToolError.self) {
-                try await context.authorizeCourseAccess(course.requireID(), tool: "test")
+                try await context.authorizeCourseAccess(course.requireID())
             }
 
             let enrollment = APICourseEnrollment(
                 userID: try boss.requireID(), courseID: try course.requireID())
             try await enrollment.save(on: app.db)
-            try await context.authorizeCourseAccess(course.requireID(), tool: "test")
+            try await context.authorizeCourseAccess(course.requireID())
 
             try await enrollment.delete(on: app.db)
             await #expect(throws: MCPToolError.self) {
-                try await context.authorizeCourseAccess(course.requireID(), tool: "test")
+                try await context.authorizeCourseAccess(course.requireID())
             }
         }
     }

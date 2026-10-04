@@ -311,7 +311,7 @@ struct UpdatePatternFamilyTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let newTier = try parseOptionalTier(input.defaultTier, tool: Self.name, field: "defaultTier")
+        let newTier = try parseOptionalTier(input.defaultTier, field: "defaultTier")
         let enable = Set(input.enableCases ?? [])
         let disable = Set(input.disableCases ?? [])
         let caseEdits = input.cases ?? []
@@ -324,30 +324,28 @@ struct UpdatePatternFamilyTool: ContentTool {
                 || input.referenceImplementation != nil || input.ioComparison != nil
         else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail:
                     "Specify at least one of: defaultTier, defaultPoints, defaultHint, "
                     + "defaultTimeLimitSeconds, defaultFailureDetail, enableCases, disableCases, "
                     + "cases, addCases, dependsOn, referenceImplementation, ioComparison.")
         }
         guard enable.isDisjoint(with: disable) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "A case key cannot be in both enableCases and disableCases.")
+            throw MCPToolError.invalidArguments(detail: "A case key cannot be in both enableCases and disableCases.")
         }
         // Parse every time limit before any database work, so an out-of-range
         // value is refused first. addCases time limits are parsed by
         // patternCase(from:) on the shared create path.
         let defaultLimitEdit = try parseTimeLimitOverride(
-            input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds")
+            input.defaultTimeLimitSeconds, field: "defaultTimeLimitSeconds")
         for edit in caseEdits {
             _ = try parseTimeLimitOverride(
-                edit.timeLimitSeconds, tool: Self.name, field: "cases[\(edit.key)].timeLimitSeconds")
+                edit.timeLimitSeconds, field: "cases[\(edit.key)].timeLimitSeconds")
         }
         let editsByKey = try Self.indexCaseEdits(caseEdits)
-        try CreatePatternFamilyTool.assertUniqueCaseKeys(addCases, tool: Self.name)
+        try CreatePatternFamilyTool.assertUniqueCaseKeys(addCases)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         var payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
@@ -356,15 +354,13 @@ struct UpdatePatternFamilyTool: ContentTool {
             }),
             let family = payload.items[idx].family
         else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No pattern family with id \"\(input.familyID)\" in the suite.")
+            throw MCPToolError.invalidArguments(detail: "No pattern family with id \"\(input.familyID)\" in the suite.")
         }
 
         let caseKeys = Set(family.cases.map(\.key))
         let unknown = enable.union(disable).union(editsByKey.keys).subtracting(caseKeys)
         guard unknown.isEmpty else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "Unknown case key(s): \(unknown.sorted().joined(separator: ", ")).")
         }
         // New cases can't reuse an existing key (that would be an edit, not an
@@ -373,13 +369,12 @@ struct UpdatePatternFamilyTool: ContentTool {
         let collisions = addKeys.intersection(caseKeys)
         guard collisions.isEmpty else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail:
                     "addCases key(s) already exist: \(collisions.sorted().joined(separator: ", ")). "
                     + "Use `cases` to edit an existing case.")
         }
         let newCases = try addCases.map {
-            try CreatePatternFamilyTool.patternCase(from: $0, tool: Self.name)
+            try CreatePatternFamilyTool.patternCase(from: $0)
         }
 
         let newDefaults = PatternDefaults(
@@ -389,7 +384,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             tolerance: family.defaults.tolerance,
             timeLimitSeconds: defaultLimitEdit.applied(to: family.defaults.timeLimitSeconds),
             failureDetail: try MCPFailureDetailProse.parse(
-                input.defaultFailureDetail, tool: Self.name, field: "defaultFailureDetail")
+                input.defaultFailureDetail, field: "defaultFailureDetail")
                 ?? family.defaults.failureDetail)
         let updatedFamily = try Self.rebuild(
             family, defaults: newDefaults,
@@ -397,7 +392,7 @@ struct UpdatePatternFamilyTool: ContentTool {
                 enable: enable, disable: disable, edits: editsByKey, newCases: newCases),
             dependsOn: input.dependsOn,
             referenceImplementation: input.referenceImplementation,
-            ioComparison: try MCPProgramIOProse.parse(input.ioComparison, tool: Self.name))
+            ioComparison: try MCPProgramIOProse.parse(input.ioComparison))
         payload.items[idx].family = updatedFamily
         // The family's row-level dependsOn wins over `family.dependsOn` in
         // applySuiteEdit, so when the caller replaces deps, mirror the new value
@@ -410,7 +405,7 @@ struct UpdatePatternFamilyTool: ContentTool {
         // applySuiteEdit -> applyPatternFamilies -> validatePatternFamilies runs
         // the structural + per-kind case checks synchronously; surface those as
         // clean MCP errors rather than opaque protocol failures.
-        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        try await applySuiteEditMapped(setup: setup, body: payload, on: context.db)
         // Close, re-grade, and re-validate (matching the web Save button).
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
@@ -433,8 +428,7 @@ struct UpdatePatternFamilyTool: ContentTool {
         var byKey: [String: CaseEdit] = [:]
         for edit in edits {
             guard byKey.updateValue(edit, forKey: edit.key) == nil else {
-                throw MCPToolError.invalidArguments(
-                    tool: name, detail: "Duplicate case edit for key \"\(edit.key)\".")
+                throw MCPToolError.invalidArguments(detail: "Duplicate case edit for key \"\(edit.key)\".")
             }
         }
         return byKey
@@ -509,10 +503,10 @@ struct UpdatePatternFamilyTool: ContentTool {
             hint: resolveHintEdit(edit.hint, existing: caseSpec.hint),
             tier: caseSpec.tier, points: caseSpec.points,
             timeLimitSeconds: try parseTimeLimitOverride(
-                edit.timeLimitSeconds, tool: name, field: "cases[\(edit.key)].timeLimitSeconds"
+                edit.timeLimitSeconds, field: "cases[\(edit.key)].timeLimitSeconds"
             ).applied(to: caseSpec.timeLimitSeconds),
             failureDetail: try MCPFailureDetailProse.parse(
-                edit.failureDetail, tool: name, field: "cases[\(edit.key)].failureDetail")
+                edit.failureDetail, field: "cases[\(edit.key)].failureDetail")
                 ?? caseSpec.failureDetail,
             enabled: enabled)
     }
@@ -536,7 +530,6 @@ struct UpdatePatternFamilyTool: ContentTool {
         if let explicit {
             guard explicit.count == argCount else {
                 throw MCPToolError.invalidArguments(
-                    tool: name,
                     detail:
                         "case '\(caseKey)': \(field) length (\(explicit.count)) must match args length (\(argCount)).")
             }

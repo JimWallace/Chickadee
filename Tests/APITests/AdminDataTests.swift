@@ -63,25 +63,9 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-admin-data")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "data_admin", password: "testpassword", role: "admin", on: app)
-    }
-
-    private func body(of path: String, cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     @Test func storageShowsAShareBarPerAssignmentAndNoSorter() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("data_admin", on: app)
             let course = try await makeTestCourse(on: app, code: "SHR101", name: "Share")
             let courseID = try course.requireID()
             let setup = try await makeTestSetup(on: app, id: "setup_share", courseID: courseID)
@@ -89,7 +73,7 @@ import VaporTesting
                 testSetupID: try #require(setup.id), title: "Shared Lab", isOpen: false,
                 courseID: courseID
             ).save(on: app.db)
-            let html = try await body(of: "/admin/storage", cookie: cookie)
+            let html = try await getHTML("/admin/storage", cookie: cookie, on: app)
             #expect(html.contains("Shared Lab"))
             #expect(html.contains(">SHR101<"))
             #expect(html.contains("class=\"share-bar\" style=\"--share:"))
@@ -101,7 +85,7 @@ import VaporTesting
 
     @Test func retentionOffersTheDeleteMenuOnlyWhenTheCourseIsDeletable() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("data_admin", on: app)
             let eligible = try await makeTestCourse(
                 on: app, code: "RETMENUELIG", name: "Eligible", archived: true)
             eligible.archivedAt = Date().addingTimeInterval(-900 * 86_400)
@@ -111,7 +95,7 @@ import VaporTesting
             pending.archivedAt = Date()
             try await pending.save(on: app.db)
 
-            let html = try await body(of: "/admin/retention", cookie: cookie)
+            let html = try await getHTML("/admin/retention", cookie: cookie, on: app)
             #expect(html.contains("Eligible to delete"))
             #expect(html.contains("Delete course permanently"))
             // The menu is one per deletable row; the other row holds a spacer.
@@ -125,7 +109,7 @@ import VaporTesting
 
     @Test func retentionKeepsServerOrderEligibleFirst() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("data_admin", on: app)
             let pending = try await makeTestCourse(
                 on: app, code: "RETORDAAA", name: "Pending", archived: true)
             pending.archivedAt = Date()
@@ -134,7 +118,7 @@ import VaporTesting
                 on: app, code: "RETORDZZZ", name: "Eligible", archived: true)
             eligible.archivedAt = Date().addingTimeInterval(-900 * 86_400)
             try await eligible.save(on: app.db)
-            let html = try await body(of: "/admin/retention", cookie: cookie)
+            let html = try await getHTML("/admin/retention", cookie: cookie, on: app)
             let eligibleAt = try #require(html.range(of: ">RETORDZZZ<"))
             let pendingAt = try #require(html.range(of: ">RETORDAAA<"))
             #expect(eligibleAt.lowerBound < pendingAt.lowerBound)

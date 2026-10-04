@@ -79,17 +79,6 @@ import VaporTesting
         app.githubRepoClient = client
     }
 
-    private func page(_ path: String, cookie: String) async throws -> String {
-        var body = ""
-        try await app.asyncTest(
-            .GET, path, beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                body = res.body.string
-            })
-        return body
-    }
-
     /// An instructor of a course bound to `cs101-org`.
     private func instructorOfBoundCourse() async throws -> String {
         try await APIGitHubCourseOrganization(
@@ -162,7 +151,7 @@ import VaporTesting
                     events: ["push"]),
                 installation: nil)
             let cookie = try await loginUser(username: "grants_admin", password: "testpassword", role: "admin", on: app)
-            let body = try await page("/admin/github", cookie: cookie)
+            let body = try await getHTML("/admin/github", cookie: cookie, on: app)
             #expect(body.contains("<dt>Course repositories</dt>"))
             #expect(body.contains("<dt>Push events</dt>"))
             #expect(body.contains("<dt>Commit statuses</dt>"))
@@ -179,7 +168,7 @@ import VaporTesting
             try await registerApp()
             useGitHub(app: nil, installation: nil)
             let cookie = try await loginUser(username: "grants_admin", password: "testpassword", role: "admin", on: app)
-            let body = try await page("/admin/github", cookie: cookie)
+            let body = try await getHTML("/admin/github", cookie: cookie, on: app)
             #expect(body.contains("The App's permissions could not be read from GitHub."))
             #expect(!body.contains("<dt>Course repositories</dt>"))
         }
@@ -191,7 +180,7 @@ import VaporTesting
             try FileManager.default.removeItem(atPath: app.githubAppSecretsFilePath)
             useGitHub(app: GitHubAppGrants(permissions: [:], events: []), installation: nil)
             let cookie = try await loginUser(username: "grants_admin", password: "testpassword", role: "admin", on: app)
-            let body = try await page("/admin/github", cookie: cookie)
+            let body = try await getHTML("/admin/github", cookie: cookie, on: app)
             #expect(!body.contains("<dt>Course repositories</dt>"))
             #expect(!body.contains("could not be read from GitHub"))
             #expect(asked.withLockedValue { $0 }.isEmpty)
@@ -206,7 +195,7 @@ import VaporTesting
             useGitHub(
                 app: nil,
                 installation: GitHubAppGrants(permissions: ["contents": "read", "metadata": "read"], events: []))
-            let body = try await page("/instructor/github", cookie: try await instructorOfBoundCourse())
+            let body = try await getHTML("/instructor/github", cookie: try await instructorOfBoundCourse(), on: app)
             #expect(body.contains("cannot make course repositories"))
             #expect(body.contains("or an admin must add them to the App."))
             #expect(body.contains("https://github.com/organizations/cs101-org/settings/installations/55"))
@@ -220,7 +209,7 @@ import VaporTesting
             useGitHub(
                 app: nil,
                 installation: GitHubAppGrants(permissions: ["administration": "write", "members": "read"], events: []))
-            let body = try await page("/instructor/github", cookie: try await instructorOfBoundCourse())
+            let body = try await getHTML("/instructor/github", cookie: try await instructorOfBoundCourse(), on: app)
             #expect(!body.contains("cannot make course repositories"))
             #expect(body.contains("<dt>Course repositories</dt>"))
             #expect(!body.contains("The permissions of the App on this organization could not be read."))
@@ -231,7 +220,7 @@ import VaporTesting
         try await withApp(app) { _ in
             try await registerApp()
             useGitHub(app: nil, installation: nil)
-            let body = try await page("/instructor/github", cookie: try await instructorOfBoundCourse())
+            let body = try await getHTML("/instructor/github", cookie: try await instructorOfBoundCourse(), on: app)
             #expect(body.contains("The permissions of the App on this organization could not be read."))
             #expect(!body.contains("cannot make course repositories"))
             #expect(!body.contains("<dt>Course repositories</dt>"))

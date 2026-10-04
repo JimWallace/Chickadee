@@ -74,13 +74,14 @@
                             <span class="js-section-var-row-valid section-var-valid"></span>
                             <input type="text" class="form-input cell-input cell-input--with-check input-mono js-section-var-name" value="#(v.name)" placeholder="Input Name">
                         </td>
-                        <td><input type="text" class="form-input cell-input input-mono js-section-var-value" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
+                        <td><input type="text" class="form-input cell-input input-mono js-section-var-value" aria-label="Value" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
                         <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs js-section-var-remove"
                                     title="Remove input" aria-label="Remove input"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button></td>
                     </tr>
                     #endfor
                 </tbody>
             </table>
+            #extend("_value-cue-note")
         </form>
     #else:
         <div class="section-create-toolbar"

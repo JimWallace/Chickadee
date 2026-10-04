@@ -104,6 +104,7 @@
                 <p class="card-meta family-empty-note" id="family-variables-empty">
                     Define a name and a value (e.g. a list or a mapping) once; reference it from any arg cell by typing <code>$name</code>.  Locked rows come from the section's shared inputs (edit in the section's Inputs table).
                 </p>
+                #extend("_value-cue-note")
             </div>
 
             <div>
@@ -128,6 +129,12 @@
                 </table>
                 <p class="card-meta family-empty-note" id="family-cases-empty">
                     No cases yet.  Add at least one to save this family.
+                </p>
+                <!-- Shown only for a kind that auto-compute fills; the
+                     family editor script toggles it with the kind. -->
+                <p class="field-note field-note--muted" id="family-auto-compute-note" hidden>
+                    If an Expected cell shows a warning, read
+                    <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/auto-compute.md#when-expected-shows-a-warning" target="_blank" rel="noopener noreferrer">auto-compute warnings <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>.
                 </p>
             </div>
     <span id="family-editor-status" class="editor-status" role="status" aria-live="polite"></span>

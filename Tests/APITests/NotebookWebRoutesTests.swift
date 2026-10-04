@@ -27,6 +27,9 @@ import VaporTesting
         self.app = try await makeTestingApplication { app in
             app.directory = DirectoryConfiguration(workingDirectory: tmpRoot)
             publicDir = app.directory.publicDirectory
+            // Seeded so that the app does not read the configuration of the
+            // machine that runs the tests, as `makeTestApp` does.
+            app.appConfig = AppConfig.testDefaults()
 
             try FileManager.default.createDirectory(
                 atPath: tmpRoot, withIntermediateDirectories: true)
@@ -55,6 +58,14 @@ import VaporTesting
             app.middleware.use(app.sessions.middleware)
 
             try await configureTestDatabase(app)
+
+            // The three registrations that `makeTestApp` adds, for the same
+            // reasons it gives. This suite cannot use `makeTestApp`, because
+            // it needs a working directory of its own.
+            app.middleware.use(AssignmentVersionCaptureMiddleware())
+            app.lifecycle.use(DataExportDrainLifecycleHandler())
+            app.kernelEnvironments = KernelEnvironments.load(
+                publicDirectory: app.directory.publicDirectory)
 
             configureLeaf(app)
             try routes(app)

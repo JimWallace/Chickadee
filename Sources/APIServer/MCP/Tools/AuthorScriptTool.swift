@@ -226,8 +226,7 @@ struct AuthorScriptTool: ContentTool {
     private static func parseTier(_ raw: String) throws -> ResolvedTier {
         if raw == "support" { return .support }
         guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: \(MCPTierProse.oneOfListWithSupport).")
+            throw MCPToolError.invalidArguments(detail: "tier must be one of: \(MCPTierProse.oneOfListWithSupport).")
         }
         return .test(tier)
     }
@@ -238,7 +237,6 @@ struct AuthorScriptTool: ContentTool {
         let cleaned = sanitizeSuiteFilename(input.filename)
         guard !cleaned.isEmpty, cleaned == input.filename else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "filename must be a bare filename with no path separators (got \"\(input.filename)\").")
         }
 
@@ -249,13 +247,12 @@ struct AuthorScriptTool: ContentTool {
         let source = try Self.resolveContentSource(input)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         // Never clobber a pattern-family / notebook-check generated script —
         // those are owned by the family/check, mirroring the web 409.
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: cleaned) {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "\"\(cleaned)\" is generated from pattern family \"\(familyID)\"; edit the family instead.")
         }
 
@@ -289,7 +286,6 @@ struct AuthorScriptTool: ContentTool {
             // path below.
             if existingTestEntry != nil {
                 throw MCPToolError.invalidArguments(
-                    tool: Self.name,
                     detail: "\"\(cleaned)\" is currently a graded test; change its tier with update_suite "
                         + "or delete it before re-authoring it as a support file.")
             }
@@ -299,7 +295,6 @@ struct AuthorScriptTool: ContentTool {
                 (setup.decodedManifest()?.effectiveGradingMode ?? .worker) != .worker
             {
                 throw MCPToolError.invalidArguments(
-                    tool: Self.name,
                     detail: "graderOnly requires worker grading, but this assignment is browser-graded. "
                         + "Switch it with set_grading_mode(\"worker\") first.")
             }
@@ -346,11 +341,9 @@ struct AuthorScriptTool: ContentTool {
 
         switch (inline?.isEmpty == false, url?.isEmpty == false) {
         case (true, true):
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "Provide either `content` or `sourceUrl`, not both.")
+            throw MCPToolError.invalidArguments(detail: "Provide either `content` or `sourceUrl`, not both.")
         case (false, false):
             throw MCPToolError.invalidArguments(
-                tool: name,
                 detail: "Provide `content` (the body inline) or `sourceUrl` (an https URL to fetch).")
         case (true, false):
             return .inline(inline ?? "")
@@ -369,10 +362,9 @@ struct AuthorScriptTool: ContentTool {
             do {
                 return try await SupportFileURLFetcher.fetch(urlString: url, on: context.request)
             } catch let error as SupportFileFetchError {
-                throw MCPToolError.invalidArguments(tool: name, detail: error.toolDetail)
+                throw MCPToolError.invalidArguments(detail: error.toolDetail)
             } catch {
-                throw MCPToolError.executionFailed(
-                    tool: name, detail: "Failed to fetch sourceUrl: \(error).")
+                throw MCPToolError.executionFailed(detail: "Failed to fetch sourceUrl: \(error).")
             }
         }
     }
@@ -391,9 +383,9 @@ struct AuthorScriptTool: ContentTool {
         let displayName = input.displayName.flatMap { $0.isEmpty ? nil : $0 }
         let points = max(0, input.points ?? 1)
         let limitEdit = try parseTimeLimitOverride(
-            input.timeLimitSeconds, tool: Self.name, field: "timeLimitSeconds")
+            input.timeLimitSeconds, field: "timeLimitSeconds")
         let detailUpdate = try MCPFailureDetailProse.parse(
-            input.failureDetail, tool: Self.name, field: "failureDetail")
+            input.failureDetail, field: "failureDetail")
 
         if let idx = payload.items.firstIndex(where: { $0.kind == "script" && $0.script?.script == filename }) {
             // Replace an existing hand-written script. Content + tier always
@@ -430,7 +422,7 @@ struct AuthorScriptTool: ContentTool {
         }
 
         try await applySuiteEditMapped(
-            setup: setup, body: payload, tool: Self.name,
+            setup: setup, body: payload,
             kernelEnvironments: context.request.application.kernelEnvironments,
             on: context.db)
     }
@@ -457,8 +449,7 @@ struct AuthorScriptTool: ContentTool {
         do {
             try await updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: toWrite)
         } catch {
-            throw MCPToolError.executionFailed(
-                tool: Self.name, detail: "Failed to write \"\(filename)\" into the setup zip.")
+            throw MCPToolError.executionFailed(detail: "Failed to write \"\(filename)\" into the setup zip.")
         }
 
         // Keep the shared support directory (student working-copy symlinks +

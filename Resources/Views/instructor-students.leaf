@@ -162,19 +162,6 @@ Students
 /* The global .page-titlebar puts the title left and actions right; the roster
    adds only that the cluster wraps. */
 .students-titlebar { flex-wrap: wrap; gap: .75rem; }
-.learn-flag {
-    display: inline-block;
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    color: var(--danger-fg);
-    background: var(--danger-bg);
-    border: 1px solid var(--danger-border);
-    border-radius: var(--radius-sm);
-    padding: .1rem .3rem;
-    margin-left: .4rem;
-    white-space: nowrap;
-    vertical-align: middle;
-}
 </style>
 <script src="/list-filter.js?v=#appVersion()"></script>
 <script src="/sortable-table.js?v=#appVersion()"></script>

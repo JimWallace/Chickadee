@@ -45,18 +45,6 @@ import VaporTesting
         return (course, user, cookie)
     }
 
-    private func getHTML(_ path: String, cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     private func postClone(
         form: [String: String], cookie: String
     ) async throws -> (status: HTTPStatus, location: String?, cookie: String) {
@@ -77,7 +65,7 @@ import VaporTesting
     @Test func tabOffersTheNextTerm() async throws {
         try await withApp(app) { _ in
             let (_, _, cookie) = try await setUp(username: "nt_instructor1", role: .instructor)
-            let html = try await getHTML("/instructor/new-term", cookie: cookie)
+            let html = try await getHTML("/instructor/new-term", cookie: cookie, on: app)
             #expect(html.contains("Clone NT135 Fall 2026 for a new term"))
             #expect(html.contains("action=\"/instructor/new-term\""))
             #expect(html.contains("value=\"2027\""))
@@ -120,7 +108,7 @@ import VaporTesting
 
             // The new course is now the active one, and the page points to
             // its assignments rather than to a second clone.
-            let html = try await getHTML("/instructor/new-term?cloned=1", cookie: result.cookie)
+            let html = try await getHTML("/instructor/new-term?cloned=1", cookie: result.cookie, on: app)
             #expect(html.contains("NT135 Winter 2027 — New Term Target"))
             #expect(html.contains("set the new course&#39;s dates") || html.contains("set the new course's dates"))
             #expect(html.contains("href=\"/instructor\">Open its assignments</a>"))
@@ -146,7 +134,7 @@ import VaporTesting
     @Test func aTACannotClone() async throws {
         try await withApp(app) { app in
             let (_, _, cookie) = try await setUp(username: "nt_ta", role: .ta)
-            let html = try await getHTML("/instructor/new-term", cookie: cookie)
+            let html = try await getHTML("/instructor/new-term", cookie: cookie, on: app)
             #expect(html.contains("Only this course's instructors can clone it."))
             #expect(!html.contains("action=\"/instructor/new-term\""))
 

@@ -12,7 +12,8 @@
 // On either failure: hide the iframe, reveal the #js-nb-fallback section
 // containing a direct .ipynb upload picker, and POST a record to
 // /api/v1/client-diagnostics so the instructor dashboard can surface the
-// affected student.
+// affected student. A slow boot is not a failure: it reveals the
+// #nb-slow-notice banner and keeps the editor.
 //
 // When all preflight checks pass, this script makes ZERO visible changes to
 // the page — the iframe loads normally and the watchdog is silently armed
@@ -95,6 +96,22 @@
     let _failureShown = false;
 
     /**
+     * Hide a notice. When `refocus` is set, or focus was inside the notice,
+     * move focus to the page's status line, so a keyboard or screen-reader
+     * user is not left on a hidden element (#2028). A Dismiss click passes
+     * `refocus`, because Safari does not focus a button on a click.
+     */
+    function hideNotice(notice, refocus) {
+        if (!notice) return;
+        const focusInside = notice.contains(document.activeElement);
+        notice.hidden = true;
+        if (refocus || focusInside) {
+            const status = document.getElementById('nb-status');
+            if (status) status.focus();
+        }
+    }
+
+    /**
      * Hide the editor iframe, reveal the fallback panel, and POST a
      * diagnostic record.  Idempotent — calling twice (e.g. preflight
      * failed AND the unmounted iframe later "timed out") only renders
@@ -115,10 +132,14 @@
         if (submit)   submit.style.display = 'none';
         if (fallback) fallback.hidden = false;
 
+        // The panel replaces the slow-boot notice: one state at a time.
+        const slowNotice = document.getElementById('nb-slow-notice');
+        if (slowNotice && !slowNotice.hidden) hideNotice(slowNotice, false);
+
         // Memory-crash variant: the editor DID load, but the kernel died on a
         // fatal WASM/OOM crash mid-session — swap in memory-specific copy on the
         // same fallback panel (which already offers .ipynb upload + reset link),
-        // instead of the generic "Editor didn't load" message.
+        // instead of the generic "Editor did not load" message.
         if (info.variant === 'memory' && fallback) {
             const titleEl = fallback.querySelector('.js-nb-fallback-title');
             const textEl  = fallback.querySelector('.js-nb-fallback-text');
@@ -249,7 +270,7 @@
             const closeBtn = document.getElementById('nb-device-warning-dismiss');
             if (closeBtn) {
                 closeBtn.addEventListener('click', function () {
-                    banner.hidden = true;
+                    hideNotice(banner, true);
                     try { localStorage.setItem(Core.DEVICE_WARNING_DISMISSED_KEY, '1'); } catch (_) { /* ignore */ }
                 });
             }
@@ -264,38 +285,52 @@
     // ----------------------------------------------------------------
     //
     // Driven by notebook.js's WebKit slow-boot watchdog: if the editor hasn't
-    // reported a healthy kernel within the window, reveal the .ipynb-upload
-    // fallback panel with a polite, plain-English message WITHOUT hiding the
-    // editor. Some devices (notably low-memory iPads) never finish booting the
-    // editor; rather than strand the student on a spinner, we surface the
-    // upload path and suggest a different device — while leaving the editor
-    // visible so a merely-slow-but-healthy boot still works (so this can never
-    // hide a working editor). Gated by `_failureShown` so a real failure
-    // (which DOES hide the editor) wins. (The pre-xeus editor also stalled on
-    // Safari 18.x; the xeus editor boots fine there — Aug 2026 telemetry.)
+    // reported a healthy kernel within the window, reveal a dismissible
+    // warning banner with an .ipynb upload WITHOUT hiding the editor. Some
+    // devices (notably low-memory iPads) never finish booting the editor;
+    // rather than strand the student on a spinner, we surface the upload path
+    // and link the device advice — while leaving the editor visible so a
+    // merely-slow-but-healthy boot still works (so this can never hide a
+    // working editor). Gated by `_failureShown` so a real failure (which DOES
+    // hide the editor) wins, and showFailure hides this banner. (The pre-xeus
+    // editor also stalled on Safari 18.x; the xeus editor boots fine there —
+    // Aug 2026 telemetry.)
+    //
+    // This used to rewrite and reveal the failure panel (#js-nb-fallback),
+    // which is a role="alert" stand-in for content that is not there, while
+    // the editor was still there and loading (#2028). Its dismissal does not
+    // persist, unlike the two other notices: a slow boot is a state of this
+    // page load, not of the device.
 
     let _slowNoticeShown = false;
     function showSlowEditorNotice() {
         if (_slowNoticeShown || _failureShown) return;
         _slowNoticeShown = true;
 
-        const fallback = document.getElementById('js-nb-fallback');
-        if (fallback) {
-            const titleEl = fallback.querySelector('.js-nb-fallback-title');
-            const textEl  = fallback.querySelector('.js-nb-fallback-text');
+        const notice = document.getElementById('nb-slow-notice');
+        if (notice) {
+            const titleEl = notice.querySelector('.js-nb-slow-title');
+            const textEl  = notice.querySelector('.js-nb-slow-text');
             if (titleEl) titleEl.textContent = Core.FALLBACK_COPY.slow.title;
             if (textEl) textEl.textContent = Core.FALLBACK_COPY.slow.text;
-            const resetLink = document.getElementById('nb-reset-editor-link');
-            if (resetLink) {
-                try {
-                    resetLink.href = Core.resetEditorHref(location.pathname, location.search);
-                } catch (_) { /* keep the static href */ }
+            const closeBtn = document.getElementById('nb-slow-notice-dismiss');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () { hideNotice(notice, true); });
             }
             // Reveal the upload path; do NOT hide the editor — it may still boot.
-            fallback.hidden = false;
+            notice.hidden = false;
         }
 
         reportEvent(Core.slowBootEvent(navigator.userAgent));
+    }
+
+    /// Hides the slow-boot notice when the kernel becomes ready after it was
+    /// shown, because the notice is then out of date. It stays while focus is
+    /// inside it: the student may be choosing a file to upload.
+    function hideSlowEditorNotice() {
+        const notice = document.getElementById('nb-slow-notice');
+        if (!notice || notice.hidden || notice.contains(document.activeElement)) return;
+        notice.hidden = true;
     }
 
     // ----------------------------------------------------------------
@@ -329,7 +364,7 @@
             const closeBtn = document.getElementById('nb-browser-support-dismiss');
             if (closeBtn) {
                 closeBtn.addEventListener('click', function () {
-                    banner.hidden = true;
+                    hideNotice(banner, true);
                     try { localStorage.setItem(Core.BROWSER_WARNING_DISMISSED_KEY, '1'); } catch (_) { /* ignore */ }
                 });
             }
@@ -350,6 +385,7 @@
         showDeviceWarning:        showDeviceWarning,
         showBrowserSupportWarning: showBrowserSupportWarning,
         showSlowEditorNotice:     showSlowEditorNotice,
+        hideSlowEditorNotice:     hideSlowEditorNotice,
         reportEditorError:        reportEditorError,
         reportEvent:              reportEvent
     };

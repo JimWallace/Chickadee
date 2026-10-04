@@ -27,36 +27,28 @@ func withAssignmentRoutesApp(
 
 // MARK: - Auth helpers
 
-func arLoginAsInstructor(on app: Application) async throws -> String {
+/// Signs in `username` as an instructor and enrols them as a per-course
+/// instructor in the course with `courseCode`. Returns the session cookie.
+///
+/// Instructor authority is per-course (Phase 5, #417), so the `/instructor`
+/// gate admits a user only when they are staff in the course.
+/// `enrollAsTestInstructor` upserts the role, because a `.auto` course has
+/// already enrolled a non-admin as a `.student` at sign-in.
+func loginAsCourseInstructor(
+    username: String, courseCode: String = "TEST101", on app: Application
+) async throws -> String {
     let cookie = try await loginUser(
-        username: "testinstructor", password: "testpassword", role: "instructor", on: app)
-    // Phase 5: instructor authority is per-course. Ensure the test instructor is
-    // enrolled as a per-course instructor in the shared TEST101 course, so the
-    // /instructor gate admits them deterministically (independent of when the
-    // course is created relative to the first /instructor request).
-    let courseID = try await app.testCourseID(enrollmentMode: .auto)
-    if let user = try await APIUser.query(on: app.db)
-        .filter(\.$username == "testinstructor").first()
-    {
-        let userID = try user.requireID()
-        // Upsert the `.instructor` role — don't just skip when a row exists. A
-        // `.auto` course auto-enrolls the user at login (AuthRoutes) and, since
-        // the deployment role collapsed (#417 Slice G2), that seeds a non-admin
-        // as a per-course `.student`. Skipping on "already enrolled" would leave
-        // the test instructor a student and 403 every per-course staff gate.
-        if let existing = try await APICourseEnrollment.query(on: app.db)
-            .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
-        {
-            if existing.role != .instructor {
-                existing.role = .instructor
-                try await existing.save(on: app.db)
-            }
-        } else {
-            try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
-                .save(on: app.db)
-        }
-    }
+        username: username, password: "testpassword", role: "instructor", on: app)
+    try await enrollAsTestInstructor(username: username, on: app, courseCode: courseCode)
     return cookie
+}
+
+func arLoginAsInstructor(on app: Application) async throws -> String {
+    // These suites use the shared TEST101 course in `.auto` mode. Creating it
+    // here first sets that mode, so the enrolment below does not create the
+    // course itself in its default `.open` mode.
+    _ = try await app.testCourseID(enrollmentMode: .auto)
+    return try await loginAsCourseInstructor(username: "testinstructor", on: app)
 }
 
 func arLoginAsStudent(on app: Application) async throws -> String {

@@ -48,10 +48,6 @@ import VaporTesting
             sessionCookieSecure: false, sessionIdleTimeoutSeconds: 30 * 60, sessionIdleWarningSeconds: 120)
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "github_admin", password: "testpassword", role: "admin", on: app)
-    }
-
     /// GETs `path` with the session cookie, and returns the cookie to use
     /// next (the response's, when it sets one).
     @discardableResult
@@ -90,7 +86,7 @@ import VaporTesting
 
     @Test func withoutABaseURLThePageExplainsAndOffersNoForm() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             try await get("/admin/github", cookie: cookie) { res in
                 #expect(res.status == .ok)
                 let body = res.body.string
@@ -105,12 +101,12 @@ import VaporTesting
     @Test func manifestFormPostsToGitHubAndTheCSPAllowsIt() async throws {
         setPublicBaseURL("https://courses.example.edu")
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             try await get("/admin/github", cookie: cookie) { res in
                 let body = res.body.string
                 #expect(body.contains("action=\"https://github.com/settings/apps/new?state="))
                 #expect(body.contains("name=\"manifest\""))
-                #expect(!body.contains("<details class=\"test-output-details\" open>"))
+                #expect(body.contains("<details id=\"github-app-options\">"))
                 #expect(body.contains("https://courses.example.edu/admin/github/callback"))
                 let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
                 #expect(csp.contains("form-action 'self' https://github.com"))
@@ -121,13 +117,13 @@ import VaporTesting
     @Test func organizationMovesTheFormToTheOrganization() async throws {
         setPublicBaseURL("https://courses.example.edu")
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             try await get("/admin/github?org=uwaterloo-cs", cookie: cookie) { res in
                 let body = res.body.string
                 #expect(
                     body.contains("action=\"https://github.com/organizations/uwaterloo-cs/settings/apps/new?state="))
                 #expect(body.contains("the organization uwaterloo-cs"))
-                #expect(body.contains("<details class=\"test-output-details\" open>"))
+                #expect(body.contains("<details id=\"github-app-options\" open>"))
             }
         }
     }
@@ -135,7 +131,7 @@ import VaporTesting
     @Test func invalidOrganizationIsRefusedAsASentence() async throws {
         setPublicBaseURL("https://courses.example.edu")
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             try await get("/admin/github?org=not%2Fan%2Forg", cookie: cookie) { res in
                 let body = res.body.string
                 #expect(body.contains(GitHubAppRegistrationError.invalidOrganization.message))
@@ -163,7 +159,7 @@ import VaporTesting
             return Self.conversion
         }
         try await withApp(app) { app in
-            let login = try await loginAsAdmin()
+            let login = try await loginAsAdmin("github_admin", on: app)
             let (state, cookie) = try await openManifestForm(cookie: login)
             try await get("/admin/github/callback?code=the-code&state=\(state)", cookie: cookie) { res in
                 #expect(res.status == .seeOther)
@@ -194,7 +190,7 @@ import VaporTesting
     @Test func callbackRefusesAStateThisSessionDidNotSend() async throws {
         setPublicBaseURL("https://courses.example.edu")
         try await withApp(app) { app in
-            let login = try await loginAsAdmin()
+            let login = try await loginAsAdmin("github_admin", on: app)
             let (_, cookie) = try await openManifestForm(cookie: login)
             try await get("/admin/github/callback?code=abc&state=forged", cookie: cookie) { res in
                 #expect(res.headers.first(name: .location) == "/admin/github?error=stateMismatch")
@@ -206,7 +202,7 @@ import VaporTesting
 
     @Test func callbackWithoutAnOpenedFormIsRefused() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             try await get("/admin/github/callback?code=abc&state=anything", cookie: cookie) { res in
                 #expect(res.headers.first(name: .location) == "/admin/github?error=stateMismatch")
             }
@@ -217,7 +213,7 @@ import VaporTesting
         setPublicBaseURL("https://courses.example.edu")
         app.githubManifestConverter = { _ in throw GitHubAppRegistrationError.conversionFailed }
         try await withApp(app) { _ in
-            let login = try await loginAsAdmin()
+            let login = try await loginAsAdmin("github_admin", on: app)
             let (state, cookie) = try await openManifestForm(cookie: login)
             try await get("/admin/github/callback?code=abc&state=\(state)", cookie: cookie) { res in
                 #expect(res.headers.first(name: .location) == "/admin/github?error=conversionFailed")
@@ -231,7 +227,7 @@ import VaporTesting
     @Test func malformedCodeIsRefusedBeforeAnyRequest() async throws {
         setPublicBaseURL("https://courses.example.edu")
         try await withApp(app) { _ in
-            let login = try await loginAsAdmin()
+            let login = try await loginAsAdmin("github_admin", on: app)
             let (state, cookie) = try await openManifestForm(cookie: login)
             try await get("/admin/github/callback?code=..%2Fx&state=\(state)", cookie: cookie) { res in
                 #expect(res.headers.first(name: .location) == "/admin/github?error=missingCode")
@@ -243,7 +239,7 @@ import VaporTesting
         setPublicBaseURL("https://courses.example.edu")
         app.githubManifestConverter = { _ in throw GitHubAppRegistrationError.conversionFailed }
         try await withApp(app) { app in
-            let login = try await loginAsAdmin()
+            let login = try await loginAsAdmin("github_admin", on: app)
             let (state, cookie) = try await openManifestForm(cookie: login)
             try await get("/admin/github/callback?code=abc&state=\(state)", cookie: cookie) { res in
                 #expect(res.headers.first(name: .location) == "/admin/github?error=conversionFailed")
@@ -259,7 +255,7 @@ import VaporTesting
     @Test func secondRegistrationIsRefused() async throws {
         try await withApp(app) { app in
             try await register(on: app)
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             try await get("/admin/github/callback?code=abc&state=x", cookie: cookie) { res in
                 #expect(res.headers.first(name: .location) == "/admin/github?error=alreadyRegistered")
             }
@@ -271,7 +267,7 @@ import VaporTesting
         try await withApp(app) { app in
             try await register(on: app)
             try Self.conversion.secrets.write(path: secretsPath)
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             let (token, boundCookie) = try await csrfFields(for: "/admin/github", cookie: cookie, on: app)
             try await app.asyncTest(
                 .POST, "/admin/github/delete",
@@ -291,7 +287,7 @@ import VaporTesting
 
     @Test func removingWithNoAppIsNotFound() async throws {
         try await withApp(app) { app in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             let (token, boundCookie) = try await csrfFields(for: "/admin/github", cookie: cookie, on: app)
             try await app.asyncTest(
                 .POST, "/admin/github/delete",
@@ -305,7 +301,7 @@ import VaporTesting
 
     @Test func unknownNoticeAndErrorKeysShowNoBanner() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("github_admin", on: app)
             try await get("/admin/github?ok=%3Cscript%3E&error=%3Cb%3Eforged", cookie: cookie) { res in
                 let body = res.body.string
                 #expect(!body.contains("<script>"))

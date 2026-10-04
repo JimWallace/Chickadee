@@ -25,25 +25,8 @@ import Testing
 
 @Suite struct MCPTierCoverageTests {
 
-    /// Every piece of text an agent can actually read: the server instructions,
-    /// plus each tool's name, description, and both schemas rendered as JSON.
-    private static let servedText: String = {
-        var parts = [MCPServerInstructions.text]
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        for tool in MCPToolCatalog.live.all {
-            parts.append(tool.name)
-            parts.append(tool.description)
-            for schema in [tool.inputSchema, tool.outputSchema] {
-                guard let schema,
-                    let data = try? encoder.encode(schema),
-                    let json = String(data: data, encoding: .utf8)
-                else { continue }
-                parts.append(json)
-            }
-        }
-        return parts.joined(separator: "\n")
-    }()
+    /// Every piece of text an agent can read on either MCP surface.
+    private static let servedText = MCPServedText.text
 
     // MARK: - The schema cannot offer a tier the parser refuses
 
@@ -179,7 +162,7 @@ import Testing
     @Test func theTierRejectionMessageListsExactlyTheRealTiers() throws {
         var thrown: String?
         do {
-            _ = try parseOptionalTier("student", tool: "author_script")
+            _ = try parseOptionalTier("student")
         } catch let error as MCPToolError {
             thrown = "\(error)"
         }

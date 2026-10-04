@@ -22,7 +22,7 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite struct RunnerProfileDetectorTests {
+@Suite(.timeLimit(.minutes(2))) struct RunnerProfileDetectorTests {
 
     /// The real banner each interpreter prints, as observed. Pinned as data so
     /// a parser change is checked against every language at once rather than
@@ -115,9 +115,7 @@ import Testing
 /// v0.5.33) — and nothing tested it. Both directions matter: failing open
 /// advertises a capability the host does not have and every C++ job dies at
 /// `exec`; failing closed advertises nothing and every C++ job queues forever.
-@Suite struct RunnerExecProbeTests {
-
-    static let requiresGpp: ConditionTrait = .enabled("requires g++ on PATH") { await Self.gppIsAvailable() }
+@Suite(.timeLimit(.minutes(2))) struct RunnerExecProbeTests {
 
     /// The probe program is answered per language, exhaustively — the guard
     /// against an eighth compiled language reaching the probe with C++'s source.
@@ -136,7 +134,7 @@ import Testing
 
     /// A work root that permits exec advertises C++; the same probe against a
     /// directory it cannot write to does not.
-    @Test(Self.requiresGpp) func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
+    @Test(.requiresGpp) func theProbeAdvertisesCppOnlyWhenTheWorkRootCanRunABinary() async throws {
         let usable = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-execprobe-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: usable, withIntermediateDirectories: true)
@@ -163,7 +161,4 @@ import Testing
             "an unusable work root withheld python too, which needs no exec probe")
     }
 
-    private static func gppIsAvailable() async -> Bool {
-        return await toolIsAvailable("g++", arguments: ["--version"])
-    }
 }

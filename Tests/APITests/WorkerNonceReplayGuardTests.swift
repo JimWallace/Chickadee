@@ -47,28 +47,26 @@ import VaporTesting
             _ = try await WorkerNonceReplayGuard.insertIfNew(
                 nonceKey: "w1:live", expiresAt: Date().addingTimeInterval(300), on: app.db)
 
-            await WorkerNonceReplayGuard.purgeExpiredIfDue(
-                application: app, db: app.db, logger: app.logger)
+            await WorkerNonceReplayGuard.purgeExpired(db: app.db, logger: app.logger)
 
             let remaining = try await WorkerNonce.query(on: app.db).all()
             #expect(remaining.map(\.id) == ["w1:live"])
         }
     }
 
-    @Test func purgeIsThrottledPerProcess() async throws {
+    /// The purge runs on a leased sweep (`workerNonceReaperMonitor`), not on
+    /// a runner's request, so it carries no per-process throttle: a second
+    /// call removes a row that expired after the first (#1924).
+    @Test func purgeHasNoPerProcessThrottle() async throws {
         try await withApp(app) { _ in
-            // First call consumes the throttle slot…
-            await WorkerNonceReplayGuard.purgeExpiredIfDue(
-                application: app, db: app.db, logger: app.logger)
+            await WorkerNonceReplayGuard.purgeExpired(db: app.db, logger: app.logger)
 
-            // …so an expired row inserted now survives the second call.
             _ = try await WorkerNonceReplayGuard.insertIfNew(
                 nonceKey: "w1:stale", expiresAt: Date().addingTimeInterval(-10), on: app.db)
-            await WorkerNonceReplayGuard.purgeExpiredIfDue(
-                application: app, db: app.db, logger: app.logger)
+            await WorkerNonceReplayGuard.purgeExpired(db: app.db, logger: app.logger)
 
             let count = try await WorkerNonce.query(on: app.db).count()
-            #expect(count == 1)
+            #expect(count == 0)
         }
     }
 

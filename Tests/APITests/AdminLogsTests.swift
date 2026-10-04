@@ -147,27 +147,11 @@ private struct StampedRow: Encodable, Sendable, Equatable {
         self.app = try await makeTestApp(prefix: "chickadee-admin-logs")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "logs_admin", password: "testpassword", role: "admin", on: app)
-    }
-
-    private func body(of path: String, cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     @Test func alertsPageShowsTheNoticeRulesAndNoPayloadDisclosure() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("logs_admin", on: app)
             _ = try? await app.serverHealthAlertMonitor.dispatchTestAlert(application: app)
-            let html = try await body(of: "/admin/alerts", cookie: cookie)
+            let html = try await getHTML("/admin/alerts", cookie: cookie, on: app)
             #expect(html.contains("<strong>Alerting is off.</strong>"))
             #expect(html.contains("tier-closed\">Disabled<"))
             #expect(html.contains("Edit webhook"))
@@ -185,8 +169,8 @@ private struct StampedRow: Encodable, Sendable, Equatable {
 
     @Test func alertsPageWithNoFiringsKeepsItsEmptyState() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
-            let html = try await body(of: "/admin/alerts", cookie: cookie)
+            let cookie = try await loginAsAdmin("logs_admin", on: app)
+            let html = try await getHTML("/admin/alerts", cookie: cookie, on: app)
             #expect(html.contains("No alerts have fired since startup."))
         }
     }
@@ -197,8 +181,8 @@ private struct StampedRow: Encodable, Sendable, Equatable {
                 actorUsername: "audit_actor", action: AuditAction.loginSuccess.rawValue,
                 targetType: "user", targetID: "abc", remoteAddr: "10.0.0.9", metadata: "{\"k\":\"v\"}")
             try await entry.save(on: app.db)
-            let cookie = try await loginAsAdmin()
-            let html = try await body(of: "/admin/audit", cookie: cookie)
+            let cookie = try await loginAsAdmin("logs_admin", on: app)
+            let html = try await getHTML("/admin/audit", cookie: cookie, on: app)
             #expect(html.contains("<strong>Today</strong>"))
             #expect(html.contains("class=\"log-entry\""))
             for label in ["Category", "Target", "Remote", "Metadata"] {
@@ -221,15 +205,15 @@ private struct StampedRow: Encodable, Sendable, Equatable {
                 actorUsername: "someone_else", action: AuditAction.loginSuccess.rawValue,
                 remoteAddr: "127.0.0.1"
             ).save(on: app.db)
-            let cookie = try await loginAsAdmin()
-            let plain = try await body(of: "/admin/audit", cookie: cookie)
+            let cookie = try await loginAsAdmin("logs_admin", on: app)
+            let plain = try await getHTML("/admin/audit", cookie: cookie, on: app)
             #expect(!plain.contains(">Clear</a>"))
-            let filtered = try await body(
-                of: "/admin/audit?action=auth.login_success&actor=someone", cookie: cookie)
+            let filtered = try await getHTML(
+                "/admin/audit?action=auth.login_success&actor=someone", cookie: cookie, on: app)
             #expect(filtered.contains(">Clear</a>"))
             #expect(filtered.contains("value=\"someone\""))
             #expect(filtered.contains("<option value=\"auth.login_success\" selected>"))
-            let none = try await body(of: "/admin/audit?actor=nobody_at_all", cookie: cookie)
+            let none = try await getHTML("/admin/audit?actor=nobody_at_all", cookie: cookie, on: app)
             #expect(none.contains("No audit entries match this filter."))
         }
     }

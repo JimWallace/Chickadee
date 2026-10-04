@@ -141,14 +141,15 @@
             <div class="item-details">
                 #if(item.row.dueAt):Due #(item.row.dueAt)#else:No due date#endif
                 #if(item.row.variantState == "failed"):
-                · <span class="tier tier-danger" title="The solution failed on some per-student variants; those students would fail too.">#(item.row.variantSummaryText)</span>
+                · <span class="tier tier-danger" title="Reference solution graded on synthetic per-student seeds">#(item.row.variantSummaryText)</span>
+                · Students on those variants fail too
                 #if(item.row.failedVariantSubmissionID):
                 · <a href="/submissions/#(item.row.failedVariantSubmissionID)">View variant</a>
                 #endif
                 #elseif(item.row.variantState == "pending"):
-                · <span title="The reference solution is also being graded against synthetic per-student seeds.">#(item.row.variantSummaryText)</span>
+                · <span title="Reference solution graded on synthetic per-student seeds">#(item.row.variantSummaryText)</span>
                 #elseif(item.row.variantState == "passed"):
-                · <span title="The reference solution also passed against every synthetic per-student seed.">#(item.row.variantSummaryText)</span>
+                · <span title="Reference solution graded on synthetic per-student seeds">#(item.row.variantSummaryText)</span>
                 #endif
                 #if(item.row.validationStatus == "failed"):
                 #if(item.row.validationSubmissionID):· <a href="/submissions/#(item.row.validationSubmissionID)">View results</a>#endif

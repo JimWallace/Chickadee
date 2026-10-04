@@ -151,13 +151,13 @@ import VaporTesting
             _ = try await makeTestUser(on: app, username: "the-prof", role: "instructor")
             _ = try await makeTestUser(on: app, username: "the-student", role: "student")
 
-            let admin = try await context([.read], subject: "the-admin").requireAdminSubject(tool: "x")
+            let admin = try await context([.read], subject: "the-admin").requireAdminSubject()
             #expect(admin.username == "the-admin")
 
             for subject in ["the-prof", "the-student", "nobody-at-all"] {
                 let ctx = context([.read], subject: subject)
                 await #expect(throws: MCPToolError.self) {
-                    try await ctx.requireAdminSubject(tool: "x")
+                    try await ctx.requireAdminSubject()
                 }
             }
         }

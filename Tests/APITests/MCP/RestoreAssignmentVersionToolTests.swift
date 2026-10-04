@@ -258,11 +258,10 @@ import Vapor
                 _ = try await restore(app, assignment, version: 42)
                 Issue.record("expected a thrown error for an unknown version")
             } catch let error as MCPToolError {
-                guard case .invalidArguments(let tool, let detail) = error else {
+                guard case .invalidArguments(let detail) = error else {
                     Issue.record("expected invalidArguments, got \(error)")
                     return
                 }
-                #expect(tool == RestoreAssignmentVersionTool.name)
                 #expect(detail.contains("Versions 1-1 exist"))
             }
         }

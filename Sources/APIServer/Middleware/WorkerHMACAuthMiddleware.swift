@@ -52,8 +52,6 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         guard wasInserted else {
             throw Abort(.unauthorized, reason: "Replay detected.")
         }
-        await WorkerNonceReplayGuard.purgeExpiredIfDue(
-            application: request.application, db: request.db, logger: request.logger)
 
         let headers = WorkerHMACSigning.SignedHeaders(
             timestamp: timestampHeader,
@@ -102,12 +100,9 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 /// instance could be replayed against another within the TTL window. The
 /// PRIMARY KEY insert makes first-seen atomic across every process sharing
 /// the database, and — as a free improvement — replaces the actor's
-/// O(all nonces) dictionary rebuild on every worker request with a
-/// throttled bulk DELETE.
+/// O(all nonces) dictionary rebuild on every worker request with a bulk
+/// DELETE on a periodic sweep (`workerNonceReaperMonitor`).
 enum WorkerNonceReplayGuard {
-    /// How often (at most) a request triggers the expired-row purge.
-    static let purgeInterval: TimeInterval = 60
-
     /// Atomically records first use of `nonceKey`. Returns false when the
     /// key was already consumed (replay). A unique-constraint failure is
     /// detected by re-fetching rather than by string-matching driver errors —
@@ -130,12 +125,9 @@ enum WorkerNonceReplayGuard {
         }
     }
 
-    /// Deletes expired nonce rows, at most once per `purgeInterval` per
-    /// process. Best-effort: a failed purge only delays cleanup.
-    static func purgeExpiredIfDue(application: Application, db: Database, logger: Logger) async {
-        let due = await application.workerNoncePurgeThrottle.shouldRun(
-            now: Date(), interval: purgeInterval)
-        guard due else { return }
+    /// Deletes expired nonce rows. Runs on `workerNonceReaperMonitor`.
+    /// Best-effort: a failed purge only delays cleanup.
+    static func purgeExpired(db: Database, logger: Logger) async {
         do {
             try await WorkerNonce.query(on: db)
                 .filter(\.$expiresAt <= Date())
@@ -143,36 +135,6 @@ enum WorkerNonceReplayGuard {
         } catch {
             logger.warning("worker_nonce_purge_failed: \(String(describing: error))")
         }
-    }
-}
-
-/// Rate-limits a recurring maintenance action to once per interval per
-/// process (same shape as `DiagnosticsMaintenanceStore`).
-actor PurgeThrottle {
-    private var lastRunAt: Date?
-
-    func shouldRun(now: Date, interval: TimeInterval) -> Bool {
-        if let lastRunAt, now.timeIntervalSince(lastRunAt) < interval {
-            return false
-        }
-        lastRunAt = now
-        return true
-    }
-}
-
-struct WorkerNoncePurgeThrottleKey: StorageKey {
-    typealias Value = PurgeThrottle
-}
-
-extension Application {
-    var workerNoncePurgeThrottle: PurgeThrottle {
-        get {
-            if let existing = storage[WorkerNoncePurgeThrottleKey.self] { return existing }
-            let created = PurgeThrottle()
-            storage[WorkerNoncePurgeThrottleKey.self] = created
-            return created
-        }
-        set { storage[WorkerNoncePurgeThrottleKey.self] = newValue }
     }
 }
 

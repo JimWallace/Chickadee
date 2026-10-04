@@ -146,24 +146,12 @@ import VaporTesting
         }
     }
 
-    private func dashboard(as cookie: String) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, "/",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     @Test func sectionOfSevenHasNoFilterAndOfEightDoes() async throws {
         try await withApp(app) { _ in
             let cookie = try await wrLoginAsStudent(on: app)
             try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
             try await seedSection(materials: 7)
-            #expect(!(try await dashboard(as: cookie)).contains("filter-group"))
+            #expect(!(try await getHTML("/", cookie: cookie, on: app)).contains("filter-group"))
         }
     }
 
@@ -172,7 +160,7 @@ import VaporTesting
             let cookie = try await wrLoginAsStudent(on: app)
             try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
             try await seedSection(materials: 8)
-            let html = try await dashboard(as: cookie)
+            let html = try await getHTML("/", cookie: cookie, on: app)
             #expect(html.contains("filter-group"))
             #expect(html.contains("data-list-filter=\"assignments-0\""))
             #expect(html.contains("id=\"assignments-0\""))
@@ -204,7 +192,7 @@ import VaporTesting
                 courseID: courseID, sortOrder: 2, title: "Part Two", kind: .heading
             ).save(on: app.db)
 
-            let html = try await dashboard(as: cookie)
+            let html = try await getHTML("/", cookie: cookie, on: app)
             #expect(html.contains("data-kind=\"slides\""))
             #expect(html.contains("#i-slides"))
             #expect(html.contains("href=\"/content-files/\(itemID.uuidString)/\(attachmentID.uuidString)/view\""))
