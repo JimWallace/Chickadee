@@ -211,7 +211,7 @@ Student browser
 
 Browser-graded assignments run the *same* `executeSuites` loop, compiled to
 wasm, against a xeus kernel substrate: `RoutingExecutor` in
-`Public/browser-runner.js` sends each script to the vendored kernel for its
+`Public/grading-executors.js` sends each script to the vendored kernel for its
 language (xeus-python, xeus-r, xeus-lua or xeus-octave) through that
 language's `*-grading-worker.js`, seeded through `BrowserRunnerRoutes`, and the
 page posts the results to the server. A worker backstop regrades browser-mode
@@ -671,8 +671,14 @@ client registration, rotating refresh tokens with prior-hash theft detection,
 short-lived ES256 access JWTs (`MCPTokenAuthority`), and strictly single-use
 codes/consent tokens consumed via an atomic conditional
 `UPDATE … WHERE consumed = false RETURNING`, so concurrent exchanges cannot
-replay a code. The human's role is re-checked at consent and on every
-refresh; an hourly reaper drops dead OAuth rows.
+replay a code. Codes, consent tokens and refresh tokens are stored only as
+SHA-256 hashes. The human's role is re-checked at consent and on every
+refresh; an hourly reaper drops dead OAuth rows. Scopes are clamped to the
+mode ceiling, and `MCPMode.advertisedScopes` is the single source for both
+discovery and dynamic client registration. `MCPBearerAuthMiddleware` does the
+bearer authentication and clamps scopes per request. The consent POST does not
+depend on a cookie: identity and CSRF ride the single-use consent token, so it
+survives Safari/ITP cross-site cookie blocking.
 
 ### Content authoring (`POST /mcp`)
 

@@ -13,12 +13,16 @@ import vm from 'node:vm';
 // kernel is booted here.  That half is covered by Tools/r-grading-smoke, which
 // grades real scripts through the real xeus-r kernel in a real browser.
 
+// The module takes makeNonce from Public/grading-shared.js (#1963), which the
+// page and the workers load first.
+const sharedSource = await fs.readFile(path.resolve('Public/grading-shared.js'), 'utf8');
 const source = await fs.readFile(path.resolve('Public/r-grading-shared.js'), 'utf8');
 
 function load() {
   const context = { console };
   context.globalThis = context;
   const vmContext = vm.createContext(context);
+  vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
   vm.runInContext(source, vmContext, { filename: 'r-grading-shared.js' });
   return context.ChickadeeRGradingShared;
 }

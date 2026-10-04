@@ -26,6 +26,10 @@ const octaveSharedSource = await fs.readFile(
 );
 // The generated runtime-helper map (scripts/generate-js-constants.sh). The
 // runner reads it at IIFE start, as it reads the shared modules above.
+const executorsSource = await fs.readFile(
+  path.resolve('Public/grading-executors.js'),
+  'utf8',
+);
 const runnerSupportSourcesSource = await fs.readFile(
   path.resolve('Public/runner-support-sources.js'),
   'utf8',
@@ -492,6 +496,7 @@ async function loadRunnerHarness(options = {}) {
   vm.runInContext(luaSharedSource, vmContext, { filename: 'lua-grading-shared.js' });
   vm.runInContext(octaveSharedSource, vmContext, { filename: 'octave-grading-shared.js' });
   vm.runInContext(runnerSupportSourcesSource, vmContext, { filename: 'runner-support-sources.js' });
+  vm.runInContext(executorsSource, vmContext, { filename: 'grading-executors.js' });
   vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
 
   return {

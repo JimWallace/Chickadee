@@ -7,7 +7,7 @@
 // interpretation into a TestOutcome, exactly as for Python, so the native and
 // browser graders cannot drift.
 //
-// Loading: classic script, no dependencies.
+// Loading: classic script. Requires /grading-shared.js first (makeNonce).
 //   - Public/r-grading-worker.js: importScripts('/r-grading-shared.js' + search)
 //   - Node tests: read + eval, then read globalThis.ChickadeeRGradingShared.
 // Exposes exactly one global: ChickadeeRGradingShared.
@@ -209,21 +209,11 @@
         return 'Sys.setenv(CHICKADEE_ASSIGNMENT_SEED = ' + rStringLiteral(seed) + ')';
     }
 
-    // A fresh, unguessable delimiter for one script run.  The wrapper replays
-    // the script's captured stdout/stderr to the kernel with this marker around
-    // each section; student code cannot forge a section boundary because it
-    // cannot see the nonce.  crypto.getRandomValues is available in every
-    // browser worker; Math.random is a test-harness fallback only.
+    // One copy of the nonce, in Public/grading-shared.js (#1963). Every
+    // worker and the notebook page load that file before this one. Read at
+    // call time, so a harness that loads only this module still loads.
     function makeNonce() {
-        try {
-            const bytes = new Uint8Array(16);
-            (root.crypto || globalThis.crypto).getRandomValues(bytes);
-            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch (_) {
-            let out = '';
-            for (let i = 0; i < 4; i++) out += Math.random().toString(16).slice(2, 10);
-            return out;
-        }
+        return root.ChickadeeGradingShared.makeNonce();
     }
 
     // The R source for grading ONE script.  See the header for why this is a

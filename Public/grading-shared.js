@@ -17,6 +17,8 @@
 // Consumers:
 //   - Public/python-grading-worker.js: envConfigPython, assignmentSeedPython.
 //   - Public/python-grading-shared.js: deriveExitCode.
+//   - Public/<language>-grading-shared.js, all four: makeNonce; Lua and
+//     Octave also parseStatusRunOutput. Each was copied per language (#1963).
 //   - Public/xeus-kernel-shared.js: writeFilesToEmscriptenFS, for every
 //     grading worker.
 //   - Public/browser-runner.js: deriveExitCode, re-exported on its test hooks.
@@ -140,10 +142,57 @@ for _module_name in student_module_names_in_load_order():
         });
     }
 
+    // A fresh, unguessable delimiter for one script run. Each grading wrapper
+    // writes it around what the grader reads back (a status line, or a replayed
+    // stream); student code cannot forge a boundary because it cannot see the
+    // nonce. crypto.getRandomValues is available in every browser worker;
+    // Math.random is a test-harness fallback only.
+    function makeNonce() {
+        try {
+            var bytes = new Uint8Array(16);
+            (root.crypto || globalThis.crypto).getRandomValues(bytes);
+            return Array.from(bytes).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+        } catch (_) {
+            var out = '';
+            for (var i = 0; i < 4; i++) out += Math.random().toString(16).slice(2, 10);
+            return out;
+        }
+    }
+
+    // Pull the status and the script's stdout back out of a kernel's
+    // concatenated stdout stream, for a wrapper that ends its run with ONE
+    // line of the form `<nonce>:status:<exitCode>` (Lua and Octave; Python
+    // and R report differently and parse in their own modules).
+    //
+    // Anchored on the LAST occurrence of the marker, so a submission that
+    // echoes an earlier line cannot shadow the real one. Returns null when the
+    // run never reached the status line; the caller turns that into a
+    // substrate error rather than guessing at an exit code, since a missing
+    // status means the cell died before it could report anything.
+    function parseStatusRunOutput(stdoutText, nonce) {
+        var text = String(stdoutText == null ? '' : stdoutText);
+        var statusMark = '\n' + nonce + ':status:';
+
+        var statusAt = text.lastIndexOf(statusMark);
+        if (statusAt < 0) return null;
+        var statusFrom = statusAt + statusMark.length;
+        var statusEnd = text.indexOf('\n', statusFrom);
+        if (statusEnd < 0) return null;
+        var exitCode = parseInt(text.slice(statusFrom, statusEnd).trim(), 10);
+        if (!Number.isFinite(exitCode)) return null;
+
+        // The marker's own leading newline is not the script's, so the slice
+        // ends before it: a script whose last write had no trailing newline
+        // must not gain one.
+        return { exitCode: exitCode, stdout: text.slice(0, statusAt) };
+    }
+
     root.ChickadeeGradingShared = {
         envConfigPython: envConfigPython,
         assignmentSeedPython: assignmentSeedPython,
         deriveExitCode: deriveExitCode,
-        writeFilesToEmscriptenFS: writeFilesToEmscriptenFS
+        writeFilesToEmscriptenFS: writeFilesToEmscriptenFS,
+        makeNonce: makeNonce,
+        parseStatusRunOutput: parseStatusRunOutput
     };
 })(typeof self !== 'undefined' ? self : globalThis);

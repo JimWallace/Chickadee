@@ -9,7 +9,7 @@
 //
 // This was the first conformance, and the browser runner is the second
 // substrate the same loop drives: its `RoutingExecutor` in
-// `Public/browser-runner.js` hands each script to a xeus kernel. The protocol
+// `Public/grading-executors.js` hands each script to a xeus kernel. The protocol
 // was born exercised by a real caller, never a floating speculative
 // interface.
 

@@ -16,11 +16,10 @@ import Foundation
 /// 422) lives beside the server code in `AuthoringValidationError+Abort.swift`,
 /// so this file stays free of Vapor.
 ///
-/// Cases are added one validator at a time. They cover
+/// Cases were added one validator at a time. They cover
 /// `NotebookCheckValidator`, `ManifestValidation`, `PatternKindHandler`,
-/// `NotebookCheckKindHandler` and `PatternFamilyAuthoredGraph`.
-/// `PatternFamilyValidator` still throws `Abort`, because a test asserts
-/// that concrete type.
+/// `NotebookCheckKindHandler`, `PatternFamilyAuthoredGraph` and
+/// `PatternFamilyValidator`.
 enum AuthoringValidationError: Error, Equatable, Sendable {
     // MARK: NotebookCheckValidator
 
@@ -166,6 +165,54 @@ enum AuthoringValidationError: Error, Equatable, Sendable {
     case familyDependsOnUnknownFamily(familyID: String, dependency: String)
     /// A notebook check depends on a pattern family that does not exist.
     case notebookCheckDependsOnUnknownFamily(checkID: String, familyID: String)
+
+    // MARK: PatternFamilyValidator
+
+    /// A case key is not letters, digits and underscore.
+    case patternCaseKeyInvalid(familyID: String, caseKey: String)
+    /// A case key is the one the existence guard generates.
+    case patternCaseKeyReserved(familyID: String, caseKey: String)
+    /// Two cases of one family share a key.
+    case duplicatePatternCaseKey(familyID: String, caseKey: String)
+    /// A case has an empty label.
+    case patternCaseMissingLabel(familyID: String, caseKey: String)
+    /// A family variable is not a valid identifier in the assignment's
+    /// language. `identifierKind` is the language's name for one.
+    case patternVariableNameInvalid(familyID: String, name: String, identifierKind: String)
+    /// Two family variables share a name.
+    case duplicatePatternVariableName(familyID: String, name: String)
+    /// A family variable has a parameter's name, which the generated test
+    /// would shadow.
+    case patternVariableShadowsParameter(familyID: String, name: String)
+    /// A case argument references a `$variable` the family does not define.
+    case patternCaseUnknownVariable(familyID: String, caseKey: String, argument: String, reference: String)
+    /// A case argument references a per-student input in a kind that cannot
+    /// take one. `capableKinds` names the kinds that can.
+    case patternCasePerStudentArgumentUnsupported(
+        familyID: String, caseKey: String, reference: String, capableKinds: String)
+    /// A case's expected reference does not name a per-student input.
+    case patternCaseExpectedReferenceNotPerStudent(familyID: String, caseKey: String, reference: String)
+    /// A case uses a per-student expected in a kind that cannot take one.
+    case patternCasePerStudentExpectedUnsupported(familyID: String, caseKey: String, capableKinds: String)
+    /// A family id is not letters, digits and underscore.
+    case patternFamilyIDInvalid(familyID: String)
+    /// Two families share an id.
+    case duplicatePatternFamilyID(familyID: String)
+    /// A family's function name is not a valid target in the assignment's
+    /// language. `expectation` is the language's rule for one.
+    case patternFunctionNameInvalid(
+        familyID: String, functionName: String, language: AssignmentLanguage, expectation: String)
+    /// A parameter name is not a valid identifier in the assignment's language.
+    case patternParameterNameInvalid(familyID: String, name: String, identifierKind: String)
+    /// Two parameters of one family share a name.
+    case duplicatePatternParameterName(familyID: String, name: String)
+    /// A family would generate a file that a hand-written script already uses.
+    case patternFamilyCollidesWithHandWrittenFile(familyID: String, filename: String)
+    /// Two families would generate the same file.
+    case patternFamiliesCollide(familyID: String, otherFamilyID: String, filename: String)
+    /// The reference implementation contains the heredoc delimiter the
+    /// generated wrapper uses.
+    case patternSourceContainsHeredocDelimiter(familyID: String, delimiter: String)
 }
 
 extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
@@ -329,6 +376,56 @@ extension AuthoringValidationError: CustomStringConvertible, LocalizedError {
             return "Pattern family '\(familyID)' depends on unknown family '\(dependency)'."
         case .notebookCheckDependsOnUnknownFamily(let checkID, let familyID):
             return "Notebook check '\(checkID)' depends on unknown pattern family '\(familyID)'."
+
+        case .patternCaseKeyInvalid(let familyID, let caseKey):
+            return
+                "Pattern family '\(familyID)': case key '\(caseKey)' must contain only letters, digits, and underscore"
+        case .patternCaseKeyReserved(let familyID, let caseKey):
+            return
+                "Pattern family '\(familyID)': case key '\(caseKey)' is reserved for the auto-generated existence guard; choose a different key."
+        case .duplicatePatternCaseKey(let familyID, let caseKey):
+            return "Pattern family '\(familyID)': duplicate case key '\(caseKey)'"
+        case .patternCaseMissingLabel(let familyID, let caseKey):
+            return "Pattern family '\(familyID)': case '\(caseKey)' is missing a label"
+        case .patternVariableNameInvalid(let familyID, let name, let identifierKind):
+            return "Pattern family '\(familyID)': variable name '\(name)' is not a valid " + identifierKind
+        case .duplicatePatternVariableName(let familyID, let name):
+            return "Pattern family '\(familyID)': duplicate variable name '\(name)'"
+        case .patternVariableShadowsParameter(let familyID, let name):
+            return
+                "Pattern family '\(familyID)': variable name '\(name)' collides with a parameter name; the generated test would shadow the family variable."
+        case .patternCaseUnknownVariable(let familyID, let caseKey, let argument, let reference):
+            return
+                "Pattern family '\(familyID)': case '\(caseKey)' arg '\(argument)' references unknown variable '$\(reference)'"
+        case .patternCasePerStudentArgumentUnsupported(let familyID, let caseKey, let reference, let capableKinds):
+            return
+                "Pattern family '\(familyID)': case '\(caseKey)' references per-student input '$\(reference)', which is only supported in \(capableKinds) families for now."
+        case .patternCaseExpectedReferenceNotPerStudent(let familyID, let caseKey, let reference):
+            return
+                "Pattern family '\(familyID)': case '\(caseKey)' expected reference '$\(reference)' must name a per-student input (a global or section `=` expression)."
+        case .patternCasePerStudentExpectedUnsupported(let familyID, let caseKey, let capableKinds):
+            return
+                "Pattern family '\(familyID)': case '\(caseKey)' uses a per-student expected, which is only supported in \(capableKinds) families for now."
+        case .patternFamilyIDInvalid(let familyID):
+            return "Pattern family id '\(familyID)' must contain only letters, digits, and underscore"
+        case .duplicatePatternFamilyID(let familyID):
+            return "Duplicate pattern family id '\(familyID)'"
+        case .patternFunctionNameInvalid(let familyID, let functionName, let language, let expectation):
+            return "Pattern family '\(familyID)': functionName '\(functionName)' is not valid for a "
+                + "\(language.displayName) assignment — expected \(expectation)"
+        case .patternParameterNameInvalid(let familyID, let name, let identifierKind):
+            return "Pattern family '\(familyID)': parameter name '\(name)' is not a valid " + identifierKind
+        case .duplicatePatternParameterName(let familyID, let name):
+            return "Pattern family '\(familyID)': duplicate parameter name '\(name)'"
+        case .patternFamilyCollidesWithHandWrittenFile(let familyID, let filename):
+            return
+                "Pattern family '\(familyID)' would generate '\(filename)', but a hand-written script with that name already exists. Rename the raw script or change the family id/case key."
+        case .patternFamiliesCollide(let familyID, let otherFamilyID, let filename):
+            return
+                "Pattern families '\(otherFamilyID)' and '\(familyID)' would both generate '\(filename)'. Change one family's id or case key — otherwise one family's cases would silently replace the other's."
+        case .patternSourceContainsHeredocDelimiter(let familyID, let delimiter):
+            return
+                "Pattern family '\(familyID)': the reference implementation contains a line reading exactly '\(delimiter)', which would terminate the generated script's heredoc. Remove or indent that line."
         }
     }
 

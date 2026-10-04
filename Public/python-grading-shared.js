@@ -74,19 +74,11 @@
         argv: ['xeus/chickadee-python/bin/xpython.js'],
     };
 
-    // A fresh, unguessable delimiter for one script run. crypto.getRandomValues
-    // is available in every browser worker; Math.random is a test-harness
-    // fallback only.
+    // One copy of the nonce, in Public/grading-shared.js (#1963). Every
+    // worker and the notebook page load that file before this one. Read at
+    // call time, so a harness that loads only this module still loads.
     function makeNonce() {
-        try {
-            var bytes = new Uint8Array(16);
-            (root.crypto || globalThis.crypto).getRandomValues(bytes);
-            return Array.from(bytes).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
-        } catch (_) {
-            var out = '';
-            for (var i = 0; i < 4; i++) out += Math.random().toString(16).slice(2, 10);
-            return out;
-        }
+        return root.ChickadeeGradingShared.makeNonce();
     }
 
     // Each native test is a fresh `python3` process; in the browser every

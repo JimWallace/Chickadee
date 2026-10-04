@@ -182,73 +182,19 @@ authoring step. `minimumRunnerVersion` is the wrong tool for a new language.
 Validation runs on the native worker, so browser-graded assignments are gated
 too. See `docs/runner-capability-profiles.md`.
 
-**A class goal counts one of three things, and the sweep will evaluate no fourth.**
-`Achievement` scope `.classWide` used to mean exactly one arithmetic: how many
-students' best whole-assignment grade cleared a threshold, over the enrolled
-roster. A collaborative assignment needs the other one — the **union** of what
-the class produced, "the class has found 12 of the 15 seeded bugs" — so
-`AchievementSignal.itemsCovered` counts DISTINCT items in the
-`class_item_coverage` table, optionally scoped to one suite section (a bug
-hunt's variants, not the well-formedness gate beside them).
-
-The third arithmetic is the **corpus percent**, "the class collectively reaches
-80% coverage", which a union of per-item rows cannot produce because no row can
-say what fraction of a reference a combined test corpus exercises.
-`AchievementSignal.classCoverage` reads the newest completed
-`class_coverage_runs` row — one synthetic `kind == .classAggregate` submission
-holding every contributor's slot cells, graded once, its ordinary grade fraction
-being the number. It scopes nothing: the run produces one number for the
-assignment, so a `.section` target would name a share of a reference nothing
-measured. See
+**A class goal counts one of three things, and the sweep evaluates no fourth.**
+`isSweepEvaluableClassGoal` admits exactly four shapes: no conditions, or a
+single `grade`, `itemsCovered` or `classCoverage` `atLeast`. Every other shape
+is refused at save time and skipped with a log by the sweep, so a hand-authored
+manifest cannot mis-grade a bonus. A union or corpus goal grades on the smaller
+of coverage and breadth. See
 [docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md)
-§"The corpus run".
-
-`isSweepEvaluableClassGoal` admits **exactly four shapes**: no conditions, a
-single `grade atLeast`, a single `itemsCovered atLeast`, or a single
-`classCoverage atLeast`. Everything else is refused at save time and
-skipped-with-a-log by the sweep. That guard is the reason a hand-authored
-manifest cannot silently mis-grade a bonus (audit A4), so admitting each new
-shape meant admitting exactly it — the arity has never moved.
-
-A union or corpus goal is graded on the SMALLER of two halves: coverage (the
-item count, or the corpus percent) and **breadth** (at least `classFraction` of
-the roster contributed at least one covered item, or one cell to the corpus).
-Breadth is why there is no per-student contribution cap: one
-student finding everything reaches full coverage and then fails on breadth. The
-alternative — crediting each student only their K rarest items — bounds the solo
-hero too, and breaks determinism doing it, because a later submission can change
-which of an earlier student's items counted.
-
-The two halves scope differently, and the asymmetry is deliberate. **Coverage
-counts every row**, including one found by a student who has since dropped: the
-item was covered, and the number must never retreat because it freezes into a
-LEARN push. **Breadth counts only currently-enrolled students**, because it is a
-fraction of the CURRENT roster — audit A7's shape. A corpus goal carries the
-same split, one level up: the run's number is what it measured, and its stored
-contributor list is intersected with today's roster. `achievement_results` stores
-`items_covered` / `items_required` (and `coverage_percent` /
-`coverage_required`) rather than recomputing them, so a frozen row
-can say what coverage produced the bonus in every student's grade of record. See
-[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
+§"Class goals in force".
 
 **Post-deadline reveals wait for the slip-day claim window, not just the
-deadline.** Slip days are claimed *after* the due date (first-claim window
-`dueAt + extensionHours`), so "this student's effective deadline has passed"
-does not mean they are done buying time — gating a reveal on it alone lets a
-student read the revealed material at due+1min, claim a slip day, and act on
-it. `postDeadlineRevealDeadline` (AssignmentDeadlineService) is the one
-resolver for that moment — the later of the effective deadline and
-`slipDayClaimWindowCeiling`, the end of any claim window still reachable —
-and both reveal surfaces flow through it: release-tier output
-(`releaseVisibilityDeadline` — whose hold a course may switch off on the
-slip-day settings, `SlipDayPolicy.releaseRevealHold`, restoring the pre-hold
-timing knowingly) and the per-assignment **solution reveal**
-(`SolutionVisibility.afterDue`, off by default), which lets students open the
-reference solution — personalized with their own inputs — once their reveal
-moment passes and never honours that opt-out. An assignment with no due date reveals immediately (posted
-lecture material); enabling the policy is refused with no solution on file;
-a manual deadline override suppresses it. See
-[docs/solution-visibility.md](docs/solution-visibility.md).
+deadline.** `postDeadlineRevealDeadline` (`AssignmentDeadlineService`) is the one
+resolver for that moment. Release-tier output and the solution reveal both use
+it. See [docs/solution-visibility.md](docs/solution-visibility.md).
 
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
@@ -277,45 +223,14 @@ The current implementation is tested against UWaterloo DUO; claim names
 (`winaccountname`, `user_id`) are in `OIDCIDTokenClaims.swift` and can be
 adjusted for other providers.
 
-**The CSP `script-src` permits no inline execution, and that is load-bearing
-for the templates.** An AppScan run on 2026-09-11 reported `'unsafe-inline'` in
-`script-src` as a High (CVSS 8.2); it is gone (#1516). What this costs a future
-author is worth knowing BEFORE writing a page: an inline `<script>` in a
-template **does not run**, and an `onclick=` / `onchange=` attribute **never
-fires** — neither fails loudly, the control just stops responding. Page JS goes
-in a `Public/*.js` file; a handler becomes a data attribute read by a delegated
-listener (`data-ck-click-target`, `data-ck-submit-on-change`,
-`data-ck-select-all`, all at the foot of `app.js`). `<script
-type="application/json">` seeds are data blocks and are unaffected.
-`check-styles.sh` rules 3b/3b-2/3b-3 catch all three shapes, including the
-one-line `<script>` that the JSON-island exemption used to let through.
-
-`'unsafe-eval'` stays — JupyterLab compiles JSON-schema validators at run time,
-measured with Pyodide fully removed — and so does `style-src 'unsafe-inline'`,
-which the templates use for CSS custom-property assignments. The vendored
-JupyterLite entry points carry inline bootstraps we do not author, so they ride
-the policy by **sha256 hash**, derived at startup from the bytes FileMiddleware
-actually serves (`EditorInlineScriptHashes`) and attached to `/jupyterlite/`
-responses only. Derived rather than pinned because a hash in source goes stale
-the moment a kernel is re-vendored, and the failure is upstream of everything
-the editor smoke test measures — the page breaks before a kernel is fetched.
-A nonce cannot do this job at all: those are static files, and the one script
-that would most want a nonce hands the document to `document.write`, which
-inherits the writing response's policy. Chickadee's own stray-editor-tab page
-is the one inline script it still serves, under a hash named from the same
-constant that renders it — inline on purpose, since a page whose only job is to
-close the tab the instant it paints should not first wait on a fetch that can
-fail.
-
-The scan-side lesson is the more general one. **ZAP baseline had been running
-weekly the whole time and could not see this**, because `.zap/rules.tsv` sets a
-threshold per RULE, ZAP reports every CSP finding under one rule id, and the
-`IGNORE` that accepted `'unsafe-eval'` accepted `'unsafe-inline'` with it. Do
-not suppress a coarse third-party rule to accept one of its findings; assert
-the policy where you have an exact opinion about it
-(`scripts/check-security-headers.sh` against the running container,
-`ContentSecurityPolicyInlineScriptTests` per directive) and leave the rule at
-`WARN`.
+**The CSP `script-src` permits no inline execution (#1516).** An inline
+`<script>` in a template does not run, and an `onclick=` / `onchange=` attribute
+never fires. Neither failure is loud. Put page JS in a `Public/*.js` file and
+use the delegated data attributes at the foot of `app.js` (`docs/ui-design.md`
+§"Page-local scripts"; `check-styles.sh` rules 3b, 3b-2 and 3b-3). Do not
+suppress a coarse third-party scanner rule to accept one of its findings. What
+the policy keeps, and why, is in the `scripts/check-security-headers.sh`
+header.
 
 **HTTPS enforcement is optional and proxy-aware.** `AppSecurityConfiguration`
 reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
@@ -342,64 +257,21 @@ automatically if `.local-runner-autostart` exists (or is toggled via the admin
 dashboard). This is a development convenience; production runs the runner
 separately.
 
-**MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server *and*
-its own OAuth 2.1 authorization server, so an agent (e.g. the Claude connector)
-can manage course content on an instructor's behalf. Gated by `MCP_MODE`
-(`off` / `read_only` / `read_write`). The server is **dual-era** (#1218): the
-era is resolved *per request* — a body whose `_meta` carries
-`io.modelcontextprotocol/protocolVersion` gets the modern 2026-07-28 semantics
-(mandatory `server/discover`, `resultType` + server `_meta` on every result,
-mirrored `MCP-Protocol-Version`/`Mcp-Method`/`Mcp-Name` header validation,
-HTTP-visible protocol errors), anything else keeps the legacy `initialize`
-behaviour unchanged. `initialize` negotiates only among the legacy revisions,
-so a handshake client is never handed a protocol it cannot speak. See
-`Transport/MCPModernTransport.swift` and `docs/mcp-2026-07-28-revision.md`. The browser OAuth flow is Authorization
-Code + PKCE (S256); codes, consent tokens, and refresh tokens are stored only as
-SHA-256 hashes and are strictly single-use — consumption is an **atomic
-conditional `UPDATE … WHERE consumed = false RETURNING`** so concurrent
-exchanges can't replay a code. Refresh tokens rotate with prior-hash theft
-detection; the human's role is re-checked at consent and on every refresh.
-Scopes are clamped to the mode ceiling (`MCPMode.advertisedScopes`, the single
-source for discovery + DCR). Access tokens are short-lived ES256 JWTs minted by
-`MCPTokenAuthority`; bearer auth + per-request scope clamping live in
-`MCPBearerAuthMiddleware`. An hourly reaper drops dead OAuth rows. The consent
-POST is deliberately cookie-independent (identity + CSRF ride the single-use
-consent token) so it survives Safari/ITP cross-site cookie blocking.
-The `initialize` instructions end with the default **authoring-voice guide**
-(`MCPServerInstructions.authoringVoice` — see "Voice and Register" below).
-Every course inherits that guide; a course's instructors can take it over on
-the `/instructor` MCP tab, which seeds one editable box with the default and
-stores the edited copy in `courses.mcp_instructions` (nil = still inheriting).
-A customized course's guide **replaces** the default for that course's content
-and is appended as a labelled block at initialize (`MCPCourseGuidance.swift`);
-an inheriting course adds nothing, since the default is already in the base
-text. Both are live MCP resources too (`chickadee://docs/authoring-voice`,
-`chickadee://course/<code>/authoring-guidance` — which serves whichever guide
-is in force) so agents can re-read them mid-session; the initialize copy is
-frozen per connection. Advisory text only — it never alters tools, scopes, or
-the admin surface.
+**MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server and
+its own OAuth 2.1 authorization server. `MCP_MODE` (`off` / `read_only` /
+`read_write`) gates it. The protocol era is resolved per request (#1218), and
+`initialize` never negotiates up to the modern revision. OAuth codes and tokens
+are stored only as hashes and are consumed by an atomic conditional `UPDATE`,
+so a code cannot be replayed. See `docs/architecture.md` §"MCP surfaces" and
+`docs/mcp-2026-07-28-revision.md`. The `initialize` instructions end with the
+authoring-voice guide, and a course's instructors can replace it for their
+course (see "Voice and Register" below).
 
-**The MCP surface reports its own languages, and holds none of their names
-(#1290).** `get_server_info` returns a `languages` payload
-(`MCPLanguageCapability`): per language, its wire token and display name, its
-script/generated/source extensions, editor-kernel-vs-upload-only, expression
-support and interpreter, and the supported/refused pattern-family and
-notebook-check kinds **with a reason for each exclusion** — the check-kind
-answers taken from `notebookCheckKindUnsupportedReason`, the same predicate the
-save-time refusal calls, so the payload cannot promise what a save would reject.
-Before it, an agent discovered that six check kinds are refused on Lua (and all
-ten on C++ and Racket) by getting rejected. Every rendering of the language list
-in agent-facing copy derives from `allCases` via `MCPLanguageProse` (display-name
-prose, wire-token prose, `"a" | "b"` schema union); no description or schema
-holds a language name. This is the SECOND fix of that defect: #1288 derived the
-one list it was looking at, and one language later five other hand-typed lists
-still stopped at `cpp` — `set_assignment_language` refusing Racket in prose while
-its derived JSON `enum` accepted it — and four tool descriptions still called
-personalization expressions "Python source", the very sentence #1288 existed to
-fix. So the guard is scoped to the whole served catalog, not to one string:
-`MCPLanguageCoverageTests` fails on any list that stops short of `allCases`
-anywhere in the instructions, tool descriptions or schemas. A seventh language
-needs no edit to any MCP prose.
+**The MCP surface holds no language names (#1290).** Every language list in
+agent-facing copy derives from `allCases` (`MCPLanguageProse`), and
+`get_server_info` reports a `languages` payload. `MCPLanguageCoverageTests`
+fails on any list that stops short. A new language needs no edit to MCP prose.
+See `docs/adding-a-xeus-kernel.md`, compiler-invisible item 8.
 
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —
@@ -486,28 +358,13 @@ the canonical `/testsetups/:id/submit` handlers remain active for
 compatibility. The first segment is the course's `urlKey`: the code, or
 "CS135-F26" for a course with a term (see the next entry).
 
-**A course is one offering: it records a year and a term, and its code is
-unique per term (docs/course-terms.md).** `AcademicTerm` (Core) is a
-four-digit year plus a Waterloo `TermSeason` (Winter, Spring, Fall), stored
-as the nullable `term_year` / `term_season` columns and read only through
-`APICourse.term`. A new course must declare one at every door (admin create,
-clone, bundle import records the bundle's), and nothing infers one — a
-course with no term means "no term recorded", exactly the
-language-declaration rule. The unique index is `(code, COALESCE(term_year,
-0), COALESCE(term_season, ''))` over active courses; the COALESCE is what
-keeps two term-less courses from sharing a code, because SQL NULLs are
-distinct. So **a bare code can name more than one active course**, and every
-code lookup must pick one: the web resolver `findActiveCourse(byKey:viewer:on:)`
-takes an exact code first, then a "CODE-F26" key, then prefers the viewer's
-enrolled offering, then the newest term; MCP's `resolveMCPCourse` does the
-same but **refuses a write** through a code that still names several
-offerings. Do not add a code-only lookup; use one of those two. Cloning into
-a new term is `CourseCloneService` (admin course page, and the instructor
-"New term" tab, which enrolls the cloning instructor): content and settings
-come along, people, their work and LMS bindings do not, and every copied
-assignment starts closed with no dates and its solution reveal off, because
-a stale or missing date would let an "after due" reveal show the answer key
-on opening.
+**A course is one offering: a code plus a year and a term
+([docs/course-terms.md](docs/course-terms.md)).** Every door that creates a
+course declares a term, and nothing infers one. A bare code can name more than
+one active course. **Do not add a code-only lookup.** Use
+`findActiveCourse(byKey:viewer:on:)` on the web or `resolveMCPCourse` in MCP;
+MCP refuses a write through an ambiguous code. A clone for a new term starts
+every copied assignment closed, with no dates and the solution reveal off.
 
 **Runner-side LRU test setup cache (v0.4.41).** `TestSetupCache` (Swift actor,
 default 16 entries) keeps fully-prepared test setup directories keyed by
@@ -1248,207 +1105,51 @@ Full design, runbook, and host steps:
 
 ## Current State
 
-**The 0.4 series is closed.** v0.5.0 marks the conclusion of the first full
-course offering run on Chickadee and the pivot to next year's feature work.
-The system is a working client–server autograder: Python, R, Lua, Octave, C++,
-Racket and Java assignments;
-browser (xeus/wasm) and native worker grading paths sharing one RunnerCore
-implementation; per-student personalization; pattern-generated test families
-(10 kinds) and notebook checks (10 kinds); achievements; student slip days;
-per-course roles; BrightSpace grade sync (awaiting UW IST prod credentials);
-an MCP authoring surface of 56 tools plus a read-only admin-diagnostics MCP
-of 19 (`MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the count's
-source of truth); OIDC SSO; and zero-downtime auto-deploys.
+**The 0.4 series is closed.** v0.5.0 marks the end of the first full course
+offering run on Chickadee. The system is a working client–server autograder:
+Python, R, Lua, Octave, C++, Racket and Java assignments; browser (xeus/wasm)
+and native worker grading that share one RunnerCore; per-student
+personalization; pattern-generated test families (10 kinds) and notebook checks
+(10 kinds); achievements; student slip days; per-course roles; BrightSpace grade
+sync (awaiting UW IST prod credentials); an MCP authoring surface of 56 tools
+plus a read-only admin-diagnostics MCP of 19 (`MCPToolCatalog.live` in
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source of
+truth for the count); OIDC SSO; and zero-downtime auto-deploys. The 0.4 arc is
+summarised at the top of `CHANGELOG-0.4.md`. The 0.5-boundary cleanup is in the
+0.5.0 entry of `CHANGELOG.md`. Both browser graders and every editor kernel are
+xeus (#1271, done); the measurements are in `docs/archive/xeus-python-grading-*`.
 
-Per-release history for 0.1.0–0.4.x lives in `CHANGELOG-0.4.md` (split out of
-`CHANGELOG.md` at the 0.5.0 cut). The 0.4 arc, one line per theme:
+Instructor validation is a `kind == .validation` submission, graded by the
+**native worker** (`WorkerJobRoutes.collectClaimCandidates`). It never runs a
+kernel. There is no `assignment-validate.js`.
 
-- **Grading core.** Shell-script contract → sandboxing → browser grading →
-  the RunnerCore extraction (#764–#775): one Swift grading core compiled
-  natively and to wasm, pinned by `Tests/Fixtures/output-contract.json`;
-  R became first-class in #1207.
-- **Authoring.** Instructor editor → server-authoritative suite editor →
-  pattern families + notebook checks → suite sections, hints, datasets,
-  per-student personalization (the #461 arc) → assignment versioning with
-  restore (#1223–#1225) → the MCP authoring surface with per-course
-  authoring-voice guides.
-- **Course management.** Courses/enrollment/archival → `.chickadee` course
-  bundles → per-course enrollment roles (#417 arc: `student` < `ta` <
-  `instructor` per course; deployment roles collapsed to `user`/`admin`) →
-  course sections, content items, activity timeline (#1227), slip days
-  (#1228).
-- **Identity & compliance.** Local auth → OIDC/PKCE SSO (UWaterloo DUO) →
-  lockout/rate-limit/audit hardening → the UW approval package under
-  `docs/compliance/` (student-data audits of both MCP surfaces, tool and
-  data-flow inventories).
-- **Operations.** Docker Compose → HMAC runner auth → capability profiles,
-  runner-side LRU setup cache, health alerts, diagnostics tables →
-  blue-green zero-downtime auto-deploy (`chickadee-deployer`) → CI
-  hardening (the #1139 fork/exec postmortem, the #1233 pool-saturation
-  wedge fix, the prebuilt swift-ci test image #1238/#1239, a
-  real-Postgres test lane).
-- **Editor reliability.** Embedded JupyterLite → kernel-boot telemetry +
-  watchdog → the exec_hang root cause (v0.4.526 chdir patch) → JupyterLite
-  0.8, service-worker-free/SAB-only isolation, the xeus-r kernel for R
-  notebooks, the parselmouth CSP stub (#1241/#1243).
+**Leaf templates: rules that fail silently.** A render test proves that a
+template resolves, not that it resolves right. The evidence is in
+`docs/leaf-decomposition-review.md` §0. `scripts/check-leaf-semantics.sh`
+enforces the first three rules.
 
-The 0.5-boundary cleanup pass additionally: put R execution and
-pandas/matplotlib on the CI image (their suites were silently skipped
-everywhere); deduplicated the browser grading semantics into
-`Public/grading-shared.js` (one copy for the grading worker and the
-main-thread fallback — the bespoke drift test is gone); ran the second
-migration consolidation (post-#502 increments folded into `Create*` files,
-removing the #1077 boot-order hazard class); retired the pre-0.5 shims
-(`WORKER_SHARED_SECRET` alias, `/admin/workers` alias, the two per-boot
-legacy sweeps, the bundle `isOpen` write side, the scanner realignment
-shim); and archived finished-era docs under `docs/archive/`.
+- **No Leaf tag syntax in a template comment or in template prose.** Leaf's
+  lexer has no notion of an HTML comment. In a comment, a bare structural tag
+  name fails at render (`extend only supports one or two parameters []`), a
+  field interpolation prints the real value, and a complete include resolves.
+  Commenting a tag out does not disable it. Write "the extend" instead.
+- **Leaf has no line-comment syntax.** A `#` followed by a slash is raw text,
+  so the "comment" prints into the page. Use an HTML comment.
+- **Use the `count` tag, not `.isEmpty`.** Leaf resolves no Swift properties,
+  so `rows.isEmpty` on an array is nil: the plain form never fires and the
+  negated form always fires. Write `#if(count(rows) == 0)` or
+  `#if(count(rows) > 0)`. Two struct properties are allowlisted in the script.
+- **The sub-context include takes a bare second parameter:**
+  `extend("_partial", subObject)`. The labelled `with:` form does not lex.
+- **A scanner that cannot tell markup from prose about markup matches its own
+  documentation.** This shipped twice in drift guards. Parse structure, and
+  describe forbidden syntax instead of quoting it.
 
-**Near-term roadmap:**
-
-- **Leaf partial decomposition — DONE (2026-08, #1266 + #1269). The
-  long-standing "multi-extend parser bug" was a misdiagnosis.** Multiple inline
-  partial includes work fine on LeafKit 1.14.3. The real cause of
-  `LeafError.500: extend only supports one or two parameters []` is that
-  **Leaf's lexer has no notion of an HTML comment.** `<!-- ... -->` is raw text
-  to it, so tag syntax written inside one is lexed exactly as if it stood in
-  the markup. A bare structural tag name lexes to a tag with *no* parameter
-  list, and `Extend.init` rejects that — hence the empty `[]` in the message.
-
-  Verified against a control (a probe comment inserted into an otherwise
-  untouched `notebook.leaf` — 7 lines, one include — with a no-probe baseline
-  proving the harness measured anything at all):
-
-  | In a comment | Result |
-  |---|---|
-  | bare `extend` / `if` / `else` / `elseif` / `endif` / `for` / `endfor` / `import` / `export` / `endextend` | **500 at render** |
-  | `#(someField)` | **silently interpolated** — the real context value lands in the served HTML |
-  | `#someTag()` | parens consumed, name left as literal text |
-  | a *complete* `extend("_partial")` | **resolves the partial**, exactly as if uncommented |
-  | unknown `#word` (`#wb-single-edit`, `#jl-frame`), `C#`, `id="#main"` | genuinely inert |
-
-  That last row is why existing comments naming CSS ids are safe, and why the
-  rule is narrower than "never write `#` in prose".
-
-  **That row has a second edge, and it cost a leaked page header (v0.5.233).
-  Leaf has NO LINE-COMMENT SYNTAX.** `LeafLexer.lexCheckTagIndicator` pops the
-  `#`, peeks the next character, and takes the tag path only when it is a letter
-  or an open paren — so a `#` followed by a slash emits a raw `#` and returns to
-  raw state. It is the same rule that makes `C#` inert, seen from the other
-  side: "passes through as text" is invisible only inside an HTML comment.
-  Outside one it means the comment **prints**. A thirteen-line `#//` header on
-  `_leaderboard-body.leaf` rendered above the results, rode every five-second
-  background refresh, and emitted the unclosed heading tag inside its own prose
-  for real. Render tests could not see it — the template resolves, it just
-  resolves wrong, the same blind spot as the `isEmpty` finding below. Comment a
-  template with an HTML comment; `scripts/check-leaf-semantics.sh` now fails on
-  the other form, with a `check-guards.sh` fixture proving it still does.
-
-  **Practical rule:** never write Leaf *tag* syntax in template prose or
-  comments — not a bare structural tag name, not `#(field)`, not a complete
-  include. Say "the extend" or "an `extend(...)` include" instead. Commenting a
-  tag out does not disable it.
-
-  The historical bisection was almost certainly toggling heavily-commented
-  blocks whose prose named a tag, which is why the failure looked template-wide
-  and size-dependent rather than like a one-line typo.
-
-  Inline partial includes themselves are unrestricted, and the **sub-context
-  form** `extend("_partial", subObject)` works — that is what lets one partial
-  serve both a standalone page (flat context) and a composite page (nested), as
-  `_assignment-edit-body` / `_notebook-body` do for the workbench. Note the
-  syntax: a bare second parameter, **not** the labelled `with:` form, which
-  does not lex (`invalidParameterToken(":")`).
-
-  **What the corrected rule actually unblocked, measured (#1269).** Less than
-  the old rule appeared to be holding up. Diffing the two authoring templates
-  rather than counting marker strings, the shared-markup opportunity was **one
-  block of ~70 lines**, now `_suite-sections.leaf` — parameterized on a
-  per-page endpoint base, a trailing query string, and whether its forms carry
-  `data-ck-inplace`. The files table only *looks* shared and stays in two
-  honest copies: its notebook rows differ structurally (optional-notebook
-  draft actions vs. a guaranteed notebook plus workbench hooks).
-
-  The duplication that was actually costing correctness was **JavaScript**,
-  which the Leaf rule never blocked, and in every case the create page was the
-  stale fork. Fixing it removed three live defects: per-student `=` expressions
-  degrading to literal strings in section inputs, section drag-reorder
-  persisting nothing while showing a failure alert, and a double confirmation
-  dialog on section delete. `assignment-new.leaf` went 1,059 → 711 lines,
-  `_assignment-edit-body.leaf` 918 → 811. Full analysis and the slice plan:
-  [docs/leaf-decomposition-review.md](docs/leaf-decomposition-review.md).
-
-  A corollary of the comment finding, learned twice more while doing it: the
-  same blindness applies to *any* scanner that cannot tell markup from prose
-  about markup. Two new drift guards matched their own documentation — one
-  quoting the pattern it forbade, one naming an attribute it asserted absent.
-  Prefer parsing structure (as `InstructorWorkbenchRoutesTests` does with form
-  open tags) over searching the document, and describe forbidden syntax rather
-  than quoting it.
-
-  (Render tests catch all of this — they prove templates *resolve*; they don't
-  exercise page JS, so a JS-driven widget still wants a manual check.)
-
-  **Leaf resolves no Swift properties, and says nothing when it fails to
-  (v0.5.165).** The comment finding above has a twin, found the same way and
-  costing more. `Dictionary+LeafData.swift` walks a keypath by requiring every
-  intermediate to be a **dictionary**, so `rows.isEmpty` — where `rows` is an
-  array — resolves to **nil**, not to an error. Nil then flows two ways and
-  both read as success: `LeafSerializer`'s conditional guard is
-  `(evaluated.bool ?? false) || (!evaluated.isNil && …)`, so `#if(rows.isEmpty)`
-  **never fires**; `ParameterResolver`'s `.not` is `rhs.bool ?? !rhs.isNil`, so
-  `#if(!rows.isEmpty)` **always fires**.
-
-  Thirty-three sites across 22 templates shipped this way: 22 empty states that
-  never appeared (a "No submissions yet" replaced by a header-only table
-  promising rows and listing none — on the student dashboard, enrollment, five
-  admin pages) and 11 blocks that always did (an "Auto-detected:" note with
-  nothing after it, a Section picker on a course with no sections, empty badge
-  containers). **Render tests cannot see any of it** — the template resolves
-  fine, it just resolves wrong — which is why it survived every guard the repo
-  has and was found only by reading LeafKit's source.
-
-  Use the built-in `count` **tag**, which handles arrays and dictionaries
-  properly: `#if(count(rows) == 0)` and `#if(count(rows) > 0)`. Not the
-  `isEmpty` tag — `#isEmpty(rows)` stringifies its parameter and throws on an
-  array. `count()` throws on a missing or non-collection key, so confirm the
-  receiver is a non-optional array on the context struct; that trade is
-  deliberate, since loud-while-rendering beats silent-forever.
-
-  The idiom is legitimate in exactly one shape: when the receiver is a struct
-  that **declares** the property, the key is a real dictionary member
-  (`SparklineBar.isEmpty`, `ActivityBucket.count`). Those two are
-  indistinguishable to a reader from the broken form, so
-  `scripts/check-leaf-semantics.sh` names them in a pair allowlist and forbids
-  everything else, with a `check-guards.sh` fixture proving it still fails. That
-  script carries the line-comment rule above too: both are Leaf idioms that
-  render fine and resolve wrong, which is the one thing a render test cannot
-  catch.
-- **Consolidating on xeus (#1271) — DONE.** Both browser graders and both
-  editor kernels are xeus; `Public/pyodide` went in v0.5.19 (see "Pyodide is
-  gone" above). The package-set question that gated it was settled the way
-  the spike predicted: the kernel env is fixed at build time, students are
-  already held to it by the editor, and `PythonImportGuard` refuses a
-  browser-graded script at authoring time whose imports the vendored kernel
-  cannot satisfy. The measurements that decided it (xeus-python's 5 ms per
-  cell versus Pyodide's ~0 ms; boot a wash once Pyodide's on-demand
-  numpy/pandas fetch is counted; R's ~180 ms per-expression yield NOT
-  generalising) are kept in `docs/archive/xeus-python-grading-spike.md` and
-  `docs/archive/xeus-python-grading-migration-plan.md`. One correction from
-  that arc worth keeping here: instructor validation is enqueued as a
-  `kind == .validation` submission and graded by the **native worker**
-  (`WorkerJobRoutes.collectClaimCandidates`), so it never ran Pyodide and
-  never runs a kernel; earlier notes citing an `assignment-validate.js`
-  described a file that does not exist.
-- **Feature backlog:** continued personalization / notebook-check
-  expansion (e.g. per-student refs in pattern kinds beyond the three
-  equality kinds); pattern kinds beyond the ten shipped
-  (`boundaryEquality` / `approximateEquality` / `variableEquality` /
-  `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
-  `stdoutEquality` / `unorderedEquality` / `differential` / `programIO`);
-  multi-provider SSO testing beyond UWaterloo DUO;
-  refresh-token handling; gamification expansion (leaderboards, more
-  badges beyond First-Try Perfect).
+**Feature backlog:** continued personalization / notebook-check expansion
+(e.g. per-student refs in pattern kinds beyond the three equality kinds);
+pattern kinds beyond the ten shipped (`PatternKind`); multi-provider SSO
+testing beyond UWaterloo DUO; refresh-token handling; gamification expansion
+(leaderboards, more badges beyond First-Try Perfect).
 
 ---
 
@@ -1477,46 +1178,49 @@ shim); and archived finished-era docs under `docs/archive/`.
 
 ## Reference Material
 
-- `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
-- `docs/lti-1-3.md` — LTI 1.3 tool support, additive to everything above: the compatibility rules (no platform registered = no change; registrations in the database, never env vars; Valence stays the default grade transport), why a launch opens a new window rather than an iframe (an iframe inside a non-isolated LMS page loses cross-origin isolation and silently fails browser grading over to the native worker), the RS256 tool key created on first use, the launch claim rules and role mapping (a TA sub-role wins over the Instructor principal sent beside it), and the five-slice plan
-- `docs/github-submissions.md` — design note with slices 1 to 6 built, before the privacy review so the review can examine working behaviour, and a "What reaches GitHub" table listing every item of data that crosses, by slice (the admin page that registers the GitHub App through the manifest flow; account linking that keeps only the GitHub user ID and login and revokes the user token at once; and submitting a commit from a repository the linked account owns, opted in per assignment by the `githubSubmission` manifest flag, which `runnerSanitized` drops — the page posts the SHA it showed, the open-assignment gate runs before any GitHub call, and the tarball becomes a zip through a capped `gzip` and a small Swift tar reader that keeps regular files only; and course repositories, where binding an organization needs the App installed on it and the instructor to be an owner, checked through a user authorization whose token is revoked before either answer is used, and a student makes their own private repository with a button, never on a page load; and display-only push webhooks, verified by `X-Hub-Signature-256`, that record a course repository's last push and never start grading, keeping only the repository ID and SHA of a payload that also carries names and email addresses; and opt-in commit statuses carrying only the public-tier count, posted after worker grading and only to a private repository): submitting from a GitHub repository and GitHub-Classroom-style course repositories, additive to everything above. Grading stays on Chickadee's runners (never GitHub Actions, so release and secret tests never reach the student's repository); a commit becomes an ordinary submission zip; the deadline is the server's receipt time, never a commit date; the ownership check that stops a student submitting a classmate's granted repository; App credentials via the manifest flow into the database and a 0600 file rather than an environment variable; and the privacy review (slice 0) that gates it all
-- `docs/brightspace-setup.md` — BrightSpace grade-sync operator runbook: Valence credential handshake (`scripts/brightspace-valence-auth.py`), env wiring, org-unit/grade-item binding, end-to-end testing against `learntest`
-- `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
-- `docs/zero-downtime-deploy.md` — production CI/CD: blue-green swap (`scripts/bluegreen-deploy.sh`), the `chickadee-deployer` auto-deploy daemon (GitHub-release SemVer gate, snapshot, auto-rollback), and the read-only admin-MCP deploy-oversight tools
-- `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
-- `docs/swift-toolchain-upgrades.md` — the semi-annual Swift upgrade job: the two-PR shape (pins, then a feature scan), where every toolchain pin lives and the grep that finds them, the five traps each of which cost a day (the `mirror-images.yml` bootstrap that fails the first CI run at `manifest unknown`, the wasm vendor gate that re-vendors on `main` unattended when `build-runner-wasm.sh` changes, a link that succeeds and still yields a broken binary, attribution by control against the old toolchain, and the Ubuntu distro bump held back because the seven interpreter suites skip rather than fail), the bar a new language feature must clear to be adopted at all, the verification gauntlet, and the agent prompts the scheduled Routine dispatches
-- `docs/runner-wasm-migration.md` — plan to share one Swift grading core (RunnerCore) between the worker + browser runner via SwiftWasm; staging, the ScriptExecutor protocol, type-hoist
-- `docs/runner-wasm-swift-6-4-review.md` — what the Swift 6.4 move changed for the browser wasm, measured: the artifact was 80 % DWARF for its whole life (three individually-documented facts, jointly invisible to a size guard that measured the whole file; one `--strip-debug` took it from 1.48 MB to 273 KB), what the remaining 270 KB is by module, the hand-rolled JSON number fold that `Double(String)` replaced and the one-ulp errors it had been putting into `score`, BridgeJS now building under the Embedded SDK (the bridge is `@JS` exports with a vendored `.d.ts` contract since slice 2; the legacy `globalThis.runner*` entry points are a JS adapter in `wasm/loader/`), why `EmbeddedRestrictions` does not cover RunnerCore, and the 7-second host-side Embedded compile that closes the "no per-PR wasm build" gap without a wasm SDK
-- `docs/personalization-phase1.md` — per-(student, assignment) seed contract (`CHICKADEE_ASSIGNMENT_SEED`), worked hand-written example
-- `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
-- `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
-- `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
-- `docs/archive/xeus-python-grading-spike.md` and `docs/archive/xeus-python-grading-migration-plan.md` — the finished Pyodide → xeus-python migration (#1271): the measured execution and boot costs, which R lessons did NOT carry over (the stderr trap and the one-expression rule are both xeus-r-only), and the slice-by-slice record of what shipped and what it cost. Archived 2026-09-20; the live state is the "Pyodide is gone (v0.5.19)" section above
-- `docs/cpp-assignment-language-decision.md` — the 2026 memo on whether C++ should become an `AssignmentLanguage`, now superseded in part: C++ is one (see `docs/cpp-support.md`). What it still governs is the browser half — its pedagogy analysis is why no xeus-cpp kernel is vendored and C++ is upload-only
-- `docs/authoring-parity.md` — what an instructor authoring in R, Lua, Octave, C++ or Racket can and cannot do that a Python author can, which differences are defects and which are correct refusals. Its work list is complete; what survives is the reasoning behind the parity checklist in `adding-a-xeus-kernel.md`, including the gaps that are correct as they stand and have been re-litigated more than once
-- `docs/multi-language-audit.md` — architecture audit of the Lua→Racket arc and the fixes it produced: the three stacking Racket runner defects (all since fixed, the last two being `.rkt` dispatching to `/bin/sh` and `racket --version`'s letter-led token defeating the runner's version parser), the upload-only rule that generalised at two of five sites, and the recurring shape behind all of them — a hand-written list of languages in a place whose types are language-generic, failing open. Carries a "Status at merge" section separating closed from deliberately open, so a later reader does not chase a fixed defect
-- `docs/java-support.md` — first-class Java support: why both upload-only arguments hold at once, why generated cases are `.sh` wrappers (single-file source mode compiles exactly one file), the three measured traps (`System.exit` hijacking the exit code, type-strict boxed numeric equality, `CLASSPATH` replacing the default `.`), the literal rules that replace C++'s refusal table, and why the capability probe is `javac` rather than `java`
-- `docs/program-io.md` — the `programIO` pattern kind: a whole submission run as a program with a case's stdin text and graded on its stdout under `exact` / `included` / `regex`; how each of the seven languages feeds input in-process (or, for C++ and Java, on a real stdin), why prompts count as output, the exit masks, and why the Python runtime now imports a submission with an empty stdin and captured streams
-- `docs/adding-a-xeus-kernel.md` — runbook for teaching Chickadee another in-browser language: which xeus kernels exist on emscripten-forge (with sizes and xeus-ABI pins), why availability is not the same as working, the browser-half steps and the check that proves each, the traps that have cost a day each, and where the irreducible per-language work begins — plus "What the Lua run actually cost", the measured postmortem of doing it once (what held, and which of R's expensive lessons turned out to be xeus-r properties that do not generalise). Now covers BOTH halves end to end: the 27 compiler-named switch arms across 17 files, the **nine** the compiler cannot see (the fifth being boolean sniffs like `isRNotebook(nb) ? .r : .python`, which type-check forever and route the new language to Python; the sixth runner capability matching, which fails in both directions and whose worse direction queues an assignment's jobs forever; the seventh the submission policy; the ninth whether the generated scripts DISPATCH at all, which the RunnerCore/Core dependency direction means the compiler probably never will see), the authoring-UI section that exists to stop you working (a seventh language needs ZERO JavaScript edits, and the failure mode is going to look for one), the browser half's own checklist, the one judgement (`moduleResolution`) that replaced three and the scorecard that sized it against Octave/Java/C++ — including the two axes the model cannot see (interpreted-vs-compiled, and dynamically-vs-statically-typed literals) and the reframe that a language need not be an `AssignmentLanguage` to be graded at all, the submission-guarantee policy (a policy value with named exemptions rather than a protocol, because a protocol makes opting out invisible), and a done test that requires the generated code be executed rather than parsed. Extended after the in-page auto-compute and `differential` work: the eval-worker half a kernel language also owes the editor (renderer → snippets → worker → smoke row → and only THEN the descriptor, because a descriptor naming a worker that does not exist makes the editor spawn a 404 silently), a per-kernel eval-quirk table (each of the three kernels needed a different shape rule and none inherited its neighbour's), the per-language literal traps (three of four are a null-ish value silently changing a container's length, and all three needed different rules), and a **parity checklist** separating what a seventh language now gets free from `allCases` — all 10 pattern kinds, both Add Test renderings, the authoring UI, the whole MCP surface, the browser inputs filename, the vendoring guard — from the four things that remain genuinely per-language
-- `docs/kernel-boot-cost.md` — what a kernel boot costs, measured per package and per environment; the failure-driven on-demand install design and why predicting the package set cannot work; why cross-user caching is unavailable; why the editor is deliberately excluded
-- `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and the R renderers for pattern families / notebook checks (#1207; `astStructure` stays Python-only)
-- `docs/language-declaration.md` — where the multi-language transition stands: language is **declared, not inferred** (`resolve(manifest:)` reads `manifest.language` and nothing else; nil means the author said "none", not "nobody has been asked"), the four doors that declare and the one boundary that still derives (`derivedDeclaration`, three callers, each recording immediately), what was deleted and why each deleted shape was compiler-invisible, and a per-site table of the fourteen remaining `?? .python` fallbacks split by the rule that decides them — fail loudly while authoring, never while grading, rendering, or extracting a student's submission
-- `docs/language-handling-review.md` — second-opinion design review of the assignment-language dispatch surface: verdicts on R extraction in RunnerCore, the Swift↔JS drift-guard hierarchy, the resolution API surface, the third-language census, and process rules. Written before Lua existed, so §4's prediction is now **scored against the real third language** — what held (bucket A never changed; every bucket-B site failed to compile) and what did not (the compiler-invisible surface is a recurring shape, not a checklist)
-- `docs/ui-consistency-audit.md` — the 2026-08 widget-layer UI audit: the drift living above the guarded token layer (five list-filter inputs in three patterns, six table-sort implementations in three markup dialects, three polls duplicating row markup in JS strings, 49 unguarded `confirm()`s, 16 copies of the trash-can SVG, a page-CSS "shadow vocabulary" re-implementing global components under page-local names), the incidental-defect list, and the ten-slice consolidation plan (S0–S9) with per-slice guards and ratchet effects
-- `docs/multi-course-roles.md` — per-course roles design (#417 arc): enrollment-row `CourseRole`, gates, staff invites
-- `docs/assignment-versioning.md` — content version history: snapshot capture, read/restore, lifecycle
-- `docs/slip-days.md` — student-managed slip days (#1228): per-course bank, self-serve extensions
-- `docs/course-terms.md` — the year and Waterloo term of each course offering: the three maintainer decisions (codes unique per term, a term required at every door and never inferred, clone by admins and by instructors), the `COALESCE` index and why NULL terms need it, the URL key and the two course-code resolvers (web prefers the viewer's offering; MCP refuses an ambiguous write), and the clone (what it copies, what it leaves, and why copied assignments start with no dates). Supersedes `clone-course-for-new-term.md` (now in `docs/archive/`)
-- `docs/solution-visibility.md` — post-deadline solution reveal: the per-assignment `SolutionVisibility` policy, the per-student reveal gate and its slip-day claim-window ceiling (shared with release-output gating), the enforcement chokepoints, and the accepted residual leak
-- `docs/datasets.md` — per-student datasets (#1083): `DatasetSpec`, deterministic per-seed slices
-- `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface (19 tools)
-- `docs/compliance/` — the UW approval package: student-data audits of both MCP surfaces, per-tool inventory, data-flow inventory, Policy 46 classification, trust boundary
-- `docs/collaborative-class-assignments.md` — assignments where students contribute individual artifacts that accumulate into a class-wide result. Written as a design note and now shipped, so it opens with a **Status** table separating built behaviour from the one thing deliberately not built: a per-student contribution cap by attribution ranking (slots bound the contribution and breadth bounds the solo hero; ranking would break the sweep's determinism). Its §"The corpus run" records what coverage % turned out to be once built — a `classAggregate` submission owned by nobody whose ordinary grade fraction IS the number, opt-in behind the goal that reads it, debounced to one run in flight, read as the newest COMPLETED row so a queued re-run never blanks a bar that freezes into a grade push — plus the three things it deliberately does not do (call `mergeNotebook`, whose slot bound would truncate a corpus to one student's worth of cells; grade a personalized assignment, which has no single set of inputs; resolve name collisions between contributors, which no language-agnostic server can). It also says plainly that it shipped against the note's own "do not start it until a real offering has run one" advice, and what to measure in the first offering as a result. The reasoning behind each choice is kept as written, including why the bound on a contribution is server-side in `mergeNotebook` rather than an editor rule
-- `docs/class-activities.md` — class activities (#1508): leaderboard challenges, beat-the-instructor bots and, in later slices, round robins, king of the hill and brackets. Opens with a **Status** table per slice; the model is two hidden axes (opponent source × class aggregation) behind one instructor-chosen `ActivityKind`, the `activity` manifest block, the footer's `metric` field (ranking, never credit), the ingest-time `leaderboard_entries` materialisation, the pseudonymous leaderboard page, the kind-locked-once-submitted rule, the slice-2 opponent primitive (`ActivityOpponentSource` read off the kind exhaustively; the structural `Job.opponent` the runner reads instead of the enum; `CHICKADEE_OPPONENT_DIR` / `CHICKADEE_MATCH_SEED`; the `activity-match` build capability `RunnerActivityGate` requires at claim; browser grading refused wherever grader-only files are), the slice-3 hill (`match_results` opened at claim and completed at ingest, `activity_champions`), the slice-4 round robin (`Job.opponents`, the worker's per-opponent loop folding into ONE collection plus `MatchReport` rows, `activity_standings` rewritten from the latest submission only, the `standing` / `matchesWon` signals that turned out to be static authorable-badge signals rather than the third category the design predicted), the slice-5 tournaments (`paired` rides the hill's runner token because a bracket match is one opponent once; a match is a `tournamentMatch` submission every student-kind filter already excludes; `TournamentPairing` in Core is the pure bracket/Swiss rule; a failed match advances the opponent so a round cannot stall), the slice-6 tests-and-code kind (the `union` aggregation reuses the slice-4 matrix outright — no table, no migration, no runner token, no worker code — and materialises nothing, because a union over matches is a query; a kill stays with the test's author after the fault is fixed while a defence counts only the code standing today, which is safe because no union shape is sweep-evaluable), and the compatibility rules every slice must keep (the `makeWorkerManifestJSON` fresh-dict trap, `runnerSanitized` stripping the block so an old runner never decodes a kind it predates)
-- `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
-- `docs/student-wardrobe.md` — the student wardrobe: cosmetic choices for the chickadee, kept apart from a trophy case (earned status, account page only, never drawn on the bird) and a participation currency (shelved). Slice W1 lets a student choose the backdrop and a border ring on the account page through one chokepoint, `AvatarCustomization`; the ring is a sprite layer (`av-ring-<ring>`, drawn last and untilted; W2 replaced W1's CSS `outline` so that patterned and seasonal rings are art like everything else), with a live preview that sets only the two custom properties and swaps the ring layer's `href` (the style guard exempts `.style.setProperty('--…')`); rings are tiered (starter, including rainbow; earned; special; seasonal, one per Waterloo term, open to choose only during that term on the Waterloo calendar and kept after it, because the chokepoint always allows the ring a student already wears) and a locked one is shown disabled and refused at the chokepoint; course staff wear the reserved staff ring, drawn from the course role and never stored, which no student option can produce; the gradcap left the first-use draw for the headband, and a one-time migration swapped the drawn ones. Carries the idea catalogue and the plan for unlocks through achievements
-- `docs/student-avatars.md` — generated chickadee avatars, shipped for the account page (art, `Core/` model, storage, per-course handles; leaderboards and the customization wardrobe are not built) replacing the account-page initials monogram, and the pseudonymous identity primitive a leaderboard would be built on: why the spec is stored rather than derived from a username (a hash of an identifier is reproducible by any classmate, which looks private without being private) and rather than re-derived from a stored seed (appending one option reshuffles everyone), why uniqueness is carried by a per-course handle rather than by the picture (uniqueness must hold at the granularity a viewer can distinguish, at the scope where they see them together — and enforcing it per course would make an avatar change when somebody drops), and how the existing UI guards decide the rendering mechanism (sprite symbols plus custom-property recolouring, since raw path data in a template already fails S4)
-- `docs/browser-freeze-investigation.md` — the Aug 2026 post-boot editor freeze (`page_unresponsive` beacons): telemetry signature, the measured root cause (two upstream listeners each forcing a reflow per IOPub output message — `updatePromptOverlayIcon` and the `:scroll-output` plugin), the runtime prototype mitigation (`Public/jl-cell-perf-patch.js`, which also carries the auto-collapse rule) and why it is not a vendored-bundle edit, and the reusable freeze tracer (`Tools/editor-smoke-test/freeze-trace-check.mjs`)
-- `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (started 2026-07, extended through 2026-10-01; start here before chasing a red check on an unrelated PR). **Seven families. Family 5 is closed for monitoring as of 2026-09-28** — the `api-tests` throughput collapse did not recur across 88 post-fix `main` runs, and three merged changes (a tmpfs `/tmp`, SQLite test databases copied from a once-migrated template, postgres schemas recycled from a pre-migrated pool) made BOTH lanes O(1) in the migration count, taking `api-tests` 291 s → 156 s and `api-tests-postgres` 391 s → 198 s. It was never root-caused, and the entry keeps "it stopped appearing" and "it is fixed" distinguishable. **Family 6 is root-caused and fixed**: `worker-tests` wedging to its ceiling after the noble→resolute move, traced to Foundation's `Process` leaking a sibling's exit-signal socket into a long-lived child, and then to glibc 2.43's abort lock inherited through swift-subprocess's `clone3`. It is the opposite shape to Family 5, and the `[ci-pressure]` telemetry separates them in one line — a Family 5 job runs slowly and keeps finishing tests, a Family 6 job stops completely (`scopes=0.0/min` with `self cpu=0.0%` while the machine idles). Do NOT read anything into per-test or per-suite durations in these logs: Swift Testing starts a test's clock when it is scheduled rather than when it gets a parallelization slot, so a healthy run's median test already reports ~80 s and every suite always ends at about the run's total. **Family 7 is an upstream toolchain crash, not ours**: the `build` job exits 139 before it compiles anything, because SwiftPM 6.4's default Swift Build engine reads its tool-discovery pipes through `DispatchIO` and trips a known use-after-free in libdispatch's epoll backend (swiftlang/swift-build#1786). The signature is `Thread "DispatchWorker" crashed` in `_dispatch_event_loop_drain` right after `[Planning 1 / N]`; the handling is one `/rerun-failed`, never a read of the diff
-- `docs/archive/` — finished-era investigations, superseded plans, and point-in-time audits (kept for the record; nothing in there describes current behaviour)
-- `CHANGELOG.md` — release history from 0.5.0; `CHANGELOG-0.4.md` — the archived 0.1.0–0.4.x history
+One line per document. Each document holds its own rules and evidence.
+
+- `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, MCP, deployment
+- `docs/lti-1-3.md` — LTI 1.3 tool support, additive to everything above, and why a launch opens a new window
+- `docs/github-submissions.md` — submitting from GitHub and course repositories, with the "What reaches GitHub" data table
+- `docs/brightspace-setup.md` — BrightSpace grade-sync operator runbook
+- `docs/operational-diagnostics.md` — observability tables, log events, metrics endpoint, ops runbook
+- `docs/zero-downtime-deploy.md` — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
+- `docs/runner-capability-profiles.md` — runner capability matching, the language gate, `minimumRunnerVersion`
+- `docs/swift-toolchain-upgrades.md` — the semi-annual Swift upgrade: where the pins live, its traps, the verification gauntlet
+- `docs/runner-wasm-migration.md` — the plan that made RunnerCore one grading core for the worker and the browser
+- `docs/runner-wasm-swift-6-4-review.md` — what the Swift 6.4 move changed for the browser wasm, measured
+- `docs/personalization-phase1.md` — the per-student seed contract (`CHICKADEE_ASSIGNMENT_SEED`)
+- `docs/inputs.md` — global and section inputs: literals, `=` expressions, `$name` references
+- `docs/personalization-pattern-families.md` — per-student values in pattern families
+- `docs/personalization-eval-runtime.md` — where, and in which language, personalization expressions run
+- `docs/archive/xeus-python-grading-spike.md`, `docs/archive/xeus-python-grading-migration-plan.md` — the finished Pyodide-to-xeus migration (#1271), measured; the live state is in the JupyterLite section above
+- `docs/cpp-support.md` — first-class C++: upload-only, the `.sh` wrapper, single-TU inclusion, the literal refusals
+- `docs/cpp-assignment-language-decision.md` — the C++ memo, superseded in part; it still governs why C++ has no browser kernel
+- `docs/authoring-parity.md` — what a non-Python author can and cannot do, and which gaps are correct refusals
+- `docs/multi-language-audit.md` — the Lua-to-Racket audit, with a "Status at merge" section
+- `docs/java-support.md` — first-class Java: why upload-only, the `.sh` wrapper, the three measured traps
+- `docs/program-io.md` — the `programIO` pattern kind: stdin in, stdout graded, per language
+- `docs/adding-a-xeus-kernel.md` — the runbook for a new language: both halves, the compiler-invisible list, the parity checklist, the per-language postmortems
+- `docs/kernel-boot-cost.md` — what a kernel boot costs, and on-demand package loading
+- `docs/r-support.md` — first-class R: runtime, personalization, renderers
+- `docs/language-declaration.md` — language is declared, never inferred, and the per-site `?? .python` table
+- `docs/language-handling-review.md` — design review of language dispatch, scored against the real third language
+- `docs/ui-consistency-audit.md` — the 2026-08 widget-layer UI audit and its consolidation plan
+- `docs/multi-course-roles.md` — per-course roles (#417): enrollment-row `CourseRole`, gates, staff invites
+- `docs/assignment-versioning.md` — content version history: capture, read, restore
+- `docs/slip-days.md` — student-managed slip days (#1228)
+- `docs/course-terms.md` — course year and term, the two course-code resolvers, cloning for a new term
+- `docs/solution-visibility.md` — the post-deadline solution reveal and its slip-day ceiling
+- `docs/datasets.md` — per-student datasets (#1083)
+- `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface
+- `docs/compliance/` — the UW approval package: student-data audits, tool and data-flow inventories
+- `docs/collaborative-class-assignments.md` — contribution assignments and class goals; opens with a Status table
+- `docs/class-activities.md` — leaderboards, bots, round robins, hills and brackets (#1508); opens with a Status table
+- `docs/unlockable-labs.md` — assignment prerequisites and sticky per-student unlocks
+- `docs/student-wardrobe.md` — cosmetic choices for the avatar, kept apart from earned status
+- `docs/student-avatars.md` — generated avatars and the per-course pseudonymous handle
+- `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
+- `docs/ci-flakiness.md` — CI flake families; start here before chasing a red check on an unrelated PR
+- `docs/archive/` — finished-era documents; nothing there describes current behaviour
+- `CHANGELOG.md` — release history from 0.5.0; `CHANGELOG-0.4.md` — the 0.1.0–0.4.x history

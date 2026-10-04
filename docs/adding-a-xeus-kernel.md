@@ -250,8 +250,8 @@ file against a fake kernel; add the new worker to its table.
 
 ### 7. Route to it
 
-- `Public/browser-runner.js` — `RoutingExecutor` picks a worker by script
-  extension.
+- `Public/grading-executors.js` — `RoutingExecutor` picks a worker by script
+  extension, from the generated table `browser-runner.js` hands it.
 - `Sources/RunnerCore/ScriptClassification.swift` — `classifyScriptInterpreter`
   maps the same extension to a native subprocess command, so the worker and the
   browser agree.
@@ -1002,7 +1002,7 @@ a value a generated test then compares.
 list in any of the authoring JS — verify with:
 
 ```
-grep -nE "'(r|lua|octave|cpp|racket)'" Public/authoring-language.js Public/inputs-editor-core.js Public/pattern-family-editor.js Public/test-editor-modal.js
+grep -nE "'(r|lua|octave|cpp|racket)'" Public/authoring-language.js Public/inputs-editor-core.js Public/pattern-family-editor.js Public/auto-compute-client.js Public/test-editor-modal.js
 ```
 
 An empty result is the invariant. A hit means someone re-added the table.
