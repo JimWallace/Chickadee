@@ -45,34 +45,22 @@ struct StaffSubmissionHistoryPageTests {
             courseBackURL: StudentCoursePaths.submissions(courseCode: course.urlKey, urlToken: token))
     }
 
-    private func html(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var body = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok, "\(path)")
-                body = res.body.string
-            })
-        return body
-    }
-
     @Test func eachRouteNamesTheStudentAndKeepsItsOwnBackLink() async throws {
         try await withAssignmentRoutesApp { app in
             let page = try await fixture(username: "hist_dana", displayName: "Dana Example", on: app)
             let diffPath = "/instructor/\(page.assignmentID)/submissions/sub_hist/diff"
 
-            let roster = try await html(page.rosterPath, cookie: page.cookie, on: app)
+            let roster = try await getHTML(page.rosterPath, cookie: page.cookie, on: app)
             #expect(roster.contains("<strong>Dana Example</strong> (hist_dana)"))
             #expect(roster.contains(#"href="/instructor/\#(page.assignmentID)/submissions">Back to submissions</a>"#))
             #expect(roster.contains(diffPath))
 
-            let course = try await html(page.coursePath, cookie: page.cookie, on: app)
+            let course = try await getHTML(page.coursePath, cookie: page.cookie, on: app)
             #expect(course.contains("<strong>Dana Example</strong> (hist_dana)"))
             #expect(course.contains(#"href="\#(page.courseBackURL)">Back to student</a>"#))
             #expect(!course.contains(diffPath), "the course route keeps the reader's way back to the student")
 
-            let diff = try await html(diffPath, cookie: page.cookie, on: app)
+            let diff = try await getHTML(diffPath, cookie: page.cookie, on: app)
             #expect(diff.contains("<strong>Dana Example</strong> (hist_dana)"))
         }
     }
@@ -82,7 +70,7 @@ struct StaffSubmissionHistoryPageTests {
         try await withAssignmentRoutesApp { app in
             let page = try await fixture(username: "hist_eli", displayName: nil, on: app)
             for path in [page.rosterPath, page.coursePath] {
-                let body = try await html(path, cookie: page.cookie, on: app)
+                let body = try await getHTML(path, cookie: page.cookie, on: app)
                 #expect(body.contains("<strong>hist_eli</strong>"), "\(path)")
                 #expect(!body.contains("(hist_eli)"), "\(path)")
             }

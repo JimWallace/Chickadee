@@ -15,18 +15,6 @@ import VaporTesting
 
 @Suite struct AvatarStaffRingRoutesTests {
 
-    private func page(_ path: String, cookie: String, on app: Application) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                html = res.body.string
-            })
-        return html
-    }
-
     private func enroll(
         _ username: String, role: CourseRole = .student, on app: Application
     ) async throws -> APIUser {
@@ -67,7 +55,7 @@ import VaporTesting
             _ = try await enroll("ring_ta", role: .ta, on: app)
             _ = try await enroll("ring_pupil", on: app)
 
-            let html = try await page("/instructor/students", cookie: cookie, on: app)
+            let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
             let staffTable = try #require(html.range(of: "id=\"course-staff-table\""))
             let studentTable = try #require(html.range(of: "id=\"enrolled-students-table\""))
             let staffPart = html[staffTable.lowerBound..<studentTable.lowerBound]
@@ -84,7 +72,7 @@ import VaporTesting
             let cookie = try await loginUser(
                 username: ta.username, password: "testpassword", role: "user", on: app)
 
-            let html = try await page("/account", cookie: cookie, on: app)
+            let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.contains("<use href=\"#av-ring-staff\" data-av-ring/>"))
             #expect(html.contains("Course staff wear the staff ring."))
             #expect(!html.contains("name=\"border\""))
@@ -99,7 +87,7 @@ import VaporTesting
             let ta = try await enroll("ring_ta_post", role: .instructor, on: app)
             let cookie = try await loginUser(
                 username: ta.username, password: "testpassword", role: "user", on: app)
-            _ = try await page("/account", cookie: cookie, on: app)
+            _ = try await getHTML("/account", cookie: cookie, on: app)
             let before = try await storedSpec(ta, on: app)
 
             let refused = try await postChoices(["border": "ember"], cookie: cookie, on: app)
@@ -119,13 +107,13 @@ import VaporTesting
             let pupil = try await enroll("ring_rainbow", on: app)
             let cookie = try await loginUser(
                 username: pupil.username, password: "testpassword", role: "user", on: app)
-            _ = try await page("/account", cookie: cookie, on: app)
+            _ = try await getHTML("/account", cookie: cookie, on: app)
 
             let saved = try await postChoices(["border": "rainbow"], cookie: cookie, on: app)
             #expect(saved == "/account?avatar=saved#chickadee")
             #expect(try await storedSpec(pupil, on: app).border == .rainbow)
 
-            let html = try await page("/account", cookie: cookie, on: app)
+            let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.contains("<use href=\"#av-ring-rainbow\" data-av-ring/>"))
         }
     }
@@ -135,7 +123,7 @@ import VaporTesting
             let pupil = try await enroll("ring_locked", on: app)
             let cookie = try await loginUser(
                 username: pupil.username, password: "testpassword", role: "user", on: app)
-            let html = try await page("/account", cookie: cookie, on: app)
+            let html = try await getHTML("/account", cookie: cookie, on: app)
             for value in ["spectrum", "twotone", "stitched"] {
                 #expect(
                     html.contains(

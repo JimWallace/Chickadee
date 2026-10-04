@@ -18,13 +18,9 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-adminactivity")
     }
 
-    private func loginAsAdmin() async throws -> String {
-        try await loginUser(username: "activity_admin", password: "testpassword", role: "admin", on: app)
-    }
-
     @Test func activityEndpoint_returnsRequestedWindow() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("activity_admin", on: app)
             try await app.asyncTest(
                 .GET, "/admin/activity?window=1w",
                 beforeRequest: { req in
@@ -42,7 +38,7 @@ import VaporTesting
 
     @Test func activityEndpoint_defaultsTo24hOnBadWindow() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("activity_admin", on: app)
             try await app.asyncTest(
                 .GET, "/admin/activity?window=bogus",
                 beforeRequest: { req in
@@ -74,7 +70,7 @@ import VaporTesting
 
     @Test func overviewPageRendersActivitySection() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin()
+            let cookie = try await loginAsAdmin("activity_admin", on: app)
             try await app.asyncTest(
                 .GET, "/admin",
                 beforeRequest: { req in
