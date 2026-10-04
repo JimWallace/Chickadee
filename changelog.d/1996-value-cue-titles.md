@@ -1,0 +1,3 @@
+### Fixed
+
+- **The amber cue on an input value names its cause, and a note links the explanation.** The Global Inputs panel, the section inputs and a family's Variables table gave every loose value the title "Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict." That was two sentences, and it was wrong for a value pasted in the language's own syntax, which the editor rewrites to a list or a dict. The title is now "Kept as text" or "Read as a pasted literal", from one helper, `ChickadeeLanguage.looseValueTitle`. The new section "The amber cue on a value" in `docs/inputs.md` explains both, and a one-sentence note under each editor links it, because a touch screen does not show a title (#1996).

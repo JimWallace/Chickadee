@@ -69,6 +69,40 @@ substitutes into starter-notebook `{{name}}` placeholders.
     (`= 1/0`, `= unknown_var`, ...) return a 400 with the failure
     message before any student sees them.
 
+## The amber cue on a value
+
+The Global Inputs panel, a section's inputs table and a pattern family's
+Variables table read each literal value by the assignment language's rules
+(`ChickadeeLanguage.parseValue` in `Public/authoring-language.js`), in this
+order:
+
+1. the language's own true, false and null spellings, such as Python's `True`
+   or R's `TRUE`;
+2. JSON;
+3. a value pasted in the language's own syntax: the editor changes single
+   quotes to double quotes and the true, false and null spellings to JSON's,
+   then reads the result as JSON;
+4. plain text.
+
+A value read by step 1 or 2 is exact. A value read by step 3 or 4 gets an
+amber border, and its title tells you which step read it. The editors link
+this section from the note under each table, because a touch screen does not
+show a title (#1996).
+
+- **Kept as text** (step 4). The value is not JSON and not a pasted value, so
+  the editor stores it as a string. This is usually a typing error in a list or
+  a dictionary, such as a missing comma, quote or bracket. Correct the syntax.
+  To store a string on purpose, put it in double quotes, for example
+  `"hello"`. The border then goes away.
+- **Read as a pasted literal** (step 3). The editor rewrote the value before
+  it read it. For example, Python's `['a', True]` becomes the JSON
+  `["a", true]`. The stored value is the rewritten one, so make sure that it is
+  what you mean. To remove the border, type the value as JSON.
+
+On the Global Inputs panel and a section's inputs, a value that starts with `=`
+is a per-student expression (see above). It has a green tint, not the amber
+border, unless nothing follows the `=`.
+
 ## How values flow
 
 Inputs are **inlined at save time**.  When the instructor saves a value

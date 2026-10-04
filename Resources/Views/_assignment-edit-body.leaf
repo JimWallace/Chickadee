@@ -390,6 +390,10 @@
             #endfor
         </tbody>
     </table>
+    <p class="field-note">
+        If a value has an amber border, read
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/inputs.md#the-amber-cue-on-a-value" target="_blank" rel="noopener noreferrer">the amber cue on a value</a>.
+    </p>
 </section>
 
 <!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form

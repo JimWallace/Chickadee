@@ -748,13 +748,14 @@
             nameEl.classList.toggle('input-invalid', !!nameError);
             nameEl.title = nameError || '';
 
-            // Value validity.  Empty stays silent until typed; a bare-string
-            // fallback — almost always a typo in dict/list JSON — gets the
-            // amber needs-a-look cue.
+            // Value validity.  Empty stays silent until typed; a value that
+            // was not read exactly — a bare-string fallback, almost always a
+            // typo in dict/list JSON, or a rewritten pasted literal — gets the
+            // amber needs-a-look cue, and its title says which (#1996).
             var parsed = tryParseVarValue(rawVal);
             var valueOk = parsed.kind !== 'empty' && parsed.strict;
             var valueError = (parsed.kind !== 'empty' && !parsed.strict)
-                ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict.'
+                ? ChickadeeLanguage.looseValueTitle(rawVal)
                 : null;
             valueEl.classList.toggle('input-attention', !!valueError);
             valueEl.title = valueError || (valueOk ? 'Parsed as ' + parsed.kind : '');

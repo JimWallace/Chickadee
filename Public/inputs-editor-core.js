@@ -119,10 +119,12 @@
                     ? 'Expression body is empty after the leading `=`.'
                     : 'Per-student expression. Server evaluates with `seed` bound and substitutes the result.';
             } else {
+                // A loose reading gets the amber cue; the title names which
+                // kind of loose reading it was (#1996).
                 valueOk = classified.strict;
                 hint = classified.strict
                     ? ''
-                    : 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.';
+                    : ChickadeeLanguage.looseValueTitle(rawVal);
             }
 
             // Classification cues are classes (styles.css: .input-expression is
