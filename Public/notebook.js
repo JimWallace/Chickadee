@@ -31,7 +31,11 @@
     const statusEl   = document.getElementById('nb-status');
     const submitBtn  = document.getElementById('nb-submit');
     const resultsEl  = document.getElementById('nb-results');
-    const uploadFile = document.getElementById('nb-upload-file');
+    // The .ipynb upload inputs: the failure panel's, and the slow-boot
+    // notice's (#2028). One handler serves both (section 3 below).
+    const uploadFiles = ['nb-upload-file', 'nb-slow-upload-file']
+        .map(function (id) { return document.getElementById(id); })
+        .filter(Boolean);
     // Course-staff authoring control; absent for students (see notebook.leaf).
     const saveAssignmentBtn = document.getElementById('nb-save-assignment');
     // `let`, not `const`: the workbench can switch which notebook is open
@@ -1864,10 +1868,10 @@
     // 3. Upload & submit — read file → queue runner grading
     // -------------------------------------------------------------------------
 
-    if (uploadFile && readOnly) {
-        uploadFile.disabled = true;
-    }
-    if (uploadFile) {
+    for (const uploadFile of uploadFiles) {
+        if (readOnly) {
+            uploadFile.disabled = true;
+        }
         uploadFile.addEventListener('change', async () => {
             if (readOnly) {
                 uploadFile.value = '';

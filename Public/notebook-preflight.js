@@ -12,7 +12,8 @@
 // On either failure: hide the iframe, reveal the #js-nb-fallback section
 // containing a direct .ipynb upload picker, and POST a record to
 // /api/v1/client-diagnostics so the instructor dashboard can surface the
-// affected student.
+// affected student. A slow boot is not a failure: it reveals the
+// #nb-slow-notice banner and keeps the editor.
 //
 // When all preflight checks pass, this script makes ZERO visible changes to
 // the page — the iframe loads normally and the watchdog is silently armed
@@ -115,10 +116,14 @@
         if (submit)   submit.style.display = 'none';
         if (fallback) fallback.hidden = false;
 
+        // The panel replaces the slow-boot notice: one state at a time.
+        const slowNotice = document.getElementById('nb-slow-notice');
+        if (slowNotice) slowNotice.hidden = true;
+
         // Memory-crash variant: the editor DID load, but the kernel died on a
         // fatal WASM/OOM crash mid-session — swap in memory-specific copy on the
         // same fallback panel (which already offers .ipynb upload + reset link),
-        // instead of the generic "Editor didn't load" message.
+        // instead of the generic "Editor did not load" message.
         if (info.variant === 'memory' && fallback) {
             const titleEl = fallback.querySelector('.js-nb-fallback-title');
             const textEl  = fallback.querySelector('.js-nb-fallback-text');
@@ -264,35 +269,40 @@
     // ----------------------------------------------------------------
     //
     // Driven by notebook.js's WebKit slow-boot watchdog: if the editor hasn't
-    // reported a healthy kernel within the window, reveal the .ipynb-upload
-    // fallback panel with a polite, plain-English message WITHOUT hiding the
-    // editor. Some devices (notably low-memory iPads) never finish booting the
-    // editor; rather than strand the student on a spinner, we surface the
-    // upload path and suggest a different device — while leaving the editor
-    // visible so a merely-slow-but-healthy boot still works (so this can never
-    // hide a working editor). Gated by `_failureShown` so a real failure
-    // (which DOES hide the editor) wins. (The pre-xeus editor also stalled on
-    // Safari 18.x; the xeus editor boots fine there — Aug 2026 telemetry.)
+    // reported a healthy kernel within the window, reveal a dismissible
+    // warning banner with an .ipynb upload WITHOUT hiding the editor. Some
+    // devices (notably low-memory iPads) never finish booting the editor;
+    // rather than strand the student on a spinner, we surface the upload path
+    // and link the device advice — while leaving the editor visible so a
+    // merely-slow-but-healthy boot still works (so this can never hide a
+    // working editor). Gated by `_failureShown` so a real failure (which DOES
+    // hide the editor) wins, and showFailure hides this banner. (The pre-xeus
+    // editor also stalled on Safari 18.x; the xeus editor boots fine there —
+    // Aug 2026 telemetry.)
+    //
+    // This used to rewrite and reveal the failure panel (#js-nb-fallback),
+    // which is a role="alert" stand-in for content that is not there, while
+    // the editor was still there and loading (#2028). Its dismissal does not
+    // persist, unlike the two other notices: a slow boot is a state of this
+    // page load, not of the device.
 
     let _slowNoticeShown = false;
     function showSlowEditorNotice() {
         if (_slowNoticeShown || _failureShown) return;
         _slowNoticeShown = true;
 
-        const fallback = document.getElementById('js-nb-fallback');
-        if (fallback) {
-            const titleEl = fallback.querySelector('.js-nb-fallback-title');
-            const textEl  = fallback.querySelector('.js-nb-fallback-text');
+        const notice = document.getElementById('nb-slow-notice');
+        if (notice) {
+            const titleEl = notice.querySelector('.js-nb-slow-title');
+            const textEl  = notice.querySelector('.js-nb-slow-text');
             if (titleEl) titleEl.textContent = Core.FALLBACK_COPY.slow.title;
             if (textEl) textEl.textContent = Core.FALLBACK_COPY.slow.text;
-            const resetLink = document.getElementById('nb-reset-editor-link');
-            if (resetLink) {
-                try {
-                    resetLink.href = Core.resetEditorHref(location.pathname, location.search);
-                } catch (_) { /* keep the static href */ }
+            const closeBtn = document.getElementById('nb-slow-notice-dismiss');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () { notice.hidden = true; });
             }
             // Reveal the upload path; do NOT hide the editor — it may still boot.
-            fallback.hidden = false;
+            notice.hidden = false;
         }
 
         reportEvent(Core.slowBootEvent(navigator.userAgent));
