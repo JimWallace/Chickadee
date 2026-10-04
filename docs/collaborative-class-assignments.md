@@ -48,6 +48,58 @@ One thing left to the instructor's hand for now: **a slot is declared by
 `chickadee_slot` cell metadata**, which is hand-edited in the notebook JSON.
 There is no authoring affordance for it yet.
 
+## Class goals in force
+
+This section states the class-goal rules as built. The sections after it keep
+the reasoning and the history.
+
+**A class goal counts one of three things.** An `Achievement` with scope
+`.classWide` reads one of three arithmetics:
+
+- **Students meeting a grade.** How many students' best whole-assignment grade
+  clears a threshold, over the enrolled roster. This was the only arithmetic
+  before contribution assignments.
+- **The union of items** (`AchievementSignal.itemsCovered`). The count of
+  DISTINCT items in the `class_item_coverage` table, for example "the class has
+  found 12 of the 15 seeded bugs". It can be scoped to one suite section, so a
+  bug hunt counts its variants and not the well-formedness gate beside them.
+- **The corpus percent** (`AchievementSignal.classCoverage`). The newest
+  COMPLETED `class_coverage_runs` row: one `kind == .classAggregate`
+  submission, graded once, whose grade fraction is the number. A union of
+  per-item rows cannot give this number. It scopes nothing, because the run
+  gives one number for the assignment (see "The corpus run").
+
+**`isSweepEvaluableClassGoal` admits exactly four shapes:** no conditions, a
+single `grade atLeast`, a single `itemsCovered atLeast`, or a single
+`classCoverage atLeast`. Every other shape is refused at save time and skipped
+with a log by the sweep. That guard is the reason a hand-authored manifest
+cannot silently mis-grade a bonus (audit A4). Admit a new shape only together
+with the evaluator that reads it; the arity has never moved.
+
+**A union or corpus goal grades on the SMALLER of two halves.** The halves are
+coverage (the item count or the corpus percent) and breadth (at least
+`classFraction` of the roster contributed one covered item, or one cell to the
+corpus). Breadth is why there is no per-student contribution cap: one student
+who finds everything reaches full coverage and then fails on breadth. Crediting
+each student only their K rarest items would also bound that student, but it
+breaks determinism, because a later submission can change which of an earlier
+student's items counted.
+
+**The two halves scope differently, on purpose.**
+
+- **Coverage counts every row**, including a row found by a student who has
+  since dropped. The item was covered, and the number must never retreat,
+  because it freezes into a LEARN push.
+- **Breadth counts only currently-enrolled students**, because it is a fraction
+  of the CURRENT roster (audit A7).
+- A corpus goal has the same split. The run's number is what it measured, and
+  its stored contributor list is intersected with the current roster.
+
+`achievement_results` stores `items_covered` / `items_required` (and
+`coverage_percent` / `coverage_required`). It does not recompute them, so a
+frozen row can say what coverage produced the bonus in each student's grade of
+record.
+
 ## Summary
 
 The request decomposes into three independent mechanisms. Two exist today.

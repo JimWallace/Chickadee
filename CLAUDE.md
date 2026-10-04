@@ -387,73 +387,19 @@ covered too, since instructor validation is enqueued as a `kind == .validation`
 submission and always runs on the **native worker**. See
 `docs/runner-capability-profiles.md`.
 
-**A class goal counts one of three things, and the sweep will evaluate no fourth.**
-`Achievement` scope `.classWide` used to mean exactly one arithmetic: how many
-students' best whole-assignment grade cleared a threshold, over the enrolled
-roster. A collaborative assignment needs the other one — the **union** of what
-the class produced, "the class has found 12 of the 15 seeded bugs" — so
-`AchievementSignal.itemsCovered` counts DISTINCT items in the
-`class_item_coverage` table, optionally scoped to one suite section (a bug
-hunt's variants, not the well-formedness gate beside them).
-
-The third arithmetic is the **corpus percent**, "the class collectively reaches
-80% coverage", which a union of per-item rows cannot produce because no row can
-say what fraction of a reference a combined test corpus exercises.
-`AchievementSignal.classCoverage` reads the newest completed
-`class_coverage_runs` row — one synthetic `kind == .classAggregate` submission
-holding every contributor's slot cells, graded once, its ordinary grade fraction
-being the number. It scopes nothing: the run produces one number for the
-assignment, so a `.section` target would name a share of a reference nothing
-measured. See
+**A class goal counts one of three things, and the sweep evaluates no fourth.**
+`isSweepEvaluableClassGoal` admits exactly four shapes: no conditions, or a
+single `grade`, `itemsCovered` or `classCoverage` `atLeast`. Every other shape
+is refused at save time and skipped with a log by the sweep, so a hand-authored
+manifest cannot mis-grade a bonus. A union or corpus goal grades on the smaller
+of coverage and breadth. See
 [docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md)
-§"The corpus run".
-
-`isSweepEvaluableClassGoal` admits **exactly four shapes**: no conditions, a
-single `grade atLeast`, a single `itemsCovered atLeast`, or a single
-`classCoverage atLeast`. Everything else is refused at save time and
-skipped-with-a-log by the sweep. That guard is the reason a hand-authored
-manifest cannot silently mis-grade a bonus (audit A4), so admitting each new
-shape meant admitting exactly it — the arity has never moved.
-
-A union or corpus goal is graded on the SMALLER of two halves: coverage (the
-item count, or the corpus percent) and **breadth** (at least `classFraction` of
-the roster contributed at least one covered item, or one cell to the corpus).
-Breadth is why there is no per-student contribution cap: one
-student finding everything reaches full coverage and then fails on breadth. The
-alternative — crediting each student only their K rarest items — bounds the solo
-hero too, and breaks determinism doing it, because a later submission can change
-which of an earlier student's items counted.
-
-The two halves scope differently, and the asymmetry is deliberate. **Coverage
-counts every row**, including one found by a student who has since dropped: the
-item was covered, and the number must never retreat because it freezes into a
-LEARN push. **Breadth counts only currently-enrolled students**, because it is a
-fraction of the CURRENT roster — audit A7's shape. A corpus goal carries the
-same split, one level up: the run's number is what it measured, and its stored
-contributor list is intersected with today's roster. `achievement_results` stores
-`items_covered` / `items_required` (and `coverage_percent` /
-`coverage_required`) rather than recomputing them, so a frozen row
-can say what coverage produced the bonus in every student's grade of record. See
-[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
+§"Class goals in force".
 
 **Post-deadline reveals wait for the slip-day claim window, not just the
-deadline.** Slip days are claimed *after* the due date (first-claim window
-`dueAt + extensionHours`), so "this student's effective deadline has passed"
-does not mean they are done buying time — gating a reveal on it alone lets a
-student read the revealed material at due+1min, claim a slip day, and act on
-it. `postDeadlineRevealDeadline` (AssignmentDeadlineService) is the one
-resolver for that moment — the later of the effective deadline and
-`slipDayClaimWindowCeiling`, the end of any claim window still reachable —
-and both reveal surfaces flow through it: release-tier output
-(`releaseVisibilityDeadline` — whose hold a course may switch off on the
-slip-day settings, `SlipDayPolicy.releaseRevealHold`, restoring the pre-hold
-timing knowingly) and the per-assignment **solution reveal**
-(`SolutionVisibility.afterDue`, off by default), which lets students open the
-reference solution — personalized with their own inputs — once their reveal
-moment passes and never honours that opt-out. An assignment with no due date reveals immediately (posted
-lecture material); enabling the policy is refused with no solution on file;
-a manual deadline override suppresses it. See
-[docs/solution-visibility.md](docs/solution-visibility.md).
+deadline.** `postDeadlineRevealDeadline` (`AssignmentDeadlineService`) is the one
+resolver for that moment. Release-tier output and the solution reveal both use
+it. See [docs/solution-visibility.md](docs/solution-visibility.md).
 
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
@@ -482,45 +428,14 @@ The current implementation is tested against UWaterloo DUO; claim names
 (`winaccountname`, `user_id`) are in `OIDCIDTokenClaims.swift` and can be
 adjusted for other providers.
 
-**The CSP `script-src` permits no inline execution, and that is load-bearing
-for the templates.** An AppScan run on 2026-09-11 reported `'unsafe-inline'` in
-`script-src` as a High (CVSS 8.2); it is gone (#1516). What this costs a future
-author is worth knowing BEFORE writing a page: an inline `<script>` in a
-template **does not run**, and an `onclick=` / `onchange=` attribute **never
-fires** — neither fails loudly, the control just stops responding. Page JS goes
-in a `Public/*.js` file; a handler becomes a data attribute read by a delegated
-listener (`data-ck-click-target`, `data-ck-submit-on-change`,
-`data-ck-select-all`, all at the foot of `app.js`). `<script
-type="application/json">` seeds are data blocks and are unaffected.
-`check-styles.sh` rules 3b/3b-2/3b-3 catch all three shapes, including the
-one-line `<script>` that the JSON-island exemption used to let through.
-
-`'unsafe-eval'` stays — JupyterLab compiles JSON-schema validators at run time,
-measured with Pyodide fully removed — and so does `style-src 'unsafe-inline'`,
-which the templates use for CSS custom-property assignments. The vendored
-JupyterLite entry points carry inline bootstraps we do not author, so they ride
-the policy by **sha256 hash**, derived at startup from the bytes FileMiddleware
-actually serves (`EditorInlineScriptHashes`) and attached to `/jupyterlite/`
-responses only. Derived rather than pinned because a hash in source goes stale
-the moment a kernel is re-vendored, and the failure is upstream of everything
-the editor smoke test measures — the page breaks before a kernel is fetched.
-A nonce cannot do this job at all: those are static files, and the one script
-that would most want a nonce hands the document to `document.write`, which
-inherits the writing response's policy. Chickadee's own stray-editor-tab page
-is the one inline script it still serves, under a hash named from the same
-constant that renders it — inline on purpose, since a page whose only job is to
-close the tab the instant it paints should not first wait on a fetch that can
-fail.
-
-The scan-side lesson is the more general one. **ZAP baseline had been running
-weekly the whole time and could not see this**, because `.zap/rules.tsv` sets a
-threshold per RULE, ZAP reports every CSP finding under one rule id, and the
-`IGNORE` that accepted `'unsafe-eval'` accepted `'unsafe-inline'` with it. Do
-not suppress a coarse third-party rule to accept one of its findings; assert
-the policy where you have an exact opinion about it
-(`scripts/check-security-headers.sh` against the running container,
-`ContentSecurityPolicyInlineScriptTests` per directive) and leave the rule at
-`WARN`.
+**The CSP `script-src` permits no inline execution (#1516).** An inline
+`<script>` in a template does not run, and an `onclick=` / `onchange=` attribute
+never fires. Neither failure is loud. Put page JS in a `Public/*.js` file and
+use the delegated data attributes at the foot of `app.js` (`docs/ui-design.md`
+§"Page-local scripts"; `check-styles.sh` rules 3b, 3b-2 and 3b-3). Do not
+suppress a coarse third-party scanner rule to accept one of its findings. What
+the policy keeps, and why, is in the `scripts/check-security-headers.sh`
+header.
 
 **HTTPS enforcement is optional and proxy-aware.** `AppSecurityConfiguration`
 reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
@@ -547,64 +462,21 @@ automatically if `.local-runner-autostart` exists (or is toggled via the admin
 dashboard). This is a development convenience; production runs the runner
 separately.
 
-**MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server *and*
-its own OAuth 2.1 authorization server, so an agent (e.g. the Claude connector)
-can manage course content on an instructor's behalf. Gated by `MCP_MODE`
-(`off` / `read_only` / `read_write`). The server is **dual-era** (#1218): the
-era is resolved *per request* — a body whose `_meta` carries
-`io.modelcontextprotocol/protocolVersion` gets the modern 2026-07-28 semantics
-(mandatory `server/discover`, `resultType` + server `_meta` on every result,
-mirrored `MCP-Protocol-Version`/`Mcp-Method`/`Mcp-Name` header validation,
-HTTP-visible protocol errors), anything else keeps the legacy `initialize`
-behaviour unchanged. `initialize` negotiates only among the legacy revisions,
-so a handshake client is never handed a protocol it cannot speak. See
-`Transport/MCPModernTransport.swift` and `docs/mcp-2026-07-28-revision.md`. The browser OAuth flow is Authorization
-Code + PKCE (S256); codes, consent tokens, and refresh tokens are stored only as
-SHA-256 hashes and are strictly single-use — consumption is an **atomic
-conditional `UPDATE … WHERE consumed = false RETURNING`** so concurrent
-exchanges can't replay a code. Refresh tokens rotate with prior-hash theft
-detection; the human's role is re-checked at consent and on every refresh.
-Scopes are clamped to the mode ceiling (`MCPMode.advertisedScopes`, the single
-source for discovery + DCR). Access tokens are short-lived ES256 JWTs minted by
-`MCPTokenAuthority`; bearer auth + per-request scope clamping live in
-`MCPBearerAuthMiddleware`. An hourly reaper drops dead OAuth rows. The consent
-POST is deliberately cookie-independent (identity + CSRF ride the single-use
-consent token) so it survives Safari/ITP cross-site cookie blocking.
-The `initialize` instructions end with the default **authoring-voice guide**
-(`MCPServerInstructions.authoringVoice` — see "Voice and Register" below).
-Every course inherits that guide; a course's instructors can take it over on
-the `/instructor` MCP tab, which seeds one editable box with the default and
-stores the edited copy in `courses.mcp_instructions` (nil = still inheriting).
-A customized course's guide **replaces** the default for that course's content
-and is appended as a labelled block at initialize (`MCPCourseGuidance.swift`);
-an inheriting course adds nothing, since the default is already in the base
-text. Both are live MCP resources too (`chickadee://docs/authoring-voice`,
-`chickadee://course/<code>/authoring-guidance` — which serves whichever guide
-is in force) so agents can re-read them mid-session; the initialize copy is
-frozen per connection. Advisory text only — it never alters tools, scopes, or
-the admin surface.
+**MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server and
+its own OAuth 2.1 authorization server. `MCP_MODE` (`off` / `read_only` /
+`read_write`) gates it. The protocol era is resolved per request (#1218), and
+`initialize` never negotiates up to the modern revision. OAuth codes and tokens
+are stored only as hashes and are consumed by an atomic conditional `UPDATE`,
+so a code cannot be replayed. See `docs/architecture.md` §"MCP surfaces" and
+`docs/mcp-2026-07-28-revision.md`. The `initialize` instructions end with the
+authoring-voice guide, and a course's instructors can replace it for their
+course (see "Voice and Register" below).
 
-**The MCP surface reports its own languages, and holds none of their names
-(#1290).** `get_server_info` returns a `languages` payload
-(`MCPLanguageCapability`): per language, its wire token and display name, its
-script/generated/source extensions, editor-kernel-vs-upload-only, expression
-support and interpreter, and the supported/refused pattern-family and
-notebook-check kinds **with a reason for each exclusion** — the check-kind
-answers taken from `notebookCheckKindUnsupportedReason`, the same predicate the
-save-time refusal calls, so the payload cannot promise what a save would reject.
-Before it, an agent discovered that six check kinds are refused on Lua (and all
-ten on C++ and Racket) by getting rejected. Every rendering of the language list
-in agent-facing copy derives from `allCases` via `MCPLanguageProse` (display-name
-prose, wire-token prose, `"a" | "b"` schema union); no description or schema
-holds a language name. This is the SECOND fix of that defect: #1288 derived the
-one list it was looking at, and one language later five other hand-typed lists
-still stopped at `cpp` — `set_assignment_language` refusing Racket in prose while
-its derived JSON `enum` accepted it — and four tool descriptions still called
-personalization expressions "Python source", the very sentence #1288 existed to
-fix. So the guard is scoped to the whole served catalog, not to one string:
-`MCPLanguageCoverageTests` fails on any list that stops short of `allCases`
-anywhere in the instructions, tool descriptions or schemas. A seventh language
-needs no edit to any MCP prose.
+**The MCP surface holds no language names (#1290).** Every language list in
+agent-facing copy derives from `allCases` (`MCPLanguageProse`), and
+`get_server_info` reports a `languages` payload. `MCPLanguageCoverageTests`
+fails on any list that stops short. A new language needs no edit to MCP prose.
+See `docs/adding-a-xeus-kernel.md`, compiler-invisible item 8.
 
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —
@@ -691,28 +563,13 @@ the canonical `/testsetups/:id/submit` handlers remain active for
 compatibility. The first segment is the course's `urlKey`: the code, or
 "CS135-F26" for a course with a term (see the next entry).
 
-**A course is one offering: it records a year and a term, and its code is
-unique per term (docs/course-terms.md).** `AcademicTerm` (Core) is a
-four-digit year plus a Waterloo `TermSeason` (Winter, Spring, Fall), stored
-as the nullable `term_year` / `term_season` columns and read only through
-`APICourse.term`. A new course must declare one at every door (admin create,
-clone, bundle import records the bundle's), and nothing infers one — a
-course with no term means "no term recorded", exactly the
-language-declaration rule. The unique index is `(code, COALESCE(term_year,
-0), COALESCE(term_season, ''))` over active courses; the COALESCE is what
-keeps two term-less courses from sharing a code, because SQL NULLs are
-distinct. So **a bare code can name more than one active course**, and every
-code lookup must pick one: the web resolver `findActiveCourse(byKey:viewer:on:)`
-takes an exact code first, then a "CODE-F26" key, then prefers the viewer's
-enrolled offering, then the newest term; MCP's `resolveMCPCourse` does the
-same but **refuses a write** through a code that still names several
-offerings. Do not add a code-only lookup; use one of those two. Cloning into
-a new term is `CourseCloneService` (admin course page, and the instructor
-"New term" tab, which enrolls the cloning instructor): content and settings
-come along, people, their work and LMS bindings do not, and every copied
-assignment starts closed with no dates and its solution reveal off, because
-a stale or missing date would let an "after due" reveal show the answer key
-on opening.
+**A course is one offering: a code plus a year and a term
+([docs/course-terms.md](docs/course-terms.md)).** Every door that creates a
+course declares a term, and nothing infers one. A bare code can name more than
+one active course. **Do not add a code-only lookup.** Use
+`findActiveCourse(byKey:viewer:on:)` on the web or `resolveMCPCourse` in MCP;
+MCP refuses a write through an ambiguous code. A clone for a new term starts
+every copied assignment closed, with no dates and the solution reveal off.
 
 **Runner-side LRU test setup cache (v0.4.41).** `TestSetupCache` (Swift actor,
 default 16 entries) keeps fully-prepared test setup directories keyed by

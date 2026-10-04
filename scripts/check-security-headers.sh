@@ -24,6 +24,36 @@ set -uo pipefail
 # actually receives from a booted container, which is the layer a DAST scanner
 # sees and the layer a proxy or middleware-ordering mistake can change.
 #
+# So: do not suppress a coarse third-party rule to accept one of its findings.
+# Assert the policy where you have an exact opinion about it (here, and in the
+# test above), and leave ZAP rule 10055 at WARN in `.zap/rules.tsv`.
+#
+# What the policy keeps, and why:
+#
+# - `script-src` has no `'unsafe-inline'`. An inline `<script>` in a template
+#   does not run, and an `onclick=` / `onchange=` attribute never fires.
+#   Neither failure is loud. Page JS goes in a `Public/*.js` file; see
+#   docs/ui-design.md, "Page-local scripts", and check-styles.sh rules 3b,
+#   3b-2 and 3b-3.
+# - `'unsafe-eval'` stays. JupyterLab compiles JSON-schema validators at run
+#   time. This was measured with Pyodide fully removed.
+# - `style-src 'unsafe-inline'` stays. The templates assign CSS custom
+#   properties in `style=""`.
+# - The vendored JupyterLite entry points carry inline bootstraps that
+#   Chickadee does not author. They are allowed by sha256 hash, on
+#   `/jupyterlite/` responses only. `EditorInlineScriptHashes` derives the
+#   hashes at startup from the bytes that FileMiddleware serves. A hash pinned
+#   in source goes stale when a kernel is re-vendored, and the page then
+#   breaks before a kernel is fetched, upstream of the editor smoke test.
+# - A nonce cannot do this job. The entry points are static files, and the
+#   script that most needs a nonce hands the document to `document.write`,
+#   which inherits the policy of the writing response.
+# - Chickadee's stray-editor-tab page is the one inline script it serves. It
+#   is allowed by a hash of the same constant that renders it
+#   (`JupyterLiteAppIndexMiddleware.selfCloseScript`). It stays inline because
+#   the page must close the tab as soon as it paints, with no fetch that can
+#   fail first.
+#
 # Usage: scripts/check-security-headers.sh [base-url]   (default localhost:8080)
 
 base_url="${1:-http://localhost:8080}"

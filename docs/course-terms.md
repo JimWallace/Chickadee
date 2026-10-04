@@ -250,8 +250,9 @@ used (`courseCode`, `courseKey`, `courseTerm`), as the content tools do (#1781).
 
 ## 5. Places that find a course by its code
 
-After slice 3, a code can name more than one active course. These places must
-use the lookup rule in slice 3:
+After slice 3, a code can name more than one active course. **Do not add a
+code-only lookup.** Use `findActiveCourse(byKey:viewer:on:)` on the web or
+`resolveMCPCourse` in MCP. These places must use the lookup rule in slice 3:
 
 | Place | File |
 |---|---|
