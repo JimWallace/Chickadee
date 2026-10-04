@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.391] - 2026-10-04
+
+### Removed
+
+- **Pyodide leftovers in the browser runner.** Nothing called `STDOUT_REDIRECT_PY`, `runScriptPython`, `CAPTURE_OUTPUT_PY`, `RESTORE_STREAMS_PY` or `preloadPackagesForFiles` in `Public/grading-shared.js`, so they are deleted. The unused `writeFilesToPyFS` name is gone too; `writeFilesToEmscriptenFS` is the only name for that writer now. `extractNotebook` in `Public/browser-runner.js` wrote to a Pyodide file system, and only tests called it. It is deleted, and its tests now call `extractNotebookToMap`, which grading uses. The Pyodide test harness is removed. Two assertions read that harness, which the runner never used, so they always passed. They now check the worker's init message, so they test real behaviour again. Comments that described Pyodide, a main-thread fallback or the deleted Swift runtime literals now describe the xeus kernels. Grading behaviour does not change. Closes #1961.
+
+### Changed
+
+- **Two finished audits moved to `docs/archive/`.** `achievements-audit-2026-07.md` and `lua-architecture-audit.md` are point-in-time audits. Each now has an archival banner. The findings that were still open at archival moved to #2054. The links that pointed at the two files now point into the archive. This completes the six moves (#1987).
+
+### Fixed
+
+- **An authored badge shows on the dashboard and the staff per-student page, not only on the submission page.** One function now decides the badges a submission earns, and all three pages call it. Every badge reads the raw grade. Before, an authored badge on the submission page read the grade with the class-goal bonus, so the bonus alone could earn it (#2020).
+
+
 ## [0.5.390] - 2026-10-04
 
 ### Fixed
