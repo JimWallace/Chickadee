@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.412] - 2026-10-04
+
+### Security
+
+- **A sandboxed test script no longer sees the other jobs on its runner.** With `--sandbox` on Linux, each script now also runs in a private mount namespace: the work root is covered by an empty tmpfs, and only the script's working directory and the directories its environment names (`CHICKADEE_OPPONENT_DIR`) are bound back. On macOS the profile denies the work root and allows the same directories. The startup probe checks the mounts too, so a host that refuses them is reported before any job is claimed (#2061).
+
+### Changed
+
+- **CLAUDE.md names the executors module.** The browser-grading paragraph pointed `RoutingExecutor` at `Public/browser-runner.js`; since #2099 it lives in `Public/grading-executors.js`.
+
+
 ## [0.5.411] - 2026-10-04
 
 ### Changed
