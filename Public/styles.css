@@ -2733,12 +2733,18 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* The <summary> of a <details> that a reader opens occasionally
    (docs/ui-design.md, "Interaction idioms").  An .accordion-caret
-   replaces the native marker and turns while the details is open. */
+   replaces the native marker and turns while the details is open.  The link
+   colour marks it as a control, so it does not read like the muted notes
+   inside it, and fit-content keeps the click area and the focus ring on the
+   label. */
 .disclosure-summary {
     display: flex;
     align-items: center;
     gap: .35rem;
+    width: fit-content;
     list-style: none;
+    color: var(--blue);
+    font-size: var(--text-base);
 }
 .disclosure-summary::-webkit-details-marker { display: none; }
 details[open] > .disclosure-summary .accordion-caret { transform: rotate(90deg); }
