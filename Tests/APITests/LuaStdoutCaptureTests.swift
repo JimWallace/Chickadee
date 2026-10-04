@@ -17,10 +17,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaStdoutCaptureTests {
 
-    static var luaAvailable: Bool {
-        get async { await toolIsAvailable("lua", arguments: ["-v"]) }
-    }
-
     private static var repoRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // APITests
@@ -39,7 +35,6 @@ import Testing
     /// Grade `submission` with the generated script + the canonical runtime,
     /// returning the outcome status parsed from the last JSON line.
     private func grade(_ submission: String) async throws -> String {
-        guard await Self.luaAvailable else { return "pass" }  // skip: treated as no-op
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-luastdout-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
