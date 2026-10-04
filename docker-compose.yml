@@ -104,10 +104,9 @@ services:
   # secret file was no barrier. A student script could therefore read the
   # HMAC secret and sign worker API calls, defeating the environment
   # allowlist in mergedScriptEnvironment that exists to withhold exactly
-  # that. Sandboxing does not close it either: the Linux sandbox creates no
-  # mount namespace. The secret now arrives by environment variable, which
-  # the runner already prefers over any file (resolveWorkerSharedSecret),
-  # and the runner container can no longer see student data at all.
+  # that. The secret now arrives by environment variable, which the runner
+  # already prefers over any file (resolveWorkerSharedSecret), and the runner
+  # container can no longer see student data at all.
   runner:
     image: ghcr.io/jimwallace/chickadee:latest
     entrypoint: ["/bin/sh", "-lc"]
@@ -120,14 +119,17 @@ services:
         --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
         --max-jobs "${RUNNER_MAX_JOBS:-4}"
         --sandbox
-      # --sandbox runs each test script in its own user and network namespace
-      # (unshare). The script then has no network, so it cannot reach the
-      # server or the internet, and no real privileges. It does not restrict
-      # filesystem access, which is why the data volume is unmounted above
-      # rather than sandboxed around. Docker's default seccomp and AppArmor
-      # profiles refuse unshare, so security_opt below relaxes both; see
-      # deploy/README.md for the host check to run first. If the host still
-      # refuses user namespaces, the runner refuses to start and says why.
+      # --sandbox runs each test script in its own user, network and mount
+      # namespace (unshare). The script then has no network, so it cannot
+      # reach the server or the internet, no real privileges, and no view of
+      # the other jobs on this runner: the work root is covered inside the
+      # namespace and only the job's own directories are bound back. It does
+      # not restrict the rest of the file system, which is why the data
+      # volume is unmounted above rather than sandboxed around. Docker's
+      # default seccomp and AppArmor profiles refuse unshare and mount, so
+      # security_opt below relaxes both; see deploy/README.md for the host
+      # check to run first. If the host still refuses the namespaces, the
+      # runner refuses to start and says why.
     networks:
       - chickadee
     depends_on:
@@ -148,9 +150,10 @@ services:
     # gets no capabilities, cannot acquire new ones, and cannot fork without
     # bound. None of the three costs anything a test script legitimately needs.
     # The two unconfined profiles are the price of --sandbox: Docker's default
-    # seccomp profile allows unshare only with CAP_SYS_ADMIN, and its default
-    # AppArmor profile does not allow a user namespace. The namespaces then
-    # isolate each script; the capability drop still applies to the runner.
+    # seccomp profile allows unshare and mount only with CAP_SYS_ADMIN, and
+    # its default AppArmor profile does not allow a user namespace. The
+    # namespaces then isolate each script; the capability drop still applies
+    # to the runner.
     cap_drop:
       - ALL
     security_opt:

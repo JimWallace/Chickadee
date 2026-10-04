@@ -125,9 +125,10 @@ private let rscriptAvailabilityCache = Mutex<Bool?>(nil)
 
 /// Cached sandbox availability probe, the same shape as `rscriptIsAvailable`.
 ///
-/// Runs the exact namespace request `SandboxedScriptRunner` makes on Linux
-/// (`unshare --user --net --map-root-user`) against `true`, so the answer is
-/// "can this host sandbox" and not "is the unshare binary installed". On
+/// Runs the runner's own startup probe, which uses the exact wrapper
+/// `SandboxedScriptRunner` puts in front of a job on Linux (`unshare --user
+/// --net --mount --map-root-user` plus the mounts inside it), so the answer
+/// is "can this host sandbox" and not "is the unshare binary installed". On
 /// macOS the runner needs only the `sandbox-exec` binary.
 func sandboxIsAvailable() async -> Bool {
     if let cached = sandboxAvailabilityCache.withLock({ $0 }) {
@@ -135,11 +136,7 @@ func sandboxIsAvailable() async -> Bool {
     }
     let available: Bool
     #if os(Linux)
-    do {
-        available = try await runToolThrottled(["unshare", "--user", "--net", "--map-root-user", "true"]).succeeded
-    } catch {
-        available = false
-    }
+    available = await SandboxedScriptRunner.probe(workDir: FileManager.default.temporaryDirectory) == nil
     #else
     available = FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec")
     #endif

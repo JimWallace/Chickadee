@@ -406,8 +406,10 @@ struct SandboxedScriptRunner: ScriptRunner { … }     // --sandbox flag
 
 `SandboxedScriptRunner` uses platform-specific primitives:
 - **macOS:** `sandbox-exec` with a generated profile
-- **Linux:** `unshare --user --net --map-root-user` to drop privileges and
-  isolate the network namespace
+- **Linux:** `unshare --user --net --mount --map-root-user` to drop
+  privileges, isolate the network namespace, and give the script a private
+  mount namespace in which the work root is covered by an empty tmpfs and
+  only the job's own directories are bound back (#2061)
 
 The sandbox boundary is at the subprocess level. Swift never imports a JVM,
 Python interpreter, or any language runtime — all language execution goes
@@ -454,14 +456,19 @@ these protections:
   Linux it has no real privileges. On macOS it can write only in its working
   directory. Without `--sandbox`, the script runs as the runner's user, with
   network access.
-
-Other students' work is **not** isolated on one runner. A job holds one
-submission, but every job on a runner runs as the same user, and the job
-workspaces share one directory. So while two jobs run at the same time
-(`--max-jobs` above 1), a script in one can read the other's workspace, with
-or without `--sandbox`, which creates no mount namespace. A class-activity
-match job also stages a classmate's submission as the opponent, by design (see
-[class-activities.md](class-activities.md)).
+- **Other jobs on the same runner, with `--sandbox`.** Every job on a runner
+  runs as the same user, and every job directory is a child of one work root.
+  So while two jobs run at the same time (`--max-jobs` above 1), a script
+  could read the other job's workspace, which holds another student's
+  submission. The sandbox hides it (#2061): on Linux the script runs in a
+  private mount namespace in which the work root is covered by an empty
+  tmpfs, and only the script's working directory and the directories its
+  environment names (`CHICKADEE_OPPONENT_DIR`) are bound back. On macOS the
+  profile denies the work root and allows the same directories. Nothing is
+  configured: the work root is the parent of the working directory, because
+  the runner creates both. Without `--sandbox`, the workspaces are shared. A
+  class-activity match job stages a classmate's submission as the opponent,
+  by design (see [class-activities.md](class-activities.md)).
 
 This is a property of the design, not a defect. Treat each value in a test,
 and each file in its test setup, as visible to a determined student. To hide
