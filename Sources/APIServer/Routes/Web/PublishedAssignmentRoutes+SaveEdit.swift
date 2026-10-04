@@ -24,12 +24,9 @@ extension PublishedAssignmentRoutes {
         let title = (form.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(form.dueAtRaw)
         let starts = parseDueDate(form.startsAtRaw)
-        let startsAtQuery = "&startsAt=\(urlEncode(form.startsAtRaw ?? ""))"
 
         guard !title.isEmpty else {
-            let q =
-                "assignmentName=&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Assignment%20name%20is%20required"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+            return redirectToEditForm(req: req, assignmentID: idStr, form: form, error: "Assignment name is required")
         }
 
         // As of v0.4.79, the assignment Save button is for notebook +
@@ -48,9 +45,9 @@ extension PublishedAssignmentRoutes {
         guard !assignmentNotebookRaw.isEmpty,
             (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil
         else {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+            return redirectToEditForm(
+                req: req, assignmentID: idStr, form: form,
+                error: "Assignment notebook (.ipynb) is required and must be valid JSON")
         }
 
         let resolved = try await resolveSolutionForEditedAssignment(
@@ -61,24 +58,22 @@ extension PublishedAssignmentRoutes {
             uploadedSolution: form.solutionNotebookFile
         )
         guard !resolved.data.isEmpty else {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+            return redirectToEditForm(
+                req: req, assignmentID: idStr, form: form,
+                error: "Solution notebook (.ipynb) is required for validation")
         }
 
         guard try setupHasAnyTestEntries(manifestJSON: setup.manifest) else {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+            return redirectToEditForm(
+                req: req, assignmentID: idStr, form: form,
+                error: "Add at least one test script or pattern family in the suite list before saving")
         }
 
         // Persist the manifest settings before anything else touches the row:
         // each helper refuses an incoherent state, and refusing must leave the
         // assignment entirely unmodified — not half-saved.
         if let refusal = await persistManifestSettings(form: form, setup: setup, on: req.db) {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=\(urlEncode(refusal))"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+            return redirectToEditForm(req: req, assignmentID: idStr, form: form, error: refusal)
         }
 
         try await persistAssignmentNotebook(
@@ -98,13 +93,6 @@ extension PublishedAssignmentRoutes {
         )
 
         let previousDueAt = assignment.dueAt
-        assignment.title = title
-        assignment.dueAt = due
-        assignment.startsAt = starts
-        assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
-            dueAt: due,
-            existingOverride: assignment.deadlineOverrideActive ?? false
-        )
         if let rawID = form.gradeObjectID {
             let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
             assignment.brightspaceGradeObjectID = trimmed.isEmpty ? nil : trimmed
@@ -123,6 +111,15 @@ extension PublishedAssignmentRoutes {
         if !form.liveEdit {
             assignment.visibility = .closed
         }
+        // The same write the MCP update tool makes, so the two cannot drift
+        // on how a due-date change re-normalises the deadline override. It
+        // saves the row, with the fields set above.
+        try await AssignmentAuthoringService.updateMetadata(
+            assignment,
+            title: title,
+            dueAt: due.map { .set($0) } ?? .clear,
+            startsAt: starts.map { .set($0) } ?? .clear,
+            on: req.db)
 
         // Only when it actually moved: the Save button posts the whole form on
         // every content edit, so auditing unconditionally would bury the real
@@ -144,6 +141,21 @@ extension PublishedAssignmentRoutes {
     }
 
     // MARK: - saveEditedAssignment helpers
+
+    /// Returns the author to the edit form with what they typed and one
+    /// error, the way every refusal in `saveEditedAssignment` does. The name
+    /// is sent back trimmed, so a blank name posts back as blank.
+    fileprivate func redirectToEditForm(
+        req: Request, assignmentID: String, form: SaveEditedAssignmentForm, error: String
+    ) -> Response {
+        let title = (form.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let query =
+            "assignmentName=\(urlEncode(title))"
+            + "&dueAt=\(urlEncode(form.dueAtRaw ?? ""))"
+            + "&startsAt=\(urlEncode(form.startsAtRaw ?? ""))"
+            + "&error=\(urlEncode(error))"
+        return req.redirect(to: "/instructor/\(assignmentID)/edit?\(query)")
+    }
 
     /// Parsed form payload for `POST /instructor/:assignmentID/edit/save`.
     fileprivate struct SaveEditedAssignmentForm {
