@@ -41,18 +41,25 @@ private struct MCPSurfacePrincipalKey<Scope: Hashable & Sendable>: StorageKey {
 }
 
 extension Request {
+    /// The principal on the surface whose scope type is `Scope`, set by that
+    /// surface's bearer middleware. Nil on unauthenticated requests.
+    subscript<Scope>(mcpPrincipalFor _: Scope.Type) -> MCPSurfacePrincipal<Scope>? {
+        get { storage[MCPSurfacePrincipalKey<Scope>.self] }
+        set { storage[MCPSurfacePrincipalKey<Scope>.self] = newValue }
+    }
+
     /// The MCP principal established by `MCPBearerAuthMiddleware` once a bearer
     /// token has passed validation. Nil on unauthenticated requests.
     var mcpPrincipal: MCPPrincipal? {
-        get { storage[MCPSurfacePrincipalKey<ContentScope>.self] }
-        set { storage[MCPSurfacePrincipalKey<ContentScope>.self] = newValue }
+        get { self[mcpPrincipalFor: ContentScope.self] }
+        set { self[mcpPrincipalFor: ContentScope.self] = newValue }
     }
 
     /// The admin MCP principal established by `AdminMCPBearerAuthMiddleware`
     /// once a bearer token has passed validation. Nil on unauthenticated
     /// requests.
     var adminMcpPrincipal: AdminMCPPrincipal? {
-        get { storage[MCPSurfacePrincipalKey<DiagnosticScope>.self] }
-        set { storage[MCPSurfacePrincipalKey<DiagnosticScope>.self] = newValue }
+        get { self[mcpPrincipalFor: DiagnosticScope.self] }
+        set { self[mcpPrincipalFor: DiagnosticScope.self] = newValue }
     }
 }
