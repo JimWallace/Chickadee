@@ -2203,6 +2203,11 @@
     /// with the editor's renderer, cue setter and time limits passed in `env`,
     /// so a test can drive every branch on a plain object.
     ///
+    /// Each title is one phrase of at most 20 words (docs/ui-design.md, "UI
+    /// copy"). What to do about a warning is in docs/auto-compute.md, which
+    /// the note under the cases table links, because a title is not shown on
+    /// a touch screen (#1991).
+    ///
     /// Every failure clears a value that auto-compute filled earlier. A
     /// placeholder is not visible behind a value, so the error would otherwise
     /// be only in the title, which a touch screen never shows (#1998). The
@@ -2212,13 +2217,12 @@
         if (res.ok && res.returnedNone) {
             // The solution function returned None.  Don't write the string
             // "null" to the cell — that used to round-trip as a literal value
-            // and confuse instructors.  Instead leave it empty with a clear
-            // hint, and suggest stdout_equality (which is the most common
-            // reason a function returns None: it print()s instead of
-            // returning).
+            // and confuse instructors.  Instead leave it empty with a
+            // warning.  The usual cause is a function that print()s instead
+            // of returning; docs/auto-compute.md points to Stdout equality.
             cell.value = '';
             cell.placeholder = '⚠ solution returned None';
-            cell.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
+            cell.title = 'Solution function returned None';
             env.setCue(cell, 'input-attention');
             delete cell.dataset.autoComputed;
         } else if (res.ok) {
@@ -2239,14 +2243,14 @@
             // no cause and no language.
             cell.title = res.error.indexOf('notebook load') >= 0
                 ? 'Loading the solution notebook ran longer than ' + (env.loadTimeoutMs / 1000) + ' seconds'
-                : 'Solution call did not return within ' + (env.timeoutMs / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
+                : 'Solution call did not return within ' + (env.timeoutMs / 1000) + ' seconds';
             env.setCue(cell, 'input-invalid');
             delete cell.dataset.autoComputed;
         } else if (res.unsupported) {
             // The solution returned a value of a type that doesn't round-trip
-            // through JSON in a way the runner-side test will accept.  Show
-            // the specific reason so the instructor can decide whether to
-            // change the solution or type Expected manually.
+            // through JSON in a way the runner-side test will accept.  Name
+            // the type; docs/auto-compute.md says how to change the solution
+            // or type Expected manually.
             var reasonText = ({
                 'coroutine':       'an async function (returned a coroutine without awaiting it)',
                 'async-generator': 'an async generator',
@@ -2258,7 +2262,7 @@
             })[res.unsupported] || res.unsupported;
             cell.value = '';
             cell.placeholder = '⚠ solution returned ' + reasonText;
-            cell.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
+            cell.title = 'Auto-compute cannot represent ' + reasonText;
             env.setCue(cell, 'input-attention');
             delete cell.dataset.autoComputed;
         } else {

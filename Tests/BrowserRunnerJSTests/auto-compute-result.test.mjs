@@ -100,3 +100,43 @@ test('a solution-load failure shows readable copy, not a sentinel or "Solution r
   assert.equal(network.placeholder, '⚠ solution notebook did not load');
   assert.equal(network.title, 'Load failed: Failed to fetch');
 });
+
+// #1991: a title is one phrase of at most 20 words (docs/ui-design.md, "UI
+// copy"). check-ui-vocabulary.sh counts the words of a title in a template;
+// a title built in JS has only this test. What to do about a warning is in
+// docs/auto-compute.md, which the note under the cases table links.
+const TITLE_WORD_CAP = 20;
+
+test('every auto-compute title is one phrase within the hover word budget', () => {
+  const unsupported = ['coroutine', 'async-generator', 'generator', 'set', 'tuple', 'bytes', 'complex'];
+  const results = [
+    { ok: true, value: 42 },
+    { ok: true, returnedNone: true },
+    { ok: false, timedOut: true, error: 'timed out after 5s' },
+    { ok: false, timedOut: true, error: 'solution notebook load timed out after 30s' },
+    ...unsupported.map((kind) => ({ ok: false, unsupported: kind })),
+    { ok: false, error: "NameError: name 'x' is not defined" },
+    { ok: false, loadFailed: true, error: 'no solution notebook', detail: 'no-solution' },
+    { ok: false, loadFailed: true, error: 'solution notebook has no code', detail: 'empty-solution' },
+    { ok: false, loadFailed: true, error: 'solution notebook did not load', detail: 'Failed to fetch' },
+  ];
+  for (const res of results) {
+    const cell = computedCell();
+    apply(cell, res, env);
+    const label = JSON.stringify(res) + ' -> "' + cell.title + '"';
+    const words = cell.title.trim().split(/\s+/).filter(Boolean);
+    assert.ok(words.length > 0, label + ' has no title');
+    assert.ok(words.length <= TITLE_WORD_CAP, label + ' has ' + words.length + ' words');
+    assert.doesNotMatch(cell.title, /[.?!](\s|$)/, label + ' is more than one phrase');
+  }
+});
+
+test('a timeout title names no language function', () => {
+  // The call and the load run in the R, Lua and Octave kernels too, so
+  // advice about Python's input() or print() is wrong for those authors.
+  for (const error of ['timed out after 5s', 'solution notebook load timed out after 30s']) {
+    const cell = computedCell();
+    apply(cell, { ok: false, timedOut: true, error }, env);
+    assert.doesNotMatch(cell.title, /\w+\(\)/, cell.title);
+  }
+});
