@@ -235,7 +235,7 @@ extension Application {
     var ltiGradeSyncMonitor: PeriodicSweepMonitor {
         lazyStored(LTIGradeSyncMonitorKey.self) {
             PeriodicSweepMonitor(
-                name: "LTI grade sync", interval: LTIGradeSyncSweep.interval, runImmediately: false
+                name: "LTI grade sync", interval: LTIGradeSyncSweep.interval
             ) { application in
                 let sent = try await application.ltiGradeSyncSweep.run()
                 if sent > 0 { application.logger.info("LTI grade sync: finished \(sent) row(s)") }

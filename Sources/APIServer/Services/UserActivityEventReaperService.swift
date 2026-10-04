@@ -48,8 +48,7 @@ extension Application {
         lazyStored(UserActivityEventReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Activity-event reaper",
-                interval: activityEventReaperSweepInterval,
-                runImmediately: true
+                interval: activityEventReaperSweepInterval
             ) { application in
                 try await reapStaleActivityEvents(on: application.db, logger: application.logger)
             }

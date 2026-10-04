@@ -680,8 +680,7 @@ extension Application {
         lazyStored(BrightSpaceGradeSyncMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "BrightSpace grade sync",
-                interval: brightSpaceGradeSyncInterval,
-                runImmediately: false
+                interval: brightSpaceGradeSyncInterval
             ) { application in
                 guard let app = application.brightSpaceAppCredentials else { return }
                 let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs

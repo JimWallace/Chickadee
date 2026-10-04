@@ -474,8 +474,7 @@ extension Application {
             PeriodicSweepMonitor(
                 name: "Assignment deadline",
                 interval: assignmentDeadlineSweepInterval,
-                minimumInterval: 1,
-                runImmediately: true
+                minimumInterval: 1
             ) { application in
                 _ = try await openScheduledAssignments(
                     on: application.db,

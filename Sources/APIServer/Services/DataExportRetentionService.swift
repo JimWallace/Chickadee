@@ -68,8 +68,7 @@ extension Application {
         lazyStored(DataExportReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Data-export reaper",
-                interval: dataExportReaperSweepInterval,
-                runImmediately: true
+                interval: dataExportReaperSweepInterval
             ) { application in
                 try await reapExpiredDataExports(
                     on: application.db,

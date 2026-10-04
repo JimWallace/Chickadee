@@ -61,8 +61,7 @@ extension Application {
         lazyStored(AuditLogReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Audit-log reaper",
-                interval: auditLogReaperSweepInterval,
-                runImmediately: true
+                interval: auditLogReaperSweepInterval
             ) { application in
                 try await reapStaleAuditLogEntries(
                     on: application.db,

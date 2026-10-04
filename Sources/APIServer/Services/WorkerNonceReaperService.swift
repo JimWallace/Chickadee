@@ -23,8 +23,7 @@ extension Application {
         lazyStored(WorkerNonceReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "Worker-nonce reaper",
-                interval: workerNonceReaperSweepInterval,
-                runImmediately: true
+                interval: workerNonceReaperSweepInterval
             ) { application in
                 await WorkerNonceReplayGuard.purgeExpired(db: application.db, logger: application.logger)
             }

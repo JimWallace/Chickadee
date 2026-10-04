@@ -174,8 +174,7 @@ extension Application {
         lazyStored(LearnSectionSyncMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "LEARN section sync",
-                interval: learnSectionSyncInterval,
-                runImmediately: false
+                interval: learnSectionSyncInterval
             ) { application in
                 guard application.brightSpaceAppCredentials != nil else { return }
                 _ = try await sweepLearnSections(

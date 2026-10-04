@@ -531,8 +531,7 @@ extension Application {
             PeriodicSweepMonitor(
                 name: "Class-goal achievement",
                 interval: achievementSweepInterval,
-                minimumInterval: 1,
-                runImmediately: true
+                minimumInterval: 1
             ) { application in
                 _ = try await evaluateClassGoalAchievements(
                     on: application.db, logger: application.logger)

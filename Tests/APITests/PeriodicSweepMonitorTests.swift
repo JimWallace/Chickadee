@@ -1,9 +1,10 @@
 // Tests/APITests/PeriodicSweepMonitorTests.swift
 //
-// `PeriodicSweepMonitor.stop()` waits for the sweeps it started (#1922).
-// Before, it cancelled the loop and returned at once, and dropped the boot
-// sweep's handle entirely, so a sweep running at shutdown kept querying
-// `application.db` while Fluent closed it: the #1700 shape.
+// `PeriodicSweepMonitor.stop()` waits for the sweep it started (#1922).
+// Before, it cancelled the loop and returned at once, so a sweep running at
+// shutdown kept querying `application.db` while Fluent closed it: the #1700
+// shape. The separate boot sweep is gone (#2054, audit A16): the loop's first
+// iteration is the sweep at start, so a boot runs each sweep once.
 
 import ChickadeeTestSupport
 import Foundation
@@ -24,8 +25,8 @@ import Vapor
 
     /// A monitor whose sweep waits 300 ms in a way that ignores cancellation,
     /// as a database query in flight does.
-    private static func monitor(probe: SweepProbe, runImmediately: Bool) -> PeriodicSweepMonitor {
-        PeriodicSweepMonitor(name: "probe", interval: 3600, runImmediately: runImmediately) { _ in
+    private static func monitor(probe: SweepProbe) -> PeriodicSweepMonitor {
+        PeriodicSweepMonitor(name: "probe", interval: 3600) { _ in
             await probe.begin()
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(300)) {
@@ -48,7 +49,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let probe = SweepProbe()
-            let monitor = Self.monitor(probe: probe, runImmediately: false)
+            let monitor = Self.monitor(probe: probe)
             monitor.start(application: app)
             try await Self.waitForFirstSweep(probe)
 
@@ -58,27 +59,8 @@ import Vapor
         }
     }
 
-    /// The boot sweep is awaited too, and nothing starts a sweep after
-    /// `stop()` returns.
-    @Test func stopAlsoWaitsForTheBootSweep() async throws {
-        let app = try await makeTestApp()
-        try await withApp(app) { app in
-            let probe = SweepProbe()
-            let monitor = Self.monitor(probe: probe, runImmediately: true)
-            monitor.start(application: app)
-            try await Self.waitForFirstSweep(probe)
-
-            await monitor.stop()
-            let startedAtStop = await probe.started
-            #expect(await probe.finished == startedAtStop)
-
-            try await Task.sleep(for: .milliseconds(500))
-            #expect(await probe.started == startedAtStop, "a sweep started after stop() returned")
-        }
-    }
-
     @Test func stopBeforeStartReturnsAtOnce() async {
-        let monitor = Self.monitor(probe: SweepProbe(), runImmediately: true)
+        let monitor = Self.monitor(probe: SweepProbe())
         await monitor.stop()
         await monitor.stop()
     }

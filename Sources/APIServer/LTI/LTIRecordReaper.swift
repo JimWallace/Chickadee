@@ -44,7 +44,7 @@ extension Application {
     var ltiRecordReaperMonitor: PeriodicSweepMonitor {
         lazyStored(LTIRecordReaperMonitorKey.self) {
             PeriodicSweepMonitor(
-                name: "LTI record reaper", interval: ltiRecordReaperInterval, runImmediately: true
+                name: "LTI record reaper", interval: ltiRecordReaperInterval
             ) { application in
                 try await reapExpiredLTIRecords(on: application.db, logger: application.logger)
             }

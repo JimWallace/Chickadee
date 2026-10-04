@@ -69,8 +69,7 @@ extension Application {
             PeriodicSweepMonitor(
                 name: "Stuck submission reaper",
                 interval: stuckSubmissionSweepInterval,
-                minimumInterval: 1,
-                runImmediately: true
+                minimumInterval: 1
             ) { application in
                 _ = try await reapStuckAssignedSubmissions(
                     on: application.db,

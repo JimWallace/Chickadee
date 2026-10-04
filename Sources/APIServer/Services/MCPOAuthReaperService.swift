@@ -55,8 +55,7 @@ extension Application {
         lazyStored(MCPOAuthReaperMonitorKey.self) {
             PeriodicSweepMonitor(
                 name: "MCP OAuth reaper",
-                interval: mcpOAuthReaperSweepInterval,
-                runImmediately: true
+                interval: mcpOAuthReaperSweepInterval
             ) { application in
                 try await reapExpiredMCPOAuthRecords(on: application.db, logger: application.logger)
             }

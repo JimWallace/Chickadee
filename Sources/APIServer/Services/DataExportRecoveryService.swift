@@ -101,8 +101,7 @@ extension Application {
             PeriodicSweepMonitor(
                 name: "Stale data-export reaper",
                 interval: staleDataExportSweepInterval,
-                minimumInterval: 1,
-                runImmediately: true
+                minimumInterval: 1
             ) { application in
                 _ = try await failStalePendingDataExports(
                     on: application.db,
