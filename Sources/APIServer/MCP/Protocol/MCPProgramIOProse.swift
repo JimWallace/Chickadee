@@ -52,7 +52,7 @@ enum MCPProgramIOProse {
 
     /// nil in → nil out (leave unchanged / default); an unknown token is a
     /// tool error naming the legal values.
-    static func parse(_ raw: String?, tool: String) throws -> ProgramIOComparison? {
-        try MCPEnumProse<ProgramIOComparison>.parseOptional(raw, tool: tool, field: "ioComparison")
+    static func parse(_ raw: String?) throws -> ProgramIOComparison? {
+        try MCPEnumProse<ProgramIOComparison>.parseOptional(raw, field: "ioComparison")
     }
 }

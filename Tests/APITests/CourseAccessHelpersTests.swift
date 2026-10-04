@@ -136,17 +136,17 @@ import Vapor
                 grantedScopes: [.read, .write])
 
             await #expect(throws: MCPToolError.self) {
-                try await context.authorizeCourseAccess(course.requireID(), tool: "test")
+                try await context.authorizeCourseAccess(course.requireID())
             }
 
             let enrollment = APICourseEnrollment(
                 userID: try boss.requireID(), courseID: try course.requireID())
             try await enrollment.save(on: app.db)
-            try await context.authorizeCourseAccess(course.requireID(), tool: "test")
+            try await context.authorizeCourseAccess(course.requireID())
 
             try await enrollment.delete(on: app.db)
             await #expect(throws: MCPToolError.self) {
-                try await context.authorizeCourseAccess(course.requireID(), tool: "test")
+                try await context.authorizeCourseAccess(course.requireID())
             }
         }
     }

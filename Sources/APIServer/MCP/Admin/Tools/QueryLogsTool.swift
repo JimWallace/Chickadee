@@ -71,7 +71,7 @@ struct QueryLogsTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject(tool: Self.name)
+        try await context.requireAdminSubject()
 
         let capacity = context.request.application.adminEventSink?.bufferCapacity ?? 0
         let all = context.request.application.adminEventSink?.snapshot() ?? []

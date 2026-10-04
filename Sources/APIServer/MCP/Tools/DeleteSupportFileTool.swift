@@ -98,48 +98,42 @@ struct DeleteSupportFileTool: ContentTool {
         let cleaned = sanitizeSuiteFilename(input.filename)
         guard !cleaned.isEmpty, cleaned == input.filename else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail:
                     "filename must be a bare filename with no path separators (got \"\(input.filename)\").")
         }
 
         guard !Self.reservedFilenames.contains(cleaned) else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "\"\(cleaned)\" is a reserved part of the test setup, not a support file. "
                     + "Edit it with update_notebook / update_solution, or the suite tools.")
         }
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         // A graded row is owned by the suite tools; point at the right one
         // rather than tearing the file out from under its manifest entry.
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: cleaned) {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "\"\(cleaned)\" is generated from pattern family \"\(familyID)\"; "
                     + "remove the family with delete_suite_item(familyID: \"\(familyID)\") instead.")
         }
         let manifest = setup.decodedManifest()
         if manifest?.testSuites.contains(where: { $0.script == cleaned }) == true {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "\"\(cleaned)\" is a graded test, not a support file. Remove it with "
                     + "delete_suite_item(script: \"\(cleaned)\").")
         }
 
         guard await listZipEntries(zipPath: setup.zipPath).contains(cleaned) else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name,
                 detail: "No support file \"\(cleaned)\" in this test setup (see get_support_files).")
         }
 
         do {
             try await removeScriptFromZip(zipPath: setup.zipPath, filename: cleaned)
         } catch {
-            throw MCPToolError.executionFailed(
-                tool: Self.name, detail: "Failed to remove \"\(cleaned)\" from the setup zip.")
+            throw MCPToolError.executionFailed(detail: "Failed to remove \"\(cleaned)\" from the setup zip.")
         }
 
         // Drop any manifest marks that named the file, so a future file reusing

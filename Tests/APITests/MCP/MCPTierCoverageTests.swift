@@ -179,7 +179,7 @@ import Testing
     @Test func theTierRejectionMessageListsExactlyTheRealTiers() throws {
         var thrown: String?
         do {
-            _ = try parseOptionalTier("student", tool: "author_script")
+            _ = try parseOptionalTier("student")
         } catch let error as MCPToolError {
             thrown = "\(error)"
         }

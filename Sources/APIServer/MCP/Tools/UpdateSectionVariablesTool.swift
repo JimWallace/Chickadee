@@ -77,9 +77,9 @@ struct UpdateSectionVariablesTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
-        let actingUser = try await context.requireEligibleSubject(tool: Self.name)
+        let actingUser = try await context.requireEligibleSubject()
 
         do {
             try await SectionInputsService.apply(
@@ -97,7 +97,7 @@ struct UpdateSectionVariablesTool: ContentTool {
                 // the only one granted `assignment_personalization_seeds`.
                 seedDB: context.mainDB)
         } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
+            throw MCPToolError.from(error)
         }
 
         let reloaded = try SectionInputsService.current(setup: setup, sectionID: input.sectionID)

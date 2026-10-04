@@ -112,9 +112,9 @@ struct PreviewPersonalizationTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
         guard let manifest = setup.decodedManifest() else {
-            throw MCPToolError.executionFailed(tool: Self.name, detail: "Manifest is not valid JSON.")
+            throw MCPToolError.executionFailed(detail: "Manifest is not valid JSON.")
         }
 
         let seedHex = try await resolveSeed(
@@ -150,14 +150,13 @@ struct PreviewPersonalizationTool: ContentTool {
         if let provided = input.seedHex {
             let trimmed = provided.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty, trimmed.allSatisfy(\.isHexDigit) else {
-                throw MCPToolError.invalidArguments(
-                    tool: Self.name, detail: "seedHex must be a non-empty hexadecimal string.")
+                throw MCPToolError.invalidArguments(detail: "seedHex must be a non-empty hexadecimal string.")
             }
             return trimmed.lowercased()
         }
         // No seed is needed for a literal-only assignment.
         guard manifest.hasExpressions else { return nil }
-        let actingUser = try await context.requireEligibleSubject(tool: Self.name)
+        let actingUser = try await context.requireEligibleSubject()
         guard let userID = actingUser.id, let assignmentID = assignment.id else { return nil }
         // Acting-user seed bookkeeping runs on the owner pool, not the
         // least-privilege `.mcp` pool: `assignment_personalization_seeds` is

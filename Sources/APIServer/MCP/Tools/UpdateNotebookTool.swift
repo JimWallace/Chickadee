@@ -74,17 +74,16 @@ struct UpdateNotebookTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        try validateNotebookShape(input.notebook, tool: Self.name)
+        try validateNotebookShape(input.notebook)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
+            publicID: input.assignmentPublicID, atLeast: .ta)
 
         let data: Data
         do {
             data = try JSONEncoder().encode(input.notebook)
         } catch {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The notebook could not be serialized to JSON.")
+            throw MCPToolError.invalidArguments(detail: "The notebook could not be serialized to JSON.")
         }
 
         do {
@@ -93,10 +92,9 @@ struct UpdateNotebookTool: ContentTool {
                 setupsDirectory: context.request.application.testSetupsDirectory, on: context.db)
         } catch let error as AssignmentAuthoringError {
             if case .setupCopyFailed(let reason) = error {
-                throw MCPToolError.executionFailed(
-                    tool: Self.name, detail: "Could not write the notebook: \(reason)")
+                throw MCPToolError.executionFailed(detail: "Could not write the notebook: \(reason)")
             }
-            throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
+            throw MCPToolError.executionFailed(detail: "\(error)")
         }
 
         // Starter-notebook edit: close + re-validate, no regrade of submissions.

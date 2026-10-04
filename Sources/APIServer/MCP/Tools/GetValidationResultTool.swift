@@ -140,7 +140,7 @@ struct GetValidationResultTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let assignment = try await context.authorizedAssignment(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID)
         let status = assignment.validationStatus ?? "none"
 
         // Map database failures to executionFailed so the agent sees the reason
@@ -160,8 +160,7 @@ struct GetValidationResultTool: ContentTool {
                 collectionJSON = nil
             }
         } catch {
-            throw MCPToolError.executionFailed(
-                tool: Self.name, detail: "Could not read the validation result: \(error)")
+            throw MCPToolError.executionFailed(detail: "Could not read the validation result: \(error)")
         }
 
         let (variants, variantWarning) = await Self.variantBatchOrWarning(

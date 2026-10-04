@@ -10,6 +10,6 @@ import Core
 /// input and throwing `invalidArguments` for an unrecognized value. `field`
 /// names the offending argument in the error message (e.g. "tier",
 /// "defaultTier").
-func parseOptionalTier(_ raw: String?, tool: String, field: String = "tier") throws -> TestTier? {
-    try MCPEnumProse<TestTier>.parseOptional(raw, tool: tool, field: field)
+func parseOptionalTier(_ raw: String?, field: String = "tier") throws -> TestTier? {
+    try MCPEnumProse<TestTier>.parseOptional(raw, field: field)
 }

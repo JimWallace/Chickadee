@@ -111,32 +111,30 @@ struct CreateAssignmentTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "title must not be empty.")
+            throw MCPToolError.invalidArguments(detail: "title must not be empty.")
         }
-        try validateNotebookShape(input.notebook, tool: Self.name)
+        try validateNotebookShape(input.notebook)
         // Parsed BEFORE the course lookup and the setup write, so an unusable
         // language fails without leaving a half-created assignment behind.
         let declaredLanguage: AssignmentLanguage?
         do {
             declaredLanguage = try parseLanguageChoice(input.language)
         } catch {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: unknownLanguageMessage(input.language))
+            throw MCPToolError.invalidArguments(detail: unknownLanguageMessage(input.language))
         }
 
         // Creating an assignment is instructor-level (#417); archived is blocked too.
         // `courseCode` may be a bare code or a course key, so the output reports
         // the resolved course rather than echoing the argument.
         let course = try await resolveCourseForWrite(
-            code: input.courseCode, tool: Self.name, context: context, atLeast: .instructor)
+            code: input.courseCode, context: context, atLeast: .instructor)
         let courseID = try course.requireID()
 
         let data: Data
         do {
             data = try JSONEncoder().encode(input.notebook)
         } catch {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The notebook could not be serialized to JSON.")
+            throw MCPToolError.invalidArguments(detail: "The notebook could not be serialized to JSON.")
         }
 
         let created: AuthoredAssignment
@@ -146,10 +144,9 @@ struct CreateAssignmentTool: ContentTool {
                 setupsDirectory: context.request.application.testSetupsDirectory, on: context.db)
         } catch let error as AssignmentAuthoringError {
             if case .setupCopyFailed(let reason) = error {
-                throw MCPToolError.executionFailed(
-                    tool: Self.name, detail: "Could not create the test setup: \(reason)")
+                throw MCPToolError.executionFailed(detail: "Could not create the test setup: \(reason)")
             }
-            throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
+            throw MCPToolError.executionFailed(detail: "\(error)")
         }
 
         try await declareManifestLanguage(
