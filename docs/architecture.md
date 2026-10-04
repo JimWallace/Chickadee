@@ -411,7 +411,7 @@ struct SandboxedScriptRunner: ScriptRunner { … }     // --sandbox flag
 
 The sandbox boundary is at the subprocess level. Swift never imports a JVM,
 Python interpreter, or any language runtime — all language execution goes
-through `Foundation.Process`.
+through `swift-subprocess` (`runBounded`).
 
 ### What in-process grading does not protect
 
@@ -445,16 +445,23 @@ message. On a public test, the student sees that text at the `full` and
 The boundary is the process, not the stack frame. That boundary still gives
 these protections:
 
-- **Other students' work.** A job holds one submission. A class-activity
-  match job is the exception: it can stage a classmate's submission as the
-  opponent (see [class-activities.md](class-activities.md)).
 - **The server.** Student code runs on a runner, never in the server process.
   A script gets an allowlisted environment, so it does not inherit the
-  runner's shared secret (`Sources/Worker/ScriptRunner.swift`).
+  runner's shared secret (`Sources/Worker/ScriptRunner.swift`). The runner
+  also marks itself non-dumpable at start, so a script cannot read the
+  secret from the runner's own `/proc` entries.
 - **The host, with `--sandbox`.** The script cannot reach the network. On
   Linux it has no real privileges. On macOS it can write only in its working
   directory. Without `--sandbox`, the script runs as the runner's user, with
   network access.
+
+Other students' work is **not** isolated on one runner. A job holds one
+submission, but every job on a runner runs as the same user, and the job
+workspaces share one directory. So while two jobs run at the same time
+(`--max-jobs` above 1), a script in one can read the other's workspace, with
+or without `--sandbox`, which creates no mount namespace. A class-activity
+match job also stages a classmate's submission as the opponent, by design (see
+[class-activities.md](class-activities.md)).
 
 This is a property of the design, not a defect. Treat each value in a test,
 and each file in its test setup, as visible to a determined student. To hide
