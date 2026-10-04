@@ -60,6 +60,15 @@
 
     'use strict';
 
+    // The teardown of the editor that the last init built.
+    //
+    // A workbench swap (#1957) runs init again for the new half, and each
+    // init builds a new editor closure. The old closure is discarded with the
+    // old half, but its auto-compute worker is not: a Worker runs until it is
+    // terminated, and it holds a booted kernel and the old solution. So a new
+    // init first stops the worker of the editor it replaces.
+    var retirePreviousEditor = null;
+
     function initPatternFamilyEditor(config) {
         config = config || {};
         var csrfToken       = config.csrfToken || '';
@@ -68,6 +77,12 @@
         if (typeof urls.solutionNotebook !== 'function'
          || typeof urls.scanNotebook     !== 'function') {
             throw new Error('initPatternFamilyEditor: urls must supply solutionNotebook + scanNotebook functions');
+        }
+
+        if (retirePreviousEditor) {
+            var retire = retirePreviousEditor;
+            retirePreviousEditor = null;
+            retire();
         }
 
         // ── The assignment's language ──────────────────────────────────────
@@ -1660,6 +1675,8 @@
             // must re-load it.
             _solutionLoadedPromise = null;
         }
+        // The next init stops this editor's worker (see retirePreviousEditor).
+        retirePreviousEditor = killWorker;
 
         /// Sends a message to the Pyodide worker, optionally with a
         /// wall-clock timeout.  When the timeout fires we terminate the

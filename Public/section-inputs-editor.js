@@ -26,7 +26,7 @@
     // The elements init() has wired, so that init() can run again (#1957).
     // The workbench calls it after it swaps the edit half: the new half has
     // new elements to wire, and an element wired before is not wired twice.
-    // A form maps to its { flush } object.
+    // A form maps to its { flush, flushPending } object.
     var wiredForms = new WeakMap();
     var wiredAddButtons = new WeakSet();
 
@@ -37,7 +37,10 @@
         var known = wiredForms.get(form);
         if (known) return known;
         var tbody = form.querySelector('tbody.js-section-vars-body');
-        if (!tbody) return { flush: function () { return Promise.resolve(); } };
+        if (!tbody) {
+            var none = function () { return Promise.resolve(); };
+            return { flush: none, flushPending: none };
+        }
 
         function doPost() {
             var payload = editor.buildPayload(tbody);
@@ -82,7 +85,10 @@
         });
         form.addEventListener('submit', function (e) { e.preventDefault(); saver.flush(); });
 
-        var wired = { flush: saver.flush };
+        var wired = {
+            flush: saver.flush,
+            flushPending: saver.flushPending || function () { return Promise.resolve(); }
+        };
         wiredForms.set(form, wired);
         return wired;
     }
@@ -95,6 +101,12 @@
 
         window.chickadeeFlushSectionVars = function () {
             return Promise.all(forms.map(function (f) { return f.flush(); }));
+        };
+        // Only the saves that are waiting: the workbench swap awaits this
+        // before it discards the forms (surface-swap.js), and must not write
+        // for nothing.
+        window.chickadeeFlushPendingSectionVars = function () {
+            return Promise.all(forms.map(function (f) { return f.flushPending(); }));
         };
 
         // "+ Add Input" buttons (one per section).  Buttons live in the

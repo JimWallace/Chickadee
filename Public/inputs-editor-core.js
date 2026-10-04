@@ -235,7 +235,15 @@
             if (inFlight) { pending = true; return inFlight; }
             return run();
         }
-        return { schedule: schedule, flush: flush };
+        /// Send a save that waits on the timer now, and wait for a save in
+        /// flight. Unlike `flush`, it sends nothing when no save waits, so a
+        /// caller that only needs "no edit is lost" makes no write. The
+        /// workbench swap uses it before it discards the panel (#1957).
+        function flushPending() {
+            if (timer) return flush();
+            return inFlight || Promise.resolve();
+        }
+        return { schedule: schedule, flush: flush, flushPending: flushPending };
     }
 
     var api = {

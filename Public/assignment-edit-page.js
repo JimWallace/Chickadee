@@ -68,9 +68,9 @@
             if (!val) return 'No deadline';
             // datetime-local format: "2024-03-15T09:00"
             var d = new Date(val);
-            if (isNaN(d.getTime())) return val.replace('T', ' ');
-            return 'Due ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-                + ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+            if (isNaN(d.getTime())) return val.replace('T', '\u2002');
+            return 'Due\u00a0' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                + '\u00a0at\u00a0' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
         }
 
         function refreshDueDisplay() {

@@ -74,6 +74,10 @@ function makeFragment() {
 /// `opts.merged` decides whether `#wb-shell` exists — i.e. whether this is the
 /// merged workbench or the standalone editor. `opts.responseHTML` is what the
 /// refresh fetch resolves with; `opts.fetchFails` makes it reject.
+///
+/// The merged workbench also has what the re-wire after a swap needs: the
+/// `ChickadeeEditPage` hook and a `#suite-state-seed`. Without them a swap
+/// falls back to a reload (#1957), which swap-half.test.mjs pins.
 function load(opts = {}) {
   const calls = [];
   const half = makeEl('<p>old</p>');
@@ -82,7 +86,7 @@ function load(opts = {}) {
   const document = {
     body: { getAttribute: () => null },
     querySelector: (sel) => (sel === '.wb-pane-edit' ? half : null),
-    getElementById: (id) => (id === 'wb-shell' && opts.merged ? {} : null),
+    getElementById: (id) => (opts.merged && (id === 'wb-shell' || id === 'suite-state-seed') ? {} : null),
     createElement: () => ({}),
     createDocumentFragment: makeFragment,
     importNode: (n) => n,
@@ -115,6 +119,7 @@ function load(opts = {}) {
     },
   };
   window.parent = window;
+  if (opts.merged) window.ChickadeeEditPage = { init() {} };
 
   // `self`, because surface-swap.js resolves its global as
   // `typeof self !== 'undefined' ? self : this`.

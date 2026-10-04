@@ -105,6 +105,10 @@
         // Expose a global flush hook so the main "Save & Validate"
         // submit can await any pending PUTs before reloading the page.
         window.chickadeeFlushGlobalInputs = saver.flush;
+        // Only a save that is waiting: the workbench swap awaits this before
+        // it discards the panel (surface-swap.js), and must not write for
+        // nothing.
+        window.chickadeeFlushPendingGlobalInputs = saver.flushPending;
     }
 
     // Called again by ChickadeeEditPage.init() after a workbench swap.

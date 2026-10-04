@@ -33,6 +33,8 @@ const sectionInputsSource = await read('Public/section-inputs-editor.js');
 const globalInputsSource = await read('Public/global-inputs-editor.js');
 const achievementsSource = await read('Public/achievements-editor.js');
 const languageSource = await read('Public/authoring-language.js');
+const familyEditorSource = await read('Public/pattern-family-editor.js');
+const inputsCoreSource = await read('Public/inputs-editor-core.js');
 
 /// An element stub that records its listeners.
 function el(id = '', extra = {}) {
@@ -318,7 +320,7 @@ function loadSelfStarting(source, doc, extra = {}) {
     getCsrfToken: () => 'tok', setStatus() {}, notifyWorkbench() {},
     escapeHtml: (s) => String(s), extractErrorMessage: () => '',
   };
-  sandbox.ChickadeeInputsCore = {
+  sandbox.ChickadeeInputsCore ||= {
     createEditor: () => ({ buildPayload: () => null, refreshAllRows() {}, addEmptyRow() {} }),
     makeDebouncedSaver: () => ({ schedule() {}, flush: () => Promise.resolve() }),
   };
@@ -425,4 +427,144 @@ test('the language facts follow the seed element, so a save that changes the lan
   assert.equal(lang.label(), 'R',
     'a swapped half carries a new seed; the old facts would render R values as Python');
   assert.equal(lang.facts().trueLiteral, 'TRUE');
+});
+
+// ── pattern-family-editor.js: the old editor's worker is stopped ────────────
+
+/// The family editor under a stub DOM in which every id exists, with a fake
+/// Worker that records `terminate()`. Timers are queued, not run, so a test
+/// runs only the auto-compute debounce and never the worker's own timeout,
+/// which would terminate the worker for an unrelated reason.
+function loadFamilyEditor() {
+  const elements = {};
+  const stub = (tag = 'div') => el(tag, {
+    value: '', textContent: '', innerHTML: '', dataset: {}, attrs: {},
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    setAttribute(n, v) { this.attrs[n] = v; },
+    getAttribute(n) { return this.attrs[n] ?? null; },
+    removeAttribute() {}, insertBefore: (c) => c, removeChild: (c) => c, remove() {}, select() {},
+  });
+  const workers = [];
+  const timers = [];
+  const seed = {
+    textContent: JSON.stringify({
+      name: 'python', displayName: 'Python', autoComputeWorker: '/python-eval-worker.js',
+    }),
+  };
+  const solution = { cells: [{ cell_type: 'code', source: 'def f(x):\n    return x\n' }] };
+  const ctx = {
+    JSON, Array, Object, Math, Set, Map, Promise, RegExp, String, Boolean, Number, Error,
+    encodeURIComponent,
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    clearTimeout() {},
+    fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(solution) }),
+    Worker: class {
+      constructor(url) { this.url = url; this.terminated = 0; workers.push(this); }
+      addEventListener() {}
+      postMessage() {}
+      terminate() { this.terminated += 1; }
+    },
+    document: {
+      getElementById: (id) => (id === 'assignment-language-seed' ? seed : (elements[id] ||= stub())),
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      createElement: (tag) => stub(tag),
+      addEventListener() {},
+      body: stub('body'),
+    },
+  };
+  ctx.window = ctx;
+  ctx.ChickadeeUI = {
+    escapeHtml: (s) => String(s), escapeAttr: (s) => String(s), getCsrfToken: () => 't',
+    extractErrorMessage: () => '', setStatus() {}, confirmAction: () => Promise.resolve(true),
+    fetchJSON: () => new Promise(() => {}),
+  };
+  vm.createContext(ctx);
+  vm.runInContext(languageSource, ctx);
+  vm.runInContext(familyEditorSource, ctx);
+
+  const config = {
+    csrfToken: 't', initialFamilies: [],
+    urls: { solutionNotebook: () => '/s', scanNotebook: () => '/scan', computeExpected: () => '/c' },
+  };
+
+  /// Edit one argument cell of a case row. That starts one auto-compute,
+  /// which boots the editor's worker.
+  async function autoComputeOnce() {
+    elements['family-kind'].value = 'boundary_equality';
+    elements['family-function'].value = 'f';
+    elements['family-params'].value = 'x';
+    const expected = stub('input');
+    const arg = stub('input');
+    arg.value = '1';
+    arg.classList = { add() {}, remove() {}, toggle() {}, contains: (c) => c === 'js-pf-case-arg' };
+    const row = stub('tr');
+    row.parentElement = stub('tbody');
+    row.querySelector = (sel) => (sel === '.js-pf-case-expected' ? expected
+      : sel.startsWith('.js-pf-case-arg') ? arg : null);
+    arg.closest = (sel) => (sel === 'tr' ? row : null);
+    (elements['family-cases-body'].handlers.input || []).forEach((fn) => fn({ target: arg }));
+    timers.splice(0).filter((t) => t.ms === 400).forEach((t) => t.fn());
+    await settle();
+  }
+
+  return { init: () => ctx.initPatternFamilyEditor(config), autoComputeOnce, workers };
+}
+
+test('a second family-editor init stops the auto-compute worker of the editor it replaces', async () => {
+  const h = loadFamilyEditor();
+  h.init();
+  await h.autoComputeOnce();
+  assert.equal(h.workers.length, 1, 'the harness must boot a worker, or this test proves nothing');
+  assert.equal(h.workers[0].terminated, 0);
+
+  h.init();
+
+  assert.equal(h.workers[0].terminated, 1,
+    'each swap builds a new editor, and the old editor\'s worker holds a booted kernel until it is stopped');
+});
+
+// ── The pending-only flush that the swap awaits ─────────────────────────────
+
+test('flushPending sends a save that waits, and sends nothing when none waits', async () => {
+  const sandbox = { setTimeout, clearTimeout, Promise };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(inputsCoreSource, sandbox);
+  let saves = 0;
+  const saver = sandbox.ChickadeeInputsCore.makeDebouncedSaver(
+    () => { saves += 1; return Promise.resolve(); }, 10000);
+
+  await saver.flushPending();
+  assert.equal(saves, 0,
+    'the swap calls this on every refresh, and a Global Inputs save also marks the notebook stale');
+
+  saver.schedule();
+  await saver.flushPending();
+  assert.equal(saves, 1, 'a value typed just before the swap must reach the server');
+});
+
+test('section inputs expose the pending-only flush, and it reaches every form', async () => {
+  const pending = [];
+  const forms = ['a', 'b'].map((id) => el('form', { id, querySelector: () => el('tbody') }));
+  let made = 0;
+  const sandbox = loadSelfStarting(sectionInputsSource, {
+    querySelectorAll: (sel) => (sel === 'form.section-vars-form' ? forms : []),
+    querySelector: () => null,
+  }, {
+    ChickadeeInputsCore: {
+      createEditor: () => ({ buildPayload: () => null, refreshAllRows() {}, addEmptyRow() {} }),
+      makeDebouncedSaver: () => {
+        const form = forms[made++];
+        return {
+          schedule() {},
+          flush: () => Promise.resolve(),
+          flushPending: () => { pending.push(form.id); return Promise.resolve(); },
+        };
+      },
+    },
+  });
+
+  await sandbox.chickadeeFlushPendingSectionVars();
+  assert.deepEqual(pending, ['a', 'b']);
 });

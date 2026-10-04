@@ -101,6 +101,10 @@ function node(tagName, attrs = {}, children = []) {
 
     get childNodes() { return this.children.slice(); },
 
+    contains(other) { return other === this || descendants(this).includes(other); },
+    /// Records each call and its options, so a test can see `preventScroll`.
+    focus(opts) { (this.focusCalls ||= []).push(opts ?? null); },
+
     /// Depth-first search for `#id`, `.class` and a tag name — the selectors
     /// the swap uses — and for `script:not([src])`, the selector of the
     /// script re-run that #1957 removed, so the test that forbids a re-run can
@@ -153,21 +157,47 @@ function importNode(n) {
 /// path has something with identity to carry.
 ///
 /// `editPage` installs a `ChickadeeEditPage` whose `init()` records what the
-/// half held, and its scroll offset, at the moment of each call. Pass
-/// `editPage: 'throws'` for an init that fails.
-function load({ freshHalf, selector = '.wb-pane-edit', keptID = null, fetchFails = false, editPage = null } = {}) {
+/// half held, and its scroll offset, at the moment of each call. It is on by
+/// default, because the workbench always has it and a swap without it now
+/// falls back to a reload. Pass `editPage: 'throws'` for an init that fails,
+/// and `editPage: null` for a page without the hook.
+///
+/// `seed: false` takes away the `#suite-state-seed` that a real edit half
+/// carries; the hook refuses to wire a half without it.
+///
+/// `activeID` puts a focused control with that id in the live half (`''` for
+/// one with no id), and `activeOutside` puts it outside the half.
+///
+/// `flushes` installs the two pending-autosave hooks; each records a call,
+/// and `'fails'` makes them reject.
+function load({
+  freshHalf, selector = '.wb-pane-edit', keptID = null, fetchFails = false,
+  editPage = 'records', seed = true, activeID = null, activeOutside = false, flushes = null,
+} = {}) {
   const calls = [];
   const half = node('div', { class: selector.slice(1) }, [node('p', {}, [])]);
   half.scrollTop = 420;
   const kept = keptID ? node('iframe', { id: keptID, 'data-file': 'old.ipynb' }) : null;
   const created = [];
+  const seedStub = { id: 'suite-state-seed' };
+  let activeElement = null;
+  if (activeID !== null) {
+    // An empty `activeID` is a focused control with no id at all.
+    activeElement = node('input', activeID ? { id: activeID } : {});
+    if (!activeOutside) half.appendChild(activeElement);
+  }
 
   const document = {
     body: { getAttribute: () => null },
+    get activeElement() { return activeElement; },
     querySelector: (sel) => (matches(half, sel) ? half : null),
     getElementById: (id) => {
       if (id === 'wb-shell') return {};
       if (kept && id === keptID) return kept;
+      const inHalf = descendants(half).find((n) => n.attrs.id === id);
+      if (inHalf) return inHalf;
+      if (activeOutside && activeElement && id === activeElement.id) return activeElement;
+      if (id === 'suite-state-seed' && seed) return seedStub;
       return null;
     },
     createElement: (tag) => { const el = node(tag); created.push(el); return el; },
@@ -206,6 +236,15 @@ function load({ freshHalf, selector = '.wb-pane-edit', keptID = null, fetchFails
         if (editPage === 'throws') throw new Error('init failed');
       },
     };
+  }
+
+  if (flushes) {
+    const hook = (name) => () => {
+      calls.push({ kind: name });
+      return flushes === 'fails' ? Promise.reject(new Error('save failed')) : Promise.resolve();
+    };
+    window.chickadeeFlushPendingGlobalInputs = hook('flush-global');
+    window.chickadeeFlushPendingSectionVars = hook('flush-sections');
   }
 
   // `self`, because surface-swap.js resolves its global as
@@ -283,6 +322,100 @@ test('an init() that throws falls back to a reload, like any failed refresh', as
   assert.equal(await ui.refreshEditSurface(), false);
   assert.equal(calls.filter((c) => c.kind === 'reload').length, 1,
     'a half with no wiring is a half-swapped page');
+});
+
+test('on the workbench, a page with no ChickadeeEditPage falls back to a reload', async () => {
+  const { ui, calls } = load({ freshHalf: freshEditHalf([node('table')]), editPage: null });
+
+  assert.equal(await ui.refreshEditSurface(), false,
+    'with no hook the new half looks right and does nothing');
+  assert.equal(calls.filter((c) => c.kind === 'reload').length, 1);
+});
+
+test('a new half with no #suite-state-seed falls back to a reload, and is not wired', async () => {
+  const { ui, calls, inits } = load({ freshHalf: freshEditHalf([node('table')]), seed: false });
+
+  assert.equal(await ui.refreshEditSurface(), false);
+  assert.equal(calls.filter((c) => c.kind === 'reload').length, 1);
+  assert.equal(inits.length, 0, 'init() keys on the seed, so without one it would wire nothing');
+});
+
+test('a seed inside the new half is enough for the hook', async () => {
+  const seed = scriptNode('{"items":[]}', { type: 'application/json', id: 'suite-state-seed' });
+  const { ui, inits } = load({ freshHalf: freshEditHalf([node('table'), seed]), seed: false });
+
+  assert.equal(await ui.refreshEditSurface(), true);
+  assert.equal(inits.length, 1);
+});
+
+// ── Focus across the swap ───────────────────────────────────────────────────
+
+test('the focused control is focused again in the new half, without a scroll', async () => {
+  const incoming = node('input', { id: 'section-name-S1' });
+  const { ui, half } = load({
+    freshHalf: freshEditHalf([node('form', {}, [incoming])]),
+    activeID: 'section-name-S1',
+  });
+
+  assert.equal(await ui.refreshEditSurface(), true);
+
+  const live = half.querySelector('#section-name-S1');
+  assert.notEqual(live.nodeID, incoming.nodeID, 'the swap imports a copy');
+  assert.equal((live.focusCalls || []).length, 1,
+    'emptying the half drops focus to <body>; a keyboard user would lose their place on each save');
+  assert.equal(live.focusCalls[0].preventScroll, true);
+  assert.equal(half.scrollTop, 420, 'the focus must not move the restored scroll offset');
+});
+
+test('focus is restored after the hook, so it lands on the wired control', async () => {
+  const { ui, half, inits } = load({
+    freshHalf: freshEditHalf([node('input', { id: 'dueAt' })]),
+    activeID: 'dueAt',
+  });
+
+  await ui.refreshEditSurface();
+
+  assert.equal(inits.length, 1);
+  assert.equal(half.querySelector('#dueAt').focusCalls.length, 1);
+});
+
+test('focus outside the half is left alone', async () => {
+  const { ui, document } = load({
+    freshHalf: freshEditHalf([node('input', { id: 'wb-save' })]),
+    activeID: 'wb-save',
+    activeOutside: true,
+  });
+
+  await ui.refreshEditSurface();
+
+  assert.equal(document.activeElement.focusCalls, undefined,
+    'a control in the other half or the top bar was never in danger');
+});
+
+test('a focused element with no id is not restored', async () => {
+  const { ui, half } = load({ freshHalf: freshEditHalf([node('input')]), activeID: '' });
+
+  assert.equal(await ui.refreshEditSurface(), true);
+  assert.equal(half.children[0].focusCalls, undefined, 'there is nothing to find it again by');
+});
+
+// ── Pending autosaves go first ──────────────────────────────────────────────
+
+test('the pending inputs autosaves are flushed before the refresh fetches', async () => {
+  const { ui, calls } = load({ freshHalf: freshEditHalf([node('table')]), flushes: 'records' });
+
+  assert.equal(await ui.refreshEditSurface(), true);
+
+  assert.deepEqual(calls.map((c) => c.kind), ['flush-global', 'flush-sections', 'fetch'],
+    'the swap discards the inputs panels; a value typed just before it was in no request');
+});
+
+test('a failed autosave does not stop the refresh', async () => {
+  const { ui, calls } = load({ freshHalf: freshEditHalf([node('table')]), flushes: 'fails' });
+
+  assert.equal(await ui.refreshEditSurface(), true);
+  assert.equal(calls.filter((c) => c.kind === 'fetch').length, 1);
+  assert.equal(calls.filter((c) => c.kind === 'reload').length, 0);
 });
 
 test('a notebook swap does not re-wire the edit half', async () => {

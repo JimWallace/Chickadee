@@ -58,6 +58,13 @@
     /// pane. A rewire that throws goes to the same reload fallback as a failed
     /// fetch, because a half with no wiring is a half-swapped page.
     ///
+    /// Focus is kept across the swap. Emptying the half removes the focused
+    /// control, and the browser then moves focus to <body>: a keyboard user
+    /// who saved a section name would lose their place on each save. So the
+    /// id of the focused element is read before the half is emptied, and the
+    /// element with that id in the new half takes focus after the rewire. An
+    /// element with no id cannot be found again, so it is not restored.
+    ///
     /// `opts.keepElement` names an element (by id) to carry across the swap
     /// rather than let `innerHTML` destroy. The notebook half needs this for
     /// `#jl-frame`: 34 closures in notebook.js capture that element, and a
@@ -85,6 +92,10 @@
             var doc = new DOMParser().parseFromString(html, 'text/html');
             var fresh = doc.querySelector(selector);
             if (!fresh) throw new Error('refresh failed: ' + selector + ' not in response');
+
+            // Read before anything leaves the half. Moving the kept element
+            // below also takes focus away from it.
+            var focusedID = focusedIDWithin(half);
 
             // Build the replacement as real nodes, NOT via `innerHTML`.
             //
@@ -115,6 +126,7 @@
             half.appendChild(frag);
             if (typeof opts.rewire === 'function') opts.rewire();
             half.scrollTop = scrollTop;
+            restoreFocus(half, focusedID);
             return true;
         }).catch(function () {
             // A failed refresh must not leave a half-swapped page. Whatever
@@ -125,6 +137,25 @@
         });
     }
 
+    /// The id of the focused element when it is inside `half`, else null.
+    function focusedIDWithin(half) {
+        var active = document.activeElement;
+        if (!active || active === half || !active.id) return null;
+        if (typeof half.contains !== 'function' || !half.contains(active)) return null;
+        return active.id;
+    }
+
+    /// Focus the element with `id` in `half`, without a scroll.
+    ///
+    /// `preventScroll`, because the swap has just put the scroll offset back,
+    /// and a focus that scrolls the control into view would move it again.
+    function restoreFocus(half, id) {
+        if (!id) return;
+        var el = document.getElementById(id);
+        if (!el || typeof el.focus !== 'function' || !half.contains(el)) return;
+        el.focus({ preventScroll: true });
+    }
+
     /// Re-render the edit half in place after a write.
     ///
     /// `window.location.href`, not a stored URL: the merged page's own URL
@@ -132,17 +163,52 @@
     /// open, so there is no second URL to keep in sync (and no DOM-sourced
     /// navigation target to validate).
     ///
-    /// The new half is wired by `ChickadeeEditPage.init()`. That function is
-    /// idempotent, so this call is safe on any page. A page that does not load
-    /// assignment-edit-page.js has no hook, and the swap is then all there is.
+    /// The new half is wired by `ChickadeeEditPage.init()` (see
+    /// `rewireEditHalf`).
+    ///
+    /// A pending autosave goes first. The Global and Section Inputs panels
+    /// save on a debounce, and the swap discards their elements. A value typed
+    /// less than a debounce before the swap would then be in no request and
+    /// on no screen. So the refresh waits for those saves before it fetches.
     function refreshEditSurface() {
-        return swapHalf(EDIT_HALF_SELECTOR, global.location.href, { rewire: rewireEditHalf });
+        return flushPendingAutosaves().then(function () {
+            return swapHalf(EDIT_HALF_SELECTOR, global.location.href, { rewire: rewireEditHalf });
+        });
+    }
+
+    /// Send the inputs autosaves that are waiting on their debounce, and wait
+    /// for the ones in flight.
+    ///
+    /// The PENDING-only hooks, not `chickadeeFlushGlobalInputs`: that one
+    /// always sends a save, and a Global Inputs save also tells the notebook
+    /// half that its values are stale. A refresh would then write, and raise
+    /// that notice, on every swap. A failed save does not stop the refresh:
+    /// each panel reports its own failure, and the write that asked for the
+    /// refresh has already succeeded.
+    function flushPendingAutosaves() {
+        var hooks = [global.chickadeeFlushPendingGlobalInputs, global.chickadeeFlushPendingSectionVars];
+        return Promise.all(hooks.map(function (hook) {
+            if (typeof hook !== 'function') return null;
+            return Promise.resolve().then(hook).catch(function () { return null; });
+        }));
     }
 
     /// Wire the edit half that a swap just put in the document (#1957).
+    ///
+    /// It runs only on the merged workbench: `swapHalf` reloads the
+    /// standalone page before it gets here. On the workbench, a missing hook
+    /// or a missing `#suite-state-seed` means the new half cannot be wired,
+    /// and a half with no wiring looks right and does nothing. So both throw,
+    /// and the swap falls back to a reload.
     function rewireEditHalf() {
         var page = global.ChickadeeEditPage;
-        if (page && typeof page.init === 'function') page.init();
+        if (!page || typeof page.init !== 'function') {
+            throw new Error('refresh failed: ChickadeeEditPage.init is not on this page');
+        }
+        if (!document.getElementById('suite-state-seed')) {
+            throw new Error('refresh failed: #suite-state-seed is not in the new edit half');
+        }
+        page.init();
     }
 
     /// Open a different notebook (file and/or view) without leaving the page.
