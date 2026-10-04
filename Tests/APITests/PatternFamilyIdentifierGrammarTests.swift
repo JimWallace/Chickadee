@@ -109,7 +109,7 @@ import Vapor
         do {
             try validate(family(paramNames: ["has space"]), .racket)
             Issue.record("expected a refusal for an invalid Racket parameter name")
-        } catch let error as Abort {
+        } catch let error as AuthoringValidationError {
             #expect(error.reason.contains("Racket"))
             #expect(!error.reason.contains("Python"))
         }
