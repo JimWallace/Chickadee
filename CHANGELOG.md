@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.411] - 2026-10-04
+
+### Changed
+
+- **Each periodic sweep runs once at boot, not twice.** `PeriodicSweepMonitor` no longer fires a detached boot sweep beside its loop, whose first iteration already sweeps at once. Thirteen services ran their first sweep twice under one lease on every start. The `runImmediately` flag is gone (#2054, audit A16).
+
+
 ## [0.5.410] - 2026-10-04
 
 ### Changed
