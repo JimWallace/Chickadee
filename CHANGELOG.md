@@ -9,6 +9,42 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.398] - 2026-10-04
+
+### Changed
+
+- **The APITests helper file is now eight files, one job each (#1945).**
+  `Tests/APITests/TestHelpers.swift` had 1,717 lines and six unrelated jobs.
+  The code moves without change to `TestDatabase.swift`,
+  `MigratedSQLiteTemplate.swift`, `MigratedPostgresSchemaPool.swift`,
+  `SchemaMutatingSuites.swift`, `TestApp.swift`, `TestRequests.swift`,
+  `TestLogin.swift` and `WorkerHMACTestHeaders.swift`. Two functions lose
+  `private` so that the next file can call them. The comment on
+  `SchemaMutatingSuites` now names all five suites. No test body changes.
+
+### Changed
+
+- **A worker heartbeat test now waits for the daemon with a limit (#1949).**
+  `workerDaemonHeartbeatFailuresDoNotStopPolling` cancelled the daemon and
+  then waited for it with no limit. It now calls `awaitCancelledDaemon`, which
+  waits 30 seconds at most and records an issue when the daemon does not stop.
+
+### Changed
+
+- **Seventeen pure-function tests no longer build a Vapor app (#1950).** They
+  were in class suites that build an app in `init`, so each of them paid for
+  an app that it did not use. They now sit in struct suites in the same
+  files, with no `withApp` wrapper. No assertion changes.
+
+### Changed
+
+- **An enrollment render assertion can fail again (#2036).**
+  `bulkEnrollCSV_enrollsMatchedUsers` checked the CSV result page with a
+  disjunction that held `html.contains("2")`, which almost any page
+  satisfies. It now reads each count from its own row of the page: 2
+  enrolled, 1 pre-enrolled, 0 already enrolled and 0 rejected.
+
+
 ## [0.5.397] - 2026-10-04
 
 ### Changed
