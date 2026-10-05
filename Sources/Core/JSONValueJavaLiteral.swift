@@ -64,10 +64,9 @@ extension JSONValue {
             if d.isInfinite {
                 return d < 0 ? "Double.NEGATIVE_INFINITY" : "Double.POSITIVE_INFINITY"
             }
-            let s = String(d)
-            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+            return finiteDoubleLiteral(d)
         case .string(let s):
-            return encodeJavaString(s)
+            return CStyleStringEscaping.java.quotedLiteral(s)
         case .array(let a):
             // `Arrays.asList`, always — see the doc. An empty array is
             // `java.util.Arrays.asList()`, a legal zero-arg varargs call
@@ -128,10 +127,4 @@ public func javaDeclaredType(forLiteral literal: String) -> String {
         return "int"
     }
     return "Object"
-}
-
-/// See `CStyleStringEscaping.java` for the escape rules — in particular
-/// why a backslash-u escape is never emitted.
-private func encodeJavaString(_ s: String) -> String {
-    CStyleStringEscaping.java.quotedLiteral(s)
 }

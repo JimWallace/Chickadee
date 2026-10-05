@@ -61,10 +61,9 @@ extension JSONValue {
                     ? "(-std::numeric_limits<double>::infinity())"
                     : "std::numeric_limits<double>::infinity()"
             }
-            let s = String(d)
-            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+            return finiteDoubleLiteral(d)
         case .string(let s):
-            return "std::string(\(encodeCppString(s)))"
+            return "std::string(\(CStyleStringEscaping.cpp.quotedLiteral(s)))"
         case .array(let a):
             guard let element = cppVectorElementType(a) else {
                 return "CK_UNRENDERABLE_ARRAY_HAS_NO_SINGLE_CPP_ELEMENT_TYPE"
@@ -79,7 +78,7 @@ extension JSONValue {
                     : "CK_UNRENDERABLE_OBJECT_HAS_NO_SINGLE_CPP_VALUE_TYPE"
             }
             let rendered = pairs.map {
-                "{\(encodeCppString($0.key)), \($0.value.cppScalarLiteral(as: element))}"
+                "{\(CStyleStringEscaping.cpp.quotedLiteral($0.key)), \($0.value.cppScalarLiteral(as: element))}"
             }
             return "std::map<std::string, \(element.spelled)>{\(rendered.joined(separator: ", "))}"
         }
@@ -171,9 +170,4 @@ private func cppVectorElementType(_ items: [JSONValue]) -> CppElementType? {
     case (false, false, false, true): return .longLong
     default: return nil
     }
-}
-
-/// See `CStyleStringEscaping.cpp` for the escape rules.
-private func encodeCppString(_ s: String) -> String {
-    CStyleStringEscaping.cpp.quotedLiteral(s)
 }
