@@ -121,6 +121,24 @@
   (eprintf "~a\n" message)
   (exit 2))
 
+;; --- Running the submission's code ---------------------------------------------
+
+;; The submission runs in the test's process, and a test's result is its exit
+;; status. An `(exit ...)` in the submission's own code would end the test with
+;; the submission's status, and status 0 reads as a pass. Every entry into the
+;; submission's code goes through this, which raises an `exn:fail` in place of
+;; exiting; the generated tests' `with-handlers` reports it as a failure. The
+;; runtime's own verdicts call `exit` outside it and keep the real handler.
+;; This does not stop a determined submission (docs/grading-integrity.md,
+;; phase 2).
+(define (chickadee-as-submission thunk)
+  (parameterize ([exit-handler
+                  (lambda (code)
+                    (raise (make-exn:fail
+                            (format "the submission ended the test (exit ~a)" code)
+                            (current-continuation-marks))))])
+    (thunk)))
+
 ;; --- Locating and loading the submission -----------------------------------
 
 ;; Names that are never the student's module.
@@ -171,7 +189,7 @@
           (chickadee-failed
            (format "Your submission could not be loaded: ~a" (exn-message e))))])
     (define mp `(file ,complete))
-    (dynamic-require mp #f)
+    (chickadee-as-submission (lambda () (dynamic-require mp #f)))
     (module->namespace mp)))
 
 ;; See note 2 in the header: this is the only definedness test that works for a
@@ -186,13 +204,13 @@
       (string->symbol (format "ck-arg~a" i))))
   (for ([n (in-list arg-names)] [v (in-list args)])
     (namespace-set-variable-value! n v #t ns))
-  (eval (cons name arg-names) ns))
+  (chickadee-as-submission (lambda () (eval (cons name arg-names) ns))))
 
 ;; A module-level VALUE (not a function). Safe to evaluate bare: BSL's
 ;; operator-position restriction applies to procedures, not to data bindings —
 ;; `(define x 5)` then `x` is legal there. Used by `variableEquality`.
 (define (chickadee-value ns name)
-  (eval name ns))
+  (chickadee-as-submission (lambda () (eval name ns))))
 
 ;; Calls the student's function with stdout captured, for `stdoutEquality`.
 ;; Returns (values printed-string result).
