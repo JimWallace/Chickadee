@@ -40,7 +40,9 @@ struct SetActivityTool: ContentTool {
         let leaderboardVisibility: String?
         /// The student-facing leaderboard path, null for an ordinary assignment.
         let leaderboardPath: String?
-        /// True when a `highestMetric` record achievement is on the manifest.
+        /// True when the record the kind's aggregation seeds is on the
+        /// manifest (`ActivityAuthoring.hasSeededRecord`). False for a union
+        /// kind, which seeds none.
         let recordAchievementSeeded: Bool
         /// The kind's opponent source (\(MCPActivityProse.opponentSourceTokens)),
         /// null for an ordinary assignment.
@@ -85,17 +87,18 @@ struct SetActivityTool: ContentTool {
     static let description =
         "Make an assignment a class activity by its public ID, or change its leaderboard "
         + "visibility, or clear it. kind is \(MCPActivityProse.tokens), or \"none\" for an ordinary "
-        + "assignment. Kinds: \(MCPActivityProse.summaries). Every kind ranks students on the "
-        + "unclamped `metric` field a test script prints in its JSON footer beside `score` "
-        + "(highest first; a script whose lower is better reports the negation), so author one "
-        + "suite entry whose script reports it. Setting a kind seeds a record achievement on the "
-        + "highest metric. The kind is LOCKED once any student has submitted — clone the assignment "
+        + "assignment. Kinds: \(MCPActivityProse.summaries). A kind's aggregation (get_server_info "
+        + "lists it) decides how the class is ranked and which record setting the kind seeds: "
+        + "\(MCPActivityProse.aggregationSummaries). The kind is LOCKED once any student has submitted — clone the assignment "
         + "instead — but leaderboardVisibility (\"hidden\", the default, or \"visible\") and "
         + "opponentFile may change at any time. A kind whose opponent source is \"supportFile\" "
         + "plays each submission against a bot: upload the bot as a support file (graderOnly to hide "
         + "its source), name it in opponentFile, and the native worker stages it in the directory "
         + "the match script reads from CHICKADEE_OPPONENT_DIR, with a per-match seed in "
-        + "CHICKADEE_MATCH_SEED. A kind whose opponent source is \"champion\" (king of the hill) "
+        + "CHICKADEE_MATCH_SEED. A kind whose opponent source is \"classmates\" plays each submission "
+        + "against every classmate's latest submission in one job (the bot in opponentFile stands in "
+        + "until a classmate has submitted); \"paired\" plays the pairing run_tournament made. "
+        + "A kind whose opponent source is \"champion\" (king of the hill) "
         + "stages the current champion's submission there instead, with `.chickadee_student_module` "
         + "naming their module; the bot in opponentFile holds the hill until a student's match "
         + "passes (exits 0), and the script's exit code is what takes the hill. A kind with an "
@@ -218,8 +221,7 @@ struct SetActivityTool: ContentTool {
             leaderboardPath: stored?.activity.map { _ in
                 "/testsetups/\(assignment.testSetupID)/leaderboard"
             },
-            recordAchievementSeeded: stored?.achievements
-                .contains { $0.recordDimension == .highestMetric } ?? false,
+            recordAchievementSeeded: stored.map(ActivityAuthoring.hasSeededRecord) ?? false,
             opponentSource: stored?.activity?.kind.opponentSource.rawValue,
             opponentFile: stored?.activity?.opponentFile,
             opensAt: stored?.activity?.window?.opensAtISO,
