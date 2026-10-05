@@ -204,6 +204,17 @@ struct CourseBundleRoutes: RouteCollection {
         // it lives in the result_collections side table, not on the row).
         let resultCollectionJSONByID = try await collectionJSONByResultID(
             for: results.compactMap(\.id), on: db)
+        // The runner requirements each assignment declared (#2167).
+        let assignmentIDs = assignments.compactMap(\.id)
+        var requirementByAssignmentID: [UUID: AssignmentRequirementSpec] = [:]
+        if !assignmentIDs.isEmpty {
+            for row in try await AssignmentRequirement.query(on: db)
+                .filter(\.$assignmentID ~~ assignmentIDs)
+                .all()
+            {
+                requirementByAssignmentID[row.assignmentID] = row.requirementSpec
+            }
+        }
 
         return ExportData(
             testSetups: testSetups,
@@ -215,7 +226,8 @@ struct CourseBundleRoutes: RouteCollection {
             allUsers: Array(allUsers),
             submissions: submissions,
             results: results,
-            resultCollectionJSONByID: resultCollectionJSONByID
+            resultCollectionJSONByID: resultCollectionJSONByID,
+            requirementByAssignmentID: requirementByAssignmentID
         )
     }
 
@@ -321,7 +333,8 @@ struct CourseBundleRoutes: RouteCollection {
                 secretRevealEnabled: a.secretRevealEnabled,
                 passingThresholdPercent: a.passingThresholdPercent,
                 solutionVisibility: a.solutionVisibility,
-                brightspaceSyncExcluded: a.brightspaceSyncExcluded
+                brightspaceSyncExcluded: a.brightspaceSyncExcluded,
+                requirement: data.requirementByAssignmentID[aid]
             )
         }
 
@@ -507,6 +520,7 @@ private struct ExportData {
     let results: [APIResult]
     /// Collection blob per result id, batch-fetched from the side table.
     let resultCollectionJSONByID: [String: String]
+    let requirementByAssignmentID: [UUID: AssignmentRequirementSpec]
 }
 
 /// Maps from live DB ids to in-bundle synthetic identifiers used for cross-references.

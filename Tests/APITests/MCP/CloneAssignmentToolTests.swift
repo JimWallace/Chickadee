@@ -91,6 +91,31 @@ import Vapor
         }
     }
 
+    /// The runner requirements the author declared travel with the clone
+    /// (#2167).
+    @Test func copiesTheRequirementRow() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let source = try await fixture(on: app)
+            let spec = AssignmentRequirementSpec(
+                requiredPlatform: "linux", requiredArchitecture: "x86_64",
+                requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.11")],
+                requiredCapabilities: [RunnerCapability(name: "numpy")])
+            try await AssignmentRequirement(assignmentID: try source.requireID(), specification: spec)
+                .save(on: app.db)
+            let output = try await CloneAssignmentTool().execute(
+                CloneAssignmentTool.Input(
+                    sourceAssignmentPublicID: source.publicID, newTitle: "Lab 1 (Copy)", targetCourseCode: nil),
+                context(app))
+            let clone = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
+            let copied = try #require(
+                try await AssignmentRequirement.query(on: app.db)
+                    .filter(\.$assignmentID == (try clone.requireID()))
+                    .first())
+            #expect(copied.requirementSpec == spec)
+        }
+    }
+
     @Test func copiesNotebook() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

@@ -335,10 +335,10 @@ Configuration:
 
 ## How Assignments Declare Requirements
 
-This PR keeps requirement declaration backend-only. There is no admin form yet.
-
-For now, requirements are managed by creating or updating a row in
-`assignment_requirements` for the target assignment.
+The new-assignment form declares the requirements (platform, architecture,
+languages, capabilities), stored as one row in `assignment_requirements` for
+the assignment. A clone and a course bundle copy the row with the assignment
+(#2167). The row can also be written by hand.
 
 Example SQLite session for a Python assignment:
 

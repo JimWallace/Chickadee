@@ -238,6 +238,13 @@ enum AssignmentAuthoringService {
             assignment.passingThresholdPercent = source.passingThresholdPercent
             assignment.brightspaceSyncExcluded = source.brightspaceSyncExcluded
             try await assignment.save(on: db)
+            // The runner requirements the author declared travel with the
+            // clone: the same suite needs the same runner (#2167).
+            if let requirement = try await loadAssignmentRequirementSpec(assignment: source, on: db) {
+                try await AssignmentRequirement(
+                    assignmentID: try assignment.requireID(), specification: requirement
+                ).save(on: db)
+            }
             // Seed the clone's own v1. It inherits no history — the copy lands
             // in a NEW setup id, which is exactly the "only the most recent
             // version travels" semantic a new term wants — so this is what

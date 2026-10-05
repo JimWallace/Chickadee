@@ -181,8 +181,9 @@ The Core type, the migration, the model accessor, and tests
   It now also keeps the source term, so the copy is a sandbox in the same
   term.
 - **Copied:** course sections; every assignment (setup, notebook, reference
-  solution, support files, section, order, secret-reveal flag, passing
-  threshold, LMS sync exclusion); content items and their attachment files;
+  solution, support files, section, order, runner requirements, secret-reveal
+  flag, passing threshold, LMS sync exclusion); content items and their
+  attachment files;
   the slip-day policy and the course MCP authoring guide.
 - **Not copied:** enrollments, pre-enrollments, submissions, results, grade
   overrides, extensions, slip-day spends, achievement results, version

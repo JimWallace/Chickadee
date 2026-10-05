@@ -304,6 +304,11 @@ public struct BundledAssignment: Codable, Sendable {
     public let passingThresholdPercent: Int?
     public let solutionVisibility: SolutionVisibility?
     public let brightspaceSyncExcluded: Bool?
+    /// The runner requirements the author declared (platform, architecture,
+    /// languages, capabilities), which the clone also copies (#2167). Nil in
+    /// a bundle written before it was carried, or when the assignment
+    /// declared none.
+    public let requirement: AssignmentRequirementSpec?
 
     public init(
         bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool? = nil,
@@ -313,7 +318,8 @@ public struct BundledAssignment: Codable, Sendable {
         secretRevealEnabled: Bool? = nil,
         passingThresholdPercent: Int? = nil,
         solutionVisibility: SolutionVisibility? = nil,
-        brightspaceSyncExcluded: Bool? = nil
+        brightspaceSyncExcluded: Bool? = nil,
+        requirement: AssignmentRequirementSpec? = nil
     ) {
         self.bundleID = bundleID
         self.title = title
@@ -328,6 +334,7 @@ public struct BundledAssignment: Codable, Sendable {
         self.passingThresholdPercent = passingThresholdPercent
         self.solutionVisibility = solutionVisibility
         self.brightspaceSyncExcluded = brightspaceSyncExcluded
+        self.requirement = requirement
     }
 }
 
