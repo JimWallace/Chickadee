@@ -257,7 +257,7 @@ extension CourseBundleRoutes {
                 // recreated above (depends only on sectionIDMap).
                 try await importBundledContentItems(
                     manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID,
-                    extractDir: extractDir, contentFilesDir: contentFilesDir, db: db, tally: &t)
+                    dirs: dirs, db: db, tally: &t)
 
                 // 6f. Create test setups → setupIDMap[bundleID] = new live ID
                 let setupIDMap = try await importBundledTestSetups(
@@ -575,11 +575,12 @@ private func importBundledContentItems(
     manifest: CourseBundleManifest,
     sectionIDMap: [String: UUID],
     courseID: UUID,
-    extractDir: URL,
-    contentFilesDir: String,
+    dirs: BundleImportDirectories,
     db: Database,
     tally: inout ImportTally
 ) async throws {
+    let extractDir = dirs.extractDir
+    let contentFilesDir = dirs.contentFilesDir
     for item in manifest.contentItems ?? [] {
         let newItem = APICourseContentItem(
             courseID: courseID,
