@@ -1,8 +1,8 @@
-// Core/CStyleStringEscaping.swift
+// RunnerCore/CStyleStringEscaping.swift
 //
 // One string escaper for every language whose literals take C-style escapes.
 //
-// Seven languages render a `JSONValue` string (`JSONValue.swift` and its
+// Seven languages render a `JSONValue` string (`Core/JSONValue.swift` and its
 // per-language siblings) and three of them also escape authored text into
 // generated test sources (`PythonScriptHelpers`, `CppScriptHelpers`,
 // `JavaSourceHelpers`). Every one of those escapers had the same twenty
@@ -12,12 +12,15 @@
 // measured trap in three languages, so it is stated per preset rather than
 // re-derived by each copy.
 //
+// It lives in RunnerCore, not Core, because the Python notebook extraction
+// (`pythonStringLiteral`) needs the Python preset too, and RunnerCore cannot
+// import Core. Stdlib only: the numeric escapes are rendered by hand, since
+// Foundation's `String(format:)` is unavailable here.
+//
 // Output bytes are content-addressed: generated scripts embed a `spec_hash`
 // that feeds `TestSetupCache` invalidation, so a change to any preset shifts
 // every generated script's hash. The presets reproduce the previous per-copy
 // output exactly.
-
-import Foundation
 
 /// How to escape a string for a double-quoted literal in one language.
 public struct CStyleStringEscaping: Sendable, Equatable {
@@ -38,11 +41,13 @@ public struct CStyleStringEscaping: Sendable, Equatable {
 
         func render(_ scalar: Unicode.Scalar) -> String {
             switch self {
-            case .hexTwoDigit: return String(format: "\\x%02x", scalar.value)
-            case .unicodeFourDigitLowercase: return String(format: "\\u%04x", scalar.value)
-            case .unicodeFourDigitUppercase: return String(format: "\\u%04X", scalar.value)
-            case .octalThreeDigit: return String(format: "\\%03o", scalar.value)
-            case .decimalThreeDigit: return String(format: "\\%03d", scalar.value)
+            case .hexTwoDigit: return "\\x" + digits(scalar.value, radix: 16, width: 2, uppercase: false)
+            case .unicodeFourDigitLowercase:
+                return "\\u" + digits(scalar.value, radix: 16, width: 4, uppercase: false)
+            case .unicodeFourDigitUppercase:
+                return "\\u" + digits(scalar.value, radix: 16, width: 4, uppercase: true)
+            case .octalThreeDigit: return "\\" + digits(scalar.value, radix: 8, width: 3, uppercase: false)
+            case .decimalThreeDigit: return "\\" + digits(scalar.value, radix: 10, width: 3, uppercase: false)
             }
         }
     }
@@ -109,4 +114,18 @@ public struct CStyleStringEscaping: Sendable, Equatable {
     public func quotedLiteral(_ s: String) -> String {
         "\"" + escapedContents(of: s) + "\""
     }
+}
+
+/// `value` in `radix`, zero-padded on the left to `width` digits. Every
+/// caller passes a value below 0x80, so the result never exceeds the width.
+private func digits(_ value: UInt32, radix: UInt32, width: Int, uppercase: Bool) -> String {
+    let alphabet: [Character] = Array(uppercase ? "0123456789ABCDEF" : "0123456789abcdef")
+    var out: [Character] = []
+    var rest = value
+    repeat {
+        out.append(alphabet[Int(rest % radix)])
+        rest /= radix
+    } while rest > 0
+    while out.count < width { out.append("0") }
+    return String(out.reversed())
 }
