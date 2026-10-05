@@ -64,12 +64,12 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
             let s = String(d)
             return (s.contains(".") || s.contains("e") || s.contains("n")) ? s : s + ".0"
         case .string(let s):
-            return encodePythonString(s)
+            return CStyleStringEscaping.python.quotedLiteral(s)
         case .array(let a):
             return "[" + a.map(\.pythonLiteral).joined(separator: ", ") + "]"
         case .object(let o):
             let pairs = o.sorted { $0.key < $1.key }
-                .map { "\(encodePythonString($0.key)): \($0.value.pythonLiteral)" }
+                .map { "\(CStyleStringEscaping.python.quotedLiteral($0.key)): \($0.value.pythonLiteral)" }
             return "{" + pairs.joined(separator: ", ") + "}"
         }
     }
@@ -97,10 +97,9 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
             if d.isNaN { return "NaN" }
             if d.isInfinite { return d < 0 ? "-Inf" : "Inf" }
             // Keep it a valid R numeric literal (e.g. 2 -> "2.0").
-            let s = String(d)
-            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+            return finiteDoubleLiteral(d)
         case .string(let s):
-            return encodeRString(s)
+            return CStyleStringEscaping.r.quotedLiteral(s)
         case .array(let a):
             let inner = a.map(\.rLiteral).joined(separator: ", ")
             return isHomogeneousScalarArray(a) ? "c(\(inner))" : "list(\(inner))"
@@ -188,17 +187,16 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
         case .double(let d):
             if d.isNaN { return "NaN" }
             if d.isInfinite { return d < 0 ? "-Inf" : "Inf" }
-            let s = String(d)
-            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+            return finiteDoubleLiteral(d)
         case .string(let s):
-            return encodeOctaveString(s)
+            return CStyleStringEscaping.octave.quotedLiteral(s)
         case .array(let a):
             let inner = a.map(\.octaveLiteral).joined(separator: ", ")
             return isOctaveNumericArray(a) ? "[\(inner)]" : "{\(inner)}"
         case .object(let o):
             let pairs = o.sorted { $0.key < $1.key }
             guard !pairs.isEmpty else { return "containers.Map()" }
-            let keys = pairs.map { encodeOctaveString($0.key) }.joined(separator: ", ")
+            let keys = pairs.map { CStyleStringEscaping.octave.quotedLiteral($0.key) }.joined(separator: ", ")
             let values = pairs.map { $0.value.octaveLiteral }.joined(separator: ", ")
             return "containers.Map({\(keys)}, {\(values)})"
         }
@@ -218,28 +216,17 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
             // `1/0` are how Lua spells the non-finite literals it cannot parse.
             if d.isNaN { return "(0/0)" }
             if d.isInfinite { return d < 0 ? "(-1/0)" : "(1/0)" }
-            let s = String(d)
-            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+            return finiteDoubleLiteral(d)
         case .string(let s):
-            return encodeLuaString(s)
+            return CStyleStringEscaping.lua.quotedLiteral(s)
         case .array(let a):
             return "{" + a.map { $0.luaLiteral(inTable: true) }.joined(separator: ", ") + "}"
         case .object(let o):
             let pairs = o.sorted { $0.key < $1.key }
-                .map { "[\(encodeLuaString($0.key))] = \($0.value.luaLiteral(inTable: true))" }
+                .map { "[\(CStyleStringEscaping.lua.quotedLiteral($0.key))] = \($0.value.luaLiteral(inTable: true))" }
             return "{" + pairs.joined(separator: ", ") + "}"
         }
     }
-}
-
-/// See `CStyleStringEscaping.lua` for the escape rules.
-private func encodeLuaString(_ s: String) -> String {
-    CStyleStringEscaping.lua.quotedLiteral(s)
-}
-
-/// See `CStyleStringEscaping.octave` for the escape rules.
-private func encodeOctaveString(_ s: String) -> String {
-    CStyleStringEscaping.octave.quotedLiteral(s)
 }
 
 /// True when every element is a numeric or boolean scalar (JSON null admitted
@@ -248,6 +235,15 @@ private func encodeOctaveString(_ s: String) -> String {
 /// are deliberately NOT admitted (see `octaveLiteral`), which is what makes
 /// this narrower than `isHomogeneousScalarArray`'s R rule. Empty arrays fall
 /// through to the cell rendering: nothing says what they would have held.
+/// A finite double as a literal that stays a floating-point number in every
+/// language that reads it: `2.0` must not render as `2`, which a dynamic
+/// language reads as an integer. Swift's description is already minimal and
+/// round-trippable; the only edit is the `.0` a whole number lacks.
+func finiteDoubleLiteral(_ d: Double) -> String {
+    let s = String(d)
+    return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+}
+
 private func isOctaveNumericArray(_ items: [JSONValue]) -> Bool {
     guard !items.isEmpty else { return false }
     return items.allSatisfy { item in
@@ -256,10 +252,6 @@ private func isOctaveNumericArray(_ items: [JSONValue]) -> Bool {
         case .string, .array, .object: return false
         }
     }
-}
-
-private func encodePythonString(_ s: String) -> String {
-    CStyleStringEscaping.python.quotedLiteral(s)
 }
 
 /// True when every element is a scalar of the *same* R atomic kind (all
@@ -297,10 +289,6 @@ private func isHomogeneousScalarArray(_ items: [JSONValue]) -> Bool {
     return true
 }
 
-private func encodeRString(_ s: String) -> String {
-    CStyleStringEscaping.r.quotedLiteral(s)
-}
-
 /// Renders an object key as an R `list(...)` name: bare when it is a simple
 /// syntactic name (letters/digits/`.`/`_`, not starting with a digit), else a
 /// quoted string (R accepts `list("a b" = 1)`).
@@ -309,5 +297,5 @@ private func encodeRName(_ s: String) -> String {
         guard let first = s.first, first.isLetter || first == "." else { return false }
         return s.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }
     }()
-    return isSyntactic ? s : encodeRString(s)
+    return isSyntactic ? s : CStyleStringEscaping.r.quotedLiteral(s)
 }

@@ -45,12 +45,11 @@ extension JSONValue {
             // value.
             if d.isNaN { return "+nan.0" }
             if d.isInfinite { return d < 0 ? "-inf.0" : "+inf.0" }
-            let s = String(d)
             // Keep it a flonum: `2.0` must not render as `2`, which Racket
             // reads as an exact integer and which `equal?` then distinguishes.
-            return (s.contains(".") || s.contains("e") || s.contains("E")) ? s : s + ".0"
+            return finiteDoubleLiteral(d)
         case .string(let s):
-            return encodeRacketString(s)
+            return CStyleStringEscaping.racket.quotedLiteral(s)
         case .array(let a):
             // `(list ...)` rather than a quoted `'(...)`: quote would suppress
             // evaluation of the elements, so a nested `(hash ...)` or a
@@ -63,13 +62,8 @@ extension JSONValue {
             // `equal?` compares structurally.
             guard !o.isEmpty else { return "(hash)" }
             let pairs = o.sorted { $0.key < $1.key }
-                .map { "\(encodeRacketString($0.key)) \($0.value.racketLiteral)" }
+                .map { "\(CStyleStringEscaping.racket.quotedLiteral($0.key)) \($0.value.racketLiteral)" }
             return "(hash " + pairs.joined(separator: " ") + ")"
         }
     }
-}
-
-/// See `CStyleStringEscaping.racket` for the escape rules.
-private func encodeRacketString(_ s: String) -> String {
-    CStyleStringEscaping.racket.quotedLiteral(s)
 }
