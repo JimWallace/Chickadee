@@ -150,6 +150,10 @@ func openMatch(
 /// against their earlier entry stayed completed beside the new one and
 /// `recomputeStanding` counted both. A re-claim replaces the result
 /// wholesale; the rows it opens are the only ones that count.
+///
+/// The claim calls this for a `standings` kind only. A `union` kind keeps
+/// its completed rows, because a kill belongs to the tester after the target
+/// resubmits (#2187).
 func voidCompletedMatrixRows(submissionID: String, on db: Database) async throws {
     try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)

@@ -235,6 +235,34 @@ import VaporTesting
         }
     }
 
+    /// The claim itself voids the earlier rows for a standings kind: a
+    /// retest through `jobOpponentSet` leaves no completed row against the
+    /// classmate's earlier entry (#1744, #2187).
+    @Test func theClaimVoidsTheEarlierRowsForAStandingsKind() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "revoid", manifest: try robinManifest())
+            _ = try await arInsertSubmission(
+                id: "revoid_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
+            let first = try await claim(app, fx: fx, user: fx.a, submissionID: "revoid_a1")
+            let vsB1 = try #require(first.first)
+            try await recordActivityMatch(
+                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "revoid_a1",
+                outcomes: [outcome("match", metric: 1)],
+                matches: [report(vsB1, submissionID: "revoid_a1", won: true, score: 1)], on: app.db)
+
+            _ = try await arInsertSubmission(
+                id: "revoid_b2", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
+            let a1 = try #require(try await APISubmission.find("revoid_a1", on: app.db))
+            let manifest = try #require(fx.setup.decodedManifest())
+            _ = try await WorkerJobRoutes.jobOpponentSet(
+                manifest: manifest, submission: a1, base: "http://localhost", on: app.db)
+
+            let rows = try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "revoid_a1").all()
+            #expect(rows.map(\.opponentSubmissionID) == ["revoid_b2"])
+            #expect(rows.allSatisfy { $0.completedAt == nil })
+        }
+    }
+
     // MARK: - Landing a matrix result
 
     /// The worker's reports complete the rows by identity; the challenger's
