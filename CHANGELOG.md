@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.429] - 2026-10-05
+
+### Changed
+
+- **Eight pure files moved from `Helpers/` to `Utilities/`, and the boundary is now checked from both sides (#2144).** `AchievementSignalPresentation`, `TierFilter`, `FailureDetailMasking`, `NotebookContributionSlots`, `SingleFlightCache`, `ManifestCoherence`, `SupportFileNames` and `SecretFile` import no framework and name no model. `scripts/check-utilities-imports.sh` now also fails on a `Helpers/` file that imports none of Vapor, Fluent and Leaf and names no model, with a fixture. No behaviour change.
+
+
 ## [0.5.428] - 2026-10-05
 
 ### Changed
