@@ -351,6 +351,9 @@ extension GitHubRepoClient {
                 let response = try await app.recordingReachability(.github) {
                     try await http.execute(request, timeout: .seconds(60))
                 }
+                // A refused token is the access layer's to renew, as on every
+                // other call (#1768, #2205).
+                if response.status == .unauthorized { throw GitHubSubmitError.tokenRejected }
                 guard response.status == .ok else { throw GitHubSubmitError.githubFailed }
                 do {
                     return Data(buffer: try await response.body.collect(upTo: maxBytes))
