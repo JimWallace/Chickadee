@@ -36,6 +36,13 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(
         name: .long,
         help:
+            "With --sandbox, the most processes and threads one test script may start at once"
+    )
+    var jobProcessLimit: Int = SandboxedScriptRunner.defaultProcessLimit
+
+    @Option(
+        name: .long,
+        help:
             "Deprecated, and refused with --sandbox: test scripts can read it. Set the RUNNER_SHARED_SECRET env var instead"
     )
     var workerSecret: String?
@@ -100,13 +107,7 @@ struct WorkerCommand: AsyncParsableCommand {
         try FileManager.default.createDirectory(
             at: workRoot, withIntermediateDirectories: true)
 
-        // Refuse to start with `--sandbox` on a host that cannot sandbox. The
-        // alternative is a runner that claims jobs and fails every one of them.
-        if sandbox, let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
-            throw Self.startupFailure(
-                "Error: --sandbox is set, but this host cannot start the sandbox: \(reason)\n"
-                    + SandboxedScriptRunner.probeFailureAdvice + "\n")
-        }
+        let processLimitEnforced = try await checkSandbox(workRoot: workRoot)
 
         let runnerProfile = await RunnerProfileDetector(
             discoveryEnabled: config.capabilityDiscoveryEnabled,
@@ -136,7 +137,7 @@ struct WorkerCommand: AsyncParsableCommand {
             heartbeatRetryPolicy: .heartbeat(config: config),
             resultUploadRetryPolicy: .resultUpload(config: config)
         )
-        let (runner, sandboxLabel) = Self.scriptRunner(sandboxed: sandbox)
+        let (runner, sandboxLabel) = Self.scriptRunner(sandboxed: sandbox, processLimit: jobProcessLimit)
 
         let testSetupCache = TestSetupCache(
             cacheRoot: workRoot,
@@ -170,6 +171,8 @@ struct WorkerCommand: AsyncParsableCommand {
                 "api_base_url": apiBaseURL,
                 "max_jobs": maxJobs,
                 "sandbox_mode": sandboxLabel,
+                "job_process_limit": sandbox ? "\(jobProcessLimit)" : "none",
+                "job_process_limit_enforced": processLimitEnforced,
                 "process_inspection": inspectionRefused ? "refused" : "allowed",
                 "test_setup_cache_dir": cacheDirPath,
             ])
@@ -187,11 +190,50 @@ struct WorkerCommand: AsyncParsableCommand {
         try await daemon.run()
     }
 
+    /// Checks the sandbox at startup, and returns whether the kernel applies
+    /// `--job-process-limit`.
+    ///
+    /// It refuses to start with `--sandbox` on a host that cannot sandbox. The
+    /// alternative is a runner that claims jobs and fails every one of them.
+    /// The process limit isolates the jobs from each other only when the
+    /// kernel applies it and the container can hold every job at its limit.
+    /// Neither stops grading, so both warn rather than refuse.
+    func checkSandbox(workRoot: URL) async throws -> Bool {
+        guard jobProcessLimit >= 1 else {
+            throw Self.startupFailure("Error: --job-process-limit must be at least 1\n")
+        }
+        guard sandbox else { return false }
+        if let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
+            throw Self.startupFailure(
+                "Error: --sandbox is set, but this host cannot start the sandbox: \(reason)\n"
+                    + SandboxedScriptRunner.probeFailureAdvice + "\n")
+        }
+        let enforced = await SandboxedScriptRunner.processLimitIsEnforced(workDir: workRoot)
+        if !enforced {
+            writeToStandardError(
+                "Warning: --job-process-limit is not enforced on this host. The kernel does not "
+                    + "apply it when the runner runs as root, so one job can fork until the "
+                    + "container's processes are used up. Run the runner as a non-root user.\n")
+        }
+        if let containerLimit = JobProcessBudget.readContainerLimit(),
+            let warning = JobProcessBudget(
+                containerLimit: containerLimit, maxJobs: maxJobs, processLimit: jobProcessLimit
+            ).warning
+        {
+            writeToStandardError(warning)
+        }
+        return enforced
+    }
+
     /// The script runner `--sandbox` selects, with the label the startup log
     /// reports for it. One decision for both, so the log cannot describe a
     /// different runner from the one that grades.
-    static func scriptRunner(sandboxed: Bool) -> (runner: any ScriptRunner, label: String) {
-        sandboxed ? (SandboxedScriptRunner(), "sandboxed") : (UnsandboxedScriptRunner(), "unsandboxed")
+    static func scriptRunner(
+        sandboxed: Bool, processLimit: Int = SandboxedScriptRunner.defaultProcessLimit
+    ) -> (runner: any ScriptRunner, label: String) {
+        sandboxed
+            ? (SandboxedScriptRunner(processLimit: processLimit), "sandboxed")
+            : (UnsandboxedScriptRunner(), "unsandboxed")
     }
 
     /// What the runner does when `--worker-secret` is set.
