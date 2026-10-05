@@ -6,10 +6,12 @@
 // (`CourseAdminRoutes+Sections`) all change exactly one field of
 // `test_setups.manifest`.  Each helper is a `mutateManifest` closure
 // (below) over the decoded `TestProperties`, so the decode →
-// mutate → stable-encode → save pattern lives once.  Helpers save only when
-// the field actually changes, so a no-op call doesn't bump the row.  A
-// manifest that does not decode throws — that indicates a corrupted setup,
-// not a user error.
+// mutate → stable-encode → save pattern lives once, and so does the rule
+// that a no-op edit does not bump the row: the stable encoder makes "the
+// field changed" the same question as "the bytes changed", so `mutateManifest`
+// compares the bytes and a helper does not compare the field.  A manifest
+// that does not decode throws — that indicates a corrupted setup, not a user
+// error.
 
 import Core
 import Fluent
@@ -49,6 +51,9 @@ func mutateManifest(
         }
         try mutate(&props)
         let written = try encodeManifest(props)
+        // A no-op edit writes nothing, so nothing keyed on the bytes (a
+        // version snapshot, the runner's setup cache) sees a change.
+        if written == setup.manifest { return }
         if try await replaceManifest(of: setup, with: written, on: db) { return }
         // Another edit saved first. Start again from what it saved.
         guard let current = try await APITestSetup.find(setup.id, on: db) else {
@@ -146,10 +151,8 @@ func setManifestGradingMode(
     if let violation = ManifestCoherence.violation(introducedBy: { $0.gradingMode = parsed }, in: setup.manifest) {
         throw AppError.badRequest(reason: violation)
     }
-    if currentManifestGradingMode(setup.manifest) != mode {
-        try await mutateManifest(setup: setup, on: db) { props in
-            props.gradingMode = parsed
-        }
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.gradingMode = parsed
     }
     return mode
 }
@@ -240,8 +243,9 @@ func setManifestLanguage(
     guard let parsed = AssignmentLanguage(rawValue: language) else {
         throw AppError.badRequest(reason: unknownLanguageMessage(language))
     }
-    let current = currentManifestLanguage(setup.manifest)
-    guard current != language else { return language }
+    // Not a save-only-when-changed rule, which `mutateManifest` owns: a
+    // same-value call must not meet the generated-scripts refusal below.
+    guard currentManifestLanguage(setup.manifest) != language else { return language }
     if let violation = ManifestCoherence.violation(introducedBy: { $0.language = parsed }, in: setup.manifest) {
         throw AppError.badRequest(reason: violation)
     }
@@ -388,46 +392,40 @@ func setManifestSubmissionMode(
     if let violation = ManifestCoherence.violation(introducedBy: { $0.submissionMode = parsed }, in: setup.manifest) {
         throw AppError.badRequest(reason: violation)
     }
-    if currentManifestSubmissionMode(setup.manifest) != mode {
-        try await mutateManifest(setup: setup, on: db) { props in
-            props.submissionMode = parsed
-        }
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.submissionMode = parsed
     }
     return mode
 }
 
-/// Adds or removes `filename` in the manifest's `graderOnlyFiles` list, saving
-/// only when it actually changes.  A grader-only file is bundled for the worker
-/// but withheld from every student-facing path — see docs/datasets.md.
+/// Adds or removes `filename` in the manifest's `graderOnlyFiles` list.  A
+/// grader-only file is bundled for the worker but withheld from every
+/// student-facing path — see docs/datasets.md.
 func setManifestGraderOnly(
     setup: APITestSetup, filename: String, graderOnly: Bool, on db: any Database
 ) async throws {
-    let present = currentManifestGraderOnlyFiles(setup.manifest).contains(filename)
-    guard graderOnly != present else { return }  // already in the desired state
     try await mutateManifest(setup: setup, on: db) { props in
         if graderOnly {
-            props.graderOnlyFiles.append(filename)
+            if !props.graderOnlyFiles.contains(filename) { props.graderOnlyFiles.append(filename) }
         } else {
             props.graderOnlyFiles.removeAll { $0 == filename }
         }
     }
 }
 
-/// Sets the test setup's default `timeLimitSeconds` to `seconds` when it
-/// differs.  Returns the effective value.
+/// Sets the test setup's default `timeLimitSeconds` to `seconds`.  Returns the
+/// effective value.
 func setManifestTimeLimitSeconds(
     setup: APITestSetup, to seconds: Int, on db: any Database
 ) async throws -> Int {
-    if setup.decodedManifest()?.timeLimitSeconds != seconds {
-        try await mutateManifest(setup: setup, on: db) { props in
-            props.timeLimitSeconds = seconds
-        }
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.timeLimitSeconds = seconds
     }
     return seconds
 }
 
-/// Sets (or clears) the test setup's `minimumRunnerVersion` gate, saving only
-/// when it actually changes.  A blank/nil `version` clears the gate (the key is
+/// Sets (or clears) the test setup's `minimumRunnerVersion` gate.  A
+/// blank/nil `version` clears the gate (the key is
 /// omitted, matching `TestProperties.encodeIfPresent`).  A gated setup is only
 /// handed to a native runner whose advertised version is `>=` this value — see
 /// docs/runner-capability-profiles.md.  Returns the effective value (nil when
@@ -437,7 +435,6 @@ func setManifestMinimumRunnerVersion(
 ) async throws -> String? {
     let normalized = version?.trimmingCharacters(in: .whitespacesAndNewlines)
     let effective = (normalized?.isEmpty == false) ? normalized : nil
-    guard setup.decodedManifest()?.minimumRunnerVersion != effective else { return effective }
     try await mutateManifest(setup: setup, on: db) { props in
         props.minimumRunnerVersion = effective
     }
@@ -445,19 +442,17 @@ func setManifestMinimumRunnerVersion(
 }
 
 /// Turns GitHub submission on or off for the test setup
-/// (docs/github-submissions.md slice 3), saving only when it changes. Off
-/// omits the key, matching `TestProperties.encode`, which omits `false`.
+/// (docs/github-submissions.md slice 3). Off omits the key, matching
+/// `TestProperties.encode`, which omits `false`.
 func setManifestGitHubSubmission(setup: APITestSetup, enabled: Bool, on db: any Database) async throws {
-    guard setup.decodedManifest()?.githubSubmission != enabled else { return }
     try await mutateManifest(setup: setup, on: db) { props in
         props.githubSubmission = enabled
     }
 }
 
-/// Turns commit statuses on or off (slice 6), saving only when it changes.
-/// Off omits the key, matching `TestProperties.encode`.
+/// Turns commit statuses on or off (slice 6). Off omits the key, matching
+/// `TestProperties.encode`.
 func setManifestGitHubStatusChecks(setup: APITestSetup, enabled: Bool, on db: any Database) async throws {
-    guard setup.decodedManifest()?.githubStatusChecks != enabled else { return }
     try await mutateManifest(setup: setup, on: db) { props in
         props.githubStatusChecks = enabled
     }
@@ -477,15 +472,13 @@ func currentManifestActivityStagesAnOpponent(_ manifest: String?) -> Bool {
     currentManifestActivity(manifest)?.stagesAnOpponent == true
 }
 
-/// Sets (or clears, with nil) the test setup's `activity` block, saving only
-/// when it actually changes.
+/// Sets (or clears, with nil) the test setup's `activity` block.
 ///
 /// Callers decide the lifecycle rule (the kind is locked once a student has
 /// submitted); this helper only writes.
 func setManifestActivity(
     setup: APITestSetup, to activity: ClassActivity?, on db: any Database
 ) async throws {
-    guard currentManifestActivity(setup.manifest) != activity else { return }
     try await mutateManifest(setup: setup, on: db) { props in
         props.activity = activity
     }
