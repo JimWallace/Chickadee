@@ -119,4 +119,20 @@ import _CryptoExtras
             #expect(await app.githubInstallationTokens.token(forAccount: Self.accountID) == nil)
         }
     }
+
+    /// After one refusal, the next call on the same access starts from the
+    /// fresh token, not from the refused one it was resolved with (#2205).
+    @Test func aLaterCallOnTheSameAccessUsesTheFreshToken() async throws {
+        useGitHub(refusing: ["stale"])
+        try await withApp(app) { _ in
+            let studentID = try await linkedStudent(cachedToken: "stale")
+            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let access = try await GitHubSubmissionAccess.resolve(userID: studentID, req: req)
+
+            _ = try await access.ownedRepositories(req: req)
+            _ = try await access.ownedRepositories(req: req)
+            #expect(calls.withLockedValue { $0 } == ["stale", "fresh-0", "fresh-0"])
+            #expect(issued.withLockedValue { $0 } == ["fresh-0"], "one token minted, not one per call")
+        }
+    }
 }

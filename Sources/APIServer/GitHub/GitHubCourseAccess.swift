@@ -54,7 +54,8 @@ struct GitHubCourseAccess: Sendable {
 
     /// Nil when the setting cannot be read.
     func privateForksAllowed(req: Request) async -> Bool? {
-        try? await client.privateForksAllowed(token, organization.orgLogin)
+        let login = organization.orgLogin
+        return try? await call(req) { token in try await client.privateForksAllowed(token, login) }
     }
 
     /// The linked account's login now, read by its numeric ID, and stored when

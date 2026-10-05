@@ -87,7 +87,11 @@ enum GitHubCommitStatusPoster {
             let status = status(
                 for: collection, context: context(assignmentSlug: assignment?.slug),
                 targetURL: targetURL(submissionID: try submission.requireID(), req: req))
-            try await access.client.createStatus(access.token, repository.fullName, sha, status)
+            // Through `call`, so a refused token is renewed like every other
+            // call's (#2205).
+            try await access.call(req) { token in
+                try await access.client.createStatus(token, repository.fullName, sha, status)
+            }
         } catch {
             req.logger.warning("GitHub status not posted", metadata: ["error": "\(error)"])
         }

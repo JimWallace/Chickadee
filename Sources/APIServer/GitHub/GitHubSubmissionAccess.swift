@@ -152,13 +152,20 @@ struct GitHubSubmissionAccess: Sendable {
     /// token's installation was removed or re-made after the token was
     /// cached, so the cached entry is dropped and `renew` resolves a fresh
     /// one; a second refusal means the App is not installed (#1768).
+    ///
+    /// The call starts from the account's cached token when there is one,
+    /// and from `token` only when there is not. `token` is the one the access
+    /// was resolved with; after a refusal `renew` caches a fresh token, and
+    /// without this every later call in the same request started from the
+    /// refused one again (#2205).
     static func calling<T: Sendable>(
         _ req: Request, accountID: Int64, token: String,
         renew: @Sendable (Request) async throws -> String,
         _ body: (_ token: String) async throws -> T
     ) async throws -> T {
+        let current = await req.application.githubInstallationTokens.token(forAccount: accountID) ?? token
         do {
-            return try await calling(req) { try await body(token) }
+            return try await calling(req) { try await body(current) }
         } catch GitHubSubmitError.tokenRejected {
             let cache = req.application.githubInstallationTokens
             await cache.remove(account: accountID)
