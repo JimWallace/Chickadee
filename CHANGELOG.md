@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.422] - 2026-10-05
+
+### Changed
+
+- **One kernel-name loop in `AssignmentLanguage` (#2127).** `fromNotebookMetadata` and `languageFromKernelNames` each looped every language over the kernel name and the language name. The first now extracts the two strings and calls the second.
+
+
 ## [0.5.421] - 2026-10-05
 
 ### Changed
