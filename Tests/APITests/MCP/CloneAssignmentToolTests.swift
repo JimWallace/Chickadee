@@ -260,6 +260,15 @@ import Vapor
         }
     }
 
+    /// The description is what an agent reads before it calls the tool, so it
+    /// must name the solution copy and the section drop (#2169).
+    @Test func descriptionNamesTheSolutionAndTheSectionDrop() {
+        let description = CloneAssignmentTool.description
+        #expect(description.contains("reference solution"))
+        #expect(description.contains("no course section"))
+        #expect(description.contains("set_assignment_course_section"))
+    }
+
     @Test func deniesWhenNotEnrolledInTargetCourse() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

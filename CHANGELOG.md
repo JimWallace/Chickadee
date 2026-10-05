@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.438] - 2026-10-05
+
+### Fixed
+
+- **A course export names only the files the bundle holds (#2165).** A submission whose file is gone from disk is left out of the bundle with its results, and an export whose setup zip is missing fails with a message that names the path. Before, the manifest listed the row, the staging step skipped the file with a warning, and the import then refused the whole bundle.
+
+
+## [0.5.437] - 2026-10-05
+
+### Fixed
+
+- **The `clone_assignment` description names everything the clone copies and drops (#2169).** It now says that the reference solution, the support files and the three per-assignment policies come along, that version 1 is seeded, and that the clone has no course section, sort order, due date or solution reveal. The `cloneAssignment` doc comment and two lines in `docs/assignment-versioning.md` no longer describe a `copyCourse` mirror that no longer exists.
+
+
+## [0.5.436] - 2026-10-05
+
+### Changed
+
+- **The layering baseline is empty (#2143).** The last seven symbols that shared code named in route files moved below the routes: `waterlooDateTimeFormatter` to `Utilities/`, the two deadline-override functions into `AssignmentDeadlineService`, `AchievementBadge` and `BadgeContext` into `AchievementBadgeEvaluation`, and `AssignmentSlugHelpers.swift` to `Helpers/`, where the slug rule now lives as `assignmentSlug(fromTitle:)` with `VanityURLRoutes.slugify` forwarding to it. `scripts/check-layering.sh` now fails on any upward call. No behaviour change.
+
+
 ## [0.5.435] - 2026-10-05
 
 ### Changed

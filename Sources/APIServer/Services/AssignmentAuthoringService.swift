@@ -156,16 +156,20 @@ enum AssignmentAuthoringService {
         try await assignment.save(on: db)
     }
 
-    /// Duplicates an assignment into `targetCourseID` under `newTitle`: the
-    /// source test setup's zip (+ optional notebook) is copied to a fresh setup
-    /// id, the manifest is carried over verbatim, and a new assignment is
-    /// allocated with its own public id + course-unique slug.
+    /// Duplicates an assignment into `targetCourseID` under `newTitle`. The
+    /// source setup's zip and starter notebook are copied to a fresh setup id,
+    /// the manifest is carried over verbatim, the reference solution and the
+    /// shared support files are copied, the solution source is written, the
+    /// three per-assignment policies come along, and a new assignment is
+    /// allocated with its own public id, course-unique slug and version v1.
     ///
-    /// The clone always starts **closed and unvalidated** (no `isOpen`, no
-    /// `validationStatus`, no due date) — the instructor (or a follow-up tool
-    /// call) re-validates and opens it. Because it's a brand-new setup with no
-    /// submissions, nothing is re-graded. Mirrors the per-assignment slice of
-    /// the admin `copyCourse` flow so the two clone paths can't drift.
+    /// The clone always starts **closed and unvalidated**: no `isOpen`, no
+    /// `validationStatus`, no due date, no section, no sort order, solution
+    /// hidden. The instructor (or a follow-up tool call) re-validates and
+    /// opens it. Because it is a brand-new setup with no submissions, nothing
+    /// is re-graded. Every live copy path (the course clone through
+    /// `CourseCloneService`, the web clone route and MCP `clone_assignment`)
+    /// runs this one function, so the copies cannot drift.
     static func cloneAssignment(
         source: APIAssignment,
         sourceSetup: APITestSetup,
