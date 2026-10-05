@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.450] - 2026-10-05
+
+### Fixed
+
+- **A tournament round advances once, and a failed advance can finish.** Two match results landing together could both advance from a stale copy of the run, so the second could complete the run with no winner. An error in the advance stalled the run for ever, because a replayed report returned early. The advance now reads the run fresh in one transaction and claims each step with one conditional update, a replayed report retries it, the ingest calls it best effort, and starting a tournament is one transaction.
+
+### Fixed
+
+- **The activity docs say how a matrix activity reaches the grade.** The round robin and tests-and-code summaries, the union header and `docs/class-activities.md` said these activities never touch the grade of record. Their standings do not, but the submission's own match entry is graded on its mean win fraction like any suite entry. The text now says so and tells the author to give that entry 0 points to keep match results off the grade.
+
+
 ## [0.5.449] - 2026-10-05
 
 ### Fixed
