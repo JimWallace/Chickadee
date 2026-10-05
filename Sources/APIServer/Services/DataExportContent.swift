@@ -64,6 +64,11 @@ struct DataExportGitHubAccount: Codable, Sendable {
 
 struct DataExportEnrollment: Codable, Sendable {
     let courseCode: String
+    /// The course's URL key ("CS135-F26"): two offerings of one course share
+    /// a code, so the key and the term tell them apart (#2230).
+    let courseKey: String
+    /// "Fall 2026", nil for a course with no term.
+    let courseTerm: String?
     let courseName: String
     let role: String
     let enrolledAt: Date?
@@ -77,6 +82,9 @@ struct DataExportEnrollment: Codable, Sendable {
 struct DataExportSubmission: Codable, Sendable {
     let submissionID: String
     let courseCode: String?
+    /// The course's URL key and term, as on `DataExportEnrollment`.
+    let courseKey: String?
+    let courseTerm: String?
     let assignmentTitle: String?
     let kind: String
     let status: String
@@ -213,9 +221,12 @@ private func gatherEnrollments(
         .all()
     return
         rows
+        .sorted { courseListPrecedes($0.course, $1.course) }
         .map { row in
             DataExportEnrollment(
                 courseCode: row.course.code,
+                courseKey: row.course.urlKey,
+                courseTerm: row.course.term?.displayName,
                 courseName: row.course.name,
                 role: row.role.rawValue,
                 enrolledAt: row.enrolledAt,
@@ -223,7 +234,6 @@ private func gatherEnrollments(
                 avatarHandle: row.avatarHandle
             )
         }
-        .sorted { $0.courseCode < $1.courseCode }
 }
 
 private struct GatheredSubmissions: Sendable {
@@ -298,6 +308,8 @@ private func gatherSubmissions(
             DataExportSubmission(
                 submissionID: subID,
                 courseCode: course?.code,
+                courseKey: course?.urlKey,
+                courseTerm: course?.term?.displayName,
                 assignmentTitle: assignmentBySetupID[submission.testSetupID]?.title,
                 kind: submission.kind,
                 status: submission.status,
@@ -539,8 +551,9 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
           student ID, sign-in provider, account timestamps, and the choices
           behind your generated avatar. Passwords are stored only as one-way
           hashes and are never included.
-        - `enrollments.json` — the courses you are enrolled in, your role in
-          each, when you enrolled, and the per-course handle reserved for you.
+        - `enrollments.json` — the courses you are enrolled in, with each
+          course's term, your role in each, when you enrolled, and the
+          per-course handle reserved for you.
         - `submissions.json` — an index of every submission you have made:
           course, assignment, attempt number, timestamps, and where in this
           archive to find the uploaded file and its grading results.

@@ -92,6 +92,44 @@ import VaporTesting
         }
     }
 
+    // MARK: - Course order
+
+    /// Both course lists sort newest term first, so two offerings of one code
+    /// are in a fixed order (docs/course-terms.md slice 2, #2231).
+    @Test func courseListsSortNewestTermFirst() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(
+                username: "acct_term_order", password: "pw", role: "student", on: app)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "acct_term_order").first())
+            let fall26 = AcademicTerm(year: 2026, season: .fall)
+            let winter27 = AcademicTerm(year: 2027, season: .winter)
+            for (code, term) in [("ORD135", fall26), ("ORD135", winter27)] {
+                let course = APICourse(code: code, name: "Enrolled", enrollmentMode: .open, term: term)
+                try await course.save(on: app.db)
+                try await enroll(user: student, in: course)
+            }
+            for (code, term) in [("ORD240", fall26), ("ORD240", winter27)] {
+                try await APICourse(code: code, name: "Available", enrollmentMode: .open, term: term)
+                    .save(on: app.db)
+            }
+
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    let enrolledWinter = try #require(html.range(of: "<strong>ORD135</strong> Winter 2027"))
+                    let enrolledFall = try #require(html.range(of: "<strong>ORD135</strong> Fall 2026"))
+                    #expect(enrolledWinter.lowerBound < enrolledFall.lowerBound)
+                    let availableWinter = try #require(html.range(of: "<strong>ORD240</strong> Winter 2027"))
+                    let availableFall = try #require(html.range(of: "<strong>ORD240</strong> Fall 2026"))
+                    #expect(availableWinter.lowerBound < availableFall.lowerBound)
+                })
+        }
+    }
+
     // MARK: - The avatar renders
 
     /// The bird reaches the page, from the sprite through the partial.

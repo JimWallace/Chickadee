@@ -264,14 +264,14 @@ code-only lookup.** Use `findActiveCourse(byKey:viewer:on:)` on the web or
 
 | Place | File |
 |---|---|
-| `findActiveCourse(byCode:)` | `Services/CourseLookupHelpers.swift` |
+| `findActiveCourse(byKey:viewer:on:)` | `Services/CourseLookupHelpers.swift` |
 | Vanity URLs `/:courseCode/:assignmentSlug` (and `/notebook`, `/submit`, `/history`, `/leaderboard`) | `Routes/Web/VanityURLRoutes.swift` |
 | Staff student paths `/:courseCode/students/...` | `Routes/Web/StudentCoursePaths.swift`, `StudentCourseRoutes+History.swift` |
-| MCP `resolveCourse` / `resolveCourseForWrite` (these do not filter archived courses today) | `MCP/Tools/CourseSectionTools.swift` |
+| MCP `resolveCourse` / `resolveCourseForWrite` (active courses are matched first; an archived course only when no active one matches, #1778) | `MCP/Tools/CourseSectionTools.swift` |
 | MCP `list_assignments`, `clone_assignment` | `MCP/Tools/ListAssignmentsTool.swift`, `CloneAssignmentTool.swift` |
 | MCP resource `chickadee://course/<code>/authoring-guidance` | `MCP/Resources/MCPResourceProvider.swift` |
 | Admin MCP `get_instructor_card_series` | `MCP/Admin/Tools/GetInstructorCardSeriesTool.swift` |
-| Bundle import conflict check (also a latent bug: it can see an archived duplicate first) | `Routes/Web/CourseBundleRoutes+Import.swift` |
+| Bundle import conflict check (active courses only, inside the import transaction) | `Routes/Web/CourseBundleRoutes+Import.swift` |
 
 ---
 

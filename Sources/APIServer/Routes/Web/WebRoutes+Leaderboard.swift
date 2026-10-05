@@ -374,7 +374,8 @@ func buildChampionPresentation(
     else { return nil }
     let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
     // The same lock as a ranking row: a classmate has now seen this handle.
-    if !includeNames, champion.userID != viewerID {
+    // A nil viewer is Present mode, a staff view, which locks nothing (#2254).
+    if !includeNames, let viewerID, champion.userID != viewerID {
         await AvatarStore.lockHandle(for: enrollment, on: db)
     }
     let spec = try await AvatarStore.ensureSpec(for: user, on: db)

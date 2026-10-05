@@ -9,6 +9,45 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.470] - 2026-10-05
+
+### Fixed
+
+- **Present mode no longer locks the hill champion's handle.** Opening Present mode on a king-of-the-hill activity spent the champion's one handle change, although Present mode is a staff view and locks nothing. The champion card now follows the same rule as the ranking rows (#2254).
+
+
+## [0.5.469] - 2026-10-05
+
+### Security
+
+- **A Racket submission can no longer end a test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. An `(exit ...)` in the submission's own code, in a function the test calls or in its module body, ended the test with the submission's status, and status 0 read as a pass. Every entry into the submission (`chickadee-load-student`, `chickadee-call`, `chickadee-value` and `chickadee-call/capture`) now runs under an exit handler that raises an `exn:fail` naming the cause, which the generated test reports as a failure. The runtime's own verdicts keep the real handler. The browser copy of the runtime is regenerated with it. Phase 2 of `docs/grading-integrity.md` (#2241); it does not stop a determined submission, which phase 3 addresses.
+
+
+## [0.5.468] - 2026-10-05
+
+### Security
+
+- **A Lua submission can no longer end a test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. An `os.exit` in the submission's own code, in a function the test calls or in its top-level code, ended the test with the submission's status, and status 0 read as a pass. `load_student` now gives the submission's environment its own `os`, whose `exit` raises an error that the generated test reports as a failure ("the submission ended the test"); every other `os` function still works, and the runtime's own verdicts keep the real `os.exit`. The browser copy of the runtime is regenerated with it. Phase 2 of `docs/grading-integrity.md` (#2241); it does not stop a determined submission, which phase 3 addresses.
+
+### Security
+
+- **An R submission can no longer end a test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. A `quit()` or `q()` in the submission's own code, in a function the test calls or in its top-level code, ended the test with the submission's status, and status 0 read as a pass. `chickadee_load_student` now shadows both names in the submission's environment, so such a call stops with an error that the generated test reports as a failure ("the submission ended the test"). The runtime's own `passed`, `failed` and `errored` keep the real `quit()`. The browser copy of the runtime is regenerated with it. Phase 2 of `docs/grading-integrity.md` (#2241); it does not stop a determined submission, which phase 3 addresses.
+
+
+## [0.5.467] - 2026-10-05
+
+### Fixed
+
+- **The account page lists courses newest term first.** Both course lists sorted by code alone, so two offerings of one course were in no fixed order; they now use the same order as every other course list. `docs/course-terms.md` no longer names a function that does not exist or describes two fixed defects as current (#2231).
+
+
+## [0.5.466] - 2026-10-05
+
+### Fixed
+
+- **The personal-data export names each course offering.** Enrollments and submissions carried only the course code, so a student who took a course twice could not tell the two offerings apart. Both now carry `courseKey` (for example `CS135-F26`) and `courseTerm` (for example `Fall 2026`), and enrollments list the newest term first (#2230).
+
+
 ## [0.5.465] - 2026-10-05
 
 ### Security
