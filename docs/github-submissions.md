@@ -206,7 +206,15 @@ As built (slice 2):
   once**. Nothing that can act on the student's GitHub account stays on the
   server.
 - Linking again replaces the student's link. A GitHub account already linked
-  to another Chickadee account is refused.
+  to another Chickadee account is refused. When the new account is another
+  one, every course repository of the student's whose invitation went to the
+  earlier account is moved: the earlier account is removed as a collaborator
+  first, then the linked account is invited (#2208). *Make my repository*
+  runs the same step for one repository. A repository made before the
+  invited account was recorded is invited again under the linked account,
+  and its earlier collaborator, which is not known, stays. Unlinking alone
+  changes nothing on GitHub: the collaborator stays until the student links
+  again or the repository is archived.
 - Linking and unlinking are audited. The link appears in the student's data
   export (`profile.githubAccount`), and deleting a user deletes their link.
 
@@ -589,7 +597,8 @@ Chickadee.
 | 4 | A repository named `{assignment-slug}-{github-login}` | Out | **Every owner of the course organization, and every member who can see private repositories. The name contains the assignment's slug and the student's GitHub login.** |
 | 4 | The template's files, copied into the student's repository | Out (GitHub to GitHub) | The same people |
 | 4 | An invitation from the course organization to the student's GitHub login | Out | The student; the organization's owners |
-| 4 | The repository ID and `owner/name`, and whether the invitation succeeded | In | Stored in `github_course_repositories` |
+| 4 | The repository ID and `owner/name`, whether the invitation succeeded, and the numeric ID of the account it went to | In | Stored in `github_course_repositories` |
+| 4 | The removal of an earlier collaborator, when the student links another account (#2208) | Out | The organization's owners and the removed account |
 | 4 | The archived state at the end of term | Out | The same people as the repository |
 | 4 | The App's permissions and events, and those of the installation on the bound organization (#1776) | In | Read for the admin and course pages only; not stored |
 | 5 | The deployment's webhook URL, in the App's settings | Out | The App's owner on GitHub |
@@ -619,7 +628,7 @@ what it leaves.
 | The link and unlink events | `audit_log`: `github.account_linked` carries the GitHub user ID and login; `github.account_unlinked` carries the user ID | The audit log's retention window, `AUDIT_LOG_RETENTION_DAYS`, 90 days by default. The login outlives the link by up to that window, and the data export includes the entries. |
 | The repository ID, `owner/name` and commit SHA of a GitHub submission | `submissions.source_repo_id`, `source_repo_name` and `source_commit` | The submission is deleted, with its course. The results page shows the short SHA to the student; the staff submission page shows the repository name and the SHA. An unlink does not clear these columns. |
 | The organization ID and login, and the installation ID | `github_course_organizations`, one row per bound course | The instructor unbinds the organization, or the course is deleted. |
-| The repository ID and `owner/name`, whether the invitation succeeded, the archived time, and the last push time and SHA | `github_course_repositories`, one row per student repository | The course, its assignment or the user is deleted; the rows cascade. Archiving the course leaves them. The data export lists the user's rows. |
+| The repository ID and `owner/name`, whether the invitation succeeded and the numeric ID of the account it went to, the archived time, and the last push time and SHA | `github_course_repositories`, one row per student repository | The course, its assignment or the user is deleted; the rows cascade. Archiving the course leaves them. The data export lists the user's rows. |
 | The App ID, slug, name, client ID and owner login | `github_apps`, one row | The admin removes the App on `/admin/github`. |
 | The client secret, private key and webhook secret | `.github-app-secrets`, a 0600 file beside the data | The admin removes the App, which deletes the file. `scripts/snapshot.sh` copies the file into every host snapshot, so a snapshot holds it for as long as the snapshot is kept. |
 | Installation tokens | Memory only, `GitHubInstallationTokenCache` | The token's one-hour life, or the next restart. Never written to disk. |

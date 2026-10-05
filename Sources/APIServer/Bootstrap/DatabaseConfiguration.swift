@@ -521,6 +521,10 @@ func registerMigrations(on app: Application) {
     // whose table it names.
     app.migrations.add(CreateSweepAndPollIndexes())
 
+    // The GitHub account a course repository's invitation went to (#2208).
+    // One optional column; existing rows keep NULL.
+    app.migrations.add(AddGitHubCourseRepositoryInvitedUser())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).

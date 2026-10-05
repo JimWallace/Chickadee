@@ -493,6 +493,81 @@ import VaporTesting
         }
     }
 
+    /// Adds the collaborator-removal and login fakes the relink tests need:
+    /// `classmateID` is the account the repository was first invited under.
+    private func useRemovals(classmateID: Int64) {
+        let calls = calls
+        app.githubRepoClient.userLogin = { _, id in
+            calls.withLockedValue { $0.append("user:\(id)") }
+            if id == Self.studentGitHubID { return "octo-student" }
+            return id == classmateID ? "classmate" : nil
+        }
+        app.githubRepoClient.removeCollaborator = { _, fullName, login in
+            calls.withLockedValue { $0.append("remove:\(fullName):\(login)") }
+        }
+    }
+
+    /// The repository was invited under a classmate's account, which the
+    /// student linked by mistake. *Make my repository* removes the classmate
+    /// first, then invites the account linked now, and records it (#2208).
+    @Test func aRepositoryInvitedUnderAnotherAccountMovesToTheLinkedOne() async throws {
+        let classmateID: Int64 = 9_999
+        try await withApp(app) { app in
+            try await registerApp()
+            try await bindOrganization()
+            let cookie = try await studentWithTemplate()
+            useRemovals(classmateID: classmateID)
+            let student = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gh_student").first())
+            let row = APIGitHubCourseRepository(
+                testSetupID: "gh_setup", userID: try student.requireID(), repoID: Self.made.id,
+                repoFullName: Self.made.fullName, invited: true)
+            row.invitedGitHubUserID = classmateID
+            try await row.save(on: app.db)
+
+            try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { res in
+                #expect(res.headers.first(name: .location) == "/testsetups/gh_setup/github?ok=repository")
+            }
+            #expect(seen("remove:") == ["remove:\(Self.made.fullName):classmate"])
+            #expect(seen("invite:") == ["invite:\(Self.made.fullName):octo-student"])
+            let moved = try #require(try await APIGitHubCourseRepository.query(on: app.db).first())
+            #expect(moved.invited)
+            #expect(moved.invitedGitHubUserID == Self.studentGitHubID)
+            #expect(seen("generate:").isEmpty)
+
+            // Asked again, nothing more is sent.
+            try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { _ in }
+            #expect(seen("remove:").count == 1)
+            #expect(seen("invite:").count == 1)
+        }
+    }
+
+    /// Linking an account moves every course repository still invited under
+    /// another one, without the student asking (#2208).
+    @Test func linkingAnAccountMovesTheCollaborator() async throws {
+        let classmateID: Int64 = 9_999
+        try await withApp(app) { app in
+            try await registerApp()
+            try await bindOrganization()
+            _ = try await studentWithTemplate()
+            useRemovals(classmateID: classmateID)
+            let student = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gh_student").first())
+            let row = APIGitHubCourseRepository(
+                testSetupID: "gh_setup", userID: try student.requireID(), repoID: Self.made.id,
+                repoFullName: Self.made.fullName, invited: true)
+            row.invitedGitHubUserID = classmateID
+            try await row.save(on: app.db)
+            let link = try #require(try await APIGitHubAccountLink.query(on: app.db).first())
+
+            await GitHubCourseAccess.moveCollaborators(
+                to: link, req: Request(application: app, on: app.eventLoopGroup.any()))
+            #expect(seen("remove:") == ["remove:\(Self.made.fullName):classmate"])
+            #expect(seen("invite:") == ["invite:\(Self.made.fullName):octo-student"])
+            #expect(
+                try await APIGitHubCourseRepository.query(on: app.db).first()?.invitedGitHubUserID
+                    == Self.studentGitHubID)
+        }
+    }
+
     /// When no GitHub account has the linked ID, nothing is made or sent, and
     /// the page asks the student to link again.
     @Test func aLinkedAccountThatIsGoneGetsNoRepository() async throws {

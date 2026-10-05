@@ -32,6 +32,13 @@ final class APIGitHubCourseRepository: Model, @unchecked Sendable {
     @Field(key: "invited")
     var invited: Bool
 
+    /// The numeric ID of the GitHub account the invitation went to. When it
+    /// is not the account the student has linked now, the collaborator is
+    /// moved to the linked account (#2208). Nil on rows made before it was
+    /// recorded.
+    @OptionalField(key: "invited_github_user_id")
+    var invitedGitHubUserID: Int64?
+
     /// Set when the repository was archived at the end of term.
     @OptionalField(key: "archived_at")
     var archivedAt: Date?
