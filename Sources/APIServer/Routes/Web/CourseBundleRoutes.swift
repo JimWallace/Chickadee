@@ -331,7 +331,8 @@ struct CourseBundleRoutes: RouteCollection {
                 secretRevealEnabled: a.secretRevealEnabled,
                 passingThresholdPercent: a.passingThresholdPercent,
                 solutionVisibility: a.solutionVisibility,
-                brightspaceSyncExcluded: a.brightspaceSyncExcluded
+                brightspaceSyncExcluded: a.brightspaceSyncExcluded,
+                deadlineOverrideActive: a.deadlineOverrideActive
             )
         }
 

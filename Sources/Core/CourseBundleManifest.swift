@@ -304,6 +304,11 @@ public struct BundledAssignment: Codable, Sendable {
     public let passingThresholdPercent: Int?
     public let solutionVisibility: SolutionVisibility?
     public let brightspaceSyncExcluded: Bool?
+    /// Whether the instructor kept the assignment open past its due date
+    /// (#2166). Nil in a bundle written before it was carried, which imports
+    /// as the column default, so the deadline sweep closes the assignment
+    /// if its due date has passed.
+    public let deadlineOverrideActive: Bool?
 
     public init(
         bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool? = nil,
@@ -313,7 +318,8 @@ public struct BundledAssignment: Codable, Sendable {
         secretRevealEnabled: Bool? = nil,
         passingThresholdPercent: Int? = nil,
         solutionVisibility: SolutionVisibility? = nil,
-        brightspaceSyncExcluded: Bool? = nil
+        brightspaceSyncExcluded: Bool? = nil,
+        deadlineOverrideActive: Bool? = nil
     ) {
         self.bundleID = bundleID
         self.title = title
@@ -328,6 +334,7 @@ public struct BundledAssignment: Codable, Sendable {
         self.passingThresholdPercent = passingThresholdPercent
         self.solutionVisibility = solutionVisibility
         self.brightspaceSyncExcluded = brightspaceSyncExcluded
+        self.deadlineOverrideActive = deadlineOverrideActive
     }
 }
 
