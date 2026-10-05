@@ -538,7 +538,7 @@ func notebookDataForHistorySelection(
     return normalizeNotebookForJupyterLite(data)
 }
 
-func latestNotebookSubmissionData(
+private func latestNotebookSubmissionData(
     setupID: String,
     userID: UUID,
     fallbackSetup: APITestSetup,

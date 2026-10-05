@@ -53,12 +53,12 @@ enum StudentAssignmentGate {
     case submission
 }
 
-func assignmentDeadlineHasPassed(_ assignment: APIAssignment, now: Date = Date()) -> Bool {
+private func assignmentDeadlineHasPassed(_ assignment: APIAssignment, now: Date = Date()) -> Bool {
     guard let dueAt = assignment.dueAt else { return false }
     return dueAt <= now
 }
 
-func assignmentDeadlineOverrideIsActive(_ assignment: APIAssignment) -> Bool {
+private func assignmentDeadlineOverrideIsActive(_ assignment: APIAssignment) -> Bool {
     assignment.deadlineOverrideActive ?? false
 }
 
@@ -253,7 +253,7 @@ func isAssignmentEffectivelyOpenResolved(
 /// solution) one minute past the due date and then claim a slip day to act on
 /// it. Shared by the release-output gate and the solution-visibility gate so
 /// the two can never disagree about when a student is done buying time.
-func postDeadlineRevealDeadline(
+private func postDeadlineRevealDeadline(
     for assignment: APIAssignment,
     user: APIUser,
     on db: Database,

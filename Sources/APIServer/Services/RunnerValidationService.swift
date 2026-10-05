@@ -147,7 +147,7 @@ let validationVariantCount = 4
 /// Best-effort like the rest of the validation trigger machinery: a failure
 /// logs and leaves at most a partial batch (rows are written per variant, so
 /// what did enqueue still reports), never blocking the instructor's save.
-func enqueueValidationVariants(
+private func enqueueValidationVariants(
     req: Request,
     setupID: String,
     solutionNotebookData: Data,
