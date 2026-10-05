@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.463] - 2026-10-05
+
+### Added
+
+- **`docs/grading-integrity.md`: the plan for #2223.** It states what a submission can do to its own grade today (browser-graded results are written by the student's browser; on the native runner a submission shares the test's process and working directory), records the three decisions agreed on 2026-10-05, and splits the work into four phases (#2239 to #2242). Phase 3 starts with a design discussion.
+
+### Security
+
+- **A sandboxed test script also gets its own `HOME` and `/var/tmp`.** On a host whose root file system is writable, every job on a runner shared one home directory, and language tools run files from it at start: Python's `usercustomize.py`, R's `~/.Rprofile` and Octave's `~/.octaverc`. One job could leave code there that then ran inside every later job on the runner. Each script now gets a fresh, empty, size-limited `HOME` (256 MB) and `/var/tmp` (64 MB). The image installs nothing into the home directory, so nothing is lost. Runners with a read-only root file system were already safe.
+
+
 ## [0.5.462] - 2026-10-05
 
 ### Fixed

@@ -1,3 +1,0 @@
-### Security
-
-- **A sandboxed test script also gets its own `HOME` and `/var/tmp`.** On a host whose root file system is writable, every job on a runner shared one home directory, and language tools run files from it at start: Python's `usercustomize.py`, R's `~/.Rprofile` and Octave's `~/.octaverc`. One job could leave code there that then ran inside every later job on the runner. Each script now gets a fresh, empty, size-limited `HOME` (256 MB) and `/var/tmp` (64 MB). The image installs nothing into the home directory, so nothing is lost. Runners with a read-only root file system were already safe.
