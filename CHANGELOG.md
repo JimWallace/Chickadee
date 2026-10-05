@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.425] - 2026-10-05
+
+### Changed
+
+- **Stale comments in Core and RunnerCore rewritten (#2126).** Three personalization runtime headers named a worker consumer that moved to `Tools/runner-support`. Three comments described read-time language inference that no longer exists, and five said "Python" where every language applies. Five RunnerCore and `Package.swift` comments described code that moved. Comments only.
+
+
 ## [0.5.424] - 2026-10-05
 
 ### Removed
