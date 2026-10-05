@@ -81,7 +81,10 @@ struct GitHubAccountLinkRoutes: RouteCollection {
                 throw GitHubLinkError.cancelled
             }
             let githubUser = try await Self.fetchGitHubUser(code: code, verifier: verifier, req: req)
-            try await Self.saveLink(userID: userID, githubUser: githubUser, on: req.db)
+            let link = try await Self.saveLink(userID: userID, githubUser: githubUser, on: req.db)
+            // A course repository invited under another account is moved to
+            // the account linked now (#2208).
+            await GitHubCourseAccess.moveCollaborators(to: link, req: req)
             await AuditLogger.record(
                 action: .githubAccountLinked, targetType: .user, targetID: userID.uuidString,
                 metadata: ["github_user_id": String(githubUser.id), "github_login": githubUser.login], on: req)
@@ -145,7 +148,9 @@ struct GitHubAccountLinkRoutes: RouteCollection {
 
     /// Creates or replaces this user's link. A GitHub account already linked to
     /// another user is refused.
-    private static func saveLink(userID: UUID, githubUser: GitHubUser, on db: Database) async throws {
+    private static func saveLink(
+        userID: UUID, githubUser: GitHubUser, on db: Database
+    ) async throws -> APIGitHubAccountLink {
         if let other = try await APIGitHubAccountLink.query(on: db)
             .filter(\.$githubUserID == githubUser.id).first(), other.userID != userID
         {
@@ -155,11 +160,11 @@ struct GitHubAccountLinkRoutes: RouteCollection {
             existing.githubUserID = githubUser.id
             existing.githubLogin = githubUser.login
             try await existing.save(on: db)
-        } else {
-            try await APIGitHubAccountLink(
-                userID: userID, githubUserID: githubUser.id, githubLogin: githubUser.login
-            ).save(on: db)
+            return existing
         }
+        let link = APIGitHubAccountLink(userID: userID, githubUserID: githubUser.id, githubLogin: githubUser.login)
+        try await link.save(on: db)
+        return link
     }
 
     private static func redirectToAccount(_ req: Request, error: GitHubLinkError) -> Response {

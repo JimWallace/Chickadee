@@ -79,27 +79,83 @@ struct GitHubCourseAccess: Sendable {
     /// the student. The row is saved before the invitation, so a failed
     /// invitation can be sent again without making a second repository.
     func makeRepository(
-        template: APIGitHubAssignmentTemplate, name: String, testSetupID: String, userID: UUID,
+        template: APIGitHubAssignmentTemplate, name: String, testSetupID: String, link: APIGitHubAccountLink,
         login: String, req: Request
     ) async throws -> APIGitHubCourseRepository {
         let made = try await call(req) { token in
             try await client.generate(token, template.templateFullName, organization.orgLogin, name)
         }
         let row = APIGitHubCourseRepository(
-            testSetupID: testSetupID, userID: userID, repoID: made.id, repoFullName: made.fullName,
+            testSetupID: testSetupID, userID: link.userID, repoID: made.id, repoFullName: made.fullName,
             invited: false)
         try await row.save(on: req.db)
-        try await invite(row, login: login, req: req)
+        try await invite(row, login: login, githubUserID: link.githubUserID, req: req)
         return row
     }
 
-    /// Invites the student with write access, and records that it worked.
-    func invite(_ row: APIGitHubCourseRepository, login: String, req: Request) async throws {
+    /// Invites the student with write access, and records that it worked and
+    /// which GitHub account it went to.
+    func invite(
+        _ row: APIGitHubCourseRepository, login: String, githubUserID: Int64, req: Request
+    ) async throws {
         try await call(req) { token in
             try await client.addCollaborator(token, row.repoFullName, login)
         }
         row.invited = true
+        row.invitedGitHubUserID = githubUserID
         try await row.save(on: req.db)
+    }
+
+    /// Makes the account the student has linked now the repository's
+    /// collaborator. When the invitation went to another account (a student
+    /// who linked a classmate's account by mistake, then their own), that
+    /// account is removed FIRST, and the row records no invitation until the
+    /// new one is sent, so a failure part-way is retried rather than leaving
+    /// the earlier account with write access (#2208). A row made before the
+    /// invited account was recorded is invited again; the earlier account is
+    /// unknown and is not removed.
+    func inviteLinkedAccount(_ row: APIGitHubCourseRepository, link: APIGitHubAccountLink, req: Request) async throws {
+        if row.invited, row.invitedGitHubUserID == link.githubUserID { return }
+        if row.invited, let previous = row.invitedGitHubUserID {
+            let fullName = row.repoFullName
+            if let previousLogin = try await call(req, { token in try await client.userLogin(token, previous) }) {
+                try await call(req) { token in try await client.removeCollaborator(token, fullName, previousLogin) }
+            }
+            row.invited = false
+            row.invitedGitHubUserID = nil
+            try await row.save(on: req.db)
+        }
+        let login = try await currentLogin(of: link, req: req)
+        try await invite(row, login: login, githubUserID: link.githubUserID, req: req)
+    }
+
+    /// After a student links a GitHub account, moves the collaborator on
+    /// every course repository of theirs that still names another account.
+    /// Best effort: the link itself has succeeded, and *Make my repository*
+    /// runs the same step again for one repository (#2208).
+    static func moveCollaborators(to link: APIGitHubAccountLink, req: Request) async {
+        do {
+            let rows = try await APIGitHubCourseRepository.query(on: req.db)
+                .filter(\.$userID == link.userID)
+                .filter(\.$invited == true)
+                .filter(\.$archivedAt == nil)
+                .all()
+                .filter { $0.invitedGitHubUserID != link.githubUserID }
+            var accessByCourse: [UUID: GitHubCourseAccess] = [:]
+            for row in rows {
+                guard let setup = try await APITestSetup.find(row.testSetupID, on: req.db) else { continue }
+                let access: GitHubCourseAccess
+                if let cached = accessByCourse[setup.courseID] {
+                    access = cached
+                } else {
+                    access = try await resolve(courseID: setup.courseID, req: req)
+                    accessByCourse[setup.courseID] = access
+                }
+                try await access.inviteLinkedAccount(row, link: link, req: req)
+            }
+        } catch {
+            req.logger.warning("GitHub collaborator not moved after a new link", metadata: ["error": "\(error)"])
+        }
     }
 
     func archive(_ row: APIGitHubCourseRepository, req: Request) async throws {

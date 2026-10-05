@@ -110,6 +110,10 @@ struct GitHubRepoClient: Sendable {
     /// Invites `login` to the repository with write access.
     var addCollaborator: @Sendable (_ token: String, _ fullName: String, _ login: String) async throws -> Void =
         { _, _, _ in throw GitHubSubmitError.unavailable }
+    /// Removes `login` from the repository's collaborators. Done when GitHub
+    /// says the account is not one (#2208).
+    var removeCollaborator: @Sendable (_ token: String, _ fullName: String, _ login: String) async throws -> Void =
+        { _, _, _ in throw GitHubSubmitError.unavailable }
     /// Whether members may fork the organization's private repositories, or
     /// nil when the installation cannot read the setting.
     var privateForksAllowed: @Sendable (_ token: String, _ organization: String) async throws -> Bool? = { _, _ in
@@ -270,6 +274,12 @@ extension GitHubRepoClient {
         func get(_ path: String, token: String) async throws -> ClientResponse {
             let response = try await transport.send(
                 .GET, api + path, headers: GitHubTransport.apiHeaders(bearer: token))
+            return try refusingAStaleToken(response)
+        }
+
+        func delete(_ path: String, token: String) async throws -> ClientResponse {
+            let response = try await transport.send(
+                .DELETE, api + path, headers: GitHubTransport.apiHeaders(bearer: token))
             return try refusingAStaleToken(response)
         }
 
@@ -439,6 +449,14 @@ extension GitHubRepoClient {
                 body: PermissionBody(permission: "push"))
             if isRateLimited(response) { throw GitHubSubmitError.rateLimited }
             guard response.status == .created || response.status == .noContent else {
+                throw GitHubSubmitError.githubFailed
+            }
+        }
+        live.removeCollaborator = { token, fullName, login in
+            let response = try await transport.delete(
+                "/repos/\(repoPath(fullName))/collaborators/\(pathSegment(login))", token: token)
+            if isRateLimited(response) { throw GitHubSubmitError.rateLimited }
+            guard response.status == .noContent || response.status == .notFound else {
                 throw GitHubSubmitError.githubFailed
             }
         }

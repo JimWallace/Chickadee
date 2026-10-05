@@ -172,14 +172,15 @@ struct GitHubSubmissionRoutes: RouteCollection {
             if let existing = try await APIGitHubCourseRepository.query(on: req.db)
                 .filter(\.$testSetupID == setupID).filter(\.$userID == userID).first()
             {
-                if !existing.invited {
-                    try await organization.invite(existing, login: login, req: req)
-                }
+                // A failed invitation is sent again, and an invitation that
+                // went to another account than the one linked now is moved
+                // to it (#2208).
+                try await organization.inviteLinkedAccount(existing, link: link, req: req)
             } else {
                 let name = GitHubCourseRepositoryName.make(
                     assignmentSlug: assignment?.slug ?? setupID, login: login)
                 let row = try await organization.makeRepository(
-                    template: template, name: name, testSetupID: setupID, userID: userID,
+                    template: template, name: name, testSetupID: setupID, link: link,
                     login: login, req: req)
                 await AuditLogger.record(
                     action: .githubCourseRepositoryCreated, targetType: .user, targetID: userID.uuidString,

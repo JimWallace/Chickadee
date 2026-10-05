@@ -258,6 +258,23 @@ import VaporTesting
         }
     }
 
+    /// Removing a collaborator is done on 204, and on 404 when the account is
+    /// not one; any other answer is a failure (#2208).
+    @Test func removeCollaboratorSendsADeleteAndAcceptsANotFound() async throws {
+        try await withApp(app) { _ throws in
+            let url = "DELETE \(Self.api)/repos/cs101-org/lab-1-octo/collaborators/classmate"
+            let (client, sent, script) = scripted([url: .init(status: .noContent)])
+            try await client.removeCollaborator("t", "cs101-org/lab-1-octo", "classmate")
+            #expect(sent.withLockedValue { $0 }.first?.headers.bearerAuthorization?.token == "t")
+            script.withLockedValue { $0[url] = .init(status: .notFound) }
+            try await client.removeCollaborator("t", "cs101-org/lab-1-octo", "classmate")
+            script.withLockedValue { $0[url] = .init(status: .forbidden) }
+            await #expect(throws: GitHubSubmitError.githubFailed) {
+                try await client.removeCollaborator("t", "cs101-org/lab-1-octo", "classmate")
+            }
+        }
+    }
+
     /// An unreadable setting is nil, never a guess.
     @Test func privateForksAllowedReadsTheOrganizationSetting() async throws {
         try await withApp(app) { _ throws in
