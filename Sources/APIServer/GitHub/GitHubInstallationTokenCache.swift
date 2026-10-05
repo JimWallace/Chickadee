@@ -32,6 +32,16 @@ actor GitHubInstallationTokenCache {
     func remove(account accountID: Int64) {
         tokens[accountID] = nil
     }
+
+    /// Drops every token. The tokens belong to the registered App, so a
+    /// removed registration must not keep serving them for the rest of
+    /// their hour to the App registered after it (#2209).
+    func removeAll() {
+        tokens.removeAll()
+    }
+
+    /// The number of cached tokens, for tests.
+    var count: Int { tokens.count }
 }
 
 struct GitHubInstallationTokenCacheKey: StorageKey {

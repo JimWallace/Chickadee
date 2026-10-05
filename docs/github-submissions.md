@@ -615,7 +615,7 @@ what it leaves.
 | The repository ID and `owner/name`, whether the invitation succeeded, the archived time, and the last push time and SHA | `github_course_repositories`, one row per student repository | The course, its assignment or the user is deleted; the rows cascade. Archiving the course leaves them. The data export lists the user's rows. |
 | The App ID, slug, name, client ID and owner login | `github_apps`, one row | The admin removes the App on `/admin/github`. |
 | The client secret, private key and webhook secret | `.github-app-secrets`, a 0600 file beside the data | The admin removes the App, which deletes the file. `scripts/snapshot.sh` copies the file into every host snapshot, so a snapshot holds it for as long as the snapshot is kept. |
-| Installation tokens | Memory only, `GitHubInstallationTokenCache` | The token's one-hour life, or the next restart. Never written to disk. |
+| Installation tokens | Memory only, `GitHubInstallationTokenCache` | The token's one-hour life, the next restart, or the removal of the App registration, whichever is first (#2209). Never written to disk. |
 | A student's or an instructor's user token | Nowhere | Revoked in the request that obtained it, before the answer it fetched is used. |
 
 A course deletion removes the course's submissions and, through the cascades,

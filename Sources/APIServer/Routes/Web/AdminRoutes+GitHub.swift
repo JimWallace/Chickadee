@@ -74,6 +74,8 @@ extension AdminRoutes {
         let slug = app.slug
         try await app.delete(on: req.db)
         try GitHubAppSecrets.remove(path: req.application.githubAppSecretsFilePath)
+        // The cached installation tokens are the removed App's (#2209).
+        await req.application.githubInstallationTokens.removeAll()
         await AuditLogger.record(
             action: .githubAppRemoved, targetType: .githubApp, targetID: appID,
             metadata: ["slug": slug], on: req)
@@ -124,6 +126,9 @@ extension AdminRoutes {
             try? GitHubAppSecrets.remove(path: path)
             throw error
         }
+        // A request still in flight when the old App was removed may have
+        // cached one of its tokens since; none of them is the new App's.
+        await req.application.githubInstallationTokens.removeAll()
         return app
     }
 
