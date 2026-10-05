@@ -22,29 +22,30 @@ spawn.
 
 ## Debt: server-only files
 
-Measured by type name (2026-10, #1723), `Sources/Worker` references nothing
-from 33 files here, 5,021 lines, none of them a member of `TestProperties`,
-`Job` or a result type. They compile into the runner for nothing. Each group
-is a move to `APIServer`, one PR per group, each with a struct test suite that
-needs no app; do not add a sixth group. The owning audit sweep is named.
+Measured by type name (2026-10, #1723, recounted in #2129), `Sources/Worker`
+references nothing from 32 files here, 4,980 lines, none of them a member of
+`TestProperties`, `Job` or a result type. They compile into the runner for
+nothing. Each group is a move to `APIServer`, one PR per group, each with a
+struct test suite that needs no app; do not add a sixth group. The owning audit
+sweep is named.
 
-- **Avatars**, 838 lines: `AvatarSpec`, `AvatarPresentation`, `AvatarHandle`,
+- **Avatars**, 879 lines: `AvatarSpec`, `AvatarMarkup`, `AvatarHandle`,
   `AvatarCustomization` (sweep 8, #1689).
 - **Dataset materialization and diagnostics**, 1,155 lines:
   `DatasetMaterializer`, `DatasetDivergence`, `DatasetDiagnostics`,
   `DatasetSpecValidation`, `DatasetTransformApplication`, `DatasetResolver`.
-- **Course model and bundle format**, 797 lines: `CourseBundleManifest`,
+- **Course model and bundle format**, 848 lines: `CourseBundleManifest`,
   `AcademicTerm`, `SlipDayPolicy`, `AssignmentVisibility`, `CourseRole`,
   `ContentAttachment`, `SolutionVisibility`, `ContentItemKind`, `ContentLink`,
   `CourseEnrollmentMode` (sweeps 4 and 7).
-- **Authoring renderers and drivers**, 1,408 lines: `NotebookFunctionScanner`,
+- **Authoring renderers and drivers**, 1,277 lines: `NotebookFunctionScanner`,
   `JSONValueCppLiteral`, `JSONValueJavaLiteral`, `JSONValueRacketLiteral`,
-  `CStyleStringEscaping`, `LuaPersonalizationRuntime`,
-  `OctavePersonalizationRuntime`, `RPersonalizationRuntime`. `JSONValue.swift`
-  mixes the shared model with four more renderers and splits the same way.
+  `LuaPersonalizationRuntime`, `OctavePersonalizationRuntime`,
+  `RPersonalizationRuntime`. `JSONValue.swift` mixes the shared model with four
+  more renderers and splits the same way.
 - **Activities and achievements**, 588 lines: `Tournament`,
   `AchievementEvaluation` (sweep 5, #1686).
-- **Other**, 208 lines: `LTIRoleMapping`, `LineDiff`.
+- **Other**, 233 lines: `LTIRoleMapping`, `LineDiff`, `GradePercent`.
 
 All four of `AcademicTerm`, `Avatar*`, `Tournament` and `LTIRoleMapping`
 arrived since August 2026 by copying the pattern this section exists to stop.
