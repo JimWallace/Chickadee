@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.432] - 2026-10-05
+
+### Changed
+
+- **`RunnerValidationHelpers.swift` is now `Services/RunnerValidationService.swift` (#2140).** The validation-submission lifecycle is code over models and a database that shared code calls, so it lives below the routes, and `loadAssignmentRequirementSpec`, which only the validation pre-check uses, moves with it. Signatures are unchanged, and the layering baseline loses one line.
+
+### Changed
+
+- **The claim walk takes no `Request` (#2145).** `ClaimEvaluator` now carries the database, the application and the logger beside the two collaborators it already bundled, and `evaluateAndClaimCandidate` reads them from there. The route builds the evaluator from its request; `ClaimWalkTests` builds it from the test app and no longer makes a request. No behaviour change.
+
+### Changed
+
+- **`CourseActivityRow` is `CourseTimelineRow` (#2150).** The last telemetry name that still said "activity" after #1734 separated course telemetry from class activities; `ActivityCategoryTile` is `TimelineCategoryTile` for the same reason. Identifier rename only.
+
+
 ## [0.5.431] - 2026-10-05
 
 ### Changed
