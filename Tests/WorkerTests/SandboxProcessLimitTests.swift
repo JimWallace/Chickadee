@@ -4,14 +4,9 @@
 // limit one job could fork until the container's `pids_limit` was used up, and
 // the jobs beside it could not start a process. The sandbox now starts each
 // script under its own `RLIMIT_NPROC`, which the kernel counts per user
-// namespace. These tests prove that one script stops at its limit while a
-// script beside it, as the same user, still starts its processes; that the
-// runner detects a host where the limit is not applied; and that the
-// container budget warning says what to change.
-//
-// The kernel does not apply `RLIMIT_NPROC` to a sandbox that root starts, and
-// the CI runs as root. So the isolation test starts the real sandbox launch as
-// `nobody` through `setpriv`, as a production runner runs as `chickadee`.
+// namespace. These tests prove that a script starts under its limit and
+// cannot raise it; that the runner detects a host where the kernel does not
+// apply the limit; and that the container budget warning says what to change.
 
 import ChickadeeTestSupport
 import Foundation
@@ -60,110 +55,72 @@ import Testing
 #if os(Linux)
 @Suite(.timeLimit(.minutes(2))) final class SandboxProcessLimitTests {
 
-    /// A work root with two job directories, as the runner lays them out. Both
-    /// are writable by `nobody`, who runs the sandboxes when the test is root.
-    private let workRoot: URL
-    private let forkingJob: URL
-    private let neighbourJob: URL
+    private let jobDir: URL
 
     init() throws {
-        workRoot = FileManager.default.temporaryDirectory
+        jobDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-sandbox-nproc-\(UUID().uuidString)", isDirectory: true)
-        forkingJob = workRoot.appendingPathComponent("chickadee_ts_fork_\(UUID().uuidString)", isDirectory: true)
-        neighbourJob = workRoot.appendingPathComponent("chickadee_ts_next_\(UUID().uuidString)", isDirectory: true)
-        for directory in [forkingJob, neighbourJob] {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try FileManager.default.setAttributes(
-                [.posixPermissions: NSNumber(value: 0o777)], ofItemAtPath: directory.path)
-        }
-        try FileManager.default.setAttributes(
-            [.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: workRoot.path)
+            .appendingPathComponent("chickadee_ts_job_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: jobDir, withIntermediateDirectories: true)
     }
 
     deinit {
-        try? FileManager.default.removeItem(at: workRoot)
+        try? FileManager.default.removeItem(at: jobDir.deletingLastPathComponent())
     }
 
-    /// The real sandbox launch for a shell command, started as `nobody` when
-    /// the test runs as root.
-    private func launch(_ command: String, in workDir: URL, processLimit: Int) -> ScriptLaunch {
-        let sandboxed = sandboxWrap(
-            executablePath: "/bin/sh",
-            arguments: ["-c", command],
-            workDir: workDir,
-            environment: mergedScriptEnvironment(overrides: [:]),
-            processLimit: processLimit)
-        guard getuid() == 0 else { return sandboxed }
-        return ScriptLaunch(
-            executablePath: "/usr/bin/setpriv",
-            arguments: ["--reuid=65534", "--regid=65534", "--clear-groups", sandboxed.executablePath]
-                + sandboxed.arguments,
-            env: sandboxed.env)
+    private func writeScript(_ body: String) throws -> URL {
+        let script = jobDir.appendingPathComponent("test.sh")
+        try body.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: script.path)
+        return script
     }
 
-    @Test(.requiresSandbox) func aForkingScriptStopsAtItsLimitAndTheScriptBesideItStillStartsItsProcesses()
-        async throws
-    {
-        // Each background `sleep` is one process. The forking script prints how
-        // many it has started; the shell ends with "Cannot fork" at the limit.
-        let forking = launch(
+    /// The script starts under the limit, soft and hard, with the sandbox's
+    /// own two processes added, and cannot raise it: that needs
+    /// `CAP_SYS_RESOURCE` outside its user namespace, which even a sandbox
+    /// that root starts does not have. Read from the script's own
+    /// `/proc/self/limits`, so this holds as root, where the CI runs.
+    ///
+    /// That the kernel then counts only this namespace's processes against
+    /// the limit, so that a script beside it as the same user is unaffected,
+    /// is the kernel's per-user-namespace `RLIMIT_NPROC` accounting (Linux
+    /// 5.14 and later). It was shown by hand as `nobody`, and
+    /// `processLimitIsEnforced` checks it at every runner start. A test of it
+    /// needs a non-root user namespace, which the CI host's AppArmor refuses.
+    @Test(.requiresSandbox) func theScriptStartsUnderItsLimitAndCannotRaiseIt() async throws {
+        let script = try writeScript(
             """
-            n=0
-            while [ "$n" -lt 200 ]; do
-                sleep 4 &
-                n=$((n+1))
-                echo "$n"
-            done
-            """,
-            in: forkingJob, processLimit: 16)
-        // Starts after the forking script has reached its limit, as the same
-        // user, while the forking script's processes are still running.
-        let neighbour = launch(
-            """
-            sleep 1
-            n=0
-            while [ "$n" -lt 10 ]; do
-                sleep 1 &
-                n=$((n+1))
-            done
-            wait
-            echo "started $n"
-            """,
-            in: neighbourJob, processLimit: 16)
-
-        let forkingDir = forkingJob
-        let neighbourDir = neighbourJob
-        async let forkingOutput = executeScriptLaunch(
-            forking, workDir: forkingDir, timeLimitSeconds: 30, launchErrorPrefix: "fork test")
-        async let neighbourOutput = executeScriptLaunch(
-            neighbour, workDir: neighbourDir, timeLimitSeconds: 30, launchErrorPrefix: "neighbour test")
-        let (forked, beside) = await (forkingOutput, neighbourOutput)
-
-        let started = forked.stdout.split(separator: "\n").last.map(String.init)
-        #expect(started == "16", "processes started: \(started ?? "none"), stderr: \(forked.stderr)")
-        #expect(forked.exitCode != 0)
-        #expect(beside.exitCode == 0, "stderr: \(beside.stderr)")
-        #expect(beside.stdout.contains("started 10"))
+            #!/bin/sh
+            grep 'Max processes' /proc/self/limits
+            if prlimit --pid $$ --nproc=100000:100000 2>/dev/null; then echo "raised"; fi
+            """)
+        let output = await SandboxedScriptRunner(processLimit: 16)
+            .run(script: script, workDir: jobDir, timeLimitSeconds: 30)
+        #expect(output.exitCode == 0, "stderr: \(output.stderr)")
+        let fields = output.stdout.split(separator: "\n").first?.split(separator: " ").map(String.init) ?? []
+        let limits = fields.filter { Int($0) != nil }
+        #expect(limits == ["18", "18"], "limits line: \(output.stdout)")
+        #expect(!output.stdout.contains("raised"))
     }
 
     @Test(.requiresSandbox) func theProbeReportsWhetherTheKernelAppliesTheLimit() async {
         // The kernel applies the limit to a sandbox that a non-root runner
         // starts, and not to one that root starts.
-        let enforced = await SandboxedScriptRunner.processLimitIsEnforced(workDir: workRoot)
+        let enforced = await SandboxedScriptRunner.processLimitIsEnforced(
+            workDir: jobDir.deletingLastPathComponent())
         #expect(enforced == (getuid() != 0))
     }
 
     @Test(.requiresSandbox) func aScriptWithinItsLimitIsUnaffected() async throws {
-        let script = forkingJob.appendingPathComponent("test.sh")
-        try """
-        #!/bin/sh
-        for i in 1 2 3 4 5; do sleep 0.1 & done
-        wait
-        echo done
-        """.write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: script.path)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            for i in 1 2 3 4 5; do sleep 0.1 & done
+            wait
+            echo done
+            """)
         let output = await SandboxedScriptRunner(processLimit: 8)
-            .run(script: script, workDir: forkingJob, timeLimitSeconds: 30)
+            .run(script: script, workDir: jobDir, timeLimitSeconds: 30)
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains("done"))
     }

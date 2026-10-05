@@ -247,10 +247,8 @@ let sandboxOwnProcessCount = 2
 
 /// Puts the platform's sandbox launcher in front of a command. The one place
 /// that decides how a command is sandboxed, so the probe and real jobs cannot
-/// use different wrappers. Internal, not private, so a test can start the real
-/// wrapper as an unprivileged user: as root, the kernel does not apply the
-/// process limit.
-func sandboxWrap(
+/// use different wrappers.
+private func sandboxWrap(
     executablePath: String,
     arguments commandArguments: [String],
     workDir: URL,
