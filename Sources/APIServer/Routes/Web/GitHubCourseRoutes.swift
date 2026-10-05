@@ -158,6 +158,7 @@ struct GitHubCourseRoutes: RouteCollection {
             try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
             let installation = try await confirmOwnership(
                 code: code, verifier: verifier, organization: organizationText, req: req)
+            try await requireSameOrganization(courseID: courseID, installation: installation, on: req.db)
             try await saveBinding(courseID: courseID, installation: installation, on: req.db)
             await AuditLogger.record(
                 action: .githubCourseBound, targetType: .course, targetID: courseID.uuidString,
@@ -211,6 +212,34 @@ struct GitHubCourseRoutes: RouteCollection {
         return installation
     }
 
+    /// Refuses a binding to a different organization while the course has
+    /// course repositories or templates. They live in the organization they
+    /// were made in: with another organization's token a repository reads as
+    /// not found, its template cannot be generated from, and archiving fails
+    /// (#2207, the binding's version of #1767). While the course is bound the
+    /// organization ID decides, so a renamed organization still binds. After
+    /// an unbind no ID is kept, so the owner in the stored names decides.
+    private static func requireSameOrganization(
+        courseID: UUID, installation: GitHubUserInstallation, on db: Database
+    ) async throws {
+        let setupIDs = try await APITestSetup.query(on: db).filter(\.$courseID == courseID).all().compactMap(\.id)
+        guard !setupIDs.isEmpty else { return }
+        let repositories = try await APIGitHubCourseRepository.query(on: db)
+            .filter(\.$testSetupID ~~ setupIDs).all().map(\.repoFullName)
+        let templates = try await APIGitHubAssignmentTemplate.query(on: db)
+            .filter(\.$testSetupID ~~ setupIDs).all().map(\.templateFullName)
+        let names = repositories + templates
+        guard !names.isEmpty else { return }
+        if let bound = try await APIGitHubCourseOrganization.query(on: db).filter(\.$courseID == courseID).first() {
+            guard bound.orgID == installation.accountID else { throw GitHubCourseBindError.organizationInUse }
+            return
+        }
+        let owners = Set(names.map { $0.split(separator: "/").first.map { $0.lowercased() } ?? "" })
+        guard owners == [installation.accountLogin.lowercased()] else {
+            throw GitHubCourseBindError.organizationInUse
+        }
+    }
+
     private static func saveBinding(
         courseID: UUID, installation: GitHubUserInstallation, on db: Database
     ) async throws {
@@ -228,7 +257,8 @@ struct GitHubCourseRoutes: RouteCollection {
     // MARK: - POST /instructor/github/unbind
 
     /// Removes the binding. Course repositories and their rows stay, so
-    /// grades keep their commits; binding again resumes them.
+    /// grades keep their commits; binding the same organization again
+    /// resumes them, and another one is refused while they exist (#2207).
     @Sendable
     func unbind(req: Request) async throws -> Response {
         let courseID = try await Self.requireInstructorCourse(req)

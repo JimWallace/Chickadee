@@ -401,7 +401,10 @@ As built (slice 4):
   uses either answer**. The binding stores the installation ID, the
   organization ID and its login. It links no Chickadee account to GitHub.
 - **Unbinding** removes only the binding. The repositories and their rows
-  stay, so grades keep their commits.
+  stay, so grades keep their commits. Binding the same organization again
+  resumes them. A different organization is refused while the course has
+  course repositories or templates, because they stay in the organization
+  they were made in (#2207).
 - **Templates** are chosen per assignment, from the repositories the
   installation grants that GitHub marks as templates. A template that is not
   in that list is refused. A template puts the assignment in course-repository

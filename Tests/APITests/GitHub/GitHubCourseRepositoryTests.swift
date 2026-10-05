@@ -377,6 +377,85 @@ import VaporTesting
         }
     }
 
+    /// The instructor's GitHub view when the App is also on `other-org`,
+    /// which they own.
+    private func useOAuthWithOtherOrganization() {
+        let revoked = revoked
+        app.githubOAuthClient = GitHubOAuthClient(
+            exchangeCode: { exchange in "user-token-\(exchange.code)" },
+            fetchUser: { _ in GitHubUser(id: 1, login: "prof") },
+            revokeToken: { token, _, _ in revoked.withLockedValue { $0.append(token) } },
+            userInstallations: { _ in
+                [
+                    GitHubUserInstallation(
+                        installationID: 55, accountID: Self.orgID, accountLogin: "cs101-org",
+                        accountType: "Organization"),
+                    GitHubUserInstallation(
+                        installationID: 66, accountID: 8_000, accountLogin: "other-org", accountType: "Organization"),
+                ]
+            },
+            organizationRole: { _, _ in "admin" })
+    }
+
+    /// Binds `organization` through the routes and returns where the
+    /// callback sent the instructor.
+    private func bind(_ organization: String, cookie: String) async throws -> String {
+        let location = NIOLockedValueBox("")
+        let form = ["organization": organization]
+        let next = try await post("/instructor/github/bind", form: form, cookie: cookie) { res in
+            location.withLockedValue { $0 = res.headers.first(name: .location) ?? "" }
+        }
+        let authorize = location.withLockedValue { $0 }
+        let state = try #require(URLComponents(string: authorize)?.queryItems?.first { $0.name == "state" }?.value)
+        let result = NIOLockedValueBox("")
+        try await get("/github/link/callback?code=abc123&state=\(state)", cookie: next) { res in
+            result.withLockedValue { $0 = res.headers.first(name: .location) ?? "" }
+        }
+        return result.withLockedValue { $0 }
+    }
+
+    /// One student's course repository in `cs101-org`.
+    private func madeRepository() async throws {
+        _ = try await studentWithTemplate()
+        let student = try #require(try await APIUser.query(on: app.db).filter(\.$username == "gh_student").first())
+        try await APIGitHubCourseRepository(
+            testSetupID: "gh_setup", userID: try student.requireID(), repoID: Self.made.id,
+            repoFullName: Self.made.fullName, invited: true
+        ).save(on: app.db)
+    }
+
+    /// A course with repositories stays bound to the organization they live
+    /// in; the same organization binds again (#2207).
+    @Test func aCourseWithRepositoriesCannotMoveToAnotherOrganization() async throws {
+        try await withApp(app) { app in
+            try await registerApp()
+            try await bindOrganization()
+            try await madeRepository()
+            useOAuthWithOtherOrganization()
+            let cookie = try await instructor()
+
+            #expect(try await bind("other-org", cookie: cookie).contains("error=organizationInUse"))
+            #expect(try await APIGitHubCourseOrganization.query(on: app.db).first()?.orgID == Self.orgID)
+            #expect(try await bind("cs101-org", cookie: cookie) == "/instructor/github?ok=bound")
+        }
+    }
+
+    /// After an unbind no organization ID is kept, so the owner in the stored
+    /// repository names decides (#2207).
+    @Test func anUnboundCourseWithRepositoriesBindsOnlyTheirOrganization() async throws {
+        try await withApp(app) { app in
+            try await registerApp()
+            try await madeRepository()
+            useOAuthWithOtherOrganization()
+            let cookie = try await instructor()
+
+            #expect(try await bind("other-org", cookie: cookie).contains("error=organizationInUse"))
+            #expect(try await APIGitHubCourseOrganization.query(on: app.db).count() == 0)
+            #expect(try await bind("cs101-org", cookie: cookie) == "/instructor/github?ok=bound")
+            #expect(try await APIGitHubCourseOrganization.query(on: app.db).first()?.orgID == Self.orgID)
+        }
+    }
+
     @Test func thePageWarnsWhenPrivateForksAreAllowed() async throws {
         useRepos(forksAllowed: true)
         try await withApp(app) { _ in

@@ -25,6 +25,9 @@ enum GitHubCourseBindError: String, Error, Equatable {
     /// Course repositories were made from the assignment's template, so it
     /// can be neither cleared nor changed (#1767).
     case templateInUse
+    /// The course has repositories or templates in another organization, so
+    /// binding this one would orphan them (#2207).
+    case organizationInUse
 
     var message: String {
         switch self {
@@ -48,6 +51,8 @@ enum GitHubCourseBindError: String, Error, Equatable {
             "That template is not available. Mark the repository as a template on GitHub, or give the App access to it."
         case .templateInUse:
             "Students have made repositories from this template. It cannot be cleared or changed while they exist."
+        case .organizationInUse:
+            "This course has repositories or templates in another organization. Bind that organization again."
         }
     }
 }
