@@ -46,7 +46,7 @@ struct CloneAssignmentTool: ContentTool {
         + "Copies the test setup (scripts, manifest, pattern families, support files), the starter "
         + "notebook, the reference solution and the per-assignment policies (secret reveal, passing "
         + "threshold, LMS sync exclusion), and seeds version 1. The clone has no course section, no "
-        + "sort order, no due date and no solution reveal, and starts closed and unvalidated: set a "
+        + "sort order, no due date, no activity session window and no solution reveal, and starts closed and unvalidated: set a "
         + "section with set_assignment_course_section, edit it with update_suite / "
         + "update_pattern_family / update_assignment, then validate and open it. Optionally clone "
         + "into another course (targetCourseCode); defaults to the same course. Nothing is re-graded."

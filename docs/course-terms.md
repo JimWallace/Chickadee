@@ -197,7 +197,9 @@ The Core type, the migration, the model accessor, and tests
   term starts.
 - **Dates (the open question, now decided):** every copied assignment starts
   closed and unvalidated, with **no due date and no start date**, and its
-  solution reveal is set back to hidden. The source dates belong to the
+  solution reveal is set back to hidden. A class activity also loses its
+  live-session window, which holds dates of the source term: a closed window
+  refuses every student and lets staff through (#2189). The source dates belong to the
   source term. A stale date is not harmless: with no date, or a date in the
   past, an "after due" solution policy shows the answer key as soon as the
   assignment opens. The instructor sets new dates, and turns the reveal on

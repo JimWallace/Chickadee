@@ -116,6 +116,36 @@ import Vapor
         }
     }
 
+    /// A class activity's live-session window holds dates of the source
+    /// term, so the clone drops it and keeps the rest of the block (#2189).
+    @Test func clearsTheActivityWindow() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let source = try await fixture(on: app)
+            let srcSetup = try #require(try await APITestSetup.find(source.testSetupID, on: app.db))
+            var props = try #require(srcSetup.decodedManifest())
+            let window = LiveSessionWindow(opensAtISO: "2026-01-10T14:00:00Z", closesAtISO: "2026-01-10T16:00:00Z")
+            props.activity = ClassActivity(
+                kind: .beatTheInstructor, leaderboardVisibility: .visible, opponentFile: "bot.py", window: window)
+            srcSetup.manifest = try encodeManifest(props)
+            try await srcSetup.save(on: app.db)
+
+            let output = try await CloneAssignmentTool().execute(
+                CloneAssignmentTool.Input(
+                    sourceAssignmentPublicID: source.publicID, newTitle: "Lab 1 (Copy)", targetCourseCode: nil),
+                context(app))
+            let clone = try #require(try await assignmentByPublicID(output.publicID, on: app.db))
+            let cloneSetup = try #require(try await APITestSetup.find(clone.testSetupID, on: app.db))
+            let activity = try #require(cloneSetup.decodedManifest()?.activity)
+            #expect(activity.window == nil)
+            #expect(activity.kind == .beatTheInstructor)
+            #expect(activity.leaderboardVisibility == .visible)
+            #expect(activity.opponentFile == "bot.py")
+            let reloaded = try #require(try await APITestSetup.find(source.testSetupID, on: app.db))
+            #expect(reloaded.decodedManifest()?.activity?.window == window)
+        }
+    }
+
     @Test func copiesNotebook() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
