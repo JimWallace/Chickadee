@@ -197,7 +197,7 @@ func renderRNumericArrayClose(_ check: NotebookCheck, specHash: String) -> Strin
 /// Renders a `Double` as an R literal that survives into a numeric vector.
 /// R spells the non-finite values `NaN` / `Inf` / `-Inf`; unlike Python they
 /// are language keywords, not constructor calls.
-func rNumericLiteral(_ value: Double) -> String {
+private func rNumericLiteral(_ value: Double) -> String {
     if value.isNaN { return "NaN" }
     if value.isInfinite { return value > 0 ? "Inf" : "-Inf" }
     return "\(value)"

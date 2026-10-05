@@ -848,6 +848,76 @@ import VaporTesting
         }
     }
 
+    /// Safari posts a single selection as one bare `suiteFiles` part, not a
+    /// `suiteFiles[]` array. The parser reads both names (#2149), so one bare
+    /// part lands in the zip and in the manifest like the array shape does.
+    @Test func saveNewAssignmentWithOneBareSuiteFilePart() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            app.migrations.add(CreateRunnerProfiles())
+            app.migrations.add(CreateAssignmentRequirements())
+            try await app.autoMigrate()
+
+            let runnerProfile = RunnerProfile()
+            runnerProfile.runnerID = "runner-bare-part"
+            runnerProfile.displayName = "Runner Bare Part"
+            runnerProfile.platform = "linux"
+            runnerProfile.architecture = "x86_64"
+            runnerProfile.languageVersionsJSON = "[]"
+            runnerProfile.capabilitiesJSON = "[]"
+            runnerProfile.profileHash = nil
+            runnerProfile.lastRegisteredAt = Date()
+            runnerProfile.lastSeenAt = Date().addingTimeInterval(3600)
+            runnerProfile.isActive = true
+            try await runnerProfile.save(on: app.db)
+
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+            let boundary = "Boundary-BarePart"
+            let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+            let suiteConfig = """
+                [{"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"index":0}]
+                """
+
+            try await app.asyncTest(
+                .POST, "/instructor/new/save",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": boundary]
+                    )
+                    // `arMultipartAssignmentBody` writes each suite file under the bare name.
+                    req.body = .init(
+                        buffer: arMultipartAssignmentBody(
+                            boundary: boundary,
+                            csrf: csrf,
+                            assignmentName: "Bare Part Lab",
+                            assignmentNotebook: notebook,
+                            solutionNotebook: notebook,
+                            suiteFiles: [("test_one.py", "text/plain", "print('one')\n")],
+                            suiteConfig: suiteConfig
+                        ))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/instructor")
+                })
+
+            let assignment = try await APIAssignment.query(on: app.db)
+                .filter(\.$title == "Bare Part Lab")
+                .first()
+            let setup = try await APITestSetup.find(try #require(assignment?.testSetupID), on: app.db)
+            let props = try JSONDecoder().decode(
+                TestProperties.self,
+                from: try #require(setup?.manifest.data(using: .utf8))
+            )
+            #expect(props.testSuites.map(\.script) == ["test_one.py"])
+            let zipEntries = await Set(listZipEntries(zipPath: try #require(setup?.zipPath)))
+            #expect(zipEntries.contains("test_one.py"), "test_one.py missing from zip; entries: \(zipEntries)")
+        }
+    }
+
     @Test func editPageShowsUploadedSolutionNotebookFilenameAfterCreate() async throws {
         try await withAssignmentRoutesApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)

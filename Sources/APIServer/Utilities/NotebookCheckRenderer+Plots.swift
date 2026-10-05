@@ -83,7 +83,7 @@ func renderNumericArrayClose(_ check: NotebookCheck, specHash: String) -> String
 /// a numpy array.  NaN / inf get the explicit `float('nan')` / `inf`
 /// spellings so the array constructor accepts them; finite numbers use
 /// Swift's default Double description (which preserves precision).
-func numericArrayLiteral(_ value: Double) -> String {
+private func numericArrayLiteral(_ value: Double) -> String {
     if value.isNaN { return #"float("nan")"# }
     if value.isInfinite {
         return value > 0 ? #"float("inf")"# : #"float("-inf")"#

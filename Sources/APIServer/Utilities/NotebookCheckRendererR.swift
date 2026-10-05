@@ -107,7 +107,7 @@ private func rRequireDataFrame(_ expectation: String) -> String {
 
 // MARK: - .dataFrameShape
 
-func renderRDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
+private func renderRDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
     let variable = check.variable ?? "df"
     let rows = check.expectedRows ?? 0
     let cols = check.expectedCols ?? 0
@@ -135,7 +135,7 @@ func renderRDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
 
 // MARK: - .dataFrameColumns
 
-func renderRDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String {
+private func renderRDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String {
     let variable = check.variable ?? "df"
     let columns = check.expectedColumns ?? []
     let mode = check.columnMatch ?? .exact
@@ -186,7 +186,7 @@ func renderRDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String
 
 // MARK: - .dataFrameEquality
 
-func renderRDataFrameEquality(_ check: NotebookCheck, specHash: String) -> String {
+private func renderRDataFrameEquality(_ check: NotebookCheck, specHash: String) -> String {
     let variable = check.variable ?? "df"
     let sidecar = expectedCSVSidecarFilename(checkID: check.id)
     let rtol = JSONValue.double(check.rtol ?? 1e-5).rLiteral
@@ -257,7 +257,7 @@ func renderRDataFrameEquality(_ check: NotebookCheck, specHash: String) -> Strin
 
 // MARK: - .seriesEquality
 
-func renderRSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
+private func renderRSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
     let variable = check.variable ?? "s"
     let sidecar = expectedCSVSidecarFilename(checkID: check.id)
     let rtol = JSONValue.double(check.rtol ?? 1e-5).rLiteral

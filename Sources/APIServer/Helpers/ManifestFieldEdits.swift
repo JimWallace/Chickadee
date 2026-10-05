@@ -66,7 +66,7 @@ func mutateManifest(
 }
 
 /// How many times `mutateManifest` re-applies an edit that lost a race.
-let manifestWriteAttempts = 3
+private let manifestWriteAttempts = 3
 
 /// Writes `manifest` only if the stored manifest is still the one `setup`
 /// holds, in one `UPDATE … WHERE manifest = … RETURNING` statement, which is

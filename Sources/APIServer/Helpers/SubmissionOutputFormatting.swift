@@ -36,7 +36,7 @@ func parseSkip(shortResult: String) -> (isSkipped: Bool, blockerName: String?) {
     return (true, name.isEmpty ? nil : name)
 }
 
-func detailedScriptOutput(from raw: String?, status: TestStatus) -> String? {
+private func detailedScriptOutput(from raw: String?, status: TestStatus) -> String? {
     guard status != .pass else { return nil }
     guard let raw else { return nil }
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -98,7 +98,7 @@ func formattedPassingDetailedOutput(primary raw: String?) -> String? {
     return trimmed
 }
 
-func extractStructuredSummaryText(from text: String) -> String? {
+private func extractStructuredSummaryText(from text: String) -> String? {
     guard let data = text.data(using: .utf8),
         let object = try? JSONSerialization.jsonObject(with: data)
     else {
@@ -144,7 +144,7 @@ private func defaultShortResult(for status: TestStatus) -> String {
     }
 }
 
-func extractTraceback(in text: String) -> String? {
+private func extractTraceback(in text: String) -> String? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
@@ -181,7 +181,7 @@ private func bestDetailedSection(stderr: String?, stdout: String?) -> String? {
     return stderr ?? stdout
 }
 
-func extractStructuredErrorText(from text: String) -> String? {
+private func extractStructuredErrorText(from text: String) -> String? {
     guard let data = text.data(using: .utf8),
         let object = try? JSONSerialization.jsonObject(with: data)
     else {
@@ -261,7 +261,7 @@ private func extractStructuredMessages(from value: Any) -> [String]? {
     return nil
 }
 
-func extractLabeledOutputSection(_ label: String, in text: String) -> String? {
+private func extractLabeledOutputSection(_ label: String, in text: String) -> String? {
     let marker = "\(label):\n"
     guard let start = text.range(of: marker) else { return nil }
     let body = text[start.upperBound...]

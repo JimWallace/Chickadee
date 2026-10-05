@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.434] - 2026-10-05
+
+### Changed
+
+- **The two draft handlers read the suite files once (#2149).** `parseSaveNewAssignmentForm` and `updateNewAssignmentDraft` decoded `suiteFiles` through `MultipartFileList` and then read the same parts again through `multipartFiles`, which already handles the array and single-bare-file shapes. The decoded field and its fallback are gone; `MultipartFileList` stays for the content-item attachments. A new test posts one bare `suiteFiles` part and reads it back.
+
+
+## [0.5.433] - 2026-10-05
+
+### Changed
+
+- **Four `Request`-free, model-touching web helpers moved to `Services/` (#2141).** `GradeOverrideHelpers`, `ScriptCRUDHelpers`, `CourseLookupHelpers` and `CourseRosterCounts` write or query models and never read a request, so the placement rule puts them below the routes. The layering baseline loses two lines. No behaviour change.
+
+
 ## [0.5.432] - 2026-10-05
 
 ### Changed

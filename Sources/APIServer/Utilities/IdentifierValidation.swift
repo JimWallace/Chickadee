@@ -22,7 +22,7 @@
 import Core
 import Foundation
 
-let pythonKeywords: Set<String> = [
+private let pythonKeywords: Set<String> = [
     "False", "None", "True", "and", "as", "assert", "async", "await", "break",
     "class", "continue", "def", "del", "elif", "else", "except", "finally",
     "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
@@ -41,7 +41,7 @@ func isValidPythonIdentifier(_ s: String) -> Bool {
 }
 
 /// R reserved words (`?Reserved`), which are not syntactic names.
-let rReservedWords: Set<String> = [
+private let rReservedWords: Set<String> = [
     "if", "else", "repeat", "while", "function", "for", "in", "next", "break",
     "TRUE", "FALSE", "NULL", "Inf", "NaN", "NA", "NA_integer_", "NA_real_",
     "NA_complex_", "NA_character_",
@@ -77,7 +77,7 @@ func isValidRIdentifier(_ s: String) -> Bool {
 /// declares no language at all — a plain `.sh` suite has no grammar to consult,
 /// and a name in this subset is safe whatever the suite's scripts turn out to
 /// be written in.
-func isValidCrossLanguageIdentifier(_ s: String) -> Bool {
+private func isValidCrossLanguageIdentifier(_ s: String) -> Bool {
     isValidPythonIdentifier(s)
 }
 

@@ -155,7 +155,7 @@ func rCallContext(for family: PatternFamily, case c: PatternCase) -> RCallContex
 
 /// Two-line provenance header plus the `source("test_runtime.R")` every
 /// generated R script needs (R has no `sitecustomize` auto-import).
-func rGeneratedCaseHeader(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+private func rGeneratedCaseHeader(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
     """
     # Test: \(rComment(c.label))
     # Generated from pattern family "\(rComment(family.name))" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.

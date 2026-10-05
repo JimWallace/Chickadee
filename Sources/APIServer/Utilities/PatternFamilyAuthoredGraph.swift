@@ -68,7 +68,7 @@ func detectAuthoredCycles(
 /// filenames stay as-is; `family:<id>` tokens keep the prefix so they
 /// don't collide with a real file name like "family" (filename has no
 /// colon; a clash is impossible in practice).
-func normaliseNode(_ dep: String) -> String { dep }
+private func normaliseNode(_ dep: String) -> String { dep }
 
 // MARK: - Extracted phases (#1123)
 
