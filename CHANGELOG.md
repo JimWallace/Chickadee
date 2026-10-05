@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.424] - 2026-10-05
+
+### Removed
+
+- **`manifestRequiresUploadOnlySubmission` (#2123).** Nothing called it. `ManifestCoherence.violations(in:)` asks the question of a decoded manifest.
+
+
 ## [0.5.423] - 2026-10-05
 
 ### Changed
