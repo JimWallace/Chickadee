@@ -124,13 +124,11 @@ enum CourseCloneService {
             }
 
             for item in contentItems {
-                if let copiedDirectory = try await copyContentItem(
+                try await copyContentItem(
                     item, toCourse: newCourseID,
                     sectionID: item.sectionID.flatMap { sectionIDMap[$0] },
-                    contentFilesDirectory: contentFilesDirectory, on: db)
-                {
-                    createdPaths.append(copiedDirectory)
-                }
+                    contentFilesDirectory: contentFilesDirectory,
+                    createdPaths: &createdPaths, on: db)
             }
         } catch {
             let fm = FileManager.default
@@ -143,28 +141,29 @@ enum CourseCloneService {
 
     /// Copies one content item and its attachment files. Attachments keep
     /// their ids: a file lives at `<itemID>/<attachmentID>`, so a copy under
-    /// the new item id needs no rewrite of the metadata. Returns the copied
-    /// attachment directory, or nil when the item has none to copy.
+    /// the new item id needs no rewrite of the metadata. The copied
+    /// directory is appended to `createdPaths` before the copy, so a failure
+    /// in the copy or in the row save leaves it for the caller's cleanup
+    /// (#2168).
     private static func copyContentItem(
         _ item: APICourseContentItem, toCourse courseID: UUID, sectionID: UUID?,
-        contentFilesDirectory: String, on db: Database
-    ) async throws -> String? {
+        contentFilesDirectory: String, createdPaths: inout [String], on db: Database
+    ) async throws {
         let copy = APICourseContentItem(
             id: UUID(), courseID: courseID, sectionID: sectionID, sortOrder: item.sortOrder,
             title: item.title, kind: item.kind, itemDescription: item.itemDescription,
             links: item.links, attachments: item.attachments, updatedLabel: item.updatedLabel,
             isPublished: item.isPublished)
         let fm = FileManager.default
-        var copiedDirectory: String?
         if let oldID = item.id, let newID = copy.id, !item.attachments.isEmpty {
             let sourceDir = contentFilesDirectory + oldID.uuidString
             if fm.fileExists(atPath: sourceDir) {
+                let copiedDirectory = contentFilesDirectory + newID.uuidString
+                createdPaths.append(copiedDirectory)
                 try fm.createDirectory(atPath: contentFilesDirectory, withIntermediateDirectories: true)
-                try fm.copyItem(atPath: sourceDir, toPath: contentFilesDirectory + newID.uuidString)
-                copiedDirectory = contentFilesDirectory + newID.uuidString
+                try fm.copyItem(atPath: sourceDir, toPath: copiedDirectory)
             }
         }
         try await copy.save(on: db)
-        return copiedDirectory
     }
 }
