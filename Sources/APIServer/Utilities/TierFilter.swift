@@ -1,4 +1,4 @@
-// APIServer/Helpers/TierFilter.swift
+// APIServer/Utilities/TierFilter.swift
 //
 // Tier-visibility helpers shared between the web UI and the JSON API.
 //

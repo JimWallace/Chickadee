@@ -1,4 +1,4 @@
-// APIServer/Helpers/FailureDetailMasking.swift
+// APIServer/Utilities/FailureDetailMasking.swift
 //
 // Applies a suite entry's `FailureDetail` to a failing outcome at
 // results-display time. The generated script printed everything it knew;

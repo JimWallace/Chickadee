@@ -1,4 +1,4 @@
-// APIServer/Helpers/NotebookContributionSlots.swift
+// APIServer/Utilities/NotebookContributionSlots.swift
 //
 // Contribution slots: the server-side bound on how much of a student's
 // notebook counts as their contribution.
