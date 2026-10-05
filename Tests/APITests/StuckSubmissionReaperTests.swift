@@ -98,4 +98,50 @@ import VaporTesting
             #expect(fresh.status == SubmissionStatus.assigned.rawValue)
         }
     }
+
+    /// A job that plays opponents runs the suite once per opponent, so each
+    /// open match row adds one suite budget (10 s here) to its allowance
+    /// (#2185). With 120 opponents the allowance is 10 + 20 minutes.
+    @Test func aMatrixJobGetsOneSuiteBudgetPerOpponent() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            for id in ["sub_matrix_running", "sub_matrix_dead"] {
+                for index in 0..<120 {
+                    try await APIMatchResult(
+                        testSetupID: "setup_reaper", submissionID: id, opponentSubmissionID: "opp\(index)",
+                        opponentIdentity: "submission:opp\(index)", seed: "s\(index)", createdAt: now
+                    ).save(on: app.db)
+                }
+            }
+            try await insertAssignedSubmission(
+                id: "sub_matrix_running", workerID: "w_busy", assignedAt: now.addingTimeInterval(-20 * 60))
+            try await insertAssignedSubmission(
+                id: "sub_matrix_dead", workerID: "w_dead", assignedAt: now.addingTimeInterval(-31 * 60))
+            try await insertAssignedSubmission(
+                id: "sub_plain_old", workerID: "w_dead", assignedAt: now.addingTimeInterval(-11 * 60))
+
+            let reaped = try await reapStuckAssignedSubmissions(on: app.db, logger: app.logger, now: now)
+            #expect(reaped == 2)
+            let running = try #require(try await APISubmission.find("sub_matrix_running", on: app.db))
+            #expect(running.status == SubmissionStatus.assigned.rawValue)
+            #expect(running.workerID == "w_busy")
+            let dead = try #require(try await APISubmission.find("sub_matrix_dead", on: app.db))
+            #expect(dead.status == SubmissionStatus.pending.rawValue)
+            let plain = try #require(try await APISubmission.find("sub_plain_old", on: app.db))
+            #expect(plain.status == SubmissionStatus.pending.rawValue)
+        }
+    }
+
+    @Test func theSuiteBudgetSumsEachEntrysLimit() async throws {
+        try await withApp(app) { _ in
+            let manifest = TestProperties(
+                testSuites: [
+                    TestSuiteEntry(tier: .pub, script: "a.sh"),
+                    TestSuiteEntry(tier: .pub, script: "b.sh", timeLimitSeconds: 30),
+                ],
+                timeLimitSeconds: 10)
+            #expect(suiteTimeBudget(manifest) == 40)
+            #expect(suiteTimeBudget(nil) == 0)
+        }
+    }
 }
