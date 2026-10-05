@@ -38,7 +38,7 @@ struct SuiteConfigRow: Decodable {
 struct ConfiguredSuiteEntry {
     let script: String
     let tier: String
-    let order: Int
+    var order: Int
     let dependsOn: [String]  // script names of prerequisites; empty == none
     let points: Int  // grade weight; 1 = default (unweighted)
     let displayName: String?  // optional human-readable name shown to students
@@ -88,6 +88,13 @@ struct ConfiguredSuiteEntry {
             timeLimitSeconds: entry.timeLimitSeconds,
             failureDetail: entry.failureDetail
         )
+    }
+
+    /// The same entry at a new position. Every other field is carried, so a
+    /// field added later cannot be dropped here by a copy that names fields.
+    init(_ entry: ConfiguredSuiteEntry, order: Int) {
+        self = entry
+        self.order = order
     }
 }
 

@@ -140,6 +140,40 @@ final class AssignmentHelpersManifestTests {
         #expect(props.testSuites.last?.name == "Release tests")
     }
 
+    @Test func updateManifestAddingScriptCarriesEveryFieldOfTheEntry() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false
+        )
+
+        let updated = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_release.py", tier: "release", order: 99,
+                    dependsOn: ["01_public.py"], points: 3, displayName: "Release",
+                    sectionID: "sec-1", hint: "Read the spec.", timeLimitSeconds: 42,
+                    failureDetail: .actualOnly)
+            )
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        let added = try #require(props.testSuites.last)
+        #expect(added.script == "02_release.py")
+        #expect(added.tier == .release)
+        #expect(added.dependsOn == ["01_public.py"])
+        #expect(added.points == 3)
+        #expect(added.name == "Release")
+        #expect(added.sectionID == "sec-1")
+        #expect(added.hint == "Read the spec.")
+        #expect(added.timeLimitSeconds == 42)
+        #expect(added.failureDetail == .actualOnly)
+    }
+
     @Test func updateManifestRemovingScriptClearsDependencyReferences() throws {
         let original = try makeWorkerManifestJSON(
             testSuites: [

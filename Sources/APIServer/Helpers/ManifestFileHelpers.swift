@@ -63,19 +63,7 @@ func updateManifestAddingScript(
     }
     let existing = props.testSuites.enumerated().map { idx, e in ConfiguredSuiteEntry(e, order: idx + 1) }
     let nextOrder = (existing.map(\.order).max() ?? 0) + 1
-    let newEntry = ConfiguredSuiteEntry(
-        script: entry.script,
-        tier: entry.tier,
-        order: nextOrder,
-        dependsOn: entry.dependsOn,
-        points: entry.points,
-        displayName: entry.displayName,
-        generatedBy: entry.generatedBy,
-        generatedByCheck: entry.generatedByCheck,
-        sectionID: entry.sectionID,
-        hint: entry.hint,
-        timeLimitSeconds: entry.timeLimitSeconds
-    )
+    let newEntry = ConfiguredSuiteEntry(entry, order: nextOrder)
     return try? makeWorkerManifestJSON(
         preserving: props, testSuites: existing + [newEntry], language: props.language)
 }
