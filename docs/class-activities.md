@@ -525,7 +525,9 @@ it: their work is not undone by somebody else's later submission. A DEFENCE
 belongs to the author's CURRENT submission only, because the question it
 answers is whether the code that stands today has held up — so a
 resubmission returns that student to "not tested yet" until a classmate's
-next run reaches it. This is the same asymmetry `class_item_coverage`
+next run reaches it. A retest of the tester keeps their earlier rows for
+the same reason: the claim voids completed rows for a standings kind only
+(#2187). This is the same asymmetry `class_item_coverage`
 already carries between coverage and breadth, and it is safe here for a
 reason worth stating: a union kind feeds achievements only, and
 `isSweepEvaluableClassGoal` admits no shape that reads these rows, so a

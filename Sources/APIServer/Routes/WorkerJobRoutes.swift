@@ -383,10 +383,16 @@ struct WorkerJobRoutes: RouteCollection {
         var classmates: [ChosenOpponent] = []
         if activity.kind.opponentSource == .classmates {
             do {
-                // A re-claim (retest) replaces the whole result: rows from an
-                // earlier claim against classmates who have since resubmitted
-                // would otherwise stay completed and inflate the standings.
-                try await voidCompletedMatrixRows(submissionID: submissionID, on: db)
+                // A re-claim (retest) of a STANDINGS kind replaces the whole
+                // result: rows from an earlier claim against classmates who
+                // have since resubmitted would otherwise stay completed and
+                // inflate the standings (#1744). A UNION kind keeps them: a
+                // kill stays with the tester after the target fixes the
+                // fault, and the union counts distinct students, so an old
+                // row cannot count twice (#2187).
+                if activity.kind.aggregation == .standings {
+                    try await voidCompletedMatrixRows(submissionID: submissionID, on: db)
+                }
                 classmates = try await chooseClassmates(for: submission, activity: activity, on: db)
             } catch {
                 throw WorkerJobError.internalInconsistency(

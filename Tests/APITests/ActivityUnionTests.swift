@@ -206,6 +206,36 @@ import VaporTesting
         }
     }
 
+    /// A retest of the tester re-claims the job after the target resubmitted.
+    /// The claim keeps the completed row against the target's earlier code,
+    /// so the kill survives the retest as it survives the resubmission
+    /// (#2187). Only a standings kind voids the earlier rows.
+    @Test func aKillSurvivesARetestOfTheTester() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "rekill")
+            _ = try await arInsertSubmission(
+                id: "rekill_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
+            try await play(app, fx: fx, user: fx.a, submissionID: "rekill_a1", defeats: ["rekill_b1"])
+
+            // B fixes the fault, and A is retested: the claim runs again.
+            _ = try await arInsertSubmission(
+                id: "rekill_b2", testSetupID: fx.setupID, userID: try fx.b.requireID(),
+                attemptNumber: 2, on: app)
+            let a1 = try #require(try await APISubmission.find("rekill_a1", on: app.db))
+            let manifest = try #require(fx.setup.decodedManifest())
+            let set = try await WorkerJobRoutes.jobOpponentSet(
+                manifest: manifest, submission: a1, base: "http://localhost", on: app.db)
+            #expect(set.opponents?.compactMap(\.submissionID) == ["rekill_b2"])
+
+            let kept = try await APIMatchResult.query(on: app.db)
+                .filter(\.$submissionID == "rekill_a1")
+                .filter(\.$opponentSubmissionID == "rekill_b1")
+                .first()
+            #expect(kept?.completedAt != nil, "the row against the defeated code stays completed")
+            #expect(try kill(try await tally(app, fx), fx.a).defeated == 1)
+        }
+    }
+
     /// A student's own earlier submission is not a target of their own
     /// tests, and staff never enter either half.
     @Test func aStudentNeverTestsThemselvesAndStaffNeverAppear() async throws {
