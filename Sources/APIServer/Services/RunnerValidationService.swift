@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/RunnerValidationHelpers.swift
+// APIServer/Services/RunnerValidationService.swift
 //
 // Validation-submission lifecycle: enqueue from a saved solution
 // notebook, schedule after a suite edit (debounced + runner availability
@@ -6,7 +6,8 @@
 // submission for a setup.  Plus the
 // runner-availability probes that gate validation so we don't sit in
 // queue forever when no compatible runner exists.  Extracted from
-// AssignmentHelpers.swift (issue #442) — no behaviour changes.
+// AssignmentHelpers.swift (issue #442). Moved below the routes to Services/
+// (#2140): shared code calls it, and it is code over models and a database.
 
 import Core
 import Fluent
@@ -688,4 +689,19 @@ func ensureCompatibleValidationRunnerAvailability(
     }
 
     return false
+}
+
+/// Loads the persisted `AssignmentRequirement` for an assignment, if any,
+/// and decodes it into an `AssignmentRequirementSpec`.  Used by the
+/// validation pre-check to pick the right runner profile. Lives with the
+/// validation service since #2140, because the service calls it.
+func loadAssignmentRequirementSpec(
+    assignment: APIAssignment,
+    on db: Database
+) async throws -> AssignmentRequirementSpec? {
+    guard let assignmentID = assignment.id else { return nil }
+    let row = try await AssignmentRequirement.query(on: db)
+        .filter(\.$assignmentID == assignmentID)
+        .first()
+    return row?.requirementSpec
 }

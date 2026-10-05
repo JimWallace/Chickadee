@@ -1,6 +1,6 @@
 // APIServer/Services/CourseTimelineService.swift
 //
-// The merged course activity timeline (#421): who changed what in this course,
+// The merged course timeline (#421): who changed what in this course,
 // and when.
 //
 // Two records feed it, because two different things happened and neither alone
@@ -22,7 +22,7 @@ import Foundation
 import Vapor
 
 /// One row of the timeline, already formatted for display.
-struct CourseActivityRow: Encodable, Sendable {
+struct CourseTimelineRow: Encodable, Sendable {
     let timestamp: String
     /// The same instant in ISO-8601, for `js-relative-time` to render as
     /// "3 hours ago" with the absolute value in the tooltip. Activity is
@@ -61,7 +61,7 @@ struct CourseActivityRow: Encodable, Sendable {
 /// How an activity row's category maps to its tile. The audit categories are
 /// the real `AuditCategory` values; "Content edit" is the version-history
 /// source's own label. Anything unrecognised reads as a neutral link tile.
-enum ActivityCategoryTile {
+enum TimelineCategoryTile {
     static func tile(forCategory category: String) -> (key: String, kind: String, icon: String) {
         switch category {
         case "Content edit":
@@ -81,13 +81,13 @@ enum ActivityCategoryTile {
 /// One day's worth of activity rows under a heading.
 struct ActivityDay: Encodable, Sendable {
     let label: String
-    let rows: [CourseActivityRow]
+    let rows: [CourseTimelineRow]
 
     /// Groups rows (already newest first) into days in `timeZone`, labelled
     /// "Today", "Yesterday", or "Sep 26". `now` is a parameter so the midnight
     /// boundary can be tested.
     static func group(
-        _ rows: [CourseActivityRow], now: Date = Date(),
+        _ rows: [CourseTimelineRow], now: Date = Date(),
         timeZone: TimeZone = DayGrouper.displayTimeZone
     ) -> [ActivityDay] {
         DayGrouper.group(rows, occurredAt: \.occurredAt, now: now, timeZone: timeZone)
@@ -110,7 +110,7 @@ enum CourseTimelineService {
         actorFilter: String? = nil,
         limit: Int = defaultLimit,
         on db: any Database
-    ) async throws -> [CourseActivityRow] {
+    ) async throws -> [CourseTimelineRow] {
         // Over-fetch each source by the page size: after the merge only the
         // newest `limit` survive, and either source could supply all of them.
         async let versionsFetch = contentEdits(
@@ -131,8 +131,8 @@ enum CourseTimelineService {
         clock.timeStyle = .short
         let iso = ISO8601DateFormatter()
         return merged.map { entry in
-            let tile = ActivityCategoryTile.tile(forCategory: entry.category)
-            return CourseActivityRow(
+            let tile = TimelineCategoryTile.tile(forCategory: entry.category)
+            return CourseTimelineRow(
                 timestamp: formatter.string(from: entry.sortKey),
                 timestampISO: iso.string(from: entry.sortKey),
                 actor: entry.actor,

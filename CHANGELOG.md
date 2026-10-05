@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.431] - 2026-10-05
+
+### Changed
+
+- **`AlertSender` and `PersonalizationSubstitution` moved from `Services/` to `Utilities/` (#2148).** Both import only `Core` and `Foundation` and touch no model, request or database, so the placement rule puts them in `Utilities/`. The personalization drivers and the `PatternFamilyApplication` parts stay with their families. No behaviour change.
+
+
+## [0.5.430] - 2026-10-05
+
+### Changed
+
+- **The last two hand-rolled get-or-create accessors in Services use `lazyStored` (#2146).** `Application.sweepLeaseHolderID` and the `serverStartedAt` getter now go through the one helper in `ApplicationLazyStorage.swift`, as every sweep monitor already does. No behaviour change.
+
+
 ## [0.5.429] - 2026-10-05
 
 ### Changed

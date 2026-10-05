@@ -9,6 +9,5 @@ NewAssignmentFields
 assignmentByTestSetupID
 createAssignmentWithUniquePublicID
 deadlineOverrideValueForInstructorOpen
-materializeValidationGrading
 normalizedDeadlineOverrideAfterDueDateChange
 waterlooDateTimeFormatter

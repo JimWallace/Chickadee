@@ -175,17 +175,3 @@ private func pythonCapabilitySuggestions(in source: String) -> [String] {
     }
     return matches.sorted()
 }
-
-/// Loads the persisted `AssignmentRequirement` for an assignment, if any,
-/// and decodes it into an `AssignmentRequirementSpec`.  Used by the
-/// validation pre-check to pick the right runner profile.
-func loadAssignmentRequirementSpec(
-    assignment: APIAssignment,
-    on db: Database
-) async throws -> AssignmentRequirementSpec? {
-    guard let assignmentID = assignment.id else { return nil }
-    let row = try await AssignmentRequirement.query(on: db)
-        .filter(\.$assignmentID == assignmentID)
-        .first()
-    return row?.requirementSpec
-}

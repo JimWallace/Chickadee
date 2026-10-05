@@ -8,7 +8,8 @@
 // none of them is about HTTP.  The one genuine coupling was the claim step
 // itself, which lives on the route collection because it needs the request;
 // it is injected as a closure rather than dragging the walk back into the
-// routes file.
+// routes file. The walk itself takes a database, the application and a
+// logger through `ClaimEvaluator`, never a `Request` (#1732, #2145).
 
 import Core
 import Fluent
@@ -178,11 +179,13 @@ func collectClaimCandidates(
 struct ClaimEvaluator {
     let assignmentRequirements: AssignmentRequirementService
     let compatibilityMatcher: CompatibilityMatcher
+    let db: any Database
+    let application: Application
+    let logger: Logger
 }
 
 func evaluateAndClaimCandidate(
     candidates: [(APISubmission, APITestSetup, TestProperties)],
-    req: Request,
     body: WorkerActivityPayload,
     runnerProfile: RunnerCapabilityProfile?,
     evaluator: ClaimEvaluator,
@@ -195,14 +198,14 @@ func evaluateAndClaimCandidate(
 
     for (submission, setup, manifest) in candidates {
         let loadedRequirements = try await evaluator.assignmentRequirements.loadRequirement(
-            for: submission, on: req.db)
+            for: submission, on: evaluator.db)
         let requirementSpec = loadedRequirements.requirement?.requirementSpec
 
-        req.application.diagnostics.recordAssignmentRequirementsLoaded(
+        evaluator.application.diagnostics.recordAssignmentRequirementsLoaded(
             submission: submission,
             assignmentID: loadedRequirements.assignmentID,
             requirements: requirementSpec,
-            logger: req.logger
+            logger: evaluator.logger
         )
 
         let capabilityResult = evaluator.compatibilityMatcher.evaluate(
@@ -243,13 +246,13 @@ func evaluateAndClaimCandidate(
                 languageResult),
             activityResult
         )
-        await req.application.diagnostics.recordCompatibilityDecision(
+        await evaluator.application.diagnostics.recordCompatibilityDecision(
             submission: submission,
             assignmentID: loadedRequirements.assignmentID,
             runnerID: body.workerID,
             requirements: requirementSpec,
             result: compatibilityResult,
-            logger: req.logger
+            logger: evaluator.logger
         )
 
         guard compatibilityResult.isCompatible else {
@@ -282,13 +285,13 @@ func evaluateAndClaimCandidate(
     }
 
     if let blockedCandidate {
-        await req.application.diagnostics.recordNoCompatibleRunnerAvailable(
+        await evaluator.application.diagnostics.recordNoCompatibleRunnerAvailable(
             submission: blockedCandidate.submission,
             assignmentID: blockedCandidate.assignmentID,
             runnerID: body.workerID,
             requirements: blockedCandidate.requirements,
             result: blockedCandidate.result,
-            logger: req.logger
+            logger: evaluator.logger
         )
     }
     return nil
