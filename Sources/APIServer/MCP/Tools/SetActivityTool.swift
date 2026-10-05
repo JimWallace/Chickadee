@@ -18,7 +18,8 @@ struct SetActivityTool: ContentTool {
         let assignmentPublicID: String
         /// An `ActivityKind` token, or "none" to make it an ordinary assignment.
         let kind: String
-        /// "hidden" (default) or "visible". Ignored with kind "none".
+        /// "hidden" or "visible"; absent keeps the stored visibility while the
+        /// kind is unchanged, else "hidden". Ignored with kind "none".
         let leaderboardVisibility: String?
         /// For a kind that stages an opponent: the support file to stage as
         /// the bot. Absent keeps the stored file when the kind is unchanged;
@@ -90,7 +91,8 @@ struct SetActivityTool: ContentTool {
         + "assignment. Kinds: \(MCPActivityProse.summaries). A kind's aggregation (get_server_info "
         + "lists it) decides how the class is ranked and which record setting the kind seeds: "
         + "\(MCPActivityProse.aggregationSummaries). The kind is LOCKED once any student has submitted — clone the assignment "
-        + "instead — but leaderboardVisibility (\"hidden\", the default, or \"visible\") and "
+        + "instead — but leaderboardVisibility (\"hidden\" or \"visible\"; absent keeps the stored value "
+        + "while the kind is unchanged, else \"hidden\") and "
         + "opponentFile may change at any time. A kind whose opponent source is \"supportFile\" "
         + "plays each submission against a bot: upload the bot as a support file (graderOnly to hide "
         + "its source), name it in opponentFile, and the native worker stages it in the directory "
@@ -126,7 +128,8 @@ struct SetActivityTool: ContentTool {
                 "type": .string("string"),
                 "enum": .array(LeaderboardVisibility.allCases.map { .string($0.rawValue) }),
                 "description": .string(
-                    "Whether students may open the leaderboard; \"hidden\" by default. Staff always can."),
+                    "Whether students may open the leaderboard. Absent keeps the stored value while the "
+                        + "kind is unchanged, else \"hidden\". Staff always can."),
             ]),
             "opponentFile": .object([
                 "type": .string("string"),
@@ -183,13 +186,17 @@ struct SetActivityTool: ContentTool {
             guard let kind = ActivityKind(rawValue: kindToken) else {
                 throw MCPToolError.invalidArguments(detail: "kind must be \(MCPActivityProse.tokens), or \"none\".")
             }
-            let visibilityToken =
-                input.leaderboardVisibility?.trimmingCharacters(in: .whitespacesAndNewlines)
-                ?? LeaderboardVisibility.hidden.rawValue
-            guard let visibility = LeaderboardVisibility(rawValue: visibilityToken) else {
+            activity = ClassActivity(kind: kind)
+        }
+        // Read only for a kind: with "none" the field is ignored, as before.
+        let requestedVisibility = try input.leaderboardVisibility.flatMap { token -> LeaderboardVisibility? in
+            guard activity != nil else { return nil }
+            guard
+                let visibility = LeaderboardVisibility(rawValue: token.trimmingCharacters(in: .whitespacesAndNewlines))
+            else {
                 throw MCPToolError.invalidArguments(detail: "leaderboardVisibility must be \"hidden\" or \"visible\".")
             }
-            activity = ClassActivity(kind: kind, leaderboardVisibility: visibility)
+            return visibility
         }
         // A lifecycle setting — instructor-level, like set_submission_mode.
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
@@ -197,6 +204,9 @@ struct SetActivityTool: ContentTool {
         let current = currentManifestActivity(setup.manifest)
         let requested = activity.map { block in
             block
+                .withLeaderboardVisibility(
+                    Self.resolvedVisibility(input: requestedVisibility, kind: block.kind, current: current)
+                )
                 .withOpponentFile(
                     Self.resolvedOpponentFile(
                         input: input.opponentFile, kind: block.kind, current: current)
@@ -226,6 +236,17 @@ struct SetActivityTool: ContentTool {
             opponentFile: stored?.activity?.opponentFile,
             opensAt: stored?.activity?.window?.opensAtISO,
             closesAt: stored?.activity?.window?.closesAtISO)
+    }
+
+    /// The visibility the call means: the given value, or, when absent, the
+    /// stored value carried forward as long as the kind is unchanged — so a
+    /// call that only moves the session window cannot hide a projected board
+    /// (#2190). A kind change starts hidden.
+    static func resolvedVisibility(
+        input: LeaderboardVisibility?, kind: ActivityKind, current: ClassActivity?
+    ) -> LeaderboardVisibility {
+        if let input { return input }
+        return current?.kind == kind ? current?.leaderboardVisibility ?? .hidden : .hidden
     }
 
     /// The window the call means, one bound at a time: an explicit value as

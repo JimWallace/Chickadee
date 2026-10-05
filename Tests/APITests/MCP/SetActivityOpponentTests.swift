@@ -164,7 +164,7 @@ import Vapor
                     leaderboardVisibility: nil, opponentFile: ""),
                 context(app))
             #expect(cleared.opponentFile == nil)
-            #expect(try await stored(on: app)?.leaderboardVisibility == .hidden)
+            #expect(try await stored(on: app)?.leaderboardVisibility == .visible)
 
             _ = try await tool.execute(
                 .init(
