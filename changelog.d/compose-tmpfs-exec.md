@@ -1,0 +1,3 @@
+### Fixed
+
+- **The Compose runner advertises C++ again.** Docker mounts a tmpfs `noexec` unless its options say `exec`, so the runner's `/tmp:size=1g` work root was `noexec` although the file's own comment said it must not be. The runner's startup probe compiles a C++ program in the work root and runs it; on a `noexec` mount that fails, so the runner stopped advertising C++ without an error, and C++ jobs waited for a runner that never came. On 2026-10-05 all three production runners had lost C++ this way. The mount is now `/tmp:size=1g,exec`, and a new `format-lint` guard (`scripts/check-compose-tmpfs-exec.sh`) fails on any tmpfs mount in `docker-compose.yml` without `exec`. Hosts with their own compose file must add `exec` themselves.

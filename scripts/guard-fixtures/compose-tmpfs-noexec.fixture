@@ -1,0 +1,11 @@
+# The runner's /tmp tmpfs without exec. Docker then mounts it noexec, the
+# runner's compiled startup probe cannot run, and the runner silently stops
+# advertising C++. All three production runners lost C++ this way on
+# 2026-10-05.
+guard="scripts/check-compose-tmpfs-exec.sh"
+files="docker-compose.yml"
+description="a tmpfs mount with no exec option"
+expect="has no exec option"
+apply() {
+    sed -i 's|/tmp:size=1g,exec|/tmp:size=1g|' docker-compose.yml
+}
