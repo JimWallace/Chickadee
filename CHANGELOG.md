@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.439] - 2026-10-05
+
+### Fixed
+
+- **The course bundle carries the deadline override (#2166).** An assignment kept open past its due date imported without the override, so the next deadline sweep closed it. `BundledAssignment` now has an optional `deadlineOverrideActive`, written on export and applied on import; a bundle written before it was carried imports as before.
+
+
+## [0.5.438] - 2026-10-05
+
+### Fixed
+
+- **A course export names only the files the bundle holds (#2165).** A submission whose file is gone from disk is left out of the bundle with its results, and an export whose setup zip is missing fails with a message that names the path. Before, the manifest listed the row, the staging step skipped the file with a warning, and the import then refused the whole bundle.
+
+
+## [0.5.437] - 2026-10-05
+
+### Fixed
+
+- **The `clone_assignment` description names everything the clone copies and drops (#2169).** It now says that the reference solution, the support files and the three per-assignment policies come along, that version 1 is seeded, and that the clone has no course section, sort order, due date or solution reveal. The `cloneAssignment` doc comment and two lines in `docs/assignment-versioning.md` no longer describe a `copyCourse` mirror that no longer exists.
+
+
 ## [0.5.436] - 2026-10-05
 
 ### Changed

@@ -205,10 +205,10 @@ The Core type, the migration, the model accessor, and tests
   rejected: term lengths and weekdays are different, so a shifted date is a
   guess.
 - **The bundle is the other copy, and it is a faithful restore.** A
-  `.chickadee` bundle carries the dates, the open state, the four
-  per-assignment policies (secret reveal, passing threshold, solution
-  reveal, LMS sync exclusion) and the course authoring guide exactly as they
-  were (#1737). The clone clears the dates, the open state and the solution
+  `.chickadee` bundle carries the dates, the open state, the deadline
+  override, the four per-assignment policies (secret reveal, passing
+  threshold, solution reveal, LMS sync exclusion) and the course authoring
+  guide exactly as they were (#1737, #2166). The clone clears the dates, the open state and the solution
   reveal because it starts a new term; the bundle restores one.
 - The clone does not archive the source. The instructor can still be
   exporting grades.

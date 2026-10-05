@@ -7,6 +7,7 @@
 import Core
 import Fluent
 import Foundation
+import NIOCore
 import Testing
 import VaporTesting
 
@@ -76,5 +77,83 @@ import VaporTesting
             #expect(try listing(of: app.submissionsDirectory) == submissionsBefore)
             #expect(try await APICourse.query(on: app.db).filter(\.$code == "CLX2").count() == 0)
         }
+    }
+
+    /// One content item with an attachment file, and a database that fails
+    /// the item's row save after the attachment directory was copied. The
+    /// copy records the directory before it writes, so the cleanup removes
+    /// it and the content files directory holds what it held before (#2168).
+    @Test func aFailedContentItemSaveLeavesNoAttachmentFiles() async throws {
+        try await withApp(app) { app in
+            let course = APICourse(
+                code: "CLX3", name: "Cleanup Source", enrollmentMode: .closed,
+                term: AcademicTerm(year: 2026, season: .fall))
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+            let attachmentID = UUID()
+            let item = APICourseContentItem(
+                id: UUID(), courseID: courseID, sectionID: nil, sortOrder: 1,
+                title: "Syllabus", kind: .link,
+                attachments: [
+                    ContentAttachment(id: attachmentID, originalName: "syllabus.pdf", sizeBytes: 4, sortOrder: 0)
+                ])
+            let itemID = try #require(item.id)
+            try FileManager.default.createDirectory(
+                atPath: ContentAttachmentStore.directory(app, itemID: itemID), withIntermediateDirectories: true)
+            try Data("%PDF".utf8).write(
+                to: URL(fileURLWithPath: ContentAttachmentStore.path(app, itemID: itemID, attachmentID: attachmentID)))
+            try await item.save(on: app.db)
+
+            let contentFilesBefore = try listing(of: app.contentFilesDirectory)
+            let directories = AuthoringDirectories(
+                setups: app.testSetupsDirectory, submissions: app.submissionsDirectory)
+            let target = CourseCloneTarget(
+                code: "CLX4", name: "Cleanup Target", term: AcademicTerm(year: 2027, season: .winter))
+
+            await #expect(throws: (any Error).self) {
+                try await app.db.transaction { db in
+                    _ = try await CourseCloneService.clone(
+                        source: course, target: target, directories: directories,
+                        contentFilesDirectory: app.contentFilesDirectory,
+                        on: FailingContentItemInsertDatabase(base: db))
+                }
+            }
+
+            #expect(try listing(of: app.contentFilesDirectory) == contentFilesBefore)
+            #expect(try await APICourse.query(on: app.db).filter(\.$code == "CLX4").count() == 0)
+        }
+    }
+}
+
+/// Forwards every query to `base` and fails the first insert into the
+/// content item table, so a test can make the row save fail after the
+/// attachment directory was copied.
+private struct FailingContentItemInsertDatabase: Database {
+    struct InsertRefused: Error {}
+
+    let base: any Database
+
+    var context: DatabaseContext { base.context }
+    var inTransaction: Bool { base.inTransaction }
+
+    func execute(
+        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
+    ) -> EventLoopFuture<Void> {
+        if query.schema == APICourseContentItem.schema, case .create = query.action {
+            return base.eventLoop.makeFailedFuture(InsertRefused())
+        }
+        return base.execute(query: query, onOutput: onOutput)
+    }
+
+    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
+
+    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
+
+    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+        base.transaction(closure)
+    }
+
+    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
+        base.withConnection(closure)
     }
 }
