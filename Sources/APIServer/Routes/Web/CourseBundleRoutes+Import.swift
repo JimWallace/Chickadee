@@ -50,6 +50,7 @@ extension CourseBundleRoutes {
         let manifest = try parseBundleManifest(extractDir: extractDir)
 
         try validateBundleFiles(manifest: manifest, extractDir: extractDir)
+        try validateBundleKinds(manifest: manifest)
 
         let setupsDir = req.application.testSetupsDirectory
         let subsDir = req.application.submissionsDirectory
@@ -165,6 +166,21 @@ extension CourseBundleRoutes {
                             + att.bundleFilename)
                 }
             }
+        }
+    }
+
+    // ── 4b. Validate the enum-valued fields ───────────────────────────
+
+    /// A bundle from a newer server can name a content item kind or a
+    /// section grading mode this server does not know. The import refuses
+    /// it here and names the item, instead of importing the item as a link
+    /// in silence (#2172).
+    private func validateBundleKinds(manifest: CourseBundleManifest) throws {
+        for item in manifest.contentItems ?? [] {
+            _ = try bundledContentItemKind(item)
+        }
+        for section in manifest.sections ?? [] {
+            _ = try bundledSectionGradingMode(section)
         }
     }
 
@@ -542,7 +558,7 @@ private func importBundledSections(
     for bundledSection in manifest.sections ?? [] {
         let newSection = APICourseSection(
             name: bundledSection.name,
-            defaultGradingMode: bundledSection.defaultGradingMode,
+            defaultGradingMode: try bundledSectionGradingMode(bundledSection).rawValue,
             sortOrder: bundledSection.sortOrder,
             courseID: courseID
         )
@@ -570,7 +586,7 @@ private func importBundledContentItems(
             sectionID: item.sectionBundleID.flatMap { sectionIDMap[$0] },
             sortOrder: item.sortOrder,
             title: item.title,
-            kind: ContentItemKind(rawValue: item.kind) ?? .link,
+            kind: try bundledContentItemKind(item),
             itemDescription: item.description,
             links: item.links,
             updatedLabel: item.updatedLabel,
@@ -758,4 +774,26 @@ private func importBundledResults(
         }
         tally.resultsImported += 1
     }
+}
+
+/// The content item kind a bundled item names, or a `badRequest` that names
+/// the item and the kind (#2172).
+private func bundledContentItemKind(_ item: BundledContentItem) throws -> ContentItemKind {
+    guard let kind = ContentItemKind(rawValue: item.kind) else {
+        throw Abort(
+            .badRequest,
+            reason: "Bundle content item \"\(item.title)\" has an unknown kind: \(item.kind)")
+    }
+    return kind
+}
+
+/// The grading mode a bundled section names, or a `badRequest` that names
+/// the section and the mode (#2172).
+private func bundledSectionGradingMode(_ section: BundledSection) throws -> GradingMode {
+    guard let mode = GradingMode(rawValue: section.defaultGradingMode) else {
+        throw Abort(
+            .badRequest,
+            reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(section.defaultGradingMode)")
+    }
+    return mode
 }
