@@ -1119,6 +1119,50 @@ import VaporTesting
         }
     }
 
+    /// The bundle carries the runner requirements an assignment declared,
+    /// and import writes them as the imported assignment's row (#2167).
+    @Test func roundTripPreservesTheAssignmentRequirement() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let course = try await makeTestCourse(code: "REQ_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_req_rt", courseID: courseID)
+            let assignment = try await insertAssignment(testSetupID: try setup.requireID(), courseID: courseID)
+            let spec = AssignmentRequirementSpec(
+                requiredPlatform: "linux", requiredArchitecture: "arm64",
+                requiredLanguages: [AssignmentLanguageRequirement(language: "r", exactVersion: "4.3")],
+                requiredCapabilities: [RunnerCapability(name: "tidyverse")])
+            try await AssignmentRequirement(assignmentID: try assignment.requireID(), specification: spec)
+                .save(on: app.db)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "REQ_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedAssignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            let copied = try #require(
+                try await AssignmentRequirement.query(on: app.db)
+                    .filter(\.$assignmentID == (try importedAssignment.requireID()))
+                    .first())
+            #expect(copied.requirementSpec == spec)
+        }
+    }
+
     /// Staff round-trip as staff: the bundle carries each enrollment's course
     /// role, and import enrolls the matched user in that role (#1740).
     @Test func roundTripPreservesEnrollmentRoles() async throws {

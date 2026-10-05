@@ -678,6 +678,12 @@ private func importBundledAssignments(
             newAssign.deadlineOverrideActive = deadlineOverrideActive
         }
         try await newAssign.save(on: db)
+        // The runner requirements travel with the assignment (#2167).
+        if let requirement = bundledAssign.requirement {
+            try await AssignmentRequirement(
+                assignmentID: try newAssign.requireID(), specification: requirement
+            ).save(on: db)
+        }
         tally.assignmentsImported += 1
     }
 }

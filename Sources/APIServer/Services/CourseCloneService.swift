@@ -33,8 +33,8 @@ enum CourseCloneService {
     /// Copied:
     /// - course sections, content items and their attachment files;
     /// - every assignment: setup, notebook, reference solution, support
-    ///   files, section, order, and the per-assignment policies (secret
-    ///   reveal, passing threshold, LMS sync exclusion);
+    ///   files, section, order, runner requirements, and the per-assignment
+    ///   policies (secret reveal, passing threshold, LMS sync exclusion);
     /// - the course settings: slip-day policy and the MCP authoring guide.
     ///
     /// Not copied: enrollments, pre-enrollments, submissions, results, grade
