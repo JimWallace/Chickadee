@@ -1075,6 +1075,50 @@ import VaporTesting
         }
     }
 
+    /// The bundle course row carries the term, the enrollment mode and the
+    /// four slip-day fields through export and import (#2171). The Core
+    /// tests pin the resolvers; this pins the route on both sides.
+    @Test func roundTripPreservesTermEnrollmentModeAndSlipDayPolicy() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let course = APICourse(
+                code: "TERM_RT", name: "Term Round Trip", enrollmentMode: .auto,
+                term: AcademicTerm(year: 2026, season: .fall))
+            course.slipDaysEnabled = true
+            course.slipDaysPerStudent = 4
+            course.slipDayExtensionHours = 36
+            course.slipDayReleaseRevealHold = false
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "TERM_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            #expect(imported.term?.year == 2026)
+            #expect(imported.term?.season == .fall)
+            #expect(imported.enrollmentMode == .auto)
+            #expect(imported.slipDaysEnabled == true)
+            #expect(imported.slipDaysPerStudent == 4)
+            #expect(imported.slipDayExtensionHours == 36)
+            #expect(imported.slipDayReleaseRevealHold == false)
+        }
+    }
+
     /// Staff round-trip as staff: the bundle carries each enrollment's course
     /// role, and import enrolls the matched user in that role (#1740).
     @Test func roundTripPreservesEnrollmentRoles() async throws {
