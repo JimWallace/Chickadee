@@ -143,8 +143,8 @@ Each of those directories has one job, so a file goes where its imports say:
 
 - `Utilities/` holds pure code: no request and no database.
   `scripts/check-utilities-imports.sh` fails when a file there imports Vapor or
-  a database module (#1730). Six validators that throw `Abort` may import Vapor
-  and nothing else, and that list can only shrink.
+  a database module (#1730). The authoring validators throw
+  `AuthoringValidationError`, so no file there imports Vapor (#1929).
 - `Helpers/` holds code that works with a `Request` or a database driver type.
   The same script fails when a file there imports none of Vapor, Fluent and
   Leaf and names no model, because such a file is pure (#2144).

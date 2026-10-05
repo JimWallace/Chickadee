@@ -1,4 +1,4 @@
-// Sources/APIServer/Services/SubprocessEnvironment.swift
+// APIServer/Services/SubprocessEnvironment.swift
 //
 // The one bridge from a `[String: String]` environment to swift-subprocess.
 
