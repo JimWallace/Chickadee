@@ -97,6 +97,8 @@ import VaporTesting
             course: BundledCourse(code: courseCode, name: "Minimal Import Course"),
             users: [],
             enrolledUserBundleIDs: [],
+            sections: sections,
+            contentItems: contentItems,
             assignments: [
                 BundledAssignment(
                     bundleID: "assign_1", title: "Lab 1",
@@ -109,8 +111,6 @@ import VaporTesting
                     manifest: Self.workerManifestJSON,
                     zipFilename: "testsetups/\(setupOrigID).zip")
             ],
-            sections: sections,
-            contentItems: contentItems,
             submissions: [],
             results: []
         )
