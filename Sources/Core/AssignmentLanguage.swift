@@ -145,19 +145,9 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     /// equality on top of it rather than a second copy, so a new language is a
     /// `notebookKernelNames` arm and nothing else.
     public static func fromNotebookMetadata(_ metadata: [String: Any]) -> AssignmentLanguage? {
-        if let kernel = (metadata["kernelspec"] as? [String: Any])?["name"] as? String {
-            let lowered = kernel.lowercased()
-            if let match = allCases.first(where: { $0.notebookKernelNames.contains(lowered) }) {
-                return match
-            }
-        }
-        if let info = (metadata["language_info"] as? [String: Any])?["name"] as? String {
-            let lowered = info.lowercased()
-            if let match = allCases.first(where: { $0.notebookKernelNames.contains(lowered) }) {
-                return match
-            }
-        }
-        return nil
+        languageFromKernelNames(
+            (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
+            (metadata["language_info"] as? [String: Any])?["name"] as? String)
     }
 
     /// See `LanguageDescriptor.scriptExtensions`.
