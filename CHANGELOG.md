@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.423] - 2026-10-05
+
+### Changed
+
+- **Two trivial indirections in `SuiteExecution.swift` are gone (#2128).** `outcomeTestName(for:)` only called `runnerOutcomeTestName`, and the public `runnerScriptStem` only called a private `scriptStem`. The two call sites call `runnerOutcomeTestName` directly, and `runnerScriptStem` holds the body.
+
+
 ## [0.5.422] - 2026-10-05
 
 ### Changed
