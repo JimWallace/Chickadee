@@ -256,7 +256,7 @@ code-only lookup.** Use `findActiveCourse(byKey:viewer:on:)` on the web or
 
 | Place | File |
 |---|---|
-| `findActiveCourse(byCode:)` | `Routes/Web/CourseLookupHelpers.swift` |
+| `findActiveCourse(byCode:)` | `Services/CourseLookupHelpers.swift` |
 | Vanity URLs `/:courseCode/:assignmentSlug` (and `/notebook`, `/submit`, `/history`, `/leaderboard`) | `Routes/Web/VanityURLRoutes.swift` |
 | Staff student paths `/:courseCode/students/...` | `Routes/Web/StudentCoursePaths.swift`, `StudentCourseRoutes+History.swift` |
 | MCP `resolveCourse` / `resolveCourseForWrite` (these do not filter archived courses today) | `MCP/Tools/CourseSectionTools.swift` |

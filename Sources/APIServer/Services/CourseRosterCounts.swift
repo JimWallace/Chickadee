@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/CourseRosterCounts.swift
+// APIServer/Services/CourseRosterCounts.swift
 //
 // Canonical "enrolled students" count for a course.
 //
