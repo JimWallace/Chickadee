@@ -1,0 +1,3 @@
+### Security
+
+- **A sandboxed test script gets its own `/tmp` and `/dev/shm`.** Every job on a runner runs as the same user, and the sandbox hid only the work root. A file that one job wrote elsewhere in `/tmp` or in `/dev/shm`, such as a compiler's temporary file, R's session directory or Java's `hsperfdata`, was readable by every other job on the runner and stayed for the next one. The staff sandbox checks proved this on 2026-10-05: a later job saw an earlier job's marker files in both places. Each script now gets fresh, empty, size-limited mounts there (512 MB for `/tmp`, 64 MB for `/dev/shm`), and a `TMPDIR` under `/tmp` is created again inside the new `/tmp`.
