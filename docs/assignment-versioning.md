@@ -169,7 +169,7 @@ keeps its baseline, which is genuine pre-edit content.
 
 ### 4.3 Creation paths seed `v1`
 
-`AssignmentAuthoringService.cloneAssignment`, `copyCourse`,
+`AssignmentAuthoringService.cloneAssignment` (every course or assignment clone),
 `AssignmentAuthoringService.createAssignment`, and `.chickadee` bundle import
 each stamp a single `v1` with the appropriate `origin`. The §3.1 lazy baseline
 covers any creation path missed here.
@@ -260,8 +260,8 @@ change; that is out of scope here but the shape should not foreclose it.
 
 ### 7.2 Clone copies content, not history
 
-`cloneAssignment` and `copyCourse` copy live files into a **new** setup ID, so a
-clone inherits no history for free. Each creation path then seeds a single `v1`
+`cloneAssignment`, which every course or assignment clone calls, copies live
+files into a **new** setup ID, so a clone inherits no history for free. Each creation path then seeds a single `v1`
 (`origin: clone` / `create`), which is both the intended new-term semantic —
 current content, clean slate — and a starting point to roll back to before
 anyone edits the copy.

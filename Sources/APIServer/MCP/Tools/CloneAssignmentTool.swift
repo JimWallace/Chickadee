@@ -43,10 +43,13 @@ struct CloneAssignmentTool: ContentTool {
     static let name = "clone_assignment"
     static let description =
         "Duplicate an existing assignment into a new one by source public ID + new title. "
-        + "Copies the test setup (scripts, manifest, pattern families) and notebook verbatim. "
-        + "Optionally clone into another course (targetCourseCode); defaults to the same course. "
-        + "The clone starts closed, unvalidated, and with no due date — edit it with update_suite / "
-        + "update_pattern_family / update_assignment, then validate and open it. Nothing is re-graded."
+        + "Copies the test setup (scripts, manifest, pattern families, support files), the starter "
+        + "notebook, the reference solution and the per-assignment policies (secret reveal, passing "
+        + "threshold, LMS sync exclusion), and seeds version 1. The clone has no course section, no "
+        + "sort order, no due date and no solution reveal, and starts closed and unvalidated: set a "
+        + "section with set_assignment_course_section, edit it with update_suite / "
+        + "update_pattern_family / update_assignment, then validate and open it. Optionally clone "
+        + "into another course (targetCourseCode); defaults to the same course. Nothing is re-graded."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
