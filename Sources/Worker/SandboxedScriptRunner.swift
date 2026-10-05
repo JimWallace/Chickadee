@@ -7,8 +7,8 @@
 //             private network namespace (no outbound connectivity) and a
 //             private mount namespace, in which the work root is covered by
 //             an empty tmpfs and only the job's own directories are bound
-//             back into place (#2061), and /tmp and /dev/shm are fresh,
-//             empty and private to the job.
+//             back into place (#2061), and /tmp, /dev/shm, /var/tmp and
+//             HOME are fresh, empty and private to the job.
 //
 // On macOS  — uses `sandbox-exec -p <profile>` to enforce a TCC-level policy:
 //             deny all network, allow file-reads from the system prefix except
@@ -216,7 +216,12 @@ private func sandboxWrap(
 /// fresh, size-limited tmpfs mounts: every job runs as the same user, so
 /// without this a file one job writes there (a compiler's temporary file, R's
 /// session directory, Java's `hsperfdata`) is readable by every other job on
-/// the runner, and stays for the next one. The work root, which is usually
+/// the runner, and stays for the next one. `/var/tmp` and `HOME` get the same,
+/// and `HOME` matters most: Python runs `usercustomize.py` from the user site
+/// directory, R reads `~/.Rprofile` and Octave reads `~/.octaverc` at start,
+/// so on a host whose root file system is writable, one job could otherwise
+/// leave code there that runs inside every later job. The image installs
+/// nothing into the home directory, so an empty one loses nothing. The work root, which is usually
 /// under `/tmp`, is covered by an empty tmpfs, which hides every job directory,
 /// and each visible directory is bound back at its own path. `TMPDIR`, when it
 /// pointed into the old `/tmp`, is created again in the new one. The working
@@ -246,6 +251,12 @@ private let linuxMountPrelude = """
     mount -t tmpfs -o nosuid,nodev,size=512m chickadee-private-tmp /tmp
     if [ -d /dev/shm ]; then
         mount -t tmpfs -o nosuid,nodev,size=64m chickadee-private-shm /dev/shm
+    fi
+    if [ -d /var/tmp ]; then
+        mount -t tmpfs -o nosuid,nodev,size=64m chickadee-private-var-tmp /var/tmp
+    fi
+    if [ -n "${HOME:-}" ] && [ "$HOME" != / ] && [ -d "$HOME" ]; then
+        mount -t tmpfs -o nosuid,nodev,size=256m chickadee-private-home "$HOME"
     fi
     mkdir -p "$root"
     mount -t tmpfs -o nosuid,nodev chickadee-work-root "$root"

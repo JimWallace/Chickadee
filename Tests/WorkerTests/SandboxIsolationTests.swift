@@ -6,8 +6,8 @@
 // submission. The sandbox now covers the work root and binds back only the
 // job's own directories. These tests prove that from inside a script: a
 // sibling job directory is invisible, a directory the environment names is
-// visible, and the script's own directory still works. /tmp and /dev/shm are
-// private too: a file one job leaves there is invisible to the next, and a
+// visible, and the script's own directory still works. /tmp, /dev/shm,
+// /var/tmp and HOME are private too: a file one job leaves there is invisible to the next, and a
 // file a script writes there does not outlive it.
 
 import ChickadeeTestSupport
@@ -124,6 +124,41 @@ import Testing
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(!FileManager.default.fileExists(atPath: "/tmp/\(name)"))
         #expect(!FileManager.default.fileExists(atPath: "/dev/shm/\(name)"))
+    }
+
+    @Test(.requiresSandbox) func aFileAnotherJobLeftInHomeIsInvisibleAndANewOneDoesNotOutliveTheScript() async throws {
+        // Outside /tmp, /var/tmp and /dev/shm, which are private already, so
+        // the test proves the HOME mount and not one of those.
+        let home = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".chickadee-sandbox-home-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try "print('another job ran here')".write(
+            to: home.appendingPathComponent(".Rprofile"), atomically: true, encoding: .utf8)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            if [ -e "$HOME/.Rprofile" ]; then echo "leftover visible"; exit 1; fi
+            echo planted > "$HOME/.octaverc" || exit 1
+            """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(
+            script: script, workDir: ownJob, timeLimitSeconds: 60, env: ["HOME": home.path])
+        #expect(output.exitCode == 0, "stdout: \(output.stdout) stderr: \(output.stderr)")
+        #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent(".octaverc").path))
+    }
+
+    @Test(.requiresSandbox) func aFileTheScriptWritesInVarTmpDoesNotOutliveIt() async throws {
+        let name = "chickadee-sandbox-written-\(UUID().uuidString)"
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            if [ -d /var/tmp ]; then echo written > "/var/tmp/\(name)" || exit 1; fi
+            """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "stderr: \(output.stderr)")
+        #expect(!FileManager.default.fileExists(atPath: "/var/tmp/\(name)"))
     }
 
     @Test(.requiresSandbox) func aTmpdirUnderTmpStillWorks() async throws {
