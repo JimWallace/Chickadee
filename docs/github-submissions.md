@@ -377,7 +377,8 @@ a course organization, made from the instructor's template.
    installation to the Chickadee course.
 2. On the assignment page, the instructor selects a template repository.
 3. When a linked student first opens the assignment, Chickadee makes
-   `{org}/{assignment-slug}-{github-login}` from the template, private, and
+   `{org}/{assignment-slug}-{github-login}` (with the term before the login for
+   a course with a term) from the template, private, and
    invites the student as a collaborator with write access. A new table
    `github_course_repositories` maps (assignment, student) to the repository ID.
 4. The submit panel shows only that repository.
@@ -431,8 +432,13 @@ As built (slice 4):
   made in a student's name before they choose to use GitHub. There is no
   background retry: a refusal shows "GitHub is busy. Try again in a few
   minutes", and the upload form stays.
-- **The repository** is `{assignment-slug}-{github-login}`, with any character
-  GitHub does not allow replaced by `-`, private, in the bound organization.
+- **The repository** is `{assignment-slug}-{github-login}`, or
+  `{assignment-slug}-{term}-{github-login}` (for example `lab1-W27-alice`) for a
+  course with a term, with any character GitHub does not allow replaced by `-`,
+  private, in the bound organization. The term keeps two offerings apart: a
+  clone keeps the assignment slugs and may bind the same organization, so a
+  student who repeats the course would otherwise ask for the name their first
+  repository holds (#2228).
   The student is invited with write (`push`) access. The login in the name and
   in the invitation is read from the linked numeric ID first
   (`GET /user/{account_id}`) and stored, never taken from the stored login: a
@@ -602,7 +608,7 @@ Chickadee.
 | 4 | That an instructor authorizes the App, and their role in the organization | Out, then In | The instructor's own account; the role is read once and not stored |
 | 4 | The organization's ID and login, and the installation ID | In | Stored in `github_course_organizations` |
 | 4 | The student's numeric GitHub ID, to read their current login (`GET /user/{account_id}`, #1766), and the login GitHub answers with | Out, then In | GitHub; the login is stored on the student's link |
-| 4 | A repository named `{assignment-slug}-{github-login}` | Out | **Every owner of the course organization, and every member who can see private repositories. The name contains the assignment's slug and the student's GitHub login.** |
+| 4 | A repository named `{assignment-slug}-{github-login}`, with the term's short label before the login for a course with a term | Out | **Every owner of the course organization, and every member who can see private repositories. The name contains the assignment's slug, the course term and the student's GitHub login.** |
 | 4 | The template's files, copied into the student's repository | Out (GitHub to GitHub) | The same people |
 | 4 | An invitation from the course organization to the student's GitHub login | Out | The student; the organization's owners |
 | 4 | The repository ID and `owner/name`, whether the invitation succeeded, and the numeric ID of the account it went to | In | Stored in `github_course_repositories` |

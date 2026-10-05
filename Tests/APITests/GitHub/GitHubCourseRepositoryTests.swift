@@ -9,6 +9,7 @@
 // repository; archiving archives every course repository. GitHub is faked.
 
 import ChickadeeTestSupport
+import Core
 import CryptoExtras
 import Fluent
 import Foundation
@@ -470,6 +471,27 @@ import VaporTesting
 
     // MARK: - The student's course repository
 
+    /// A course with a term names the repository with the term's short
+    /// label, so a student who repeats the course gets a new name (#2228).
+    @Test func aTermedCoursePutsItsTermInTheRepositoryName() async throws {
+        try await withApp(app) { app in
+            try await registerApp()
+            try await bindOrganization()
+            let cookie = try await studentWithTemplate()
+            let course = try #require(try await APICourse.query(on: app.db).first())
+            course.term = AcademicTerm(year: 2027, season: .winter)
+            try await course.save(on: app.db)
+
+            try await post("/testsetups/gh_setup/github/repository", cookie: cookie) { res in
+                #expect(res.headers.first(name: .location) == "/testsetups/gh_setup/github?ok=repository")
+            }
+            #expect(
+                seen("generate:") == [
+                    "generate:installation-55:cs101-org/lab-template:cs101-org/lab-1-W27-octo-student"
+                ])
+        }
+    }
+
     @Test func aStudentMakesTheirRepositoryAndSubmitsOnlyFromIt() async throws {
         try await withApp(app) { app in
             try await registerApp()
@@ -715,6 +737,26 @@ import VaporTesting
         let name = GitHubCourseRepositoryName.make(assignmentSlug: String(repeating: "a", count: 200), login: "octo")
         #expect(name.count == GitHubCourseRepositoryName.maxLength)
         #expect(name.hasSuffix("-octo"))
+    }
+
+    /// A course with a term puts its short label before the login, so two
+    /// offerings that share an organization and a slug get two names (#2228).
+    @Test func aTermIsPutBeforeTheLogin() throws {
+        let winter27 = try #require(AcademicTerm(year: 2027, season: .winter))
+        #expect(
+            GitHubCourseRepositoryName.make(assignmentSlug: "lab1", term: winter27, login: "alice") == "lab1-W27-alice")
+        let fall26 = try #require(AcademicTerm(year: 2026, season: .fall))
+        #expect(
+            GitHubCourseRepositoryName.make(assignmentSlug: "lab1", term: fall26, login: "alice")
+                != GitHubCourseRepositoryName.make(assignmentSlug: "lab1", term: winter27, login: "alice"))
+    }
+
+    @Test func aLongSlugKeepsTheTermAndTheLogin() throws {
+        let winter27 = try #require(AcademicTerm(year: 2027, season: .winter))
+        let name = GitHubCourseRepositoryName.make(
+            assignmentSlug: String(repeating: "a", count: 200), term: winter27, login: "octo")
+        #expect(name.count == GitHubCourseRepositoryName.maxLength)
+        #expect(name.hasSuffix("-W27-octo"))
     }
 
     @Test func courseRepositoryPermissionsAreOptIn() throws {

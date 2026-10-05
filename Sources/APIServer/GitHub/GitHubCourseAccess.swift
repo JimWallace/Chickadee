@@ -6,6 +6,7 @@
 // repositories, make and archive course repositories, and read a student's
 // course repository when they submit.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -165,15 +166,20 @@ struct GitHubCourseAccess: Sendable {
     }
 }
 
-/// The name of a course repository: `{assignment-slug}-{github-login}`, as
+/// The name of a course repository: `{assignment-slug}-{github-login}`, or
+/// `{assignment-slug}-{term}-{github-login}` for a course with a term, as
 /// GitHub allows it (letters, digits, `.`, `-`, `_`; at most 100 characters).
+///
+/// The term keeps two offerings apart: a clone keeps its assignment slugs,
+/// and two offerings may bind one organization, so a student who repeats a
+/// course would otherwise ask for a name their first repository holds (#2228).
 enum GitHubCourseRepositoryName {
     static let maxLength = 100
 
-    static func make(assignmentSlug: String, login: String) -> String {
+    static func make(assignmentSlug: String, term: AcademicTerm? = nil, login: String) -> String {
         let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
         let clean = { (text: String) in String(text.map { allowed.contains($0) ? $0 : "-" }) }
-        let suffix = "-" + clean(login)
+        let suffix = (term.map { "-" + $0.shortLabel } ?? "") + "-" + clean(login)
         let prefix = String(clean(assignmentSlug).prefix(maxLength - suffix.count))
         let name = (prefix.isEmpty ? "assignment" : prefix) + suffix
         // A name made only of dots is reserved on GitHub.
