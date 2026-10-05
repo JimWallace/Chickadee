@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.471] - 2026-10-05
+
+### Security
+
+- **One sandboxed job can no longer use up a runner's processes (#2224).** Every job on a runner runs as the same user, so one test script could fork until the container's `pids_limit` was used up, and the other jobs on the runner could then not start a process. Each sandboxed script now starts under its own `RLIMIT_NPROC`, set by the new runner flag `--job-process-limit` (default 128), which the kernel counts per user namespace. At startup the runner warns when the kernel does not apply the limit (a runner started as root) and when the container's `pids_limit` cannot hold `--max-jobs` jobs at their limit. The Compose runner's `pids_limit` grows from 64 to 576 to cover four jobs.
+
+
 ## [0.5.470] - 2026-10-05
 
 ### Fixed
