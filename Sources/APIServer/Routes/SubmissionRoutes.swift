@@ -32,7 +32,7 @@ struct SubmissionRoutes: RouteCollection {
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let submissionsDir = req.application.submissionsDirectory
-        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = freshShortID(prefix: "sub")
         let zipPath = submissionsDir + "\(subID).zip"
 
         guard let zipData = body.zipBase64.data(using: .utf8),
@@ -82,7 +82,7 @@ struct SubmissionRoutes: RouteCollection {
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let submissionsDir = req.application.submissionsDirectory
-        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = freshShortID(prefix: "sub")
 
         // Derive extension from the provided filename, default to original ext.
         let ext = URL(fileURLWithPath: submittedFilename).pathExtension

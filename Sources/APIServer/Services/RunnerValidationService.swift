@@ -26,7 +26,7 @@ func enqueueRunnerValidationSubmission(
         fallback: "solution.ipynb"
     )
     let submissionsDir = req.application.submissionsDirectory
-    let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+    let subID = freshShortID(prefix: "sub")
     let ext = (sanitizedFilename as NSString).pathExtension
     let filePath = submissionsDir + "\(subID).\(ext)"
     try await req.fileio.writeFile(.init(data: solutionNotebookData), at: filePath)
@@ -170,7 +170,7 @@ private func enqueueValidationVariants(
         let ext = (filename as NSString).pathExtension
         for index in 0..<validationVariantCount {
             let seedHex = DatasetDiagnostics.preflightSeed(index)
-            let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+            let subID = freshShortID(prefix: "sub")
             // Each variant gets its own stored copy: the `.grading` sidecar
             // is derived from the submission's `zipPath`, so a shared file
             // would make every variant's sidecar the same path.
