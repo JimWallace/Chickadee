@@ -898,6 +898,48 @@ import VaporTesting
         }
     }
 
+    /// The bundle carries the deadline override with the open state it
+    /// protects, so the deadline sweep leaves an imported assignment open
+    /// past its due date, as it was (#2166).
+    @Test func roundTripPreservesTheDeadlineOverride() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let course = try await makeTestCourse(code: "OVERRIDE_RT")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_override_rt", courseID: courseID)
+            let assignment = try await insertAssignment(testSetupID: try setup.requireID(), courseID: courseID)
+            assignment.dueAt = Date(timeIntervalSince1970: 1_600_000_000)
+            assignment.visibility = .open
+            assignment.deadlineOverrideActive = true
+            try await assignment.save(on: app.db)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let closed = try await closeExpiredAssignments(on: app.db, logger: app.logger)
+            #expect(closed == 0)
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "OVERRIDE_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            let importedAssignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
+            #expect(importedAssignment.deadlineOverrideActive == true)
+            #expect(importedAssignment.visibility == .open)
+        }
+    }
+
     /// Staff round-trip as staff: the bundle carries each enrollment's course
     /// role, and import enrolls the matched user in that role (#1740).
     @Test func roundTripPreservesEnrollmentRoles() async throws {
