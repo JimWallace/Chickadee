@@ -367,6 +367,57 @@ import VaporTesting
         }
     }
 
+    /// Tied rows share a place, for the badge signal as on the page, and a
+    /// student who left the course has no place and cannot hold the leader
+    /// record (#2191).
+    @Test func tiedRowsShareAPlaceAndALeaverHasNone() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "tie", manifest: try robinManifest())
+            _ = try await arInsertSubmission(
+                id: "tie_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
+            _ = try await arInsertSubmission(
+                id: "tie_c1", testSetupID: fx.setupID, userID: try fx.c.requireID(), on: app)
+            // a and b each beat c, and play each other to a draw.
+            for (user, id) in [(fx.a, "tie_a1"), (fx.b, "tie_b1")] {
+                let plays = try await claim(app, fx: fx, user: user, submissionID: id)
+                try await recordActivityMatch(
+                    testSetupID: fx.setupID, userID: try user.requireID(), submissionID: id,
+                    outcomes: [outcome("match", metric: 1)],
+                    matches: plays.map { opponent in
+                        let againstC = opponent.champion?.id == "tie_c1"
+                        return report(opponent, submissionID: id, won: againstC, score: againstC ? 1 : 0.5)
+                    }, on: app.db)
+            }
+            let ranked = try await rankedStandings(testSetupID: fx.setupID, courseID: fx.setup.courseID, on: app.db)
+            let aID = try fx.a.requireID()
+            let bID = try fx.b.requireID()
+            let aRow = try #require(ranked.first { $0.standing.userID == aID })
+            let bRow = try #require(ranked.first { $0.standing.userID == bID })
+            #expect(aRow.standing.averageScore == bRow.standing.averageScore)
+            #expect(aRow.rank == 1 && bRow.rank == 1)
+            #expect(aRow.isTied && bRow.isTied)
+            #expect(try await standingSignals(testSetupID: fx.setupID, userID: aID, on: app.db)?.standing == 1)
+            #expect(try await standingSignals(testSetupID: fx.setupID, userID: bID, on: app.db)?.standing == 1)
+
+            // The current leader leaves the course; the next result moves the
+            // record to a student who is still enrolled.
+            let leader = try #require(ranked.first).standing.userID
+            let other = leader == aID ? bID : aID
+            try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == fx.setup.courseID)
+                .filter(\.$userID == leader)
+                .delete()
+            #expect(try await standingSignals(testSetupID: fx.setupID, userID: leader, on: app.db) == nil)
+            #expect(try await standingSignals(testSetupID: fx.setupID, userID: other, on: app.db)?.standing == 1)
+            let replay = try await claim(app, fx: fx, user: fx.c, submissionID: "tie_c2")
+            try await recordActivityMatch(
+                testSetupID: fx.setupID, userID: try fx.c.requireID(), submissionID: "tie_c2",
+                outcomes: [outcome("match", metric: 0, status: .fail, score: 0)],
+                matches: replay.map { report($0, submissionID: "tie_c2", won: false, score: 0) }, on: app.db)
+            #expect(try await winnerRecord(app, fx: fx)?.userID == other)
+        }
+    }
+
     /// A row the worker never reported stays open and counts nothing; a
     /// bot-only job (no reports at all) completes its one row from the
     /// collection's match entry, as a hill match does.

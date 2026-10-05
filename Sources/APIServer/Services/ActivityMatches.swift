@@ -335,9 +335,9 @@ private func recordMatrixMatches(
     // the tester's half and would be read as the whole record.
     guard setup.decodedManifest()?.activity?.kind.aggregation != .union else { return }
     try await recomputeStanding(testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
-    if let leader = try await activityStandings(testSetupID: setupID, on: db).first {
+    if let leader = try await rankedStandings(testSetupID: setupID, courseID: setup.courseID, on: db).first {
         try await awardTournamentWinnerRecords(
-            setup: setup, userID: leader.userID, submissionID: leader.submissionID, on: db)
+            setup: setup, userID: leader.standing.userID, submissionID: leader.standing.submissionID, on: db)
     }
 }
 
@@ -398,14 +398,67 @@ func activityStandings(testSetupID: String, on db: Database) async throws -> [AP
         }
 }
 
-/// A student's place (1 = first) and win count in the standings, for the
-/// `standing` / `matchesWon` badge signals; nil when they have no row.
+/// One standings row with the place the class sees.
+struct RankedStanding: Sendable {
+    let standing: APIActivityStanding
+    /// 1 = first. Tied rows share the place of the first of them.
+    let rank: Int
+    let isTied: Bool
+}
+
+/// The standings as the class sees them: the rows of students still enrolled
+/// in the course, best first (`activityStandings`), with one competition
+/// rank per tie of average, wins and played.
+///
+/// The ONE ranking rule. The leaderboard page, the `standing` badge signal
+/// and the standings-leader record all read it, so a tie or a student who
+/// left the course cannot give the page one answer and the badge or the
+/// record another (#2191).
+func rankedStandings(testSetupID: String, courseID: UUID, on db: Database) async throws -> [RankedStanding] {
+    let standings = try await activityStandings(testSetupID: testSetupID, on: db)
+    let enrolled = try await APICourseEnrollment.query(on: db)
+        .filter(\.$course.$id == courseID)
+        .filter(\.$userID ~~ standings.map(\.userID))
+        .all()
+    let roster = Set(enrolled.map(\.userID))
+    let onRoster = standings.filter { roster.contains($0.userID) }
+
+    var ranks: [Int] = []
+    for (index, standing) in onRoster.enumerated() {
+        let tiesPrevious = index > 0 && StandingKey(standing) == StandingKey(onRoster[index - 1])
+        ranks.append(tiesPrevious ? ranks[index - 1] : index + 1)
+    }
+    let tieSizes = Dictionary(ranks.map { ($0, 1) }, uniquingKeysWith: +)
+    return zip(onRoster, ranks).map { standing, rank in
+        RankedStanding(standing: standing, rank: rank, isTied: (tieSizes[rank] ?? 1) > 1)
+    }
+}
+
+/// The part of a standings row that decides its rank: two rows with equal
+/// keys share a rank.
+private struct StandingKey: Equatable {
+    let averageScore: Double
+    let wins: Int
+    let played: Int
+
+    init(_ standing: APIActivityStanding) {
+        averageScore = standing.averageScore
+        wins = standing.wins
+        played = standing.played
+    }
+}
+
+/// A student's place (1 = first, shared on a tie) and win count in the
+/// standings, for the `standing` / `matchesWon` badge signals; nil when they
+/// have no row, or have left the course. The place is the page's
+/// (`rankedStandings`).
 func standingSignals(
     testSetupID: String, userID: UUID, on db: Database
 ) async throws -> (standing: Int, matchesWon: Int)? {
-    let standings = try await activityStandings(testSetupID: testSetupID, on: db)
-    guard let index = standings.firstIndex(where: { $0.userID == userID }) else { return nil }
-    return (index + 1, standings[index].wins)
+    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return nil }
+    let ranked = try await rankedStandings(testSetupID: testSetupID, courseID: setup.courseID, on: db)
+    guard let row = ranked.first(where: { $0.standing.userID == userID }) else { return nil }
+    return (row.rank, row.standing.wins)
 }
 
 /// The hill's current holder, for the leaderboard page; nil when the bot or
