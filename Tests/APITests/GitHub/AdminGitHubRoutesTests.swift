@@ -285,6 +285,31 @@ import VaporTesting
         }
     }
 
+    /// The cached installation tokens belong to the removed App, so removal
+    /// drops them; the next App does not inherit them (#2209).
+    @Test func removingClearsTheInstallationTokenCache() async throws {
+        try await withApp(app) { app in
+            try await register(on: app)
+            try Self.conversion.secrets.write(path: secretsPath)
+            for account: Int64 in [11, 12] {
+                await app.githubInstallationTokens.store(
+                    GitHubInstallationToken(token: "old-\(account)", expiresAt: Date().addingTimeInterval(3_600)),
+                    forAccount: account)
+            }
+            let cookie = try await loginAsAdmin("github_admin", on: app)
+            let (token, boundCookie) = try await csrfFields(for: "/admin/github", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/admin/github/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+            #expect(await app.githubInstallationTokens.isEmpty)
+            #expect(await app.githubInstallationTokens.token(forAccount: 11) == nil)
+        }
+    }
+
     @Test func removingWithNoAppIsNotFound() async throws {
         try await withApp(app) { app in
             let cookie = try await loginAsAdmin("github_admin", on: app)
