@@ -1,10 +1,11 @@
 // Core/OctavePersonalizationRuntime.swift
 //
-// Octave source snippets shared by the two places that need Octave
-// personalization primitives: the injected grading runtime (test_runtime.m,
-// via the worker's TestRuntimeSources) and the server-side Octave expression
-// driver (PersonalizationEvaluator). One source of truth means the seed the
-// driver binds and the seed a grading script reads are computed identically.
+// Octave source snippets for the server-side Octave expression driver
+// (PersonalizationEvaluator). The grading runtime's copy of the same
+// primitives lives in `Tools/runner-support/test_runtime.m`, which the
+// `EmbedRunnerSupport` plugin compiles into the worker.
+// `OctavePersonalizationDriverTests` pins the two, so the seed the driver
+// binds and the seed a grading script reads are computed identically.
 //
 // The Octave counterpart of RPersonalizationRuntime and
 // LuaPersonalizationRuntime. Core Octave only: the runner image installs the

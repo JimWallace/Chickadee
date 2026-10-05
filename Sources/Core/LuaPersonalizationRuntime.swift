@@ -1,10 +1,11 @@
 // Core/LuaPersonalizationRuntime.swift
 //
-// Lua source snippets shared by the two places that need Lua personalization
-// primitives: the injected grading runtime (test_runtime.lua, via the worker's
-// TestRuntimeSources) and the server-side Lua expression driver
-// (PersonalizationEvaluator). One source of truth means the seed the driver
-// binds and the seed a grading script reads are computed identically.
+// Lua source snippets for the server-side Lua expression driver
+// (PersonalizationEvaluator). The grading runtime's copy of the same
+// primitives lives in `Tools/runner-support/test_runtime.lua`, which the
+// `EmbedRunnerSupport` plugin compiles into the worker.
+// `LuaPersonalizationDriverTests` pins the two, so the seed the driver binds
+// and the seed a grading script reads are computed identically.
 //
 // The Lua counterpart of RPersonalizationRuntime, and it exists now for the
 // reason TestRuntimeSources predicted it would: the seed was a lone literal in
