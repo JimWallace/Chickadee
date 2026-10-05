@@ -212,7 +212,14 @@ COPY docs       ./docs
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
-RUN mkdir -p /data && chown -R chickadee:chickadee /app /data
+# /app stays owned by root. Only the data volume belongs to the application
+# user. The server runs from /data (the entrypoint changes to it) and the runner
+# works under /tmp, so nothing writes to /app at runtime. When /app belonged to
+# the application user, a test script on a runner without a read-only root file
+# system could add files there or replace the runner binary, which then ran with
+# the runner secret after the next restart. docker-build.yml asserts that the
+# application user can write nothing under /app.
+RUN mkdir -p /data && chown chickadee:chickadee /data
 
 USER chickadee
 

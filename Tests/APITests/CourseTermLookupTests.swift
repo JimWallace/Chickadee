@@ -109,6 +109,43 @@ import VaporTesting
         }
     }
 
+    /// A termed course whose key is another active course's code would have
+    /// its links resolve to that course, because an exact code beats a key
+    /// (#2227). The check refuses the pair in both orders.
+    @Test func duplicateCheckRefusesAKeyThatIsAnotherCoursesCode() async throws {
+        try await withApp(app) { app in
+            let winter26 = AcademicTerm(year: 2026, season: .winter)
+            try await course("CS136-W26", nil)
+            #expect(try await activeCourseCodeIsTaken("CS136", term: winter26, excluding: nil, on: app.db))
+            #expect(try await activeCourseCodeIsTaken("cs136", term: winter26, excluding: nil, on: app.db))
+            #expect(!(try await activeCourseCodeIsTaken("CS136", term: fall26, excluding: nil, on: app.db)))
+
+            try await course("CS150", fall26)
+            #expect(try await activeCourseCodeIsTaken("CS150-F26", term: nil, excluding: nil, on: app.db))
+            #expect(try await activeCourseCodeIsTaken("cs150-f26", term: nil, excluding: nil, on: app.db))
+        }
+    }
+
+    /// Two years with one short label give two courses one key.
+    @Test func duplicateCheckRefusesTwoTermsWithOneKey() async throws {
+        try await withApp(app) { app in
+            try await course("CS151", fall26)
+            let fall2126 = AcademicTerm(year: 2126, season: .fall)
+            #expect(try await activeCourseCodeIsTaken("CS151", term: fall2126, excluding: nil, on: app.db))
+        }
+    }
+
+    /// A bare code names every offering of a course on purpose, so a course
+    /// with no term beside a termed one of the same code is not a collision.
+    @Test func aBareCodeBesideATermedOfferingIsNotACollision() async throws {
+        try await withApp(app) { _ in
+            let termed = APICourse(code: "CS152", name: "Course", term: fall26)
+            #expect(!courseKeysCollide(code: "CS152", term: nil, with: termed))
+            #expect(!courseKeysCollide(code: "CS152", term: winter27, with: termed))
+            #expect(courseKeysCollide(code: "cs152", term: fall26, with: termed))
+        }
+    }
+
     // MARK: - findActiveCourse(byKey:viewer:on:)
 
     @Test func aKeyNamesItsTerm() async throws {

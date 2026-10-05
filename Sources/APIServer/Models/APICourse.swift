@@ -181,7 +181,10 @@ extension APICourse {
     /// for a course with no term, else "CS135-F26". Two active offerings may
     /// share a code (docs/course-terms.md), so a URL names the term to stay
     /// unambiguous. `findActiveCourse(byKey:viewer:on:)` resolves both forms.
-    var urlKey: String {
+    var urlKey: String { Self.urlKey(code: code, term: term) }
+
+    /// The URL key a course with `code` and `term` has, before it exists.
+    static func urlKey(code: String, term: AcademicTerm?) -> String {
         guard let term else { return code }
         return "\(code)-\(term.shortLabel)"
     }
