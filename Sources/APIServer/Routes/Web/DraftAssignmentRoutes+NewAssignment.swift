@@ -240,9 +240,7 @@ extension DraftAssignmentRoutes {
         let assignmentNotebookFile = body.assignmentNotebookFile
         let solutionNotebookFile = body.solutionNotebookFile
         let suiteFiles =
-            (try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? body.suiteFiles?.files
-            ?? [])
+            (try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req) ?? [])
             .filter { $0.data.readableBytes > 0 }
         let suiteConfigRaw =
             try multipartTextField(named: ["suiteConfig"], from: req)
@@ -397,8 +395,9 @@ extension DraftAssignmentRoutes {
         return req.redirect(to: "/instructor")
     }
 
-    // `suiteFiles` decodes both the array-typed (`suiteFiles[]`) and
-    // single-bare-`File` (Safari) multipart shapes via `MultipartFileList`.
+    // The suite files are not decoded here: `multipartFiles` reads both the
+    // array-typed (`suiteFiles[]`) and single-bare-`File` (Safari) shapes from
+    // the raw parts, so the body carried a second reader for one field (#2149).
     fileprivate struct DraftBody: Content {
         var assignmentName: String?
         var dueAt: String?
@@ -408,7 +407,6 @@ extension DraftAssignmentRoutes {
         var draftAction: String?
         var assignmentNotebookFile: File?
         var solutionNotebookFile: File?
-        var suiteFiles: MultipartFileList?
         var suiteConfig: String?
         var requiredPlatform: String?
         var requiredArchitecture: String?
