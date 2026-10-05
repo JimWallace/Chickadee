@@ -28,11 +28,12 @@ struct AccountRoutes: RouteCollection {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.internalServerError) }
 
-        // All non-archived courses.
+        // All non-archived courses, newest term first (`courseListPrecedes`):
+        // two offerings of one code must sort in a fixed order (#2231).
         let allCourses = try await APICourse.query(on: req.db)
             .filter(\.$isArchived == false)
-            .sort(\.$code)
             .all()
+            .sorted(by: courseListPrecedes)
 
         // Current enrollments.
         let enrollments = try await APICourseEnrollment.query(on: req.db)
@@ -69,6 +70,7 @@ struct AccountRoutes: RouteCollection {
 
         let enrolledRows =
             enrollments
+            .sorted { courseListPrecedes($0.course, $1.course) }
             .compactMap { e in
                 e.course.id.map { id in
                     Self.enrolledCourseRow(
@@ -76,7 +78,6 @@ struct AccountRoutes: RouteCollection {
                         handle: handlesByCourseID[id], handleChoice: handleChoicesByCourseID[id])
                 }
             }
-            .sorted { $0.code < $1.code }
 
         let availableRows = allCourses.compactMap { c in
             Self.availableCourseRow(c, enrolledIDs: enrolledIDs)
