@@ -380,6 +380,9 @@ struct WorkerJobRoutes: RouteCollection {
     ) async throws(WorkerJobError) -> (opponent: JobOpponent?, opponents: [JobOpponent]?) {
         guard let activity = manifest.activity, activity.stagesAnOpponent, let submissionID = submission.id
         else { return (nil, nil) }
+        if playsPractice(activity: activity, submission: submission) {
+            return (practiceOpponent(activity: activity, submissionID: submissionID), nil)
+        }
         var classmates: [ChosenOpponent] = []
         if activity.kind.opponentSource == .classmates {
             do {
@@ -399,6 +402,33 @@ struct WorkerJobRoutes: RouteCollection {
             try await jobOpponents(
                 activity: activity, classmates: classmates, submission: submission, base: base, on: db)
         )
+    }
+
+    /// Whether a run plays practice instead of the class: a run that is not
+    /// a student's own entry (a validation run or a class corpus run) on a
+    /// kind that plays the class (classmates or the champion). Such a run
+    /// plays the bundled bot, or nobody, and opens no match row.
+    ///
+    /// It used to play the live class: a re-validation of a large round
+    /// robin cost one suite run per student, its verdict depended on the
+    /// students' code, and the rows it opened never completed, because the
+    /// class effects read only a `.student` result (#2188).
+    static func playsPractice(activity: ClassActivity, submission: APISubmission) -> Bool {
+        let notAnEntry =
+            submission.kind == APISubmission.Kind.validation || submission.kind == APISubmission.Kind.classAggregate
+        let source = activity.kind.opponentSource
+        return notAnEntry && (source == .classmates || source == .champion)
+    }
+
+    /// The bundled bot as a practice opponent, with its usual seed; nil when
+    /// the activity names no bot.
+    static func practiceOpponent(activity: ClassActivity, submissionID: String) -> JobOpponent? {
+        activity.opponentFile.map { file in
+            JobOpponent(
+                supportFile: file,
+                matchSeed: JobOpponent.matchSeed(
+                    submissionID: submissionID, opponentIdentity: JobOpponent.supportFileIdentity(file)))
+        }
     }
 
     /// The opponents a MATRIX job plays (round robin), each with its own open
