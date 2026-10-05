@@ -171,6 +171,9 @@ jobs:
       - name: Check the Docker compile stage carries every path the build needs
         run: scripts/check-docker-build-context.sh
 
+      - name: Check every compose tmpfs mount allows exec
+        run: scripts/check-compose-tmpfs-exec.sh
+
       - name: Deployment-target resolution self-tests
         run: scripts/deployment-target-tests.sh
 
