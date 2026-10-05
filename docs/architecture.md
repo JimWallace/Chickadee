@@ -479,6 +479,19 @@ these protections:
   included, because tests use them) and the per-student inputs stay readable
   (`NativeScriptExecutor.scriptsHidden`; [grading-integrity.md](grading-integrity.md),
   phase 2).
+- **The processes of other jobs on the same runner, with `--sandbox` on
+  Linux.** Every job runs as the same user, so one job could once fork until
+  the container's `pids_limit` was used up, and the jobs beside it could then
+  not start a process. Each script now starts under its own `RLIMIT_NPROC`
+  (`--job-process-limit`, default 128; #2224). The kernel counts it per user
+  namespace (Linux 5.14 and later), and each script has its own, so it counts
+  only that script's processes and threads. A JVM needs about 20 on four
+  CPUs, more on a larger host. Two conditions apply, and the runner warns at
+  startup when either fails: the runner must not run as root, because the
+  kernel does not apply the limit then; and the container's `pids_limit` must
+  hold every job at its limit (`--max-jobs` x limit + 64,
+  `JobProcessBudget`). Memory and disk are still shared by the jobs on a
+  runner.
 
 This is a property of the design, not a defect. Treat each value in a test,
 and each file in its test setup, as visible to a determined student. To hide

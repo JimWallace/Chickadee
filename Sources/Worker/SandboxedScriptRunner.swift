@@ -8,7 +8,8 @@
 //             private mount namespace, in which the work root is covered by
 //             an empty tmpfs and only the job's own directories are bound
 //             back into place (#2061), and /tmp, /dev/shm, /var/tmp and
-//             HOME are fresh, empty and private to the job.
+//             HOME are fresh, empty and private to the job. A script may start
+//             at most `processLimit` processes and threads at once (#2224).
 //
 // On macOS  — uses `sandbox-exec -p <profile>` to enforce a TCC-level policy:
 //             deny all network, allow file-reads from the system prefix except
@@ -37,6 +38,28 @@ import Foundation
 
 struct SandboxedScriptRunner: ScriptRunner {
 
+    /// The default for `--job-process-limit`. A JVM needs about 20 to 70
+    /// threads, depending on the host's CPU count, and `javac` or `g++` a few
+    /// processes more.
+    static let defaultProcessLimit = 128
+
+    /// The most processes and threads a script may start, counted together and
+    /// at once, its children's included (#2224). Every job runs as the runner's user, so without a
+    /// limit of its own one job could fork until the container's `pids_limit`
+    /// is used up, and the jobs beside it could no longer start a process.
+    ///
+    /// The kernel counts `RLIMIT_NPROC` per user namespace (Linux 5.14 and
+    /// later), and each script runs in a user namespace of its own, so the
+    /// limit counts only this script's processes, not the other jobs'. The
+    /// script cannot raise it: that needs `CAP_SYS_RESOURCE` outside its
+    /// namespace. The kernel does not apply the limit when the runner itself
+    /// runs as root; `processLimitIsEnforced(workDir:)` detects that.
+    let processLimit: Int
+
+    init(processLimit: Int = Self.defaultProcessLimit) {
+        self.processLimit = processLimit
+    }
+
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
         await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env, hiding: [])
     }
@@ -45,7 +68,8 @@ struct SandboxedScriptRunner: ScriptRunner {
         script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String], hiding hiddenFiles: [URL]
     ) async -> ScriptOutput {
         await executeScriptLaunch(
-            sandboxedLaunch(script: script, workDir: workDir, env: env, hiding: hiddenFiles),
+            sandboxedLaunch(
+                script: script, workDir: workDir, env: env, hiding: hiddenFiles, processLimit: processLimit),
             workDir: workDir,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch sandboxed script"
@@ -112,7 +136,8 @@ extension SandboxedScriptRunner {
                     "probe", marker.path,
                 ],
                 workDir: probeDir,
-                environment: mergedScriptEnvironment(overrides: [:])),
+                environment: mergedScriptEnvironment(overrides: [:]),
+                processLimit: defaultProcessLimit),
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox probe")
@@ -120,12 +145,45 @@ extension SandboxedScriptRunner {
         let detail = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         return detail.isEmpty ? "probe exited with code \(output.exitCode)" : detail
     }
+
+    /// Checks that the kernel applies `processLimit` to a sandboxed script.
+    ///
+    /// It starts a sandbox that may hold no process beyond its own and asks it
+    /// to fork once. The fork must be refused. The kernel does not apply
+    /// `RLIMIT_NPROC` when the runner runs as root, so on such a runner one job
+    /// can still fork until the container's `pids_limit` is used up. The
+    /// sandbox works otherwise, so the runner warns rather than refuses.
+    ///
+    /// Always `true` on a platform with no process limit to check: there is
+    /// nothing to warn about that the platform's sandbox could change.
+    static func processLimitIsEnforced(workDir: URL) async -> Bool {
+        #if os(Linux)
+        let probeDir = workDir.appendingPathComponent(
+            "chickadee-sandbox-probe-\(UUID().uuidString)", isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: probeDir, withIntermediateDirectories: false)) != nil
+        else { return false }
+        defer { try? FileManager.default.removeItem(at: probeDir) }
+        let output = await executeScriptLaunch(
+            sandboxWrap(
+                executablePath: "/bin/sh",
+                arguments: ["-c", "( : )"],
+                workDir: probeDir,
+                environment: mergedScriptEnvironment(overrides: [:]),
+                processLimit: 0),
+            workDir: probeDir,
+            timeLimitSeconds: 10,
+            launchErrorPrefix: "Failed to launch sandbox process-limit probe")
+        return output.exitCode != 0 && !output.timedOut
+        #else
+        return true
+        #endif
+    }
 }
 
 // MARK: - Platform-specific sandbox setup
 
 private func sandboxedLaunch(
-    script: URL, workDir: URL, env: [String: String], hiding hiddenFiles: [URL]
+    script: URL, workDir: URL, env: [String: String], hiding hiddenFiles: [URL], processLimit: Int
 )
     -> ScriptLaunch
 {
@@ -135,7 +193,8 @@ private func sandboxedLaunch(
         arguments: invocation.arguments,
         workDir: workDir,
         environment: mergedScriptEnvironment(overrides: env),
-        hiding: hiddenFiles)
+        hiding: hiddenFiles,
+        processLimit: processLimit)
 }
 
 /// The directories a script may see under the work root: its working
@@ -164,15 +223,23 @@ struct SandboxVisibleDirectories {
     }
 }
 
+/// The processes a Linux sandbox holds before its command starts any: the
+/// `unshare` parent and the command itself. `RLIMIT_NPROC` counts both, so the
+/// prelude adds them to the script's own limit.
+let sandboxOwnProcessCount = 2
+
 /// Puts the platform's sandbox launcher in front of a command. The one place
 /// that decides how a command is sandboxed, so the probe and real jobs cannot
-/// use different wrappers.
-private func sandboxWrap(
+/// use different wrappers. Internal, not private, so a test can start the real
+/// wrapper as an unprivileged user: as root, the kernel does not apply the
+/// process limit.
+func sandboxWrap(
     executablePath: String,
     arguments commandArguments: [String],
     workDir: URL,
     environment: [String: String],
-    hiding hiddenFiles: [URL] = []
+    hiding hiddenFiles: [URL] = [],
+    processLimit: Int
 ) -> ScriptLaunch {
     let visible = SandboxVisibleDirectories(workDir: workDir, environment: environment)
 
@@ -193,6 +260,7 @@ private func sandboxWrap(
             "-c",
             linuxMountPrelude,
             "chickadee-sandbox",
+            String(processLimit + sandboxOwnProcessCount),
             visible.workRoot.path,
             String(visible.directories.count),
         ] + visible.directories.map(\.path)
@@ -222,8 +290,9 @@ private func sandboxWrap(
 
 #if os(Linux)
 /// Runs inside the new namespaces, before the real command. Arguments: the
-/// work root, the count of visible directories, the visible directories, then
-/// the command and its arguments.
+/// process limit, the work root, the count of visible directories, the visible
+/// directories, the count of hidden files, the hidden files, then the command
+/// and its arguments.
 ///
 /// Each visible directory is first bound into a private tmpfs on `/mnt`, so
 /// the prelude keeps a handle on it. `/tmp` and `/dev/shm` are then covered by
@@ -241,12 +310,15 @@ private func sandboxWrap(
 /// pointed into the old `/tmp`, is created again in the new one. The working
 /// directory is re-entered through the new mounts, so `pwd` reports the path
 /// the runner uses. A working directory directly under `/` has no work root to
-/// cover, and the prelude refuses it rather than cover `/`.
+/// cover, and the prelude refuses it rather than cover `/`. The command starts
+/// under the process limit, soft and hard, set last so the prelude's own
+/// `mount` and `mkdir` do not count against it.
 private let linuxMountPrelude = """
     set -e
-    root=$1
-    count=$2
-    shift 2
+    limit=$1
+    root=$2
+    count=$3
+    shift 3
     if [ "$root" = / ]; then
         echo "sandbox: the working directory sits directly under /, so there is no work root to isolate" >&2
         exit 2
@@ -298,7 +370,7 @@ private let linuxMountPrelude = """
         mkdir -p "$TMPDIR" 2>/dev/null || true
     fi
     cd "$cwd"
-    exec "$@"
+    exec /usr/bin/prlimit --nproc="$limit:$limit" -- "$@"
     """
 #endif
 
