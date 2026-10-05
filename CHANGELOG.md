@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.435] - 2026-10-05
+
+### Changed
+
+- **Forty-one file-local functions and constants in `Services/`, `Helpers/` and `Utilities/` are `private` (#2151).** A scan of every top-level symbol in the three directories found these referenced only inside their own file, so the compiler now keeps them there. No behaviour change.
+
+
 ## [0.5.434] - 2026-10-05
 
 ### Changed
