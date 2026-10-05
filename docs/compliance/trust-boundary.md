@@ -73,14 +73,17 @@ the boundary, off until an admin registers an App through the manifest flow.
 It is separate from the MCP surface and shares no token, scope or key with it.
 
 - **Inbound.** Two kinds. A student's or instructor's browser returns from a
-  GitHub authorization (`/github/link/callback`, `/instructor/github/callback`)
-  with a code that Chickadee exchanges server-side over HTTPS; the user token
+  GitHub authorization at `/github/link/callback`, the one callback that both
+  the account link and the instructor's organization binding use, with a code that Chickadee exchanges server-side over HTTPS; the user token
   is revoked before any answer is used. GitHub itself posts push deliveries to
   `/github/webhook`, verified by `X-Hub-Signature-256` against the App's
   webhook secret; a delivery records a time and a SHA and starts no grading.
-- **Outbound.** Calls to `api.github.com` (authenticated as the App with a
-  JWT signed by its private key, or with a short-lived installation token) and
-  to `github.com` (the tarball download). The App's credentials live in the
+- **Outbound.** Calls to three hosts. `api.github.com` is the REST API,
+  authenticated as the App with a JWT signed by its private key, or with a
+  short-lived installation token, and it also revokes each user token.
+  `github.com` is the OAuth code-for-token exchange. `codeload.github.com` serves the tarball download: the
+  request goes to `api.github.com`, which redirects there, and the HTTP
+  client drops the token on that cross-host redirect. The App's credentials live in the
   database and a 0600 file (`.github-app-secrets`), never in environment
   variables. These are the only GitHub egress edges, and they are the ones to
   allowlist.
