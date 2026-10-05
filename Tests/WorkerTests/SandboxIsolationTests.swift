@@ -6,7 +6,9 @@
 // submission. The sandbox now covers the work root and binds back only the
 // job's own directories. These tests prove that from inside a script: a
 // sibling job directory is invisible, a directory the environment names is
-// visible, and the script's own directory still works.
+// visible, and the script's own directory still works. /tmp and /dev/shm are
+// private too: a file one job leaves there is invisible to the next, and a
+// file a script writes there does not outlive it.
 
 import ChickadeeTestSupport
 import Foundation
@@ -93,6 +95,52 @@ import Testing
         #expect(output.stdout.contains(ownJob.standardizedFileURL.path))
         #expect(output.stdout.contains("written"))
         #expect(FileManager.default.fileExists(atPath: ownJob.appendingPathComponent("marker.txt").path))
+    }
+
+    @Test(.requiresSandbox) func aFileAnotherJobLeftInTmpIsInvisible() async throws {
+        let leftover = URL(fileURLWithPath: "/tmp/chickadee-sandbox-leftover-\(UUID().uuidString)")
+        try "another job's temporary file".write(to: leftover, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: leftover) }
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            if [ -e "\(leftover.path)" ]; then echo "leftover visible"; exit 1; fi
+            """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "stdout: \(output.stdout) stderr: \(output.stderr)")
+    }
+
+    @Test(.requiresSandbox) func aFileTheScriptWritesInTmpOrSharedMemoryDoesNotOutliveIt() async throws {
+        let name = "chickadee-sandbox-written-\(UUID().uuidString)"
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            echo written > "/tmp/\(name)" || exit 1
+            if [ -d /dev/shm ]; then echo written > "/dev/shm/\(name)" || exit 1; fi
+            """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "stderr: \(output.stderr)")
+        #expect(!FileManager.default.fileExists(atPath: "/tmp/\(name)"))
+        #expect(!FileManager.default.fileExists(atPath: "/dev/shm/\(name)"))
+    }
+
+    @Test(.requiresSandbox) func aTmpdirUnderTmpStillWorks() async throws {
+        let tmpdir = URL(fileURLWithPath: "/tmp/chickadee-sandbox-tmpdir-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpdir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpdir) }
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            file=$(mktemp) || exit 1
+            echo "made $file"
+            """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(
+            script: script, workDir: ownJob, timeLimitSeconds: 60, env: ["TMPDIR": tmpdir.path])
+        #expect(output.exitCode == 0, "stderr: \(output.stderr)")
+        #expect(output.stdout.contains("made \(tmpdir.path)/"))
     }
 
     @Test(.requiresSandbox) func theProbeLeavesNothingBehind() async throws {

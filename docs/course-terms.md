@@ -126,6 +126,11 @@ The Core type, the migration, the model accessor, and tests
 - `activeCourseCodeIsTaken(_:term:excluding:on:)` applies the same rule, so
   create, edit and import report a duplicate instead of failing on the
   index. Edit no longer refuses a code that only an archived course uses.
+  It also refuses a course that would answer another active course's URL key
+  (`courseKeysCollide`, #2227): a termed course whose key is another course's
+  code (an exact code wins over a key, so the termed course's links would
+  reach the other one), and two years with one short label (2026 and 2126 are
+  both "26"). Two offerings of one code in different terms do not collide.
 - **The URL key.** `APICourse.urlKey` is the code for a course with no term,
   and "CS135-F26" for a course with one (`AcademicTerm.shortLabel`). A key is
   matched against `urlKey` by string equality and never parsed back. Every link

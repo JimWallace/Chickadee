@@ -550,6 +550,35 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
+    /// The copy picks its code with the duplicate check every other door
+    /// uses, so an active "cpy201-copy" in another case takes the first
+    /// candidate (#2229).
+    @Test func copyCourseSkipsACopyCodeTakenInAnotherCase() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
+            let source = try await makeCourse(code: "CPY201", name: "Copy Source")
+            try await makeCourse(code: "cpy201-copy", name: "Lower-case Copy")
+            let courseID = try source.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(
+                cookie, path: "/admin/courses/\(courseID.uuidString)")
+
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/copy",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            #expect(try await APICourse.query(on: app.db).filter(\.$code == "CPY201-COPY").first() == nil)
+            let copied = try #require(
+                try await APICourse.query(on: app.db).filter(\.$code == "CPY201-COPY-2").first())
+            #expect(copied.name == "Copy Source (Copy)")
+        }
+    }
+
     @Test func toggleCourseArchiveFlipsArchivedState() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin("admin_routes", on: app)
