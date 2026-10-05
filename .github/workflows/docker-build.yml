@@ -352,6 +352,19 @@ jobs:
             exit 1
           fi
 
+          # The application user must not be able to write under /app. A test
+          # script runs as that user, so a writable /app let a script on a
+          # runner without a read-only root file system add files there or
+          # replace the runner binary. The boot phases below then prove that
+          # the server does not need to write there either.
+          echo "----- /app ownership -----"
+          writable="$(docker run --rm --entrypoint find "$IMAGE" /app ! -type l -writable -print -quit)"
+          if [ -n "$writable" ]; then
+            echo "::error::The application user can write $writable. Keep /app owned by root in the Dockerfile; only /data belongs to the application user."
+            exit 1
+          fi
+          echo "no path under /app is writable by the application user"
+
           echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
           run_server
           probe 240 || dump_and_fail
