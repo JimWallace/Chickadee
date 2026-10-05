@@ -159,7 +159,7 @@ These are already `Database`-based and callable from a tool directly:
 - `retestAllSubmissionsForSetup(setupID:triggeredBy:on db:force:)` —
   `Sources/APIServer/Services/RunnerValidationService.swift`.
 - `assignmentByPublicID(_:on:)`, `uniqueAssignmentSlug(...)` —
-  `Sources/APIServer/Routes/Web/AssignmentSlugHelpers.swift`.
+  `Sources/APIServer/Helpers/AssignmentSlugHelpers.swift`.
 
 ### What is still `Request`-coupled (the seams to extract)
 

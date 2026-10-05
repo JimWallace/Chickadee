@@ -6,7 +6,7 @@
 //
 //   - AssignmentDraftHelpers.swift (now in Helpers/, #2142)
 //   - AssignmentRequirementHelpers.swift
-//   - AssignmentSlugHelpers.swift
+//   - AssignmentSlugHelpers.swift (now in Helpers/, #2143)
 //   - ManifestFileHelpers.swift (now in Helpers/, #1726)
 //   - MultipartHelpers.swift
 //   - NotebookScaffoldHelpers.swift (now in Helpers/, #2142)
@@ -15,8 +15,8 @@
 //   - TestSetupZipHelpers.swift (now in Helpers/, #1726)
 //
 // What remains: due-date parsing/formatting,
-// human-name splitting, return-path sanitization, deadline-override
-// helpers, sort-order allocation, grade-extraction helpers, CSV
+// human-name splitting, return-path sanitization,
+// sort-order allocation, grade-extraction helpers, CSV
 // escaping, and student-ID name inference.
 
 import Core
@@ -42,15 +42,6 @@ func parseDueDate(_ raw: String?) -> Date? {
         if let d = fmt.date(from: raw) { return d }
     }
     return nil
-}
-
-func waterlooDateTimeFormatter() -> DateFormatter {
-    let fmt = DateFormatter()
-    fmt.locale = Locale(identifier: "en_CA")
-    fmt.timeZone = TimeZone(identifier: "America/Toronto")
-    fmt.dateStyle = .medium
-    fmt.timeStyle = .short
-    return fmt
 }
 
 func splitHumanName(_ raw: String?) -> (surname: String, givenNames: String)? {
@@ -132,22 +123,6 @@ func dueAtLocalInputString(_ date: Date?) -> String {
     fmt.timeZone = TimeZone(identifier: "America/Toronto")
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
     return fmt.string(from: date)
-}
-
-func deadlineOverrideValueForInstructorOpen(
-    dueAt: Date?,
-    now: Date = Date()
-) -> Bool {
-    guard let dueAt else { return false }
-    return dueAt <= now
-}
-
-func normalizedDeadlineOverrideAfterDueDateChange(
-    dueAt: Date?,
-    existingOverride: Bool
-) -> Bool {
-    guard let dueAt else { return false }
-    return dueAt <= Date() ? existingOverride : false
 }
 
 /// Next `sort_order` in the shared per-section item lane of `(course, section)`.

@@ -4,10 +4,4 @@
 # longer used, so this list only shrinks. To remove a line, move the symbol
 # down to Helpers/ (or into the service that owns it), or move the call up
 # into the route. One symbol per line; lines starting with # are comments.
-AchievementBadge
-NewAssignmentFields
-assignmentByTestSetupID
-createAssignmentWithUniquePublicID
-deadlineOverrideValueForInstructorOpen
-normalizedDeadlineOverrideAfterDueDateChange
-waterlooDateTimeFormatter
+# The list has been empty since #2143.
