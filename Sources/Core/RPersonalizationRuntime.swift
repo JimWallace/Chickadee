@@ -1,11 +1,12 @@
 // Core/RPersonalizationRuntime.swift
 //
-// Base-R source snippets shared by the two places that need R personalization
-// primitives: the injected grading runtime (test_runtime.R, via the worker's
-// TestRuntimeSources) and the server-side R expression driver
-// (PersonalizationEvaluator). One source of truth means the seed the driver
-// binds and the seed a grading script reads are computed identically. Base R
-// only — the grading image ships no CRAN packages.
+// Base-R source snippets for the server-side R expression driver
+// (PersonalizationEvaluator). The grading runtime's copy of the same
+// primitives lives in `Tools/runner-support/test_runtime.R`, which the
+// `EmbedRunnerSupport` plugin compiles into the worker.
+// `RuntimeSourceDriftTests` pins the two, so the seed the driver binds and
+// the seed a grading script reads are computed identically. Base R only:
+// the grading image ships no CRAN packages.
 
 public enum RPersonalizationRuntime {
 
@@ -58,10 +59,8 @@ public enum RPersonalizationRuntime {
     /// quote-heavy and occasionally backslash-heavy, and this must round-trip
     /// through `JSONSerialization` on the Swift side.
     ///
-    /// PUBLIC, and hoisted out of `PersonalizationEvaluator` where it was
-    /// private, because a second consumer arrived. Note there is a THIRD R
-    /// encoder in `TestRuntimeSources.swift` using exactly the `gsub` approach
-    /// this one exists to avoid; it serves the grading runtime's own narrower
+    /// The grading runtime in `Tools/runner-support/test_runtime.R` has its
+    /// own encoder, in the `gsub` style this one avoids, for its narrower
     /// payloads. Prefer this one for anything carrying deparse output.
     public static let chickadeeJSONStringRSource = #"""
         .ck_json_str <- function(x) {

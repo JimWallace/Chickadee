@@ -138,8 +138,8 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     public var notebookKernelNames: Set<String> { descriptor.notebookKernelNames }
 
     /// The language a notebook's `metadata` positively declares, or nil when it
-    /// declares nothing recognisable (in which case the caller falls back to
-    /// `default`). Checks `kernelspec.name` first, then `language_info.name`.
+    /// declares nothing recognisable; the caller then asks the author. Checks
+    /// `kernelspec.name` first, then `language_info.name`.
     ///
     /// The ONE implementation of the sniff. `isRNotebookMetadata` is a thin
     /// equality on top of it rather than a second copy, so a new language is a
@@ -469,10 +469,10 @@ extension AssignmentLanguage {
 
 // MARK: - Per-language rendering / delivery strategy
 //
-// A closed 2-case enum owns its own language-specific behavior (cleaner than a
-// protocol + 2 conformances). Every site that used to hardcode Python — literal
-// rendering, the `_ck_inputs.*` file, the expression driver — dispatches here so
-// adding a third language later is one `case`.
+// The closed enum owns its own language-specific behavior (cleaner than a
+// protocol plus one conformance per language). Every site that used to
+// hardcode Python — literal rendering, the `_ck_inputs.*` file, the expression
+// driver — dispatches here, so a new language is one `case` in each switch.
 
 extension AssignmentLanguage {
 

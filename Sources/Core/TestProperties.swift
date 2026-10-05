@@ -238,7 +238,7 @@ public struct MakefileConfig: Codable, Equatable, Sendable {
     }
 }
 
-/// Slice 2 of #461 — a named, per-student-evaluated Python expression
+/// Slice 2 of #461 — a named, per-student-evaluated expression in the assignment's language
 /// at assignment scope.  The expression is evaluated server-side at
 /// notebook first-open with `seed` bound to the per-(student, assignment)
 /// random integer.  The result substitutes into starter-notebook
@@ -294,7 +294,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// views kept for the many existing read sites.  The runner ignores
     /// this field entirely (families and checks are a save-time authoring
     /// concern; by the time the zip reaches the runner every generated
-    /// `.py` is an ordinary test script), and `runnerSanitized()` empties
+    /// test is an ordinary script in the assignment's language), and
+    /// `runnerSanitized()` empties
     /// it so older runners never decode a `PatternKind` / `NotebookCheckKind`
     /// case they don't know.
     ///
@@ -334,7 +335,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `sections.variables`.
     public var globalVariables: [FamilyVariable]
 
-    /// Slice 2 of #461 — assignment-scope Python expressions evaluated
+    /// Slice 2 of #461 — assignment-scope expressions in the assignment's language evaluated
     /// per-student at notebook first-open with `seed` bound.  Their
     /// values substitute into starter-notebook `{{name}}` placeholders
     /// alongside literal `globalVariables`.
@@ -492,8 +493,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
     ///
     /// Nil means either "the author declared this assignment has no language"
     /// or "nobody has declared anything yet" — `languageDeclared` is what
-    /// separates those. `AssignmentLanguage.resolve(manifest:)` falls back to
-    /// sniffing when nothing is recorded.
+    /// separates those. `AssignmentLanguage.resolve(manifest:)` returns this
+    /// value and nothing else; nothing infers a language from content.
     public var language: AssignmentLanguage?
 
     /// True when an author has actually answered "what language is this?" —
@@ -740,8 +741,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
 
     /// Manifest view shipped to runners.  Pattern families and notebook
     /// checks are save-time authoring concerns — by the time the zip
-    /// reaches the runner every generated `.py` is already an ordinary
-    /// test script — so they are stripped before encode (which empties
+    /// reaches the runner every generated test is already an ordinary
+    /// script in the assignment's language — so they are stripped before
+    /// encode (which empties
     /// the derived `testItems` list as well).  Keeping them in the payload
     /// would force every runner binary to know every `PatternKind` /
     /// `NotebookCheckKind` case the server ever introduces (a new raw value
@@ -757,8 +759,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
             makefile: makefile,
             starterNotebook: starterNotebook,
             // Kept: the runner reads the language off `Job.language`, but a
-            // manifest that silently lost it here would resolve differently on
-            // any path that re-sniffs from the runner-facing copy.
+            // manifest that silently lost it here would resolve to "none" on
+            // any path that reads the runner-facing copy.
             language: language,
             // Kept for the same reason, plus one of its own: it is what lets the
             // runner tell "declared to have no language" from "nobody has

@@ -58,9 +58,9 @@ let package = Package(
         //
         // Dependency-free (Swift stdlib only) so it can compile to wasm32 and be
         // shared by the native worker AND the browser runner via a JS bridge.
-        // The substrate-free home for grading logic shared across runners —
-        // currently notebook → Python extraction; in time, script dispatch,
-        // output interpretation, and the shared suite-execution orchestration.
+        // The substrate-free home for grading logic shared across runners:
+        // notebook extraction, script classification, output interpretation
+        // and the suite-execution loop.
         .target(
             name: "RunnerCore",
             path: "Sources/RunnerCore",

@@ -212,8 +212,8 @@ private func cellBoundaryMarker(cellNumber: Int, comment: String) -> String {
 /// flattened `.R` file keeps the cell granularity a source-level notebook check
 /// needs. It is an ordinary R comment, so it is inert when the submission runs.
 ///
-/// The grading side splits on this in `chickadee_student_cells()`
-/// (`testRuntimeRStudentFile`, mirrored in `Tools/runner-support/test_runtime.R`).
+/// The grading side splits on this in `chickadee_student_cells()` in
+/// `Tools/runner-support/test_runtime.R`.
 /// `NotebookExtractorRCellMarkerTests` pins the two against each other.
 public func rCellBoundaryMarker(cellNumber: Int) -> String {
     cellBoundaryMarker(cellNumber: cellNumber, comment: "#")
@@ -234,11 +234,11 @@ public func octaveCellBoundaryMarker(cellNumber: Int) -> String {
 
 /// Regex the runtime uses to recognize a marker line. Kept beside the writer
 /// so the two are defined together; the runtime spells it out literally
-/// because `Tools/runner-support/test_runtime.R` is a byte-for-byte mirror.
+/// because `Tools/runner-support/test_runtime.R` cannot import this.
 public let rCellBoundaryMarkerPattern = "^# ---- chickadee:cell [0-9]+ ----$"
 
 /// The Lua equivalent. Spelled out literally for the same reason: the runtime
-/// that consumes it is a byte-for-byte mirror and cannot import this.
+/// that consumes it cannot import this.
 public let luaCellBoundaryMarkerPattern = "^%-%- ---- chickadee:cell %d+ ----$"
 
 // MARK: - Per-cell transforms (shared by both runners)

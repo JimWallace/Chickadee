@@ -105,8 +105,7 @@ private func looksLikePythonContent(_ source: String) -> Bool {
     }
 }
 
-// MARK: - Embedded-safe helpers (Swift stdlib only; file-private to avoid
-// colliding with the similarly-named helpers in NotebookExtraction.swift).
+// MARK: - Embedded-safe helpers (Swift stdlib only)
 
 /// Lowercased file extension, or "" when there's none (bare name or dotfile).
 ///
