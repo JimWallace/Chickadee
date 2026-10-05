@@ -1,4 +1,4 @@
-// Sources/APIServer/Services/SupervisedProcess.swift
+// APIServer/Services/SupervisedProcess.swift
 //
 // One long-lived child process, launched through swift-subprocess, with its
 // stdout and stderr appended to a log file. The local-runner autostart uses it
