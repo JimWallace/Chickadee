@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.445] - 2026-10-05
+
+### Fixed
+
+- **A clone and a course bundle copy the runner requirements an assignment declared (#2167).** The `assignment_requirements` row (platform, architecture, languages, capabilities) was copied by no path and named by no doc. `cloneAssignment` copies it for every clone, `BundledAssignment` carries it as an optional `requirement`, and the two docs name it.
+
+
 ## [0.5.444] - 2026-10-05
 
 ### Fixed
