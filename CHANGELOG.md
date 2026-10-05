@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.437] - 2026-10-05
+
+### Fixed
+
+- **The `clone_assignment` description names everything the clone copies and drops (#2169).** It now says that the reference solution, the support files and the three per-assignment policies come along, that version 1 is seeded, and that the clone has no course section, sort order, due date or solution reveal. The `cloneAssignment` doc comment and two lines in `docs/assignment-versioning.md` no longer describe a `copyCourse` mirror that no longer exists.
+
+
 ## [0.5.436] - 2026-10-05
 
 ### Changed
