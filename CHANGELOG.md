@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.454] - 2026-10-05
+
+### Fixed
+
+- **A course with GitHub repositories stays bound to their organization.** Binding a course to a different organization overwrote the binding, so existing course repositories read as not found, new students could not generate from the old template, and archiving failed. The binding is now refused while the course has course repositories or templates in another organization.
+
+### Fixed
+
+- **Removing the GitHub App drops its cached installation tokens.** An admin who removed an App, for example after a key leak, and registered another kept acting on GitHub with the old App's tokens for up to an hour. Removal now clears the cache, and so does a new registration.
+
+### Added
+
+- **Tests pin the keys of every outbound GitHub body.** The repository generation, the commit status and the App manifest are checked key by key on the bytes sent, so a new field that could carry student data fails a test until the "What reaches GitHub" table is updated.
+
+
 ## [0.5.453] - 2026-10-05
 
 ### Fixed
