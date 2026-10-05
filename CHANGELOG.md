@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.430] - 2026-10-05
+
+### Changed
+
+- **The last two hand-rolled get-or-create accessors in Services use `lazyStored` (#2146).** `Application.sweepLeaseHolderID` and the `serverStartedAt` getter now go through the one helper in `ApplicationLazyStorage.swift`, as every sweep monitor already does. No behaviour change.
+
+
 ## [0.5.429] - 2026-10-05
 
 ### Changed
