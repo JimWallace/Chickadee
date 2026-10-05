@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.458] - 2026-10-05
+
+### Security
+
+- **Linking another GitHub account moves the course-repository collaborator.** A student who linked a classmate's account by mistake, then their own, left the classmate with write access to their private course repository, and their own account was never invited. The row now records which account was invited; a new link removes the earlier collaborator and invites the linked account.
+
+### Deprecated
+
+- **The runner's `--worker-secret` flag.** It puts the runner secret in the runner's command line, and every test script can read that command line from `/proc`, also inside the sandbox. With the secret, a script can sign worker API calls, for example to report its own result. The runner now prints a deprecation warning when the flag is set, and the next minor release removes it. Set `RUNNER_SHARED_SECRET` instead.
+
+### Security
+
+- **The runner refuses `--worker-secret` together with `--sandbox`.** A runner started with both flags exits at startup and says why, because the flag defeats the isolation that `--sandbox` asks for.
+
+
 ## [0.5.457] - 2026-10-05
 
 ### Fixed
