@@ -69,7 +69,8 @@ import Vapor
             "../../Helpers/ManifestFileHelpers.swift",
             "MultipartHelpers.swift",
             "../../Helpers/NotebookScaffoldHelpers.swift",
-            "RunnerValidationHelpers.swift",
+            // Moved below the routes to `Services/` (#2140).
+            "../../Services/RunnerValidationService.swift",
             "SuiteRowHelpers.swift",
             "../../Helpers/TestSetupZipHelpers.swift",
             "SuiteEditHelpers.swift",

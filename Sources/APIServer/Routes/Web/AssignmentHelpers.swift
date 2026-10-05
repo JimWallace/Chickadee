@@ -10,7 +10,7 @@
 //   - ManifestFileHelpers.swift (now in Helpers/, #1726)
 //   - MultipartHelpers.swift
 //   - NotebookScaffoldHelpers.swift (now in Helpers/, #2142)
-//   - RunnerValidationHelpers.swift
+//   - RunnerValidationHelpers.swift (now Services/RunnerValidationService.swift, #2140)
 //   - SuiteRowHelpers.swift
 //   - TestSetupZipHelpers.swift (now in Helpers/, #1726)
 //

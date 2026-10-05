@@ -157,7 +157,7 @@ These are already `Database`-based and callable from a tool directly:
   (the core of `PUT /suite`: authored items → `applyPatternFamilies`).
 - `applyPatternFamilies(...)` — the canonical generator.
 - `retestAllSubmissionsForSetup(setupID:triggeredBy:on db:force:)` —
-  `Sources/APIServer/Routes/Web/RunnerValidationHelpers.swift`.
+  `Sources/APIServer/Services/RunnerValidationService.swift`.
 - `assignmentByPublicID(_:on:)`, `uniqueAssignmentSlug(...)` —
   `Sources/APIServer/Routes/Web/AssignmentSlugHelpers.swift`.
 
@@ -165,7 +165,7 @@ These are already `Database`-based and callable from a tool directly:
 
 - `saveEditedAssignment(req:)` — `PublishedAssignmentRoutes+SaveEdit.swift`:
   the metadata-save orchestration (title/due/open + validation enqueue).
-- `scheduleValidationAfterSuiteEdit(req:assignment:)` — `RunnerValidationHelpers.swift`:
+- `scheduleValidationAfterSuiteEdit(req:assignment:)` — `RunnerValidationService.swift`:
   loads the solution + requirement spec and enqueues a validation submission;
   reaches `req.application` for runner availability.
 - `createAssignmentWithUniquePublicID(req:...)` — `AssignmentSlugHelpers.swift`.
