@@ -50,6 +50,7 @@ extension CourseBundleRoutes {
         let manifest = try parseBundleManifest(extractDir: extractDir)
 
         try validateBundleFiles(manifest: manifest, extractDir: extractDir)
+        try validateBundleKinds(manifest: manifest)
 
         let setupsDir = req.application.testSetupsDirectory
         let subsDir = req.application.submissionsDirectory
@@ -165,6 +166,21 @@ extension CourseBundleRoutes {
                             + att.bundleFilename)
                 }
             }
+        }
+    }
+
+    // ── 4b. Validate the enum-valued fields ───────────────────────────
+
+    /// A bundle from a newer server can name a content item kind or a
+    /// section grading mode this server does not know. The import refuses
+    /// it here and names the item, instead of importing the item as a link
+    /// in silence (#2172).
+    private func validateBundleKinds(manifest: CourseBundleManifest) throws {
+        for item in manifest.contentItems ?? [] {
+            _ = try bundledContentItemKind(item)
+        }
+        for section in manifest.sections ?? [] {
+            _ = try bundledSectionGradingMode(section)
         }
     }
 
@@ -455,7 +471,7 @@ private func importBundledTestSetups(
     let setupsDir = dirs.setupsDir
     var setupIDMap: [String: String] = [:]
     for bundledSetup in manifest.testSetups {
-        let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let newSetupID = freshShortID(prefix: "setup")
         let newZipPath = setupsDir + "\(newSetupID).zip"
 
         // Copy zip from bundle into testsetups dir — a whole test setup
@@ -542,7 +558,7 @@ private func importBundledSections(
     for bundledSection in manifest.sections ?? [] {
         let newSection = APICourseSection(
             name: bundledSection.name,
-            defaultGradingMode: bundledSection.defaultGradingMode,
+            defaultGradingMode: try bundledSectionGradingMode(bundledSection).rawValue,
             sortOrder: bundledSection.sortOrder,
             courseID: courseID
         )
@@ -570,7 +586,7 @@ private func importBundledContentItems(
             sectionID: item.sectionBundleID.flatMap { sectionIDMap[$0] },
             sortOrder: item.sortOrder,
             title: item.title,
-            kind: ContentItemKind(rawValue: item.kind) ?? .link,
+            kind: try bundledContentItemKind(item),
             itemDescription: item.description,
             links: item.links,
             updatedLabel: item.updatedLabel,
@@ -682,18 +698,12 @@ private func importBundledSubmissions(
         let userID = userIDMap[bundledSub.userBundleID]
 
         let srcFile = extractDir.appendingPathComponent(bundledSub.submissionFilename)
-        let ext = srcFile.pathExtension
-        let newSubID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let destName = ext.isEmpty ? "\(newSubID).bin" : "\(newSubID).\(ext)"
-        let newFilePath = subsDir + destName
-        try FileManager.default.copyItem(
-            at: srcFile,
-            to: URL(fileURLWithPath: newFilePath))
+        let copied = try copySubmissionFile(from: srcFile.path, into: subsDir)
 
         let sub = APISubmission(
-            id: newSubID,
+            id: copied.id,
             testSetupID: setupID,
-            zipPath: newFilePath,
+            zipPath: copied.path,
             attemptNumber: bundledSub.attemptNumber,
             status: SubmissionStatus.complete.rawValue,
             filename: bundledSub.filename,
@@ -708,7 +718,7 @@ private func importBundledSubmissions(
             sub.submittedAt = submittedAt
             try await sub.save(on: db)
         }
-        subIDMap[bundledSub.bundleID] = newSubID
+        subIDMap[bundledSub.bundleID] = copied.id
         tally.submissionsImported += 1
     }
     return subIDMap
@@ -757,7 +767,7 @@ private func importBundledResults(
 ) async throws {
     for bundledResult in manifest.results {
         guard let subID = subIDMap[bundledResult.submissionBundleID] else { continue }
-        let newResultID = "res_\(UUID().uuidString.lowercased().prefix(8))"
+        let newResultID = freshShortID(prefix: "res")
         let result = APIResult(
             id: newResultID,
             submissionID: subID,
@@ -770,4 +780,26 @@ private func importBundledResults(
         }
         tally.resultsImported += 1
     }
+}
+
+/// The content item kind a bundled item names, or a `badRequest` that names
+/// the item and the kind (#2172).
+private func bundledContentItemKind(_ item: BundledContentItem) throws -> ContentItemKind {
+    guard let kind = ContentItemKind(rawValue: item.kind) else {
+        throw Abort(
+            .badRequest,
+            reason: "Bundle content item \"\(item.title)\" has an unknown kind: \(item.kind)")
+    }
+    return kind
+}
+
+/// The grading mode a bundled section names, or a `badRequest` that names
+/// the section and the mode (#2172).
+private func bundledSectionGradingMode(_ section: BundledSection) throws -> GradingMode {
+    guard let mode = GradingMode(rawValue: section.defaultGradingMode) else {
+        throw Abort(
+            .badRequest,
+            reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(section.defaultGradingMode)")
+    }
+    return mode
 }

@@ -145,7 +145,7 @@ func scheduleClassCorpusRun(
             let corpus = try await assembleClassCorpus(setup: setup, app: app, on: db)
         else { return }
 
-        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = freshShortID(prefix: "sub")
         let filePath = app.submissionsDirectory + "\(subID).ipynb"
         let notebook = corpus.notebook
         try await runBlocking(app: app) {

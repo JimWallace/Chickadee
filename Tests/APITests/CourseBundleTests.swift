@@ -76,7 +76,9 @@ import VaporTesting
         #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
 
     /// Builds a minimal valid bundle ZIP: one test setup, one assignment, no submissions/results.
-    private func makeMinimalBundleZip(courseCode: String) async throws -> Data {
+    private func makeMinimalBundleZip(
+        courseCode: String, sections: [BundledSection] = [], contentItems: [BundledContentItem] = []
+    ) async throws -> Data {
         let stagingDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("cb-staging-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: stagingDir) }
@@ -95,6 +97,8 @@ import VaporTesting
             course: BundledCourse(code: courseCode, name: "Minimal Import Course"),
             users: [],
             enrolledUserBundleIDs: [],
+            sections: sections,
+            contentItems: contentItems,
             assignments: [
                 BundledAssignment(
                     bundleID: "assign_1", title: "Lab 1",
@@ -464,6 +468,46 @@ import VaporTesting
             let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
             #expect(status == .badRequest)
 
+        }
+    }
+
+    /// A content item kind this server does not know is refused with its
+    /// name, not imported as a link in silence (#2172).
+    @Test func importRejectsAnUnknownContentItemKind() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let zipData = try await makeMinimalBundleZip(
+                courseCode: "UNKNOWN_KIND",
+                contentItems: [
+                    BundledContentItem(
+                        sectionBundleID: nil, title: "Week 1", kind: "hologram", description: nil,
+                        links: [], updatedLabel: nil, isPublished: true, sortOrder: 1)
+                ])
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .badRequest)
+            #expect(body.contains("hologram"))
+            #expect(body.contains("Week 1"))
+            let count = try await APICourse.query(on: app.db).filter(\.$code == "UNKNOWN_KIND").count()
+            #expect(count == 0)
+        }
+    }
+
+    /// A section grading mode this server does not know is refused the same
+    /// way (#2172).
+    @Test func importRejectsAnUnknownSectionGradingMode() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let zipData = try await makeMinimalBundleZip(
+                courseCode: "UNKNOWN_MODE",
+                sections: [
+                    BundledSection(bundleID: "section_1", name: "Labs", defaultGradingMode: "quantum", sortOrder: 1)
+                ])
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .badRequest)
+            #expect(body.contains("quantum"))
+            #expect(body.contains("Labs"))
+            let count = try await APICourse.query(on: app.db).filter(\.$code == "UNKNOWN_MODE").count()
+            #expect(count == 0)
         }
     }
 
@@ -1028,6 +1072,50 @@ import VaporTesting
                 try await APIAssignment.query(on: app.db).filter(\.$courseID == (try imported.requireID())).first())
             #expect(importedAssignment.deadlineOverrideActive == true)
             #expect(importedAssignment.visibility == .open)
+        }
+    }
+
+    /// The bundle course row carries the term, the enrollment mode and the
+    /// four slip-day fields through export and import (#2171). The Core
+    /// tests pin the resolvers; this pins the route on both sides.
+    @Test func roundTripPreservesTermEnrollmentModeAndSlipDayPolicy() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let course = APICourse(
+                code: "TERM_RT", name: "Term Round Trip", enrollmentMode: .auto,
+                term: AcademicTerm(year: 2026, season: .fall))
+            course.slipDaysEnabled = true
+            course.slipDaysPerStudent = 4
+            course.slipDayExtensionHours = 36
+            course.slipDayReleaseRevealHold = false
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "TERM_RT")
+                    .filter(\.$isArchived == false)
+                    .first())
+            #expect(imported.term?.year == 2026)
+            #expect(imported.term?.season == .fall)
+            #expect(imported.enrollmentMode == .auto)
+            #expect(imported.slipDaysEnabled == true)
+            #expect(imported.slipDaysPerStudent == 4)
+            #expect(imported.slipDayExtensionHours == 36)
+            #expect(imported.slipDayReleaseRevealHold == false)
         }
     }
 

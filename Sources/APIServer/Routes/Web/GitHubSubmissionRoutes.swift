@@ -115,7 +115,7 @@ struct GitHubSubmissionRoutes: RouteCollection {
             let access = try await Self.access(userID: userID, setup: setup, state: &ignored, req: req)
             let repository = try await access.ownedRepository(id: body.repositoryID, req: req)
             let tarball = try await access.tarball(of: repository, sha: sha, req: req)
-            let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+            let subID = freshShortID(prefix: "sub")
             let zipPath = req.application.submissionsDirectory + "\(subID).zip"
             do {
                 try await GitHubTarball.writeZip(fromGzippedTar: tarball, to: zipPath)

@@ -100,7 +100,7 @@ private func enqueueRound(run: APITournamentRun, slots: [TournamentSlot], on db:
             let original = try await APISubmission.find(home.submissionID, on: db)
         {
             let match = APISubmission(
-                id: "sub_\(UUID().uuidString.lowercased().prefix(8))",
+                id: freshShortID(prefix: "sub"),
                 testSetupID: run.testSetupID,
                 zipPath: original.zipPath,
                 attemptNumber: original.attemptNumber ?? 1,

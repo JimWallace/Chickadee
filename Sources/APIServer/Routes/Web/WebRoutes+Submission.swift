@@ -249,7 +249,7 @@ extension WebRoutes {
             return req.redirect(to: "/testsetups/\(setupID)/submit?error=filetype")
         }
         let subsDir = req.application.submissionsDirectory
-        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = freshShortID(prefix: "sub")
 
         // Decode the uploaded bytes. Vapor's File type captures the original
         // filename from the multipart Content-Disposition header automatically.
