@@ -439,7 +439,10 @@ suite costs at least ~100 ms, so 300 students submitting once is at least 45
 000 runs, about 75 minutes on one runner — and that is the floor, before the
 script's own work. Budget the match script's rounds accordingly, and prefer a
 worker with several concurrent jobs; slice 5's brackets are the answer for a
-class where every-pair play is too expensive.
+class where every-pair play is too expensive. The stuck-job reaper allows a job
+that plays opponents its ten minutes plus one suite budget (the sum of the
+entries' time limits) per opponent the claim opened a row for, so a long
+matrix job is not put back to pending while it still runs (#2185).
 
 ### Tournaments (slice 5)
 
