@@ -346,7 +346,7 @@ private func recordMatrixMatches(
 /// exists so the job has a match, but it is not a result against anyone, and
 /// counting it sat the first submitter last on a loss until a classmate
 /// arrived (#1748). With nothing to count, the student has no standings row.
-func recomputeStanding(testSetupID: String, userID: UUID, submissionID: String, on db: Database) async throws {
+private func recomputeStanding(testSetupID: String, userID: UUID, submissionID: String, on db: Database) async throws {
     let rows = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
         .filter(\.$completedAt != nil)

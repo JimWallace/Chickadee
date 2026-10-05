@@ -40,7 +40,7 @@ func maskFailureOutput(
 }
 
 /// "did not pass" / "error" / "timed out" — the verdict alone.
-func verdictText(_ status: TestStatus) -> String {
+private func verdictText(_ status: TestStatus) -> String {
     switch status {
     case .pass: return "passed"
     case .fail: return "did not pass"

@@ -281,13 +281,13 @@ func isLikelyTestSuiteScript(name: String, leadingText: String) -> Bool {
     return hasRecognizedScriptShebang(leadingText)
 }
 
-func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
+private func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
     let head = Data(file.data.readableBytesView.prefix(256))
     return isLikelyTestSuiteScript(
         name: storedName, leadingText: String(bytes: head, encoding: .utf8) ?? "")
 }
 
-func hasRecognizedScriptShebang(_ text: String) -> Bool {
+private func hasRecognizedScriptShebang(_ text: String) -> Bool {
     let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
     let normalized = firstLine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard normalized.hasPrefix("#!") else { return false }

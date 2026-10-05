@@ -139,7 +139,7 @@ func assignmentHasSolution(
     return FileManager.default.fileExists(atPath: draftPath)
 }
 
-func draftFormStateSessionKey(_ draftID: String) -> String {
+private func draftFormStateSessionKey(_ draftID: String) -> String {
     "newAssignmentDraft:\(draftID)"
 }
 
@@ -166,7 +166,7 @@ func clearDraftFormState(req: Request, draftID: String) {
     req.session.data[draftFormStateSessionKey(draftID)] = nil
 }
 
-func draftNotebookDirectory(testSetupsDirectory: String, setupID: String) -> String {
+private func draftNotebookDirectory(testSetupsDirectory: String, setupID: String) -> String {
     testSetupsDirectory + "notebooks/\(setupID)/"
 }
 

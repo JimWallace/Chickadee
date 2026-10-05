@@ -172,7 +172,7 @@ func octaveCallContext(for family: PatternFamily, case c: PatternCase) -> Octave
 /// Two-line provenance header plus the runtime handle every generated Octave
 /// script opens with. The `% Test:` line MUST come first so the runner's label
 /// extraction agrees across languages.
-func octaveGeneratedCaseHeader(
+private func octaveGeneratedCaseHeader(
     family: PatternFamily, case c: PatternCase, specHash: String
 ) -> String {
     """
@@ -202,7 +202,7 @@ func octaveEvalcArgs(_ callArgs: String) -> String {
 /// `chickadee.inputs()` (which reads `_ck_inputs.m`, written by the runner from
 /// the server-resolved values) and fails closed with a clear message when a
 /// value is missing — the Octave mirror of `personalizationPreambleForCase`.
-func octavePersonalizationPreambleForCase(
+private func octavePersonalizationPreambleForCase(
     _ c: PatternCase, perStudentNames: Set<String>
 ) -> String {
     let names = perStudentRefsForCase(c, perStudentNames: perStudentNames)

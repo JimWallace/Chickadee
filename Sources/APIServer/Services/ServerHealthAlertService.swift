@@ -163,7 +163,7 @@ private func loadPendingQueueState(on application: Application, now: Date) async
 /// alert. Matches `WorkerActivityStore.snapshotsSortedByRecent`'s prune cutoff,
 /// so a runner is forgotten by the alert (auto-resolving it) at the same moment
 /// the admin dashboard drops it.
-let runnerPresenceRememberSeconds: TimeInterval = 3600
+private let runnerPresenceRememberSeconds: TimeInterval = 3600
 
 /// Runner presence as seen by the alert evaluator. Separated from the store so
 /// the firing decision is a pure, table-testable function.
@@ -786,7 +786,7 @@ private func formatAlertTimestamp(_ date: Date) -> String {
 
 // MARK: - Webhook URL persistence
 
-func readAlertWebhookURLFromDisk(filePath: String) -> String? {
+private func readAlertWebhookURLFromDisk(filePath: String) -> String? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
         let text = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -797,7 +797,7 @@ func readAlertWebhookURLFromDisk(filePath: String) -> String? {
     return text
 }
 
-func writeAlertWebhookURLToDisk(value: String, filePath: String) {
+private func writeAlertWebhookURLToDisk(value: String, filePath: String) {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     let url = URL(fileURLWithPath: filePath)
     if trimmed.isEmpty {

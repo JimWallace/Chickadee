@@ -177,7 +177,7 @@ func luaCallContext(for family: PatternFamily, case c: PatternCase) -> LuaCallCo
 /// Two-line provenance header plus the `require` every generated Lua script
 /// needs. The `-- Test:` line MUST come first so `chickadee.label()` and the
 /// runner's first-comment label agree with the other two languages.
-func luaGeneratedCaseHeader(
+private func luaGeneratedCaseHeader(
     family: PatternFamily, case c: PatternCase, specHash: String
 ) -> String {
     """
@@ -197,7 +197,7 @@ func luaExpectedExpression(for c: PatternCase) -> String {
 /// Per-student preamble: pulls the case's referenced names out of
 /// `chickadee.inputs()` and fails closed with a clear message when a value is
 /// missing — the Lua mirror of `personalizationPreambleForCase`.
-func luaPersonalizationPreambleForCase(
+private func luaPersonalizationPreambleForCase(
     _ c: PatternCase, perStudentNames: Set<String>
 ) -> String {
     let names = perStudentRefsForCase(c, perStudentNames: perStudentNames)

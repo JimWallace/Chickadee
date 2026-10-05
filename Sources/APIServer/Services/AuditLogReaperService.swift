@@ -25,7 +25,7 @@ import Vapor
 /// Default audit-log retention.  90 days covers the usual "what happened
 /// last term" debugging window without amassing years of identifying
 /// metadata.
-let auditLogDefaultMaxAge: TimeInterval = 90 * 24 * 60 * 60
+private let auditLogDefaultMaxAge: TimeInterval = 90 * 24 * 60 * 60
 
 /// Hourly: audit-log disposal is retention hygiene, not correctness.
 private let auditLogReaperSweepInterval: TimeInterval = 3600

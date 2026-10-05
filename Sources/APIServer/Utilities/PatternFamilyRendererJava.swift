@@ -394,7 +394,7 @@ func javaGuarded(_ inner: String, inputLine: String) -> String {
 
 // MARK: - Small utilities
 
-func javaIndent(_ block: String) -> String {
+private func javaIndent(_ block: String) -> String {
     block.split(separator: "\n", omittingEmptySubsequences: false)
         .map { $0.isEmpty ? "" : "    \($0)" }
         .joined(separator: "\n")

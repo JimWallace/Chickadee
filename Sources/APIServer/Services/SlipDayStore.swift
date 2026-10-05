@@ -350,7 +350,7 @@ enum SlipDayStore {
 /// The note stamped on a slip-day-produced extension row, so the instructor
 /// student-drilldown (which shows extension notes) says where the extension
 /// came from.
-func slipDayExtensionNote(stackedCount: Int) -> String {
+private func slipDayExtensionNote(stackedCount: Int) -> String {
     stackedCount > 1 ? "Slip days ×\(stackedCount) (self-serve)" : "Slip day (self-serve)"
 }
 

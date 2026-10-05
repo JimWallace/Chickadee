@@ -53,7 +53,7 @@ func cellSource(_ cell: [String: Any]) -> String? {
 
 /// Returns true when the cell's first non-empty line is a `# TEST:` comment
 /// whose `tier=` value is in `hiddenTiers`.
-func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -> Bool {
+private func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -> Bool {
     guard let source = cellSource(cell) else { return false }
     let firstLine =
         source

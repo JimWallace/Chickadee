@@ -120,7 +120,7 @@ func renderNotebookCheck(
 /// 16-character hex prefix of a SHA-256 over the check spec.  Stable for a
 /// given spec; bust the manifest cache when anything about the check
 /// changes.  Mirrors `patternFamilySpecHash`.
-func notebookCheckSpecHash(_ check: NotebookCheck) -> String {
+private func notebookCheckSpecHash(_ check: NotebookCheck) -> String {
     let data = (try? ManifestCodec.stableEncoder.encode(check)) ?? Data()
     return String(sha256HexDigest(data).prefix(16))
 }
