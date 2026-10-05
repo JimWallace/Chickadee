@@ -95,6 +95,40 @@ import VaporTesting
         }
     }
 
+    /// The hill's champion card follows the same rule as the rows: Present
+    /// mode shows the champion's handle and locks nothing (#2254).
+    @Test func presentModeLocksNoChampionHandle() async throws {
+        try await withWebRoutesApp { app in
+            _ = try await wrLoginAsStudent(on: app)
+            let props = TestProperties(
+                testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+                activity: ClassActivity(kind: .kingOfTheHill, leaderboardVisibility: .visible))
+            let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
+            let setup = try await wrInsertSetup(id: "lp_hill", manifest: manifest, on: app)
+            _ = try await makeTestAssignment(
+                on: app, testSetupID: "lp_hill", courseID: setup.courseID, title: "Hill")
+            let holder = try await makeTestUser(on: app, username: "lp_hill_holder", role: "student")
+            try await wrEnrollUser(holder, on: app)
+            try await APIActivityChampion(
+                testSetupID: "lp_hill", userID: try holder.requireID(), submissionID: "lp_hill_h",
+                crownedAt: Date()
+            ).save(on: app.db)
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+
+            let res = try await get("/testsetups/lp_hill/leaderboard?present=1", cookie: cookie, on: app)
+            #expect(res.status == .ok)
+            let enrollment = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == holder.requireID()).first())
+            let handle = try #require(enrollment.avatarHandle)
+            #expect(res.body.string.contains(handle))
+            #expect(enrollment.avatarHandleLockedAt == nil)
+        }
+    }
+
     @Test func thePodiumStandsSecondFirstThird() {
         func place(_ rank: Int) -> PresentPlace {
             PresentPlace(
