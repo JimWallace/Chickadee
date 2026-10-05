@@ -441,7 +441,7 @@ extension DraftAssignmentRoutes {
         validated: ValidatedSaveNewAssignment
     ) async throws -> NewAssignmentPaths {
         let assignmentNotebook = normalizeNotebookForJupyterLite(validated.assignmentNotebookRaw)
-        let setupID = validated.draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let setupID = validated.draftSetup?.id ?? freshShortID(prefix: "setup")
         let setupsDir = req.application.testSetupsDirectory
         let notebookFilename = notebookFilenameForStorage(
             uploadedName: validated.uploadedAssignmentNotebookFilename ?? validated.draftState.assignmentNotebookName,
@@ -690,7 +690,7 @@ extension DraftAssignmentRoutes {
             return existing
         }
 
-        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let setupID = freshShortID(prefix: "setup")
         let zipPath = req.application.testSetupsDirectory + "\(setupID).zip"
         _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
         let gradingMode = try await newAssignmentSectionGradingMode(

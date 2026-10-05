@@ -112,7 +112,7 @@ struct TestSetupRoutes: RouteCollection {
 
         // Persist the zip.
         let setupsDir = req.application.testSetupsDirectory
-        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let setupID = freshShortID(prefix: "setup")
         let zipPath = setupsDir + "\(setupID).zip"
 
         let zipBytes = upload.files

@@ -178,7 +178,7 @@ enum AssignmentAuthoringService {
         directories: AuthoringDirectories,
         on db: Database
     ) async throws -> AuthoredAssignment {
-        let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let newSetupID = freshShortID(prefix: "setup")
         let fm = FileManager.default
 
         let dstZip = directories.setups + "\(newSetupID).zip"
@@ -294,21 +294,18 @@ enum AssignmentAuthoringService {
             fm.fileExists(atPath: sourceSolution.zipPath)
         else { return nil }
 
-        let newSubID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let ext = URL(fileURLWithPath: sourceSolution.zipPath).pathExtension
-        let destName = ext.isEmpty ? "\(newSubID).bin" : "\(newSubID).\(ext)"
-        let destPath = submissionsDirectory + destName
+        let copied: (id: String, path: String)
         do {
-            try fm.copyItem(atPath: sourceSolution.zipPath, toPath: destPath)
+            copied = try copySubmissionFile(from: sourceSolution.zipPath, into: submissionsDirectory)
         } catch {
             throw AssignmentAuthoringError.setupCopyFailed(
                 reason: "reference solution: \(error)")
         }
 
         let solution = APISubmission(
-            id: newSubID,
+            id: copied.id,
             testSetupID: newSetupID,
-            zipPath: destPath,
+            zipPath: copied.path,
             attemptNumber: 1,
             status: SubmissionStatus.complete.rawValue,
             filename: sourceSolution.filename,
@@ -317,7 +314,7 @@ enum AssignmentAuthoringService {
         do {
             try await solution.save(on: db)
         } catch {
-            try? fm.removeItem(atPath: destPath)
+            try? fm.removeItem(atPath: copied.path)
             throw error
         }
         return solution
@@ -339,7 +336,7 @@ enum AssignmentAuthoringService {
         setupsDirectory: String,
         on db: Database
     ) async throws -> AuthoredAssignment {
-        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let setupID = freshShortID(prefix: "setup")
         let zipPath = setupsDirectory + "\(setupID).zip"
         do {
             _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)

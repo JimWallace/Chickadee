@@ -82,7 +82,7 @@ struct BrowserResultRoutes: RouteCollection {
         // this submission is later re-graded by a worker (a retest, or the
         // browser-mode backstop) the authoritative suite has its cells.
         let subsDir = req.application.submissionsDirectory
-        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = freshShortID(prefix: "sub")
         let nbPath = subsDir + "\(subID).ipynb"
         let instructorData: Data
         do {
@@ -132,7 +132,7 @@ struct BrowserResultRoutes: RouteCollection {
         let collectionJSON = try String(data: encoder.encode(reconciled), encoding: .utf8) ?? "{}"
 
         let browserResult = APIResult(
-            id: "res_\(UUID().uuidString.lowercased().prefix(8))",
+            id: freshShortID(prefix: "res"),
             submissionID: subID,
             source: "browser"
         )
@@ -208,7 +208,7 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         let subsDir = req.application.submissionsDirectory
-        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = freshShortID(prefix: "sub")
         let nbPath = subsDir + "\(subID).ipynb"
 
         // Always merge with canonical instructor notebook so hidden tests are present.
@@ -337,7 +337,7 @@ struct BrowserResultRoutes: RouteCollection {
         // the backstop runs the hidden (release/secret) test cells too — exactly
         // as `browser-result` does.
         let subsDir = req.application.submissionsDirectory
-        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = freshShortID(prefix: "sub")
         let nbPath = subsDir + "\(subID).ipynb"
         let studentData = Data(body.notebook.utf8)
         let instructorData: Data

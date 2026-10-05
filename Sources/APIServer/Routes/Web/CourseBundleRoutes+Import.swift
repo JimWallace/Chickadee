@@ -455,7 +455,7 @@ private func importBundledTestSetups(
     let setupsDir = dirs.setupsDir
     var setupIDMap: [String: String] = [:]
     for bundledSetup in manifest.testSetups {
-        let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let newSetupID = freshShortID(prefix: "setup")
         let newZipPath = setupsDir + "\(newSetupID).zip"
 
         // Copy zip from bundle into testsetups dir — a whole test setup
@@ -676,18 +676,12 @@ private func importBundledSubmissions(
         let userID = userIDMap[bundledSub.userBundleID]
 
         let srcFile = extractDir.appendingPathComponent(bundledSub.submissionFilename)
-        let ext = srcFile.pathExtension
-        let newSubID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let destName = ext.isEmpty ? "\(newSubID).bin" : "\(newSubID).\(ext)"
-        let newFilePath = subsDir + destName
-        try FileManager.default.copyItem(
-            at: srcFile,
-            to: URL(fileURLWithPath: newFilePath))
+        let copied = try copySubmissionFile(from: srcFile.path, into: subsDir)
 
         let sub = APISubmission(
-            id: newSubID,
+            id: copied.id,
             testSetupID: setupID,
-            zipPath: newFilePath,
+            zipPath: copied.path,
             attemptNumber: bundledSub.attemptNumber,
             status: SubmissionStatus.complete.rawValue,
             filename: bundledSub.filename,
@@ -702,7 +696,7 @@ private func importBundledSubmissions(
             sub.submittedAt = submittedAt
             try await sub.save(on: db)
         }
-        subIDMap[bundledSub.bundleID] = newSubID
+        subIDMap[bundledSub.bundleID] = copied.id
         tally.submissionsImported += 1
     }
     return subIDMap
@@ -751,7 +745,7 @@ private func importBundledResults(
 ) async throws {
     for bundledResult in manifest.results {
         guard let subID = subIDMap[bundledResult.submissionBundleID] else { continue }
-        let newResultID = "res_\(UUID().uuidString.lowercased().prefix(8))"
+        let newResultID = freshShortID(prefix: "res")
         let result = APIResult(
             id: newResultID,
             submissionID: subID,

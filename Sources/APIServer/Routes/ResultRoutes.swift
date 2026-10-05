@@ -130,7 +130,7 @@ struct ResultRoutes: RouteCollection {
         let json = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
 
         let result = APIResult(
-            id: "res_\(UUID().uuidString.lowercased().prefix(8))",
+            id: freshShortID(prefix: "res"),
             submissionID: collection.submissionID
         )
 
