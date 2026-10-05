@@ -14,6 +14,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// The opponent a challenger plays, as the claim path chose it.
@@ -334,11 +335,31 @@ private func recordMatrixMatches(
     // rows just completed (`unionTally`). A standings row would answer only
     // the tester's half and would be read as the whole record.
     guard setup.decodedManifest()?.activity?.kind.aggregation != .union else { return }
-    try await recomputeStanding(testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
-    if let leader = try await rankedStandings(testSetupID: setupID, courseID: setup.courseID, on: db).first {
-        try await awardTournamentWinnerRecords(
-            setup: setup, userID: leader.standing.userID, submissionID: leader.standing.submissionID, on: db)
+    try await db.transaction { tx in
+        try await lockStandings(of: setupID, on: tx)
+        try await recomputeStanding(testSetupID: setupID, userID: userID, submissionID: submissionID, on: tx)
+        if let leader = try await rankedStandings(testSetupID: setupID, courseID: setup.courseID, on: tx).first {
+            try await awardTournamentWinnerRecords(
+                setup: setup, userID: leader.standing.userID, submissionID: leader.standing.submissionID, on: tx)
+        }
     }
+}
+
+/// Serializes the standings write and the leader award for one assignment,
+/// for the rest of the caller's transaction.
+///
+/// Two results landing together each wrote their own row, read the leader
+/// without the other's row, and set the record, so the later write could
+/// name a student the standings did not show first (#2192, the #1752
+/// family). A no-op `UPDATE` of the setup row takes that row's lock on
+/// Postgres and the write lock on SQLite. The second ingest waits for the
+/// first to commit (or, on SQLite, is retried by the caller's
+/// `withTransientDatabaseLockRetry`) and then reads both rows.
+private func lockStandings(of setupID: String, on db: Database) async throws {
+    guard let sql = db as? SQLDatabase else { return }
+    try await sql.raw(
+        "UPDATE \(unsafeRaw: APITestSetup.schema) SET id = id WHERE id = \(bind: setupID)"
+    ).run()
 }
 
 /// Rewrites the student's standings row from `submissionID`'s completed

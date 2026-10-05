@@ -418,6 +418,44 @@ import VaporTesting
         }
     }
 
+    /// Two results that land together leave the leader record on the student
+    /// the standings show first, whichever ingest finishes last (#2192).
+    /// Each ingest runs the way `ResultIngestEffects.bestEffort` runs it.
+    @Test func twoResultsLandingTogetherLeaveTheRecordOnTheLeader() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "race", manifest: try robinManifest())
+            for (user, id) in [(fx.a, "race_a1"), (fx.b, "race_b1"), (fx.c, "race_c1")] {
+                _ = try await arInsertSubmission(id: id, testSetupID: fx.setupID, userID: try user.requireID(), on: app)
+            }
+            let aPlays = try await claim(app, fx: fx, user: fx.a, submissionID: "race_a1")
+            let bPlays = try await claim(app, fx: fx, user: fx.b, submissionID: "race_b1")
+            let db = app.db
+            let aID = try fx.a.requireID()
+            let bID = try fx.b.requireID()
+            let setupID = fx.setupID
+            let aReports = aPlays.map { report($0, submissionID: "race_a1", won: false, score: 0) }
+            let bReports = bPlays.map { report($0, submissionID: "race_b1", won: true, score: 1) }
+            let aOutcomes = [outcome("match", metric: 0, status: .fail, score: 0)]
+            let bOutcomes = [outcome("match", metric: 2)]
+            async let landA: Void = withTransientDatabaseLockRetry(on: db) {
+                try await recordActivityMatch(
+                    testSetupID: setupID, userID: aID, submissionID: "race_a1",
+                    outcomes: aOutcomes, matches: aReports, on: db)
+            }
+            async let landB: Void = withTransientDatabaseLockRetry(on: db) {
+                try await recordActivityMatch(
+                    testSetupID: setupID, userID: bID, submissionID: "race_b1",
+                    outcomes: bOutcomes, matches: bReports, on: db)
+            }
+            _ = try await (landA, landB)
+
+            let leader = try #require(
+                try await rankedStandings(testSetupID: setupID, courseID: fx.setup.courseID, on: db).first)
+            #expect(leader.standing.userID == bID)
+            #expect(try await winnerRecord(app, fx: fx)?.userID == bID)
+        }
+    }
+
     /// A row the worker never reported stays open and counts nothing; a
     /// bot-only job (no reports at all) completes its one row from the
     /// collection's match entry, as a hill match does.
