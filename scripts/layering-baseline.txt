@@ -9,7 +9,5 @@ NewAssignmentFields
 assignmentByTestSetupID
 createAssignmentWithUniquePublicID
 deadlineOverrideValueForInstructorOpen
-enrolledStudentCountsByCourse
 normalizedDeadlineOverrideAfterDueDateChange
-studentUserIDsByCourse
 waterlooDateTimeFormatter
