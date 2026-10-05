@@ -471,6 +471,14 @@ these protections:
   the runner creates both. Without `--sandbox`, the workspaces are shared. A
   class-activity match job stages a classmate's submission as the opponent,
   by design (see [class-activities.md](class-activities.md)).
+- **The job's other test scripts, with `--sandbox`.** While one suite script
+  runs, the job's other suite scripts read as empty on Linux (each is covered
+  with `/dev/null` in the script's mount namespace) and are denied on macOS. A
+  public test's submission can then no longer read the release and secret test
+  scripts beside it. Its own script, the support files (grader-only ones
+  included, because tests use them) and the per-student inputs stay readable
+  (`NativeScriptExecutor.scriptsHidden`; [grading-integrity.md](grading-integrity.md),
+  phase 2).
 
 This is a property of the design, not a defect. Treat each value in a test,
 and each file in its test setup, as visible to a determined student. To hide

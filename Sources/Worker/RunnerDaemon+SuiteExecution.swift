@@ -76,7 +76,8 @@ extension WorkerDaemon {
             }
         }
         let executor = NativeScriptExecutor(
-            runner: runner, workDir: testSetupDir, env: scriptEnv, overrides: timeLimitOverrides)
+            runner: runner, workDir: testSetupDir, env: scriptEnv, overrides: timeLimitOverrides,
+            suiteScripts: manifest.testSuites.map(\.script))
         let items = manifest.testSuites.map { entry in
             SuiteItem(
                 script: entry.script,
