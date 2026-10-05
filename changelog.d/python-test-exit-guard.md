@@ -1,3 +1,0 @@
-### Security
-
-- **A Python submission can no longer end a native test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. A `SystemExit` raised in the submission's own code, from a function the test calls or from the notebook's top-level code that a notebook check runs, ended the test with the submission's status, and status 0 read as a pass. The native bootstrap now reports such an exit as an error ("the submission ended the test"). Exits from the test itself and from `passed`, `failed` and `errored` are unchanged, and `exception_expected` tests still catch an expected `SystemExit`. This is phase 2 of `docs/grading-integrity.md` (#2241); it does not stop a determined submission, which phase 3 addresses.
