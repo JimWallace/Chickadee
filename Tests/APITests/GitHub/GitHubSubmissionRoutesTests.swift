@@ -234,6 +234,35 @@ import VaporTesting
         }
     }
 
+    /// A student who renamed their GitHub account: the lookup by the stored
+    /// login misses, the installation is found by the account's numeric ID,
+    /// and the stored login is brought up to date (#2206).
+    @Test func aRenamedAccountFindsItsInstallationByID() async throws {
+        useGitHub()
+        let listed = NIOLockedValueBox<[Int64]>([])
+        app.githubRepoClient.installationByAccountID = { _, accountID in
+            listed.withLockedValue { $0.append(accountID) }
+            return accountID == Self.githubUserID
+                ? GitHubUserInstallation(
+                    installationID: 5, accountID: Self.githubUserID, accountLogin: "octo-student", accountType: "User")
+                : nil
+        }
+        try await withApp(app) { app in
+            try await registerApp()
+            let cookie = try await student()
+            let link = try #require(try await APIGitHubAccountLink.query(on: app.db).first())
+            link.githubLogin = "octo-old-name"
+            try await link.save(on: app.db)
+
+            try await get("/testsetups/gh_setup/github", cookie: cookie) { res in
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("octo-student/lab1"))
+            }
+            #expect(listed.withLockedValue { $0 } == [Self.githubUserID])
+            #expect(try await APIGitHubAccountLink.query(on: app.db).first()?.githubLogin == "octo-student")
+        }
+    }
+
     @Test func thePageListsOnlyOwnedRepositoriesAndShowsTheHeadCommit() async throws {
         try await withApp(app) { _ in
             try await registerApp()

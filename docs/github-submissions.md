@@ -273,8 +273,13 @@ As built (slice 3):
   `owner.id` with the linked GitHub user ID. The page also lists only owned
   repositories, but the check on the POST is the control.
 - The installation must be on the linked account: the installation found for
-  the linked login must report the linked GitHub user ID. A login that moved
-  to another account therefore fails as "not installed".
+  the linked login must report the linked GitHub user ID. When the lookup by
+  login misses, or finds another account's installation, the App's own
+  installation list (`GET /app/installations`, read with the App's JWT) is
+  searched for the linked numeric ID. A student who renamed their account is
+  found that way, and the login stored on their link is updated (#2206).
+  Only when neither finds an installation on the linked account is the result
+  "not installed".
 - The save goes through `recordStudentSubmission`, the helper the upload form
   now uses too, so attempt numbers, diagnostics, the first-to-submit award and
   the local-runner start cannot drift between the two.
