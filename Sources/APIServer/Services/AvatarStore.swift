@@ -28,8 +28,9 @@ enum AvatarStore {
         return AvatarPresentation(for: spec, size: .roster, accessibility: .decorative, isStaff: isStaff)
     }
 
-    /// This user's stored avatar, drawing and saving one on first call, and
-    /// filling any axis added since it was stored.
+    /// This user's stored avatar, drawing and saving one on first call.  A
+    /// spec stored before a later axis gets that axis from its decoder default;
+    /// the `FillLateAvatarAxes` migration stored the draw once.
     ///
     /// - Important: do NOT call inside an enclosing `db.transaction { … }`.
     ///   On Postgres a failed write aborts the whole transaction, so the
