@@ -166,6 +166,40 @@ import Vapor
         }
     }
 
+    /// A call that only moves the session window keeps a visible board
+    /// visible; a kind change starts hidden (#2190).
+    @Test func absentVisibilityKeepsTheStoredValueWhileTheKindIsUnchanged() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let (assignment, _) = try await fixture(on: app)
+            let tool = SetActivityTool()
+            _ = try await tool.execute(
+                .init(assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: "visible"),
+                context(app))
+            let moved = try await tool.execute(
+                .init(
+                    assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil,
+                    closesAt: "2026-12-01T16:00:00Z"),
+                context(app))
+            #expect(moved.leaderboardVisibility == "visible")
+            #expect(moved.closesAt == "2026-12-01T16:00:00Z")
+
+            let switched = try await tool.execute(
+                .init(assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: nil),
+                context(app))
+            #expect(switched.leaderboardVisibility == "hidden")
+        }
+    }
+
+    /// The pure rule, apart from the database.
+    @Test func resolvedVisibilityRule() {
+        let visible = ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)
+        #expect(SetActivityTool.resolvedVisibility(input: nil, kind: .bestMetric, current: visible) == .visible)
+        #expect(SetActivityTool.resolvedVisibility(input: .hidden, kind: .bestMetric, current: visible) == .hidden)
+        #expect(SetActivityTool.resolvedVisibility(input: nil, kind: .roundRobin, current: visible) == .hidden)
+        #expect(SetActivityTool.resolvedVisibility(input: nil, kind: .bestMetric, current: nil) == .hidden)
+    }
+
     @Test func serverInfoListsEveryKind() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
