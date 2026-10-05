@@ -117,7 +117,10 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     case kingOfTheHill
     /// Round robin: the submission plays every classmate's latest submission
     /// and the class is ranked in standings — wins, draws, losses and average
-    /// match score. Feeds achievements, never the grade of record.
+    /// match score. The standings feed achievements only. The submission's
+    /// own match entry is graded like any suite entry, on its mean win
+    /// fraction, so an author keeps match results off the grade by giving
+    /// that entry 0 points (#2186).
     case roundRobin
     /// Tournament: an instructor starts a single-elimination bracket or a
     /// Swiss tournament on a snapshot of every student's latest submission;
@@ -129,7 +132,8 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// match is read TWICE — as a kill for the student whose test found the
     /// fault, and as a fault against the classmate whose work was tested —
     /// so the class sees which work it has collectively defeated and whose
-    /// work held up. Feeds achievements only.
+    /// work held up. The two readings feed achievements only; the match entry
+    /// is graded as a round robin's is (#2186).
     case testsVersusImplementations
 
     /// Two-or-three-word chrome label.
@@ -166,7 +170,8 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
                 "Round robin: one job plays the submission against every classmate's latest "
                 + "submission (the bundled bot until a classmate exists) and the class is ranked in "
                 + "standings by wins, draws, losses and average match score; standings feed "
-                + "achievements, never the grade of record."
+                + "achievements only, but the match entry is graded on its mean win fraction like any "
+                + "suite entry, so give it 0 points to keep match results off the grade."
         case .elimination:
             return
                 "Tournament: an instructor runs a single-elimination bracket or a Swiss tournament "
@@ -179,7 +184,9 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
             return
                 "Tests and code: every student submits both, and each student's tests run against "
                 + "every classmate's latest submission, counting once for the test that finds a "
-                + "fault and once against the code that has it."
+                + "fault and once against the code that has it; the match entry is graded on its "
+                + "mean win fraction like any suite entry, so give it 0 points to keep match results "
+                + "off the grade."
         }
     }
 

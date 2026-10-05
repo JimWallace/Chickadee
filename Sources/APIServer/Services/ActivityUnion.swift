@@ -20,7 +20,9 @@
 // CURRENT submission only, because the question it answers is whether the
 // code that stands today has held up.
 //
-// Nothing here reaches a grade. A union kind feeds achievements only, and
+// Nothing here reaches a grade. These two readings feed achievements only
+// (the submission's own match entry is graded like any suite entry, which
+// is the author's choice of points, not this file's — #2186), and
 // `isSweepEvaluableClassGoal` admits no shape that reads these rows, so a
 // number that moves when a student resubmits can never freeze into a grade
 // push — which is why this one may move at all, where a coverage count must

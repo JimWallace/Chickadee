@@ -427,10 +427,16 @@ and average by handle and bird, best first, instead of the metric table
 `standings_leader` record INSTEAD of the leaderboard record and swaps them
 back when the kind changes to a metric kind.
 
-**The grade of record is untouched** (open question 1, decided): a round robin
-contributes to achievements only. Win fraction against classmates is not
-stable across the term, so participation credit belongs in an ordinary public
-test beside the match entry.
+**The standings do not reach the grade of record** (open question 1,
+decided): they feed achievements only. The submission's own result is still
+graded like any other. The matrix job folds the match entry into one outcome
+whose `score` is the mean win fraction (`aggregateMatrixRuns`), and that
+entry earns its points times that score. Win fraction against classmates is
+not stable across the term, and a classmate's resubmission changes it on the
+next retest, so give the match entry 0 points and put participation credit
+in an ordinary public test beside it. Nothing enforces this: the match entry
+is chosen at run time, by the highest `metric`, so a save-time check cannot
+know which entry it is (#2186).
 
 **Cost.** A matrix job runs the suite N times for N classmates, so the K-th
 submission costs K−1 suite runs; a class of S students that each submit once
@@ -533,7 +539,8 @@ next run reaches it. A retest of the tester keeps their earlier rows for
 the same reason: the claim voids completed rows for a standings kind only
 (#2187). This is the same asymmetry `class_item_coverage`
 already carries between coverage and breadth, and it is safe here for a
-reason worth stating: a union kind feeds achievements only, and
+reason worth stating: the two readings feed achievements only (the match
+entry itself is graded as a round robin's is, so give it 0 points), and
 `isSweepEvaluableClassGoal` admits no shape that reads these rows, so a
 number that moves when a student resubmits can never freeze into a grade
 push. That is why this number may move at all, where a coverage count must
@@ -717,8 +724,9 @@ errors rather than passes.
 
 ## Open questions (decide during the named slice)
 
-1. **Slice 4 — decided.** A matrix activity contributes to achievements only;
-   see "Round robin" above.
+1. **Slice 4 — decided.** A matrix activity's standings contribute to
+   achievements only, and the author gives the match entry 0 points to keep
+   match results off the grade; see "Round robin" above (#2186).
 2. **Slice 4 — decided, differently from both options.** `standing` and
    `matchesWon` needed neither a third category nor the sweep: they are static
    authorable-badge signals evaluated on the submission page with the
