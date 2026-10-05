@@ -334,6 +334,14 @@ import Testing
         #expect(!extractor.pythonStringLiteral("a / b").contains("\\/"))
     }
 
+    @Test func pythonStringLiteralSpellsControlCharactersAsTwoHexDigits() {
+        // The extractor shares the Python preset of `CStyleStringEscaping`
+        // (#2130); a control character is `\xNN`, and DEL passes through.
+        #expect(extractor.pythonStringLiteral("\u{1F}") == "\"\\x1f\"")
+        #expect(extractor.pythonStringLiteral("\u{0}") == "\"\\x00\"")
+        #expect(extractor.pythonStringLiteral("\u{7F}") == "\"\u{7F}\"")
+    }
+
     @Test func divisionCellSurvivesExtraction() throws {
         // End-to-end guard: a cell using `/` must keep the `/` in the generated
         // module so its exec(compile()) doesn't fail and its variables resolve.

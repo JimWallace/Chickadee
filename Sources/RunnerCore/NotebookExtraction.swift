@@ -336,24 +336,7 @@ public func wrapCellForResilientLoad(_ body: String, label: String) -> String {
 /// NOT use JSON encoding here: it escapes `/` as `\/`, which is not a valid
 /// Python escape and breaks the inner `compile()` (regression fixed in v0.4.220).
 public func pythonStringLiteral(_ s: String) -> String {
-    var out = "\""
-    for scalar in s.unicodeScalars {
-        switch scalar {
-        case "\\": out += "\\\\"
-        case "\"": out += "\\\""
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if scalar.value < 0x20 {
-                out += "\\x" + hex2(scalar.value)
-            } else {
-                out.unicodeScalars.append(scalar)
-            }
-        }
-    }
-    out += "\""
-    return out
+    CStyleStringEscaping.python.quotedLiteral(s)
 }
 
 // MARK: - Cross-line lexical scan
@@ -557,14 +540,4 @@ func rhsContainsFunctionCall(_ rhs: String) -> Bool {
         prev = ch
     }
     return false
-}
-
-// MARK: - Stdlib-only string helpers (Foundation-free for WASM)
-
-/// Two-digit lowercase hex for a control-character scalar (< 0x20).
-private func hex2(_ value: UInt32) -> String {
-    let digits = "0123456789abcdef"
-    let hi = digits[digits.index(digits.startIndex, offsetBy: Int((value >> 4) & 0xF))]
-    let lo = digits[digits.index(digits.startIndex, offsetBy: Int(value & 0xF))]
-    return String([hi, lo])
 }
