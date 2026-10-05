@@ -50,6 +50,18 @@ import Testing
         }
     }
 
+    /// The ranking text is derived per aggregation and reaches the
+    /// `set_activity` description, so no aggregation is described as if it
+    /// ranked on `metric` when it does not (#2190).
+    @Test func setActivityDescribesEveryAggregation() {
+        let rendering = MCPActivityProse.aggregationSummaries
+        for aggregation in ActivityAggregation.allCases {
+            #expect(rendering.contains("\(aggregation.rawValue) — "), "missing \(aggregation.rawValue)")
+        }
+        #expect(SetActivityTool.description.contains(rendering))
+        #expect(!SetActivityTool.description.contains("Every kind ranks students"))
+    }
+
     /// A read tool's serialized description must never name the write tool
     /// (the read-only-mode contract asserts the whole tools/list never does).
     @Test func readToolsDoNotNameTheWriteTool() {

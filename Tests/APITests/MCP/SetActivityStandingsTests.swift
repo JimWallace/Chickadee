@@ -120,6 +120,22 @@ import Vapor
         }
     }
 
+    /// The report says whether the record the kind's aggregation seeds is on
+    /// the manifest, for every aggregation, not only the metric board (#2190).
+    @Test(arguments: [
+        ("bestMetric", true), ("roundRobin", true), ("elimination", true), ("testsVersusImplementations", false),
+    ])
+    func theReportNamesTheRecordTheAggregationSeeds(kind: String, seeded: Bool) async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, gradingMode: "worker")
+            let out = try await SetActivityTool().execute(
+                .init(assignmentPublicID: assignment.publicID, kind: kind, leaderboardVisibility: nil),
+                context(app))
+            #expect(out.recordAchievementSeeded == seeded)
+        }
+    }
+
     /// Worker-only by construction, like the hill: it stages classmates.
     @Test func theTestsAndCodeKindIsRefusedOnABrowserGradedAssignment() async throws {
         let app = try await makeTestApp()

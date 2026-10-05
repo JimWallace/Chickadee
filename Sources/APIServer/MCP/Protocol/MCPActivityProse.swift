@@ -27,6 +27,35 @@ enum MCPActivityProse {
         ActivityKind.allCases.map { "\($0.rawValue) — \($0.summary)" }.joined(separator: "; ")
     }
 
+    /// One clause per aggregation: how it ranks the class and which record
+    /// `set_activity` seeds for it. Derived per case, so an aggregation that
+    /// ranks on something other than `metric` cannot be described as if it
+    /// did (#2190).
+    static var aggregationSummaries: String {
+        ActivityAggregation.allCases.map { "\($0.rawValue) — \(summary(of: $0))" }.joined(separator: "; ")
+    }
+
+    private static func summary(of aggregation: ActivityAggregation) -> String {
+        switch aggregation {
+        case .leaderboard:
+            return
+                "ranks students on the unclamped `metric` field a test script prints in its JSON footer "
+                + "beside `score` (highest first; a script whose lower is better reports the negation), "
+                + "so author one suite entry whose script reports it, and seeds a record achievement on "
+                + "the highest metric"
+        case .standings:
+            return
+                "ranks students by average match score, then wins, over each student's latest "
+                + "submission, and seeds the standings-leader record"
+        case .bracket:
+            return "shows a tournament's rounds and its winner, and seeds the tournament-winner record"
+        case .union:
+            return
+                "reads every match as a kill for the tester and as a fault against the tested code, "
+                + "and seeds no record"
+        }
+    }
+
     /// `"none or supportFile"` — the opponent-source tokens a payload reports.
     static var opponentSourceTokens: String { MCPEnumProse<ActivityOpponentSource>.orList }
 

@@ -174,6 +174,28 @@ enum ActivityAuthoring {
     }
 
     /// The record a leaderboard kind seeds.
+    /// The record dimension `setActivity` seeds for an aggregation; nil for
+    /// a union kind, which seeds none. The seeders decline while a record of
+    /// that dimension is already on the manifest, so an instructor's own
+    /// record counts. One exhaustive switch, so the `set_activity` report
+    /// cannot answer for the leaderboard alone (#2190).
+    static func seededRecordDimension(for aggregation: ActivityAggregation) -> RecordDimension? {
+        switch aggregation {
+        case .leaderboard: return .highestMetric
+        case .standings, .bracket: return .tournamentWinner
+        case .union: return nil
+        }
+    }
+
+    /// True when the manifest holds the record its activity's aggregation
+    /// seeds. False with no activity and for a union kind.
+    static func hasSeededRecord(_ props: TestProperties) -> Bool {
+        guard let aggregation = props.activity?.kind.aggregation,
+            let dimension = seededRecordDimension(for: aggregation)
+        else { return false }
+        return props.achievements.contains { $0.recordDimension == dimension }
+    }
+
     static let seededRecord = Achievement(
         id: seededRecordID,
         name: "Leaderboard record",
