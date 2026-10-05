@@ -48,7 +48,7 @@ enum CourseCloneService {
     /// (#1780). The instructor opens enrollment when the term starts.
     ///
     /// Every assignment starts closed and unvalidated, with NO due or start
-    /// date and its solution hidden. The source's dates belong to the source's
+    /// date, no class activity session window, and its solution hidden. The source's dates belong to the source's
     /// term, and a stale date is not harmless: with no date, or one in the
     /// past, an "after due" solution policy would show the answer key the
     /// moment the assignment opens. The instructor sets new dates, and

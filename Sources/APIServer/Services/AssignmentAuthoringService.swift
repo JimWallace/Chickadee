@@ -158,7 +158,8 @@ enum AssignmentAuthoringService {
 
     /// Duplicates an assignment into `targetCourseID` under `newTitle`. The
     /// source setup's zip and starter notebook are copied to a fresh setup id,
-    /// the manifest is carried over verbatim, the reference solution and the
+    /// the manifest is carried over verbatim (except an activity's live-session
+    /// window, see `cloneManifest`), the reference solution and the
     /// shared support files are copied, the solution source is written, the
     /// three per-assignment policies come along, and a new assignment is
     /// allocated with its own public id, course-unique slug and version v1.
@@ -201,7 +202,7 @@ enum AssignmentAuthoringService {
         }
 
         let newSetup = APITestSetup(
-            id: newSetupID, manifest: sourceSetup.manifest, zipPath: dstZip,
+            id: newSetupID, manifest: try cloneManifest(of: sourceSetup), zipPath: dstZip,
             notebookPath: newNotebookPath, courseID: targetCourseID)
 
         var copiedSolutionPath: String?
@@ -278,6 +279,19 @@ enum AssignmentAuthoringService {
             if let copiedSolutionPath { try? fm.removeItem(atPath: copiedSolutionPath) }
             throw error
         }
+    }
+
+    /// The manifest a clone starts from: the source's bytes, unchanged, unless
+    /// the source is a class activity with a live-session window. That window
+    /// holds absolute dates of the source's term, like the due date the clone
+    /// drops, and a closed window refuses every student while it lets staff
+    /// through, so the instructor cannot see the fault (#2189). The clone
+    /// starts with no window, and the instructor sets one for the new term.
+    static func cloneManifest(of setup: APITestSetup) throws -> String {
+        guard var props = setup.decodedManifest(), let activity = props.activity, activity.window != nil
+        else { return setup.manifest }
+        props.activity = activity.withWindow(nil)
+        return try encodeManifest(props)
     }
 
     /// Copies the source assignment's reference solution onto a new setup id,
