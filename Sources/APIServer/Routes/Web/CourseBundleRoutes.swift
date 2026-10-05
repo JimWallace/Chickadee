@@ -52,7 +52,7 @@ struct CourseBundleRoutes: RouteCollection {
             let course = try await APICourse.find(courseUUID, on: req.db)
         else { throw AppError.notFound(resource: "Course") }
 
-        let data = try await loadExportData(courseUUID: courseUUID, on: req.db)
+        let data = try await loadExportData(courseUUID: courseUUID, on: req.db, logger: req.logger)
         let bundleIDs = assignExportBundleIDs(data: data)
         let manifest = buildExportManifest(
             course: course, caller: caller, data: data, bundleIDs: bundleIDs)
@@ -127,7 +127,9 @@ struct CourseBundleRoutes: RouteCollection {
 
     // ── 1. Load all course data ────────────────────────────────────────
 
-    private func loadExportData(courseUUID: UUID, on db: Database) async throws -> ExportData {
+    private func loadExportData(
+        courseUUID: UUID, on db: Database, logger: Logger
+    ) async throws -> ExportData {
         let testSetups = try await APITestSetup.query(on: db)
             .filter(\.$courseID == courseUUID)
             .all()
@@ -174,6 +176,14 @@ struct CourseBundleRoutes: RouteCollection {
                     \.$kind ~~ [APISubmission.Kind.student, APISubmission.Kind.validation]
                 )
                 .all()
+        }
+        // A submission whose file is gone from disk stays out of the bundle,
+        // with its results. The manifest then names only files the staging
+        // copy holds, so the bundle can be imported (#2165).
+        submissions = submissions.filter { sub in
+            if FileManager.default.fileExists(atPath: sub.zipPath) { return true }
+            logger.warning("Export: submission file missing at \(sub.zipPath), left out of the bundle")
+            return false
         }
 
         // Collect unique user UUIDs from submissions not already in enrolled set.
@@ -461,11 +471,13 @@ private func writeExportStaging(
     for setup in setupCopies {
         let src = URL(fileURLWithPath: setup.zipPath)
         let dst = stagingDir.appendingPathComponent("testsetups/\(setup.id).zip")
-        if FileManager.default.fileExists(atPath: src.path) {
-            try FileManager.default.copyItem(at: src, to: dst)
-        } else {
-            logger.warning("Export: test setup zip missing at \(src.path), skipping")
+        // A setup zip is the assignment's content. Without it the bundle
+        // would name a file it does not hold and the import would refuse
+        // it, so the export fails here and names the path (#2165).
+        guard FileManager.default.fileExists(atPath: src.path) else {
+            throw Abort(.internalServerError, reason: "Export: test setup zip missing at \(src.path)")
         }
+        try FileManager.default.copyItem(at: src, to: dst)
         // The starter notebook as it is now, beside the zip (#1736).
         if let notebookPath = setup.notebookPath {
             try FileManager.default.copyItem(
