@@ -75,6 +75,23 @@ struct SandboxedScriptRunner: ScriptRunner {
             launchErrorPrefix: "Failed to launch sandboxed script"
         )
     }
+
+    func run(
+        command executablePath: String, arguments: [String], workDir: URL, timeLimitSeconds: Int,
+        launchErrorPrefix: String
+    ) async -> ScriptOutput {
+        await executeScriptLaunch(
+            sandboxWrap(
+                executablePath: executablePath,
+                arguments: arguments,
+                workDir: workDir,
+                environment: mergedScriptEnvironment(overrides: [:]),
+                processLimit: processLimit),
+            workDir: workDir,
+            timeLimitSeconds: timeLimitSeconds,
+            launchErrorPrefix: launchErrorPrefix
+        )
+    }
 }
 
 // MARK: - Startup probe
