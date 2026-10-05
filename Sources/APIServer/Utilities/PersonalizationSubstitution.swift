@@ -1,4 +1,4 @@
-// APIServer/Services/PersonalizationSubstitution.swift
+// APIServer/Utilities/PersonalizationSubstitution.swift
 //
 // HTTP-free core that builds the `{{name}}` substitution map a student with a
 // given seed would see at notebook first-open: every global + section literal
