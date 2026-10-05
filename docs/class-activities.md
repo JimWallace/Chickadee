@@ -347,7 +347,11 @@ existing contract. Then:
   forward and keeps the streak;
 - a loss to the current champion counts one defence;
 - only a `.student` in the setup's own course can hold the hill, so a staff
-  validation run completes its row and changes nothing.
+  submission completes its row and changes nothing;
+- a validation run (or a class corpus run) plays the bundled bot, or nobody,
+  and opens no row. It never plays the champion or the class, so its verdict
+  does not depend on the students' code (#2188). A round robin's validation
+  run does the same.
 
 The leaderboard still ranks on `metric` (a win count, typically) and gains a
 line naming the hill's holder by handle and bird, with "since" and the streak;

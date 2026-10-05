@@ -1136,4 +1136,51 @@ import VaporTesting
             #expect(new?.submissionID == "wsub_robin3")
         }
     }
+
+    // MARK: - A validation run plays practice (#2188)
+
+    /// A validation run on a round robin plays the bundled bot, never the
+    /// class, and opens no match row.
+    @Test func requestJob_roundRobin_validationPlaysTheBotNotTheClass() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_robin_val", manifest: robinManifestJSON)
+            _ = try await enrolClassmate(
+                username: "robin_val_b", submissionID: "wsub_robin_val_b", setup: setup, filename: "b.py")
+            _ = try await makeSubmission(
+                id: "wsub_robin_val", setupID: try setup.requireID(), kind: APISubmission.Kind.validation)
+
+            let job = try #require(try await requestJob(workerID: "w-robin-val", profile: robinProfile()))
+            #expect(job.submissionID == "wsub_robin_val")
+            #expect(job.opponents == nil)
+            let opponent = try #require(job.opponent)
+            #expect(opponent.supportFile == "bot.py")
+            #expect(!opponent.stagesASubmission)
+            let rows = try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "wsub_robin_val").all()
+            #expect(rows.isEmpty)
+        }
+    }
+
+    /// A validation run on a hill plays the bot even while a student holds
+    /// the hill, and opens no match row.
+    @Test func requestJob_hill_validationPlaysTheBotNotTheChampion() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_hill_val", manifest: hillManifestJSON)
+            _ = try await makeSubmission(id: "wsub_champ_val", setupID: try setup.requireID(), status: "complete")
+            let holder = try await makeTestUser(on: app, username: "hill_val_holder", role: "student")
+            try await APIActivityChampion(
+                testSetupID: try setup.requireID(), userID: try holder.requireID(),
+                submissionID: "wsub_champ_val", crownedAt: Date()
+            ).save(on: app.db)
+            _ = try await makeSubmission(
+                id: "wsub_hill_val", setupID: try setup.requireID(), kind: APISubmission.Kind.validation)
+
+            let job = try #require(try await requestJob(workerID: "w-hill-val", profile: hillProfile()))
+            #expect(job.submissionID == "wsub_hill_val")
+            let opponent = try #require(job.opponent)
+            #expect(opponent.supportFile == "bot.py")
+            #expect(opponent.submissionID == nil)
+            let rows = try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "wsub_hill_val").all()
+            #expect(rows.isEmpty)
+        }
+    }
 }
