@@ -188,7 +188,7 @@ extension CourseBundleRoutes {
     // Returns a tally from the closure to avoid captured-var mutation warnings
     // (errors in Swift 6 strict mode).
 
-    private func performImportTransaction(
+    func performImportTransaction(
         app: Application,
         db: Database,
         manifest: CourseBundleManifest,
@@ -217,83 +217,91 @@ extension CourseBundleRoutes {
                 courseCode: manifest.course.code,
                 courseName: manifest.course.name
             )
+            do {
+                // 6b. Create course
+                let importedMode = bundledCourseEnrollmentMode(manifest.course)
+                let newCourse = APICourse(
+                    code: manifest.course.code, name: manifest.course.name,
+                    enrollmentMode: importedMode,
+                    term: bundledCourseTerm(manifest.course))
+                // Slip-day policy travels with the course (#1228); the ledger and
+                // per-student adjustments deliberately do not (per-term data).
+                let slipDayPolicy = bundledCourseSlipDayPolicy(manifest.course)
+                newCourse.slipDaysEnabled = slipDayPolicy.enabled
+                newCourse.slipDaysPerStudent = slipDayPolicy.daysPerStudent
+                newCourse.slipDayExtensionHours = slipDayPolicy.extensionHours
+                newCourse.slipDayReleaseRevealHold = slipDayPolicy.releaseRevealHold
+                // The course's own authoring guide, when it has one (#1737).
+                newCourse.mcpInstructions = manifest.course.mcpInstructions
+                try await newCourse.save(on: db)
+                guard let newCourseID = newCourse.id else {
+                    throw AppError.internalFailure(reason: "Created course missing id after save")
+                }
+                t.courseID = newCourseID
+                t.courseCode = newCourse.code
+                t.courseName = newCourse.name
+                t.termLabel = newCourse.term?.displayName
 
-            // 6b. Create course
-            let importedMode = bundledCourseEnrollmentMode(manifest.course)
-            let newCourse = APICourse(
-                code: manifest.course.code, name: manifest.course.name,
-                enrollmentMode: importedMode,
-                term: bundledCourseTerm(manifest.course))
-            // Slip-day policy travels with the course (#1228); the ledger and
-            // per-student adjustments deliberately do not (per-term data).
-            let slipDayPolicy = bundledCourseSlipDayPolicy(manifest.course)
-            newCourse.slipDaysEnabled = slipDayPolicy.enabled
-            newCourse.slipDaysPerStudent = slipDayPolicy.daysPerStudent
-            newCourse.slipDayExtensionHours = slipDayPolicy.extensionHours
-            newCourse.slipDayReleaseRevealHold = slipDayPolicy.releaseRevealHold
-            // The course's own authoring guide, when it has one (#1737).
-            newCourse.mcpInstructions = manifest.course.mcpInstructions
-            try await newCourse.save(on: db)
-            guard let newCourseID = newCourse.id else {
-                throw AppError.internalFailure(reason: "Created course missing id after save")
+                // 6c. Resolve users → userIDMap[bundleID] = live UUID
+                let userIDMap = try await importBundledUsers(manifest: manifest, db: db, tally: &t)
+
+                // 6d. Create enrollments for enrolled users
+                try await importBundledEnrollments(
+                    manifest: manifest, userIDMap: userIDMap, courseID: t.courseID, db: db)
+
+                // 6e. Create course sections → sectionIDMap[bundleID] = new live UUID
+                let sectionIDMap = try await importBundledSections(
+                    manifest: manifest, courseID: t.courseID, db: db)
+
+                // 6e-bis. Create ungraded content items, re-linked to the sections
+                // recreated above (depends only on sectionIDMap).
+                try await importBundledContentItems(
+                    manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID,
+                    extractDir: extractDir, contentFilesDir: contentFilesDir, db: db, tally: &t)
+
+                // 6f. Create test setups → setupIDMap[bundleID] = new live ID
+                let setupIDMap = try await importBundledTestSetups(
+                    manifest: manifest, dirs: dirs, courseID: t.courseID,
+                    app: app, db: db, tally: &t)
+
+                // 6g. Create assignments
+                try await importBundledAssignments(
+                    manifest: manifest, setupIDMap: setupIDMap, sectionIDMap: sectionIDMap,
+                    courseID: t.courseID, db: db, tally: &t)
+
+                // 6h. Create submissions → subIDMap[bundleID] = new live ID
+                let subIDMap = try await importBundledSubmissions(
+                    manifest: manifest, extractDir: extractDir, subsDir: subsDir,
+                    idMaps: ImportIDMaps(userIDMap: userIDMap, setupIDMap: setupIDMap),
+                    db: db, tally: &t)
+
+                // 6h-bis. Point each imported assignment at its own imported
+                // reference solution. The submissions above landed on the NEW
+                // setup ids, so this is what turns a carried solution into one the
+                // assignment can actually resolve.
+                try await linkImportedValidationSubmissions(
+                    courseID: t.courseID, setupsDir: dirs.setupsDir, db: db)
+
+                // 6h-ter. Seed each imported assignment's v1, as clone and create
+                // do, so it has a starting point to roll back to and the timeline
+                // can say it arrived by import (#1741). After 6g and 6h-bis: the
+                // version store records only a published assignment, and the
+                // snapshot should see the linked solution.
+                await seedImportedVersions(setupIDs: setupIDMap.values, setupsDir: dirs.setupsDir, db: db)
+
+                // 6i. Create results
+                try await importBundledResults(
+                    manifest: manifest, subIDMap: subIDMap, db: db, tally: &t)
+
+                return t
+            } catch {
+                // The rows roll back with the transaction; the files the
+                // import wrote would stay. Remove them before the error
+                // leaves, as the course clone does (#1743, #2164).
+                let fm = FileManager.default
+                for path in t.createdPaths { try? fm.removeItem(atPath: path) }
+                throw error
             }
-            t.courseID = newCourseID
-            t.courseCode = newCourse.code
-            t.courseName = newCourse.name
-            t.termLabel = newCourse.term?.displayName
-
-            // 6c. Resolve users → userIDMap[bundleID] = live UUID
-            let userIDMap = try await importBundledUsers(manifest: manifest, db: db, tally: &t)
-
-            // 6d. Create enrollments for enrolled users
-            try await importBundledEnrollments(
-                manifest: manifest, userIDMap: userIDMap, courseID: t.courseID, db: db)
-
-            // 6e. Create course sections → sectionIDMap[bundleID] = new live UUID
-            let sectionIDMap = try await importBundledSections(
-                manifest: manifest, courseID: t.courseID, db: db)
-
-            // 6e-bis. Create ungraded content items, re-linked to the sections
-            // recreated above (depends only on sectionIDMap).
-            try await importBundledContentItems(
-                manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID,
-                extractDir: extractDir, contentFilesDir: contentFilesDir, db: db)
-
-            // 6f. Create test setups → setupIDMap[bundleID] = new live ID
-            let setupIDMap = try await importBundledTestSetups(
-                manifest: manifest, dirs: dirs, courseID: t.courseID,
-                app: app, db: db, tally: &t)
-
-            // 6g. Create assignments
-            try await importBundledAssignments(
-                manifest: manifest, setupIDMap: setupIDMap, sectionIDMap: sectionIDMap,
-                courseID: t.courseID, db: db, tally: &t)
-
-            // 6h. Create submissions → subIDMap[bundleID] = new live ID
-            let subIDMap = try await importBundledSubmissions(
-                manifest: manifest, extractDir: extractDir, subsDir: subsDir,
-                idMaps: ImportIDMaps(userIDMap: userIDMap, setupIDMap: setupIDMap),
-                db: db, tally: &t)
-
-            // 6h-bis. Point each imported assignment at its own imported
-            // reference solution. The submissions above landed on the NEW
-            // setup ids, so this is what turns a carried solution into one the
-            // assignment can actually resolve.
-            try await linkImportedValidationSubmissions(
-                courseID: t.courseID, setupsDir: dirs.setupsDir, db: db)
-
-            // 6h-ter. Seed each imported assignment's v1, as clone and create
-            // do, so it has a starting point to roll back to and the timeline
-            // can say it arrived by import (#1741). After 6g and 6h-bis: the
-            // version store records only a published assignment, and the
-            // snapshot should see the linked solution.
-            await seedImportedVersions(setupIDs: setupIDMap.values, setupsDir: dirs.setupsDir, db: db)
-
-            // 6i. Create results
-            try await importBundledResults(
-                manifest: manifest, subIDMap: subIDMap, db: db, tally: &t)
-
-            return t
         }
     }
 
@@ -330,7 +338,7 @@ private struct ImportIDMaps {
 /// Mutable counters accumulated inside the import transaction and returned to the caller.
 /// Using a local `var` inside the closure and returning it avoids the Swift 6
 /// "mutation of captured var in concurrently-executing code" error.
-private struct ImportTally: Sendable {
+struct ImportTally: Sendable {
     var courseID: UUID
     var courseCode: String
     var courseName: String
@@ -341,6 +349,9 @@ private struct ImportTally: Sendable {
     var assignmentsImported: Int = 0
     var submissionsImported: Int = 0
     var resultsImported: Int = 0
+    /// Every file and directory the import wrote, recorded before the
+    /// write, so a failed transaction can remove them (#2164).
+    var createdPaths: [String] = []
 }
 
 // MARK: - View context
@@ -464,6 +475,7 @@ private func importBundledTestSetups(
         // inside the import transaction, whose closure cannot capture the
         // request).
         let srcZip = extractDir.appendingPathComponent(bundledSetup.zipFilename)
+        tally.createdPaths.append(newZipPath)
         try await runBlocking(app: app) {
             try FileManager.default.copyItem(
                 at: srcZip,
@@ -477,6 +489,7 @@ private func importBundledTestSetups(
             FileManager.default.fileExists(atPath: extractDir.appendingPathComponent(bundledNotebook).path)
         {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
+            tally.createdPaths.append(nbPath)
             try await runBlocking(app: app) {
                 try FileManager.default.copyItem(
                     at: extractDir.appendingPathComponent(bundledNotebook), to: URL(fileURLWithPath: nbPath))
@@ -484,6 +497,7 @@ private func importBundledTestSetups(
             notebookPath = nbPath
         } else if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
+            tally.createdPaths.append(nbPath)
             try await runBlocking(app: app) {
                 try nbData.write(to: URL(fileURLWithPath: nbPath))
             }
@@ -500,6 +514,7 @@ private func importBundledTestSetups(
         try await setup.save(on: db)
         // The zip copy above carries the support files, but students and
         // personalization expressions read them from the shared directory.
+        tally.createdPaths.append(setupsDir + "shared/\(newSetupID)/")
         await extractSupportFilesToSharedDirectory(for: setup, testSetupsDirectory: setupsDir)
         // A bundle exported by an older build carries no language declaration,
         // so declare one on the way in — the same thing
@@ -562,7 +577,8 @@ private func importBundledContentItems(
     courseID: UUID,
     extractDir: URL,
     contentFilesDir: String,
-    db: Database
+    db: Database,
+    tally: inout ImportTally
 ) async throws {
     for item in manifest.contentItems ?? [] {
         let newItem = APICourseContentItem(
@@ -583,6 +599,7 @@ private func importBundledContentItems(
         guard let newItemID = newItem.id, let bundleAtts = item.attachments, !bundleAtts.isEmpty
         else { continue }
         let destDir = contentFilesDir + newItemID.uuidString + "/"
+        tally.createdPaths.append(destDir)
         try FileManager.default.createDirectory(atPath: destDir, withIntermediateDirectories: true)
         var stored: [ContentAttachment] = []
         for att in bundleAtts {
@@ -677,6 +694,7 @@ private func importBundledSubmissions(
 
         let srcFile = extractDir.appendingPathComponent(bundledSub.submissionFilename)
         let copied = try copySubmissionFile(from: srcFile.path, into: subsDir)
+        tally.createdPaths.append(copied.path)
 
         let sub = APISubmission(
             id: copied.id,
