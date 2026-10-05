@@ -73,9 +73,6 @@ extension Application {
     /// simply takes over its old leases as they expire (or immediately,
     /// since the old process stopped renewing).
     var sweepLeaseHolderID: String {
-        if let existing = storage[SweepLeaseHolderIDKey.self] { return existing }
-        let created = UUID().uuidString
-        storage[SweepLeaseHolderIDKey.self] = created
-        return created
+        lazyStored(SweepLeaseHolderIDKey.self) { UUID().uuidString }
     }
 }
