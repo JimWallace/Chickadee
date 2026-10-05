@@ -4,17 +4,17 @@
 // don't belong to a more focused helper file.  The bulk of what used to
 // live here was split out per issue #442 into:
 //
-//   - AssignmentDraftHelpers.swift
+//   - AssignmentDraftHelpers.swift (now in Helpers/, #2142)
 //   - AssignmentRequirementHelpers.swift
 //   - AssignmentSlugHelpers.swift
 //   - ManifestFileHelpers.swift (now in Helpers/, #1726)
 //   - MultipartHelpers.swift
-//   - NotebookScaffoldHelpers.swift
+//   - NotebookScaffoldHelpers.swift (now in Helpers/, #2142)
 //   - RunnerValidationHelpers.swift
 //   - SuiteRowHelpers.swift
 //   - TestSetupZipHelpers.swift (now in Helpers/, #1726)
 //
-// What remains: section-ID resolution, due-date parsing/formatting,
+// What remains: due-date parsing/formatting,
 // human-name splitting, return-path sanitization, deadline-override
 // helpers, sort-order allocation, grade-extraction helpers, CSV
 // escaping, and student-ID name inference.
@@ -23,22 +23,6 @@ import Core
 import Fluent
 import Foundation
 import Vapor
-
-/// Validates a sectionID string (UUID) against the given course and returns the UUID if valid.
-/// Returns nil for absent, empty, or "none" values (meaning "ungrouped").
-func resolveSectionID(_ raw: String?, courseID: UUID, db: Database) async throws -> UUID? {
-    guard let raw, !raw.isEmpty, raw.lowercased() != "none" else { return nil }
-    guard let uuid = UUID(uuidString: raw) else {
-        throw WebAssignmentError.invalidParameter(name: "sectionID", reason: "Invalid sectionID format.")
-    }
-    guard let section = try await APICourseSection.find(uuid, on: db),
-        section.courseID == courseID
-    else {
-        // Section not found or belongs to a different course — silently ignore.
-        return nil
-    }
-    return uuid
-}
 
 func parseDueDate(_ raw: String?) -> Date? {
     guard let raw, !raw.isEmpty else { return nil }

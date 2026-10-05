@@ -61,13 +61,14 @@ import Vapor
         // names.
         let inScope: [String] = [
             "AssignmentHelpers.swift",
-            "AssignmentDraftHelpers.swift",
+            // Moved below the routes to `Helpers/` (#2142).
+            "../../Helpers/AssignmentDraftHelpers.swift",
             "AssignmentRequirementHelpers.swift",
             "AssignmentSlugHelpers.swift",
             // Moved below the routes to `Helpers/` (#1726).
             "../../Helpers/ManifestFileHelpers.swift",
             "MultipartHelpers.swift",
-            "NotebookScaffoldHelpers.swift",
+            "../../Helpers/NotebookScaffoldHelpers.swift",
             "RunnerValidationHelpers.swift",
             "SuiteRowHelpers.swift",
             "../../Helpers/TestSetupZipHelpers.swift",

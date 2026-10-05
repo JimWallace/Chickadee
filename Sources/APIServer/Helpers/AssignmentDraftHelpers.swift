@@ -1,9 +1,10 @@
-// APIServer/Routes/Web/AssignmentDraftHelpers.swift
+// APIServer/Helpers/AssignmentDraftHelpers.swift
 //
 // Draft-state types and helpers for the new-assignment authoring flow:
 // session-stored form values, JupyterLite working-copy bookkeeping, and
 // solution-notebook lookups.  Extracted from AssignmentHelpers.swift
-// (issue #442) — no behaviour changes.
+// (issue #442). Moved below the routes to Helpers/ (#2142), because
+// `NewAssignmentDraftService` and `NotebookWorkingCopyStore` call it.
 
 import Core
 import Fluent

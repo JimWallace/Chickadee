@@ -1,9 +1,10 @@
-// APIServer/Routes/Web/NotebookScaffoldHelpers.swift
+// APIServer/Helpers/NotebookScaffoldHelpers.swift
 //
 // Notebook filename normalization, default-notebook construction, the
 // "auto-scaffold from solution notebook" flow (v0.4.100+), and cleanup
 // of materialized JupyterLite copies.  Extracted from
-// AssignmentHelpers.swift (issue #442) — no behaviour changes.
+// AssignmentHelpers.swift (issue #442). Moved below the routes to Helpers/
+// (#2142), because `NewAssignmentDraftService` calls it.
 
 import Core
 import Fluent

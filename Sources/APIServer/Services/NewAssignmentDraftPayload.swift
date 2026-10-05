@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/NewAssignmentDraftPayload.swift
+// APIServer/Services/NewAssignmentDraftPayload.swift
 //
 // Parsed payload for `POST /instructor/new/draft`.  Resolves the
 // array-typed (`suiteFiles[]`) and single-typed (`suiteFiles`) Vapor
@@ -8,11 +8,9 @@
 // `SaveEditedAssignmentForm` / `parseSaveEditedAssignmentForm` pattern
 // used by `saveEditedAssignment` in `AssignmentRoutes+Editor.swift`.
 //
-// Lives at file-internal visibility so `NewAssignmentDraftService`
-// (Sources/APIServer/Services/) can construct one without importing
-// fileprivate handler internals.  The parser itself
-// (`parseNewAssignmentDraftPayload(req:)`) stays inside the route
-// file because it's only called from one place.
+// Lives beside `NewAssignmentDraftService`, which consumes it (#2142).
+// The parser itself (`parseNewAssignmentDraftPayload(req:)`) stays inside
+// the route file because it's only called from one place.
 
 import Vapor
 
