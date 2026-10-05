@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.427] - 2026-10-05
+
+### Changed
+
+- **Core README debt table recounted (#2129).** The server-only file inventory in `Sources/Core/README.md` names the files that exist today: `AvatarMarkup` replaces `AvatarPresentation`, `GradePercent` joins the Other group, `CStyleStringEscaping` leaves the list after its move to RunnerCore, and every line count is current.
+
+
 ## [0.5.426] - 2026-10-05
 
 ### Changed
