@@ -167,10 +167,13 @@ services:
     # /tmp/chickadee-runner-cache (`--test-setup-cache-dir`). So this tmpfs
     # must NOT carry `noexec`: a C++ assignment compiles with g++ and execs the
     # result from here, and `noexec` turns that into a "Permission denied" the
-    # student sees as a broken test. See the work-root comment in
+    # student sees as a broken test. Docker mounts a tmpfs `noexec` unless the
+    # options say `exec`, so `exec` below is required, not decoration: without
+    # it the runner's startup probe fails and the runner stops advertising C++
+    # (scripts/check-compose-tmpfs-exec.sh). See the work-root comment in
     # RunnerDaemon+JobProcessing.swift.
     tmpfs:
-      - /tmp:size=1g
+      - /tmp:size=1g,exec
     # Resource ceilings are deployment-specific and deliberately unset: 256 MB
     # is ample for Python and R and will not compile a C++ or Java assignment.
     # Note that tmpfs pages count against the memory cgroup, so whatever you

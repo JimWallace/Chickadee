@@ -177,8 +177,9 @@ struct GitHubSubmissionRoutes: RouteCollection {
                 // to it (#2208).
                 try await organization.inviteLinkedAccount(existing, link: link, req: req)
             } else {
+                let term = try await APICourse.find(setup.courseID, on: req.db)?.term
                 let name = GitHubCourseRepositoryName.make(
-                    assignmentSlug: assignment?.slug ?? setupID, login: login)
+                    assignmentSlug: assignment?.slug ?? setupID, term: term, login: login)
                 let row = try await organization.makeRepository(
                     template: template, name: name, testSetupID: setupID, link: link,
                     login: login, req: req)

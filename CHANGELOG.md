@@ -9,6 +9,24 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.462] - 2026-10-05
+
+### Fixed
+
+- **A course repository's name carries the course term.** A clone keeps its assignment slugs and may bind the same GitHub organization, so a student who repeated a course could not make a repository in the new offering: the name `{slug}-{login}` was taken by the first one. A course with a term now names it `{slug}-{term}-{login}`, for example `lab1-W27-alice`; a course with no term keeps the old name (#2228).
+
+
+## [0.5.461] - 2026-10-05
+
+### Fixed
+
+- **The one-click course copy applies the duplicate check.** The copy chose its `-COPY` code with an exact, case-sensitive match, so beside an active `cs135-copy` it made `CS135-COPY` in the same term: two active courses that answer one key. It now uses the same per-term, case-folded check as every other door (#2229).
+
+### Fixed
+
+- **The Compose runner advertises C++ again.** Docker mounts a tmpfs `noexec` unless its options say `exec`, so the runner's `/tmp:size=1g` work root was `noexec` although the file's own comment said it must not be. The runner's startup probe compiles a C++ program in the work root and runs it; on a `noexec` mount that fails, so the runner stopped advertising C++ without an error, and C++ jobs waited for a runner that never came. On 2026-10-05 all three production runners had lost C++ this way. The mount is now `/tmp:size=1g,exec`, and a new `format-lint` guard (`scripts/check-compose-tmpfs-exec.sh`) fails on any tmpfs mount in `docker-compose.yml` without `exec`. Hosts with their own compose file must add `exec` themselves.
+
+
 ## [0.5.460] - 2026-10-05
 
 ### Fixed
