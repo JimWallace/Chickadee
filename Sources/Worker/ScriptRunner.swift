@@ -19,9 +19,21 @@ import Foundation
 /// inherited. Empty dictionary = the allowlisted base only.
 protocol ScriptRunner: Sendable {
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput
+    /// Runs `script` with `hiddenFiles` unreadable to it, where the runner can
+    /// enforce that. Only the sandbox can; every other runner ignores the list
+    /// through the default below.
+    func run(
+        script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String], hiding hiddenFiles: [URL]
+    ) async -> ScriptOutput
 }
 
 extension ScriptRunner {
+    func run(
+        script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String], hiding hiddenFiles: [URL]
+    ) async -> ScriptOutput {
+        await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env)
+    }
+
     /// Convenience overload — call sites without per-run env-var needs can omit `env:`.
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
         await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: [:])

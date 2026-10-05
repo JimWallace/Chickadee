@@ -38,8 +38,14 @@ import Foundation
 struct SandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
+        await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env, hiding: [])
+    }
+
+    func run(
+        script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String], hiding hiddenFiles: [URL]
+    ) async -> ScriptOutput {
         await executeScriptLaunch(
-            sandboxedLaunch(script: script, workDir: workDir, env: env),
+            sandboxedLaunch(script: script, workDir: workDir, env: env, hiding: hiddenFiles),
             workDir: workDir,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch sandboxed script"
@@ -118,13 +124,18 @@ extension SandboxedScriptRunner {
 
 // MARK: - Platform-specific sandbox setup
 
-private func sandboxedLaunch(script: URL, workDir: URL, env: [String: String]) -> ScriptLaunch {
+private func sandboxedLaunch(
+    script: URL, workDir: URL, env: [String: String], hiding hiddenFiles: [URL]
+)
+    -> ScriptLaunch
+{
     let invocation = scriptInvocation(for: script)
     return sandboxWrap(
         executablePath: invocation.executableURL.path,
         arguments: invocation.arguments,
         workDir: workDir,
-        environment: mergedScriptEnvironment(overrides: env))
+        environment: mergedScriptEnvironment(overrides: env),
+        hiding: hiddenFiles)
 }
 
 /// The directories a script may see under the work root: its working
@@ -160,7 +171,8 @@ private func sandboxWrap(
     executablePath: String,
     arguments commandArguments: [String],
     workDir: URL,
-    environment: [String: String]
+    environment: [String: String],
+    hiding hiddenFiles: [URL] = []
 ) -> ScriptLaunch {
     let visible = SandboxVisibleDirectories(workDir: workDir, environment: environment)
 
@@ -183,13 +195,15 @@ private func sandboxWrap(
             "chickadee-sandbox",
             visible.workRoot.path,
             String(visible.directories.count),
-        ] + visible.directories.map(\.path) + [executablePath] + commandArguments,
+        ] + visible.directories.map(\.path)
+            + [String(hiddenFiles.count)] + hiddenFiles.map(\.standardizedFileURL.path)
+            + [executablePath] + commandArguments,
         env: environment
     )
     #elseif os(macOS)
     return ScriptLaunch(
         executablePath: "/usr/bin/sandbox-exec",
-        arguments: ["-p", macOSSandboxProfile(visible: visible), executablePath]
+        arguments: ["-p", macOSSandboxProfile(visible: visible, hiding: hiddenFiles), executablePath]
             + commandArguments,
         env: environment
     )
@@ -243,6 +257,14 @@ private let linuxMountPrelude = """
         shift
         i=$((i+1))
     done
+    hidden=$1
+    shift
+    i=0
+    while [ "$i" -lt "$hidden" ]; do
+        printf '%s\\n' "$1" >> /mnt/hidden
+        shift
+        i=$((i+1))
+    done
     mount -t tmpfs -o nosuid,nodev,size=512m chickadee-private-tmp /tmp
     if [ -d /dev/shm ]; then
         mount -t tmpfs -o nosuid,nodev,size=64m chickadee-private-shm /dev/shm
@@ -255,6 +277,11 @@ private let linuxMountPrelude = """
         mount --bind "/mnt/$i" "$dir"
         i=$((i+1))
     done < /mnt/paths
+    if [ -f /mnt/hidden ]; then
+        while IFS= read -r file; do
+            if [ -e "$file" ]; then mount --bind /dev/null "$file"; fi
+        done < /mnt/hidden
+    fi
     umount -l /mnt
     if [ -n "${TMPDIR:-}" ]; then
         mkdir -p "$TMPDIR" 2>/dev/null || true
@@ -267,7 +294,7 @@ private let linuxMountPrelude = """
 // MARK: - macOS sandbox profile
 
 #if os(macOS)
-private func macOSSandboxProfile(visible: SandboxVisibleDirectories) -> String {
+private func macOSSandboxProfile(visible: SandboxVisibleDirectories, hiding hiddenFiles: [URL]) -> String {
     // Policy intent:
     //   • Read the entire filesystem (system libs, JDK/Python runtimes, etc.),
     //     except the work root, where only the job's own directories are
@@ -293,12 +320,18 @@ private func macOSSandboxProfile(visible: SandboxVisibleDirectories) -> String {
     let visibleRules = visible.directories
         .map { "(allow file-read* file-write* (subpath \"\(realPath($0))\"))" }
         .joined(separator: "\n")
+    // After the allow rules, so the last match denies the other suite scripts.
+    let hiddenRules =
+        hiddenFiles
+        .map { "(deny file-read* file-write* (literal \"\(realPath($0))\"))" }
+        .joined(separator: "\n")
     return """
         (version 1)
         (deny default)
         (allow file-read* (subpath "/"))
         (deny file-read* file-write* (subpath "\(realPath(visible.workRoot))"))
         \(visibleRules)
+        \(hiddenRules)
         (allow file-write*
             (literal "/dev/null")
             (literal "/dev/stdout")

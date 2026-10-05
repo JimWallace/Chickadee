@@ -40,15 +40,23 @@ struct NativeScriptExecutor: ScriptExecutor, Sendable {
     /// in RunnerCore's `executeSuites` — that loop is the wasm-pinned shared
     /// implementation and must keep receiving only the assignment default.
     let overrides: [String: Int]
+    /// Every script of the job's suite. While one runs, the others are hidden
+    /// from it where the runner can enforce that (the sandbox): a submission
+    /// runs inside its test's process, so without this a public test could
+    /// read the release and secret test scripts beside it
+    /// (docs/grading-integrity.md, phase 2). Support files, grader-only ones
+    /// included, stay readable: tests use them.
+    let suiteScripts: [String]
 
     init(
         runner: any ScriptRunner, workDir: URL,
-        env: [String: String] = [:], overrides: [String: Int] = [:]
+        env: [String: String] = [:], overrides: [String: Int] = [:], suiteScripts: [String] = []
     ) {
         self.runner = runner
         self.workDir = workDir
         self.env = env
         self.overrides = overrides
+        self.suiteScripts = suiteScripts
     }
 
     func scriptExists(_ name: String) async -> Bool {
@@ -61,8 +69,20 @@ struct NativeScriptExecutor: ScriptExecutor, Sendable {
             workDir: workDir,
             timeLimitSeconds: resolveTimeLimit(
                 script: script, default: timeLimitSeconds, overrides: overrides),
-            env: env
+            env: env,
+            hiding: scriptsHidden(whileRunning: script)
         )
+    }
+
+    /// The other suite scripts that exist in the working directory.
+    func scriptsHidden(whileRunning script: String) -> [URL] {
+        var seen: Set<String> = [script]
+        var hidden: [URL] = []
+        for other in suiteScripts where seen.insert(other).inserted {
+            let url = workDir.appendingPathComponent(other)
+            if FileManager.default.fileExists(atPath: url.path) { hidden.append(url) }
+        }
+        return hidden
     }
 }
 

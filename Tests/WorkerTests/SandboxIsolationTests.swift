@@ -143,6 +143,24 @@ import Testing
         #expect(output.stdout.contains("made \(tmpdir.path)/"))
     }
 
+    @Test(.requiresSandbox) func anotherSuiteScriptIsHiddenAndTheOwnScriptStillRuns() async throws {
+        let other = ownJob.appendingPathComponent("secrettest_other.sh")
+        try "echo the secret test\n".write(to: other, atomically: true, encoding: .utf8)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            if grep -q "the secret test" secrettest_other.sh 2>/dev/null; then echo "hidden script readable"; exit 1; fi
+            echo own script ran
+            """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(
+            script: script, workDir: ownJob, timeLimitSeconds: 60, env: [:], hiding: [other])
+        #expect(output.exitCode == 0, "stdout: \(output.stdout) stderr: \(output.stderr)")
+        #expect(output.stdout.contains("own script ran"))
+        // Hidden from the script only: the file itself is untouched.
+        #expect(try String(contentsOf: other, encoding: .utf8) == "echo the secret test\n")
+    }
+
     @Test(.requiresSandbox) func theProbeLeavesNothingBehind() async throws {
         let before = try FileManager.default.contentsOfDirectory(atPath: workRoot.path).sorted()
         let reason = await SandboxedScriptRunner.probe(workDir: workRoot)
