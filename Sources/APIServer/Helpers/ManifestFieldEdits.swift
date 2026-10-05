@@ -204,16 +204,6 @@ func requiresUploadOnlySubmission(_ language: AssignmentLanguage) -> Bool {
     return false
 }
 
-/// The same question asked of a manifest's recorded `language`, for the sites
-/// that hold raw manifest JSON rather than a decoded `TestProperties`. An
-/// absent language is not upload-only.
-func manifestRequiresUploadOnlySubmission(_ manifest: String?) -> AssignmentLanguage? {
-    guard let language = manifest.flatMap(decodeManifest(fromJSON:))?.language,
-        requiresUploadOnlySubmission(language)
-    else { return nil }
-    return language
-}
-
 /// Reads the recorded `language` of a manifest JSON string, or nil when none
 /// is recorded (or the manifest can't be decoded).
 func currentManifestLanguage(_ manifest: String?) -> String? {
