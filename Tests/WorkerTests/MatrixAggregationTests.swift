@@ -57,6 +57,23 @@ import Testing
         #expect(folded.longResult == nil)
     }
 
+    /// The folded match entry keeps its points and earns them times the mean
+    /// win fraction, so a matrix activity reaches the grade unless the author
+    /// gives the entry 0 points. `docs/class-activities.md` says so (#2186).
+    @Test func theFoldedMatchEntryKeepsItsPoints() throws {
+        let runs = (0..<5).map { index in
+            MatrixRun(
+                opponent: opponent("o\(index)"),
+                outcomes: [
+                    outcome("match", status: index < 2 ? .pass : .fail, score: index < 2 ? 1 : 0, metric: 1, points: 10)
+                ])
+        }
+        let folded = try #require(aggregateMatrixRuns(runs).first)
+        #expect(folded.points == 10)
+        #expect(abs(folded.score - 0.4) < 1e-9)
+        #expect(folded.status == .fail)
+    }
+
     /// Fewer than half won is a fail; one error or timeout in any run marks
     /// the entry so, because a broken script must never read as a loss.
     @Test func theStatusRules() throws {

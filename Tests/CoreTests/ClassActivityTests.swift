@@ -59,4 +59,13 @@ import Testing
         #expect(!kind.summary.isEmpty)
         #expect(ActivityKind(rawValue: kind.rawValue) == kind)
     }
+
+    /// A kind that plays the class must not promise that its match results
+    /// stay off the grade: the match entry is graded like any suite entry,
+    /// and the copy tells the author to give it 0 points (#2186).
+    @Test(arguments: ActivityKind.allCases.filter { $0.opponentSource == .classmates })
+    func aMatrixKindSaysItsMatchEntryIsGraded(kind: ActivityKind) {
+        #expect(kind.summary.contains("give it 0 points"))
+        #expect(!kind.summary.contains("never the grade of record"))
+    }
 }
