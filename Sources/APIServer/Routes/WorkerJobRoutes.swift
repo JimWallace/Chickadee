@@ -138,13 +138,15 @@ struct WorkerJobRoutes: RouteCollection {
 
         let evaluator = ClaimEvaluator(
             assignmentRequirements: req.application.assignmentRequirements,
-            compatibilityMatcher: CompatibilityMatcher()
+            compatibilityMatcher: CompatibilityMatcher(),
+            db: req.db,
+            application: req.application,
+            logger: req.logger
         )
 
         let candidates = try await collectClaimCandidates(on: req.db)
         return try await evaluateAndClaimCandidate(
             candidates: candidates,
-            req: req,
             body: body,
             runnerProfile: runnerProfile,
             evaluator: evaluator,
