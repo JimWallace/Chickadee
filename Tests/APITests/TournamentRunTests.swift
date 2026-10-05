@@ -220,6 +220,44 @@ import VaporTesting
         }
     }
 
+    /// A round whose slots are decided but whose advance never ran (the
+    /// advance failed after the result was committed) is finished by a
+    /// replayed report. A second advance for the same round does nothing,
+    /// so two ingests that land together enqueue the next round once
+    /// (#2184).
+    @Test func aReplayFinishesAnAdvanceAndASecondAdvanceDoesNothing() async throws {
+        try await withAssignmentRoutesApp { app in
+            let fx = try await fixture(app, prefix: "replay", students: 4)
+            let run = try await startTournament(setup: fx.setup, schedule: .bracket, startedBy: nil, on: app.db)
+            let first = try await slots(app, run)
+            #expect(first.count == 2)
+            // Both slots decided with no advance, as when the advance threw.
+            for slot in first {
+                slot.winnerSeed = slot.homeSeed
+                slot.completedAt = Date()
+                try await slot.update(on: app.db)
+            }
+            #expect(try await reload(app, run).currentRound == 1)
+
+            try await land(app, slot: first[0], homeWins: false)
+            #expect(try await slots(app, run).first?.winnerSeed == first[0].homeSeed, "a replay decides nothing")
+            #expect(try await reload(app, run).currentRound == 2)
+            #expect(try await slots(app, run).filter { $0.round == 2 }.count == 1)
+
+            // The other ingest's advance for round 1 arrives late.
+            try await advanceTournamentIfRoundComplete(runID: try run.requireID(), on: app.db)
+            try await land(app, slot: first[1], homeWins: true)
+            #expect(try await reload(app, run).currentRound == 2)
+            #expect(try await reload(app, run).status == APITournamentRun.Status.running)
+            #expect(try await slots(app, run).filter { $0.round == 2 }.count == 1)
+            let matchJobs = try await APISubmission.query(on: app.db)
+                .filter(\.$testSetupID == fx.setupID)
+                .filter(\.$kind == APISubmission.Kind.tournamentMatch)
+                .count()
+            #expect(matchJobs == 3, "two first-round jobs and one final, never a second final")
+        }
+    }
+
     /// A match that never built advances the opponent, so a broken
     /// submission cannot stall a round.
     @Test func aMatchThatCouldNotRunAdvancesTheOpponent() async throws {

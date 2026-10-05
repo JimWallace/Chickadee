@@ -93,9 +93,15 @@ struct ResultRoutes: RouteCollection {
 
             // A tournament match reaches only the bracket, whatever its
             // build status: a match that could not run advances the
-            // opponent rather than stalling the round.
+            // opponent rather than stalling the round. Best effort, like the
+            // class effects below: the result is committed, so a failure
+            // here must not fail the report, which a runner would resend as
+            // a second result row. A replay of the report finishes an
+            // advance that failed (#2184).
             if submission.kind == APISubmission.Kind.tournamentMatch {
-                try await recordTournamentMatch(submission: submission, collection: collection, on: req.db)
+                await effects.bestEffort("tournament_match", submissionID: collection.submissionID) {
+                    try await recordTournamentMatch(submission: submission, collection: collection, on: req.db)
+                }
             }
 
             // The class corpus run's grade IS the class's coverage number
