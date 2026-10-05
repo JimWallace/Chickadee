@@ -16,6 +16,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 /// Why a tournament could not start; each is the web banner and the MCP
@@ -52,21 +53,25 @@ func startTournament(
     let entrants = try await snapshotEntrants(setup: setup, on: db)
     guard entrants.count >= 2 else { throw TournamentStartError.tooFewEntrants(entrants.count) }
 
-    for running in try await APITournamentRun.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$status == APITournamentRun.Status.running)
-        .all()
-    {
-        running.status = APITournamentRun.Status.superseded
-        try await running.update(on: db)
-    }
+    // One transaction, so a failure part-way leaves no run without its first
+    // round, and the superseded runs stay running (#2184).
+    return try await db.transaction { tx in
+        for running in try await APITournamentRun.query(on: tx)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$status == APITournamentRun.Status.running)
+            .all()
+        {
+            running.status = APITournamentRun.Status.superseded
+            try await running.update(on: tx)
+        }
 
-    let run = try APITournamentRun(
-        testSetupID: setupID, schedule: schedule, startedBy: startedBy, startedAt: Date(), entrants: entrants)
-    try await run.save(on: db)
-    let slots = TournamentPairing.firstRound(schedule: schedule, entrantCount: entrants.count)
-    try await enqueueRound(run: run, slots: slots, on: db)
-    return run
+        let run = try APITournamentRun(
+            testSetupID: setupID, schedule: schedule, startedBy: startedBy, startedAt: Date(), entrants: entrants)
+        try await run.save(on: tx)
+        let slots = TournamentPairing.firstRound(schedule: schedule, entrantCount: entrants.count)
+        try await enqueueRound(run: run, slots: slots, on: tx)
+        return run
+    }
 }
 
 /// The latest complete student submission per enrolled student, seeded by
@@ -139,8 +144,10 @@ func pairedOpponent(
 /// the slot's winner — the home entrant when the script passed, the away
 /// entrant otherwise, so an error, a timeout or a build failure can never
 /// stall a round — and advances the run when the round's last match lands.
-/// A replayed report finds the slot already decided and does nothing; a
-/// slot of a superseded run is decided but moves nothing.
+/// A replayed report finds the slot already decided and does not decide it
+/// again, but it still tries the advance, so a report whose advance failed
+/// can finish it (#2184). A slot of a superseded run is decided but moves
+/// nothing.
 func recordTournamentMatch(
     submission: APISubmission, collection: TestOutcomeCollection, on db: Database
 ) async throws {
@@ -148,11 +155,19 @@ func recordTournamentMatch(
         let slot = try await APITournamentMatch.query(on: db)
             .filter(\.$matchSubmissionID == submissionID)
             .first(),
-        slot.winnerSeed == nil,
-        let run = try await APITournamentRun.find(slot.tournamentID, on: db),
         let awaySeed = slot.awaySeed
     else { return }
+    if slot.winnerSeed == nil {
+        try await decideSlot(slot, awaySeed: awaySeed, submissionID: submissionID, collection: collection, on: db)
+    }
+    try await advanceTournamentIfRoundComplete(runID: slot.tournamentID, on: db)
+}
 
+/// Completes the match row the claim opened and records the slot's winner.
+private func decideSlot(
+    _ slot: APITournamentMatch, awaySeed: Int, submissionID: String, collection: TestOutcomeCollection,
+    on db: Database
+) async throws {
     let entry = collection.buildStatus == .passed ? matchOutcome(from: collection.outcomes) : nil
     let homeWon = entry?.status == .pass
     if let row = try await APIMatchResult.query(on: db)
@@ -169,40 +184,88 @@ func recordTournamentMatch(
     slot.winnerSeed = homeWon ? slot.homeSeed : awaySeed
     slot.completedAt = Date()
     try await slot.update(on: db)
-
-    guard run.status == APITournamentRun.Status.running else { return }
-    try await advanceTournamentIfRoundComplete(run: run, on: db)
 }
 
 /// Enqueues the next round once every slot of the current one has a winner,
 /// or completes the run and awards the winner's record.
-private func advanceTournamentIfRoundComplete(run: APITournamentRun, on db: Database) async throws {
-    guard let runID = run.id, let schedule = run.tournamentSchedule else { return }
-    let slots = try await APITournamentMatch.query(on: db).filter(\.$tournamentID == runID).all()
-    let current = slots.filter { $0.round == run.currentRound }
-    guard !current.isEmpty, current.allSatisfy({ $0.winnerSeed != nil }) else { return }
-    let completed = slots.map(\.slot)
-    let entrantCount = run.entrants.count
-    if let next = TournamentPairing.nextRound(schedule: schedule, entrantCount: entrantCount, completed: completed) {
-        try await enqueueRound(run: run, slots: next, on: db)
-        run.currentRound += 1
-        try await run.update(on: db)
-        return
-    }
-    run.status = APITournamentRun.Status.complete
-    run.completedAt = Date()
-    if let winnerSeed = TournamentPairing.winner(schedule: schedule, entrantCount: entrantCount, completed: completed),
-        let winner = run.entrants.first(where: { $0.seed == winnerSeed })
-    {
-        run.winnerUserID = winner.userID
-        try await run.update(on: db)
-        if let setup = try await APITestSetup.find(run.testSetupID, on: db) {
-            try await awardTournamentWinnerRecords(
-                setup: setup, userID: winner.userID, submissionID: winner.submissionID, on: db)
+///
+/// Safe to call from two ingests at once, and safe to call again (#2184).
+/// It reads the run fresh, inside one transaction, and CLAIMS the step with
+/// one conditional update that names the round it read
+/// (`claimTournamentStep`). Only the ingest whose claim lands enqueues the
+/// round or completes the run. Any other ingest, and a call for a round
+/// that already advanced, does nothing. Before, each ingest advanced from
+/// the run it had loaded before it decided its slot, so the last two matches
+/// of a round could see the next round's undecided slots and complete the
+/// run with no winner.
+func advanceTournamentIfRoundComplete(runID: UUID, on db: Database) async throws {
+    try await db.transaction { tx in
+        guard let run = try await APITournamentRun.find(runID, on: tx),
+            run.status == APITournamentRun.Status.running,
+            let schedule = run.tournamentSchedule
+        else { return }
+        let round = run.currentRound
+        let slots = try await APITournamentMatch.query(on: tx).filter(\.$tournamentID == runID).all()
+        let current = slots.filter { $0.round == round }
+        guard !current.isEmpty, current.allSatisfy({ $0.winnerSeed != nil }),
+            !slots.contains(where: { $0.round > round })
+        else { return }
+        let completed = slots.map(\.slot)
+        let entrantCount = run.entrants.count
+        if let next = TournamentPairing.nextRound(schedule: schedule, entrantCount: entrantCount, completed: completed)
+        {
+            guard try await claimTournamentStep(runID: runID, round: round, to: .nextRound, on: tx) else { return }
+            try await enqueueRound(run: run, slots: next, on: tx)
+            return
         }
-    } else {
-        try await run.update(on: db)
+        guard try await claimTournamentStep(runID: runID, round: round, to: .complete, on: tx) else { return }
+        run.completedAt = Date()
+        guard
+            let winnerSeed = TournamentPairing.winner(
+                schedule: schedule, entrantCount: entrantCount, completed: completed),
+            let winner = run.entrants.first(where: { $0.seed == winnerSeed })
+        else {
+            try await run.update(on: tx)
+            return
+        }
+        run.winnerUserID = winner.userID
+        try await run.update(on: tx)
+        if let setup = try await APITestSetup.find(run.testSetupID, on: tx) {
+            try await awardTournamentWinnerRecords(
+                setup: setup, userID: winner.userID, submissionID: winner.submissionID, on: tx)
+        }
     }
+}
+
+/// The step one ingest claims for a running tournament.
+private enum TournamentStep {
+    /// Moves `current_round` on by one.
+    case nextRound
+    /// Marks the run complete.
+    case complete
+}
+
+/// Claims `step` for the run while it is still running at `round`, in one
+/// `UPDATE … WHERE … RETURNING` statement, which is atomic on SQLite and
+/// Postgres (the `SingleUseRecord` pattern). True when this caller's update
+/// landed. False when another ingest claimed the step first.
+private func claimTournamentStep(
+    runID: UUID, round: Int, to step: TournamentStep, on db: Database
+) async throws -> Bool {
+    guard let sql = db as? SQLDatabase else { return true }
+    let assignment: SQLQueryString
+    switch step {
+    case .nextRound: assignment = "current_round = \(bind: round + 1)"
+    case .complete: assignment = "status = \(bind: APITournamentRun.Status.complete)"
+    }
+    let rows = try await sql.raw(
+        """
+        UPDATE \(unsafeRaw: APITournamentRun.schema) SET \(assignment) \
+        WHERE id = \(bind: runID) AND status = \(bind: APITournamentRun.Status.running) \
+        AND current_round = \(bind: round) RETURNING id
+        """
+    ).all()
+    return !rows.isEmpty
 }
 
 /// The most recent run for the setup, any status, with its slots in round
