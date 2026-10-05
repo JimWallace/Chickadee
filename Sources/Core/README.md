@@ -23,7 +23,7 @@ spawn.
 ## Debt: server-only files
 
 Measured by type name (2026-10, #1723, recounted in #2129), `Sources/Worker`
-references nothing from 32 files here, 4,980 lines, none of them a member of
+references nothing from 32 files here, 4,981 lines, none of them a member of
 `TestProperties`, `Job` or a result type. They compile into the runner for
 nothing. Each group is a move to `APIServer`, one PR per group, each with a
 struct test suite that needs no app; do not add a sixth group. The owning audit
@@ -38,7 +38,7 @@ sweep is named.
   `AcademicTerm`, `SlipDayPolicy`, `AssignmentVisibility`, `CourseRole`,
   `ContentAttachment`, `SolutionVisibility`, `ContentItemKind`, `ContentLink`,
   `CourseEnrollmentMode` (sweeps 4 and 7).
-- **Authoring renderers and drivers**, 1,277 lines: `NotebookFunctionScanner`,
+- **Authoring renderers and drivers**, 1,278 lines: `NotebookFunctionScanner`,
   `JSONValueCppLiteral`, `JSONValueJavaLiteral`, `JSONValueRacketLiteral`,
   `LuaPersonalizationRuntime`, `OctavePersonalizationRuntime`,
   `RPersonalizationRuntime`. `JSONValue.swift` mixes the shared model with four
