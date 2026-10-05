@@ -83,6 +83,10 @@ MAX_RETRY_DELAY_SECS=3600
 WAITING_VERSION=""
 WAITING_SINCE=0
 WAIT_STUCK_AFTER_SECS=7200
+# How long refresh_runner waits after `compose up` before it asks Docker whether
+# the runner is still up. The runner checks its own command at startup (the
+# `--sandbox` probe) and exits within a few seconds when the check fails.
+RUNNER_SETTLE_SECS=15
 # Set by stage_release_image: the digest reference bluegreen-deploy.sh deploys.
 STAGED_IMAGE=""
 WAIT_REASON=""
@@ -215,11 +219,11 @@ PY
 # health gate was never reached. That message sent an incident responder after
 # the wrong subsystem for a day. Whatever the deploy actually printed is better
 # than a guess, so record that.
-deploy_failure_reason() {  # $1 = captured output file
+deploy_failure_reason() {  # $1 = captured output file, $2 = text when no line matches (optional)
   local line
   line="$(grep -aiE 'error|cannot|refused|denied|no such|not found|failed' "$1" 2>/dev/null | tail -1)"
   line="$(printf '%s' "$line" | tr -d '\r' | sed 's/\x1b\[[0-9;]*m//g')"
-  [ -n "$line" ] || line="deploy script exited non-zero with no recognisable error line"
+  [ -n "$line" ] || line="${2:-deploy script exited non-zero with no recognisable error line}"
   printf '%s' "${line:0:400}"
 }
 
@@ -400,13 +404,53 @@ refresh_runner() {  # $1 = version tag (history label only)
   fi
 
   log "refreshing Compose runner '$RUNNER_SERVICE' onto the new image..."
-  if docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" up -d --no-deps "$RUNNER_SERVICE" >/dev/null 2>&1; then
-    append_history "$ver" runner-refresh ok "runner '$RUNNER_SERVICE' recreated on new image"
-    log "runner refresh complete."
-  else
+  if ! docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" up -d --no-deps "$RUNNER_SERVICE" >/dev/null 2>&1; then
     append_history "$ver" runner-refresh failed "compose up failed; runner may be stale"
     log "WARN: runner refresh failed; server is live but the runner may be on a stale image."
+    return 0
   fi
+
+  # `compose up` returns when the container starts, not when the runner works.
+  # A runner that cannot keep a promise its command makes (`--sandbox` on a
+  # host that refuses user namespaces) exits at startup, and Docker restarts it
+  # in a loop. Before this check, that loop was recorded here as "ok".
+  local before after reason
+  before="$(runner_container_state)"
+  sleep "$RUNNER_SETTLE_SECS"
+  after="$(runner_container_state)"
+  if [ "${after%% *}" != "running" ] || [ "${after#* }" != "${before#* }" ]; then
+    reason="$(runner_exit_reason)"
+    append_history "$ver" runner-refresh failed "runner '$RUNNER_SERVICE' does not stay up: $reason"
+    log "WARN: runner '$RUNNER_SERVICE' does not stay up; server is live but nothing grades on this host: $reason"
+    return 0
+  fi
+  append_history "$ver" runner-refresh ok "runner '$RUNNER_SERVICE' recreated on new image"
+  log "runner refresh complete."
+}
+
+# The Compose runner's container ID, or nothing when it has no container.
+runner_container_id() {
+  docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" ps -a -q "$RUNNER_SERVICE" 2>/dev/null | head -n1
+}
+
+# "<status> <restart count>" for the Compose runner, for example "running 0".
+# Prints "missing -" when it has no container.
+runner_container_state() {
+  local cid; cid="$(runner_container_id)"
+  if [ -z "$cid" ]; then printf 'missing -'; return 0; fi
+  docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$cid" 2>/dev/null || printf 'missing -'
+}
+
+# The last error line the Compose runner wrote, for the history detail.
+runner_exit_reason() {
+  local cid out reason
+  cid="$(runner_container_id)"
+  [ -n "$cid" ] || { printf 'the runner has no container'; return 0; }
+  out="$(mktemp)"
+  docker logs --tail 20 "$cid" >"$out" 2>&1
+  reason="$(deploy_failure_reason "$out" "the runner wrote no recognisable error line")"
+  rm -f "$out"
+  printf '%s' "$reason"
 }
 
 # Returns 0 when deployed, 1 when the attempt failed (counted by

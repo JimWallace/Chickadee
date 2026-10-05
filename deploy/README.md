@@ -118,10 +118,57 @@ docker compose run --rm --no-deps --entrypoint /usr/bin/unshare runner --fork --
 
 If the check fails, the host refuses user namespaces. On Ubuntu 23.10 and
 later, the usual cause is the `kernel.apparmor_restrict_unprivileged_userns`
-setting. A runner that cannot start the sandbox does not start at all. Its log
+setting. With this setting at `1`, `unshare` creates the namespace but the
+write to `uid_map` fails, and the runner log says
+`unshare: write failed /proc/self/uid_map: Operation not permitted`. Read the
+setting:
+
+```bash
+sysctl kernel.apparmor_restrict_unprivileged_userns
+```
+
+If it is `1`, set it to `0` in a file that loads after Ubuntu's
+`10-apparmor.conf`, so that it stays set after a reboot, and apply it:
+
+```bash
+echo "kernel.apparmor_restrict_unprivileged_userns=0" | sudo tee /etc/sysctl.d/60-chickadee-userns.conf
+sudo sysctl --system
+```
+
+This setting applies to every process on the host, not only to the runner.
+Ubuntu restricts user namespaces to make the kernel attack surface smaller.
+Use this fix on a host that runs only Chickadee. On a shared host, give the
+runner container its own AppArmor profile that permits `userns`, and use that
+profile in place of `apparmor=unconfined`.
+
+Then run the check again. It must print `sandbox OK` before you start the
+runner with `--sandbox`.
+
+A runner that cannot start the sandbox does not start at all. Its log
 says `--sandbox is set, but this host cannot start the sandbox`, and the admin
 runner page shows it offline. It never grades without the sandbox it was told
-to use.
+to use. When the deployer refreshes such a runner after a release, it records
+`runner-refresh failed` in its deploy history, with that log line.
+
+After you change the host, recreate the runner. A runner that fails at startup
+stays in a Docker restart loop, and `docker compose up -d` does not recreate a
+container whose configuration did not change. Its log then shows only the old
+failures:
+
+```bash
+docker compose up -d --force-recreate --no-deps runner
+docker compose logs runner | grep sandbox_mode
+```
+
+The second command must show `"sandbox_mode":"sandboxed"`.
+
+A `docker-compose.override.yml` that sets `command:` for the runner replaces
+the command in this file. Add `--sandbox` to that command too. Look at the
+command that Compose will use:
+
+```bash
+docker compose config | grep -n -e sandbox -e unconfined
+```
 
 To run without the sandbox, remove `--sandbox` from the runner command and the
 two `unconfined` lines from its `security_opt`.

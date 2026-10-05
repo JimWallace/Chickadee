@@ -44,6 +44,24 @@ case "$1" in
       *RepoDigests*) echo "ghcr.io/jimwallace/chickadee@sha256:0123abcd" ;;
     esac
     ;;
+  compose)
+    case "$*" in
+      *" ps "*) echo "runnercid" ;;
+    esac
+    ;;
+  inspect)
+    # A crashing runner restarts between any two looks at it.
+    if [ -f "$STUB/runner_crashing" ]; then
+      n=$(( $(cat "$STUB/runner_restarts" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$STUB/runner_restarts"
+      echo "restarting $n"
+    else
+      echo "running 0"
+    fi
+    ;;
+  logs)
+    cat "$STUB/runner_logs" 2>/dev/null
+    ;;
 esac
 exit 0
 SH
@@ -275,6 +293,26 @@ run_cycle
 printf '{"command": "approve", "version": "v0.5.232"}' > "$COMMAND_FILE"
 run_cycle
 expect_calls "deploy-script deploy" 2
+
+# ---------------------------------------------------------------------------
+start_case "a runner that stays up records the refresh as ok"
+run_cycle
+expect_history runner-refresh ok
+expect_calls "docker inspect" 2
+
+# ---------------------------------------------------------------------------
+start_case "a runner that exits at startup records the refresh as failed, with its error"
+touch "$STUB/runner_crashing"
+printf '%s\n' "Error: --sandbox is set, but this host cannot start the sandbox: unshare: write failed /proc/self/uid_map: Operation not permitted" \
+  "A container that drops capabilities or uses the default seccomp profile refuses user and mount namespaces. Remove --sandbox, or allow them." \
+  > "$STUB/runner_logs"
+run_cycle
+expect_history runner-refresh failed
+grep -q 'runner-refresh.*uid_map: Operation not permitted' "$HISTORY_FILE" \
+  || fail "the history detail does not carry the runner's error line"
+expect_calls "deploy-script rollback" 0
+expect_state idle
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "a runner failure changed the deployed version to $DEPLOYED_VERSION"
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then
