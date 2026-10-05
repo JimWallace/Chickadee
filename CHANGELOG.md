@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.421] - 2026-10-05
+
+### Changed
+
+- **The literal renderers share one finite-double rule and call the escaper directly (#2125).** Seven one-line string wrappers are gone, and six copies of the "a whole number gets `.0`" rule are one `finiteDoubleLiteral`. The rendered bytes do not change, so `spec_hash` does not change.
+
+
 ## [0.5.420] - 2026-10-05
 
 ### Fixed
