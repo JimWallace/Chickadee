@@ -882,12 +882,7 @@ extension Application {
     /// first read for paths that never ran the handler (e.g. a test app that
     /// evaluates rules directly), so the value is always populated and stable.
     var serverStartedAt: Date {
-        get {
-            if let existing = storage[ServerStartedAtKey.self] { return existing }
-            let now = Date()
-            storage[ServerStartedAtKey.self] = now
-            return now
-        }
+        get { lazyStored(ServerStartedAtKey.self) { Date() } }
         set { storage[ServerStartedAtKey.self] = newValue }
     }
 }
