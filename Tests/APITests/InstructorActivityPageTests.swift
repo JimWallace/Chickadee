@@ -17,8 +17,8 @@ import VaporTesting
     private let toronto = TimeZone(identifier: "America/Toronto") ?? .current
 
     /// A row at `date` with everything else fixed.
-    private func row(at date: Date, actor: String = "prof") -> CourseActivityRow {
-        CourseActivityRow(
+    private func row(at date: Date, actor: String = "prof") -> CourseTimelineRow {
+        CourseTimelineRow(
             timestamp: "", timestampISO: "", actor: actor, category: "Content edit",
             summary: "Edited", target: "Lab", detail: "v2", link: nil, occurredAt: date,
             clockText: "", categoryKey: "edit", tileKind: "notebook", iconHref: "#i-pencil")
@@ -80,7 +80,7 @@ import VaporTesting
         ("Something new", "other", "link", "#i-link"),
     ])
     func categoriesMapToTiles(category: String, key: String, kind: String, icon: String) {
-        let tile = ActivityCategoryTile.tile(forCategory: category)
+        let tile = TimelineCategoryTile.tile(forCategory: category)
         #expect(tile.key == key)
         #expect(tile.kind == kind)
         #expect(tile.icon == icon)
@@ -89,7 +89,7 @@ import VaporTesting
     @Test func everyAuditCategoryMapsToATileThatExists() {
         // A new AuditCategory falls to the neutral tile rather than to nothing.
         for category in AuditCategory.allCases {
-            let tile = ActivityCategoryTile.tile(forCategory: category.rawValue)
+            let tile = TimelineCategoryTile.tile(forCategory: category.rawValue)
             #expect(!tile.kind.isEmpty && tile.icon.hasPrefix("#i-"))
         }
     }
