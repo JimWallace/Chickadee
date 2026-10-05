@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.453] - 2026-10-05
+
+### Fixed
+
+- **The GitHub compliance documents name the real routes and hosts.** The data-flow inventory and the trust-boundary document named routes that do not exist and left out `codeload.github.com`, the host the tarball download is redirected to, so an operator who allowlisted the listed hosts would break GitHub submission.
+
+### Fixed
+
+- **The "What reaches GitHub" table lists every crossing again.** It left out the `installation` webhook deliveries the server now acts on and the lookup that sends a student's numeric GitHub ID to read their current login. Both have rows, and the slice-5 prose no longer says that every other event changes nothing.
+
+
 ## [0.5.452] - 2026-10-05
 
 ### Fixed
