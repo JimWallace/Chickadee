@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.418] - 2026-10-05
+
+### Removed
+
+- **`SupportedBrowserMatrix.isUnsupported(userAgent:)` (#2112).** No production code called it. Both pages read `assess(_:).tier`. The four test assertions that called it now read the tier, beside the assertions that already did.
+
+
 ## [0.5.417] - 2026-10-04
 
 ### Changed
