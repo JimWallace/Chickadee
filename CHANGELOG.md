@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.465] - 2026-10-05
+
+### Security
+
+- **A sandboxed test no longer sees the job's other test scripts.** Every script of a job runs in one test setup directory, and the submission runs inside its test's process, so a public test's submission could read the release and secret test scripts beside it. While one suite script runs, the sandbox now covers each of the job's other suite scripts with `/dev/null` in the script's mount namespace on Linux, and denies them in the profile on macOS. The running script, the support files (grader-only ones included, because tests use them) and the per-student inputs stay readable. A hand-written test that reads another suite script now reads an empty file; put shared code in a support file instead. Phase 2 of `docs/grading-integrity.md` (#2241).
+
+
 ## [0.5.464] - 2026-10-05
 
 ### Security
