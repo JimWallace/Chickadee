@@ -59,15 +59,6 @@ import VaporTesting
         return (submission, setup, props)
     }
 
-    private func makeRequest() -> Request {
-        Request(
-            application: app,
-            method: .POST,
-            url: URI(path: "/api/v1/worker/request"),
-            on: app.eventLoopGroup.next()
-        )
-    }
-
     private func payload(workerID: String) -> WorkerActivityPayload {
         WorkerActivityPayload(
             workerID: workerID,
@@ -82,7 +73,10 @@ import VaporTesting
     private var evaluator: ClaimEvaluator {
         ClaimEvaluator(
             assignmentRequirements: app.assignmentRequirements,
-            compatibilityMatcher: CompatibilityMatcher()
+            compatibilityMatcher: CompatibilityMatcher(),
+            db: app.db,
+            application: app,
+            logger: app.logger
         )
     }
 
@@ -100,7 +94,6 @@ import VaporTesting
             var attempted: [String] = []
             let claimed = try await evaluateAndClaimCandidate(
                 candidates: candidates,
-                req: makeRequest(),
                 body: payload(workerID: "w1"),
                 runnerProfile: nil,
                 evaluator: evaluator,
@@ -129,7 +122,6 @@ import VaporTesting
             var attempts = 0
             let claimed = try await evaluateAndClaimCandidate(
                 candidates: candidates,
-                req: makeRequest(),
                 body: payload(workerID: "w1"),
                 runnerProfile: nil,
                 evaluator: evaluator,
@@ -156,7 +148,6 @@ import VaporTesting
 
             let claimed = try await evaluateAndClaimCandidate(
                 candidates: candidates,
-                req: makeRequest(),
                 body: payload(workerID: "w1"),
                 runnerProfile: nil,
                 evaluator: evaluator,
