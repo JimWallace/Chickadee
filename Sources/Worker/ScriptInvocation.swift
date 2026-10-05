@@ -8,6 +8,7 @@ struct ScriptInvocation {
 
 private let pythonBootstrap = """
     import builtins
+    import os
     import runpy
     import sys
 
@@ -32,7 +33,35 @@ private let pythonBootstrap = """
     # sys.argv[0] to locate the test file (e.g. the Marmoset-era chickadee.py
     # helper) break when sys.argv[0] is left as '-c'.
     sys.argv = sys.argv[1:]
-    runpy.run_path(sys.argv[0], run_name="__main__")
+
+    # A test's result is its exit status, and the submission runs inside the
+    # test's process. A `SystemExit` raised in the submission's own code --
+    # `sys.exit(0)` from a function the test calls, or at the top level of a
+    # notebook the test runs -- would otherwise end the test with the
+    # submission's status, and status 0 reads as a pass. Exits from the test
+    # itself and from passed/failed/errored are left alone. This does not stop
+    # a determined submission (docs/grading-integrity.md, phase 2).
+    # The runtime's own list of student files, loaded or not: a submission
+    # whose import failed is still run again, as a script, by the notebook
+    # checks that read its executed state (`student_main_state`).
+    def _ck_submission_files():
+        return {os.path.realpath(str(_path)) for _path in _tr._ordered_student_files()}
+
+    def _ck_raised_in_submission(exit_request):
+        files = _ck_submission_files()
+        frame = exit_request.__traceback__
+        while frame is not None:
+            if os.path.realpath(frame.tb_frame.f_code.co_filename) in files:
+                return True
+            frame = frame.tb_next
+        return False
+
+    try:
+        runpy.run_path(sys.argv[0], run_name="__main__")
+    except SystemExit as _ck_exit:
+        if _ck_raised_in_submission(_ck_exit):
+            _tr.errored(f"the submission ended the test (SystemExit: {_ck_exit.code!r})")
+        raise
     """
 
 private func pythonInvocation(for script: URL) -> ScriptInvocation {
