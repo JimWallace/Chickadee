@@ -16,8 +16,8 @@ import Vapor
 
 /// Raw + lightly normalised values extracted from the save-new-assignment
 /// multipart body.  `suiteFiles` has been resolved across the
-/// "many" (`suiteFiles[]`) / "single" (`suiteFiles`) shapes via
-/// `MultipartFileList`; validation (e.g. "title is required", "notebook
+/// "many" (`suiteFiles[]`) / "single" (`suiteFiles`) shapes by
+/// `multipartFiles`; validation (e.g. "title is required", "notebook
 /// must be JSON") happens later, in `validateSaveNewAssignment`.
 struct SaveNewAssignmentForm {
     let assignmentName: String?
@@ -75,7 +75,7 @@ extension DraftAssignmentRoutes {
 
     /// Parses the save-new-assignment body — `suiteFiles` decodes both the
     /// array-typed (`suiteFiles[]`) and single-bare-`File` (Safari) shapes
-    /// via `MultipartFileList` — and returns the fields a typed handler
+    /// through `multipartFiles` — and returns the fields a typed handler
     /// would expect.  Throws `WebAssignmentError.invalidParameter` when the
     /// body isn't recognised.
     func parseSaveNewAssignmentForm(req: Request) throws -> SaveNewAssignmentForm {
@@ -87,7 +87,6 @@ extension DraftAssignmentRoutes {
             var draftID: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
-            var suiteFiles: MultipartFileList?
             var suiteConfig: String?
             var requiredPlatform: String?
             var requiredArchitecture: String?
@@ -102,10 +101,7 @@ extension DraftAssignmentRoutes {
             )
         }
 
-        let suiteFilesRaw =
-            try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? body.suiteFiles?.files
-            ?? []
+        let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req) ?? []
 
         return SaveNewAssignmentForm(
             assignmentName: try multipartTextField(named: ["assignmentName"], from: req)
