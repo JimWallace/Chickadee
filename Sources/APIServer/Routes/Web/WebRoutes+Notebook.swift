@@ -11,11 +11,6 @@ import Fluent
 import Foundation
 import Vapor
 
-enum NotebookFileKind: String {
-    case assignment
-    case solution
-}
-
 extension WebRoutes {
 
     // MARK: - GET /testsetups/:id/notebook

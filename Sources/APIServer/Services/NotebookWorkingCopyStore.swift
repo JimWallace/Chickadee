@@ -19,6 +19,12 @@ import Fluent
 import Foundation
 import Vapor
 
+/// Which of an assignment's two notebooks a working copy or a save names.
+enum NotebookFileKind: String {
+    case assignment
+    case solution
+}
+
 /// Which of the two readings of a notebook a working copy holds.
 ///
 /// A notebook with personalization is two documents at once: the *template*

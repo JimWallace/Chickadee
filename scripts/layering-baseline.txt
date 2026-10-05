@@ -5,22 +5,12 @@
 # down to Helpers/ (or into the service that owns it), or move the call up
 # into the route. One symbol per line; lines starting with # are comments.
 AchievementBadge
-NewAssignmentDraftFormState
-NewAssignmentDraftPayload
 NewAssignmentFields
-NotebookFileKind
 assignmentByTestSetupID
-autoScaffoldFromSolutionNotebook
 createAssignmentWithUniquePublicID
 deadlineOverrideValueForInstructorOpen
-defaultNotebookData
-draftSolutionNotebookPath
 enrolledStudentCountsByCourse
-ensureDraftNotebookDirectory
 materializeValidationGrading
-newAssignmentSectionGradingMode
 normalizedDeadlineOverrideAfterDueDateChange
-notebookFilenameForStorage
-removeDraftNotebookFiles
 studentUserIDsByCourse
 waterlooDateTimeFormatter

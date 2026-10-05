@@ -783,25 +783,3 @@ extension DraftAssignmentRoutes {
     }
 
 }
-
-// MARK: - File-scope helpers
-
-/// Resolves the default grading mode for the section identified by
-/// `sectionIDRaw` within `courseID`.  Falls back to `"worker"` when
-/// the section can't be resolved (e.g., the form's "Ungrouped"
-/// pseudo-section, or a missing section row).
-///
-/// File-scope so `NewAssignmentDraftService` (in `Services/`) can
-/// call it without needing to access the route extension's privates.
-func newAssignmentSectionGradingMode(
-    courseID: UUID,
-    sectionIDRaw: String,
-    on db: any Database
-) async throws -> String {
-    guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: db),
-        let sec = try await APICourseSection.find(sid, on: db)
-    else {
-        return "worker"
-    }
-    return sec.defaultGradingMode
-}
