@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.428] - 2026-10-05
+
+### Changed
+
+- **The draft and scaffold helpers live below the routes (#2142).** `AssignmentDraftHelpers.swift` and `NotebookScaffoldHelpers.swift` are in `Helpers/`, `NewAssignmentDraftPayload.swift` sits beside `NewAssignmentDraftService`, `resolveSectionID` and `newAssignmentSectionGradingMode` share the new `Helpers/CourseSectionLookup.swift`, and `NotebookFileKind` lives in `NotebookWorkingCopyStore`. The layering baseline loses ten lines. No behaviour change.
+
+
 ## [0.5.427] - 2026-10-05
 
 ### Changed
