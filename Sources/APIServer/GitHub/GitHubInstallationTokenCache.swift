@@ -40,8 +40,8 @@ actor GitHubInstallationTokenCache {
         tokens.removeAll()
     }
 
-    /// The number of cached tokens, for tests.
-    var count: Int { tokens.count }
+    /// True when no token is cached, for tests.
+    var isEmpty: Bool { tokens.isEmpty }
 }
 
 struct GitHubInstallationTokenCacheKey: StorageKey {

@@ -305,7 +305,7 @@ import VaporTesting
                     try req.content.encode(["_csrf": token], as: .urlEncodedForm)
                 },
                 afterResponse: { res in #expect(res.status == .seeOther) })
-            #expect(await app.githubInstallationTokens.count == 0)
+            #expect(await app.githubInstallationTokens.isEmpty)
             #expect(await app.githubInstallationTokens.token(forAccount: 11) == nil)
         }
     }
