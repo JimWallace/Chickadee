@@ -149,7 +149,7 @@ extension AdminRoutes {
         else {
             throw Abort(.notFound)
         }
-        let newCode = try await uniqueCopyCode(base: source.code, db: req.db)
+        let newCode = try await uniqueCopyCode(base: source.code, term: source.term, db: req.db)
         let result = try await cloneCourse(
             source, code: newCode, name: "\(source.name) (Copy)", term: source.term, req: req)
         return req.redirect(to: "/admin/courses/\(try result.course.requireID().uuidString)")
@@ -646,15 +646,14 @@ extension AdminRoutes {
 
 // MARK: - Private helpers
 
-private func uniqueCopyCode(base: String, db: Database) async throws -> String {
+/// The first free `-COPY` code for a copy of `base` in `term`. "Free" is the
+/// rule every other door applies (`activeCourseCodeIsTaken`): case-folded
+/// and per term, so the copy cannot answer the key of an active course (#2229).
+private func uniqueCopyCode(base: String, term: AcademicTerm?, db: Database) async throws -> String {
     let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
-    let taken = Set(
-        try await APICourse.query(on: db)
-            .filter(\.$code ~~ candidates)
-            .all()
-            .map(\.code))
-    if let available = candidates.first(where: { !taken.contains($0) }) {
-        return available
+    for candidate in candidates {
+        let taken = try await activeCourseCodeIsTaken(candidate, term: term, excluding: nil, on: db)
+        if !taken { return candidate }
     }
     throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }

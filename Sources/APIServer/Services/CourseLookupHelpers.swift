@@ -64,9 +64,10 @@ func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: Databa
 }
 
 /// True when a non-archived course other than `excluding` already uses
-/// `code` in the same term ("no term" is one term). This is the rule of the
-/// `idx_courses_code_term_active` index, so a form can report a duplicate
-/// instead of failing on the index.
+/// `code` in the same term ("no term" is one term), or when the two courses
+/// would answer one URL key (`courseKeysCollide`). The first is the rule of
+/// the `idx_courses_code_term_active` index, so a form can report a
+/// duplicate instead of failing on the index.
 ///
 /// Codes are compared case-insensitively, the rule `coursesMatching` applies
 /// when it resolves a key. The index compares bytes, so "cs135" and "CS135"
@@ -77,9 +78,27 @@ func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: Databa
 func activeCourseCodeIsTaken(
     _ code: String, term: AcademicTerm?, excluding courseID: UUID?, on db: Database
 ) async throws -> Bool {
-    let lowered = code.lowercased()
-    return try await APICourse.query(on: db)
+    try await APICourse.query(on: db)
         .filter(\.$isArchived == false)
         .all()
-        .contains { $0.id != courseID && $0.code.lowercased() == lowered && $0.term == term }
+        .contains { $0.id != courseID && courseKeysCollide(code: code, term: term, with: $0) }
+}
+
+/// True when a course with `code` and `term` and the course `other` would
+/// answer one URL key, so `coursesMatching` could not tell them apart (#2227):
+///
+/// - the same key: the same code in the same term, or two years with one
+///   short label (2026 and 2126 are both "26");
+/// - one course's key is the other's code: a legacy course coded
+///   "CS136-W26" with no term, beside "CS136" in Winter 2026. An exact code
+///   wins over a key, so the termed course's links would reach the legacy one.
+///
+/// Two offerings of one code in different terms do not collide: the bare
+/// code names both on purpose, and each key names one.
+func courseKeysCollide(code: String, term: AcademicTerm?, with other: APICourse) -> Bool {
+    let key = APICourse.urlKey(code: code, term: term).lowercased()
+    let otherKey = other.urlKey.lowercased()
+    return key == otherKey
+        || (term != nil && key == other.code.lowercased())
+        || (other.term != nil && code.lowercased() == otherKey)
 }

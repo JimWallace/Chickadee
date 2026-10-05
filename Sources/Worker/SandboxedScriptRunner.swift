@@ -7,7 +7,8 @@
 //             private network namespace (no outbound connectivity) and a
 //             private mount namespace, in which the work root is covered by
 //             an empty tmpfs and only the job's own directories are bound
-//             back into place (#2061).
+//             back into place (#2061), and /tmp and /dev/shm are fresh,
+//             empty and private to the job.
 //
 // On macOS  — uses `sandbox-exec -p <profile>` to enforce a TCC-level policy:
 //             deny all network, allow file-reads from the system prefix except
@@ -211,12 +212,17 @@ private func sandboxWrap(
 /// the command and its arguments.
 ///
 /// Each visible directory is first bound into a private tmpfs on `/mnt`, so
-/// the prelude keeps a handle on it. The work root is then covered by an
-/// empty tmpfs, which hides every job directory, and each visible directory
-/// is bound back at its own path. The working directory is re-entered through
-/// the new mounts, so `pwd` reports the path the runner uses. A working
-/// directory directly under `/` has no work root to cover, and the prelude
-/// refuses it rather than cover `/`.
+/// the prelude keeps a handle on it. `/tmp` and `/dev/shm` are then covered by
+/// fresh, size-limited tmpfs mounts: every job runs as the same user, so
+/// without this a file one job writes there (a compiler's temporary file, R's
+/// session directory, Java's `hsperfdata`) is readable by every other job on
+/// the runner, and stays for the next one. The work root, which is usually
+/// under `/tmp`, is covered by an empty tmpfs, which hides every job directory,
+/// and each visible directory is bound back at its own path. `TMPDIR`, when it
+/// pointed into the old `/tmp`, is created again in the new one. The working
+/// directory is re-entered through the new mounts, so `pwd` reports the path
+/// the runner uses. A working directory directly under `/` has no work root to
+/// cover, and the prelude refuses it rather than cover `/`.
 private let linuxMountPrelude = """
     set -e
     root=$1
@@ -237,6 +243,11 @@ private let linuxMountPrelude = """
         shift
         i=$((i+1))
     done
+    mount -t tmpfs -o nosuid,nodev,size=512m chickadee-private-tmp /tmp
+    if [ -d /dev/shm ]; then
+        mount -t tmpfs -o nosuid,nodev,size=64m chickadee-private-shm /dev/shm
+    fi
+    mkdir -p "$root"
     mount -t tmpfs -o nosuid,nodev chickadee-work-root "$root"
     i=0
     while IFS= read -r dir; do
@@ -245,6 +256,9 @@ private let linuxMountPrelude = """
         i=$((i+1))
     done < /mnt/paths
     umount -l /mnt
+    if [ -n "${TMPDIR:-}" ]; then
+        mkdir -p "$TMPDIR" 2>/dev/null || true
+    fi
     cd "$cwd"
     exec "$@"
     """

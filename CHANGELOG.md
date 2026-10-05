@@ -9,6 +9,39 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.460] - 2026-10-05
+
+### Fixed
+
+- **A course key names one course.** A course is refused when its URL key would also name another active course: a termed course whose key equals another course's code, or two years with one short label. Before, the new course's links and its MCP key reached the other course (#2227).
+
+### Security
+
+- **A sandboxed test script gets its own `/tmp` and `/dev/shm`.** Every job on a runner runs as the same user, and the sandbox hid only the work root. A file that one job wrote elsewhere in `/tmp` or in `/dev/shm`, such as a compiler's temporary file, R's session directory or Java's `hsperfdata`, was readable by every other job on the runner and stayed for the next one. The staff sandbox checks proved this on 2026-10-05: a later job saw an earlier job's marker files in both places. Each script now gets fresh, empty, size-limited mounts there (512 MB for `/tmp`, 64 MB for `/dev/shm`), and a `TMPDIR` under `/tmp` is created again inside the new `/tmp`.
+
+
+## [0.5.459] - 2026-10-05
+
+### Security
+
+- **The image no longer gives `/app` to the application user.** A test script runs as that user, so on a runner without a read-only root file system a script could add files to `/app` or replace the runner binary, which then ran with the runner secret after the next restart. `/app` now stays owned by root, and only `/data` belongs to the application user. Nothing writes to `/app` at runtime: the server runs from `/data` and the runner works under `/tmp`. The image build in CI now fails if the application user can write any path under `/app`.
+
+
+## [0.5.458] - 2026-10-05
+
+### Security
+
+- **Linking another GitHub account moves the course-repository collaborator.** A student who linked a classmate's account by mistake, then their own, left the classmate with write access to their private course repository, and their own account was never invited. The row now records which account was invited; a new link removes the earlier collaborator and invites the linked account.
+
+### Deprecated
+
+- **The runner's `--worker-secret` flag.** It puts the runner secret in the runner's command line, and every test script can read that command line from `/proc`, also inside the sandbox. With the secret, a script can sign worker API calls, for example to report its own result. The runner now prints a deprecation warning when the flag is set, and the next minor release removes it. Set `RUNNER_SHARED_SECRET` instead.
+
+### Security
+
+- **The runner refuses `--worker-secret` together with `--sandbox`.** A runner started with both flags exits at startup and says why, because the flag defeats the isolation that `--sandbox` asks for.
+
+
 ## [0.5.457] - 2026-10-05
 
 ### Fixed
