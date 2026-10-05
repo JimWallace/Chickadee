@@ -46,11 +46,23 @@ struct GitHubSubmissionAccess: Sendable {
         let renew: @Sendable (Request) async throws -> String = { req in
             try await installationToken(accountID: accountID, app: app, secrets: secrets, req: req) { jwt in
                 // The installation must be on the linked account itself: a login
-                // that has since moved to another GitHub account fails here.
-                guard let installation = try await client.findInstallation(jwt, login),
+                // that has since moved to another GitHub account is not taken.
+                if let installation = try await client.findInstallation(jwt, login),
                     installation.accountID == accountID
-                else { throw GitHubSubmitError.notInstalled }
-                return installation.id
+                {
+                    return installation.id
+                }
+                // The stored login misses when the student renamed the
+                // account: find the installation by the account's numeric ID,
+                // and keep the login it carries now (#2206).
+                guard let found = try await client.installationByAccountID(jwt, accountID) else {
+                    throw GitHubSubmitError.notInstalled
+                }
+                if found.accountLogin != link.githubLogin {
+                    link.githubLogin = found.accountLogin
+                    try await link.save(on: req.db)
+                }
+                return found.installationID
             }
         }
         let token = try await renew(req)

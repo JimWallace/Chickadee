@@ -99,6 +99,14 @@ struct GitHubRepoClient: Sendable {
     var userLogin: @Sendable (_ token: String, _ userID: Int64) async throws -> String? = { _, _ in
         throw GitHubSubmitError.unavailable
     }
+    /// The App's installation on the account with this numeric ID, with the
+    /// account's login now, found by listing the App's installations
+    /// (`GET /app/installations`, which the App's JWT may read), or nil. The
+    /// fallback when the lookup by the stored login misses, which a renamed
+    /// account makes it do (#2206). The default finds none, which is the
+    /// answer before this existed.
+    var installationByAccountID:
+        @Sendable (_ appJWT: String, _ accountID: Int64) async throws -> GitHubUserInstallation? = { _, _ in nil }
     /// Invites `login` to the repository with write access.
     var addCollaborator: @Sendable (_ token: String, _ fullName: String, _ login: String) async throws -> Void =
         { _, _, _ in throw GitHubSubmitError.unavailable }
@@ -352,10 +360,41 @@ extension GitHubRepoClient {
             })
         addCourseRepositoryCalls(to: &live, transport: transport)
         addGrantCalls(to: &live, transport: transport)
+        addInstallationListing(to: &live, transport: transport)
         return live
     }
 
     /// The #1776 calls, which act as the App rather than as an installation.
+    private struct ListedInstallation: Decodable {
+        struct Account: Decodable {
+            let id: Int64
+            let login: String
+            let type: String
+        }
+        let id: Int64
+        let account: Account
+    }
+
+    /// At most this many pages of 100 are read when an installation is
+    /// looked up by account ID.
+    static let installationListPages = 20
+
+    private static func addInstallationListing(to live: inout GitHubRepoClient, transport: LiveTransport) {
+        live.installationByAccountID = { appJWT, accountID in
+            for page in 1...installationListPages {
+                let response = try await transport.get("/app/installations?per_page=100&page=\(page)", token: appJWT)
+                let listed = try transport.decode([ListedInstallation].self, from: response)
+                if let match = listed.first(where: { $0.account.id == accountID }) {
+                    return GitHubUserInstallation(
+                        installationID: match.id, accountID: match.account.id, accountLogin: match.account.login,
+                        accountType: match.account.type)
+                }
+                if listed.count < 100 { return nil }
+            }
+            return nil
+        }
+    }
+
     private static func addGrantCalls(to live: inout GitHubRepoClient, transport: LiveTransport) {
         live.appGrants = { appJWT in
             let response = try await transport.get("/app", token: appJWT)
