@@ -472,8 +472,12 @@ As built (slice 5):
   still reads GitHub on each load, because a cache fed by webhooks would store
   data the page needs for a few seconds only.
 - **A push** to a course repository records the server's time of receipt and
-  the new head SHA on its row. A deleted branch, a push to any other
-  repository, and every other event change nothing. Nothing is audited per
+  the new head SHA on its row. A deleted branch and a push to any other
+  repository change nothing.
+- **An installation** delivery whose action is `deleted` or `suspend` drops
+  the cached installation token for its account, so a removed App is not
+  served for the rest of the token's hour (#1768). Every other event changes
+  nothing. Nothing is audited per
   delivery, because deliveries are frequent and carry no staff action.
 - **What is discarded.** GitHub's push payload also carries the commit
   messages, the author and committer names and email addresses, and the
@@ -581,6 +585,7 @@ Chickadee.
 | 3 | The repository ID, `owner/name` and the SHA of each GitHub submission | In | Stored on the submission row |
 | 4 | That an instructor authorizes the App, and their role in the organization | Out, then In | The instructor's own account; the role is read once and not stored |
 | 4 | The organization's ID and login, and the installation ID | In | Stored in `github_course_organizations` |
+| 4 | The student's numeric GitHub ID, to read their current login (`GET /user/{account_id}`, #1766), and the login GitHub answers with | Out, then In | GitHub; the login is stored on the student's link |
 | 4 | A repository named `{assignment-slug}-{github-login}` | Out | **Every owner of the course organization, and every member who can see private repositories. The name contains the assignment's slug and the student's GitHub login.** |
 | 4 | The template's files, copied into the student's repository | Out (GitHub to GitHub) | The same people |
 | 4 | An invitation from the course organization to the student's GitHub login | Out | The student; the organization's owners |
@@ -588,6 +593,7 @@ Chickadee.
 | 4 | The archived state at the end of term | Out | The same people as the repository |
 | 4 | The App's permissions and events, and those of the installation on the bound organization (#1776) | In | Read for the admin and course pages only; not stored |
 | 5 | The deployment's webhook URL, in the App's settings | Out | The App's owner on GitHub |
+| 5 | Installation deliveries: the action and the account ID are used to drop a cached token; the account's login, the sender's login and ID, and the repository list arrive and are **discarded** | In | Not stored |
 | 5 | Push deliveries for course repositories: the repository ID and head SHA are kept; commit messages, author and committer names and emails, and the pusher's login and email arrive and are **discarded** | In | Stored: the time and the SHA on the course-repository row |
 | 6 | A commit status on a graded GitHub submission's commit, private repositories only: "n/m public tests passed", "No public tests" or "Build failed", a success or failure state, the context `chickadee/{assignment-slug}`, and a link to the results page | Out | Everyone who can see the repository: the student and, for a course repository, the organization's owners and members with access |
 
@@ -598,7 +604,8 @@ student clicks *Make my repository*. Slice 6 is the one slice that sends a
 test result, and it sends only the public-tier count, which the student
 already sees at once, and only to a private repository. Slice 5 is the one slice that receives
 personal data Chickadee does not want: the push payload's names and email
-addresses reach the server and are dropped at decoding.
+addresses, and the installation payload's logins, reach the server and are
+dropped at decoding.
 
 ### What Chickadee keeps, and for how long
 
