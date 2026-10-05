@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.439] - 2026-10-05
+
+### Fixed
+
+- **The course bundle carries the deadline override (#2166).** An assignment kept open past its due date imported without the override, so the next deadline sweep closed it. `BundledAssignment` now has an optional `deadlineOverrideActive`, written on export and applied on import; a bundle written before it was carried imports as before.
+
+
 ## [0.5.438] - 2026-10-05
 
 ### Fixed
