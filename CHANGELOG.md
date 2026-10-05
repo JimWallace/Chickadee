@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.466] - 2026-10-05
+
+### Fixed
+
+- **The personal-data export names each course offering.** Enrollments and submissions carried only the course code, so a student who took a course twice could not tell the two offerings apart. Both now carry `courseKey` (for example `CS135-F26`) and `courseTerm` (for example `Fall 2026`), and enrollments list the newest term first (#2230).
+
+
 ## [0.5.465] - 2026-10-05
 
 ### Security
