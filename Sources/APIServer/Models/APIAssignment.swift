@@ -164,7 +164,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         self.publicID = publicID
         self.testSetupID = testSetupID
         self.title = title
-        self.slug = slug ?? VanityURLRoutes.slugify(title)
+        self.slug = slug ?? assignmentSlug(fromTitle: title)
         self.dueAt = dueAt
         self.startsAt = startsAt
         self.visibilityRaw = visibility.rawValue

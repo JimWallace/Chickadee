@@ -64,7 +64,8 @@ import Vapor
             // Moved below the routes to `Helpers/` (#2142).
             "../../Helpers/AssignmentDraftHelpers.swift",
             "AssignmentRequirementHelpers.swift",
-            "AssignmentSlugHelpers.swift",
+            // Moved below the routes to `Helpers/` (#2143).
+            "../../Helpers/AssignmentSlugHelpers.swift",
             // Moved below the routes to `Helpers/` (#1726).
             "../../Helpers/ManifestFileHelpers.swift",
             "MultipartHelpers.swift",

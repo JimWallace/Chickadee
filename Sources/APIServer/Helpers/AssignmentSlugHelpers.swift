@@ -1,12 +1,24 @@
-// APIServer/Routes/Web/AssignmentSlugHelpers.swift
+// APIServer/Helpers/AssignmentSlugHelpers.swift
 //
 // Public-ID and per-course slug allocation for assignments.  Extracted
-// from AssignmentHelpers.swift (issue #442) — no behaviour changes.
+// from AssignmentHelpers.swift (issue #442). Moved below the routes to
+// Helpers/ (#2143): the authoring, version, BrightSpace and GitHub services
+// call it.
 
 import Core
 import Fluent
 import Foundation
 import Vapor
+
+/// The URL slug for an assignment title: lowercase ASCII letters and digits,
+/// every other run of characters collapsed to one hyphen. `VanityURLRoutes`
+/// keeps `slugify` as its name for this rule, because the vanity routes own
+/// the URL shape; the body lives here so the slug allocator below the routes
+/// needs no upward call (#2143).
+func assignmentSlug(fromTitle title: String) -> String {
+    let parts = title.lowercased().split { !$0.isASCII || (!$0.isLetter && !$0.isNumber) }
+    return parts.joined(separator: "-")
+}
 
 func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> APIAssignment? {
     try await APIAssignment.query(on: db)
@@ -30,7 +42,8 @@ func uniqueAssignmentSlug(
     db: Database,
     reserved: Set<String> = []
 ) async throws -> String {
-    let base = VanityURLRoutes.slugify(title).isEmpty ? "assignment" : VanityURLRoutes.slugify(title)
+    let slug = assignmentSlug(fromTitle: title)
+    let base = slug.isEmpty ? "assignment" : slug
     for suffix in 0..<10_000 {
         let candidate = suffix == 0 ? base : "\(base)-\(suffix + 1)"
         if reserved.contains(candidate) { continue }

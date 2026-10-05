@@ -488,3 +488,25 @@ extension Application {
         }
     }
 }
+
+// MARK: - Deadline override (moved from AssignmentHelpers.swift, #2143)
+
+/// Whether opening an assignment from the instructor page must set the
+/// deadline override: true when the due date is already in the past.
+func deadlineOverrideValueForInstructorOpen(
+    dueAt: Date?,
+    now: Date = Date()
+) -> Bool {
+    guard let dueAt else { return false }
+    return dueAt <= now
+}
+
+/// The override value to keep after a due-date change: an override survives
+/// only while the new due date is still in the past.
+func normalizedDeadlineOverrideAfterDueDateChange(
+    dueAt: Date?,
+    existingOverride: Bool
+) -> Bool {
+    guard let dueAt else { return false }
+    return dueAt <= Date() ? existingOverride : false
+}

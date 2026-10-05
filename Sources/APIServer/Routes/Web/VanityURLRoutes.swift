@@ -105,7 +105,6 @@ struct VanityURLRoutes: RouteCollection {
     }
 
     static func slugify(_ title: String) -> String {
-        let parts = title.lowercased().split { !$0.isASCII || (!$0.isLetter && !$0.isNumber) }
-        return parts.joined(separator: "-")
+        assignmentSlug(fromTitle: title)
     }
 }
