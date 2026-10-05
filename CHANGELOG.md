@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.443] - 2026-10-05
+
+### Changed
+
+- **One round-trip test pins the bundle course row (#2171).** The term, the enrollment mode and the four slip-day fields are asserted on an imported course through the export and import routes. Before, only the Core resolvers were tested.
+
+### Fixed
+
+- **Bundle import refuses an unknown content item kind or section grading mode and names it (#2172).** A bundle from a newer server imported such an item as a link in silence. The pre-check now fails the import before any row is written, with a message that names the item and the value.
+
+
 ## [0.5.442] - 2026-10-05
 
 ### Changed
