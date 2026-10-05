@@ -1,4 +1,4 @@
-// APIServer/Helpers/ManifestCoherence.swift
+// APIServer/Utilities/ManifestCoherence.swift
 //
 // The manifest rules every authoring door enforces, spelled once (#1713).
 // The zip upload, the three `setManifest*` edits and the MCP grading-mode

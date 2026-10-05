@@ -1,4 +1,4 @@
-// APIServer/Helpers/SecretFile.swift
+// APIServer/Utilities/SecretFile.swift
 //
 // The files that hold a secret (`.worker-secret`, `.mcp-signing-key`,
 // `.lti-tool-key`, `.github-app-secrets`) are created with mode 0600 in ONE

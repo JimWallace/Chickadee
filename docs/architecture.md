@@ -146,6 +146,8 @@ Each of those directories has one job, so a file goes where its imports say:
   a database module (#1730). Six validators that throw `Abort` may import Vapor
   and nothing else, and that list can only shrink.
 - `Helpers/` holds code that works with a `Request` or a database driver type.
+  The same script fails when a file there imports none of Vapor, Fluent and
+  Leaf and names no model, because such a file is pure (#2144).
 - `Services/` holds code over models, a database and the application.
 - `Bootstrap/` holds app setup: the database configuration and the migration
   registry, the session driver, and the migration-namespace reconciler.

@@ -3,7 +3,7 @@ set -uo pipefail
 
 # Every file that holds a secret is git-ignored.
 #
-# The names are read from the header of Sources/APIServer/Helpers/SecretFile.swift,
+# The names are read from the header of Sources/APIServer/Utilities/SecretFile.swift,
 # which lists every secret file the server writes, so a fifth secret file is
 # guarded the day its writer is documented beside the others. Each name is
 # checked with git check-ignore, the same answer `git add` would give.
@@ -16,7 +16,7 @@ set -uo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-source_file="Sources/APIServer/Helpers/SecretFile.swift"
+source_file="Sources/APIServer/Utilities/SecretFile.swift"
 names="$(sed -n '1,12p' "$source_file" | grep -o '`\.[a-z-]*`' | tr -d '`' | sort -u)"
 
 if [ -z "$names" ]; then

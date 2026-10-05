@@ -1,0 +1,10 @@
+# Helpers/ holds code that works with a request, a database driver type or a
+# model (#2144). A Helpers file that imports none of Vapor, Fluent and Leaf
+# and names no model is pure, belongs in Utilities/, and must fail the guard.
+guard="scripts/check-utilities-imports.sh"
+files="Sources/APIServer/Helpers/BlockingWork.swift"
+description="a Helpers file with no framework import and no model"
+expect="names no model"
+apply() {
+    sed -i '/^import Vapor$/d; /^import NIOCore$/d' Sources/APIServer/Helpers/BlockingWork.swift
+}

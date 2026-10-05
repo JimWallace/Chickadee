@@ -1,4 +1,4 @@
-// APIServer/Helpers/SupportFileNames.swift
+// APIServer/Utilities/SupportFileNames.swift
 //
 // One answer to "which files in this setup are support files": every zip
 // entry that is neither a graded suite script nor one of the two reserved
