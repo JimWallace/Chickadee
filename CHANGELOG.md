@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.441] - 2026-10-05
+
+### Changed
+
+- **One test pins every copied part of an assignment through the admin clone route (#2170).** The starter notebook, the reference solution, the shared support directory, the solution source, version 1, the secret-reveal and sync-exclusion policies, and all four slip-day fields are asserted on the clone. Before, these were pinned only through direct calls or the MCP tool.
+
+
 ## [0.5.440] - 2026-10-05
 
 ### Fixed
