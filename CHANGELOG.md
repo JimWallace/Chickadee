@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.448] - 2026-10-05
+
+### Fixed
+
+- **A validation run of a class activity plays the bundled bot.** On a round robin, tests-and-code or king-of-the-hill assignment, a validation run played every student or the current champion, so its verdict depended on the students' code and the match rows it opened never completed. A validation or class corpus run now plays the bot, or nobody, and opens no row.
+
+### Fixed
+
+- **`set_activity` describes every aggregation.** Its description said that every kind ranks on `metric` and seeds a highest-metric record, which is true of the leaderboard kinds only. The text is now derived per aggregation, it names the classmates and paired opponent sources, and `recordAchievementSeeded` reports the record the kind's aggregation seeds.
+
+
 ## [0.5.447] - 2026-10-05
 
 ### Fixed
