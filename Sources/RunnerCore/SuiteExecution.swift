@@ -61,7 +61,7 @@ public func executeSuites(
         if let blockedBy = item.dependsOn.first(where: { !passedScripts.contains($0) }) {
             outcomes.append(
                 TestOutcome(
-                    testName: outcomeTestName(for: item),
+                    testName: runnerOutcomeTestName(displayName: item.displayName, script: item.script),
                     testClass: nil,
                     tier: item.tier,
                     status: .fail,
@@ -102,7 +102,7 @@ public func executeSuites(
 private func makeOutcome(item: SuiteItem, output: ScriptOutput, attemptNumber: Int) -> TestOutcome {
     let interpreted = interpretScriptOutput(output)
     return TestOutcome(
-        testName: outcomeTestName(for: item),
+        testName: runnerOutcomeTestName(displayName: item.displayName, script: item.script),
         testClass: nil,
         tier: item.tier,
         status: interpreted.status,
@@ -116,13 +116,6 @@ private func makeOutcome(item: SuiteItem, output: ScriptOutput, attemptNumber: I
         attemptNumber: attemptNumber,
         isFirstPassSuccess: attemptNumber == 1 && interpreted.status == .pass
     )
-}
-
-/// Display name shown to students: the instructor's name when present and
-/// non-blank, otherwise the script filename with its extension stripped (or the
-/// raw filename if it has no stem).
-private func outcomeTestName(for item: SuiteItem) -> String {
-    runnerOutcomeTestName(displayName: item.displayName, script: item.script)
 }
 
 /// The `testName` a runner stamps on the outcome for a suite entry: the
@@ -157,10 +150,6 @@ private func nonBlankDisplayName(_ name: String?) -> String? {
 /// `runnerOutcomeTestName` — achievement refs may be authored as filenames and
 /// must strip to the same stem.
 public func runnerScriptStem(_ name: String) -> String {
-    scriptStem(name)
-}
-
-private func scriptStem(_ name: String) -> String {
     guard let dotIndex = name.lastIndex(of: "."), dotIndex != name.startIndex else {
         return name
     }
