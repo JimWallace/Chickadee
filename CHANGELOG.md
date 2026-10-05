@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.446] - 2026-10-05
+
+### Fixed
+
+- **A retest keeps a union activity's kills.** A retest of a tests-and-code submission deleted its completed rows against classmates' earlier code, so the kills its tests had found were lost. The claim now voids earlier rows for a standings kind (round robin) only.
+
+
 ## [0.5.445] - 2026-10-05
 
 ### Fixed
