@@ -669,22 +669,15 @@ func buildStandingsBoard(
     let viewer = reader.user
     let isStaff = reader.isStaff
     let lockingFor = reader.lockingFor
-    let standings = try await activityStandings(testSetupID: setup.id ?? "", on: db)
+    let ranked = try await rankedStandings(testSetupID: setup.id ?? "", courseID: setup.courseID, on: db)
     let identities = try await RankedIdentities.load(
-        userIDs: standings.map(\.userID), courseID: setup.courseID, on: db)
-    let ranked = standings.filter { identities.isOnRoster($0.userID) }
-
-    var ranks: [Int] = []
-    for (index, standing) in ranked.enumerated() {
-        let tiesPrevious = index > 0 && StandingKey(standing) == StandingKey(ranked[index - 1])
-        ranks.append(tiesPrevious ? ranks[index - 1] : index + 1)
-    }
-    let tieSizes = Dictionary(ranks.map { ($0, 1) }, uniquingKeysWith: +)
+        userIDs: ranked.map(\.standing.userID), courseID: setup.courseID, on: db)
 
     var rows: [StandingRow] = []
-    for (index, standing) in ranked.enumerated() {
-        let rank = ranks[index]
-        let isTied = (tieSizes[rank] ?? 1) > 1
+    for entry in ranked where identities.isOnRoster(entry.standing.userID) {
+        let standing = entry.standing
+        let rank = entry.rank
+        let isTied = entry.isTied
         guard
             let identity = try await identities.presentation(
                 for: standing.userID, includeName: isStaff, lockingFor: lockingFor,
@@ -721,20 +714,6 @@ func buildStandingsBoard(
         }
     }
     return StandingsBoard(rows: rows, items: items, you: you, rankedCount: rows.count)
-}
-
-/// The part of a standings row that decides its rank: two rows with equal
-/// keys share a rank.
-private struct StandingKey: Equatable {
-    let averageScore: Double
-    let wins: Int
-    let played: Int
-
-    init(_ standing: APIActivityStanding) {
-        averageScore = standing.averageScore
-        wins = standing.wins
-        played = standing.played
-    }
 }
 
 /// The users and enrollments behind a set of ranked rows, loaded in two
