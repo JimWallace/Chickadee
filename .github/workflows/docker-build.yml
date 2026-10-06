@@ -384,6 +384,68 @@ jobs:
           echo "----- container logs (tail 80, for the record) -----"
           docker logs --tail 80 chickadee-smoke 2>&1 || true
           docker rm -f chickadee-smoke >/dev/null 2>&1 || true
+      # The runner container starts as root for one pre-step,
+      # deploy/runner-entrypoint.sh, which delegates a cgroup subtree for the
+      # jobs and then starts the runner as uid 999 with no capability. No
+      # other job here has Docker with cgroup v2, so this is the only place
+      # that proves it. It uses the Compose runner service itself, so its
+      # user, capabilities and security options are the ones a host runs.
+      #
+      # The hosted runner's AppArmor refuses user namespaces to a user that is
+      # not root, as Ubuntu 23.10 and later do by default. deploy/README.md
+      # tells an operator to relax it for the sandbox; this does the same.
+      - name: "Runner container: job cgroups and the drop to uid 999"
+        run: |
+          set -euo pipefail
+          IMAGE='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          docker tag "$IMAGE" ghcr.io/jimwallace/chickadee:latest
+          export RUNNER_SHARED_SECRET=ci-placeholder-secret
+
+          echo "----- the pre-step, with a probe as the command -----"
+          docker compose run --rm --no-deps \
+            -v "$PWD/scripts/ci-runner-cgroup-probe.sh:/probe.sh:ro" \
+            runner "exec /app/runner-entrypoint.sh /bin/sh /probe.sh"
+
+          echo "----- the runner itself -----"
+          docker compose up -d --no-deps runner
+          sleep 15
+          cid="$(docker compose ps -a -q runner)"
+          state="$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$cid")"
+          # Capture the log once, and filter it only with readers that read
+          # all their input. Piped into `head` or `grep -q`, which close the
+          # pipe early, `docker compose logs` exited 255 and pipefail ended
+          # the step.
+          runner_log="$(docker compose logs runner 2>&1)"
+          printf '%s\n' "$runner_log" | sed -n 1,20p
+          if [ "$state" != "running 0" ]; then
+            echo "::error::The runner does not stay up (state: $state)."
+            exit 1
+          fi
+          printf '%s\n' "$runner_log" | grep "job cgroups delegated at /sandbox/jobs" >/dev/null \
+            || { echo "::error::The pre-step did not delegate the job cgroups."; exit 1; }
+          # Read the runner process from the host.
+          pid="$(docker inspect -f '{{.State.Pid}}' "$cid")"
+          status="$(sudo grep -E '^(Uid|CapEff|CapBnd):' "/proc/$pid/status")"
+          cgroup="$(sudo cat "/proc/$pid/cgroup")"
+          echo "$status"; echo "cgroup (host view): $cgroup"
+          # A cgroup that gives controllers to its children cannot hold a
+          # process, and the container's own cgroup now does. An operator
+          # still needs `docker exec`, which Docker places in the cgroup of
+          # the container's first process, /sandbox/runner.
+          exec_cgroup="$(docker exec "$cid" cat /proc/self/cgroup)" \
+            || { echo "::error::docker exec into the runner fails after the pre-step."; exit 1; }
+          echo "docker exec runs in: $exec_cgroup"
+          echo "$status" | grep -qE '^Uid:[[:space:]]+999[[:space:]]+999[[:space:]]+999[[:space:]]+999' \
+            || { echo "::error::The runner does not run as uid 999."; exit 1; }
+          [ "$(echo "$status" | grep -c '0000000000000000$')" = "2" ] \
+            || { echo "::error::The runner holds a capability."; exit 1; }
+          case "$cgroup" in
+            0::*/sandbox/runner) ;;
+            *) echo "::error::The runner is in $cgroup, not /sandbox/runner."; exit 1 ;;
+          esac
+          docker compose down
+
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
