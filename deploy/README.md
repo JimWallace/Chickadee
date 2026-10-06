@@ -115,7 +115,8 @@ jobs. A runner with six jobs needs 832. The runner prints a warning at startup
 when the limit is too small, or when it runs as root, where the kernel does
 not apply the per-script limit.
 
-What a test script writes in its working directory goes to a private tmpfs of
+Everything a test script writes, in its working directory, `/tmp`,
+`/var/tmp`, `/dev/shm` and `HOME`, goes to one private tmpfs of
 `--job-disk-limit` megabytes (default 256) and is discarded when the script
 ends, so one job cannot fill the work root for the others. That tmpfs is
 memory: with four jobs, allow for about 1 GB more in the container's memory

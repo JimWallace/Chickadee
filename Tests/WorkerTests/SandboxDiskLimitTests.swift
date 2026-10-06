@@ -107,6 +107,24 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: ownJob.appendingPathComponent("new.txt").path))
     }
 
+    /// `/tmp`, `/var/tmp`, `/dev/shm`, `HOME` and the working directory share
+    /// one private tmpfs (#2252), so the memory a job's files hold is at most
+    /// the limit, not the sum of one mount per place.
+    @Test(.requiresSandbox) func everyPlaceAScriptWritesSharesOneLimit() async throws {
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            dd if=/dev/zero of=/tmp/first bs=1M count=3 2>/dev/null && echo "first fits"
+            if dd if=/dev/zero of=second bs=1M count=3 2>/dev/null; then echo "second fits"; fi
+            exit 0
+            """, in: ownJob)
+        let output = await SandboxedScriptRunner(diskLimitMegabytes: 4)
+            .run(script: script, workDir: ownJob, timeLimitSeconds: 30)
+        #expect(output.exitCode == 0, "stderr: \(output.stderr)")
+        #expect(output.stdout.contains("first fits"))
+        #expect(!output.stdout.contains("second fits"), "stdout: \(output.stdout)")
+    }
+
     /// The working directory's parent is the covered work root. Without a
     /// limit there, a script could write into `..` and get around its own.
     @Test(.requiresSandbox) func theWorkRootAboveTheWorkingDirectoryCannotBeWritten() async throws {

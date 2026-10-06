@@ -10,9 +10,10 @@
 //             back into place (#2061), and /tmp, /dev/shm, /var/tmp and
 //             HOME are fresh, empty and private to the job. A script may start
 //             at most `processLimit` processes and threads at once (#2224).
-//             What a test script writes in its working directory goes to a
-//             private space of `diskLimitMegabytes` and is discarded when it
-//             ends (#2251).
+//             Everything a test script writes, in those places and in its
+//             working directory, goes to one private tmpfs of
+//             `diskLimitMegabytes` that is discarded when it ends (#2251,
+//             #2252).
 //
 // On macOS  — uses `sandbox-exec -p <profile>` to enforce a TCC-level policy:
 //             deny all network, allow file-reads from the system prefix except
@@ -63,8 +64,11 @@ struct SandboxedScriptRunner: ScriptRunner {
     /// build of a test and its submission needs a few megabytes.
     static let defaultDiskLimitMegabytes = 256
 
-    /// How much a test script may write in its working directory, in
-    /// megabytes (#2251). The job directories live on one mount that every job
+    /// How much a script may write in all, in megabytes: in its working
+    /// directory, `/tmp`, `/var/tmp`, `/dev/shm` and `HOME` together, in one
+    /// private tmpfs (#2251, #2252). A tmpfs is memory that belongs to no
+    /// process, so this also bounds the memory a job holds outside its
+    /// processes. The job directories live on one mount that every job
     /// on the runner shares, so one script that wrote without bound filled it,
     /// and every other job then failed to write. Now the script's writes go to
     /// a private, size-limited space over the working directory (an overlay),
@@ -109,8 +113,9 @@ struct SandboxedScriptRunner: ScriptRunner {
                 arguments: arguments,
                 workDir: workDir,
                 environment: mergedScriptEnvironment(overrides: [:]),
-                processLimit: processLimit,
-                diskLimitMegabytes: nil),
+                limits: SandboxLimits(
+                    processes: processLimit, diskMegabytes: diskLimitMegabytes,
+                    keepsWorkingDirectoryWrites: true)),
             workDir: workDir,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: launchErrorPrefix
@@ -181,8 +186,9 @@ extension SandboxedScriptRunner {
                 ],
                 workDir: probeDir,
                 environment: mergedScriptEnvironment(overrides: [:]),
-                processLimit: defaultProcessLimit,
-                diskLimitMegabytes: defaultDiskLimitMegabytes),
+                limits: SandboxLimits(
+                    processes: defaultProcessLimit, diskMegabytes: defaultDiskLimitMegabytes,
+                    keepsWorkingDirectoryWrites: false)),
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox probe")
@@ -214,8 +220,9 @@ extension SandboxedScriptRunner {
                 arguments: ["-c", "( : )"],
                 workDir: probeDir,
                 environment: mergedScriptEnvironment(overrides: [:]),
-                processLimit: 0,
-                diskLimitMegabytes: nil),
+                limits: SandboxLimits(
+                    processes: 0, diskMegabytes: defaultDiskLimitMegabytes,
+                    keepsWorkingDirectoryWrites: true)),
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox process-limit probe")
@@ -241,8 +248,9 @@ private func sandboxedLaunch(
         workDir: workDir,
         environment: mergedScriptEnvironment(overrides: env),
         hiding: hiddenFiles,
-        processLimit: processLimit,
-        diskLimitMegabytes: diskLimitMegabytes)
+        limits: SandboxLimits(
+            processes: processLimit, diskMegabytes: diskLimitMegabytes,
+            keepsWorkingDirectoryWrites: false))
 }
 
 /// The directories a script may see under the work root: its working
@@ -271,6 +279,15 @@ struct SandboxVisibleDirectories {
     }
 }
 
+/// What one sandboxed command may use: processes and threads, and megabytes
+/// of private space. `keepsWorkingDirectoryWrites` is `true` for a command
+/// whose writes in the working directory the job keeps: the make step.
+struct SandboxLimits {
+    let processes: Int
+    let diskMegabytes: Int
+    let keepsWorkingDirectoryWrites: Bool
+}
+
 /// The processes a Linux sandbox holds before its command starts any: the
 /// `unshare` parent and the command itself. `RLIMIT_NPROC` counts both, so the
 /// prelude adds them to the script's own limit.
@@ -278,16 +295,14 @@ let sandboxOwnProcessCount = 2
 
 /// Puts the platform's sandbox launcher in front of a command. The one place
 /// that decides how a command is sandboxed, so the probe and real jobs cannot
-/// use different wrappers. `diskLimitMegabytes` is `nil` for a command whose
-/// writes the job keeps, the make step.
+/// use different wrappers.
 private func sandboxWrap(
     executablePath: String,
     arguments commandArguments: [String],
     workDir: URL,
     environment: [String: String],
     hiding hiddenFiles: [URL] = [],
-    processLimit: Int,
-    diskLimitMegabytes: Int?
+    limits: SandboxLimits
 ) -> ScriptLaunch {
     let visible = SandboxVisibleDirectories(workDir: workDir, environment: environment)
 
@@ -308,8 +323,9 @@ private func sandboxWrap(
             "-c",
             linuxMountPrelude,
             "chickadee-sandbox",
-            String(processLimit + sandboxOwnProcessCount),
-            String(diskLimitMegabytes ?? 0),
+            String(limits.processes + sandboxOwnProcessCount),
+            String(limits.diskMegabytes),
+            limits.keepsWorkingDirectoryWrites ? "0" : "1",
             visible.workRoot.path,
             String(visible.directories.count),
         ] + visible.directories.map(\.path)
@@ -339,18 +355,22 @@ private func sandboxWrap(
 
 #if os(Linux)
 /// Runs inside the new namespaces, before the real command. Arguments: the
-/// process limit, the disk limit in megabytes (0 keeps the writes), the work
-/// root, the count of visible directories, the visible directories (the
+/// process limit, the size of the private space in megabytes, 1 to cover the
+/// working directory with the overlay or 0 to keep its writes, the work root,
+/// the count of visible directories, the visible directories (the
 /// working directory first), the count of hidden files, the hidden files, then
 /// the command and its arguments.
 ///
 /// Each visible directory is first bound into a private tmpfs on `/mnt`, so
-/// the prelude keeps a handle on it. `/tmp` and `/dev/shm` are then covered by
-/// fresh, size-limited tmpfs mounts: every job runs as the same user, so
+/// the prelude keeps a handle on it. One private tmpfs of the given size then
+/// holds everything the command may write, and `/tmp`, `/dev/shm`, `/var/tmp`
+/// and `HOME` are bound to fresh, empty folders in it (#2252). One mount, not
+/// one per place, so the memory that a job's files hold, which belongs to no
+/// process and which the kernel cannot attribute to the job, is at most that
+/// size. Every job runs as the same user, so
 /// without this a file one job writes there (a compiler's temporary file, R's
 /// session directory, Java's `hsperfdata`) is readable by every other job on
-/// the runner, and stays for the next one. `/var/tmp` and `HOME` get the same,
-/// and `HOME` matters most: Python runs `usercustomize.py` from the user site
+/// the runner, and stays for the next one. `HOME` matters most: Python runs `usercustomize.py` from the user site
 /// directory, R reads `~/.Rprofile` and Octave reads `~/.octaverc` at start,
 /// so on a host whose root file system is writable, one job could otherwise
 /// leave code there that runs inside every later job. The image installs
@@ -360,10 +380,10 @@ private func sandboxWrap(
 /// pointed into the old `/tmp`, is created again in the new one. The working
 /// directory is re-entered through the new mounts, so `pwd` reports the path
 /// the runner uses. A working directory directly under `/` has no work root to
-/// cover, and the prelude refuses it rather than cover `/`. With a disk limit,
+/// cover, and the prelude refuses it rather than cover `/`. For a test script,
 /// an overlay covers the working directory: the script reads the job's files
-/// through it, and what it writes goes to a private tmpfs of that size, which
-/// is discarded when the script ends (#2251). The other visible directories
+/// through it, and what it writes goes to the same private tmpfs, which is
+/// discarded when the script ends (#2251). The other visible directories
 /// (an opponent) are read-only, and so is the tmpfs that covers the work root,
 /// so a script cannot write into `..` either: no write reaches the shared
 /// mount or escapes the limit. The
@@ -375,9 +395,10 @@ private let linuxMountPrelude = """
     set -e
     limit=$1
     disk=$2
-    root=$3
-    count=$4
-    shift 4
+    overlay=$3
+    root=$4
+    count=$5
+    shift 5
     if [ "$root" = / ]; then
         echo "sandbox: the working directory sits directly under /, so there is no work root to isolate" >&2
         exit 2
@@ -385,7 +406,7 @@ private let linuxMountPrelude = """
     cwd=$(pwd)
     case "$cwd" in
         *,* | *:*)
-            if [ "$disk" -gt 0 ]; then
+            if [ "$overlay" = 1 ]; then
                 echo "sandbox: the working directory $cwd holds a comma or a colon, which an overlay cannot use" >&2
                 exit 2
             fi
@@ -409,15 +430,19 @@ private let linuxMountPrelude = """
         shift
         i=$((i+1))
     done
-    mount -t tmpfs -o nosuid,nodev,size=512m chickadee-private-tmp /tmp
+    mkdir /mnt/private
+    mount -t tmpfs -o nosuid,nodev,size="${disk}m" chickadee-job-private /mnt/private
+    mkdir -m 1777 /mnt/private/tmp /mnt/private/var-tmp /mnt/private/shm
+    mkdir /mnt/private/home /mnt/private/upper /mnt/private/work
+    mount --bind /mnt/private/tmp /tmp
     if [ -d /dev/shm ]; then
-        mount -t tmpfs -o nosuid,nodev,size=64m chickadee-private-shm /dev/shm
+        mount --bind /mnt/private/shm /dev/shm
     fi
     if [ -d /var/tmp ]; then
-        mount -t tmpfs -o nosuid,nodev,size=64m chickadee-private-var-tmp /var/tmp
+        mount --bind /mnt/private/var-tmp /var/tmp
     fi
     if [ -n "${HOME:-}" ] && [ "$HOME" != / ] && [ -d "$HOME" ]; then
-        mount -t tmpfs -o nosuid,nodev,size=256m chickadee-private-home "$HOME"
+        mount --bind /mnt/private/home "$HOME"
     fi
     mkdir -p "$root"
     mount -t tmpfs -o nosuid,nodev chickadee-work-root "$root"
@@ -428,11 +453,8 @@ private let linuxMountPrelude = """
         if [ "$i" -gt 0 ]; then mount -o remount,bind,ro "$dir"; fi
         i=$((i+1))
     done < /mnt/paths
-    if [ "$disk" -gt 0 ]; then
-        mkdir /mnt/scratch
-        mount -t tmpfs -o nosuid,nodev,size="${disk}m" chickadee-job-scratch /mnt/scratch
-        mkdir /mnt/scratch/upper /mnt/scratch/work
-        mount -t overlay -o "lowerdir=$cwd,upperdir=/mnt/scratch/upper,workdir=/mnt/scratch/work" \
+    if [ "$overlay" = 1 ]; then
+        mount -t overlay -o "lowerdir=$cwd,upperdir=/mnt/private/upper,workdir=/mnt/private/work" \
             chickadee-job-writes "$cwd"
     fi
     mount -o remount,ro,nosuid,nodev chickadee-work-root "$root"
