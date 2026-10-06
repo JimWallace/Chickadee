@@ -455,7 +455,10 @@ these protections:
   also marks itself non-dumpable at start, so a script cannot read the
   secret from the runner's own `/proc` entries.
 - **The host, with `--sandbox`.** The script cannot reach the network. On
-  Linux it has no real privileges. On macOS it can write only in its working
+  Linux it has no real privileges, and it starts with no capability at all,
+  not even inside its own namespace (#2268): the prelude that builds the
+  mounts needs them, but a script that kept them could `umount` the covers
+  below and read every other job and every cached test setup. On macOS it can write only in its working
   directory. Without `--sandbox`, the script runs as the runner's user, with
   network access. The manifest's `make` step runs in the same sandbox as the
   scripts (#2250); until then it ran outside it, even with `--sandbox`. When

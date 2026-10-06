@@ -391,6 +391,15 @@ private func sandboxWrap(
 /// refuses such a working directory. The command starts
 /// under the process limit, soft and hard, set last so the prelude's own
 /// `mount` and `mkdir` do not count against it.
+///
+/// The command starts with no capabilities (#2268). The prelude runs as root of
+/// the new user namespace, which owns the mount namespace, so it holds every
+/// capability there, and none of the mounts it makes is locked. A command that
+/// kept them could `umount` the covers and read every other job and every
+/// cached test setup. `setpriv` empties the inheritable, ambient and bounding
+/// sets and sets no-new-privs, so not even running a program as root in the
+/// namespace gives a capability back. The command needs none: it only reads
+/// and writes its own files.
 private let linuxMountPrelude = """
     set -e
     limit=$1
@@ -468,7 +477,8 @@ private let linuxMountPrelude = """
         mkdir -p "$TMPDIR" 2>/dev/null || true
     fi
     cd "$cwd"
-    exec /usr/bin/prlimit --nproc="$limit:$limit" -- "$@"
+    exec /usr/bin/setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs -- \
+        /usr/bin/prlimit --nproc="$limit:$limit" -- "$@"
     """
 #endif
 
