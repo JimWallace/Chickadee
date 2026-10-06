@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.485] - 2026-10-06
+
+### Fixed
+
+- **Session rows older than their `created_at` column are deleted.** The reaper skips a row with no `created_at`, and Vapor never fills that column when it updates a session. So the rows that predate the column stayed in the session table for ever. A one-time migration deletes them, and three comments that said they would age out are corrected. (#2281)
+
+
+## [0.5.484] - 2026-10-06
+
+### Fixed
+
+- **The hourly LTI reaper uses its index.** Its delete filtered `expires_at < now OR consumed`, and no index covers `consumed`, so each sweep scanned both tables. The reaper now runs two deletes per table, and each is a range on the `expires_at` index. Which rows it removes does not change. (#2279)
+
+
+## [0.5.483] - 2026-10-06
+
+### Fixed
+
+- **Tournament match jobs no longer scan every tournament slot.** The claim and the result ingest of a match job look up its slot by `match_submission_id`, and that column had no index. A new migration adds one. (#2278)
+
+
 ## [0.5.482] - 2026-10-06
 
 ### Changed

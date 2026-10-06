@@ -560,4 +560,9 @@ func registerMigrations(on app: Application) {
     // axes existed; a draw into the empty slots only (#1762). Raw SQL that
     // reads `users.avatar_spec`, so it must follow `CreateUsers`.
     app.migrations.add(FillLateAvatarAxes())
+
+    // One-time delete of the session rows that predate `created_at`, which
+    // the reaper can never age out (#2281). Raw SQL that reads
+    // `_fluent_sessions.created_at`, so it must follow `AddSessionsCreatedAt`.
+    app.migrations.add(DeleteUndatedSessions())
 }
