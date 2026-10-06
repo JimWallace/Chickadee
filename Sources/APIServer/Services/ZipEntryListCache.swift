@@ -1,9 +1,8 @@
 // APIServer/Services/ZipEntryListCache.swift
 //
 // Caches the entry-name list of a test setup zip.  Listing a zip shells out to
-// `/usr/bin/unzip` (`listZipEntries`) under the global zip process lock — one
-// subprocess spawn per call, with concurrent callers serializing behind one
-// another on the lock.  Several hot paths need that list per page view: the
+// `/usr/bin/unzip` (`listZipEntries`): one subprocess spawn per call.
+// Several hot paths need that list per page view: the
 // student dashboard's "does this setup contain a notebook?" check, and the
 // per-visit support-file symlink pass on the notebook page (which runs even
 // when the working copy is already seeded).  Caching the list keyed by the
@@ -17,8 +16,6 @@
 // one zip-listing cache rather than two near-identical ones.)
 
 import Foundation
-import NIOCore
-import NIOPosix
 import Vapor
 
 actor ZipEntryListCache {
@@ -33,26 +30,12 @@ actor ZipEntryListCache {
     /// listed.  Reset wholesale in the unlikely event it grows past this.
     private static let maxEntries = 4096
 
-    /// Where the `unzip` subprocess actually runs (#1156). The old
-    /// implementation ran `listZipEntries` inside the synchronous actor
-    /// method, holding the actor's executor — a cooperative-pool thread —
-    /// for the whole subprocess and serializing every cache caller behind a
-    /// single miss. Nil (bare test instances) falls back to running the
-    /// listing inline.
-    private let threadPool: NIOThreadPool?
-    private let eventLoopGroup: EventLoopGroup?
-
     /// One in-flight listing per zip path: concurrent misses on the same
     /// zip (a class opening one assignment post-deploy) share a single
-    /// subprocess instead of queueing one each behind the global zip lock.
+    /// subprocess instead of spawning one each.
     private var inFlight: [String: Task<[String], Never>] = [:]
 
     private var cache: [String: CachedEntries] = [:]
-
-    init(threadPool: NIOThreadPool? = nil, eventLoopGroup: EventLoopGroup? = nil) {
-        self.threadPool = threadPool
-        self.eventLoopGroup = eventLoopGroup
-    }
 
     /// The zip's entry-name list (exactly what `listZipEntries` would return),
     /// cached by the zip's mtime + size.  Returns an empty list when the zip is
@@ -75,12 +58,8 @@ actor ZipEntryListCache {
             return await pending.value
         }
 
-        // No thread-pool offload any more. It existed because listing a zip
-        // was a BLOCKING spawn taken under the process-wide zip lock, so a
-        // caller parked a cooperative-pool thread for the spawn and for every
-        // other caller queued ahead of it. `listZipEntries` now suspends
-        // instead of blocking, and the lock is gone with Foundation's
-        // `Process`, so the offload would only add a hop.
+        // `listZipEntries` suspends rather than blocks, so the listing runs
+        // in a plain task. No thread-pool offload is needed (#1156).
         let listing = Task<[String], Never> {
             await listZipEntries(zipPath: zipPath)
         }
@@ -111,7 +90,7 @@ struct ZipEntryListCacheKey: StorageKey {
 extension Application {
     var zipEntryListCache: ZipEntryListCache {
         lazyStored(ZipEntryListCacheKey.self) {
-            ZipEntryListCache(threadPool: threadPool, eventLoopGroup: eventLoopGroup)
+            ZipEntryListCache()
         }
     }
 }

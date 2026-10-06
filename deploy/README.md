@@ -119,8 +119,8 @@ Everything a test script writes, in its working directory, `/tmp`,
 `/var/tmp`, `/dev/shm` and `HOME`, goes to one private tmpfs of
 `--job-disk-limit` megabytes (default 256) and is discarded when the script
 ends, so one job cannot fill the work root for the others. That tmpfs is
-memory: with four jobs, allow for about 1 GB more in the container's memory
-limit, if it has one. The overlay that holds it needs Linux 5.11 or later; on
+memory, and it counts against the job's memory limit (see "Job cgroups"
+below). The overlay that holds it needs Linux 5.11 or later; on
 an older kernel the runner refuses to start with `--sandbox` and says why.
 
 The host must also allow unprivileged user namespaces, with mounts inside
@@ -130,7 +130,7 @@ with the same namespaces a job uses. It mounts a tmpfs inside them, and prints
 `sandbox OK` when it works:
 
 ```bash
-docker compose run --rm --no-deps runner "exec /app/runner-entrypoint.sh unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
+docker compose run --rm --no-deps runner "unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
 ```
 
 The first line of the output tells you about the job cgroups (see "Job
@@ -205,6 +205,18 @@ before. The Compose file gives the container five capabilities for the
 pre-step: `SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID` and `SETPCAP`. The runner
 does not keep them.
 
+The pre-step is the service's `entrypoint`, so every `command` runs through it,
+including one that a `docker-compose.override.yml` sets. An override may
+replace the runner's `command` (for example its `--api-base-url` or
+`--worker-id`), but must not set `entrypoint` or `user`. A runner host with its
+own Compose file uses the same entrypoint:
+
+```yaml
+    entrypoint:
+      - /app/runner-entrypoint.sh
+      - /app/chickadee-runner
+```
+
 The runner log starts with one of these lines:
 
 - `[runner-entrypoint] job cgroups delegated at /sandbox/jobs`
@@ -216,6 +228,40 @@ delegate the cgroups, the runner still starts and grades. To read the line:
 
 ```bash
 docker compose logs runner | grep runner-entrypoint
+```
+
+With the cgroups delegated, the runner puts each test script, and the make
+step, in a cgroup of its own under `/sandbox/jobs`. The cgroup holds three
+limits:
+
+- Memory: `--job-memory-limit` megabytes (default 1024), with no swap. The
+  script's processes and its private tmpfs count together. When a script goes
+  over the limit, the kernel stops that script only, and the student sees
+  `the test used more than its memory limit of 1024 MB and was stopped`.
+- Processes: `--job-process-limit` (default 128), plus the script itself. The
+  kernel applies this limit even when the runner runs as root.
+- Lifetime: when the script ends, the runner stops every process that is left
+  in the cgroup, and then removes the cgroup.
+
+The limit is a ceiling, not a reservation: a job that uses 150 MB costs
+150 MB. If you set a memory limit on the runner container (`mem_limit`), it
+must hold every job at its limit at once: `--max-jobs` x `--job-memory-limit`,
+plus about 512 MB for the runner. With the defaults that is about 4.5 GB. A
+smaller container limit can be reached by several jobs together before any
+job reaches its own limit. The kernel then stops the largest process in the
+container, which need not be the job that grew. The runner warns at startup
+when the container limit is too small, and names a `--job-memory-limit` that
+fits. For a fixed container limit, use (container limit - 512 MB) /
+`--max-jobs`. A test stopped because the container ran out shows
+`the runner ran out of memory and stopped the test`, not the message for its
+own limit.
+
+The runner checks the cgroups at startup with one sandboxed command. Its
+`runner_configuration` log line then shows `"job_cgroups":"enabled"`, or
+`"job_cgroups":"unavailable: <reason>"` after a warning. To read it:
+
+```bash
+docker compose logs runner | grep runner_configuration
 ```
 
 ### Optional PostgreSQL service example
@@ -490,6 +536,37 @@ Add this line, with the path to your clone:
 Cron sends mail only when the script prints a line, which is when it updates
 the runner or when it fails.
 
+On macOS with Docker Desktop, use the crontab of the user who runs Docker
+Desktop, not the root crontab, and write the log to a file that the user owns.
+The script needs no python3, flock or newer bash, and it finds `docker` in the
+directories where Docker Desktop and Homebrew install it:
+
+```
+*/10 * * * * /Users/NAME/Chickadee/deploy/chickadee-runner-update.sh --compose-dir DIR --service NAME >> /Users/NAME/Library/Logs/chickadee-runner-update.log 2>&1
+```
+
+Docker Desktop runs the containers in a Linux VM. A service's `cpus` and
+`memory` limits cannot be larger than the CPUs and memory that Settings →
+Resources gives that VM.
+
+An update does not stop a running job. On SIGTERM the runner claims no new
+job, finishes and reports the jobs it is running, and exits (cordon and
+drain). Docker sends SIGTERM when it replaces the container, and kills the
+container only after the service's `stop_grace_period`. The bundled Compose
+file sets 10 minutes; a runner host with its own Compose file must add the
+same line to its runner service, or Docker kills the runner after its default
+of 10 seconds:
+
+```yaml
+    stop_grace_period: 10m
+```
+
+While one runner drains, the other runners take new jobs. A job still running
+after 10 minutes is killed, and the server puts it back in the queue 10
+minutes after it was assigned. The update script holds a lock, so a drain that
+lasts longer than the 10 minutes between cron runs does not start a second
+update. The deployer on the server host replaces its runner the same way.
+
 ### Runner hosts: give each runner a stable ID
 
 Give each runner host a stable ID, for example `--worker-id Sparrow` or
@@ -501,6 +578,15 @@ It ignores the default `runner-<container id>` IDs, because those change each
 time the container is created again. The postmortem for the same failure on the server host is in
 [docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md), in the section
 "The host's iptables state is a deploy dependency".
+
+Give the runner container a fixed hostname too, for example
+`hostname: sparrow-runner` in its Compose service. The server refuses a worker
+ID that a different hostname used in the last 90 seconds, because two runners
+with one ID would take each other's jobs. Without a fixed hostname, each new
+container has a new random hostname, so after every update the server refuses
+the new runner for 90 seconds and the log shows `duplicate_worker_id`. The
+bundled Compose file does not set a hostname, because `--scale runner=3` needs
+a different one for each replica.
 
 ### Observability and operations
 
