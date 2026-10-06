@@ -427,8 +427,8 @@ jobs:
           # The runner's own startup probe runs one sandboxed command in a job
           # cgroup and requires it to run there, read its memory limit and fail
           # to change it.
-          docker compose logs runner 2>&1 | grep runner_configuration || true
-          docker compose logs runner 2>&1 | grep -q '"job_cgroups":"enabled"' \
+          printf '%s\n' "$runner_log" | grep runner_configuration || true
+          printf '%s\n' "$runner_log" | grep '"job_cgroups":"enabled"' >/dev/null \
             || { echo "::error::The runner does not use job cgroups; its warning is in the log above."; exit 1; }
           # Read the runner process from the host. A cgroup that gives
           # controllers to its children cannot hold a process, so after the
