@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.474] - 2026-10-06
+
+### Changed
+
+- **A leaderboard's first view reads the course's handles once.** Each ranked student without a handle used to trigger its own read of every handle in the course, so the first view of a 300-student board ran about 300 of them. The handles are now drawn from one read per page (#2257).
+
+
 ## [0.5.473] - 2026-10-06
 
 ### Changed
