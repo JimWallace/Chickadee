@@ -164,7 +164,7 @@ public func scanNotebookForSectionsAndFunctions(
 
     for cell in cells {
         let cellType = cell["cell_type"] as? String
-        let source = cellSource(cell)
+        let source = NotebookCellSources.cellSource(cell)
         if cellType == "markdown" {
             // Read through the same helper `notebookSectionNames` uses, so the
             // sections-only entry point cannot drift from this one.
@@ -224,7 +224,7 @@ public func notebookSectionNames(_ notebookData: Data) -> [String] {
     var inOrder: [String] = []
     var seen: Set<String> = []
     for cell in cells where (cell["cell_type"] as? String) == "markdown" {
-        if let title = firstSectionHeading(in: cellSource(cell)), seen.insert(title).inserted {
+        if let title = firstSectionHeading(in: NotebookCellSources.cellSource(cell)), seen.insert(title).inserted {
             inOrder.append(title)
         }
     }
@@ -253,15 +253,6 @@ private func firstSectionHeading(in source: String) -> String? {
 // shadowing rule is now asserted against the implementation that actually runs.
 
 // MARK: - Private helpers
-
-/// Joins the `source` field of a notebook cell into a single string.
-/// The field may be a `[String]` (array of lines) or a plain `String`.
-private func cellSource(_ cell: [String: Any]) -> String {
-    if let lines = cell["source"] as? [String] {
-        return lines.joined()
-    }
-    return (cell["source"] as? String) ?? ""
-}
 
 /// Parses all top-level (no leading indentation) definitions in `source`.
 /// Private functions (names starting with `_`) are excluded.

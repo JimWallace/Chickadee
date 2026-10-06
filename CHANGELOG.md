@@ -9,6 +9,105 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.511] - 2026-10-06
+
+### Fixed
+
+- **Concurrent first accesses to application storage keep every entry.** Vapor reads and writes the whole `Application.storage` struct under separate locks. Two first accesses to different `lazyStored` keys at the same time could each write back a struct without the other entry, so a sweep monitor could be lost and outlive shutdown. `lazyStored` now checks and stores under the application lock, and builds the value outside it. (#2298)
+
+
+## [0.5.510] - 2026-10-06
+
+### Fixed
+
+- **`deploy/chickadee-runner-update.sh` runs on macOS with Docker Desktop.** It used `mapfile` (bash 4), `flock` and `python3`, which a Mac does not have, so a cron job there would never update the runner. It now reads the JSON with `grep` and `sed`, takes its lock with `mkdir` (a lock whose owner is no longer alive is taken over), and adds the Docker Desktop and Homebrew directories to `PATH`. The deploy README gives the macOS cron line.
+
+
+## [0.5.509] - 2026-10-06
+
+### Changed
+
+- **One notebook cell-source reader.** Five private copies of the "join a cell's `source`" helper are gone. Every caller now uses `NotebookCellSources.cellSource`. (#2306)
+
+
+## [0.5.508] - 2026-10-06
+
+### Removed
+
+- **Unused thread-pool fields in two caches.** `ZipEntryListCache` and `NotebookBytesCache` no longer store a thread pool and an event-loop group that they never used, and their comments no longer describe the removed offload and zip lock. (#2304)
+
+
+## [0.5.507] - 2026-10-06
+
+### Changed
+
+- **Runner updates no longer stop running jobs (cordon and drain).** On SIGTERM the runner now claims no new job, finishes and reports the jobs it is running, and exits. Before this, the runner, as the container's first process, ignored SIGTERM, and every `docker stop` or runner update killed it after 10 seconds with its jobs, which the server then re-queued only 10 minutes later. The bundled Compose file sets `stop_grace_period: 10m` on the runner; a runner host with its own Compose file must add it. `deploy/chickadee-runner-update.sh` holds a lock, so a long drain does not start a second update. The runner logs `runner_draining` and ends with `runner_shutdown` status `drained`.
+
+### Fixed
+
+- **A Compose override can no longer start the runner as root.** The runner's pre-step (`/app/runner-entrypoint.sh`) is now the service's `entrypoint`, not part of its `command`. On the server host, a `docker-compose.override.yml` that set the runner's `command` replaced the pre-step, so v0.5.501's runner started as root with `SYS_ADMIN`; its sandbox check then failed and it refused to start, so it never graded. Every command, including an override's or `docker compose run`'s, now runs through the pre-step and as uid 999. The image build checks that a replaced command runs as uid 999.
+
+
+## [0.5.506] - 2026-10-06
+
+### Added
+
+- **Health alert: jobs no runner can grade (`unclaimableJobs`).** It fires when a job has waited 5 minutes and no runner that polled in the last 2 minutes may grade it, and names the reason, for example an assignment's `minimumRunnerVersion` above every online runner. It uses the claim walk's own decision (`claimCompatibility`, now shared by both), so the alert and the claim cannot disagree. With no runner online it stays quiet; the runner-offline rule covers that.
+
+### Changed
+
+- **The runner version skew alert waits 30 minutes, not 15.** Runners now update only after they drain, and a runner host's update job runs every 10 minutes, so a correct runner can be about 25 minutes behind the server. Its message now points at the runner's update job. `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` still overrides the default.
+
+
+## [0.5.505] - 2026-10-06
+
+### Changed
+
+- **One async semaphore.** `WorkerClaimQueue` is now a one-permit `AsyncCountingSemaphore`, and the semaphore has a `withPermit` method that releases its slot on every exit path. The personalization evaluator uses it instead of three hand-written releases. (#2303)
+
+
+## [0.5.504] - 2026-10-06
+
+### Fixed
+
+- **One key-set fetch per LTI platform at a time.** Concurrent launches that miss the platform key cache now join the fetch already in flight, and a launch that fails after another launch fetched again uses the new keys. Before, a class that opened a link together sent one JWKS request per student. (#2309)
+
+
+## [0.5.503] - 2026-10-06
+
+### Changed
+
+- **Runner hosts: give the runner container a fixed hostname.** `deploy/README.md` now says so. The server refuses a worker ID that another hostname used in the last 90 seconds, so a recreated runner with a new random hostname could not poll for 90 seconds after each update.
+
+
+## [0.5.502] - 2026-10-06
+
+### Fixed
+
+- **Facts panels on the LTI, GitHub and runner pages.** The `.detail-grid--cells` rules came before the base `.detail-grid` rules in the stylesheet, so the base rules won. The panel was capped at 480px with one wide column and one very narrow column, and on the LTI page the URLs in the narrow column wrapped every few characters. The cell rules now come after the base rules, so the facts form an even grid.
+
+
+## [0.5.501] - 2026-10-06
+
+### Fixed
+
+- **The OIDC retry cooldown uses one clock.** `resolve(app:now:)` compared the caller's `now` against a cooldown that it had set from the wall clock, so a caller that passed a time saw a cooldown it could not control. The cooldown now starts from the caller's `now`. A stale comment about the logout token revocation is also corrected. (#2310)
+
+
+## [0.5.500] - 2026-10-06
+
+### Fixed
+
+- **Stable row height in "Last active" columns.** The column was too narrow for a time such as "15 seconds ago", so the text wrapped. Because the time updates every few seconds, the rows on the admin runner table grew and shrank. The column is now wide enough for the longest relative time.
+
+
+## [0.5.499] - 2026-10-06
+
+### Security
+
+- **Each test script has its own memory limit.** With the job cgroups that the runner container's pre-step delegates, the runner puts each sandboxed test script, and the make step, in a cgroup of its own under `/sandbox/jobs`, with `memory.max` at the new `--job-memory-limit` (default 1024 MB), no swap, and `pids.max` at `--job-process-limit` plus the script. Before this, one job that allocated without bound used the memory of every job beside it, and the kernel's OOM killer could stop another job or the runner. Now the kernel stops only that script, and its output says that it went over its memory limit. The script's private tmpfs counts against the same limit. When the script ends, the runner stops every process left in its cgroup. The script sees its own cgroup, read-only, at `/sys/fs/cgroup`, so a JVM still reads its limit, and the script cannot raise it. At startup the runner checks the cgroups with one sandboxed command and logs `job_cgroups`; without them it warns and grades as before. A container memory limit must hold `--max-jobs` x `--job-memory-limit` plus about 512 MB; the runner warns at startup when it does not, and names a `--job-memory-limit` that fits. A test that the kernel stopped because the container ran out, not because it reached its own limit, says that the runner ran out of memory.
+
+
 ## [0.5.498] - 2026-10-06
 
 ### Changed

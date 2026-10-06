@@ -243,7 +243,7 @@ func authoredSuiteItemsFromDraftManifest(
                         dependsOn: newEntry.dependsOn,
                         // v0.4.134: prefer the draft's sectionID over the rebuilt
                         // raw entry's (which loses sectionID through the JSON
-                        // round-trip via ReindexedSuiteConfigRow).
+                        // round-trip via SuiteConfigRow).
                         sectionID: entry.sectionID ?? newEntry.sectionID
                     )))
         }

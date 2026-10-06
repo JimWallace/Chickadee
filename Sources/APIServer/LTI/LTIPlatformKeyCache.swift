@@ -5,6 +5,10 @@
 // again once when a token does not verify: a platform rotates its key by
 // publishing a new `kid`, and a stale cache must not refuse the first launch
 // after that. A second failure is final.
+//
+// One fetch per platform at a time: concurrent launches that miss the cache
+// join the fetch already in flight, so a class that opens a link together
+// costs the platform one request, not one per student.
 
 import Foundation
 import JWT
@@ -26,8 +30,14 @@ actor LTIPlatformKeyCache {
         let fetchedAt: Date
     }
 
+    private struct LoadKey: Hashable {
+        let platformID: UUID
+        let jwksURL: String
+    }
+
     private let fetch: Fetch
     private var entries: [UUID: Entry] = [:]
+    private var loads: [LoadKey: Task<Entry, any Error>] = [:]
 
     init(fetch: @escaping Fetch) {
         self.fetch = fetch
@@ -44,6 +54,10 @@ actor LTIPlatformKeyCache {
         do {
             return try await entry.keys.verify(token, as: LTILaunchClaims.self)
         } catch {
+            // Another launch may have fetched again while this one verified.
+            if let current = entries[platformID], current.jwksURL == jwksURL, current.keys !== entry.keys {
+                return try await current.keys.verify(token, as: LTILaunchClaims.self)
+            }
             guard now.timeIntervalSince(entry.fetchedAt) >= Self.refetchFloor else { throw error }
             let fresh = try await load(platformID: platformID, jwksURL: jwksURL, now: now)
             return try await fresh.keys.verify(token, as: LTILaunchClaims.self)
@@ -60,9 +74,19 @@ actor LTIPlatformKeyCache {
     }
 
     private func load(platformID: UUID, jwksURL: String, now: Date) async throws -> Entry {
-        let json = try await fetch(jwksURL)
-        let keys = try await JWTKeyCollection().add(jwksJSON: json)
-        let entry = Entry(jwksURL: jwksURL, keys: keys, fetchedAt: now)
+        let key = LoadKey(platformID: platformID, jwksURL: jwksURL)
+        if let running = loads[key] {
+            return try await running.value
+        }
+        let fetch = self.fetch
+        let task = Task {
+            let json = try await fetch(jwksURL)
+            let keys = try await JWTKeyCollection().add(jwksJSON: json)
+            return Entry(jwksURL: jwksURL, keys: keys, fetchedAt: now)
+        }
+        loads[key] = task
+        defer { loads[key] = nil }
+        let entry = try await task.value
         entries[platformID] = entry
         return entry
     }

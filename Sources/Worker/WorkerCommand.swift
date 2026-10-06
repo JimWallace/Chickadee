@@ -50,6 +50,13 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(
         name: .long,
         help:
+            "With --sandbox on Linux, the megabytes of memory one test script may use, its files included; needs the job cgroups that runner-entrypoint.sh delegates"
+    )
+    var jobMemoryLimit: Int = JobCgroups.defaultMemoryLimitMegabytes
+
+    @Option(
+        name: .long,
+        help:
             "Deprecated, and refused with --sandbox: test scripts can read it. Set the RUNNER_SHARED_SECRET env var instead"
     )
     var workerSecret: String?
@@ -114,7 +121,7 @@ struct WorkerCommand: AsyncParsableCommand {
         try FileManager.default.createDirectory(
             at: workRoot, withIntermediateDirectories: true)
 
-        let processLimitEnforced = try await checkSandbox(workRoot: workRoot)
+        let sandboxCheck = try await checkSandbox(workRoot: workRoot)
 
         let runnerProfile = await RunnerProfileDetector(
             discoveryEnabled: config.capabilityDiscoveryEnabled,
@@ -145,7 +152,8 @@ struct WorkerCommand: AsyncParsableCommand {
             resultUploadRetryPolicy: .resultUpload(config: config)
         )
         let (runner, sandboxLabel) = Self.scriptRunner(
-            sandboxed: sandbox, processLimit: jobProcessLimit, diskLimitMegabytes: jobDiskLimit)
+            sandboxed: sandbox, processLimit: jobProcessLimit, diskLimitMegabytes: jobDiskLimit,
+            memoryLimitMegabytes: jobMemoryLimit, cgroups: sandboxCheck.cgroups)
 
         let testSetupCache = TestSetupCache(
             cacheRoot: workRoot,
@@ -179,12 +187,9 @@ struct WorkerCommand: AsyncParsableCommand {
                 "api_base_url": apiBaseURL,
                 "max_jobs": maxJobs,
                 "sandbox_mode": sandboxLabel,
-                "job_process_limit": sandbox ? "\(jobProcessLimit)" : "none",
-                "job_process_limit_enforced": processLimitEnforced,
-                "job_disk_limit_mb": sandbox ? "\(jobDiskLimit)" : "none",
                 "process_inspection": inspectionRefused ? "refused" : "allowed",
                 "test_setup_cache_dir": cacheDirPath,
-            ])
+            ].merging(jobLimitLogFields(sandboxCheck)) { first, _ in first })
         if let runnerProfile {
             writeStructuredRunnerLog(
                 event: "runner_profile_detected",
@@ -196,25 +201,58 @@ struct WorkerCommand: AsyncParsableCommand {
                     "capabilities": runnerProfile.capabilities.map(\.name),
                 ])
         }
+        let terminateSource = Self.drainOnTerminate(daemon)
+        defer { terminateSource.cancel() }
         try await daemon.run()
     }
 
-    /// Checks the sandbox at startup, and returns whether the kernel applies
-    /// `--job-process-limit`.
+    /// Makes SIGTERM drain the runner rather than stop it (`WorkerDaemon.drain`).
+    /// `docker stop`, `docker compose up` on a new image and a host shutdown
+    /// all send SIGTERM, then SIGKILL after the container's
+    /// `stop_grace_period`. The runner is the container's first process, and
+    /// the kernel delivers no signal to that process unless it handles the
+    /// signal, so before this the runner ignored SIGTERM and was always
+    /// killed, with its running jobs, when the grace period ended.
+    static func drainOnTerminate(_ daemon: WorkerDaemon) -> any DispatchSourceSignal {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
+        source.setEventHandler { Task { await daemon.drain() } }
+        source.resume()
+        return source
+    }
+
+    /// What the startup check found about the sandbox's limits.
+    struct SandboxCheck {
+        /// Whether the kernel applies `--job-process-limit`.
+        let processLimitEnforced: Bool
+        /// The job cgroups, or `nil` when the runner has none.
+        let cgroups: JobCgroups?
+        /// `enabled`, or why the job cgroups are not used, for the startup log.
+        let cgroupsStatus: String
+    }
+
+    /// Checks the sandbox at startup: whether the kernel applies
+    /// `--job-process-limit`, and whether each job can have its own cgroup.
     ///
     /// It refuses to start with `--sandbox` on a host that cannot sandbox. The
     /// alternative is a runner that claims jobs and fails every one of them.
     /// The process limit isolates the jobs from each other only when the
-    /// kernel applies it and the container can hold every job at its limit.
-    /// Neither stops grading, so both warn rather than refuse.
-    func checkSandbox(workRoot: URL) async throws -> Bool {
+    /// kernel applies it and the container can hold every job at its limit,
+    /// and the memory limit only when the job cgroups work. None of them stops
+    /// grading, so each warns rather than refuses.
+    func checkSandbox(workRoot: URL) async throws -> SandboxCheck {
         guard jobProcessLimit >= 1 else {
             throw Self.startupFailure("Error: --job-process-limit must be at least 1\n")
         }
         guard jobDiskLimit >= 1 else {
             throw Self.startupFailure("Error: --job-disk-limit must be at least 1\n")
         }
-        guard sandbox else { return false }
+        guard jobMemoryLimit >= 1 else {
+            throw Self.startupFailure("Error: --job-memory-limit must be at least 1\n")
+        }
+        guard sandbox else {
+            return SandboxCheck(processLimitEnforced: false, cgroups: nil, cgroupsStatus: "not sandboxed")
+        }
         if let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
             throw Self.startupFailure(
                 "Error: --sandbox is set, but this host cannot start the sandbox: \(reason)\n"
@@ -234,7 +272,46 @@ struct WorkerCommand: AsyncParsableCommand {
         {
             writeToStandardError(warning)
         }
-        return enforced
+        let (cgroups, cgroupsStatus) = await Self.checkJobCgroups(workRoot: workRoot)
+        if cgroups != nil, let containerLimit = JobMemoryBudget.readContainerLimit(),
+            let warning = JobMemoryBudget(
+                containerLimitBytes: containerLimit, maxJobs: maxJobs, memoryLimitMegabytes: jobMemoryLimit
+            ).warning
+        {
+            writeToStandardError(warning)
+        }
+        return SandboxCheck(processLimitEnforced: enforced, cgroups: cgroups, cgroupsStatus: cgroupsStatus)
+    }
+
+    /// The job limits as the startup log reports them: each limit, or `none`
+    /// where it does not apply.
+    func jobLimitLogFields(_ check: SandboxCheck) -> [String: Any] {
+        [
+            "job_process_limit": sandbox ? "\(jobProcessLimit)" : "none",
+            "job_process_limit_enforced": check.processLimitEnforced,
+            "job_disk_limit_mb": sandbox ? "\(jobDiskLimit)" : "none",
+            "job_cgroups": check.cgroupsStatus,
+            "job_memory_limit_mb": check.cgroups != nil ? "\(jobMemoryLimit)" : "none",
+        ]
+    }
+
+    /// Finds the job cgroups and checks that a sandboxed command runs in one.
+    /// Returns the cgroups, or `nil` with the reason after a warning.
+    static func checkJobCgroups(workRoot: URL) async -> (JobCgroups?, String) {
+        let reason: String
+        switch JobCgroups.discover() {
+        case .available(let cgroups):
+            guard let failure = await SandboxedScriptRunner.jobCgroupProbe(cgroups: cgroups, workDir: workRoot)
+            else { return (cgroups, "enabled") }
+            reason = failure
+        case .unavailable(let why):
+            reason = why
+        }
+        writeToStandardError(
+            "Warning: job cgroups are unavailable, so --job-memory-limit is not applied and one job "
+                + "can use the memory of every job on this runner: \(reason). Start the runner "
+                + "container through /app/runner-entrypoint.sh (see deploy/README.md).\n")
+        return (nil, "unavailable: \(reason)")
     }
 
     /// The script runner `--sandbox` selects, with the label the startup log
@@ -243,10 +320,17 @@ struct WorkerCommand: AsyncParsableCommand {
     static func scriptRunner(
         sandboxed: Bool,
         processLimit: Int = SandboxedScriptRunner.defaultProcessLimit,
-        diskLimitMegabytes: Int = SandboxedScriptRunner.defaultDiskLimitMegabytes
+        diskLimitMegabytes: Int = SandboxedScriptRunner.defaultDiskLimitMegabytes,
+        memoryLimitMegabytes: Int = JobCgroups.defaultMemoryLimitMegabytes,
+        cgroups: JobCgroups? = nil
     ) -> (runner: any ScriptRunner, label: String) {
         sandboxed
-            ? (SandboxedScriptRunner(processLimit: processLimit, diskLimitMegabytes: diskLimitMegabytes), "sandboxed")
+            ? (
+                SandboxedScriptRunner(
+                    processLimit: processLimit, diskLimitMegabytes: diskLimitMegabytes,
+                    memoryLimitMegabytes: memoryLimitMegabytes, cgroups: cgroups),
+                "sandboxed"
+            )
             : (UnsandboxedScriptRunner(), "unsandboxed")
     }
 

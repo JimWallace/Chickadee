@@ -405,7 +405,17 @@ jobs:
           echo "----- the pre-step, with a probe as the command -----"
           docker compose run --rm --no-deps \
             -v "$PWD/scripts/ci-runner-cgroup-probe.sh:/probe.sh:ro" \
-            runner "exec /app/runner-entrypoint.sh /bin/sh /probe.sh"
+            runner "exec /bin/sh /probe.sh"
+
+          # Every command runs through the pre-step, so a command that an
+          # override or `compose run` sets also runs as uid 999. Before the
+          # pre-step became the entrypoint, an override that replaced the
+          # command started the runner as root.
+          echo "----- a replaced command runs as uid 999 -----"
+          run_uid="$(docker compose run --rm --no-deps runner "id -u" 2>/dev/null | tail -n 1)"
+          echo "uid: $run_uid"
+          [ "$run_uid" = "999" ] \
+            || { echo "::error::A replaced runner command runs as uid $run_uid, not 999."; exit 1; }
 
           echo "----- the runner itself -----"
           docker compose up -d --no-deps runner
@@ -424,6 +434,12 @@ jobs:
           fi
           printf '%s\n' "$runner_log" | grep "job cgroups delegated at /sandbox/jobs" >/dev/null \
             || { echo "::error::The pre-step did not delegate the job cgroups."; exit 1; }
+          # The runner's own startup probe runs one sandboxed command in a job
+          # cgroup and requires it to run there, read its memory limit and fail
+          # to change it.
+          printf '%s\n' "$runner_log" | grep runner_configuration || true
+          printf '%s\n' "$runner_log" | grep '"job_cgroups":"enabled"' >/dev/null \
+            || { echo "::error::The runner does not use job cgroups; its warning is in the log above."; exit 1; }
           # Read the runner process from the host.
           pid="$(docker inspect -f '{{.State.Pid}}' "$cid")"
           status="$(sudo grep -E '^(Uid|CapEff|CapBnd):' "/proc/$pid/status")"
