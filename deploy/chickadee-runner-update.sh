@@ -34,7 +34,15 @@
 # this run), 1 when it could not be updated or does not stay up. It prints
 # nothing when there is nothing to do, so a cron job mails only on a change or
 # a failure.
+#
+# It runs on Linux and on macOS with Docker Desktop. macOS has bash 3.2, no
+# flock and no python3 until the developer tools are installed, and its cron
+# finds no docker on PATH. So the script uses no mapfile, no flock and no
+# python3, and it adds the directories where Docker Desktop and Homebrew put
+# docker to PATH.
 set -uo pipefail
+
+PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin"
 
 REPO="JimWallace/Chickadee"
 IMAGE_REPO="ghcr.io/jimwallace/chickadee"
@@ -42,6 +50,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HEALTH_URL="https://chickadee.uwaterloo.ca/health"
 COMPOSE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SERVICE="runner"
+# The lock directory that main() holds while it runs.
+LOCK_DIR=/tmp/chickadee-runner-update.lock
+[ -d /run/lock ] && [ -w /run/lock ] && LOCK_DIR=/run/lock/chickadee-runner-update.lock
 # How long to wait after `compose up` before asking Docker whether the runner
 # is still up. The runner checks its own command at startup (the `--sandbox`
 # probe) and exits within a few seconds when the check fails.
@@ -50,22 +61,28 @@ SETTLE_SECS=15
 ts()  { date -u +%Y-%m-%dT%H:%M:%SZ; }
 log() { printf '%s [runner-update] %s\n' "$(ts)" "$*"; }
 
+# The first string value of key $1 in the JSON on stdin. Both documents read
+# here hold the key first at the top level: /health holds "version" once, and
+# GitHub's commit object starts with its own "sha", before the nested ones.
+json_string() {  # $1 = key
+  grep -o "\"$1\" *: *\"[^\"]*\"" | head -n1 | sed 's/.*: *"\(.*\)"/\1/'
+}
+
 server_version() {
-  curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null
+  curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | json_string version
 }
 
 release_commit() {  # $1 = version tag
   curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/commits/$1" 2>/dev/null \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))' 2>/dev/null
+    | json_string sha | grep -E '^[0-9a-f]{40}$'
 }
 
 # shellcheck source=../scripts/lib/deployment-target.sh
 . "$SCRIPT_DIR/../scripts/lib/deployment-target.sh"
 
 compose() {
-  local files
-  mapfile -t files < <(chickadee_compose_file_args "$COMPOSE_DIR")
+  local files=() file
+  while IFS= read -r file; do files+=("$file"); done < <(chickadee_compose_file_args "$COMPOSE_DIR")
   docker compose --project-directory "$COMPOSE_DIR" "${files[@]}" "$@"
 }
 
@@ -146,15 +163,34 @@ update_runner() {
   return 0
 }
 
+# A drain can last up to the runner's stop_grace_period, longer than the time
+# between two cron runs, and two runs must not recreate the runner at once.
+# mkdir is the lock, because it is atomic on every file system and macOS has
+# no flock. The directory holds the PID of its owner. A lock whose owner is no
+# longer alive (the run was killed) is stale, and the next run takes it.
+take_lock() {
+  local owner
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "$$" > "$LOCK_DIR/pid"
+    return 0
+  fi
+  owner="$(cat "$LOCK_DIR/pid" 2>/dev/null)"
+  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+    return 1
+  fi
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR" 2>/dev/null || return 1
+  echo "$$" > "$LOCK_DIR/pid"
+}
+
+release_lock() {
+  rm -rf "$LOCK_DIR"
+}
+
 main() {
-  # A drain can last up to the runner's stop_grace_period, longer than the
-  # time between two cron runs, and two runs must not recreate the runner at
-  # once. A run that finds the lock taken leaves the work to the one that has
-  # it.
-  local lock=/run/lock/chickadee-runner-update.lock
-  [ -d /run/lock ] || lock=/tmp/chickadee-runner-update.lock
-  exec 9>"$lock"
-  flock -n 9 || return 0
+  # A run that finds the lock taken leaves the work to the one that has it.
+  take_lock || return 0
+  trap release_lock EXIT
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --health-url)  HEALTH_URL="$2"; shift 2 ;;
