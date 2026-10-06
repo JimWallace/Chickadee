@@ -91,13 +91,16 @@ final class OIDCConfigurationProvider: Sendable {
         case .cooling:
             return nil
         case .pending(let task):
-            return await complete(task, app: app)
+            return await complete(task, app: app, now: now)
         }
     }
 
+    /// `now` is the caller's clock: the cooldown starts from it, so a caller
+    /// that passes a time measures the cooldown on that same clock (#2310).
     private func complete(
         _ task: Task<OIDCConfiguration, any Error>,
-        app: Application
+        app: Application,
+        now: Date
     ) async -> OIDCConfiguration? {
         do {
             let configuration = try await task.value
@@ -111,7 +114,7 @@ final class OIDCConfigurationProvider: Sendable {
         } catch {
             state.withLock { state in
                 state.inFlight = nil
-                state.nextRetryNotBefore = Date().addingTimeInterval(Self.retryCooldown)
+                state.nextRetryNotBefore = now.addingTimeInterval(Self.retryCooldown)
             }
             app.logger.warning(
                 "OIDC discovery failed; SSO is unavailable until it succeeds: \(String(reflecting: error))"
