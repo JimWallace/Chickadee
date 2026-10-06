@@ -319,6 +319,8 @@ enum MCPServerInstructions {
         queued -> running -> done progress over an SSE connection), then re-open with \
         update_assignment(visibility:"open") — or visibility:"preview" to beta-test as staff first — \
         once it passes (opening and previewing are refused until it does). \
+        To re-run validation without an edit, or to see how one runner grades the suite, call \
+        run_validation (optionally with runnerID); it changes no content and closes nothing. \
         When validation fails, call get_validation_result for the per-test outcomes of your reference \
         solution's latest run — each check's status plus shortResult/longResult, across all tiers — so \
         you can see which check failed and why before fixing the suite or solution. It is \
