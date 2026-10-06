@@ -43,17 +43,17 @@ import VaporTesting
         let migrations = root.appendingPathComponent("Sources/APIServer/Migrations")
         let files = try FileManager.default.contentsOfDirectory(at: migrations, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.hasPrefix("Create") && $0.pathExtension == "swift" }
-        let schema = try Regex(#"\.schema\("([a-z_]+)"\)"#)
         let call = try Regex(#"\.(field|unique|create|id)\("#)
         let quoted = try Regex(#""([a-z_]+)""#)
         var found: Set<String> = []
         for file in files {
             let source = try String(contentsOf: file, encoding: .utf8)
-            let tables = source.matches(of: schema)
+            let tables = source.matches(of: MigrationSourceScan.schemaCall)
             for (index, table) in tables.enumerated() {
                 let end = index + 1 < tables.count ? tables[index + 1].range.lowerBound : source.endIndex
                 let chunk = source[table.range.upperBound..<end]
-                let name = String(table.output[1].substring ?? "")
+                let name = try #require(
+                    MigrationSourceScan.table(of: table), "cannot read the table \(table.output.0) names")
                 let calls = chunk.matches(of: call)
                 for (position, start) in calls.enumerated() where start.output[1].substring == "field" {
                     let pieceEnd = position + 1 < calls.count ? calls[position + 1].range.lowerBound : chunk.endIndex
