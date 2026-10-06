@@ -99,14 +99,16 @@ rmdir "$JOB" 2>/dev/null || fail "could not remove the job cgroup"
 # in /proc/self/mountinfo, and needs cpu, cpuset and memory in the
 # cgroup.controllers it finds there. Like the sandbox prelude, this joins the
 # job cgroup from a user and mount namespace, enters a cgroup namespace, and
-# mounts a read-only cgroup2 at /sys/fs/cgroup, so the JVM reads the job's
-# own files exactly as a sandboxed job does.
+# mounts a read-only cgroup2 at /sys/fs/cgroup over a tmpfs (the kernel will
+# not mount the cgroup2 superblock straight over itself), so the JVM reads the
+# job's own files exactly as a sandboxed job does.
 JVM_JOB="$JOBS/ci-probe-jvm"
 if mkdir "$JVM_JOB" 2>/dev/null && echo 512M > "$JVM_JOB/memory.max" 2>/dev/null; then
   jvm_out="$(unshare --user --map-root-user --mount /bin/sh -c '
       echo $$ > "$1/cgroup.procs" || exit 3
       exec unshare --cgroup /bin/sh -c "
-        mount -t cgroup2 -o ro chickadee-job-cgroup /sys/fs/cgroup || exit 4
+        mount -t tmpfs -o size=4k chickadee-cgroup-cover /sys/fs/cgroup || exit 4
+        mount -t cgroup2 -o ro chickadee-job-cgroup /sys/fs/cgroup || exit 5
         head -n 1 /proc/self/cgroup
         echo memory.max: \$(cat /sys/fs/cgroup/memory.max)
         exec java -XshowSettings:system -version"

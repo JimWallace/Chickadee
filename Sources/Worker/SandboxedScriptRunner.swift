@@ -559,7 +559,10 @@ private func sandboxWrap(
 /// command, every process it starts, and every page of the private tmpfs it
 /// writes count against the cgroup's limits. Last, it enters a new cgroup
 /// namespace, whose root is that cgroup, and mounts a fresh cgroup2 file
-/// system read-only at `/sys/fs/cgroup`. A cgroup that the runner created
+/// system read-only at `/sys/fs/cgroup`. It covers `/sys/fs/cgroup` with a
+/// tmpfs first: the kernel refuses (EBUSY) to mount a superblock on a mount
+/// point whose top mount is the same superblock, and the container's own
+/// cgroup2 mount there is the same cgroup2 superblock. A cgroup that the runner created
 /// belongs to the runner's user, which is root in this namespace, so with a
 /// writable view the command could raise its own limits or move itself out.
 /// The namespace also makes the command's cgroup path `/`, so a reader that
@@ -650,6 +653,7 @@ private let linuxMountPrelude = """
     cd "$cwd"
     if [ "$cgroup" != - ]; then
         exec /usr/bin/unshare --cgroup -- /bin/sh -c '
+            mount -t tmpfs -o nosuid,nodev,noexec,size=4k chickadee-cgroup-cover /sys/fs/cgroup &&
             mount -t cgroup2 -o ro,nosuid,nodev,noexec chickadee-job-cgroup /sys/fs/cgroup || {
                 echo "sandbox: could not mount the job cgroup at /sys/fs/cgroup" >&2
                 exit 2
