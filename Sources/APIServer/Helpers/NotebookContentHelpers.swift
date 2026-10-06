@@ -44,19 +44,11 @@ let hiddenTiersForStudents: Set<String> = ["secret", "release"]
 /// had that no test could see.
 let pythonKernelNames: Set<String> = AssignmentLanguage.python.notebookKernelNames
 
-/// Extracts the joined source string for a notebook cell dictionary.
-func cellSource(_ cell: [String: Any]) -> String? {
-    if let arr = cell["source"] as? [String] { return arr.joined() }
-    if let str = cell["source"] as? String { return str }
-    return nil
-}
-
 /// Returns true when the cell's first non-empty line is a `# TEST:` comment
 /// whose `tier=` value is in `hiddenTiers`.
 private func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -> Bool {
-    guard let source = cellSource(cell) else { return false }
     let firstLine =
-        source
+        NotebookCellSources.cellSource(cell)
         .split(separator: "\n", omittingEmptySubsequences: true)
         .first.map(String.init) ?? ""
     guard firstLine.range(of: #"^#\s*TEST:"#, options: .regularExpression) != nil
@@ -73,9 +65,8 @@ private func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -
 /// Returns true when the cell's first non-empty line is ANY `# TEST:` comment,
 /// regardless of tier. Used to separate solution cells from test cells during merge.
 func isTestCell(_ cell: [String: Any]) -> Bool {
-    guard let source = cellSource(cell) else { return false }
     let firstLine =
-        source
+        NotebookCellSources.cellSource(cell)
         .split(separator: "\n", omittingEmptySubsequences: true)
         .first.map(String.init) ?? ""
     return firstLine.range(of: #"^#\s*TEST:"#, options: .regularExpression) != nil

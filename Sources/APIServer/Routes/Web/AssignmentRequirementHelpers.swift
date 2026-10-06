@@ -97,13 +97,7 @@ func detectRequirementSuggestions(
         }
         guard let cells = root["cells"] as? [[String: Any]] else { return }
         for cell in cells where (cell["cell_type"] as? String) == "code" {
-            let source: String
-            if let sourceArray = cell["source"] as? [String] {
-                source = sourceArray.joined()
-            } else {
-                source = cell["source"] as? String ?? ""
-            }
-            scanPythonSource(source)
+            scanPythonSource(NotebookCellSources.cellSource(cell))
         }
     }
 
