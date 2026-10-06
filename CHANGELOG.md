@@ -9,6 +9,28 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.495] - 2026-10-06
+
+### Added
+
+- **A runner update script for runner hosts.** `deploy/chickadee-runner-update.sh` moves a runner on a separate host to the release that the server runs. Run it from cron. It reads the server's version at `/health`, pulls the image of that release's commit by its `:sha-` tag, checks the image's revision label, and recreates only the runner service. When the runner already runs that release, it does nothing and prints nothing. It reports a runner that does not stay up, with the runner's last log lines. Before this, a runner host's `docker compose pull` took `:latest`, which can be a build that is not a release, or an older one.
+
+
+## [0.5.494] - 2026-10-06
+
+### Fixed
+
+- **A deploy is recorded as a success only when the server runs the release's version.** The auto-deploy daemon recorded success once `/health` answered, with whatever version answered: on 2026-10-05 three "successful" deploys of v0.5.464 ran 0.5.463. It now rolls back and counts a failure when the reported version differs from the release.
+
+### Added
+
+- **A `deployerUnhealthy` health alert.** It pages when the auto-deploy daemon reports `stuck`, `error` or `certificate_invalid`, or when it has not written its status for 30 minutes. Until now those states showed only in the admin MCP.
+
+### Changed
+
+- **The `runnerVersionSkew` alert is now a warning that pages,** not an advisory: a runner left behind can lack a sandbox fix, which the minimum-runner-version gate does not cover.
+
+
 ## [0.5.493] - 2026-10-06
 
 ### Fixed

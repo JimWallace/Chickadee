@@ -482,6 +482,50 @@ sudo docker compose logs --tail 5
 If the chain is already gone, `sudo systemctl restart docker` recovers the
 host.
 
+### Runner hosts: keep the runner at the server's release
+
+The deployer on the server host moves the runner beside the server to each
+release. A runner on a separate host has no deployer. Do not update it with
+`docker compose pull`: that pulls `:latest`, which is the newest build of
+`main` to finish. That build is not always a release, and it can be older
+than the release.
+
+Use `deploy/chickadee-runner-update.sh` from cron. Each run does these steps:
+
+1. It reads the version that the server reports at its `/health` URL.
+2. When the runner already runs the image of that release, it stops, and it
+   prints nothing.
+3. Otherwise it pulls the image of the release commit (`:sha-<commit>`),
+   makes sure that the image was built from that commit, and recreates only
+   the runner service.
+4. It waits 15 seconds and makes sure that the runner stays up. If the runner
+   does not stay up, it prints the last lines of the runner log and exits
+   with status 1.
+
+The runner follows the server, so it never runs a release that the server
+does not run. After a rollback on the server, the runner follows it back.
+
+The script uses the Compose file in the clone that holds it, with the
+`runner` service. The flags `--compose-dir`, `--service` and `--health-url`
+change these. The service must use the image
+`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does. Run it
+as root, or as a user in the `docker` group, every 10 minutes:
+
+```bash
+sudo crontab -e
+```
+
+Add this line, with the path to your clone:
+
+```
+*/10 * * * * /opt/Chickadee/deploy/chickadee-runner-update.sh
+```
+
+Cron sends mail only when the script prints a line, which is when it updates
+the runner or when it fails.
+
+### Runner hosts: give each runner a stable ID
+
 Give each runner host a stable ID, for example `--worker-id Sparrow` or
 `RUNNER_WORKER_ID=Sparrow` in the Compose `.env`. The server health rule
 "Named runner not polling" (`runnerMissing`) then tells you when that runner
