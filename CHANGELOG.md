@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.496] - 2026-10-06
+
+### Changed
+
+- **The runner container delegates a cgroup subtree for its jobs.** The Compose runner now starts as root for one pre-step, `/app/runner-entrypoint.sh`. The pre-step remounts `/sys/fs/cgroup` read-write, creates `/sandbox/runner` and `/sandbox/jobs`, enables the `memory` and `pids` controllers for the jobs, gives that subtree to uid 999, and starts the runner as uid 999 with no capability, an empty bounding set and `no_new_privs`, as before. The container gets five capabilities for the pre-step only (`SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID`, `SETPCAP`). The runner log starts with `job cgroups delegated` or `job cgroups unavailable: <reason>`. This prepares a hard memory limit per job; the runner does not use the cgroups yet. The host check for the sandbox in `deploy/README.md` now runs through the pre-step, so that it still checks uid 999. The image build proves the delegation on a cgroup v2 Docker host.
+
+
 ## [0.5.495] - 2026-10-06
 
 ### Added
