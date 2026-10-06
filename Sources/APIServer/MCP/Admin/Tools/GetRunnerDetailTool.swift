@@ -95,8 +95,6 @@ struct GetRunnerDetailTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let runnerID = input.runnerID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !runnerID.isEmpty else {
             throw MCPToolError.invalidArguments(detail: "runnerID must not be empty.")

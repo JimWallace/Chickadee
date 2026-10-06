@@ -68,8 +68,6 @@ struct GetDeployStatusTool: DiagnosticTool {
     static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let path = URL(fileURLWithPath: context.request.application.deployStateDirectory)
             .appendingPathComponent("status.json")
 

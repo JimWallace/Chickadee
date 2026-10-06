@@ -48,8 +48,6 @@ struct ListConnectedAgentsTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         var query = MCPGrant.query(on: context.db).sort(\.$createdAt, .descending)
         if input.includeRevoked == false {
             query = query.filter(\.$revoked == false)
