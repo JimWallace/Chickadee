@@ -565,4 +565,8 @@ func registerMigrations(on app: Application) {
     // the reaper can never age out (#2281). Raw SQL that reads
     // `_fluent_sessions.created_at`, so it must follow `AddSessionsCreatedAt`.
     app.migrations.add(DeleteUndatedSessions())
+
+    // The runner a staff-requested validation run asks for (MCP
+    // `run_validation`). One optional column; existing rows keep NULL.
+    app.migrations.add(AddSubmissionTargetRunner())
 }
