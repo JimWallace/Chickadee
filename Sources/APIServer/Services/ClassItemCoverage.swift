@@ -71,7 +71,7 @@ func recordClassItemCoverage(
             userID: userID, submissionID: submissionID)
         // Ignore the conflict: two submissions covering the same item at once,
         // first insert wins. Same shape as `awardImmutableBadge`.
-        try? await row.save(on: db)
+        try await row.createIgnoringConflict(on: db)
     }
 }
 
