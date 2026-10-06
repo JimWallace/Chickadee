@@ -536,6 +536,19 @@ Add this line, with the path to your clone:
 Cron sends mail only when the script prints a line, which is when it updates
 the runner or when it fails.
 
+On macOS with Docker Desktop, use the crontab of the user who runs Docker
+Desktop, not the root crontab, and write the log to a file that the user owns.
+The script needs no python3, flock or newer bash, and it finds `docker` in the
+directories where Docker Desktop and Homebrew install it:
+
+```
+*/10 * * * * /Users/NAME/Chickadee/deploy/chickadee-runner-update.sh --compose-dir DIR --service NAME >> /Users/NAME/Library/Logs/chickadee-runner-update.log 2>&1
+```
+
+Docker Desktop runs the containers in a Linux VM. A service's `cpus` and
+`memory` limits cannot be larger than the CPUs and memory that Settings →
+Resources gives that VM.
+
 An update does not stop a running job. On SIGTERM the runner claims no new
 job, finishes and reports the jobs it is running, and exits (cordon and
 drain). Docker sends SIGTERM when it replaces the container, and kills the
