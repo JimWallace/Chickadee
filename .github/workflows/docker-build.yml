@@ -425,15 +425,24 @@ jobs:
           docker compose logs runner 2>&1 | grep runner_configuration || true
           docker compose logs runner 2>&1 | grep -q '"job_cgroups":"enabled"' \
             || { echo "::error::The runner does not use job cgroups; its warning is in the log above."; exit 1; }
-          status="$(docker compose exec -T runner grep -E '^(Uid|CapEff|CapBnd):' /proc/1/status)"
-          cgroup="$(docker compose exec -T runner cat /proc/1/cgroup)"
-          echo "$status"; echo "cgroup: $cgroup"
+          # Read the runner process from the host. A cgroup that gives
+          # controllers to its children cannot hold a process, so after the
+          # pre-step a process that `docker exec` adds to the container's own
+          # cgroup may be refused. That attempt is printed, not required.
+          pid="$(docker inspect -f '{{.State.Pid}}' "$cid")"
+          status="$(sudo grep -E '^(Uid|CapEff|CapBnd):' "/proc/$pid/status")"
+          cgroup="$(sudo cat "/proc/$pid/cgroup")"
+          echo "$status"; echo "cgroup (host view): $cgroup"
+          echo "----- docker exec into the runner (informational) -----"
+          docker exec "$cid" cat /proc/self/cgroup 2>&1 || echo "docker exec failed with exit code $?"
           echo "$status" | grep -qE '^Uid:[[:space:]]+999[[:space:]]+999[[:space:]]+999[[:space:]]+999' \
             || { echo "::error::The runner does not run as uid 999."; exit 1; }
           [ "$(echo "$status" | grep -c '0000000000000000$')" = "2" ] \
             || { echo "::error::The runner holds a capability."; exit 1; }
-          [ "$cgroup" = "0::/sandbox/runner" ] \
-            || { echo "::error::The runner is in $cgroup, not /sandbox/runner."; exit 1; }
+          case "$cgroup" in
+            0::*/sandbox/runner) ;;
+            *) echo "::error::The runner is in $cgroup, not /sandbox/runner."; exit 1 ;;
+          esac
           docker compose down
 
       - name: Scan image for vulnerabilities
