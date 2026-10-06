@@ -134,7 +134,8 @@ struct AuthorScriptTool: ContentTool {
                     "An https URL the server downloads and stores as the file body — use for a "
                         + "data/support file too large to inline (e.g. a CSV). The fetch is SSRF-guarded "
                         + "(https only; the host must not resolve to a loopback/private/link-local/"
-                        + "cloud-metadata address; redirects are not followed; capped at 8 MB; body must "
+                        + "cloud-metadata address; redirects are not followed; capped at "
+                        + "\(SupportFileURLFetcher.maxBytesText); body must "
                         + "be UTF-8 text). Provide this OR content, not both."),
             ]),
             "tier": MCPSchema.tierEnum(

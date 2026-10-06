@@ -107,7 +107,7 @@ enum MCPServerInstructions {
     static let text = operationalGuide + "\n\n" + authoringVoice
 
     /// The languages an assignment can be authored in, as prose ("Python, R,
-    /// Lua, Octave, C++ or Racket"), DERIVED from `AssignmentLanguage.allCases`.
+    /// Lua, Octave, C++, Racket or Java"), DERIVED from `AssignmentLanguage.allCases`.
     ///
     /// Interpolated into the guide rather than typed into it. This prose is
     /// served to every connecting agent and no compiler or `allCases` test can
@@ -196,7 +196,7 @@ enum MCPServerInstructions {
         write one with author_script(tier:"support") — \
         passing the body inline as content, or, for a data file too large to inline faithfully (e.g. a \
         big CSV), passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
-        no private/loopback/metadata hosts, no redirects, 8 MB cap, UTF-8 body). \
+        no private/loopback/metadata hosts, no redirects, \(SupportFileURLFetcher.maxBytesText) cap, UTF-8 body). \
         Confirm a data file is bundled before authoring checks that load it. A support data file can \
         also be marked as a per-student DATASET with set_dataset: each student then receives a \
         deterministic per-seed sample of its rows under the same filename (the uploaded file becomes \

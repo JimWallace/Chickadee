@@ -23,7 +23,7 @@
 // `notebookCheckKindUnsupportedReason` (the predicate the save-time refusal
 // itself calls), null support off `AuthoringLanguageFacts` (which took it from
 // `JSONValue.literal`), and expression support off `PersonalizationEvaluator`.
-// If a seventh language needs a NEW fact, add it to whichever type owns it and
+// If a new language needs a NEW fact, add it to whichever type owns it and
 // project it here — do not answer it twice.
 
 import Core
@@ -86,7 +86,7 @@ struct MCPLanguageCapability: Encodable, Sendable, Equatable {
     /// C++ is supportable precisely BECAUSE it is native-only — so there is no
     /// per-language predicate to consult and this is `PatternKind.allCases`.
     /// It is reported anyway, and as a derived list rather than a documented
-    /// constant, so that a seventh language which refuses one is a change to
+    /// constant, so that a new language which refuses one is a change to
     /// this projection and not a silent lie in the payload.
     let supportedPatternKinds: [String]
 
@@ -160,7 +160,7 @@ struct MCPLanguageCapability: Encodable, Sendable, Equatable {
 
     /// Every language the server has, in `allCases` order.
     ///
-    /// The whole point: a seventh language appears here by existing, with no
+    /// The whole point: a new language appears here by existing, with no
     /// edit to this file, to `get_server_info`, or to any prose.
     static var all: [MCPLanguageCapability] {
         AssignmentLanguage.allCases.map(MCPLanguageCapability.init)
