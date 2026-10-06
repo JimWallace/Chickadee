@@ -219,6 +219,25 @@ import VaporTesting
         }
     }
 
+    /// The cooldown runs on the caller's clock (#2310). A failure at a time
+    /// the caller passes starts the cooldown from that time, so a second call
+    /// one cooldown later on the same clock fetches again, whatever the wall
+    /// clock says.
+    @Test func theCooldownStartsFromTheCallersClock() async throws {
+        try await withMockIdP(mode: .failing) { base, endpoint in
+            let app = try await makeSSOApp(discoveryBase: base)
+            try await withApp(app) { app in
+                let anHourAgo = Date().addingTimeInterval(-3600)
+                #expect(await app.oidcConfigurationProvider.resolve(app: app, now: anHourAgo) == nil)
+                #expect(await endpoint.discoveryHits == 1)
+
+                let afterCooldown = anHourAgo.addingTimeInterval(OIDCConfigurationProvider.retryCooldown + 1)
+                #expect(await app.oidcConfigurationProvider.resolve(app: app, now: afterCooldown) == nil)
+                #expect(await endpoint.discoveryHits == 2)
+            }
+        }
+    }
+
     @Test func sSOBecomesAvailableOnceTheIdPRecovers() async throws {
         try await withMockIdP(mode: .failing) { base, endpoint in
             let app = try await makeSSOApp(discoveryBase: base)
