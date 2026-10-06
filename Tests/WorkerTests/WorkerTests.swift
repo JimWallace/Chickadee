@@ -213,6 +213,27 @@ import Testing
         #expect(output.executionTimeMs < 30_000)
     }
 
+    /// A script that closes both of its streams and then keeps running still
+    /// stops at the time limit. EOF on the streams is not an exit (#2271).
+    @Test func scriptThatClosesItsStreamsStillTimesOut() async throws {
+        let script = try writeScript("#!/bin/sh\nexec >&- 2>&-\nsleep 60\nexit 0")
+        let runner = UnsandboxedScriptRunner()
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        #expect(output.timedOut, "A script that closed stdout and stderr should still time out")
+        #expect(output.exitCode == -1)
+        #expect(output.executionTimeMs < 30_000)
+    }
+
+    /// The exit check must not slow down or misreport a script that closes
+    /// its streams and then exits normally.
+    @Test func scriptThatClosesItsStreamsAndExitsIsNotATimeout() async throws {
+        let script = try writeScript("#!/bin/sh\nexec >&- 2>&-\nsleep 0.2\nexit 1")
+        let runner = UnsandboxedScriptRunner()
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 30)
+        #expect(output.timedOut == false)
+        #expect(output.exitCode == 1)
+    }
+
     #if os(Linux)
     @Test func scriptTimeoutReapsBackgroundChildProcess() async throws {
         let script = try writeScript(
