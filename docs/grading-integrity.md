@@ -6,8 +6,8 @@ tests that grade it, and the plan to get there. Tracking issue: #2223.
 | Phase | Issue | State |
 |---|---|---|
 | 0. Measure each attack, per language | #2239 | not started |
-| 1. Confirm browser-graded results on a native runner after the deadline | #2240 | not started |
-| 2. Per-test working directory and exit masks on the native runner | #2241 | not started |
+| 1. Confirm browser-graded results on a native runner after the deadline | #2240 | planned (D4 to D7) |
+| 2. Per-test working directory and exit masks on the native runner | #2241 | done: other suite scripts hidden (#2248), exit guards for Python, R, Lua and Racket (#2244 to #2247); Octave waits for phase 3 |
 | 3. Run the submission in a separate process | #2242 | **discuss before work starts** |
 
 Decisions D1 to D3 below were agreed with the maintainer on 2026-10-05.
@@ -86,6 +86,28 @@ a design discussion with the maintainer, not with code.
 **D3. This document is the plan.** Each phase has its own issue, and each phase
 ends with a staff check that proves it on the production runners.
 
+Decisions D4 to D7 were agreed with the maintainer on 2026-10-06, for phase 1.
+
+**D4. The deadline run counts at once.** There is no observe-only release. When
+the native result of a deadline run arrives, it replaces the browser result of
+that submission, also when it is lower. Two safeguards limit the cost of a real
+difference between the graders: a native run that did not grade the
+submission (the build failed or the runner reported a processing failure)
+never replaces a grade, and staff see every disagreement.
+
+**D5. Only a deadline run replaces a browser result.** An instructor retest,
+before or after phase 1, keeps today's rule: the higher result counts. So no
+grade changes when phase 1 deploys.
+
+**D6. Only new deadlines are swept.** The sweep confirms an assignment only when
+its post-deadline moment passes after phase 1 deploys. An instructor can start
+confirmation of an earlier assignment with a button on the assignment.
+
+**D7. What the browser receives is decided after phase 1.** It keeps every tier
+until then. Once native results count, the browser could grade public tests
+only, as a preview. That changes what students see before the deadline, so it
+is its own change.
+
 ## Phases
 
 ### Phase 0: measure (#2239)
@@ -97,15 +119,54 @@ because the docs have native start-up numbers only for C++ and Java.
 
 ### Phase 1: confirm browser results after the deadline (#2240)
 
-As in D1. Also:
+As in D1 and D4 to D7.
 
-- re-push the grade to BrightSpace or LTI when confirmation changes it;
-- show staff each disagreement between a browser result and its native
-  confirmation. A disagreement can mean a forged result or a real difference
-  between the browser and native graders, so it is a signal, not an accusation;
-- decide whether release and secret scripts still reach the browser. Once the
-  native run is authoritative, the browser could grade public tests only, as a
-  preview.
+**What exists.** Results are append-only rows (`APIResult`), each with a
+`source` of `browser` or `worker`, so a native run adds a row beside the browser
+row and overwrites nothing. Today the highest percent wins across every row
+(`bestGradeResult` in `BestGradePercentBySubmissionID.swift`, used by the
+BrightSpace and LTI sweeps, the grades CSV, the history pages and class goals),
+and the instructor roster and the student dashboard repeat that rule in SQL
+(`StudentSubmissionAggregates.swift`). `flipSubmissionToPending` queues a
+native run of a browser submission, as the retest button does. Every worker
+result already flags the student for BrightSpace and LTI sync.
+
+**Design.**
+
+1. **Confirmation state on the submission.** Nullable columns record that the
+   sweep requested a deadline run, and its outcome: agreed, disagreed, or
+   could not confirm. The sweep reads them, so it is idempotent.
+2. **The sweep.** A `PeriodicSweepMonitor`, every five minutes. For each
+   browser-graded assignment and each student whose post-deadline moment
+   (`postDeadlineRevealDeadline`) has passed, it queues the student's best
+   browser submission that has no confirmation, one at a time per student, at
+   the lowest claim priority (after retests). When the native result arrives:
+   - same grade percent: agreed, and the student is done;
+   - different: disagreed, and the sweep queues the next-best browser
+     submission while its browser grade is above the best native grade found
+     so far;
+   - no grade (a failed build or a processing failure): retried once, then
+     "could not confirm", and the browser grade stays (D4).
+   An assignment with no deadline is never swept.
+3. **Selection.** One shared rule decides which result rows count: for a
+   submission with a deadline-run result, only its worker rows count (D5). The
+   Swift fold and both SQL folds use it, and a test checks that the three
+   agree. The BrightSpace and LTI sweeps then push the new grade without
+   further change.
+4. **Staff view.** On the assignment's submissions page, a chip per student:
+   pending, agreed, disagreed (browser x %, native y %) or could not confirm,
+   and a filter for disagreements. A disagreement is a signal for the
+   instructor, not an accusation. The page also has the button of D6.
+5. **Staff check.** A closed staff assignment with a forged browser result: its
+   grade must not survive the post-deadline moment.
+
+**Pull requests, in order.**
+
+1. The confirmation columns and the shared selection rule, with tests. No grade
+   changes, because no deadline run exists yet.
+2. The sweep, the stop rule and the result hook, with tests.
+3. The staff view and the button for earlier assignments.
+4. The staff check on the production runners.
 
 ### Phase 2: native hardening (#2241)
 
