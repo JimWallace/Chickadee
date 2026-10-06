@@ -1,0 +1,3 @@
+### Added
+
+- **A runner update script for runner hosts.** `deploy/chickadee-runner-update.sh` moves a runner on a separate host to the release that the server runs. Run it from cron. It reads the server's version at `/health`, pulls the image of that release's commit by its `:sha-` tag, checks the image's revision label, and recreates only the runner service. When the runner already runs that release, it does nothing and prints nothing. It reports a runner that does not stay up, with the runner's last log lines. Before this, a runner host's `docker compose pull` took `:latest`, which can be a build that is not a release, or an older one.
