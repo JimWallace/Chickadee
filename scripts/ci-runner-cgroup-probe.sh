@@ -103,12 +103,21 @@ rmdir "$JOB" 2>/dev/null || fail "could not remove the job cgroup"
 # own files exactly as a sandboxed job does.
 JVM_JOB="$JOBS/ci-probe-jvm"
 if mkdir "$JVM_JOB" 2>/dev/null && echo 512M > "$JVM_JOB/memory.max" 2>/dev/null; then
-  limit="$(unshare --user --map-root-user --mount /bin/sh -c '
-      echo $$ > "$1/cgroup.procs" &&
-      exec unshare --cgroup /bin/sh -c "mount -t cgroup2 -o ro chickadee-job-cgroup /sys/fs/cgroup && exec java -XshowSettings:system -version"
-    ' sh "$JVM_JOB" 2>&1 | sed -n 's/^ *Memory Limit: *//p')"
-  [ "$limit" = "512.00M" ] && pass "a JVM in a job cgroup sees its memory limit ($limit)" \
-    || fail "a JVM in a job cgroup reports the memory limit '$limit', expected 512.00M"
+  jvm_out="$(unshare --user --map-root-user --mount /bin/sh -c '
+      echo $$ > "$1/cgroup.procs" || exit 3
+      exec unshare --cgroup /bin/sh -c "
+        mount -t cgroup2 -o ro chickadee-job-cgroup /sys/fs/cgroup || exit 4
+        head -n 1 /proc/self/cgroup
+        echo memory.max: \$(cat /sys/fs/cgroup/memory.max)
+        exec java -XshowSettings:system -version"
+    ' sh "$JVM_JOB" 2>&1)"
+  limit="$(printf '%s\n' "$jvm_out" | sed -n 's/^ *Memory Limit: *//p')"
+  if [ "$limit" = "512.00M" ]; then
+    pass "a JVM in a job cgroup sees its memory limit ($limit)"
+  else
+    fail "a JVM in a job cgroup reports the memory limit '$limit', expected 512.00M. Its output:"
+    printf '%s\n' "$jvm_out" | sed -n 1,25p
+  fi
   rmdir "$JVM_JOB" 2>/dev/null || fail "could not remove the JVM job cgroup"
 else
   fail "could not create a job cgroup for the JVM check"
