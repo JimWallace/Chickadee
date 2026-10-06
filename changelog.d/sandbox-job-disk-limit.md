@@ -1,0 +1,3 @@
+### Security
+
+- **One sandboxed job can no longer fill the disk that the other jobs on a runner share (#2251).** Every job directory lives on one mount, so a test script that wrote without bound in its working directory filled it, and every other job on the runner then failed to write. An overlay now covers the working directory of each sandboxed test script: the script reads the job's files through it, and what it writes goes to a private tmpfs, sized by the new runner flag `--job-disk-limit` (megabytes, default 256), which is discarded when the script ends. The make step keeps its writes, and an opponent directory is now read-only. The startup probe includes the overlay, which needs Linux 5.11 or later.

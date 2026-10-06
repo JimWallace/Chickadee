@@ -43,6 +43,13 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(
         name: .long,
         help:
+            "With --sandbox on Linux, the megabytes one test script may write in its working directory; the writes are discarded when it ends"
+    )
+    var jobDiskLimit: Int = SandboxedScriptRunner.defaultDiskLimitMegabytes
+
+    @Option(
+        name: .long,
+        help:
             "Deprecated, and refused with --sandbox: test scripts can read it. Set the RUNNER_SHARED_SECRET env var instead"
     )
     var workerSecret: String?
@@ -137,7 +144,8 @@ struct WorkerCommand: AsyncParsableCommand {
             heartbeatRetryPolicy: .heartbeat(config: config),
             resultUploadRetryPolicy: .resultUpload(config: config)
         )
-        let (runner, sandboxLabel) = Self.scriptRunner(sandboxed: sandbox, processLimit: jobProcessLimit)
+        let (runner, sandboxLabel) = Self.scriptRunner(
+            sandboxed: sandbox, processLimit: jobProcessLimit, diskLimitMegabytes: jobDiskLimit)
 
         let testSetupCache = TestSetupCache(
             cacheRoot: workRoot,
@@ -173,6 +181,7 @@ struct WorkerCommand: AsyncParsableCommand {
                 "sandbox_mode": sandboxLabel,
                 "job_process_limit": sandbox ? "\(jobProcessLimit)" : "none",
                 "job_process_limit_enforced": processLimitEnforced,
+                "job_disk_limit_mb": sandbox ? "\(jobDiskLimit)" : "none",
                 "process_inspection": inspectionRefused ? "refused" : "allowed",
                 "test_setup_cache_dir": cacheDirPath,
             ])
@@ -202,6 +211,9 @@ struct WorkerCommand: AsyncParsableCommand {
         guard jobProcessLimit >= 1 else {
             throw Self.startupFailure("Error: --job-process-limit must be at least 1\n")
         }
+        guard jobDiskLimit >= 1 else {
+            throw Self.startupFailure("Error: --job-disk-limit must be at least 1\n")
+        }
         guard sandbox else { return false }
         if let reason = await SandboxedScriptRunner.probe(workDir: workRoot) {
             throw Self.startupFailure(
@@ -229,10 +241,12 @@ struct WorkerCommand: AsyncParsableCommand {
     /// reports for it. One decision for both, so the log cannot describe a
     /// different runner from the one that grades.
     static func scriptRunner(
-        sandboxed: Bool, processLimit: Int = SandboxedScriptRunner.defaultProcessLimit
+        sandboxed: Bool,
+        processLimit: Int = SandboxedScriptRunner.defaultProcessLimit,
+        diskLimitMegabytes: Int = SandboxedScriptRunner.defaultDiskLimitMegabytes
     ) -> (runner: any ScriptRunner, label: String) {
         sandboxed
-            ? (SandboxedScriptRunner(processLimit: processLimit), "sandboxed")
+            ? (SandboxedScriptRunner(processLimit: processLimit, diskLimitMegabytes: diskLimitMegabytes), "sandboxed")
             : (UnsandboxedScriptRunner(), "unsandboxed")
     }
 

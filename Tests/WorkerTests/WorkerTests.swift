@@ -305,14 +305,13 @@ import Testing
     #endif
 
     @Test(.requiresSandbox) func sandboxedRunnerWorkDir() async throws {
-        let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt\nexit 0")
+        let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt && test -f sandboxmarker.txt")
         let runner = SandboxedScriptRunner()
-        _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "Sandboxed script should be able to write files in the working directory")
+        // The write is discarded when the script ends (#2251).
         let markerPath = tmpDir.appendingPathComponent("sandboxmarker.txt").path
-        #expect(
-            FileManager.default.fileExists(atPath: markerPath),
-            "Sandboxed script should be able to write files in the working directory"
-        )
+        #expect(!FileManager.default.fileExists(atPath: markerPath))
     }
 
     // MARK: - SandboxedScriptRunner: network isolation

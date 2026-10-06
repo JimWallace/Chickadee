@@ -10,6 +10,9 @@
 //             back into place (#2061), and /tmp, /dev/shm, /var/tmp and
 //             HOME are fresh, empty and private to the job. A script may start
 //             at most `processLimit` processes and threads at once (#2224).
+//             What a test script writes in its working directory goes to a
+//             private space of `diskLimitMegabytes` and is discarded when it
+//             ends (#2251).
 //
 // On macOS  — uses `sandbox-exec -p <profile>` to enforce a TCC-level policy:
 //             deny all network, allow file-reads from the system prefix except
@@ -56,8 +59,27 @@ struct SandboxedScriptRunner: ScriptRunner {
     /// runs as root; `processLimitIsEnforced(workDir:)` detects that.
     let processLimit: Int
 
-    init(processLimit: Int = Self.defaultProcessLimit) {
+    /// The default for `--job-disk-limit`, in megabytes. A `g++` or `javac`
+    /// build of a test and its submission needs a few megabytes.
+    static let defaultDiskLimitMegabytes = 256
+
+    /// How much a test script may write in its working directory, in
+    /// megabytes (#2251). The job directories live on one mount that every job
+    /// on the runner shares, so one script that wrote without bound filled it,
+    /// and every other job then failed to write. Now the script's writes go to
+    /// a private, size-limited space over the working directory (an overlay),
+    /// and they are discarded when the script ends: a full space fails only
+    /// that script. No test reads a file that an earlier test wrote, and the
+    /// runner reads only a script's output, so nothing depends on the writes.
+    /// The make step keeps its writes, because the tests use what it builds.
+    let diskLimitMegabytes: Int
+
+    init(
+        processLimit: Int = Self.defaultProcessLimit,
+        diskLimitMegabytes: Int = Self.defaultDiskLimitMegabytes
+    ) {
         self.processLimit = processLimit
+        self.diskLimitMegabytes = diskLimitMegabytes
     }
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
@@ -69,7 +91,8 @@ struct SandboxedScriptRunner: ScriptRunner {
     ) async -> ScriptOutput {
         await executeScriptLaunch(
             sandboxedLaunch(
-                script: script, workDir: workDir, env: env, hiding: hiddenFiles, processLimit: processLimit),
+                script: script, workDir: workDir, env: env, hiding: hiddenFiles, processLimit: processLimit,
+                diskLimitMegabytes: diskLimitMegabytes),
             workDir: workDir,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch sandboxed script"
@@ -86,7 +109,8 @@ struct SandboxedScriptRunner: ScriptRunner {
                 arguments: arguments,
                 workDir: workDir,
                 environment: mergedScriptEnvironment(overrides: [:]),
-                processLimit: processLimit),
+                processLimit: processLimit,
+                diskLimitMegabytes: nil),
             workDir: workDir,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: launchErrorPrefix
@@ -119,7 +143,10 @@ extension SandboxedScriptRunner {
     /// in a child of the work root, beside a marker file that stands in for
     /// another job. The command passes only when the marker is hidden and the
     /// working directory is writable, so a host that starts the namespaces
-    /// but refuses the mounts inside them is reported too.
+    /// but refuses the mounts inside them is reported too. It runs with the
+    /// working-directory overlay a test script gets, so a kernel that cannot
+    /// mount an overlay in a user namespace (before Linux 5.11) is reported
+    /// as well.
     ///
     /// Returns `nil` when the sandbox works. Otherwise it returns the reason,
     /// for the operator. A container that drops capabilities or uses the
@@ -154,7 +181,8 @@ extension SandboxedScriptRunner {
                 ],
                 workDir: probeDir,
                 environment: mergedScriptEnvironment(overrides: [:]),
-                processLimit: defaultProcessLimit),
+                processLimit: defaultProcessLimit,
+                diskLimitMegabytes: defaultDiskLimitMegabytes),
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox probe")
@@ -186,7 +214,8 @@ extension SandboxedScriptRunner {
                 arguments: ["-c", "( : )"],
                 workDir: probeDir,
                 environment: mergedScriptEnvironment(overrides: [:]),
-                processLimit: 0),
+                processLimit: 0,
+                diskLimitMegabytes: nil),
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox process-limit probe")
@@ -200,7 +229,8 @@ extension SandboxedScriptRunner {
 // MARK: - Platform-specific sandbox setup
 
 private func sandboxedLaunch(
-    script: URL, workDir: URL, env: [String: String], hiding hiddenFiles: [URL], processLimit: Int
+    script: URL, workDir: URL, env: [String: String], hiding hiddenFiles: [URL], processLimit: Int,
+    diskLimitMegabytes: Int
 )
     -> ScriptLaunch
 {
@@ -211,7 +241,8 @@ private func sandboxedLaunch(
         workDir: workDir,
         environment: mergedScriptEnvironment(overrides: env),
         hiding: hiddenFiles,
-        processLimit: processLimit)
+        processLimit: processLimit,
+        diskLimitMegabytes: diskLimitMegabytes)
 }
 
 /// The directories a script may see under the work root: its working
@@ -247,14 +278,16 @@ let sandboxOwnProcessCount = 2
 
 /// Puts the platform's sandbox launcher in front of a command. The one place
 /// that decides how a command is sandboxed, so the probe and real jobs cannot
-/// use different wrappers.
+/// use different wrappers. `diskLimitMegabytes` is `nil` for a command whose
+/// writes the job keeps, the make step.
 private func sandboxWrap(
     executablePath: String,
     arguments commandArguments: [String],
     workDir: URL,
     environment: [String: String],
     hiding hiddenFiles: [URL] = [],
-    processLimit: Int
+    processLimit: Int,
+    diskLimitMegabytes: Int?
 ) -> ScriptLaunch {
     let visible = SandboxVisibleDirectories(workDir: workDir, environment: environment)
 
@@ -276,6 +309,7 @@ private func sandboxWrap(
             linuxMountPrelude,
             "chickadee-sandbox",
             String(processLimit + sandboxOwnProcessCount),
+            String(diskLimitMegabytes ?? 0),
             visible.workRoot.path,
             String(visible.directories.count),
         ] + visible.directories.map(\.path)
@@ -305,9 +339,10 @@ private func sandboxWrap(
 
 #if os(Linux)
 /// Runs inside the new namespaces, before the real command. Arguments: the
-/// process limit, the work root, the count of visible directories, the visible
-/// directories, the count of hidden files, the hidden files, then the command
-/// and its arguments.
+/// process limit, the disk limit in megabytes (0 keeps the writes), the work
+/// root, the count of visible directories, the visible directories (the
+/// working directory first), the count of hidden files, the hidden files, then
+/// the command and its arguments.
 ///
 /// Each visible directory is first bound into a private tmpfs on `/mnt`, so
 /// the prelude keeps a handle on it. `/tmp` and `/dev/shm` are then covered by
@@ -325,20 +360,35 @@ private func sandboxWrap(
 /// pointed into the old `/tmp`, is created again in the new one. The working
 /// directory is re-entered through the new mounts, so `pwd` reports the path
 /// the runner uses. A working directory directly under `/` has no work root to
-/// cover, and the prelude refuses it rather than cover `/`. The command starts
+/// cover, and the prelude refuses it rather than cover `/`. With a disk limit,
+/// an overlay covers the working directory: the script reads the job's files
+/// through it, and what it writes goes to a private tmpfs of that size, which
+/// is discarded when the script ends (#2251). The other visible directories
+/// (an opponent) are read-only, so no write reaches the shared mount. The
+/// overlay's `lowerdir` option cannot hold a comma or a colon, so the prelude
+/// refuses such a working directory. The command starts
 /// under the process limit, soft and hard, set last so the prelude's own
 /// `mount` and `mkdir` do not count against it.
 private let linuxMountPrelude = """
     set -e
     limit=$1
-    root=$2
-    count=$3
-    shift 3
+    disk=$2
+    root=$3
+    count=$4
+    shift 4
     if [ "$root" = / ]; then
         echo "sandbox: the working directory sits directly under /, so there is no work root to isolate" >&2
         exit 2
     fi
     cwd=$(pwd)
+    case "$cwd" in
+        *,* | *:*)
+            if [ "$disk" -gt 0 ]; then
+                echo "sandbox: the working directory $cwd holds a comma or a colon, which an overlay cannot use" >&2
+                exit 2
+            fi
+            ;;
+    esac
     mount --make-rprivate /
     mount -t tmpfs -o nosuid,nodev chickadee-stage /mnt
     i=0
@@ -373,8 +423,16 @@ private let linuxMountPrelude = """
     while IFS= read -r dir; do
         mkdir -p "$dir"
         mount --bind "/mnt/$i" "$dir"
+        if [ "$i" -gt 0 ]; then mount -o remount,bind,ro "$dir"; fi
         i=$((i+1))
     done < /mnt/paths
+    if [ "$disk" -gt 0 ]; then
+        mkdir /mnt/scratch
+        mount -t tmpfs -o nosuid,nodev,size="${disk}m" chickadee-job-scratch /mnt/scratch
+        mkdir /mnt/scratch/upper /mnt/scratch/work
+        mount -t overlay -o "lowerdir=$cwd,upperdir=/mnt/scratch/upper,workdir=/mnt/scratch/work" \
+            chickadee-job-writes "$cwd"
+    fi
     if [ -f /mnt/hidden ]; then
         while IFS= read -r file; do
             if [ -e "$file" ]; then mount --bind /dev/null "$file"; fi
