@@ -56,6 +56,7 @@ func dataExportCanBeRequested(_ export: APIDataExport?, now: Date = Date()) -> B
 /// Fluent closes the databases.
 actor DataExportManager {
     private var inFlight: [UUID: Task<Void, Never>] = [:]
+    private var isDraining = false
 
     /// Starts generation for `userID` unless one is already running here.
     /// Returns whether a new generation task was started.
@@ -69,9 +70,14 @@ actor DataExportManager {
     /// Runs `work` on a task the manager keeps until it ends, one per user.
     /// `startExport` is the one production caller; tests drive this seam with
     /// work of their own to pin the drain and the shutdown order.
+    ///
+    /// Runs nothing once `drain()` has begun, as `BackgroundWork.start` does:
+    /// work started then would outlive the drain and read the database after
+    /// Fluent closes it (#2302). The export row stays `pending`, the
+    /// documented interrupted state.
     @discardableResult
     func startWork(userID: UUID, _ work: @escaping @Sendable () async -> Void) -> Bool {
-        guard inFlight[userID] == nil else { return false }
+        guard !isDraining, inFlight[userID] == nil else { return false }
         inFlight[userID] = Task {
             await work()
             markFinished(userID: userID)
@@ -87,6 +93,7 @@ actor DataExportManager {
     /// documented interrupted state (`dataExportStalePendingAge`): the reaper
     /// flips it to `failed` and the user can request again.
     func drain() async {
+        isDraining = true
         let tasks = Array(inFlight.values)
         for task in tasks {
             task.cancel()
