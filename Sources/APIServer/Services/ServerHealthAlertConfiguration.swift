@@ -60,7 +60,10 @@ struct ServerHealthAlertConfiguration: Sendable {
         checkIntervalSeconds: 60,
         cooldownSeconds: 1800,
         runnerOfflineSeconds: 300,
-        runnerVersionSkewGraceSeconds: 900,
+        // A runner updates only after it drains: up to 10 minutes until its
+        // host's update job runs, up to 10 more to finish its jobs
+        // (stop_grace_period), then the restart. 30 minutes covers that.
+        runnerVersionSkewGraceSeconds: 1800,
         queueDepthThreshold: 25,
         oldestPendingSeconds: 600,
         errorRateThreshold: 0.30,
@@ -82,7 +85,8 @@ struct ServerHealthAlertConfiguration: Sendable {
             cooldownSeconds: TimeInterval(environmentInt("ALERT_COOLDOWN_SECONDS") ?? 1800),
             runnerOfflineSeconds: TimeInterval(environmentInt("ALERT_RUNNER_OFFLINE_SECONDS") ?? 300),
             runnerVersionSkewGraceSeconds: TimeInterval(
-                environmentInt("ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS") ?? 900),
+                environmentInt("ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS")
+                    ?? Int(ServerHealthAlertConfiguration.default.runnerVersionSkewGraceSeconds)),
             queueDepthThreshold: environmentInt("ALERT_QUEUE_DEPTH_THRESHOLD") ?? 25,
             oldestPendingSeconds: TimeInterval(environmentInt("ALERT_OLDEST_PENDING_SECONDS") ?? 600),
             errorRateThreshold: environmentDouble("ALERT_ERROR_RATE_THRESHOLD") ?? 0.30,
