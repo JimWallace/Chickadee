@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.475] - 2026-10-06
+
+### Fixed
+
+- **The account page offers no handle change in an ended course.** A student could still spend their one handle change in an archived course, and the page read every course's handles on each load, locked or not. An ended course now offers and accepts no change, and a locked handle reads nothing (#2258).
+
+
 ## [0.5.474] - 2026-10-06
 
 ### Changed
