@@ -258,15 +258,6 @@ struct MCPDispatcher: Sendable {
             on: context.request)
     }
 
-    /// Best-effort audit used by the streaming `validate_assignment` path (a read
-    /// tool, so no fail-closed): records the call without propagating failure.
-    func auditToolCall(
-        name: String, context: ToolContext,
-        target: MCPAuditTarget? = nil, outcome: MCPToolOutcome? = nil
-    ) async {
-        _ = await recordToolCall(name: name, context: context, target: target, outcome: outcome)
-    }
-
     /// What this server advertises to the caller, shared by the legacy
     /// `initialize` handshake and the modern `server/discover` method so both
     /// describe the same server — including the caller's own per-course
