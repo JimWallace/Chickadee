@@ -165,10 +165,12 @@ private func subprocessEnvironment(_ env: [String: String]) -> [Environment.Key:
 ///
 /// Returns whether the watchdog was the one that ended the run.
 ///
-/// EOF on both capture streams is the exit signal — what `.sequence` would
-/// have provided, except that these are pipes we made close-on-exec and drain
-/// on a deadline, so a leaked write-end duplicate degrades to a slow run
-/// rather than a permanent hang.
+/// The run is over when both capture streams reach EOF AND the child has
+/// exited. EOF alone is not enough: a script can close its own stdout and
+/// stderr and keep running, and if EOF ended the watchdog, nothing would stop
+/// that script at the time limit (#2271). The streams are pipes we made
+/// close-on-exec and drain on a deadline, so a leaked write-end duplicate
+/// degrades to a slow run rather than a permanent hang.
 private func runScriptWatchdog<Input: InputProtocol, Output: OutputProtocol, Error: ErrorOutputProtocol>(
     _ execution: Execution<Input, Output, Error>,
     capture: ScriptCapture,
@@ -186,6 +188,15 @@ private func runScriptWatchdog<Input: InputProtocol, Output: OutputProtocol, Err
             // killed the child, so EOF is due. The bound bites only when a
             // leaked descriptor is holding a stream open.
             await capture.awaitStreamsClosed(withinSeconds: timeLimitSeconds + 5)
+            // EOF can come before the exit. Wait for the exit too, so that
+            // the time limit still applies to a script that closed its streams.
+            while !processHasExited(execution.processIdentifier) {
+                do {
+                    try await Task.sleep(for: .milliseconds(10))
+                } catch {
+                    return
+                }
+            }
         }
 
         group.addTask {
@@ -196,7 +207,7 @@ private func runScriptWatchdog<Input: InputProtocol, Output: OutputProtocol, Err
             }
             // Don't claim a timeout for a script that exited in the instant
             // the limit expired.
-            guard !capture.streamsClosed else { return }
+            guard !(capture.streamsClosed && processHasExited(execution.processIdentifier)) else { return }
             timedOut.mark()
             await execution.teardown(using: scriptTeardownSequence)
         }
@@ -206,6 +217,20 @@ private func runScriptWatchdog<Input: InputProtocol, Output: OutputProtocol, Err
     }
 
     return timedOut.isSet
+}
+
+/// Whether the child has exited, without reaping it: `WNOWAIT` leaves the
+/// zombie for Subprocess to collect, the same check Subprocess makes itself.
+/// An error (`ECHILD` once Subprocess has reaped it) also means "exited".
+/// `info` starts zeroed and `waitid` fills it only for an exited child, so a
+/// nonzero `si_signo` (`SIGCHLD`) is the answer. `si_pid` would be the usual
+/// test, but on Glibc it is a C macro that Swift cannot see.
+private func processHasExited(_ process: ProcessIdentifier) -> Bool {
+    var info = siginfo_t()
+    while waitid(P_PID, id_t(process.value), &info, WEXITED | WNOHANG | WNOWAIT) == -1 {
+        if errno != EINTR { return true }
+    }
+    return info.si_signo != 0
 }
 
 /// One-way flag the watchdog raises before tearing the child down. A class
