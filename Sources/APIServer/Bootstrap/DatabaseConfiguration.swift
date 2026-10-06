@@ -227,6 +227,14 @@ extension Application {
         get { storage[UsesDedicatedMCPDatabaseKey.self] ?? false }
         set { storage[UsesDedicatedMCPDatabaseKey.self] = newValue }
     }
+
+    /// The database id every MCP content read uses: the least-privilege `.mcp`
+    /// pool when one is configured, else nil (the default pool). One answer for
+    /// `ToolContext.db` and for the `validate_assignment` progress stream,
+    /// which reads outside the request (#2335).
+    var mcpDatabaseID: DatabaseID? {
+        usesDedicatedMCPDatabase ? .mcp : nil
+    }
 }
 
 func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
