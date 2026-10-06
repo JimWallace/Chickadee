@@ -36,6 +36,10 @@ struct GetDeployStatusTool: DiagnosticTool {
         let paused: Bool?
         /// When the daemon last wrote this status (ISO-8601 UTC).
         let updatedAt: String?
+        /// The commit of the daemon's own scripts on the host (12 characters).
+        /// The daemon brings them to each release it deploys; nil from a daemon
+        /// older than that.
+        let scriptsRevision: String?
         /// Explanation when `available` is false.
         let note: String?
     }
@@ -48,6 +52,7 @@ struct GetDeployStatusTool: DiagnosticTool {
         let detail: String?
         let paused: Bool?
         let updatedAt: String?
+        let scriptsRevision: String?
     }
 
     static let name = "get_deploy_status"
@@ -55,7 +60,8 @@ struct GetDeployStatusTool: DiagnosticTool {
         "Report the zero-downtime auto-deploy daemon's current state from the status file it "
         + "writes: which version is live (deployedVersion), the latest release it has seen "
         + "(latestSeen), whether auto-deploy is paused, whether a major bump is awaiting "
-        + "approval (state=pending_approval), and the last update time. Returns available=false "
+        + "approval (state=pending_approval), the last update time, and the commit of the daemon's own "
+        + "scripts on the host (scriptsRevision). Returns available=false "
         + "if the daemon is not running or its state dir is not mounted. Read-only; reads a small "
         + "JSON file the daemon owns and touches no course, student, or database state. Deploy "
         + "control (pause/approve/rollback) is a host-side action, not exposed here."
@@ -70,14 +76,14 @@ struct GetDeployStatusTool: DiagnosticTool {
         guard let data = try? Data(contentsOf: path) else {
             return Output(
                 available: false, state: nil, deployedVersion: nil, latestSeen: nil,
-                detail: nil, paused: nil, updatedAt: nil,
+                detail: nil, paused: nil, updatedAt: nil, scriptsRevision: nil,
                 note: "No deploy status at \(path.path) — the auto-deploy daemon may not be "
                     + "running, or its state directory is not mounted into this container.")
         }
         guard let status = try? JSONDecoder().decode(StatusFile.self, from: data) else {
             return Output(
                 available: false, state: nil, deployedVersion: nil, latestSeen: nil,
-                detail: nil, paused: nil, updatedAt: nil,
+                detail: nil, paused: nil, updatedAt: nil, scriptsRevision: nil,
                 note: "Deploy status file at \(path.path) could not be parsed.")
         }
         return Output(
@@ -88,6 +94,7 @@ struct GetDeployStatusTool: DiagnosticTool {
             detail: status.detail,
             paused: status.paused,
             updatedAt: status.updatedAt,
+            scriptsRevision: status.scriptsRevision,
             note: nil)
     }
 }

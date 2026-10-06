@@ -87,8 +87,12 @@ WAIT_STUCK_AFTER_SECS=7200
 # the runner is still up. The runner checks its own command at startup (the
 # `--sandbox` probe) and exits within a few seconds when the check fails.
 RUNNER_SETTLE_SECS=15
-# Set by stage_release_image: the digest reference bluegreen-deploy.sh deploys.
+# Set by stage_release_image: the digest reference bluegreen-deploy.sh deploys,
+# and the commit the release names.
 STAGED_IMAGE=""
+STAGED_COMMIT=""
+# The release whose self-update was skipped, so the history says so once.
+SELF_UPDATE_SKIPPED_FOR=""
 WAIT_REASON=""
 # Set by verify_post_deploy when the public URL failed TLS verification while
 # the application behind it answered.
@@ -186,15 +190,16 @@ probe_public_health() {
 
 write_status() {  # $1=state $2=detail
   mkdir -p "$STATE_DIR"
-  python3 - "$STATUS_FILE" "$1" "$DEPLOYED_VERSION" "$LATEST_SEEN" "$2" "$PAUSED" <<'PY' 2>/dev/null || true
+  python3 - "$STATUS_FILE" "$1" "$DEPLOYED_VERSION" "$LATEST_SEEN" "$2" "$PAUSED" "$(scripts_revision)" <<'PY' 2>/dev/null || true
 import json, sys, datetime
-path, state, deployed, latest, detail, paused = sys.argv[1:7]
+path, state, deployed, latest, detail, paused, scripts = sys.argv[1:8]
 json.dump({
     "state": state,
     "deployedVersion": deployed,
     "latestSeen": latest,
     "detail": detail,
     "paused": paused == "1",
+    "scriptsRevision": scripts,
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }, open(path, "w"), indent=2)
 PY
@@ -280,6 +285,74 @@ verify_post_deploy() {
 }
 
 # ---------------------------------------------------------------------------
+# Keep the daemon's own scripts at the release it deploys.
+#
+# The daemon runs from a git clone on the host ($REPO_ROOT), and for months
+# nothing updated that clone: fixes to this script reached production only when
+# someone remembered `git pull`. On 2026-10-05 the host still ran the version
+# from before image staging, and it recorded three "successful" deploys of
+# v0.5.464 that ran 0.5.463.
+#
+# So, once the release image is staged, the clone is brought to the release's
+# own commit (a detached checkout of the tag, which must name the same commit
+# as the image) and the daemon restarts on the new scripts. git runs as the
+# clone's owner, so no root-owned file lands in it. A clone with local changes
+# is left alone, and the history says why. A paused daemon deploys nothing, so
+# it updates nothing.
+# ---------------------------------------------------------------------------
+repo_git() {
+  local owner home
+  owner="$(stat -c %U "$REPO_ROOT" 2>/dev/null)"
+  if [ "$(id -u)" = 0 ] && [ -n "$owner" ] && [ "$owner" != root ]; then
+    home="$(getent passwd "$owner" | cut -d: -f6)"
+    runuser -u "$owner" -- env HOME="${home:-/}" git -C "$REPO_ROOT" "$@"
+  else
+    git -C "$REPO_ROOT" "$@"
+  fi
+}
+
+scripts_revision() {
+  repo_git rev-parse --short=12 HEAD 2>/dev/null || true
+}
+
+restart_self() {
+  log "restarting on the updated scripts"
+  exec "$SCRIPT_DIR/chickadee-deployer.sh"
+}
+
+# Returns 0 when it checked out the release's scripts (the caller restarts),
+# 1 when the scripts stay as they are.
+update_own_scripts() {  # $1 = version tag, $2 = the release commit
+  local ver="$1" sha="$2" current tagged
+  [ -n "$sha" ] || return 1
+  current="$(repo_git rev-parse HEAD 2>/dev/null)"
+  [ "$current" = "$sha" ] && return 1
+  if [ -n "$(repo_git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    if [ "$SELF_UPDATE_SKIPPED_FOR" != "$ver" ]; then
+      SELF_UPDATE_SKIPPED_FOR="$ver"
+      append_history "$ver" deployer-update skipped "the clone at $REPO_ROOT has local changes; its scripts stay at ${current:0:12}"
+      log "not updating the deployer scripts: the clone at $REPO_ROOT has local changes"
+    fi
+    return 1
+  fi
+  if ! repo_git fetch --quiet origin "+refs/tags/$ver:refs/tags/$ver" >/dev/null 2>&1; then
+    append_history "$ver" deployer-update failed "could not fetch tag $ver"
+    return 1
+  fi
+  tagged="$(repo_git rev-parse "$ver^{commit}" 2>/dev/null)"
+  if [ "$tagged" != "$sha" ]; then
+    append_history "$ver" deployer-update failed "tag $ver names ${tagged:-nothing}, the release names $sha"
+    return 1
+  fi
+  if ! repo_git checkout --quiet --detach "$sha" >/dev/null 2>&1; then
+    append_history "$ver" deployer-update failed "git checkout of $sha failed"
+    return 1
+  fi
+  append_history "$ver" deployer-update ok "${current:0:12}..${sha:0:12}"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Stage the exact image of a release before deploying it.
 #
 # The daemon used to deploy whatever :latest was. :latest is pushed by every
@@ -301,6 +374,7 @@ verify_post_deploy() {
 stage_release_image() {  # $1 = version tag
   local ver="$1" sha ref rev digest
   STAGED_IMAGE=""
+  STAGED_COMMIT=""
   sha="$(fetch_release_commit "$ver")"
   if [ -z "$sha" ]; then
     WAIT_REASON="could not resolve the commit of $ver"
@@ -327,6 +401,7 @@ stage_release_image() {  # $1 = version tag
   fi
   docker rmi "$ref" >/dev/null 2>&1 || true
   STAGED_IMAGE="$digest"
+  STAGED_COMMIT="$sha"
   return 0
 }
 
@@ -477,6 +552,11 @@ do_deploy() {  # $1 = version tag
   WAITING_VERSION=""
   WAITING_SINCE=0
 
+  if update_own_scripts "$ver" "$STAGED_COMMIT"; then
+    restart_self
+    return 2
+  fi
+
   write_status deploying "deploying $ver"
   append_history "$ver" deploy start "$STAGED_IMAGE"
   log "deploying $ver ($STAGED_IMAGE)"
@@ -509,7 +589,17 @@ do_deploy() {  # $1 = version tag
     rm -f "$deploy_log"
     if verify_post_deploy; then
       local running; running="$(read_running_version)"
-      DEPLOYED_VERSION="${running:-$(strip_v "$ver")}"
+      # Healthy is not enough: the server must report the version this release
+      # names. Until 2026-10-05 a success was recorded with whatever answered,
+      # and three "successful" deploys of v0.5.464 ran 0.5.463.
+      if [ "$running" != "$(strip_v "$ver")" ]; then
+        log "post-deploy version check failed: running ${running:-<unknown>}, expected $(strip_v "$ver") — rolling back $ver"
+        "$DEPLOY_SCRIPT" rollback --yes || log "rollback command failed"
+        append_history "$ver" deploy rolledback "running ${running:-<unknown>}, expected $(strip_v "$ver")"
+        record_failure "$ver" "rolled back $ver: the server reported version ${running:-<unknown>}, expected $(strip_v "$ver")"
+        return 1
+      fi
+      DEPLOYED_VERSION="$running"
       printf '%s\n' "$DEPLOYED_VERSION" > "$DEPLOYED_VERSION_FILE"
       append_history "$ver" deploy success "running=$DEPLOYED_VERSION"
       refresh_runner "$ver"

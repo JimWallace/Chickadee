@@ -2,9 +2,8 @@
 //
 // Caches the normalized canonical-notebook bytes for a test setup (#1171).
 // `notebookData(from:)` either reads the flat `.ipynb` or extracts the
-// notebook from the setup zip via an `unzip` subprocess under the global zip
-// process lock — #1166 moved that off the cooperative pool, but a class of
-// students opening one assignment still paid one serialized subprocess per
+// notebook from the setup zip via an `unzip` subprocess. Without the cache,
+// a class of students opening one assignment paid one subprocess per
 // request. The extracted bytes only change when the backing file changes,
 // and every mutation path rewrites the flat file / repacks the zip in place,
 // refreshing the mtime — the same invalidation contract ZipEntryListCache
@@ -15,8 +14,6 @@
 // used entries are evicted first.
 
 import Foundation
-import NIOCore
-import NIOPosix
 import Vapor
 
 actor NotebookBytesCache {
@@ -32,8 +29,6 @@ actor NotebookBytesCache {
 
     private let maxEntries: Int
     private let maxTotalBytes: Int
-    private let threadPool: NIOThreadPool?
-    private let eventLoopGroup: EventLoopGroup?
 
     /// Keyed by the setup's zip path (stable per setup). LRU order tracked in
     /// `recentKeys` (most recent last).
@@ -43,21 +38,16 @@ actor NotebookBytesCache {
     private var inFlight: [String: Task<Result<Data, NotebookLookupError>, Never>] = [:]
 
     init(
-        threadPool: NIOThreadPool? = nil,
-        eventLoopGroup: EventLoopGroup? = nil,
         maxEntries: Int = NotebookBytesCache.defaultMaxEntries,
         maxTotalBytes: Int = NotebookBytesCache.defaultMaxTotalBytes
     ) {
-        self.threadPool = threadPool
-        self.eventLoopGroup = eventLoopGroup
         self.maxEntries = max(1, maxEntries)
         self.maxTotalBytes = max(1, maxTotalBytes)
     }
 
     /// The setup's normalized canonical notebook, cached against the backing
     /// file's (path, size, mtime). Concurrent misses for the same setup share
-    /// one resolution (single-flight), and the file read / zip extraction
-    /// runs on the thread pool.
+    /// one resolution (single-flight).
     func notebookData(for source: NotebookSourceRef) async throws(NotebookLookupError) -> Data {
         let key = source.zipPath
 
@@ -74,12 +64,8 @@ actor NotebookBytesCache {
                 do {
                     // Module-qualified: inside the actor, the bare name binds
                     // to this actor's own notebookData(for:) method.
-                    //
-                    // No thread-pool offload any more. It existed because
-                    // resolving the bytes meant a BLOCKING zip spawn taken
-                    // under the process-wide zip lock. That call suspends now
-                    // and the lock is gone, so what remains is one local file
-                    // read and the offload would only add a hop.
+                    // The call suspends rather than blocks, so it needs no
+                    // thread-pool offload.
                     return .success(try await APIServer.notebookData(from: source))
                 } catch let error as NotebookLookupError {
                     return .failure(error)
@@ -172,8 +158,7 @@ struct NotebookBytesCacheKey: StorageKey {
 extension Application {
     var notebookBytesCache: NotebookBytesCache {
         lazyStored(NotebookBytesCacheKey.self) {
-            NotebookBytesCache(
-                threadPool: threadPool, eventLoopGroup: eventLoopGroup)
+            NotebookBytesCache()
         }
     }
 }
