@@ -184,6 +184,12 @@ private func resolveNotebookForExtraction(
 ///   skip. The Python normalizer gets this scoping for free by walking only the
 ///   submission directory; this walks the merged workspace, so it has to be
 ///   told.
+/// - Parameter protected: workspace filenames that belong to the test setup
+///   (`protectedWorkspaceFilenames(manifest:)`). A notebook whose extracted
+///   source would take one of these names is skipped with a warning: for R,
+///   Lua, Octave and Racket a generated test has the extraction's extension,
+///   so `publictest_x.ipynb` would otherwise replace `publictest_x.R` with the
+///   student's code (#2269).
 /// - Returns: warnings about files that could not be graded — the
 ///   `unsupportedFilesWarn` guarantee, which the generic path previously did
 ///   not provide at all.
@@ -191,7 +197,8 @@ private func resolveNotebookForExtraction(
 func extractNotebooksToCode(
     in directory: URL,
     forcedLanguage: AssignmentLanguage? = nil,
-    studentNotebookName: String? = nil
+    studentNotebookName: String? = nil,
+    protected: Set<String> = []
 ) throws -> [String] {
     let items =
         (try? FileManager.default.contentsOfDirectory(
@@ -225,7 +232,12 @@ func extractNotebooksToCode(
         // switch identical to SubmissionStaging's.
         let ext = language.sourceFileExtension
         let stem = item.deletingPathExtension().lastPathComponent
-        let outURL = directory.appendingPathComponent("\(stem).\(ext)")
+        let outName = "\(stem).\(ext)"
+        guard !protected.contains(outName) else {
+            warnings.append(protectedExtractionSkippedWarning(notebook: item.lastPathComponent, source: outName))
+            continue
+        }
+        let outURL = directory.appendingPathComponent(outName)
 
         let output = assembleExtractedSource(
             language: language, cells: cells, filename: item.lastPathComponent)
@@ -233,6 +245,13 @@ func extractNotebooksToCode(
         try output.write(to: outURL, atomically: true, encoding: .utf8)
     }
     return warnings
+}
+
+/// The warning for a notebook whose extracted source would replace a file of
+/// the test setup.
+func protectedExtractionSkippedWarning(notebook: String, source: String) -> String {
+    "Ignoring \(notebook) from your submission: its code would replace \(source), which belongs to the "
+        + "assignment's test setup."
 }
 
 /// The per-language assembly of one notebook's cells into a source module.

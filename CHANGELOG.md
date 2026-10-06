@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.479] - 2026-10-06
+
+### Security
+
+- **A sandboxed test script can no longer remove the sandbox's mounts (#2268).** The sandbox prelude runs as root of a new user namespace that owns its mount namespace, and the test script kept every capability it had there, so it could `umount` the covers over the work root, `/tmp` and the hidden suite scripts, and read other jobs' directories and every cached test setup, including the secret tests of other assignments. The script now starts through `setpriv` with empty inheritable, ambient and bounding capability sets and no-new-privs, so it holds no capability and cannot regain one.
+
+
+## [0.5.478] - 2026-10-06
+
+### Security
+
+- **A notebook can no longer be extracted over a test script.** For R, Lua, Octave and Racket a generated test has the extension a notebook is extracted to, so a submitted `publictest_x.ipynb` replaced `publictest_x.R` with the student's own code, which then passed. Extraction now skips a notebook whose output would replace a file of the test setup, and warns (#2269).
+
+
+## [0.5.477] - 2026-10-06
+
+### Security
+
+- **A sandboxed job's files hold at most `--job-disk-limit` of memory (#2252).** Each test script had separate tmpfs mounts for `/tmp` (512 MB), `HOME` (256 MB), `/var/tmp`, `/dev/shm` and, since #2251, its working directory: about 1.1 GB per job of memory that belongs to no process, which the kernel's OOM killer cannot attribute to the job that wrote it. They are now folders in one private tmpfs of `--job-disk-limit` megabytes (default 256). An exact per-job memory limit needs a cgroup and is left for a change to how the runner is started.
+
+
 ## [0.5.476] - 2026-10-06
 
 ### Security
