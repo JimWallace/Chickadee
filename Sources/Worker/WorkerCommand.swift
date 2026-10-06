@@ -201,7 +201,24 @@ struct WorkerCommand: AsyncParsableCommand {
                     "capabilities": runnerProfile.capabilities.map(\.name),
                 ])
         }
+        let terminateSource = Self.drainOnTerminate(daemon)
+        defer { terminateSource.cancel() }
         try await daemon.run()
+    }
+
+    /// Makes SIGTERM drain the runner rather than stop it (`WorkerDaemon.drain`).
+    /// `docker stop`, `docker compose up` on a new image and a host shutdown
+    /// all send SIGTERM, then SIGKILL after the container's
+    /// `stop_grace_period`. The runner is the container's first process, and
+    /// the kernel delivers no signal to that process unless it handles the
+    /// signal, so before this the runner ignored SIGTERM and was always
+    /// killed, with its running jobs, when the grace period ended.
+    static func drainOnTerminate(_ daemon: WorkerDaemon) -> any DispatchSourceSignal {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
+        source.setEventHandler { Task { await daemon.drain() } }
+        source.resume()
+        return source
     }
 
     /// What the startup check found about the sandbox's limits.

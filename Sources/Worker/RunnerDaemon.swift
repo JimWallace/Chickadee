@@ -52,6 +52,9 @@ actor WorkerDaemon {
     let workRoot: URL
     var serverConnectionLost = false
     var activeJobs = 0
+    /// Set by `drain()`. A draining runner claims no new job; each slot ends
+    /// after the job it is running, and `run()` then returns.
+    private(set) var isDraining = false
 
     init(
         poller: any JobPolling,
@@ -87,7 +90,7 @@ actor WorkerDaemon {
                 event: "runner_shutdown",
                 fields: [
                     "runner_id": workerID,
-                    "status": "stopped",
+                    "status": isDraining ? "drained" : "stopped",
                 ])
         }
         try await withThrowingDiscardingTaskGroup { group in
@@ -97,6 +100,23 @@ actor WorkerDaemon {
         }
     }
 
+    /// Cordons the runner and lets it drain: it claims no new job, finishes
+    /// and reports the jobs it is running, and then `run()` returns. A job
+    /// that a poll already in flight claims is run too, because the server
+    /// has assigned it. SIGTERM calls this (`WorkerCommand.drainOnTerminate`),
+    /// so `docker stop` and every runner update wait for the running jobs, up
+    /// to the container's `stop_grace_period`, and do not stop them.
+    func drain() {
+        guard !isDraining else { return }
+        isDraining = true
+        writeStructuredRunnerLog(
+            event: "runner_draining",
+            fields: [
+                "runner_id": workerID,
+                "runner_active_jobs": activeJobs,
+            ])
+    }
+
     // MARK: - Per-worker loop
 
     private func workerLoop(slot: Int) async throws {
@@ -104,7 +124,7 @@ actor WorkerDaemon {
             initial: .milliseconds(config.retryBaseDelayMs),
             max: .milliseconds(config.retryMaxDelayMs)
         )
-        while !Task.isCancelled {
+        while !Task.isCancelled && !isDraining {
             do {
                 try await runPollCycle(slot: slot, backoff: &backoff)
             } catch JobPollerError.duplicateWorkerID(let message) {
@@ -191,7 +211,19 @@ actor WorkerDaemon {
                     "status": "no_job",
                 ])
             let delay = backoff.next()
-            try await Task.sleep(for: delay)
+            try await pollSleep(delay)
+        }
+    }
+
+    /// Sleeps for `delay` between polls, in short steps, and returns early
+    /// when a drain starts, so an idle slot does not hold up the drain.
+    private func pollSleep(_ delay: Duration) async throws {
+        let step = Duration.milliseconds(250)
+        var remaining = delay
+        while remaining > .zero && !isDraining {
+            let next = min(step, remaining)
+            try await Task.sleep(for: next)
+            remaining -= next
         }
     }
 
@@ -242,7 +274,7 @@ actor WorkerDaemon {
         ]
         if let httpStatus { fields["http_status"] = httpStatus }
         writeStructuredRunnerLog(event: "poll_cycle_end", fields: fields)
-        try await Task.sleep(for: delay)
+        try await pollSleep(delay)
     }
 
     /// HTTP-specific dispatch: classify the response, then either reuse the
