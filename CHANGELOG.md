@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.508] - 2026-10-06
+
+### Removed
+
+- **Unused thread-pool fields in two caches.** `ZipEntryListCache` and `NotebookBytesCache` no longer store a thread pool and an event-loop group that they never used, and their comments no longer describe the removed offload and zip lock. (#2304)
+
+
 ## [0.5.507] - 2026-10-06
 
 ### Changed
