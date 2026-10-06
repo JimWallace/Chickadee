@@ -44,7 +44,7 @@ struct ToolContext {
     /// enforced by the DB role, not only the in-process boundary. Otherwise it
     /// falls back to the shared default pool.
     var db: any Database {
-        request.application.usesDedicatedMCPDatabase ? request.db(.mcp) : request.db
+        request.db(request.application.mcpDatabaseID)
     }
 
     /// True when the database `db` would resolve to is actually configured.

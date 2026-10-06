@@ -89,6 +89,9 @@ import Testing
         // jobs, changes no content, and the assignment stays open for the
         // live session it serves. No close/regrade.
         "RunTournamentTool.swift",
+        // Re-runs validation of the unchanged solution and suite, optionally
+        // on one runner; nothing it does changes what the suite grades.
+        "RunValidationTool.swift",
         // Dataset marks change delivery (per-student slices), not the graded
         // suite; mirrors the web PUT /datasets endpoint, which neither closes
         // nor regrades. Slices apply on the next (re)grade.

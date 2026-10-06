@@ -46,6 +46,7 @@ The catalog:
 | `get_achievements` | `content:read` | The assignment's composable awards (badges / class goals / records), built-in defaults merged in until first curated |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
+| `run_validation` | `content:write` | Re-run validation with no edit, optionally on one runner (5-minute fallback to any runner) |
 | `get_validation_result` | `content:read` | Per-test outcomes of the reference solution's latest validation run (status + shortResult/longResult, all tiers); validation-only, never student data |
 | `list_assignment_versions` | `content:read` | The assignment's content-version history, newest first: who edited, when, and what produced it |
 | `get_assignment_version` | `content:read` | One past version's manifest + file list (each marked `differsFromCurrent`), and optionally one file's body; never touches the live assignment |
