@@ -74,9 +74,7 @@ func applySuiteEditMapped(
     do {
         try await applySuiteEdit(
             setup: setup, body: body, kernelEnvironments: kernelEnvironments, on: db)
-    } catch let error as WebAssignmentError {
-        throw MCPToolError.from(error)
-    } catch let error as any AbortError {
+    } catch let error as any AbortError where error.isClientRefusal {
         throw MCPToolError.from(error)
     }
 }

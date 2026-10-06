@@ -96,7 +96,7 @@ struct UpdateSectionVariablesTool: ContentTool {
                 // acting-user seed bookkeeping runs on the owner pool, which is
                 // the only one granted `assignment_personalization_seeds`.
                 seedDB: context.mainDB)
-        } catch let error as WebAssignmentError {
+        } catch let error as WebAssignmentError where error.isClientRefusal {
             throw MCPToolError.from(error)
         }
 
