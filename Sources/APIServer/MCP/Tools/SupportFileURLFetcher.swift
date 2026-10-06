@@ -88,6 +88,8 @@ enum SupportFileURLFetcher {
     /// a support file lives in the same setup zip, so this stays comfortably
     /// under it.  Compile-time constant — deliberately not an env var.
     static let maxBytes = 8 * 1024 * 1024
+    /// `maxBytes` for served prose ("8 MB"), so the text cannot drift from it.
+    static let maxBytesText = "\(maxBytes / (1024 * 1024)) MB"
     static let connectTimeout: TimeAmount = .seconds(10)
     static let readTimeout: TimeAmount = .seconds(15)
     static let overallTimeout: TimeAmount = .seconds(20)

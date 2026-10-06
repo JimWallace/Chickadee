@@ -70,10 +70,11 @@ enum LanguageProse {
         AssignmentLanguage.allCases.map(\.rawValue).joined(separator: ", ")
     }
 
-    /// `["a", "b", "c"]` → `"a, b or c"`; a one-element list is itself.
-    static func list(_ items: [String]) -> String {
+    /// `["a", "b", "c"]` → `"a, b or c"` (or `"a, b and c"` with
+    /// `conjunction: "and"`); a one-element list is itself. No Oxford comma.
+    static func list(_ items: [String], conjunction: String = "or") -> String {
         guard let last = items.last else { return "" }
         guard items.count > 1 else { return last }
-        return items.dropLast().joined(separator: ", ") + " or " + last
+        return items.dropLast().joined(separator: ", ") + " \(conjunction) " + last
     }
 }

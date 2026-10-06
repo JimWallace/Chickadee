@@ -23,7 +23,7 @@
 // three ways the same derived set is written, chosen by where it appears, and
 // no call site holds a language name at all.
 //
-// Adding a seventh language requires no edit to this file and no edit to any
+// Adding a language requires no edit to this file and no edit to any
 // copy that uses it. `MCPLanguageCoverageTests` fails if a hand-typed list
 // reappears anywhere in the served catalog.
 
@@ -34,7 +34,7 @@ import Core
 enum MCPLanguageProse {
 
     /// Prose for a sentence a human or agent reads: `"Python, R, Lua, Octave,
-    /// C++ or Racket"`. Display names, Oxford-comma-free, joined with "or".
+    /// C++, Racket or Java"`. Display names, Oxford-comma-free, joined with "or".
     ///
     /// Use inside a sentence about what the system supports.
     static var displayNames: String {
