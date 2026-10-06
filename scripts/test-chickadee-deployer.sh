@@ -124,6 +124,25 @@ export CHICKADEE_COMPOSE_FILE="$WORK/docker-compose.yml"
 # shellcheck source=../deploy/chickadee-deployer.sh
 . "$REPO_ROOT/deploy/chickadee-deployer.sh"
 
+# The daemon's git clone, and its restart. The real ones would run git on this
+# repository and replace the test process.
+repo_git() {
+  printf 'git %s\n' "$*" >> "$STUB/calls"
+  case "$1" in
+    rev-parse)
+      case "$2" in
+        HEAD) cat "$STUB/git_head" ;;
+        --short=12) cut -c1-12 "$STUB/git_head" ;;
+        *) cat "$STUB/git_tag_commit" ;;
+      esac
+      ;;
+    status) cat "$STUB/git_dirty" 2>/dev/null ;;
+    fetch) [ ! -f "$STUB/git_fetch_fails" ] ;;
+    checkout) printf '%s\n' "$4" > "$STUB/git_head" ;;
+  esac
+}
+restart_self() { printf 'restart-self\n' >> "$STUB/calls"; }
+
 # The fake clock. `sleep` advances it instead of waiting.
 FAKE_NOW=1000000
 now_epoch() { printf '%s\n' "$FAKE_NOW"; }
@@ -173,6 +192,8 @@ start_case() {
   echo "0.5.232" > "$STUB/target_version"
   echo "ok" > "$STUB/health"
   touch "$STUB/image_published" "$STUB/deploy_ok"
+  echo "$RELEASE_SHA" > "$STUB/git_head"
+  echo "$RELEASE_SHA" > "$STUB/git_tag_commit"
   DEPLOYED_VERSION="0.5.231"
   PAUSED=0
   APPROVED_VERSION=""
@@ -313,6 +334,61 @@ grep -q 'runner-refresh.*uid_map: Operation not permitted' "$HISTORY_FILE" \
 expect_calls "deploy-script rollback" 0
 expect_state idle
 [ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "a runner failure changed the deployed version to $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+OLD_SHA="03df65cfb5cd97613bf7356a7204e88c866ca107"
+
+start_case "an older clone is brought to the release commit and the daemon restarts"
+echo "$OLD_SHA" > "$STUB/git_head"
+run_cycle
+expect_calls "git fetch --quiet origin +refs/tags/v0.5.232:refs/tags/v0.5.232" 1
+expect_calls "git checkout --quiet --detach $RELEASE_SHA" 1
+expect_calls "restart-self" 1
+expect_history deployer-update ok
+expect_calls "snapshot" 0
+expect_calls "deploy-script" 0
+
+# ---------------------------------------------------------------------------
+start_case "a clone already at the release does not fetch, and deploys"
+run_cycle
+expect_calls "git fetch" 0
+expect_calls "restart-self" 0
+expect_calls "deploy-script deploy" 1
+[ "$(json_field "$STATUS_FILE" scriptsRevision)" = "${RELEASE_SHA:0:12}" ] \
+  || fail "status.json does not carry the scripts revision"
+
+# ---------------------------------------------------------------------------
+start_case "a clone with local changes is left alone, said once, and the deploy goes on"
+echo "$OLD_SHA" > "$STUB/git_head"
+echo " M deploy/chickadee-deployer.sh" > "$STUB/git_dirty"
+run_cycle
+expect_calls "git checkout" 0
+expect_calls "restart-self" 0
+expect_history deployer-update skipped
+expect_calls "deploy-script deploy" 1
+echo "v0.5.232" > "$STUB/latest_release"
+DEPLOYED_VERSION="0.5.231"
+run_cycle
+[ "$(grep -c '"action": "deployer-update"' "$HISTORY_FILE")" = "1" ] || fail "the skip was recorded more than once"
+
+# ---------------------------------------------------------------------------
+start_case "a tag that names another commit than the release is refused"
+echo "$OLD_SHA" > "$STUB/git_head"
+echo "$OLD_SHA" > "$STUB/git_tag_commit"
+run_cycle
+expect_calls "git checkout" 0
+expect_calls "restart-self" 0
+expect_history deployer-update failed
+expect_calls "deploy-script deploy" 1
+
+# ---------------------------------------------------------------------------
+start_case "a failed fetch keeps the current scripts and deploys"
+echo "$OLD_SHA" > "$STUB/git_head"
+touch "$STUB/git_fetch_fails"
+run_cycle
+expect_calls "git checkout" 0
+expect_history deployer-update failed
+expect_calls "deploy-script deploy" 1
 
 # ---------------------------------------------------------------------------
 start_case "a healthy server that reports another version is rolled back, not recorded"

@@ -1,0 +1,3 @@
+### Changed
+
+- **The auto-deploy daemon keeps its own scripts at the release it deploys.** It ran from a git clone on the host that nothing updated, so fixes to the deploy scripts reached production only by a manual `git pull`. Once a release's image is staged, the daemon now checks out the release's own commit in that clone (the tag must name the same commit as the image), as the clone's owner, and restarts on the new scripts. A clone with local changes is left alone and the history says so; a paused daemon updates nothing. `status.json` and the admin MCP `get_deploy_status` report the scripts' revision. A daemon older than this change needs one `git pull` and a restart to start updating itself.
