@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.503] - 2026-10-06
+
+### Changed
+
+- **Runner hosts: give the runner container a fixed hostname.** `deploy/README.md` now says so. The server refuses a worker ID that another hostname used in the last 90 seconds, so a recreated runner with a new random hostname could not poll for 90 seconds after each update.
+
+
 ## [0.5.502] - 2026-10-06
 
 ### Fixed
