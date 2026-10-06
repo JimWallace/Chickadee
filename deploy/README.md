@@ -231,10 +231,18 @@ limits:
 - Lifetime: when the script ends, the runner stops every process that is left
   in the cgroup, and then removes the cgroup.
 
-The container's memory must hold every job at its limit:
-`--max-jobs` x `--job-memory-limit`, plus about 512 MB for the runner. With the
-defaults that is about 4.5 GB. Set `mem_limit` in the Compose file to that
-value or more, or leave it unset.
+The limit is a ceiling, not a reservation: a job that uses 150 MB costs
+150 MB. If you set a memory limit on the runner container (`mem_limit`), it
+must hold every job at its limit at once: `--max-jobs` x `--job-memory-limit`,
+plus about 512 MB for the runner. With the defaults that is about 4.5 GB. A
+smaller container limit can be reached by several jobs together before any
+job reaches its own limit. The kernel then stops the largest process in the
+container, which need not be the job that grew. The runner warns at startup
+when the container limit is too small, and names a `--job-memory-limit` that
+fits. For a fixed container limit, use (container limit - 512 MB) /
+`--max-jobs`. A test stopped because the container ran out shows
+`the runner ran out of memory and stopped the test`, not the message for its
+own limit.
 
 The runner checks the cgroups at startup with one sandboxed command. Its
 `runner_configuration` log line then shows `"job_cgroups":"enabled"`, or

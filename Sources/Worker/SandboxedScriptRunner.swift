@@ -143,8 +143,9 @@ struct SandboxedScriptRunner: ScriptRunner {
 
     /// Runs `body` with a fresh cgroup for its command, then removes the
     /// cgroup and every process left in it. When the kernel stopped the command
-    /// at its memory limit, the output says so, because otherwise the student
-    /// sees only an exit code of 137.
+    /// for want of memory, the output says so, and says whether the command
+    /// reached its own limit or the container ran out, because otherwise the
+    /// student sees only an exit code of 137.
     ///
     /// When the cgroup cannot be created, the command runs without one and the
     /// runner logs why: a job is graded rather than failed for a fault of the
@@ -161,15 +162,34 @@ struct SandboxedScriptRunner: ScriptRunner {
             return await body(nil)
         }
         let output = await body(cgroup)
-        let kills = cgroup.memoryLimitKills
+        let events = cgroup.memoryEvents
         await cgroup.remove()
-        guard kills > 0 else { return output }
+        guard let note = Self.memoryStopMessage(memoryEvents: events, megabytes: memoryLimitMegabytes)
+        else { return output }
         return ScriptOutput(
             exitCode: output.exitCode,
             stdout: output.stdout,
-            stderr: output.stderr + Self.memoryLimitMessage(megabytes: memoryLimitMegabytes),
+            stderr: output.stderr + note,
             executionTimeMs: output.executionTimeMs,
             timedOut: output.timedOut)
+    }
+
+    /// The line added to a command's stderr when the kernel stopped a process
+    /// of it for want of memory, or `nil` when it did not. A command that did
+    /// not reach its own limit was stopped because the container ran out,
+    /// which is not the test's fault, and the message must not say otherwise.
+    static func memoryStopMessage(memoryEvents events: String, megabytes: Int) -> String? {
+        guard JobCgroup.oomKills(inMemoryEvents: events) > 0 else { return nil }
+        return JobCgroup.ownLimitOOMs(inMemoryEvents: events) > 0
+            ? memoryLimitMessage(megabytes: megabytes)
+            : runnerOutOfMemoryMessage(megabytes: megabytes)
+    }
+
+    /// The line for a command that the kernel stopped because the container,
+    /// not the command, ran out of memory.
+    static func runnerOutOfMemoryMessage(megabytes: Int) -> String {
+        "\nsandbox: the runner ran out of memory and stopped the test, which had not reached "
+            + "its own memory limit of \(megabytes) MB\n"
     }
 
     /// The line added to a command's stderr when the kernel stopped it at its

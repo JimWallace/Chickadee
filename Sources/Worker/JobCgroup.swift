@@ -38,21 +38,29 @@ struct JobCgroup: Sendable, Equatable {
         }
     }
 
-    /// How many times the kernel stopped a process in this cgroup because the
-    /// cgroup was at its memory limit.
-    var memoryLimitKills: Int {
-        guard
-            let events = try? String(
-                contentsOf: directory.appendingPathComponent("memory.events"), encoding: .utf8)
-        else { return 0 }
-        return Self.oomKills(inMemoryEvents: events)
+    /// The contents of the cgroup's `memory.events`, or an empty string.
+    var memoryEvents: String {
+        (try? String(contentsOf: directory.appendingPathComponent("memory.events"), encoding: .utf8)) ?? ""
     }
 
-    /// The `oom_kill` count in the contents of a `memory.events` file.
+    /// The `oom_kill` count in the contents of a `memory.events` file: how
+    /// many processes in the cgroup the kernel stopped for want of memory, at
+    /// this cgroup's limit or at a limit above it.
     static func oomKills(inMemoryEvents events: String) -> Int {
+        count("oom_kill", inMemoryEvents: events)
+    }
+
+    /// The `oom` count in the contents of a `memory.events` file: how many
+    /// times this cgroup itself reached its limit. A cgroup above it that
+    /// reaches its own limit, such as the container's, counts there, not here.
+    static func ownLimitOOMs(inMemoryEvents events: String) -> Int {
+        count("oom", inMemoryEvents: events)
+    }
+
+    private static func count(_ field: String, inMemoryEvents events: String) -> Int {
         for line in events.split(separator: "\n") {
             let fields = line.split(separator: " ")
-            if fields.count == 2, fields[0] == "oom_kill", let count = Int(fields[1]) {
+            if fields.count == 2, fields[0] == field, let count = Int(fields[1]) {
                 return count
             }
         }

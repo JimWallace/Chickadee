@@ -256,6 +256,13 @@ struct WorkerCommand: AsyncParsableCommand {
             writeToStandardError(warning)
         }
         let (cgroups, cgroupsStatus) = await Self.checkJobCgroups(workRoot: workRoot)
+        if cgroups != nil, let containerLimit = JobMemoryBudget.readContainerLimit(),
+            let warning = JobMemoryBudget(
+                containerLimitBytes: containerLimit, maxJobs: maxJobs, memoryLimitMegabytes: jobMemoryLimit
+            ).warning
+        {
+            writeToStandardError(warning)
+        }
         return SandboxCheck(processLimitEnforced: enforced, cgroups: cgroups, cgroupsStatus: cgroupsStatus)
     }
 
