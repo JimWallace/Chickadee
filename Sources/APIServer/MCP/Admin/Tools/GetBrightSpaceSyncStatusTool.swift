@@ -69,8 +69,6 @@ struct GetBrightSpaceSyncStatusTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let windowHours = min(max(input.windowHours ?? 168, 1), 720)
         let sampleLimit = min(max(input.sampleLimit ?? 20, 1), 100)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)

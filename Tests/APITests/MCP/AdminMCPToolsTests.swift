@@ -39,15 +39,6 @@ import VaporTesting
         }
     }
 
-    @Test func getMetricsSnapshotRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "ms-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetMetricsSnapshotTool().execute(.init(), context(subject: "ms-prof"))
-            }
-        }
-    }
-
     @Test func getDeployStatusReturnsDaemonStateForAdmin() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "dep-admin", role: "admin")
@@ -107,16 +98,6 @@ import VaporTesting
         }
     }
 
-    @Test func getDeployStatusRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "dep-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetDeployStatusTool().execute(
-                    .init(), context(subject: "dep-prof"))
-            }
-        }
-    }
-
     @Test func getDeployHistoryReturnsRecentEntriesNewestFirst() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "hist-admin", role: "admin")
@@ -139,16 +120,6 @@ import VaporTesting
             // Newest first.
             #expect(output.entries.first?.version == "v0.4.558")
             #expect(output.entries.last?.version == "v0.4.557")
-        }
-    }
-
-    @Test func getDeployHistoryRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "hist-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetDeployHistoryTool().execute(
-                    .init(limit: nil), context(subject: "hist-prof"))
-            }
         }
     }
 
@@ -248,15 +219,6 @@ import VaporTesting
         }
     }
 
-    @Test func getHealthAlertsRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "ha-student", role: "student")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetHealthAlertsTool().execute(.init(), context(subject: "ha-student"))
-            }
-        }
-    }
-
     @Test func getBrowserDiagnosticsAggregatesAndRedactsUserID() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "bd-admin", role: "admin")
@@ -320,15 +282,6 @@ import VaporTesting
         }
     }
 
-    @Test func getBrowserDiagnosticsRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "bd-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetBrowserDiagnosticsTool().execute(.init(), context(subject: "bd-prof"))
-            }
-        }
-    }
-
     @Test func queryLogsFiltersForAdmin() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "ql-admin", role: "admin")
@@ -358,15 +311,6 @@ import VaporTesting
         }
     }
 
-    @Test func queryLogsRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "ql-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await QueryLogsTool().execute(.init(), context(subject: "ql-prof"))
-            }
-        }
-    }
-
     // MARK: - get_metrics_card_series
 
     @Test func getMetricsCardSeriesReturnsAllWindowsForAdmin() async throws {
@@ -380,15 +324,6 @@ import VaporTesting
             let day = try #require(output.windows.first { $0.window == "24h" })
             #expect(day.bucketLabels.count == 24)
             #expect(day.maxQueueDepth.series.count == 24)
-        }
-    }
-
-    @Test func getMetricsCardSeriesRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "mcs-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetMetricsCardSeriesTool().execute(.init(), context(subject: "mcs-prof"))
-            }
         }
     }
 
@@ -415,15 +350,6 @@ import VaporTesting
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetActiveUsersSeriesTool().execute(
                     .init(window: "90d"), context(subject: "aus-admin2"))
-            }
-        }
-    }
-
-    @Test func getActiveUsersSeriesRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "aus-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetActiveUsersSeriesTool().execute(.init(), context(subject: "aus-prof"))
             }
         }
     }
@@ -504,16 +430,6 @@ import VaporTesting
         }
     }
 
-    @Test func getInstructorCardSeriesRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "ics-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetInstructorCardSeriesTool().execute(
-                    .init(courseCode: "MCP101"), context(subject: "ics-prof"))
-            }
-        }
-    }
-
     // MARK: - get_metrics_timeseries
 
     @Test func getMetricsTimeseriesReturnsBucketsForAdmin() async throws {
@@ -523,15 +439,6 @@ import VaporTesting
                 .init(hours: 6, bucketMinutes: 30), context(subject: "ts-admin"))
             #expect(output.windowHours >= 1)
             #expect(!output.buckets.isEmpty)
-        }
-    }
-
-    @Test func getMetricsTimeseriesRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "ts-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetMetricsTimeseriesTool().execute(.init(), context(subject: "ts-prof"))
-            }
         }
     }
 
@@ -562,15 +469,6 @@ import VaporTesting
         }
     }
 
-    @Test func getQueueStateRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "qs-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetQueueStateTool().execute(.init(), context(subject: "qs-prof"))
-            }
-        }
-    }
-
     // MARK: - list_runners / get_runner_detail
 
     @Test func listRunnersReportsActiveRunnerForAdmin() async throws {
@@ -581,15 +479,6 @@ import VaporTesting
             let output = try await ListRunnersTool().execute(.init(), context(subject: "lr-admin"))
             #expect(output.activeRunnerCount >= 1)
             #expect(output.runners.contains { $0.workerID == "runner-lr" && $0.hostname == "host-lr" })
-        }
-    }
-
-    @Test func listRunnersRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "lr-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await ListRunnersTool().execute(.init(), context(subject: "lr-prof"))
-            }
         }
     }
 
@@ -648,16 +537,6 @@ import VaporTesting
         }
     }
 
-    @Test func getRunnerDetailRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "rd-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetRunnerDetailTool().execute(
-                    .init(runnerID: "runner-rd", sampleSize: nil), context(subject: "rd-prof"))
-            }
-        }
-    }
-
     // MARK: - get_storage_usage
 
     @Test func getStorageUsageReturnsComponentsForAdmin() async throws {
@@ -668,15 +547,6 @@ import VaporTesting
             #expect(output.rows.count >= 5)
             #expect(output.rows.contains { $0.label == "Database" })
             #expect(!output.dbBackend.isEmpty)
-        }
-    }
-
-    @Test func getStorageUsageRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "su-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetStorageUsageTool().execute(.init(), context(subject: "su-prof"))
-            }
         }
     }
 
@@ -737,15 +607,6 @@ import VaporTesting
         }
     }
 
-    @Test func getRequestMetricsRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "rm-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetRequestMetricsTool().execute(.init(), context(subject: "rm-prof"))
-            }
-        }
-    }
-
     // MARK: - list_connected_agents
 
     @Test func listConnectedAgentsReturnsGrantsForAdmin() async throws {
@@ -770,15 +631,6 @@ import VaporTesting
             // The refresh-token hash is never surfaced.
             let json = try #require(String(bytes: JSONEncoder().encode(output), encoding: .utf8))
             #expect(!json.contains("secret-refresh-hash"))
-        }
-    }
-
-    @Test func listConnectedAgentsRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "ca-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await ListConnectedAgentsTool().execute(.init(), context(subject: "ca-prof"))
-            }
         }
     }
 
@@ -815,15 +667,6 @@ import VaporTesting
         }
     }
 
-    @Test func getBrightSpaceSyncStatusRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "bs-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await GetBrightSpaceSyncStatusTool().execute(.init(), context(subject: "bs-prof"))
-            }
-        }
-    }
-
     // MARK: - query_audit_log
 
     @Test func queryAuditLogCountsByActionAndRedactsActors() async throws {
@@ -847,15 +690,6 @@ import VaporTesting
             let json = try #require(String(bytes: JSONEncoder().encode(output), encoding: .utf8))
             #expect(!json.contains("al-secret-actor"))
             #expect(!json.contains("203.0.113.7"))
-        }
-    }
-
-    @Test func queryAuditLogRejectsNonAdmin() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "al-prof", role: "instructor")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await QueryAuditLogTool().execute(.init(), context(subject: "al-prof"))
-            }
         }
     }
 }

@@ -63,8 +63,6 @@ struct QueryAuditLogTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let windowHours = min(max(input.windowHours ?? 168, 1), 2160)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 

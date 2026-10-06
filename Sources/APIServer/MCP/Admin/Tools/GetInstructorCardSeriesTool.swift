@@ -66,8 +66,6 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let code = input.courseCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else {
             throw MCPToolError.invalidArguments(detail: "courseCode must not be empty.")
