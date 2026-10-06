@@ -10,10 +10,9 @@ import Testing
 ///
 /// Five suites, one consequence:
 ///
-///   * `MigrationNamespaceReconcilerTests` rewrites the Fluent migration log:
-///     it reverts `CreateSweepLeases`, deletes that migration's history row,
-///     renames every other row into a legacy namespace and calls
-///     `autoMigrate()` to put it all back.
+///   * `LegacyMigrationNamespaceGuardTests` rewrites the Fluent migration
+///     log: it renames a history row into a legacy namespace to prove the
+///     server refuses to boot on it.
 ///   * `MCPAuditFailClosedTests` drops the `audit_log` table outright, to
 ///     prove a write tool fails closed when its audit record cannot persist.
 ///   * `GetValidationResultVariantFallbackTests` drops the
@@ -60,7 +59,7 @@ import Testing
 /// missed by a hand search that forgot to recurse into `Tests/APITests/MCP/`.
 enum SchemaMutatingSuites {
     static let names: Set<String> = [
-        "MigrationNamespaceReconcilerTests",
+        "LegacyMigrationNamespaceGuardTests",
         "MCPAuditFailClosedTests",
         "ResultCollectionBackfillMigrationTests",
         "GetValidationResultVariantFallbackTests",
