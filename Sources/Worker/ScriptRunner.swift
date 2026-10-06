@@ -25,6 +25,15 @@ protocol ScriptRunner: Sendable {
     func run(
         script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String], hiding hiddenFiles: [URL]
     ) async -> ScriptOutput
+    /// Runs an executable that is not a suite script, such as the `make` step,
+    /// with the same isolation as a script (#2250). The make step used to run
+    /// outside the sandbox, so the commands in a makefile, and any code it
+    /// built from the submission and ran, had the network and every other
+    /// job's directory.
+    func run(
+        command executablePath: String, arguments: [String], workDir: URL, timeLimitSeconds: Int,
+        launchErrorPrefix: String
+    ) async -> ScriptOutput
 }
 
 extension ScriptRunner {
@@ -32,6 +41,22 @@ extension ScriptRunner {
         script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String], hiding hiddenFiles: [URL]
     ) async -> ScriptOutput {
         await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env)
+    }
+
+    /// Runs the command directly, with the allowlisted environment. Only the
+    /// sandbox isolates a command, and `SandboxedScriptRunner` replaces this.
+    func run(
+        command executablePath: String, arguments: [String], workDir: URL, timeLimitSeconds: Int,
+        launchErrorPrefix: String
+    ) async -> ScriptOutput {
+        await executeScriptLaunch(
+            ScriptLaunch(
+                executablePath: executablePath,
+                arguments: arguments,
+                env: mergedScriptEnvironment(overrides: [:])),
+            workDir: workDir,
+            timeLimitSeconds: timeLimitSeconds,
+            launchErrorPrefix: launchErrorPrefix)
     }
 
     /// Convenience overload — call sites without per-run env-var needs can omit `env:`.

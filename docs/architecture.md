@@ -457,7 +457,12 @@ these protections:
 - **The host, with `--sandbox`.** The script cannot reach the network. On
   Linux it has no real privileges. On macOS it can write only in its working
   directory. Without `--sandbox`, the script runs as the runner's user, with
-  network access.
+  network access. The manifest's `make` step runs in the same sandbox as the
+  scripts (#2250); until then it ran outside it, even with `--sandbox`. When
+  the manifest has a make step, a submission cannot supply `Makefile`,
+  `makefile` or `GNUmakefile` (`protectedWorkspaceFilenames`), because the
+  submission is merged before `make` runs and GNU make reads `GNUmakefile`
+  first.
 - **Other jobs on the same runner, with `--sandbox`.** Every job on a runner
   runs as the same user, and every job directory is a child of one work root.
   So while two jobs run at the same time (`--max-jobs` above 1), a script
