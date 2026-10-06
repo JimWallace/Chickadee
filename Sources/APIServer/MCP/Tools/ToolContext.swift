@@ -150,6 +150,14 @@ struct ToolContext {
         return user
     }
 
+    /// Whether the MCP account holds an enrollment row in `courseID`. The
+    /// idempotent deletes use it to answer a row in a course the account
+    /// cannot see exactly as they answer an unknown id (#2342).
+    func subjectIsEnrolled(in courseID: UUID) async throws -> Bool {
+        guard let userID = try await requireEligibleSubject().id else { return false }
+        return try await userIsEnrolled(userID: userID, inCourse: courseID, db: db)
+    }
+
     /// Throws unless `user` holds an enrollment row in `courseID`.
     private func requireEnrollment(of user: APIUser, in courseID: UUID) async throws {
         guard let userID = user.id else {
