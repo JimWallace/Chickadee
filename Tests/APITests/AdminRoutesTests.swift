@@ -457,6 +457,37 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
+    /// Deleting a user removes their enrollments through the declared
+    /// `ON DELETE CASCADE` on `course_enrollments.user_id`, which both
+    /// backends enforce. The handler no longer deletes them by hand (#2285).
+    @Test func deleteUserRemovesEnrollmentsThroughTheCascade() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("admin_routes", on: app)
+            let student = try await makeUser(username: "fk_enrollment_student", role: "student")
+            let studentID = try student.requireID()
+            let course = try await makeCourse(code: "FKE101", name: "FK Enrollment")
+            try await makeEnrollment(userID: studentID, courseID: try course.requireID())
+
+            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+            try await app.asyncTest(
+                .POST, "/admin/users/\(studentID.uuidString)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                }
+            )
+
+            #expect(try await APIUser.find(studentID, on: app.db) == nil)
+            let remaining = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$userID == studentID)
+                .count()
+            #expect(remaining == 0, "course_enrollments rows must go with the user")
+        }
+    }
+
     @Test func adminUserActionsRenderDeleteInUsersTableOnly() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin("admin_routes", on: app)
