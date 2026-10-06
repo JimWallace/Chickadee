@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.489] - 2026-10-06
+
+### Changed
+
+- **One index test, not two.** `CreateSweepAndPollIndexesTests.everyListedIndexExists` checked indexes that `MigrationIndexCoverageTests` already checks, and on Postgres it read every schema, so another suite's index could satisfy it. It is deleted. The test of the list's shape stays, in a file named after it. (#2284)
+
+
 ## [0.5.488] - 2026-10-06
 
 ### Changed
