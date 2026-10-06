@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.524] - 2026-10-06
+
+### Removed
+
+- **The admin MCP tools no longer repeat the admin check.** The admin dispatcher runs the admin re-check once for every tool (#1943), but 18 tools still ran it again themselves, so each call checked the user twice. The per-tool lines and their 18 direct-execute tests are gone; `AdminMCPAdminRecheckTests` checks every tool through the dispatcher. (#2333)
+
+
 ## [0.5.523] - 2026-10-06
 
 ### Changed
