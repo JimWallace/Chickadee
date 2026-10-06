@@ -95,16 +95,18 @@ fi
 rmdir "$JOB" 2>/dev/null || fail "could not remove the job cgroup"
 
 # A JVM in a job cgroup must size itself from the job's limit, not from the
-# host. JDK 25 turns off its container support when cpu or cpuset is missing
-# from the cgroup.controllers it reads, and then reports the host's memory.
-# Like the sandbox prelude, this joins the job cgroup from a user and mount
-# namespace and binds the job cgroup over /sys/fs/cgroup, so the JVM reads
-# the job's own cgroup.controllers, not the container's.
+# host. JDK 25 joins the path in /proc/self/cgroup to the first cgroup2 mount
+# in /proc/self/mountinfo, and needs cpu, cpuset and memory in the
+# cgroup.controllers it finds there. Like the sandbox prelude, this joins the
+# job cgroup from a user and mount namespace, enters a cgroup namespace, and
+# mounts a read-only cgroup2 at /sys/fs/cgroup, so the JVM reads the job's
+# own files exactly as a sandboxed job does.
 JVM_JOB="$JOBS/ci-probe-jvm"
 if mkdir "$JVM_JOB" 2>/dev/null && echo 512M > "$JVM_JOB/memory.max" 2>/dev/null; then
-  limit="$(unshare --user --map-root-user --mount /bin/sh -c \
-    "echo \$\$ > $JVM_JOB/cgroup.procs && mount --bind $JVM_JOB /sys/fs/cgroup && exec java -XshowSettings:system -version" 2>&1 \
-    | sed -n 's/^ *Memory Limit: *//p')"
+  limit="$(unshare --user --map-root-user --mount /bin/sh -c '
+      echo $$ > "$1/cgroup.procs" &&
+      exec unshare --cgroup /bin/sh -c "mount -t cgroup2 -o ro chickadee-job-cgroup /sys/fs/cgroup && exec java -XshowSettings:system -version"
+    ' sh "$JVM_JOB" 2>&1 | sed -n 's/^ *Memory Limit: *//p')"
   [ "$limit" = "512.00M" ] && pass "a JVM in a job cgroup sees its memory limit ($limit)" \
     || fail "a JVM in a job cgroup reports the memory limit '$limit', expected 512.00M"
   rmdir "$JVM_JOB" 2>/dev/null || fail "could not remove the JVM job cgroup"

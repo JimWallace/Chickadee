@@ -249,6 +249,11 @@ limits:
 - Lifetime: when the script ends, the runner stops every process that is left
   in the cgroup, and then removes the cgroup.
 
+The script runs in a cgroup namespace whose root is its job cgroup, with a
+read-only view of that cgroup at `/sys/fs/cgroup`. It reads its own limits
+there and cannot change them. A JVM reads its heap size and CPU count the same
+way, so a Java test sizes itself from the job's limit, not from the host.
+
 The limit is a ceiling, not a reservation: a job that uses 150 MB costs
 150 MB. If you set a memory limit on the runner container (`mem_limit`), it
 must hold every job at its limit at once: `--max-jobs` x `--job-memory-limit`,
