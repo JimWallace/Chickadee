@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.507] - 2026-10-06
+
+### Changed
+
+- **Runner updates no longer stop running jobs (cordon and drain).** On SIGTERM the runner now claims no new job, finishes and reports the jobs it is running, and exits. Before this, the runner, as the container's first process, ignored SIGTERM, and every `docker stop` or runner update killed it after 10 seconds with its jobs, which the server then re-queued only 10 minutes later. The bundled Compose file sets `stop_grace_period: 10m` on the runner; a runner host with its own Compose file must add it. `deploy/chickadee-runner-update.sh` holds a lock, so a long drain does not start a second update. The runner logs `runner_draining` and ends with `runner_shutdown` status `drained`.
+
+### Fixed
+
+- **A Compose override can no longer start the runner as root.** The runner's pre-step (`/app/runner-entrypoint.sh`) is now the service's `entrypoint`, not part of its `command`. On the server host, a `docker-compose.override.yml` that set the runner's `command` replaced the pre-step, so v0.5.501's runner started as root with `SYS_ADMIN`; its sandbox check then failed and it refused to start, so it never graded. Every command, including an override's or `docker compose run`'s, now runs through the pre-step and as uid 999. The image build checks that a replaced command runs as uid 999.
+
+
 ## [0.5.506] - 2026-10-06
 
 ### Added
