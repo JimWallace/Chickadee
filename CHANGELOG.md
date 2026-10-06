@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.509] - 2026-10-06
+
+### Changed
+
+- **One notebook cell-source reader.** Five private copies of the "join a cell's `source`" helper are gone. Every caller now uses `NotebookCellSources.cellSource`. (#2306)
+
+
 ## [0.5.508] - 2026-10-06
 
 ### Removed
