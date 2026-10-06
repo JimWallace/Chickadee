@@ -208,43 +208,20 @@ func evaluateAndClaimCandidate(
             logger: evaluator.logger
         )
 
-        let capabilityResult = evaluator.compatibilityMatcher.evaluate(
-            runnerProfile: runnerProfile,
-            requirements: requirementSpec
-        )
-        // Fold the manifest's optional `minimumRunnerVersion` gate and the
-        // implicit language gate into the same verdict so either block rides
-        // the existing diagnostics / guard / blocked-candidate path.  Use
-        // the *merged* result below, not `capabilityResult`, or the
-        // diagnostics would report "compatible" while the job is actually
-        // blocked.
-        //
-        // The language gate needs no authoring step: the manifest already
-        // knows what language the assignment is in and the runner already
+        // One decision, shared with the unclaimable-jobs health rule
+        // (`claimCompatibility`): the capability requirements, the version
+        // gates (deployment floor and the manifest's `minimumRunnerVersion`),
+        // the implicit language gate and the class-activity gate. The
+        // language gate needs no authoring step: the manifest already knows
+        // what language the assignment is in and the runner already
         // advertises what it has, so a runner that cannot grade this
         // assignment leaves it for one that can instead of failing it.
-        let versionResult = RunnerVersionGate.combine(
-            RunnerVersionGate.evaluateDeploymentFloor(runnerVersion: body.runnerVersion),
-            RunnerVersionGate.evaluate(
-                runnerVersion: body.runnerVersion,
-                minimumRunnerVersion: manifest.minimumRunnerVersion
-            )
-        )
-        let languageResult = RunnerLanguageGate.evaluate(
+        let compatibilityResult = claimCompatibility(
+            runnerVersion: body.runnerVersion,
             runnerProfile: runnerProfile,
-            manifest: manifest
-        )
-        // A class-activity match needs a runner build that stages its
-        // opponent; the same implicit shape as the language gate.
-        let activityResult = RunnerActivityGate.evaluate(
-            runnerProfile: runnerProfile,
-            manifest: manifest
-        )
-        let compatibilityResult = RunnerVersionGate.combine(
-            RunnerVersionGate.combine(
-                RunnerVersionGate.combine(capabilityResult, versionResult),
-                languageResult),
-            activityResult
+            manifest: manifest,
+            requirements: requirementSpec,
+            matcher: evaluator.compatibilityMatcher
         )
         await evaluator.application.diagnostics.recordCompatibilityDecision(
             submission: submission,

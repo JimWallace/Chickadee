@@ -10,6 +10,7 @@
 // variables).  Slice 2 will keep the same apply() API but feed it
 // per-student values from the PersonalizationEvaluator.
 
+import Core
 import Foundation
 
 enum NotebookSubstitutionError: Error {
@@ -95,7 +96,7 @@ enum NotebookSubstitution {
             guard let cellType = cell["cell_type"] as? String, cellType == "code" else {
                 continue
             }
-            let originalSource = readCellSource(cell)
+            let originalSource = NotebookCellSources.cellSource(cell)
             let (rewritten, substituted) = try applyToCellSource(
                 originalSource,
                 substitutions: substitutions,
@@ -143,7 +144,7 @@ enum NotebookSubstitution {
             guard let cellType = cell["cell_type"] as? String, cellType == "code" else {
                 continue
             }
-            found.formUnion(placeholderNames(inSource: readCellSource(cell)))
+            found.formUnion(placeholderNames(inSource: NotebookCellSources.cellSource(cell)))
         }
         return found.sorted()
     }
@@ -167,12 +168,6 @@ enum NotebookSubstitution {
     }
 
     // MARK: - Private helpers
-
-    private static func readCellSource(_ cell: [String: Any]) -> String {
-        if let s = cell["source"] as? String { return s }
-        if let arr = cell["source"] as? [String] { return arr.joined() }
-        return ""
-    }
 
     /// nbformat allows `source` to be either a single string or an array
     /// of strings (each typically ending in `\n`).  When we rewrite a

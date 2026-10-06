@@ -13,6 +13,8 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     case databaseUnreachable
     case brightspaceSyncFailing
     case outboundEgressFailing
+    case deployerUnhealthy
+    case unclaimableJobs
 
     var humanReadable: String {
         switch self {
@@ -25,6 +27,8 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .databaseUnreachable: return "Database unreachable"
         case .brightspaceSyncFailing: return "BrightSpace grade sync failing"
         case .outboundEgressFailing: return "Outbound network unreachable"
+        case .deployerUnhealthy: return "Auto-deploy not healthy"
+        case .unclaimableJobs: return "Jobs no runner can grade"
         }
     }
 
@@ -39,11 +43,14 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         // Warning, not info: one runner down while others poll is exactly the
         // outage nothing else reports (Sept 2026, sparrow, several days).
         case .runnerMissing: return "warning"
-        // Advisory, not an outage: a runner a release behind is already protected
-        // by the #1210 minimum-runner-version gate (it queues rather than
-        // mis-grades). Surfaces on the dashboard but doesn't page — see
-        // `pagesOperator`.
-        case .runnerVersionSkew: return "info"
+        // Warning, not info: the #1210 minimum-runner-version gate keeps a stale
+        // runner from mis-grading, but nothing keeps it from running without a
+        // sandbox fix, such as the capability drop of #2274.
+        case .runnerVersionSkew: return "warning"
+        // Warning: prod stays on an old release, or stops receiving releases at
+        // all, until someone acts on the host.
+        case .deployerUnhealthy: return "warning"
+        case .unclaimableJobs: return "warning"
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
         case .editorKernelUnrecoverable: return "warning"

@@ -194,6 +194,16 @@ actor WorkerActivityStore {
     /// never carried a version) are omitted, so they can't masquerade as skew.
     /// Non-mutating like `runnerPresence`: it does not prune, so evaluating the
     /// alert never races the dashboard's pruning in `snapshotsSortedByRecent`.
+    /// The workerID and version of each runner seen within `withinSeconds`.
+    /// It reads only: unlike `snapshotsSortedByRecent`, it prunes nothing, so
+    /// a short window here cannot drop an entry that another reader needs.
+    func activeRunners(withinSeconds: TimeInterval, now: Date = Date()) -> [(workerID: String, runnerVersion: String)] {
+        entries
+            .filter { now.timeIntervalSince($0.value.lastSeen) <= withinSeconds }
+            .map { (workerID: $0.key, runnerVersion: $0.value.runnerVersion) }
+            .sorted { $0.workerID < $1.workerID }
+    }
+
     func knownRunnerVersions(rememberSeconds: TimeInterval, now: Date = Date()) -> [String] {
         entries.values
             .filter { now.timeIntervalSince($0.lastSeen) <= rememberSeconds && !$0.runnerVersion.isEmpty }
@@ -221,13 +231,16 @@ actor LocalRunnerManager {
     private var runner: SupervisedProcess?
 
     func ensureRunning(app: Application, logger: Logger) async {
-        if let runner, runner.isRunning {
-            return
-        }
-
+        // Read the secret first. This actor is open to other calls during an
+        // await, so an await between the check below and the assignment of
+        // `runner` let two callers both pass the check and start two runners,
+        // one of which could then never be stopped (#2299).
         let secret = (await app.workerSecretStore.runtimeOverrideValue() ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines
         )
+        if let runner, runner.isRunning {
+            return
+        }
         guard !secret.isEmpty else {
             logger.warning("Local runner autostart is enabled, but worker secret is empty.")
             return
@@ -274,11 +287,13 @@ actor LocalRunnerManager {
 
     func stopIfRunning(logger: Logger) async {
         guard let runner else { return }
+        // Clear the handle before the await, so a start that runs during the
+        // stop is kept rather than overwritten with nil afterwards.
+        self.runner = nil
         if runner.isRunning {
             logger.info("Stopping local runner process...")
         }
         await runner.stop()
-        self.runner = nil
     }
 }
 

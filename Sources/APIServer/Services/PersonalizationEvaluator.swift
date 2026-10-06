@@ -39,37 +39,6 @@ enum PersonalizationEvaluatorError: Error {
     case missingName(name: String, stdout: String)
 }
 
-/// Minimal counting semaphore for async contexts: `acquire` suspends (no
-/// thread parked) once `width` slots are in use; `release` hands the slot to
-/// the oldest waiter. Used to bound concurrent python3 evaluations (#1156).
-actor AsyncCountingSemaphore {
-    private let width: Int
-    private var inUse = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(width: Int) {
-        self.width = max(1, width)
-    }
-
-    func acquire() async {
-        if inUse < width {
-            inUse += 1
-            return
-        }
-        await withCheckedContinuation { waiters.append($0) }
-        // Resumed by release(), which transfers the slot without
-        // decrementing `inUse`.
-    }
-
-    func release() {
-        if waiters.isEmpty {
-            inUse -= 1
-        } else {
-            waiters.removeFirst().resume()
-        }
-    }
-}
-
 enum PersonalizationEvaluator {
 
     /// Timeout (seconds) for one evaluation subprocess in `language`.
@@ -206,21 +175,19 @@ enum PersonalizationEvaluator {
         let stdout: String
         let stderr: String
         let exitCode: Int32
-        await Self.spawnGate.acquire()
         do {
-            (stdout, stderr, exitCode) = try await spawnAndCapture(
-                executableURL: URL(fileURLWithPath: "/usr/bin/env"),
-                arguments: [interpreter, driverURL.path],
-                cwd: spawnCwd,
-                env: env,
-                timeoutSeconds: timeoutSeconds
-            )
-            await Self.spawnGate.release()
+            (stdout, stderr, exitCode) = try await Self.spawnGate.withPermit {
+                try await spawnAndCapture(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+                    arguments: [interpreter, driverURL.path],
+                    cwd: spawnCwd,
+                    env: env,
+                    timeoutSeconds: timeoutSeconds
+                )
+            }
         } catch PersonalizationEvaluatorError.timedOut {
-            await Self.spawnGate.release()
             throw PersonalizationEvaluatorError.timedOut
         } catch {
-            await Self.spawnGate.release()
             throw PersonalizationEvaluatorError.spawnFailed(String(describing: error))
         }
 
