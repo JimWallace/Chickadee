@@ -10,10 +10,11 @@
 //
 // The `created_at` column (added by `AddSessionsCreatedAt`) is populated
 // via a column DEFAULT, so Vapor's `SessionRecord` model is unchanged.  Rows
-// older than `maxAge` are deleted; rows with NULL `created_at` (pre-migration)
-// are preserved — `created_at < cutoff` is never true for NULL, so they fall
-// out naturally once Vapor rewrites the row on the next session save and it
-// picks up a real timestamp.
+// older than `maxAge` are deleted; rows with NULL `created_at` are skipped,
+// because `created_at < cutoff` is never true for NULL. Vapor's driver updates
+// only `data`, so the DEFAULT never fills an existing row. The rows that
+// predated the column were deleted once by `DeleteUndatedSessions` (#2281),
+// and every row inserted since takes the DEFAULT.
 //
 // This uses a Fluent typed query — the SAME pattern as `AuditLogReaperService`
 // and `UserActivityEventReaperService` — rather than hand-rolled raw SQL, so the
