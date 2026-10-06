@@ -424,16 +424,18 @@ jobs:
           fi
           printf '%s\n' "$runner_log" | grep "job cgroups delegated at /sandbox/jobs" >/dev/null \
             || { echo "::error::The pre-step did not delegate the job cgroups."; exit 1; }
-          # Read the runner process from the host. A cgroup that gives
-          # controllers to its children cannot hold a process, so after the
-          # pre-step a process that `docker exec` adds to the container's own
-          # cgroup may be refused. That attempt is printed, not required.
+          # Read the runner process from the host.
           pid="$(docker inspect -f '{{.State.Pid}}' "$cid")"
           status="$(sudo grep -E '^(Uid|CapEff|CapBnd):' "/proc/$pid/status")"
           cgroup="$(sudo cat "/proc/$pid/cgroup")"
           echo "$status"; echo "cgroup (host view): $cgroup"
-          echo "----- docker exec into the runner (informational) -----"
-          docker exec "$cid" cat /proc/self/cgroup 2>&1 || echo "docker exec failed with exit code $?"
+          # A cgroup that gives controllers to its children cannot hold a
+          # process, and the container's own cgroup now does. An operator
+          # still needs `docker exec`, which Docker places in the cgroup of
+          # the container's first process, /sandbox/runner.
+          exec_cgroup="$(docker exec "$cid" cat /proc/self/cgroup)" \
+            || { echo "::error::docker exec into the runner fails after the pre-step."; exit 1; }
+          echo "docker exec runs in: $exec_cgroup"
           echo "$status" | grep -qE '^Uid:[[:space:]]+999[[:space:]]+999[[:space:]]+999[[:space:]]+999' \
             || { echo "::error::The runner does not run as uid 999."; exit 1; }
           [ "$(echo "$status" | grep -c '0000000000000000$')" = "2" ] \
