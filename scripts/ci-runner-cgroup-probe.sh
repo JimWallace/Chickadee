@@ -42,6 +42,19 @@ else
   fail "the jobs subtree enables only: $controllers"
 fi
 
+# A JVM reads a cgroup only when cpu, cpuset and memory are all in its
+# cgroup.controllers. The pre-step enables cpu and cpuset when the container
+# has them, and a GitHub runner's container has them.
+for controller in cpu cpuset; do
+  if ! grep -qw "$controller" /sys/fs/cgroup/cgroup.controllers; then
+    pass "the container has no $controller controller to give the jobs"
+  elif echo "$controllers" | grep -qw "$controller"; then
+    pass "$controller is enabled for the jobs"
+  else
+    fail "the container has $controller, but the jobs subtree does not enable it"
+  fi
+done
+
 # Without swap at 0, the job would swap and not be killed. The file exists
 # only when the kernel accounts swap.
 if mkdir "$JOB" 2>/dev/null \
@@ -80,6 +93,24 @@ else
 fi
 
 rmdir "$JOB" 2>/dev/null || fail "could not remove the job cgroup"
+
+# A JVM in a job cgroup must size itself from the job's limit, not from the
+# host. JDK 25 turns off its container support when cpu or cpuset is missing
+# from the cgroup.controllers it reads, and then reports the host's memory.
+# Like the sandbox prelude, this joins the job cgroup from a user and mount
+# namespace and binds the job cgroup over /sys/fs/cgroup, so the JVM reads
+# the job's own cgroup.controllers, not the container's.
+JVM_JOB="$JOBS/ci-probe-jvm"
+if mkdir "$JVM_JOB" 2>/dev/null && echo 512M > "$JVM_JOB/memory.max" 2>/dev/null; then
+  limit="$(unshare --user --map-root-user --mount /bin/sh -c \
+    "echo \$\$ > $JVM_JOB/cgroup.procs && mount --bind $JVM_JOB /sys/fs/cgroup && exec java -XshowSettings:system -version" 2>&1 \
+    | sed -n 's/^ *Memory Limit: *//p')"
+  [ "$limit" = "512.00M" ] && pass "a JVM in a job cgroup sees its memory limit ($limit)" \
+    || fail "a JVM in a job cgroup reports the memory limit '$limit', expected 512.00M"
+  rmdir "$JVM_JOB" 2>/dev/null || fail "could not remove the JVM job cgroup"
+else
+  fail "could not create a job cgroup for the JVM check"
+fi
 
 if [ "$FAILURES" -gt 0 ]; then
   echo "$FAILURES check(s) failed"
