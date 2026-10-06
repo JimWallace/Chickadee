@@ -142,8 +142,6 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let windowHours = Self.windowBound.resolve(input.windowHours)
         let sampleLimit = Self.sampleBound.resolve(input.sampleLimit)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)

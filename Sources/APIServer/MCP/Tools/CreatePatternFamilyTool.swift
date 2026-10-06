@@ -344,9 +344,7 @@ struct CreatePatternFamilyTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard let kind = PatternKind(rawValue: input.kind) else {
-            throw MCPToolError.invalidArguments(detail: "Unknown kind \"\(input.kind)\".")
-        }
+        let kind = try MCPEnumProse<PatternKind>.parse(input.kind, field: "kind")
         let trimmedID = input.id.trimmingCharacters(in: .whitespaces)
         guard !trimmedID.isEmpty else {
             throw MCPToolError.invalidArguments(detail: "Family id must not be empty.")

@@ -24,8 +24,14 @@ import Foundation
 // MARK: - reorder_section_items
 
 struct ReorderSectionItemsTool: ContentTool {
+    /// The two kinds of item a course section holds.
+    enum ItemType: String, CaseIterable {
+        case assignment
+        case content
+    }
+
     struct ItemRef: Decodable, Sendable {
-        /// "assignment" or "content".
+        /// An `ItemType` raw value.
         let type: String
         /// Assignment public ID (type "assignment") or content-item id (type "content").
         let id: String
@@ -74,8 +80,8 @@ struct ReorderSectionItemsTool: ContentTool {
                     "properties": .object([
                         "type": .object([
                             "type": .string("string"),
-                            "enum": .array([.string("assignment"), .string("content")]),
-                            "description": .string("\"assignment\" or \"content\"."),
+                            "enum": MCPEnumProse<ItemType>.jsonEnum,
+                            "description": .string("\(MCPEnumProse<ItemType>.quotedOrList)."),
                         ]),
                         "id": .object([
                             "type": .string("string"),
@@ -126,11 +132,11 @@ struct ReorderSectionItemsTool: ContentTool {
             code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
 
-        let assignmentIDs = input.orderedItems.filter { $0.type == "assignment" }.map(\.id)
-        let contentRaw = input.orderedItems.filter { $0.type == "content" }.map(\.id)
-        guard input.orderedItems.allSatisfy({ $0.type == "assignment" || $0.type == "content" }) else {
-            throw MCPToolError.invalidArguments(detail: "each item type must be \"assignment\" or \"content\".")
+        for item in input.orderedItems {
+            _ = try MCPEnumProse<ItemType>.parse(item.type, field: "each item type")
         }
+        let assignmentIDs = input.orderedItems.filter { $0.type == ItemType.assignment.rawValue }.map(\.id)
+        let contentRaw = input.orderedItems.filter { $0.type == ItemType.content.rawValue }.map(\.id)
         guard assignmentIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
             throw MCPToolError.invalidArguments(detail: "orderedItems contains an invalid assignment public ID.")
         }

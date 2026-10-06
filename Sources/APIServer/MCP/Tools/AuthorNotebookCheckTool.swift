@@ -286,9 +286,7 @@ struct AuthorNotebookCheckTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard let kind = NotebookCheckKind(rawValue: input.kind) else {
-            throw MCPToolError.invalidArguments(detail: "Unknown check kind \"\(input.kind)\".")
-        }
+        let kind = try MCPEnumProse<NotebookCheckKind>.parse(input.kind, field: "kind")
         let checkID = input.id.trimmingCharacters(in: .whitespaces)
         guard !checkID.isEmpty else {
             throw MCPToolError.invalidArguments(detail: "Check id must not be empty.")

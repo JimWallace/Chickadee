@@ -14,7 +14,7 @@
 //
 // The guarantee here is stronger than a test. `gloss(for:)` is an exhaustive
 // switch, so a new `PatternKind` does not compile until it says what it is, and
-// every rendering below is built from `allCases` over that. A ninth kind needs
+// every rendering below is built from `allCases` over that. A new kind needs
 // no edit to any description or schema.
 
 import Core
@@ -55,25 +55,23 @@ enum MCPPatternKindProse {
     /// form a tool description uses when listing legal values inline.
     static var slashSeparated: String { MCPEnumProse<PatternKind>.slashSeparated }
 
-    /// `"boundary_equality (…), approximate_equality (…), and …"` — the
+    /// `"boundary_equality (…), approximate_equality (…) and …"` — the
     /// glossed sentence form the `initialize` instructions use.
     static var glossedList: String {
-        let described = PatternKind.allCases.map { "\($0.rawValue) (\(gloss(for: $0)))" }
-        guard described.count > 1 else { return described.first ?? "" }
-        return described.dropLast().joined(separator: ", ") + ", and " + (described.last ?? "")
+        LanguageProse.list(
+            PatternKind.allCases.map { "\($0.rawValue) (\(gloss(for: $0)))" }, conjunction: "and")
     }
 
     /// The JSON Schema `enum` array for a `kind` property.
     static var jsonEnum: JSONValue { MCPEnumProse<PatternKind>.jsonEnum }
 
-    /// The kinds whose cases accept `expectedVarRef`, as `"a, b, and c"`.
+    /// The kinds whose cases accept `expectedVarRef`, as `"a, b and c"`.
     ///
     /// Derived from `kindSupportsPerStudentExpected`, the predicate the save
     /// refuses with, so the schema cannot promise a kind the save rejects
     /// (#1936).
     static var expectedVarRefKinds: String {
-        let kinds = PatternKind.allCases.filter(kindSupportsPerStudentExpected).map(\.rawValue)
-        guard kinds.count > 1 else { return kinds.first ?? "" }
-        return kinds.dropLast().joined(separator: ", ") + ", and " + (kinds.last ?? "")
+        LanguageProse.list(
+            PatternKind.allCases.filter(kindSupportsPerStudentExpected).map(\.rawValue), conjunction: "and")
     }
 }

@@ -219,12 +219,18 @@ own Compose file uses the same entrypoint:
 
 The runner log starts with one of these lines:
 
-- `[runner-entrypoint] job cgroups delegated at /sandbox/jobs`
+- `[runner-entrypoint] job cgroups delegated at /sandbox/jobs (memory pids cpu cpuset)`
 - `[runner-entrypoint] job cgroups unavailable: <reason>`
 
 The pre-step needs cgroup v2 (Docker on Ubuntu 22.04 and later uses it), with
 the `memory` and `pids` controllers available to the container. When it cannot
-delegate the cgroups, the runner still starts and grades. To read the line:
+delegate the cgroups, the runner still starts and grades. It also enables
+`cpu` and `cpuset` for the jobs when the container has them. They set no
+limit, but a JVM needs them: JDK 25 reads a cgroup only when `cpu`, `cpuset`
+and `memory` are all in its `cgroup.controllers`, and without them it sizes
+its heap from the whole host instead of from the job's memory limit. If the
+line lists only `memory pids`, Java jobs can exceed their memory limit and be
+stopped. To read the line:
 
 ```bash
 docker compose logs runner | grep runner-entrypoint
@@ -242,6 +248,11 @@ limits:
   kernel applies this limit even when the runner runs as root.
 - Lifetime: when the script ends, the runner stops every process that is left
   in the cgroup, and then removes the cgroup.
+
+The script runs in a cgroup namespace whose root is its job cgroup, with a
+read-only view of that cgroup at `/sys/fs/cgroup`. It reads its own limits
+there and cannot change them. A JVM reads its heap size and CPU count the same
+way, so a Java test sizes itself from the job's limit, not from the host.
 
 The limit is a ceiling, not a reservation: a job that uses 150 MB costs
 150 MB. If you set a memory limit on the runner container (`mem_limit`), it

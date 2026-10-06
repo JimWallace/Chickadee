@@ -60,8 +60,6 @@ struct GetDeployHistoryTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let limit = Self.limitBound.resolve(input.limit)
         let path = URL(fileURLWithPath: context.request.application.deployStateDirectory)
             .appendingPathComponent("history.jsonl")

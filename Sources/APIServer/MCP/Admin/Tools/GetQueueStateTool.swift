@@ -51,8 +51,6 @@ struct GetQueueStateTool: DiagnosticTool {
     private static let stuckThresholdSeconds = 600
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
         let db = context.db
         let diagnostics = context.request.application.diagnostics
         let now = Date()

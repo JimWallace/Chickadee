@@ -69,7 +69,7 @@ struct GetSupportFilesTool: ContentTool {
         + "loads, or a helper module tests import) — everything in the zip that is not a graded suite "
         + "script (read those via get_suite) or the starter/solution notebook (get_notebook / "
         + "get_solution). Omit filename to list filenames and sizes; pass filename to read that file's "
-        + "UTF-8 content, capped at maxBytes (default 65536) with truncated:true when the file is "
+        + "UTF-8 content, capped at maxBytes (default \(MCPContentByteCap.defaultBytes)) with truncated:true when the file is "
         + "larger — so a big dataset returns a useful head. Listed entries report per-student "
         + "dataset marks (isDataset / datasetSampleSize / datasetKind / datasetStratumColumn — set "
         + "them with set_dataset). Write "
@@ -87,11 +87,7 @@ struct GetSupportFilesTool: ContentTool {
                     "A support filename from the list (exact match, subdirectory paths included). "
                         + "Omit to list all support files."),
             ]),
-            "maxBytes": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Read mode: max content bytes returned (default 65536, clamped 1-512000)."),
-            ]),
+            "maxBytes": MCPContentByteCap.schema,
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -111,9 +107,6 @@ struct GetSupportFilesTool: ContentTool {
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: true, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.read]
-
-    static let defaultMaxBytes = 65536
-    static let maxMaxBytes = 512_000
 
     /// Zip entries that are never support files: the canonical notebooks have
     /// dedicated read tools. Matches `extractSupportFilesToSharedDirectory`.
@@ -171,37 +164,16 @@ struct GetSupportFilesTool: ContentTool {
             throw MCPToolError.executionFailed(detail: "Failed to extract \"\(filename)\" from the setup zip.")
         }
 
-        let cap = min(max(input.maxBytes ?? Self.defaultMaxBytes, 1), Self.maxMaxBytes)
-        let (content, truncated) = try Self.utf8Content(of: data, cappedAt: cap, filename: filename)
+        guard
+            let (content, truncated) = MCPContentByteCap.cappedUTF8(
+                data, cap: MCPContentByteCap.resolve(input.maxBytes))
+        else {
+            throw MCPToolError.invalidArguments(
+                detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
+        }
         return Output(
             assignmentPublicID: assignment.publicID,
             files: nil, filename: filename, sizeBytes: data.count,
             content: content, truncated: truncated)
-    }
-
-    /// Decodes up to `cap` bytes of `data` as UTF-8, backing off to a character
-    /// boundary when the cap splits a multi-byte sequence. Throws when the file
-    /// is not UTF-8 text at all (this tool has no binary transport).
-    private static func utf8Content(
-        of data: Data, cappedAt cap: Int, filename: String
-    ) throws -> (content: String, truncated: Bool) {
-        if data.count <= cap {
-            guard let text = String(data: data, encoding: .utf8) else {
-                throw MCPToolError.invalidArguments(
-                    detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
-            }
-            return (text, false)
-        }
-        var head = data.prefix(cap)
-        // A UTF-8 character is at most 4 bytes, so at most 3 trailing bytes of
-        // a split sequence need dropping before the prefix decodes.
-        for _ in 0..<4 {
-            if let text = String(data: head, encoding: .utf8) {
-                return (text, true)
-            }
-            head = head.dropLast()
-        }
-        throw MCPToolError.invalidArguments(
-            detail: "\"\(filename)\" is not UTF-8 text; only text support files can be read.")
     }
 }

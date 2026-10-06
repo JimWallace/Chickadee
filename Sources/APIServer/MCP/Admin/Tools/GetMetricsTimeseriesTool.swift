@@ -52,7 +52,6 @@ struct GetMetricsTimeseriesTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
         return try await context.request.application.diagnostics.metricsTimeSeriesSnapshot(
             req: context.request, hours: input.hours, bucketMinutes: input.bucketMinutes)
     }
