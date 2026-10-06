@@ -589,7 +589,17 @@ do_deploy() {  # $1 = version tag
     rm -f "$deploy_log"
     if verify_post_deploy; then
       local running; running="$(read_running_version)"
-      DEPLOYED_VERSION="${running:-$(strip_v "$ver")}"
+      # Healthy is not enough: the server must report the version this release
+      # names. Until 2026-10-05 a success was recorded with whatever answered,
+      # and three "successful" deploys of v0.5.464 ran 0.5.463.
+      if [ "$running" != "$(strip_v "$ver")" ]; then
+        log "post-deploy version check failed: running ${running:-<unknown>}, expected $(strip_v "$ver") — rolling back $ver"
+        "$DEPLOY_SCRIPT" rollback --yes || log "rollback command failed"
+        append_history "$ver" deploy rolledback "running ${running:-<unknown>}, expected $(strip_v "$ver")"
+        record_failure "$ver" "rolled back $ver: the server reported version ${running:-<unknown>}, expected $(strip_v "$ver")"
+        return 1
+      fi
+      DEPLOYED_VERSION="$running"
       printf '%s\n' "$DEPLOYED_VERSION" > "$DEPLOYED_VERSION_FILE"
       append_history "$ver" deploy success "running=$DEPLOYED_VERSION"
       refresh_runner "$ver"

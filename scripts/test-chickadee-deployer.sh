@@ -99,7 +99,7 @@ SH
 cat > "$WORK/deploy-script" <<'SH'
 #!/usr/bin/env bash
 printf 'deploy-script %s image=%s\n' "$*" "${CHICKADEE_IMAGE:-}" >> "$STUB/calls"
-if [ "$1" = "deploy" ] && [ -f "$STUB/deploy_ok" ]; then
+if [ "$1" = "deploy" ] && [ -f "$STUB/deploy_ok" ] && [ ! -f "$STUB/deploy_runs_old_build" ]; then
   cp "$STUB/target_version" "$STUB/running_version"
 fi
 [ "$1" = "rollback" ] || [ -f "$STUB/deploy_ok" ]
@@ -389,6 +389,18 @@ run_cycle
 expect_calls "git checkout" 0
 expect_history deployer-update failed
 expect_calls "deploy-script deploy" 1
+
+# ---------------------------------------------------------------------------
+start_case "a healthy server that reports another version is rolled back, not recorded"
+touch "$STUB/deploy_runs_old_build"
+run_cycle
+expect_calls "deploy-script rollback" 1
+expect_history deploy rolledback
+expect_state error
+grep -q 'reported version 0.5.231, expected 0.5.232' "$STATUS_FILE" \
+  || fail "the status detail does not name the running and expected versions"
+[ "$DEPLOYED_VERSION" = "0.5.231" ] || fail "a version mismatch was recorded as deployed: $DEPLOYED_VERSION"
+expect_calls "docker compose .* up -d --no-deps runner" 0
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then

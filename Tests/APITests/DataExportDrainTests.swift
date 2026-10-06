@@ -60,6 +60,18 @@ import VaporTesting
         }
     }
 
+    /// Once the drain has begun, a new export starts nothing: a task started
+    /// then would outlive the drain (#2302).
+    @Test func noWorkStartsAfterTheDrainBegins() async throws {
+        try await withApp(app) { app in
+            let manager = app.dataExportManager
+            await manager.drain()
+            let started = await manager.startWork(userID: UUID()) {}
+            #expect(!started)
+            #expect(await manager.inFlightCount == 0)
+        }
+    }
+
     @Test func shutdownDrainsWhileTheDatabaseIsStillOpen() async throws {
         let manager = app.dataExportManager
         let finished = Mutex(false)

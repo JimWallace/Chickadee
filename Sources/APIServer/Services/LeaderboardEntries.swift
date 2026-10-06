@@ -70,7 +70,7 @@ func recordLeaderboardEntry(
             metric: metric, reachedAt: Date())
         // Ignore the conflict: two first submissions from one student landing
         // at once, first insert wins. Same shape as `awardImmutableBadge`.
-        try? await row.save(on: db)
+        try await row.createIgnoringConflict(on: db)
     }
 
     try await awardHighestMetricRecords(

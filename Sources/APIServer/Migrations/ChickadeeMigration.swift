@@ -9,8 +9,8 @@ import Fluent
 /// module-qualified type name (e.g. "APIServer.CreateUsers"). That couples every
 /// migration's identity in `_fluent_migrations` to the Swift module, so a
 /// target/library rename silently changes every identifier and makes the next
-/// boot re-run already-applied migrations (see `reconcileLegacyMigrationNamespace`
-/// for the fallout the `chickadee-server` → `APIServer` rename caused).
+/// boot re-run already-applied migrations (`refuseLegacyMigrationNamespace`
+/// stops a database still carrying the names from before this was pinned).
 ///
 /// Adopting `ChickadeeMigration` pins the identifier to `"chickadee.<TypeName>"`,
 /// which does not change when the module is renamed again. Vapor's own

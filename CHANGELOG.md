@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.493] - 2026-10-06
+
+### Fixed
+
+- **A data export requested during shutdown no longer outlives the drain.** `DataExportManager` started new work while it was draining, so that work could read the database after Fluent closed it. It now refuses new work once the drain begins, as `BackgroundWork` does. The export row stays `pending`, and the reaper marks it failed. (#2302)
+
+
+## [0.5.492] - 2026-10-06
+
+### Fixed
+
+- **A lock error no longer loses a badge, leaderboard entry or coverage row.** Five "first insert wins" saves used `try?`, which also hid the stale-snapshot lock error that the retry around the result side effects exists for. The rows were then lost with no log. A new `createIgnoringConflict` ignores only a constraint failure, so the retry now sees the lock error and runs again. (#2300)
+
+
+## [0.5.491] - 2026-10-06
+
+### Changed
+
+- **The server refuses to boot on a database from v0.4.200 or earlier.** The migration-namespace reconciler renamed such a database's history rows so that its migrations counted as applied. Since the consolidation rounds folded later migrations into their `Create*` files, that rename let the server start without the folded columns, and the first query on those models then failed. The server now stops at startup and names the problem. A database from a later release is not affected. (#2282)
+
+
 ## [0.5.490] - 2026-10-06
 
 ### Fixed

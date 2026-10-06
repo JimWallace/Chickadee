@@ -15,9 +15,9 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     try configureDatabase(app, settings: appConfig.database)
     registerMigrations(on: app)
 
-    // Repair migration-history rows from the pre-`APIServer` module name so a
-    // restored older snapshot (e.g. v0.4.172) doesn't re-run applied migrations.
-    try reconcileLegacyMigrationNamespace(on: app)
+    // Stop on a database restored from v0.4.200 or earlier: this build cannot
+    // bring it up to date (#2282).
+    try refuseLegacyMigrationNamespace(on: app)
 
     try app.autoMigrate().wait()
     // Retention for the diagnostics tables, worker nonces and login attempts:
