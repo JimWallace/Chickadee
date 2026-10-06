@@ -67,7 +67,6 @@ struct Reporter: Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         do { request.httpBody = try encoder.encode(report) } catch { throw .transportError(error) }
-        signer.sign(&request)
 
         try await sendWithRetry(
             request,
@@ -83,7 +82,6 @@ struct Reporter: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
-        signer.sign(&request)
 
         try await sendWithRetry(
             request,
@@ -92,6 +90,10 @@ struct Reporter: Sendable {
         )
     }
 
+    /// Sends `request`, signed afresh on every attempt: the server records each
+    /// nonce and refuses a second use as a replay, and refuses a timestamp
+    /// older than its skew window, so a retry of the first signature would
+    /// fail with 401 and end the retries (#2270).
     private func sendWithRetry(
         _ request: URLRequest,
         stage: RunnerRetryStage,
@@ -129,7 +131,9 @@ struct Reporter: Sendable {
                         ])
                 },
                 operation: {
-                    let result = await Self.attemptReport(session: session, request: request, expectedStatus: 200)
+                    var signed = request
+                    self.signer.sign(&signed)
+                    let result = await Self.attemptReport(session: session, request: signed, expectedStatus: 200)
                     switch result {
                     case .success:
                         return ()
