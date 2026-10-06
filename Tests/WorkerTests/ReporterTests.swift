@@ -93,6 +93,38 @@ import FoundationNetworking
         }
     }
 
+    /// Each attempt carries its own nonce: the server refuses a reused one as
+    /// a replay, so a retry of the first signature could never succeed (#2270).
+    @Test func report_signsEachRetryWithAFreshNonce() async throws {
+        try await withMockURLProtocolLock {
+            MockURLProtocol.reset()
+            MockURLProtocol.enqueue(.status(500))
+            MockURLProtocol.enqueue(.status(200))
+            let reporter = makeReporter(uploadMaxAttempts: 3)
+            try await reporter.report(sampleExecutionReport())
+            let nonces = MockURLProtocol.capturedRequests.compactMap {
+                $0.value(forHTTPHeaderField: WorkerHMACSigning.Header.nonce)
+            }
+            #expect(nonces.count == 2)
+            #expect(Set(nonces).count == 2)
+        }
+    }
+
+    @Test func heartbeat_signsEachRetryWithAFreshNonce() async throws {
+        try await withMockURLProtocolLock {
+            MockURLProtocol.reset()
+            MockURLProtocol.enqueue(.status(503))
+            MockURLProtocol.enqueue(.status(200))
+            let reporter = makeReporter(heartbeatMaxAttempts: 3)
+            try await reporter.heartbeat(sampleActivityPayload())
+            let nonces = MockURLProtocol.capturedRequests.compactMap {
+                $0.value(forHTTPHeaderField: WorkerHMACSigning.Header.nonce)
+            }
+            #expect(nonces.count == 2)
+            #expect(Set(nonces).count == 2)
+        }
+    }
+
     @Test func report_retriesOnTransportError_thenSucceeds() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
