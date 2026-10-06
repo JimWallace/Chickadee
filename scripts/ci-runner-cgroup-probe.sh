@@ -42,6 +42,19 @@ else
   fail "the jobs subtree enables only: $controllers"
 fi
 
+# A JVM reads a cgroup only when cpu, cpuset and memory are all in its
+# cgroup.controllers. The pre-step enables cpu and cpuset when the container
+# has them, and a GitHub runner's container has them.
+for controller in cpu cpuset; do
+  if ! grep -qw "$controller" /sys/fs/cgroup/cgroup.controllers; then
+    pass "the container has no $controller controller to give the jobs"
+  elif echo "$controllers" | grep -qw "$controller"; then
+    pass "$controller is enabled for the jobs"
+  else
+    fail "the container has $controller, but the jobs subtree does not enable it"
+  fi
+done
+
 # Without swap at 0, the job would swap and not be killed. The file exists
 # only when the kernel accounts swap.
 if mkdir "$JOB" 2>/dev/null \
@@ -80,6 +93,37 @@ else
 fi
 
 rmdir "$JOB" 2>/dev/null || fail "could not remove the job cgroup"
+
+# A JVM in a job cgroup must size itself from the job's limit, not from the
+# host. JDK 25 joins the path in /proc/self/cgroup to the first cgroup2 mount
+# in /proc/self/mountinfo, and needs cpu, cpuset and memory in the
+# cgroup.controllers it finds there. Like the sandbox prelude, this joins the
+# job cgroup from a user and mount namespace, enters a cgroup namespace, and
+# mounts a read-only cgroup2 at /sys/fs/cgroup over a tmpfs (the kernel will
+# not mount the cgroup2 superblock straight over itself), so the JVM reads the
+# job's own files exactly as a sandboxed job does.
+JVM_JOB="$JOBS/ci-probe-jvm"
+if mkdir "$JVM_JOB" 2>/dev/null && echo 512M > "$JVM_JOB/memory.max" 2>/dev/null; then
+  jvm_out="$(unshare --user --map-root-user --mount /bin/sh -c '
+      echo $$ > "$1/cgroup.procs" || exit 3
+      exec unshare --cgroup /bin/sh -c "
+        mount -t tmpfs -o size=4k chickadee-cgroup-cover /sys/fs/cgroup || exit 4
+        mount -t cgroup2 -o ro chickadee-job-cgroup /sys/fs/cgroup || exit 5
+        head -n 1 /proc/self/cgroup
+        echo memory.max: \$(cat /sys/fs/cgroup/memory.max)
+        exec java -XshowSettings:system -version"
+    ' sh "$JVM_JOB" 2>&1)"
+  limit="$(printf '%s\n' "$jvm_out" | sed -n 's/^ *Memory Limit: *//p')"
+  if [ "$limit" = "512.00M" ]; then
+    pass "a JVM in a job cgroup sees its memory limit ($limit)"
+  else
+    fail "a JVM in a job cgroup reports the memory limit '$limit', expected 512.00M. Its output:"
+    printf '%s\n' "$jvm_out" | sed -n 1,25p
+  fi
+  rmdir "$JVM_JOB" 2>/dev/null || fail "could not remove the JVM job cgroup"
+else
+  fail "could not create a job cgroup for the JVM check"
+fi
 
 if [ "$FAILURES" -gt 0 ]; then
   echo "$FAILURES check(s) failed"

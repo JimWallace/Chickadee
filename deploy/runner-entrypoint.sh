@@ -12,7 +12,9 @@
 #   2. It creates /sandbox/runner and /sandbox/jobs in the container's cgroup
 #      and moves itself into /sandbox/runner. A cgroup that gives controllers
 #      to its children must hold no process of its own.
-#   3. It enables the memory and pids controllers down to /sandbox/jobs.
+#   3. It enables the memory and pids controllers down to /sandbox/jobs, and
+#      cpu and cpuset too when the container has them, so that a JVM in a job
+#      sees the job's limits.
 #   4. It gives /sandbox to uid 999, as the kernel's delegation rules say: the
 #      directories and their cgroup.procs, cgroup.threads and
 #      cgroup.subtree_control files. The runner can then create a cgroup per
@@ -68,6 +70,20 @@ delegate() {
       return 1
     fi
   done
+  # cpu and cpuset set no limit here, but a JVM needs them: JDK 25 reads a
+  # cgroup only when all of cpu, cpuset and memory are in its
+  # cgroup.controllers. Without them it sees no container at all, and sizes
+  # its heap from the whole host instead of from the job's memory limit. They
+  # are optional: a job cgroup without them still limits memory and processes.
+  CONTROLLERS="memory pids"
+  for controller in cpu cpuset; do
+    grep -qw "$controller" "$CGROUP/cgroup.controllers" || continue
+    enabled=yes
+    for parent in "$CGROUP" "$SANDBOX" "$SANDBOX/jobs"; do
+      echo "+$controller" > "$parent/cgroup.subtree_control" 2>/dev/null || { enabled=no; break; }
+    done
+    [ "$enabled" = yes ] && CONTROLLERS="$CONTROLLERS $controller"
+  done
   for directory in "$SANDBOX" "$SANDBOX/runner" "$SANDBOX/jobs"; do
     if ! chown "$RUNNER_UID:$RUNNER_UID" "$directory" "$directory/cgroup.procs" \
       "$directory/cgroup.threads" "$directory/cgroup.subtree_control" 2>/dev/null; then
@@ -87,7 +103,7 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 if delegate; then
-  say "job cgroups delegated at /sandbox/jobs"
+  say "job cgroups delegated at /sandbox/jobs ($CONTROLLERS)"
 else
   say "job cgroups unavailable: $REASON"
 fi

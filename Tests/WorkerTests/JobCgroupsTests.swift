@@ -138,33 +138,42 @@ import Testing
     }
 
     @Test func aProbeInItsCgroupThatSeesItsLimitAndCannotChangeItPasses() {
-        let output = probeOutput("0::/sandbox/jobs/job-1\n67108864\n")
+        let output = probeOutput("0::/\n67108864\n")
         #expect(
             SandboxedScriptRunner.jobCgroupProbeFailure(
-                output: output, jobCgroupName: "job-1", memoryLimitBytes: 67_108_864) == nil)
+                output: output, memoryLimitBytes: 67_108_864) == nil)
     }
 
     @Test func aProbeOutsideItsCgroupFails() throws {
         let output = probeOutput("0::/sandbox/runner\n67108864\n")
         let failure = try #require(
             SandboxedScriptRunner.jobCgroupProbeFailure(
-                output: output, jobCgroupName: "job-1", memoryLimitBytes: 67_108_864))
-        #expect(failure.contains("did not run in its job cgroup"))
+                output: output, memoryLimitBytes: 67_108_864))
+        #expect(failure.contains("did not run at the root of its own cgroup namespace"))
+    }
+
+    /// Without its own cgroup namespace the command sees the full path, and a
+    /// JVM then reads a path that the read-only view does not have.
+    @Test func aProbeWithoutItsOwnCgroupNamespaceFails() throws {
+        let output = probeOutput("0::/sandbox/jobs/job-1\n67108864\n")
+        let failure = try #require(
+            SandboxedScriptRunner.jobCgroupProbeFailure(output: output, memoryLimitBytes: 67_108_864))
+        #expect(failure.contains("did not run at the root of its own cgroup namespace"))
     }
 
     @Test func aProbeThatDoesNotSeeItsLimitFails() throws {
-        let output = probeOutput("0::/sandbox/jobs/job-1\nmax\n")
+        let output = probeOutput("0::/\nmax\n")
         let failure = try #require(
             SandboxedScriptRunner.jobCgroupProbeFailure(
-                output: output, jobCgroupName: "job-1", memoryLimitBytes: 67_108_864))
+                output: output, memoryLimitBytes: 67_108_864))
         #expect(failure.contains("did not see its memory limit"))
     }
 
     @Test func aProbeThatCanChangeItsLimitFails() throws {
-        let output = probeOutput("0::/sandbox/jobs/job-1\n67108864\nwritable\n")
+        let output = probeOutput("0::/\n67108864\nwritable\n")
         let failure = try #require(
             SandboxedScriptRunner.jobCgroupProbeFailure(
-                output: output, jobCgroupName: "job-1", memoryLimitBytes: 67_108_864))
+                output: output, memoryLimitBytes: 67_108_864))
         #expect(failure.contains("could change its own memory limit"))
     }
 
@@ -172,7 +181,7 @@ import Testing
         let output = probeOutput("", exitCode: 2, stderr: "sh: cannot create cgroup.procs: Permission denied\n")
         #expect(
             SandboxedScriptRunner.jobCgroupProbeFailure(
-                output: output, jobCgroupName: "job-1", memoryLimitBytes: 67_108_864)
+                output: output, memoryLimitBytes: 67_108_864)
                 == "sh: cannot create cgroup.procs: Permission denied")
     }
 

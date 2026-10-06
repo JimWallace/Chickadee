@@ -317,8 +317,9 @@ extension SandboxedScriptRunner {
     /// memory limit, and cannot change that limit (#2252).
     ///
     /// It runs one command through the same wrapper and the same cgroup steps
-    /// as a real job. The command must report the job's cgroup as its own,
-    /// read the job's `memory.max` at `/sys/fs/cgroup`, and fail to write it.
+    /// as a real job. The command must run at the root of its own cgroup
+    /// namespace, read the job's `memory.max` at `/sys/fs/cgroup`, and fail
+    /// to write it.
     ///
     /// Returns `nil` when the job cgroups work. Otherwise it returns the
     /// reason, and the runner grades without them.
@@ -353,9 +354,7 @@ extension SandboxedScriptRunner {
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch job cgroup probe")
         await cgroup.remove()
-        return jobCgroupProbeFailure(
-            output: output, jobCgroupName: cgroup.directory.lastPathComponent,
-            memoryLimitBytes: megabytes * 1024 * 1024)
+        return jobCgroupProbeFailure(output: output, memoryLimitBytes: megabytes * 1024 * 1024)
         #else
         return "job cgroups need Linux"
         #endif
@@ -363,19 +362,18 @@ extension SandboxedScriptRunner {
 
     /// Reads the probe's output: its cgroup, the limit it read, and whether it
     /// could write that limit. Returns `nil` when all three are as expected.
-    static func jobCgroupProbeFailure(
-        output: ScriptOutput, jobCgroupName: String, memoryLimitBytes: Int
-    )
-        -> String?
-    {
+    ///
+    /// In its cgroup namespace the command's cgroup is `0::/`, so the line
+    /// alone does not name the job cgroup. The limit does: only the job cgroup
+    /// has the probe's memory limit.
+    static func jobCgroupProbeFailure(output: ScriptOutput, memoryLimitBytes: Int) -> String? {
         guard output.exitCode == 0 else {
             let detail = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return detail.isEmpty ? "the probe exited with code \(output.exitCode)" : detail
         }
         let lines = output.stdout.split(separator: "\n").map(String.init)
-        guard let cgroupLine = lines.first, cgroupLine.hasPrefix("0::"), cgroupLine.hasSuffix("/\(jobCgroupName)")
-        else {
-            return "the command did not run in its job cgroup: \(lines.first ?? "no output")"
+        guard lines.first == "0::/" else {
+            return "the command did not run at the root of its own cgroup namespace: \(lines.first ?? "no output")"
         }
         guard lines.count > 1, lines[1] == String(memoryLimitBytes) else {
             return "the command did not see its memory limit at /sys/fs/cgroup/memory.max"
@@ -559,11 +557,19 @@ private func sandboxWrap(
 ///
 /// With a cgroup (#2252), the prelude moves itself into it first, so the
 /// command, every process it starts, and every page of the private tmpfs it
-/// writes count against the cgroup's limits. It then binds that cgroup,
-/// read-only, over `/sys/fs/cgroup`. A cgroup that the runner created belongs
-/// to the runner's user, which is root in this namespace, so without the cover
-/// the command could raise its own limits or move itself out. With it, the
-/// command still reads its own limit there, as a JVM does to size its heap.
+/// writes count against the cgroup's limits. Last, it enters a new cgroup
+/// namespace, whose root is that cgroup, and mounts a fresh cgroup2 file
+/// system read-only at `/sys/fs/cgroup`. It covers `/sys/fs/cgroup` with a
+/// tmpfs first: the kernel refuses (EBUSY) to mount a superblock on a mount
+/// point whose top mount is the same superblock, and the container's own
+/// cgroup2 mount there is the same cgroup2 superblock. A cgroup that the runner created
+/// belongs to the runner's user, which is root in this namespace, so with a
+/// writable view the command could raise its own limits or move itself out.
+/// The namespace also makes the command's cgroup path `/`, so a reader that
+/// joins `/proc/self/cgroup` to the first cgroup2 mount finds the job's own
+/// files at `/sys/fs/cgroup`. JDK 25 reads its heap size and CPU count that
+/// way; a bind mount of the job cgroup over `/sys/fs/cgroup` left it reading
+/// a path that did not exist, so it sized itself from the whole host.
 private let linuxMountPrelude = """
     set -e
     limit=$1
@@ -635,10 +641,6 @@ private let linuxMountPrelude = """
             chickadee-job-writes "$cwd"
     fi
     mount -o remount,ro,nosuid,nodev chickadee-work-root "$root"
-    if [ "$cgroup" != - ]; then
-        mount --bind "$cgroup" /sys/fs/cgroup
-        mount -o remount,bind,ro,nosuid,nodev,noexec /sys/fs/cgroup
-    fi
     if [ -f /mnt/hidden ]; then
         while IFS= read -r file; do
             if [ -e "$file" ]; then mount --bind /dev/null "$file"; fi
@@ -649,6 +651,19 @@ private let linuxMountPrelude = """
         mkdir -p "$TMPDIR" 2>/dev/null || true
     fi
     cd "$cwd"
+    if [ "$cgroup" != - ]; then
+        exec /usr/bin/unshare --cgroup -- /bin/sh -c '
+            mount -t tmpfs -o nosuid,nodev,noexec,size=4k chickadee-cgroup-cover /sys/fs/cgroup &&
+            mount -t cgroup2 -o ro,nosuid,nodev,noexec chickadee-job-cgroup /sys/fs/cgroup || {
+                echo "sandbox: could not mount the job cgroup at /sys/fs/cgroup" >&2
+                exit 2
+            }
+            limit=$1
+            shift
+            exec /usr/bin/setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs -- \
+                /usr/bin/prlimit --nproc="$limit:$limit" -- "$@"
+        ' chickadee-sandbox "$limit" "$@"
+    fi
     exec /usr/bin/setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs -- \
         /usr/bin/prlimit --nproc="$limit:$limit" -- "$@"
     """
