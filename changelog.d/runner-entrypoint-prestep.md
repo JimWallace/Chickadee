@@ -1,0 +1,3 @@
+### Fixed
+
+- **A Compose override can no longer start the runner as root.** The runner's pre-step (`/app/runner-entrypoint.sh`) is now the service's `entrypoint`, not part of its `command`. On the server host, a `docker-compose.override.yml` that set the runner's `command` replaced the pre-step, so v0.5.501's runner started as root with `SYS_ADMIN`; its sandbox check then failed and it refused to start, so it never graded. Every command, including an override's or `docker compose run`'s, now runs through the pre-step and as uid 999. The image build checks that a replaced command runs as uid 999.

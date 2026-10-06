@@ -109,18 +109,25 @@ services:
   # container can no longer see student data at all.
   runner:
     image: ghcr.io/jimwallace/chickadee:latest
-    entrypoint: ["/bin/sh", "-lc"]
-    environment:
-      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
     # The container starts as root, and only for the runner-entrypoint.sh
     # pre-step: it delegates a cgroup subtree for the jobs, then starts the
-    # runner as uid 999 with no capability, an empty bounding set and
+    # command as uid 999 with no capability, an empty bounding set and
     # no_new_privs. The runner itself runs as it did before. See the comment
     # at the head of deploy/runner-entrypoint.sh.
+    #
+    # The pre-step is the ENTRYPOINT, not part of the command, so every
+    # command passes through it, including one that a
+    # docker-compose.override.yml or `docker compose run` sets. It was in the
+    # command until a host's override replaced the command: that runner then
+    # started as root with SYS_ADMIN, and refused to start only because its
+    # sandbox check failed.
+    entrypoint: ["/app/runner-entrypoint.sh", "/bin/sh", "-lc"]
+    environment:
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
     user: "0:0"
     command:
       - >
-        exec /app/runner-entrypoint.sh /app/chickadee-runner
+        exec /app/chickadee-runner
         --api-base-url http://server:8080
         --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
         --max-jobs "${RUNNER_MAX_JOBS:-4}"

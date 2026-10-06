@@ -130,7 +130,7 @@ with the same namespaces a job uses. It mounts a tmpfs inside them, and prints
 `sandbox OK` when it works:
 
 ```bash
-docker compose run --rm --no-deps runner "exec /app/runner-entrypoint.sh unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
+docker compose run --rm --no-deps runner "unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
 ```
 
 The first line of the output tells you about the job cgroups (see "Job
@@ -204,6 +204,18 @@ capability, an empty bounding set and `no_new_privs`, as the runner ran
 before. The Compose file gives the container five capabilities for the
 pre-step: `SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID` and `SETPCAP`. The runner
 does not keep them.
+
+The pre-step is the service's `entrypoint`, so every `command` runs through it,
+including one that a `docker-compose.override.yml` sets. An override may
+replace the runner's `command` (for example its `--api-base-url` or
+`--worker-id`), but must not set `entrypoint` or `user`. A runner host with its
+own Compose file uses the same entrypoint:
+
+```yaml
+    entrypoint:
+      - /app/runner-entrypoint.sh
+      - /app/chickadee-runner
+```
 
 The runner log starts with one of these lines:
 
