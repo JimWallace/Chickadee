@@ -285,9 +285,9 @@ struct AuthRoutes: RouteCollection {
 
         let oidcConfig = req.application.oidcConfig
 
-        // Revoke any issued OAuth tokens at the IdP. Runs concurrently and is
-        // bounded by a deadline so a slow/hung IdP can't keep the task alive
-        // indefinitely; the user-facing redirect still happens immediately.
+        // Revoke any issued OAuth tokens at the IdP. Runs concurrently, and each
+        // call carries a request timeout so a slow or hung IdP cannot keep the
+        // task alive (#1925); the user-facing redirect still happens at once.
         // The task belongs to `backgroundWork`, which awaits it at shutdown, so
         // it never uses `app.client` after the application has gone (#1923).
         if let endpoint = oidcConfig?.discovery.revocationEndpoint,

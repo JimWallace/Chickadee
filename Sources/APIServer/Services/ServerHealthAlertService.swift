@@ -32,6 +32,9 @@ func evaluateHealthRules(
         now: now
     )
 
+    // Also before the database check: it reads a file the deploy daemon writes.
+    results[.deployerUnhealthy] = evaluateDeployerUnhealthy(on: application, now: now)
+
     let dbResult = await evaluateDatabaseUnreachable(on: application)
     results[.databaseUnreachable] = dbResult
     if dbResult.isFiring {

@@ -208,9 +208,12 @@ COPY Resources  ./Resources
 # Authoring guides served as MCP resources (see MCPResourceProvider).
 COPY docs       ./docs
 
-# Startup script (server only; runner uses its binary directly).
+# Startup scripts. The server starts through docker-entrypoint.sh. The runner
+# starts through runner-entrypoint.sh, which delegates the job cgroups as root
+# and then drops to the application user (see docker-compose.yml).
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh
+COPY deploy/runner-entrypoint.sh ./runner-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh ./runner-entrypoint.sh
 
 # /app stays owned by root. Only the data volume belongs to the application
 # user. The server runs from /data (the entrypoint changes to it) and the runner

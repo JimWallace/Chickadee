@@ -9,6 +9,98 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.503] - 2026-10-06
+
+### Changed
+
+- **Runner hosts: give the runner container a fixed hostname.** `deploy/README.md` now says so. The server refuses a worker ID that another hostname used in the last 90 seconds, so a recreated runner with a new random hostname could not poll for 90 seconds after each update.
+
+
+## [0.5.502] - 2026-10-06
+
+### Fixed
+
+- **Facts panels on the LTI, GitHub and runner pages.** The `.detail-grid--cells` rules came before the base `.detail-grid` rules in the stylesheet, so the base rules won. The panel was capped at 480px with one wide column and one very narrow column, and on the LTI page the URLs in the narrow column wrapped every few characters. The cell rules now come after the base rules, so the facts form an even grid.
+
+
+## [0.5.501] - 2026-10-06
+
+### Fixed
+
+- **The OIDC retry cooldown uses one clock.** `resolve(app:now:)` compared the caller's `now` against a cooldown that it had set from the wall clock, so a caller that passed a time saw a cooldown it could not control. The cooldown now starts from the caller's `now`. A stale comment about the logout token revocation is also corrected. (#2310)
+
+
+## [0.5.500] - 2026-10-06
+
+### Fixed
+
+- **Stable row height in "Last active" columns.** The column was too narrow for a time such as "15 seconds ago", so the text wrapped. Because the time updates every few seconds, the rows on the admin runner table grew and shrank. The column is now wide enough for the longest relative time.
+
+
+## [0.5.499] - 2026-10-06
+
+### Security
+
+- **Each test script has its own memory limit.** With the job cgroups that the runner container's pre-step delegates, the runner puts each sandboxed test script, and the make step, in a cgroup of its own under `/sandbox/jobs`, with `memory.max` at the new `--job-memory-limit` (default 1024 MB), no swap, and `pids.max` at `--job-process-limit` plus the script. Before this, one job that allocated without bound used the memory of every job beside it, and the kernel's OOM killer could stop another job or the runner. Now the kernel stops only that script, and its output says that it went over its memory limit. The script's private tmpfs counts against the same limit. When the script ends, the runner stops every process left in its cgroup. The script sees its own cgroup, read-only, at `/sys/fs/cgroup`, so a JVM still reads its limit, and the script cannot raise it. At startup the runner checks the cgroups with one sandboxed command and logs `job_cgroups`; without them it warns and grades as before. A container memory limit must hold `--max-jobs` x `--job-memory-limit` plus about 512 MB; the runner warns at startup when it does not, and names a `--job-memory-limit` that fits. A test that the kernel stopped because the container ran out, not because it reached its own limit, says that the runner ran out of memory.
+
+
+## [0.5.498] - 2026-10-06
+
+### Changed
+
+- **The auto-deploy daemon keeps its own scripts at the release it deploys.** It ran from a git clone on the host that nothing updated, so fixes to the deploy scripts reached production only by a manual `git pull`. Once a release's image is staged, the daemon now checks out the release's own commit in that clone (the tag must name the same commit as the image), as the clone's owner, and restarts on the new scripts. A clone with local changes is left alone and the history says so; a paused daemon updates nothing. `status.json` and the admin MCP `get_deploy_status` report the scripts' revision. A daemon older than this change needs one `git pull` and a restart to start updating itself.
+
+
+## [0.5.497] - 2026-10-06
+
+### Fixed
+
+- **The local runner autostart cannot start two runners at once.** `LocalRunnerManager.ensureRunning` checked for a runner, then awaited the worker secret, then stored the new runner. Two saves at the same moment could both pass the check and start two processes, and one of them could then never be stopped. It now reads the secret before the check. `stopIfRunning` clears its handle before it awaits the stop. The validation pre-check's wait now ends when the request is cancelled. (#2299)
+
+
+## [0.5.496] - 2026-10-06
+
+### Changed
+
+- **The runner container delegates a cgroup subtree for its jobs.** The Compose runner now starts as root for one pre-step, `/app/runner-entrypoint.sh`. The pre-step remounts `/sys/fs/cgroup` read-write, creates `/sandbox/runner` and `/sandbox/jobs`, enables the `memory` and `pids` controllers for the jobs, gives that subtree to uid 999, and starts the runner as uid 999 with no capability, an empty bounding set and `no_new_privs`, as before. The container gets five capabilities for the pre-step only (`SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID`, `SETPCAP`). The runner log starts with `job cgroups delegated` or `job cgroups unavailable: <reason>`. This prepares a hard memory limit per job; the runner does not use the cgroups yet. The host check for the sandbox in `deploy/README.md` now runs through the pre-step, so that it still checks uid 999. The image build proves the delegation on a cgroup v2 Docker host.
+
+
+## [0.5.495] - 2026-10-06
+
+### Added
+
+- **A runner update script for runner hosts.** `deploy/chickadee-runner-update.sh` moves a runner on a separate host to the release that the server runs. Run it from cron. It reads the server's version at `/health`, pulls the image of that release's commit by its `:sha-` tag, checks the image's revision label, and recreates only the runner service. When the runner already runs that release, it does nothing and prints nothing. It reports a runner that does not stay up, with the runner's last log lines. Before this, a runner host's `docker compose pull` took `:latest`, which can be a build that is not a release, or an older one.
+
+
+## [0.5.494] - 2026-10-06
+
+### Fixed
+
+- **A deploy is recorded as a success only when the server runs the release's version.** The auto-deploy daemon recorded success once `/health` answered, with whatever version answered: on 2026-10-05 three "successful" deploys of v0.5.464 ran 0.5.463. It now rolls back and counts a failure when the reported version differs from the release.
+
+### Added
+
+- **A `deployerUnhealthy` health alert.** It pages when the auto-deploy daemon reports `stuck`, `error` or `certificate_invalid`, or when it has not written its status for 30 minutes. Until now those states showed only in the admin MCP.
+
+### Changed
+
+- **The `runnerVersionSkew` alert is now a warning that pages,** not an advisory: a runner left behind can lack a sandbox fix, which the minimum-runner-version gate does not cover.
+
+
+## [0.5.493] - 2026-10-06
+
+### Fixed
+
+- **A data export requested during shutdown no longer outlives the drain.** `DataExportManager` started new work while it was draining, so that work could read the database after Fluent closed it. It now refuses new work once the drain begins, as `BackgroundWork` does. The export row stays `pending`, and the reaper marks it failed. (#2302)
+
+
+## [0.5.492] - 2026-10-06
+
+### Fixed
+
+- **A lock error no longer loses a badge, leaderboard entry or coverage row.** Five "first insert wins" saves used `try?`, which also hid the stale-snapshot lock error that the retry around the result side effects exists for. The rows were then lost with no log. A new `createIgnoringConflict` ignores only a constraint failure, so the retry now sees the lock error and runs again. (#2300)
+
+
 ## [0.5.491] - 2026-10-06
 
 ### Changed

@@ -72,6 +72,28 @@ import VaporTesting
         }
     }
 
+    @Test func getDeployStatusReportsTheDeployerScriptsRevision() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "dep-admin-rev", role: "admin")
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("deploy-state-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let status = """
+                {"state":"idle","deployedVersion":"0.5.470","latestSeen":"v0.5.470",\
+                "detail":"up to date","paused":false,"scriptsRevision":"b485699b4cf9",\
+                "updatedAt":"2026-10-06T10:00:00Z"}
+                """
+            try status.write(
+                to: dir.appendingPathComponent("status.json"), atomically: true, encoding: .utf8)
+            app.deployStateDirectory = dir.path
+
+            let output = try await GetDeployStatusTool().execute(
+                .init(), context(subject: "dep-admin-rev"))
+            #expect(output.scriptsRevision == "b485699b4cf9")
+        }
+    }
+
     @Test func getDeployStatusReportsUnavailableWhenNoFile() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "dep-admin2", role: "admin")

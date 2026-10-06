@@ -207,6 +207,12 @@ mechanism without moving any student traffic:
    already aborted by the script *before* the nginx flip, so traffic never moved
    — this covers the rarer "healthy at cutover, degrades after" case.)
 
+   **Healthy is not enough: the version must match.** After the probe passes,
+   `/health` must report the version the release names. If it reports another,
+   the daemon rolls back and counts a failure, with both versions in the
+   detail. Until 2026-10-05 a success was recorded with whatever answered: three
+   "successful" deploys of v0.5.464 ran 0.5.463.
+
    A **TLS failure is not a failed release.** TLS terminates at the host nginx,
    in front of both colors, so when the certificate check fails the probe asks
    again without verification. If the application answers, the release stays,
@@ -226,7 +232,9 @@ mechanism without moving any student traffic:
    is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
    Disable with `CHICKADEE_REFRESH_RUNNER=0`. Because this step is best-effort, a
    silently-failed refresh would leave the runner grading on a stale build; the
-   `runnerVersionSkew` health alert is the backstop — it pages once a runner stays
+   `runnerVersionSkew` health alert is the backstop — it pages (severity
+   `warning` since 2026-10-06, because a stale runner can lack a sandbox fix
+   that the minimum-version gate does not cover) once a runner stays
    behind the server past `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` (default 900s),
    which is set generously so the *expected* transient skew during this very step
    never fires.
@@ -273,6 +281,16 @@ Ctrl-C, then enable the service. Its first *real* auto-deploy then happens
 naturally on the next merge to `main` (the next release). Pause anytime by
 writing `{"command":"pause"}` to `command.json`, or `sudo systemctl stop
 chickadee-deployer`.
+
+### The `deployerUnhealthy` alert
+
+The server reads `status.json` from the read-only deploy state mount
+(`DeployerHealthRule.swift`). The rule pages (severity `warning`) when the
+daemon reports `stuck`, `error` or `certificate_invalid`, and when the daemon
+has not written its status for 30 minutes, which means it has stopped: it writes
+on every poll. A paused daemon does not fire, and neither does a deployment
+with no status file. Until this rule, those states showed only to someone who
+asked the admin MCP.
 
 ### App ⇄ daemon IPC (files in `STATE_DIR`)
 
@@ -439,22 +457,46 @@ Three guards were added after this incident:
 - The server's `outboundEgressFailing` health rule fires when several outbound
   calls have failed in the window and none has succeeded in it.
 
-### The deploy scripts run from a git clone, not from the image
+### The deploy scripts run from a git clone, which the daemon keeps at each release
 
 `chickadee-deployer.service` runs `deploy/chickadee-deployer.sh` from a checkout
-on the host. **Nothing in the pipeline updates that checkout.** The container
-image rolls forward on every release; the deploy scripts do not. A fix committed
-here reaches production only when somebody pulls on the host:
+on the host. Until October 2026 **nothing updated that checkout**: the image
+rolled forward on every release and the deploy scripts did not, so a fix here
+reached production only when somebody pulled on the host. The Sept 2026
+investigation lost time chasing a shell-quoting bug that was already fixed here,
+and on 2026-10-05 the host still ran the script from before image staging and
+recorded three "successful" deploys of v0.5.464 that ran 0.5.463.
+
+**Now the daemon updates its own scripts.** Once a release's image is staged,
+`update_own_scripts` brings the clone to the release's own commit and the daemon
+restarts on the new scripts, before it snapshots or swaps:
+
+- It fetches the release tag and requires it to name the same commit as the
+  image (the image's revision label). A tag that names another commit is
+  refused.
+- It checks out that commit **detached**, so the clone sits exactly at the
+  release, `docker-compose.yml` included. `git pull` no longer applies there;
+  `git checkout main` returns it to the branch if ever needed.
+- git runs as the clone's owner (`runuser`), so no root-owned file lands in it.
+- **A clone with local changes is left alone.** The history records
+  `deployer-update skipped` once per release, and the deploy goes on with the
+  scripts as they are. Commit or discard the changes to resume updates.
+- A failed fetch records `deployer-update failed` and deploys with the current
+  scripts.
+- A paused daemon deploys nothing, so it updates nothing: `pause` is the
+  opt-out.
+
+`status.json` carries `scriptsRevision`, the clone's commit, and the admin MCP
+`get_deploy_status` reports it, so the script that ran is visible without SSH.
+
+**One-time bootstrap.** A daemon older than this change cannot update itself.
+On the host, once, after this change is released:
 
 ```
 cd /home/jrwallac/Chickadee
-git log --oneline -1
 git pull
+sudo systemctl restart chickadee-deployer
 ```
-
-This is worth checking during any deploy-path investigation: the script that ran
-may not be the script in this repository. The Sept 2026 investigation lost time
-to exactly that, chasing a shell-quoting bug that had already been fixed here.
 
 ## The legacy Compose server kept running, and paged Slack
 
