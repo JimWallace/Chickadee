@@ -75,7 +75,8 @@ struct DataExportEnrollment: Codable, Sendable {
     let learnSection: String?
     /// The per-course handle this student is shown under on the class-facing
     /// pages (the leaderboards; docs/student-avatars.md). nil before one has
-    /// been materialized, and never set for a staff enrollment.
+    /// been materialized. A staff enrollment keeps a handle drawn while the
+    /// user was a student.
     let avatarHandle: String?
 }
 

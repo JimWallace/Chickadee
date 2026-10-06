@@ -220,6 +220,18 @@ chickadee_load_student <- function(extra_skip = character(0)) {
     if (is.na(f)) errored("No R submission file was found to grade.")
 
     env <- new.env(parent = globalenv())
+    # The submission runs in the test's process, and a test's result is its
+    # exit status. A quit() or q() in the submission's own code would end the
+    # test with the submission's status, and status 0 reads as a pass. These
+    # two names shadow base R's for code defined in `env` only; the runtime's
+    # passed/failed/errored live in the global environment and keep the real
+    # quit(). This does not stop a determined submission
+    # (docs/grading-integrity.md, phase 2).
+    chickadee_submission_quit <- function(...) {
+        stop("the submission ended the test (quit)", call. = FALSE)
+    }
+    assign("quit", chickadee_submission_quit, envir = env)
+    assign("q", chickadee_submission_quit, envir = env)
     grDevices::pdf(NULL)                 # swallow any plots the notebook draws
     on.exit(try(grDevices::dev.off(), silent = TRUE), add = TRUE)
 

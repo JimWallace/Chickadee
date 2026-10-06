@@ -59,6 +59,6 @@ struct FillLateAvatarAxes: ChickadeeMigration {
     }
 
     /// Nothing to undo: the drawn values are indistinguishable from a draw that
-    /// happened on the first view, and the keys they fill are now required.
+    /// happened on the first view.
     func revert(on database: Database) async throws {}
 }

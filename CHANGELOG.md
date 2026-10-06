@@ -9,6 +9,52 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.472] - 2026-10-06
+
+### Fixed
+
+- **"Give new handle" no longer reports a database failure as an exhausted pool.** The redraw treated every failed save as a lost race and, after three tries, told staff that the course had no unused handle left. It now retries only when a classmate holds the drawn handle, and reports any other failure as an error (#2255).
+
+
+## [0.5.471] - 2026-10-05
+
+### Security
+
+- **One sandboxed job can no longer use up a runner's processes (#2224).** Every job on a runner runs as the same user, so one test script could fork until the container's `pids_limit` was used up, and the other jobs on the runner could then not start a process. Each sandboxed script now starts under its own `RLIMIT_NPROC`, set by the new runner flag `--job-process-limit` (default 128), which the kernel counts per user namespace. At startup the runner warns when the kernel does not apply the limit (a runner started as root) and when the container's `pids_limit` cannot hold `--max-jobs` jobs at their limit. The Compose runner's `pids_limit` grows from 64 to 576 to cover four jobs.
+
+
+## [0.5.470] - 2026-10-05
+
+### Fixed
+
+- **Present mode no longer locks the hill champion's handle.** Opening Present mode on a king-of-the-hill activity spent the champion's one handle change, although Present mode is a staff view and locks nothing. The champion card now follows the same rule as the ranking rows (#2254).
+
+
+## [0.5.469] - 2026-10-05
+
+### Security
+
+- **A Racket submission can no longer end a test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. An `(exit ...)` in the submission's own code, in a function the test calls or in its module body, ended the test with the submission's status, and status 0 read as a pass. Every entry into the submission (`chickadee-load-student`, `chickadee-call`, `chickadee-value` and `chickadee-call/capture`) now runs under an exit handler that raises an `exn:fail` naming the cause, which the generated test reports as a failure. The runtime's own verdicts keep the real handler. The browser copy of the runtime is regenerated with it. Phase 2 of `docs/grading-integrity.md` (#2241); it does not stop a determined submission, which phase 3 addresses.
+
+
+## [0.5.468] - 2026-10-05
+
+### Security
+
+- **A Lua submission can no longer end a test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. An `os.exit` in the submission's own code, in a function the test calls or in its top-level code, ended the test with the submission's status, and status 0 read as a pass. `load_student` now gives the submission's environment its own `os`, whose `exit` raises an error that the generated test reports as a failure ("the submission ended the test"); every other `os` function still works, and the runtime's own verdicts keep the real `os.exit`. The browser copy of the runtime is regenerated with it. Phase 2 of `docs/grading-integrity.md` (#2241); it does not stop a determined submission, which phase 3 addresses.
+
+### Security
+
+- **An R submission can no longer end a test with its own exit status.** The submission runs inside the test's process, and a test's result is its exit status. A `quit()` or `q()` in the submission's own code, in a function the test calls or in its top-level code, ended the test with the submission's status, and status 0 read as a pass. `chickadee_load_student` now shadows both names in the submission's environment, so such a call stops with an error that the generated test reports as a failure ("the submission ended the test"). The runtime's own `passed`, `failed` and `errored` keep the real `quit()`. The browser copy of the runtime is regenerated with it. Phase 2 of `docs/grading-integrity.md` (#2241); it does not stop a determined submission, which phase 3 addresses.
+
+
+## [0.5.467] - 2026-10-05
+
+### Fixed
+
+- **The account page lists courses newest term first.** Both course lists sorted by code alone, so two offerings of one course were in no fixed order; they now use the same order as every other course list. `docs/course-terms.md` no longer names a function that does not exist or describes two fixed defects as current (#2231).
+
+
 ## [0.5.466] - 2026-10-05
 
 ### Fixed

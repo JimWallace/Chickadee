@@ -107,6 +107,14 @@ Docker's default seccomp and AppArmor profiles refuse the `unshare` and
 `seccomp=unconfined` and `apparmor=unconfined`. The runner keeps `cap_drop:
 ALL`, `no-new-privileges`, a read-only root file system and `pids_limit`.
 
+Each test script may start at most `--job-process-limit` processes and
+threads (default 128), so one job cannot use up the container's processes
+while other jobs run. The container's `pids_limit` must hold every job at that
+limit: `--max-jobs` x 128 + 64. The file sets 576, for the default of four
+jobs. A runner with six jobs needs 832. The runner prints a warning at startup
+when the limit is too small, or when it runs as root, where the kernel does
+not apply the per-script limit.
+
 The host must also allow unprivileged user namespaces, with mounts inside
 them. Check it before the first `docker compose up` with this file. The check
 runs `unshare` in the runner service, with the same namespaces a job uses,

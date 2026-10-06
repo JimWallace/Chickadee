@@ -286,6 +286,18 @@ function M.load_student()
         M.errored("No Lua submission file was found to grade.")
     end
     local env = setmetatable({}, { __index = _G })
+    -- The submission runs in the test's process, and a test's result is its
+    -- exit status. An os.exit in the submission's own code would end the test
+    -- with the submission's status, and status 0 reads as a pass. The
+    -- submission's environment gets its own `os` whose exit raises an error;
+    -- every other name reads through to the real `os`, and the runtime's own
+    -- verdicts keep the real os.exit. This does not stop a determined
+    -- submission (docs/grading-integrity.md, phase 2).
+    env.os = setmetatable({
+        exit = function()
+            error("the submission ended the test (os.exit)", 0)
+        end,
+    }, { __index = os })
     local chunk, err = loadfile(file, "t", env)
     if not chunk then
         M.errored("Your submission (" .. file .. ") could not be parsed as Lua: " .. tostring(err))

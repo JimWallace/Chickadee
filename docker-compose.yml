@@ -160,7 +160,14 @@ services:
       - no-new-privileges:true
       - seccomp=unconfined
       - apparmor=unconfined
-    pids_limit: 64
+    # Each sandboxed test script may start at most --job-process-limit
+    # processes and threads (default 128; #2224), so one job cannot use up the
+    # container's processes while others run. That isolates the jobs only when
+    # the container holds every job at its limit: --max-jobs x 128 + 64 for
+    # the runner. 576 covers the default --max-jobs 4. With a higher
+    # RUNNER_MAX_JOBS, raise this too; the runner warns at startup when it is
+    # too small.
+    pids_limit: 576
     read_only: true
     # The runner's work root — where it stages a test setup, and where a
     # compiled language writes a binary and then EXECUTES it — defaults to
