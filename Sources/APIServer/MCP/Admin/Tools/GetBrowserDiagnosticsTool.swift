@@ -97,6 +97,8 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     ]
 
     static let name = "get_browser_diagnostics"
+    static let windowBound = MCPBoundedInt(default: 168, max: 720)
+    static let sampleBound = MCPBoundedInt(default: 20, max: 100)
     static let description =
         "In-browser editor + submission diagnostics (JupyterLite and its xeus kernels) for diagnosis: totals and "
         + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error / page_unresponsive for "
@@ -129,18 +131,12 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "windowHours": .object([
-                "type": .string("integer"),
-                "description": .string("Look-back window in hours (default 168, max 720)."),
-            ]),
+            "windowHours": Self.windowBound.property("Look-back window in hours"),
             "testSetupID": .object([
                 "type": .string("string"),
                 "description": .string("Optional assignment/test-setup id filter."),
             ]),
-            "sampleLimit": .object([
-                "type": .string("integer"),
-                "description": .string("Max recent samples to return (default 20, max 100)."),
-            ]),
+            "sampleLimit": Self.sampleBound.property("Max recent samples to return"),
         ]),
         "additionalProperties": .bool(false),
     ])
@@ -148,8 +144,8 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         try await context.requireAdminSubject()
 
-        let windowHours = min(max(input.windowHours ?? 168, 1), 720)
-        let sampleLimit = min(max(input.sampleLimit ?? 20, 1), 100)
+        let windowHours = Self.windowBound.resolve(input.windowHours)
+        let sampleLimit = Self.sampleBound.resolve(input.sampleLimit)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 
         var query = APIClientDiagnostic.query(on: context.db)

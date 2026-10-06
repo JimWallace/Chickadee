@@ -81,10 +81,7 @@ struct ListAssignmentVersionsTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "assignmentPublicID": MCPSchema.assignmentPublicID,
-            "limit": .object([
-                "type": .string("integer"),
-                "description": .string("Max entries returned (default 50, clamped 1-200)."),
-            ]),
+            "limit": limitBound.property("Max entries returned"),
             "beforeVersion": .object([
                 "type": .string("integer"),
                 "description": .string(
@@ -111,14 +108,13 @@ struct ListAssignmentVersionsTool: ContentTool {
         readOnlyHint: true, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.read]
 
-    static let defaultLimit = 50
-    static let maxLimit = 200
+    static let limitBound = MCPBoundedInt(default: 50, max: 200)
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (_, setup) = try await context.authorizedAssignmentAndSetup(
             publicID: input.assignmentPublicID)
         let setupID = setup.id ?? ""
-        let limit = min(max(input.limit ?? Self.defaultLimit, 1), Self.maxLimit)
+        let limit = Self.limitBound.resolve(input.limit)
 
         var query = APIAssignmentVersion.query(on: context.mainDB)
             .filter(\.$testSetupID == setupID)

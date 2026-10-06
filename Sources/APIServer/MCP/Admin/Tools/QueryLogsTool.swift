@@ -43,6 +43,7 @@ struct QueryLogsTool: DiagnosticTool {
     }
 
     static let name = "query_logs"
+    static let limitBound = MCPBoundedInt(default: 100, max: 500)
     static let description =
         "Recent server log events (warning and above) from an in-process ring buffer, for "
         + "diagnosis. Filter by minLevel, a message substring (contains), and sinceMinutes. "
@@ -53,12 +54,13 @@ struct QueryLogsTool: DiagnosticTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "limit": .object([
-                "type": .string("integer"), "description": .string("Max entries (default 100, max 500)."),
-            ]),
+            "limit": Self.limitBound.property("Max entries"),
             "minLevel": .object([
                 "type": .string("string"),
-                "description": .string("Minimum level: warning | error | critical."),
+                "enum": MCPEnumProse<Logger.Level>.jsonEnum,
+                "description": .string(
+                    "Minimum level, one of: \(MCPEnumProse<Logger.Level>.oneOfList). "
+                        + "The buffer holds warning and above."),
             ]),
             "contains": .object([
                 "type": .string("string"), "description": .string("Case-insensitive message substring."),
@@ -76,8 +78,11 @@ struct QueryLogsTool: DiagnosticTool {
         let capacity = context.request.application.adminEventSink?.bufferCapacity ?? 0
         let all = context.request.application.adminEventSink?.snapshot() ?? []
 
-        let limit = min(max(input.limit ?? 100, 1), 500)
-        let minLevel = input.minLevel.flatMap { Logger.Level(rawValue: $0.lowercased()) }
+        let limit = Self.limitBound.resolve(input.limit)
+        // An unknown level is refused rather than ignored: "warn" used to
+        // return every entry unfiltered (#2336).
+        let minLevel = try MCPEnumProse<Logger.Level>.parseOptional(
+            input.minLevel?.lowercased(), field: "minLevel")
         let needle = input.contains?.lowercased()
         let since = input.sinceMinutes.map { Date().addingTimeInterval(Double(-$0) * 60) }
 

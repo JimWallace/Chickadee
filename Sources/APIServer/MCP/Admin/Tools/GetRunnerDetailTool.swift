@@ -69,6 +69,7 @@ struct GetRunnerDetailTool: DiagnosticTool {
     }
 
     static let name = "get_runner_detail"
+    static let sampleBound = MCPBoundedInt(default: 50, max: 200)
     static let description =
         "One runner's detail: identity (hostname, version, load, all-time jobs), its capability "
         + "profile (platform / architecture / language versions / capabilities — what the "
@@ -85,10 +86,7 @@ struct GetRunnerDetailTool: DiagnosticTool {
                 "type": .string("string"),
                 "description": .string("Runner id, as listed by list_runners or get_metrics_snapshot."),
             ]),
-            "sampleSize": .object([
-                "type": .string("integer"),
-                "description": .string("Recent jobs to aggregate the timing summary over (default 50, max 200)."),
-            ]),
+            "sampleSize": Self.sampleBound.property("Recent jobs to aggregate the timing summary over"),
         ]),
         "required": .array([.string("runnerID")]),
         "additionalProperties": .bool(false),
@@ -101,7 +99,7 @@ struct GetRunnerDetailTool: DiagnosticTool {
         guard !runnerID.isEmpty else {
             throw MCPToolError.invalidArguments(detail: "runnerID must not be empty.")
         }
-        let sampleSize = min(max(input.sampleSize ?? 50, 1), 200)
+        let sampleSize = Self.sampleBound.resolve(input.sampleSize)
         let db = context.db
 
         let identity = try await resolveIdentity(runnerID: runnerID, req: context.request)
