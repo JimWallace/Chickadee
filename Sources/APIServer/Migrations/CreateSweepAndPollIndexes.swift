@@ -15,7 +15,7 @@ struct CreateSweepAndPollIndexes: ChickadeeMigration {
         // Instructor LTI grades page: every sync for a set of assignments.
         ("idx_lti_grade_syncs_test_setup", "lti_grade_syncs(test_setup_id)"),
         // Union leaderboard body, polled every 5s while the window is open:
-        // completed matches for one assignment, newest first.
+        // completed matches for one assignment, oldest first.
         ("idx_match_results_setup_completed", "match_results(test_setup_id, completed_at)"),
         // Tournament page and the next-round scheduler: runs for one
         // assignment, latest first.
