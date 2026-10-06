@@ -167,17 +167,11 @@ enum AvatarStore {
                 .compactMap { $0 })
     }
 
-    /// Two unused handles from the current lists, for the account page's
-    /// "Choose a different handle" panel.  They are not reserved: the choice
-    /// is checked again against the unique index when the student picks one.
-    /// Fewer than two when the course has nearly exhausted the lists.
-    static func drawAlternates(
-        for enrollment: APICourseEnrollment, count: Int = 2, on db: Database
-    ) async throws -> [String] {
-        drawAlternates(taken: try await takenHandles(inCourse: enrollment.$course.id, on: db), count: count)
-    }
-
-    /// `drawAlternates(for:count:on:)` from a set the caller already loaded.
+    /// Unused handles from the current lists, two by default, for the account
+    /// page's "Change handle" panel, drawn from a taken set the caller loaded.
+    /// They are not reserved: the choice is checked again against the unique
+    /// index when the student picks one.  Fewer than `count` when the course
+    /// has nearly exhausted the lists.
     static func drawAlternates(taken: Set<String>, count: Int = 2) -> [String] {
         var taken = taken
         var alternates: [String] = []
