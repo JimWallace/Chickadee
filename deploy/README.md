@@ -536,6 +536,15 @@ time the container is created again. The postmortem for the same failure on the 
 [docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md), in the section
 "The host's iptables state is a deploy dependency".
 
+Give the runner container a fixed hostname too, for example
+`hostname: sparrow-runner` in its Compose service. The server refuses a worker
+ID that a different hostname used in the last 90 seconds, because two runners
+with one ID would take each other's jobs. Without a fixed hostname, each new
+container has a new random hostname, so after every update the server refuses
+the new runner for 90 seconds and the log shows `duplicate_worker_id`. The
+bundled Compose file does not set a hostname, because `--scale runner=3` needs
+a different one for each replica.
+
 ### Observability and operations
 
 Backend-only observability is built in:
