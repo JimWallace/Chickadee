@@ -1,0 +1,3 @@
+### Changed
+
+- **Runner updates no longer stop running jobs (cordon and drain).** On SIGTERM the runner now claims no new job, finishes and reports the jobs it is running, and exits. Before this, the runner, as the container's first process, ignored SIGTERM, and every `docker stop` or runner update killed it after 10 seconds with its jobs, which the server then re-queued only 10 minutes later. The bundled Compose file sets `stop_grace_period: 10m` on the runner; a runner host with its own Compose file must add it. `deploy/chickadee-runner-update.sh` holds a lock, so a long drain does not start a second update. The runner logs `runner_draining` and ends with `runner_shutdown` status `drained`.

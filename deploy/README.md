@@ -524,6 +524,24 @@ Add this line, with the path to your clone:
 Cron sends mail only when the script prints a line, which is when it updates
 the runner or when it fails.
 
+An update does not stop a running job. On SIGTERM the runner claims no new
+job, finishes and reports the jobs it is running, and exits (cordon and
+drain). Docker sends SIGTERM when it replaces the container, and kills the
+container only after the service's `stop_grace_period`. The bundled Compose
+file sets 10 minutes; a runner host with its own Compose file must add the
+same line to its runner service, or Docker kills the runner after its default
+of 10 seconds:
+
+```yaml
+    stop_grace_period: 10m
+```
+
+While one runner drains, the other runners take new jobs. A job still running
+after 10 minutes is killed, and the server puts it back in the queue 10
+minutes after it was assigned. The update script holds a lock, so a drain that
+lasts longer than the 10 minutes between cron runs does not start a second
+update. The deployer on the server host replaces its runner the same way.
+
 ### Runner hosts: give each runner a stable ID
 
 Give each runner host a stable ID, for example `--worker-id Sparrow` or

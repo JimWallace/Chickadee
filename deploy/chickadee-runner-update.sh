@@ -125,7 +125,7 @@ update_runner() {
   fi
   docker rmi "$ref" >/dev/null 2>&1 || true
 
-  log "recreating '$SERVICE' on v$version ($ref)"
+  log "recreating '$SERVICE' on v$version ($ref); the runner first finishes its running jobs"
   if ! compose up -d --no-deps "$SERVICE" >/dev/null 2>&1; then
     log "compose up failed; the runner may still run the old image"
     return 1
@@ -147,6 +147,14 @@ update_runner() {
 }
 
 main() {
+  # A drain can last up to the runner's stop_grace_period, longer than the
+  # time between two cron runs, and two runs must not recreate the runner at
+  # once. A run that finds the lock taken leaves the work to the one that has
+  # it.
+  local lock=/run/lock/chickadee-runner-update.lock
+  [ -d /run/lock ] || lock=/tmp/chickadee-runner-update.lock
+  exec 9>"$lock"
+  flock -n 9 || return 0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --health-url)  HEALTH_URL="$2"; shift 2 ;;

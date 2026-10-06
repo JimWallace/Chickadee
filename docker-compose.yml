@@ -142,6 +142,12 @@ services:
       server:
         condition: service_healthy
     restart: unless-stopped
+    # Cordon and drain. On SIGTERM (docker stop, or `compose up` on a new
+    # image) the runner claims no new job, finishes and reports the jobs it is
+    # running, and exits. Docker waits this long before SIGKILL; ten minutes is
+    # the server's reaper age, past which a job counts as lost anyway. Other
+    # runners take new jobs while this one drains.
+    stop_grace_period: 10m
     # The image carries one HEALTHCHECK, and it curls the server's /health on
     # :8080. The runner serves no HTTP at all, so that check fails every 15s
     # forever and the container reports `unhealthy` while polling and grading
