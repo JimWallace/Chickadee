@@ -5,11 +5,11 @@ handle, drawn on first view and stored; the account page renders the bird in
 place of the initials monogram, which is gone, and the wardrobe lets a student
 choose its backdrop and ring (docs/student-wardrobe.md).
 
-**Both are shown to other people.** Eleven templates include the avatar partial:
+**Both are shown to other people.** Twelve templates include the avatar partial:
 the leaderboard pages (list, bracket, Present mode) show a student's bird and
 handle to classmates, and the instructor Students, Slip days and LEARN lists,
-the admin runner page and the readiness list show the bird beside the name to
-staff. The handle is therefore **in use**, and student-facing copy says so: the
+the admin Users list, the admin course page, the admin runner page and the
+readiness list show the bird beside the name to staff. The handle is therefore **in use**, and student-facing copy says so: the
 account page names the handle per course and says plainly that a stable
 pseudonym is not anonymity (section 5).
 
@@ -95,7 +95,7 @@ ship in.
 | `expression` | 6 + 3 | bright, sleepy, wink, curious, keen, startled — reads first and from furthest away; plus chirp, sly, dreamy, which are unlockables and never drawn at first use |
 | `accessory` | 8 + 1, × 5 accents | none, scarf, headphones, beanie, glasses, headband, bowtie, bloom; plus the gradcap, kept for a completion achievement and never drawn ([student-wardrobe.md](student-wardrobe.md), decision 4) |
 | `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts; drawn at first use, then the student may change it on the account page |
-| `border` | 1 + 5 | none, or a ring in one of the five accents — chosen by the student, never drawn, so not counted below ([student-wardrobe.md](student-wardrobe.md)) |
+| `border` | 13 | none, a solid ring in one of the five accents, or one of seven patterned rings — chosen by the student, never drawn, so not counted below ([student-wardrobe.md](student-wardrobe.md)) |
 | `tuft` | 5 | none, cowlick, crest, pair, swoop — the outline, the one thing that separates two hatless birds at roster size |
 | `tilt` | 3 | upright, left, right (0°, −9°, +9°) — a transform, not a symbol |
 
@@ -294,11 +294,12 @@ Swift builds the layer list and the custom-property string; `_avatar.leaf` takes
 it as a sub-context (the bare-second-parameter `extend` form, not the labelled
 `with:` form, which does not lex) and loops. Leaf makes no decisions.
 
-**Two sizes.** The account page gets 3rem; a dense table gets `.avatar-sm` at
-1.5rem. Drawing the bird settled what this is for, and it is not DOM weight:
+**Sizes.** The account page gets 3rem; a dense row gets `.avatar-sm` at
+1.5rem. (Five sizes exist now; `AvatarSize` and `docs/ui-design.md` list them.)
+Drawing the bird settled what this is for, and it is not DOM weight:
 the parts that never vary geometrically are baked into one `av-plumage` symbol,
-so a whole bird is **five** `use` elements rather than one per feature, and 200
-rows cost 1,000 nodes. The real reason for the small variant is legibility —
+so a whole bird is **seven** `use` elements rather than one per feature, and 200
+rows cost 1,400 nodes. The real reason for the small variant is legibility —
 beak, bib and wing marks stop being separable somewhere under 24px — which is
 the same fact that makes the handle, not the picture, the thing a leaderboard
 identifies a student by.
@@ -563,7 +564,7 @@ persisted:
 | | Lives where | Size | Per |
 |---|---|---|---|
 | Geometry | the sprite, inlined in the page | 6.0 KB, **2.4 KB gzipped** | page |
-| Spec | a JSON column | ~60 bytes (five short strings) | student |
+| Spec | a JSON column | ~150 bytes (nine short fields) | student |
 | Markup | built at render | 459 bytes | rendering |
 
 Measured: building one avatar's markup costs **5.6 µs** and a draw costs 2.2 µs
@@ -592,8 +593,8 @@ load. That follows the icon sprite deliberately: an external sprite is one more
 fetch that can fail, and its failure mode is an avatar rendering as an empty
 box. At this size the trade is not close.
 
-**DOM** is the remaining number to take on a real page: five elements per bird,
-so 1,000 for 200 rows.
+**DOM** is the remaining number to take on a real page: seven elements per bird,
+so 1,400 for 200 rows.
 
 ---
 
@@ -652,7 +653,8 @@ assert against the markup instead.
 **The size floor, as built:** "the bird earns its detail at 48px and up". Below
 it the bird is recognition, not identification, so `.avatar-sm` (1.5rem,
 `AvatarSize.small`) is drawn only where a handle beside it carries the identity:
-the leaderboard rows, which is what `RankedIdentities.presentation` defaults to.
+the bracket and the account page's handle panel. The list, standings and union
+rows use `.avatar-md` (`AvatarSize.roster`).
 A row with no text beside the bird would want a monogram chip instead, and none
 exists.
 
