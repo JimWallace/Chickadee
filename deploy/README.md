@@ -125,12 +125,16 @@ an older kernel the runner refuses to start with `--sandbox` and says why.
 
 The host must also allow unprivileged user namespaces, with mounts inside
 them. Check it before the first `docker compose up` with this file. The check
-runs `unshare` in the runner service, with the same namespaces a job uses,
-mounts a tmpfs inside them, and prints `sandbox OK` when it works:
+starts the runner service through its pre-step, so `unshare` runs as uid 999
+with the same namespaces a job uses. It mounts a tmpfs inside them, and prints
+`sandbox OK` when it works:
 
 ```bash
-docker compose run --rm --no-deps --entrypoint /usr/bin/unshare runner --fork --user --net --mount --map-root-user /bin/sh -c "mount -t tmpfs tmpfs /mnt && echo sandbox OK"
+docker compose run --rm --no-deps runner "exec /app/runner-entrypoint.sh unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
 ```
+
+The first line of the output tells you about the job cgroups (see "Job
+cgroups" below).
 
 If the check fails, the host refuses user namespaces. On Ubuntu 23.10 and
 later, the usual cause is the `kernel.apparmor_restrict_unprivileged_userns`
@@ -188,6 +192,31 @@ docker compose config | grep -n -e sandbox -e unconfined
 
 To run without the sandbox, remove `--sandbox` from the runner command and the
 two `unconfined` lines from its `security_opt`.
+
+### Job cgroups
+
+The runner container starts as root, for one pre-step only:
+`/app/runner-entrypoint.sh`. The pre-step remounts `/sys/fs/cgroup`
+read-write, creates `/sandbox/runner` and `/sandbox/jobs` in the container's
+cgroup, enables the `memory` and `pids` controllers for `/sandbox/jobs`, and
+gives that subtree to uid 999. Then it starts the runner as uid 999, with no
+capability, an empty bounding set and `no_new_privs`, as the runner ran
+before. The Compose file gives the container five capabilities for the
+pre-step: `SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID` and `SETPCAP`. The runner
+does not keep them.
+
+The runner log starts with one of these lines:
+
+- `[runner-entrypoint] job cgroups delegated at /sandbox/jobs`
+- `[runner-entrypoint] job cgroups unavailable: <reason>`
+
+The pre-step needs cgroup v2 (Docker on Ubuntu 22.04 and later uses it), with
+the `memory` and `pids` controllers available to the container. When it cannot
+delegate the cgroups, the runner still starts and grades. To read the line:
+
+```bash
+docker compose logs runner | grep runner-entrypoint
+```
 
 ### Optional PostgreSQL service example
 

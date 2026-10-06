@@ -112,9 +112,15 @@ services:
     entrypoint: ["/bin/sh", "-lc"]
     environment:
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
+    # The container starts as root, and only for the runner-entrypoint.sh
+    # pre-step: it delegates a cgroup subtree for the jobs, then starts the
+    # runner as uid 999 with no capability, an empty bounding set and
+    # no_new_privs. The runner itself runs as it did before. See the comment
+    # at the head of deploy/runner-entrypoint.sh.
+    user: "0:0"
     command:
       - >
-        exec /app/chickadee-runner
+        exec /app/runner-entrypoint.sh /app/chickadee-runner
         --api-base-url http://server:8080
         --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
         --max-jobs "${RUNNER_MAX_JOBS:-4}"
@@ -154,8 +160,22 @@ services:
     # its default AppArmor profile does not allow a user namespace. The
     # namespaces then isolate each script; the capability drop still applies
     # to the runner.
+    #
+    # The five capabilities below are for the pre-step only, and the runner
+    # does not keep them: SYS_ADMIN remounts /sys/fs/cgroup read-write, CHOWN
+    # gives the job subtree to uid 999, SETUID and SETGID change to that user,
+    # and SETPCAP empties the bounding set. Without SYS_ADMIN or CHOWN the
+    # pre-step reports "job cgroups unavailable" and the runner starts without
+    # job cgroups. Without one of the other three the change of user fails
+    # and the runner does not start, so it never runs as root.
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_ADMIN
+      - CHOWN
+      - SETUID
+      - SETGID
+      - SETPCAP
     security_opt:
       - no-new-privileges:true
       - seccomp=unconfined
