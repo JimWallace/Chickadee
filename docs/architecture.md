@@ -150,7 +150,7 @@ Each of those directories has one job, so a file goes where its imports say:
   Leaf and names no model, because such a file is pure (#2144).
 - `Services/` holds code over models, a database and the application.
 - `Bootstrap/` holds app setup: the database configuration and the migration
-  registry, the session driver, and the migration-namespace reconciler.
+  registry, the session driver, and the legacy migration-namespace guard.
 
 ---
 
@@ -608,12 +608,13 @@ file. The steady-state convention:
   column, and the assignment table's boolean `is_open` became the three-state
   `visibility` column in a migration since folded into `CreateAssignments`.
   Treat column existence as migration-order-dependent.
-- **`MigrationNamespaceReconciler`** runs after registration and before
-  `autoMigrate`: it rewrites `_fluent_migrations` rows recorded under legacy
-  module-derived name prefixes (`chickadee_server.`, `APIServer.`) to the
-  canonical `chickadee.*` namespace pinned by `ChickadeeMigration`, so a
-  database restored from a pre-rename build migrates cleanly instead of
-  re-running already-applied migrations.
+- **`LegacyMigrationNamespaceGuard`** runs after registration and before
+  `autoMigrate`. It stops the server when `_fluent_migrations` holds rows
+  under the module-derived prefixes (`chickadee_server.`, `APIServer.`) that
+  only v0.4.200 or earlier wrote, before `ChickadeeMigration` pinned names to
+  `chickadee.*`. It used to rename those rows, but the consolidation rounds
+  folded later migrations into the `Create*` files, so a renamed database
+  booted without the folded columns (#2282).
 
 For the current set, see `Sources/APIServer/Migrations/`.
 

@@ -37,7 +37,7 @@ import Vapor
     /// Source fragments that mean "this suite changes its database's shape".
     ///
     /// Behaviour, not names. `MigrationLog` is the model whose rows ARE the
-    /// history; `reconcileLegacyMigrationNamespace` rewrites them wholesale;
+    /// history, so a suite that renames them shows up through it;
     /// `.revert(on:` undoes a migration's DDL; `.schema(` is Fluent's DDL
     /// builder, which is how the one suite this scan found that a hand search
     /// had missed drops a table. Renaming any of those suites changes nothing
@@ -50,7 +50,6 @@ import Vapor
     /// same pooled schema.
     private static let schemaMutationTokens = [
         "MigrationLog",
-        "reconcileLegacyMigrationNamespace",
         ".revert(on:",
         ".schema(",
     ]
