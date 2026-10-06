@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.482] - 2026-10-06
+
+### Changed
+
+- **Worker and personalization comments match the code.** Nine comments described old behaviour: sandbox reads, the Racket evaluation timeout, the language count, a parameter default, and a doc comment above the wrong function. (#2272)
+
+
 ## [0.5.481] - 2026-10-06
 
 ### Fixed
