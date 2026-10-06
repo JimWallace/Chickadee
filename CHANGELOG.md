@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.487] - 2026-10-06
+
+### Changed
+
+- **The user-row foreign-key table lists every reference.** `docs/operational-diagnostics.md` said its table listed every column that references `users.id`, but it left out the LTI, GitHub, MCP, slip-day, extension, override, version, export and activity references. The table now lists all of them. (#2283)
+
+
 ## [0.5.486] - 2026-10-06
 
 ### Changed
