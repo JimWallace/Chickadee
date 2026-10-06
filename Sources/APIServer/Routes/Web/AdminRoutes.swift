@@ -639,9 +639,6 @@ struct AdminRoutes: RouteCollection {
             .set(\.$winnerUserID, to: nil)
             .update()
 
-        try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == uuid)
-            .delete()
         try await user.delete(on: req.db)
         await AuditLogger.record(
             action: .userDeleted,
