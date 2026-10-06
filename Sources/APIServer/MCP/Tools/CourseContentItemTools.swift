@@ -166,24 +166,12 @@ func resolveContentItemForWrite(
     return item
 }
 
-/// Resolves a target section id for a content item within `courseID`: nil for
-/// empty / "none", a validated UUID otherwise. A non-empty id that doesn't
-/// resolve to a section in this course is rejected (typos surface as errors).
+/// A content item's target section id within `courseID`; see
+/// `resolveCourseSectionID`.
 func resolveContentItemSectionID(
     _ raw: String?, courseID: UUID, context: ToolContext
 ) async throws -> UUID? {
-    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let trimmed, !trimmed.isEmpty, trimmed.lowercased() != "none" else { return nil }
-    guard let uuid = UUID(uuidString: trimmed) else {
-        throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(trimmed)\" is not a valid id.")
-    }
-    guard let section = try await APICourseSection.find(uuid, on: context.db),
-        section.courseID == courseID
-    else {
-        throw MCPToolError.invalidArguments(
-            detail: "No course section with id \"\(trimmed)\" in this content item's course.")
-    }
-    return uuid
+    try await resolveCourseSectionID(raw, inCourse: courseID, owner: "content item", context: context)
 }
 
 /// Next sort order in the content-item lane of `(course, section)`.
