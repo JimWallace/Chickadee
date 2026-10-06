@@ -85,6 +85,29 @@ import VaporTesting
 
     // MARK: - The account page
 
+    /// An ended course offers no handle change, and a change posted from a
+    /// page opened before it ended is refused: an old handle ages out (#2258).
+    @Test func anEndedCourseOffersNoChangeAndRefusesOne() async throws {
+        try await withWebRoutesApp { app in
+            let (cookie, enrollment) = try await loggedInStudent(on: app)
+            let html = try await get("/account", cookie: cookie, on: app).body.string
+            let pick = try #require(offeredHandles(in: html).first)
+
+            let course = try #require(try await APICourse.find(enrollment.$course.id, on: app.db))
+            course.isArchived = true
+            try await course.save(on: app.db)
+
+            let res = try await choose(pick, courseID: try course.requireID(), cookie: cookie, on: app)
+            #expect(res.status == .seeOther)
+            let stored = try await storedEnrollment(enrollment, on: app)
+            #expect(stored.avatarHandle != pick)
+            #expect(stored.avatarHandleLockedAt == nil)
+
+            let after = try await get("/account", cookie: cookie, on: app).body.string
+            #expect(offeredHandles(in: after).isEmpty)
+        }
+    }
+
     @Test func anUnlockedHandleIsOfferedTwoUnusedAlternates() async throws {
         try await withWebRoutesApp { app in
             let (cookie, enrollment) = try await loggedInStudent(on: app)

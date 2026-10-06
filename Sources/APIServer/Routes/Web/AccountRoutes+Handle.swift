@@ -65,6 +65,13 @@ extension AccountRoutes {
         return fresh
     }
 
+    /// Whether the student may still spend their one handle change here: the
+    /// handle is unlocked and the course has not ended.  `enrollment.course`
+    /// must be loaded.
+    static func canChangeHandle(_ enrollment: APICourseEnrollment) -> Bool {
+        enrollment.avatarHandleLockedAt == nil && !enrollment.course.isArchived
+    }
+
     /// Each student enrollment's handle, materialized on first view, and its
     /// "Change handle" panel.  Keyed by course.
     static func studentHandles(
@@ -73,9 +80,19 @@ extension AccountRoutes {
         var handles: [UUID: String] = [:]
         var choices: [UUID: AccountHandleChoice] = [:]
         for enrollment in enrollments where enrollment.role == .student {
+            guard let courseID = enrollment.course.id else { continue }
+            // A locked handle, or any handle in an ended course, needs no draw
+            // and offers no change, so it reads nothing (#2258). An ended
+            // course draws no new handle: an old handle ages out.
+            if !Self.canChangeHandle(enrollment) {
+                guard let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) else { continue }
+                handles[courseID] = handle
+                choices[courseID] = handleChoice(
+                    for: enrollment, handle: handle, spec: spec, taken: [], isStaff: isStaff, req: req)
+                continue
+            }
             // One roster read per enrollment, shared by the draw and the
             // alternates (#1759).
-            guard let courseID = enrollment.course.id else { continue }
             var taken = try await AvatarStore.takenHandles(inCourse: courseID, on: req.db)
             guard let handle = try await AvatarStore.ensureHandle(for: enrollment, taken: taken, on: req.db)
             else { continue }
@@ -98,7 +115,7 @@ extension AccountRoutes {
         let courseID = enrollment.course.id?.uuidString
         let wasTaken = req.query[String.self, at: "handleTaken"] == courseID
         let wasLocked = req.query[String.self, at: "handleLocked"] == courseID
-        guard enrollment.avatarHandleLockedAt == nil else {
+        guard canChangeHandle(enrollment) else {
             return AccountHandleChoice(
                 isLocked: true, options: [], canChoose: false, wasTaken: false, wasLocked: wasLocked)
         }
@@ -129,11 +146,15 @@ extension AccountRoutes {
             let enrollment = try await APICourseEnrollment.query(on: req.db)
                 .filter(\.$userID == userID)
                 .filter(\.$course.$id == courseID)
+                .with(\.$course)
                 .first(),
             enrollment.role == .student,
             enrollment.avatarHandle != nil,
             let enrollmentID = enrollment.id
         else { throw Abort(.notFound) }
+
+        // An ended course offers no change, so a stale tab changes nothing.
+        guard !enrollment.course.isArchived else { return req.redirect(to: "/account") }
 
         // Saving with the current handle selected keeps it, and does not
         // spend the one change.
