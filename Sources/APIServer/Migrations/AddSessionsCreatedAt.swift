@@ -8,8 +8,9 @@ import SQLKit
 ///
 /// The column is added with `DEFAULT CURRENT_TIMESTAMP` so new rows inserted
 /// by Vapor's untouched `SessionRecord` model still pick up a timestamp.
-/// Pre-existing rows get NULL and are ignored by the reaper — they roll out
-/// naturally as Vapor rewrites session rows on login.
+/// Pre-existing rows get NULL, which the reaper skips. Vapor's driver updates
+/// only `data`, so nothing ever fills them; `DeleteUndatedSessions` deletes
+/// them once (#2281).
 ///
 /// `TIMESTAMP DEFAULT CURRENT_TIMESTAMP` is portable to both PostgreSQL and
 /// SQLite (SQLite treats TIMESTAMP as a NUMERIC-affinity TEXT column).

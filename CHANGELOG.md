@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.484] - 2026-10-06
+
+### Fixed
+
+- **The hourly LTI reaper uses its index.** Its delete filtered `expires_at < now OR consumed`, and no index covers `consumed`, so each sweep scanned both tables. The reaper now runs two deletes per table, and each is a range on the `expires_at` index. Which rows it removes does not change. (#2279)
+
+
+## [0.5.483] - 2026-10-06
+
+### Fixed
+
+- **Tournament match jobs no longer scan every tournament slot.** The claim and the result ingest of a match job look up its slot by `match_submission_id`, and that column had no index. A new migration adds one. (#2278)
+
+
 ## [0.5.482] - 2026-10-06
 
 ### Changed

@@ -525,6 +525,10 @@ func registerMigrations(on app: Application) {
     // One optional column; existing rows keep NULL.
     app.migrations.add(AddGitHubCourseRepositoryInvitedUser())
 
+    // The match-job lookup by `match_submission_id` (#2278). Index only;
+    // must follow `CreateTournamentRuns`, which creates the table.
+    app.migrations.add(CreateTournamentMatchSubmissionIndex())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
@@ -556,4 +560,9 @@ func registerMigrations(on app: Application) {
     // axes existed; a draw into the empty slots only (#1762). Raw SQL that
     // reads `users.avatar_spec`, so it must follow `CreateUsers`.
     app.migrations.add(FillLateAvatarAxes())
+
+    // One-time delete of the session rows that predate `created_at`, which
+    // the reaper can never age out (#2281). Raw SQL that reads
+    // `_fluent_sessions.created_at`, so it must follow `AddSessionsCreatedAt`.
+    app.migrations.add(DeleteUndatedSessions())
 }
