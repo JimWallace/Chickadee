@@ -94,7 +94,9 @@ import Testing
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains(ownJob.standardizedFileURL.path))
         #expect(output.stdout.contains("written"))
-        #expect(FileManager.default.fileExists(atPath: ownJob.appendingPathComponent("marker.txt").path))
+        // The script's writes go to a private space that is discarded when it
+        // ends (#2251).
+        #expect(!FileManager.default.fileExists(atPath: ownJob.appendingPathComponent("marker.txt").path))
     }
 
     @Test(.requiresSandbox) func aFileAnotherJobLeftInTmpIsInvisible() async throws {

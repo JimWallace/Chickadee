@@ -115,6 +115,13 @@ jobs. A runner with six jobs needs 832. The runner prints a warning at startup
 when the limit is too small, or when it runs as root, where the kernel does
 not apply the per-script limit.
 
+What a test script writes in its working directory goes to a private tmpfs of
+`--job-disk-limit` megabytes (default 256) and is discarded when the script
+ends, so one job cannot fill the work root for the others. That tmpfs is
+memory: with four jobs, allow for about 1 GB more in the container's memory
+limit, if it has one. The overlay that holds it needs Linux 5.11 or later; on
+an older kernel the runner refuses to start with `--sandbox` and says why.
+
 The host must also allow unprivileged user namespaces, with mounts inside
 them. Check it before the first `docker compose up` with this file. The check
 runs `unshare` in the runner service, with the same namespaces a job uses,
