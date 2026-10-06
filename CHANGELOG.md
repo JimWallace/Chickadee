@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.504] - 2026-10-06
+
+### Fixed
+
+- **One key-set fetch per LTI platform at a time.** Concurrent launches that miss the platform key cache now join the fetch already in flight, and a launch that fails after another launch fetched again uses the new keys. Before, a class that opened a link together sent one JWKS request per student. (#2309)
+
+
 ## [0.5.503] - 2026-10-06
 
 ### Changed
