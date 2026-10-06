@@ -119,8 +119,8 @@ Everything a test script writes, in its working directory, `/tmp`,
 `/var/tmp`, `/dev/shm` and `HOME`, goes to one private tmpfs of
 `--job-disk-limit` megabytes (default 256) and is discarded when the script
 ends, so one job cannot fill the work root for the others. That tmpfs is
-memory: with four jobs, allow for about 1 GB more in the container's memory
-limit, if it has one. The overlay that holds it needs Linux 5.11 or later; on
+memory, and it counts against the job's memory limit (see "Job cgroups"
+below). The overlay that holds it needs Linux 5.11 or later; on
 an older kernel the runner refuses to start with `--sandbox` and says why.
 
 The host must also allow unprivileged user namespaces, with mounts inside
@@ -216,6 +216,32 @@ delegate the cgroups, the runner still starts and grades. To read the line:
 
 ```bash
 docker compose logs runner | grep runner-entrypoint
+```
+
+With the cgroups delegated, the runner puts each test script, and the make
+step, in a cgroup of its own under `/sandbox/jobs`. The cgroup holds three
+limits:
+
+- Memory: `--job-memory-limit` megabytes (default 1024), with no swap. The
+  script's processes and its private tmpfs count together. When a script goes
+  over the limit, the kernel stops that script only, and the student sees
+  `the test used more than its memory limit of 1024 MB and was stopped`.
+- Processes: `--job-process-limit` (default 128), plus the script itself. The
+  kernel applies this limit even when the runner runs as root.
+- Lifetime: when the script ends, the runner stops every process that is left
+  in the cgroup, and then removes the cgroup.
+
+The container's memory must hold every job at its limit:
+`--max-jobs` x `--job-memory-limit`, plus about 512 MB for the runner. With the
+defaults that is about 4.5 GB. Set `mem_limit` in the Compose file to that
+value or more, or leave it unset.
+
+The runner checks the cgroups at startup with one sandboxed command. Its
+`runner_configuration` log line then shows `"job_cgroups":"enabled"`, or
+`"job_cgroups":"unavailable: <reason>"` after a warning. To read it:
+
+```bash
+docker compose logs runner | grep runner_configuration
 ```
 
 ### Optional PostgreSQL service example
