@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.486] - 2026-10-06
+
+### Changed
+
+- **Deleting a user leaves enrollments to the foreign key.** `deleteUser` deleted the user's enrollments by hand, although `course_enrollments.user_id` cascades on both backends and the handler's own comment says that only columns without a foreign key are cleared there. The hand delete is gone. A new test checks that the enrollments still go. (#2285)
+
+
 ## [0.5.485] - 2026-10-06
 
 ### Fixed
