@@ -2156,17 +2156,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
    the actions track still line up. Never an empty menu. */
 .row-menu-spacer { display: inline-block; flex: none; width: 1.95rem; height: 1.95rem; }
 
-/* A facts card whose facts are cells in an auto-fitting grid
-   (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them. */
-.detail-grid--cells {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-    gap: 1rem 1.25rem;
-    max-width: none;
-}
-.detail-grid--cells dt { font-size: var(--text-xs); }
-.detail-grid--cells code { overflow-wrap: anywhere; }
-.detail-grid--cells dd { margin: .15rem 0 0; font-weight: 600; }
-
 /* The sparkline drawn large: a y-scale, a taller plot with a midline, and an
    x-axis of clock times. Same bars as a card sparkline; amber is a full runner
    and grey an idle stub. */
@@ -2324,6 +2313,19 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .detail-grid dt { color: var(--gray-600); }
 .detail-grid dd { margin: 0; }
+
+/* A facts card whose facts are cells in an auto-fitting grid
+   (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them.
+   Keep these rules after .detail-grid: the selectors have the same
+   specificity, so the later rule wins. */
+.detail-grid--cells {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: 1rem 1.25rem;
+    max-width: none;
+}
+.detail-grid--cells dt { font-size: var(--text-xs); }
+.detail-grid--cells code { overflow-wrap: anywhere; }
+.detail-grid--cells dd { margin: .15rem 0 0; font-weight: 600; }
 
 /* The payload block inside a log/event row's disclosure (audit log, alert
    firings): a .detail-grid that needs to clear its own <summary>.  Global
