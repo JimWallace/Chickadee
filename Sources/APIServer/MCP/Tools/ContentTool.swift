@@ -144,7 +144,7 @@ extension ContentTool {
                 do {
                     let output = try await self.execute(input, context)
                     return try JSONValue(encoding: output)
-                } catch let error as any AbortError where (400..<500).contains(Int(error.status.code)) {
+                } catch let error as any AbortError where error.isClientRefusal {
                     // A refusal from a shared web path reaches the agent with
                     // its reason, whichever tool raised it (#1940). Before this,
                     // only the tools that caught it themselves mapped it, and

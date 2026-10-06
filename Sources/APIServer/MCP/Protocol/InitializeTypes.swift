@@ -165,7 +165,7 @@ enum MCPServerInstructions {
         mix of assignments and content items renumbered together), or reorder_assignments / \
         reorder_content_items for a section that holds only that one type.
         - Course content item — ungraded reference material shown to students inside a course section \
-        alongside assignments: a link, notebook, document, slides, outline, or heading, each with a \
+        alongside assignments: a \(MCPEnumProse<ContentItemKind>.orList), each with a \
         title and one or more labelled links ({label, url}; http(s) or site-relative only). It owns no \
         test setup, so creating or editing one never validates, re-grades, or closes anything. List with \
         list_content_items, create with create_content_item (optionally into a course section via \
@@ -319,6 +319,8 @@ enum MCPServerInstructions {
         queued -> running -> done progress over an SSE connection), then re-open with \
         update_assignment(visibility:"open") — or visibility:"preview" to beta-test as staff first — \
         once it passes (opening and previewing are refused until it does). \
+        To re-run validation without an edit, or to see how one runner grades the suite, call \
+        run_validation (optionally with runnerID); it changes no content and closes nothing. \
         When validation fails, call get_validation_result for the per-test outcomes of your reference \
         solution's latest run — each check's status plus shortResult/longResult, across all tiers — so \
         you can see which check failed and why before fixing the suite or solution. It is \
