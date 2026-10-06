@@ -15,7 +15,7 @@ struct CreateSweepAndPollIndexes: ChickadeeMigration {
         // Instructor LTI grades page: every sync for a set of assignments.
         ("idx_lti_grade_syncs_test_setup", "lti_grade_syncs(test_setup_id)"),
         // Union leaderboard body, polled every 5s while the window is open:
-        // completed matches for one assignment, newest first.
+        // completed matches for one assignment, oldest first.
         ("idx_match_results_setup_completed", "match_results(test_setup_id, completed_at)"),
         // Tournament page and the next-round scheduler: runs for one
         // assignment, latest first.
@@ -30,8 +30,8 @@ struct CreateSweepAndPollIndexes: ChickadeeMigration {
         ("idx_github_course_repositories_repo", "github_course_repositories(repo_id)"),
         // Admin user page and the data export: one student's repositories.
         ("idx_github_course_repositories_user", "github_course_repositories(user_id)"),
-        // Hourly LTI reaper: rows past their expiry. A consumed row expires
-        // too, so one column serves both arms of its filter.
+        // Hourly LTI reaper: rows past their expiry, and consumed rows among
+        // the live ones. Both are ranges on this column (#2279).
         ("idx_lti_login_states_expires", "lti_login_states(expires_at)"),
         ("idx_lti_deep_link_requests_expires", "lti_deep_link_requests(expires_at)"),
     ]

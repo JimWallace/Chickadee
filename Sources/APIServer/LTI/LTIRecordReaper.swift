@@ -22,16 +22,25 @@ private let ltiRecordReaperInterval: TimeInterval = 3600
 /// Deletes login states and deep-link requests that have expired or been
 /// consumed. A consumed row can never be used again (the atomic burn blocks
 /// it), so there is no reason to keep it until its lifetime lapses.
+///
+/// Two deletes per table, not one `expires_at < now OR consumed`: no index
+/// covers `consumed`, so the OR scanned the whole table. Each delete here is
+/// a range on the `expires_at` index (#1804). The second range holds only
+/// live rows, which last at most 30 minutes (#2279).
 func reapExpiredLTIRecords(on db: Database, logger: Logger, now: Date = Date()) async throws {
     try await APILTILoginState.query(on: db)
-        .group(.or) { group in
-            group.filter(\.$expiresAt < now).filter(\.$consumed == true)
-        }
+        .filter(\.$expiresAt < now)
+        .delete()
+    try await APILTILoginState.query(on: db)
+        .filter(\.$expiresAt >= now)
+        .filter(\.$consumed == true)
         .delete()
     try await APILTIDeepLinkRequest.query(on: db)
-        .group(.or) { group in
-            group.filter(\.$expiresAt < now).filter(\.$consumed == true)
-        }
+        .filter(\.$expiresAt < now)
+        .delete()
+    try await APILTIDeepLinkRequest.query(on: db)
+        .filter(\.$expiresAt >= now)
+        .filter(\.$consumed == true)
         .delete()
     logger.debug("LTI record reaper sweep complete")
 }
