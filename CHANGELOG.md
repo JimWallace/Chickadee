@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.505] - 2026-10-06
+
+### Changed
+
+- **One async semaphore.** `WorkerClaimQueue` is now a one-permit `AsyncCountingSemaphore`, and the semaphore has a `withPermit` method that releases its slot on every exit path. The personalization evaluator uses it instead of three hand-written releases. (#2303)
+
+
 ## [0.5.504] - 2026-10-06
 
 ### Fixed
