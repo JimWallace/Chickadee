@@ -304,7 +304,7 @@ struct RunnerProfileDetector {
     /// dotted number in the token": a token still contributes at most its first
     /// numeric run, so `1994-2022` (Lua's copyright line) and `2023-06-16` (R's
     /// release date) stay unmatched for want of a dot, and `Lua.org` contributes
-    /// nothing for want of a digit. Every one of the six banners is pinned in
+    /// nothing for want of a digit. Every language's banner is pinned in
     /// `RunnerProfileDetectorTests`.
     static func firstNumericVersion(in raw: String) -> String? {
         for token in raw.split(whereSeparator: \.isWhitespace) {

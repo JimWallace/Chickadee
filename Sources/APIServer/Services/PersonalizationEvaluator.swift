@@ -99,25 +99,9 @@ enum PersonalizationEvaluator {
     static let spawnGate = AsyncCountingSemaphore(
         width: max(2, ProcessInfo.processInfo.activeProcessorCount))
 
-    /// Evaluates each `expressions` entry with `seed` and all listed
-    /// static variables in scope.  Returns the rendered Python literal
-    /// per expression name, suitable for dropping into a
-    /// `NotebookSubstitution.apply` substitutions map.
-    ///
-    /// - `seedHex`: 64-char lowercase hex (the value persisted by
-    ///   `AssignmentSeedStore`).  Sent to the subprocess as
-    ///   `CHICKADEE_ASSIGNMENT_SEED` so the driver re-uses Phase 1's
-    ///   wire contract.
-    /// - `staticVariables`: every literal name in scope (globals +
-    ///   section vars combined).  Order matters when names collide —
-    ///   later entries win, matching the notebook substitution map's
-    ///   "section overrides global" precedence.
-    /// - `expressions`: evaluated in declared order, each seeing
-    ///   `seed`, every entry in `staticVariables`, and every prior
-    ///   expression's value as a Python global.
     /// Whether an expression can be evaluated for `language`.
     ///
-    /// True for all six today: `driverPlan` is exhaustive and every arm names
+    /// True for every language today: `driverPlan` is exhaustive and every arm names
     /// an interpreter that ships on the server image. It is a function rather
     /// than a constant so a seventh language whose driver is not yet written
     /// has somewhere to say so — and so the authoring editor reads the answer
@@ -129,6 +113,21 @@ enum PersonalizationEvaluator {
     }
 
     /// Evaluates `expressions` with `seed` bound to the per-student seed.
+    /// Returns each expression's value rendered as a literal in `language`,
+    /// keyed by expression name, ready for a `NotebookSubstitution.apply`
+    /// substitutions map.
+    ///
+    /// - `seedHex`: 64-char lowercase hex (the value persisted by
+    ///   `AssignmentSeedStore`).  Sent to the subprocess as
+    ///   `CHICKADEE_ASSIGNMENT_SEED` so the driver re-uses Phase 1's
+    ///   wire contract.
+    /// - `staticVariables`: every literal name in scope (globals +
+    ///   section vars combined).  Order matters when names collide —
+    ///   later entries win, matching the notebook substitution map's
+    ///   "section overrides global" precedence.
+    /// - `expressions`: evaluated in declared order, each seeing
+    ///   `seed`, every entry in `staticVariables`, and every prior
+    ///   expression's value.
     ///
     /// `datasetFiles` maps a support filename to the bytes THIS student
     /// receives (`DatasetResolver.resolve`).  When it is non-empty the
@@ -360,7 +359,7 @@ enum PersonalizationEvaluator {
         case .cpp:
             // No interpreter exists, so the driver is a shell script that
             // compiles a generated program with g++ and runs it (~0.3s per
-            // evaluation, measured). One spawn shape for all five languages.
+            // evaluation, measured). One spawn shape for every language.
             source = CppPersonalizationDriver.renderDriverScript(
                 staticVariables: staticVariables,
                 expressions: expressions,

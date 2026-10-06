@@ -5,7 +5,7 @@
 // has no interpreter, so the "driver" is a shell script that compiles a
 // generated program with g++ and runs it (~0.3s per evaluation, measured;
 // docs/cpp-support.md). The evaluator invokes it with `sh`, keeping one
-// spawn shape for all five languages.
+// spawn shape for every language.
 //
 // Output protocol (shared with the other drivers): the LAST stdout line is a
 // JSON object mapping each expression name to the value rendered as a
