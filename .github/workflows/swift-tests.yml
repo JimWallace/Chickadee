@@ -54,6 +54,7 @@ jobs:
 
   # The auto-deploy daemon is bash that runs as root on the production host, so
   # its tests stub docker, curl and the clock (scripts/test-chickadee-deployer.sh).
+  # The runner hosts' update script is tested the same way.
   # They need bash and python3 and nothing else, like the job above.
   deployer-tests:
     runs-on: ubuntu-latest
@@ -62,6 +63,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Auto-deploy daemon behaviour tests
         run: scripts/test-chickadee-deployer.sh
+      - name: Runner update script behaviour tests
+        run: scripts/test-chickadee-runner-update.sh
 
   # The class-handle word lists (Sources/Core/AvatarHandle.swift) against the
   # review data in Tools/handle-review/data. Node only, like the two jobs above

@@ -78,12 +78,25 @@ struct SandboxedScriptRunner: ScriptRunner {
     /// The make step keeps its writes, because the tests use what it builds.
     let diskLimitMegabytes: Int
 
+    /// How much memory one command may use, in megabytes: its processes and
+    /// its private tmpfs together (#2252). It applies only when `cgroups` is
+    /// set.
+    let memoryLimitMegabytes: Int
+
+    /// The delegated cgroup that holds a cgroup per command, or `nil` when the
+    /// host has none. Without it, a command's memory is not limited.
+    let cgroups: JobCgroups?
+
     init(
         processLimit: Int = Self.defaultProcessLimit,
-        diskLimitMegabytes: Int = Self.defaultDiskLimitMegabytes
+        diskLimitMegabytes: Int = Self.defaultDiskLimitMegabytes,
+        memoryLimitMegabytes: Int = JobCgroups.defaultMemoryLimitMegabytes,
+        cgroups: JobCgroups? = nil
     ) {
         self.processLimit = processLimit
         self.diskLimitMegabytes = diskLimitMegabytes
+        self.memoryLimitMegabytes = memoryLimitMegabytes
+        self.cgroups = cgroups
     }
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
@@ -93,33 +106,96 @@ struct SandboxedScriptRunner: ScriptRunner {
     func run(
         script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String], hiding hiddenFiles: [URL]
     ) async -> ScriptOutput {
-        await executeScriptLaunch(
-            sandboxedLaunch(
-                script: script, workDir: workDir, env: env, hiding: hiddenFiles, processLimit: processLimit,
-                diskLimitMegabytes: diskLimitMegabytes),
-            workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds,
-            launchErrorPrefix: "Failed to launch sandboxed script"
-        )
+        await inJobCgroup { cgroup in
+            await executeScriptLaunch(
+                sandboxedLaunch(
+                    script: script, workDir: workDir, env: env, hiding: hiddenFiles,
+                    limits: SandboxLimits(
+                        processes: processLimit, diskMegabytes: diskLimitMegabytes,
+                        keepsWorkingDirectoryWrites: false, cgroup: cgroup?.directory)),
+                workDir: workDir,
+                timeLimitSeconds: timeLimitSeconds,
+                launchErrorPrefix: "Failed to launch sandboxed script"
+            )
+        }
     }
 
     func run(
         command executablePath: String, arguments: [String], workDir: URL, timeLimitSeconds: Int,
         launchErrorPrefix: String
     ) async -> ScriptOutput {
-        await executeScriptLaunch(
-            sandboxWrap(
-                executablePath: executablePath,
-                arguments: arguments,
+        await inJobCgroup { cgroup in
+            await executeScriptLaunch(
+                sandboxWrap(
+                    executablePath: executablePath,
+                    arguments: arguments,
+                    workDir: workDir,
+                    environment: mergedScriptEnvironment(overrides: [:]),
+                    limits: SandboxLimits(
+                        processes: processLimit, diskMegabytes: diskLimitMegabytes,
+                        keepsWorkingDirectoryWrites: true, cgroup: cgroup?.directory)),
                 workDir: workDir,
-                environment: mergedScriptEnvironment(overrides: [:]),
-                limits: SandboxLimits(
-                    processes: processLimit, diskMegabytes: diskLimitMegabytes,
-                    keepsWorkingDirectoryWrites: true)),
-            workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds,
-            launchErrorPrefix: launchErrorPrefix
-        )
+                timeLimitSeconds: timeLimitSeconds,
+                launchErrorPrefix: launchErrorPrefix
+            )
+        }
+    }
+
+    /// Runs `body` with a fresh cgroup for its command, then removes the
+    /// cgroup and every process left in it. When the kernel stopped the command
+    /// for want of memory, the output says so, and says whether the command
+    /// reached its own limit or the container ran out, because otherwise the
+    /// student sees only an exit code of 137.
+    ///
+    /// When the cgroup cannot be created, the command runs without one and the
+    /// runner logs why: a job is graded rather than failed for a fault of the
+    /// runner's.
+    private func inJobCgroup(_ body: (JobCgroup?) async -> ScriptOutput) async -> ScriptOutput {
+        guard let cgroups else { return await body(nil) }
+        let cgroup: JobCgroup
+        do {
+            cgroup = try cgroups.makeJobCgroup(
+                memoryLimitMegabytes: memoryLimitMegabytes, processLimit: processLimit)
+        } catch {
+            writeStructuredRunnerLog(
+                event: "job_cgroup_unavailable", fields: ["error": error.description])
+            return await body(nil)
+        }
+        let output = await body(cgroup)
+        let events = cgroup.memoryEvents
+        await cgroup.remove()
+        guard let note = Self.memoryStopMessage(memoryEvents: events, megabytes: memoryLimitMegabytes)
+        else { return output }
+        return ScriptOutput(
+            exitCode: output.exitCode,
+            stdout: output.stdout,
+            stderr: output.stderr + note,
+            executionTimeMs: output.executionTimeMs,
+            timedOut: output.timedOut)
+    }
+
+    /// The line added to a command's stderr when the kernel stopped a process
+    /// of it for want of memory, or `nil` when it did not. A command that did
+    /// not reach its own limit was stopped because the container ran out,
+    /// which is not the test's fault, and the message must not say otherwise.
+    static func memoryStopMessage(memoryEvents events: String, megabytes: Int) -> String? {
+        guard JobCgroup.oomKills(inMemoryEvents: events) > 0 else { return nil }
+        return JobCgroup.ownLimitOOMs(inMemoryEvents: events) > 0
+            ? memoryLimitMessage(megabytes: megabytes)
+            : runnerOutOfMemoryMessage(megabytes: megabytes)
+    }
+
+    /// The line for a command that the kernel stopped because the container,
+    /// not the command, ran out of memory.
+    static func runnerOutOfMemoryMessage(megabytes: Int) -> String {
+        "\nsandbox: the runner ran out of memory and stopped the test, which had not reached "
+            + "its own memory limit of \(megabytes) MB\n"
+    }
+
+    /// The line added to a command's stderr when the kernel stopped it at its
+    /// memory limit.
+    static func memoryLimitMessage(megabytes: Int) -> String {
+        "\nsandbox: the test used more than its memory limit of \(megabytes) MB and was stopped\n"
     }
 }
 
@@ -188,7 +264,7 @@ extension SandboxedScriptRunner {
                 environment: mergedScriptEnvironment(overrides: [:]),
                 limits: SandboxLimits(
                     processes: defaultProcessLimit, diskMegabytes: defaultDiskLimitMegabytes,
-                    keepsWorkingDirectoryWrites: false)),
+                    keepsWorkingDirectoryWrites: false, cgroup: nil)),
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox probe")
@@ -222,7 +298,7 @@ extension SandboxedScriptRunner {
                 environment: mergedScriptEnvironment(overrides: [:]),
                 limits: SandboxLimits(
                     processes: 0, diskMegabytes: defaultDiskLimitMegabytes,
-                    keepsWorkingDirectoryWrites: true)),
+                    keepsWorkingDirectoryWrites: true, cgroup: nil)),
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox process-limit probe")
@@ -233,11 +309,88 @@ extension SandboxedScriptRunner {
     }
 }
 
+// MARK: - Job cgroup probe
+
+extension SandboxedScriptRunner {
+
+    /// Checks that a sandboxed command runs in its own cgroup, under its
+    /// memory limit, and cannot change that limit (#2252).
+    ///
+    /// It runs one command through the same wrapper and the same cgroup steps
+    /// as a real job. The command must report the job's cgroup as its own,
+    /// read the job's `memory.max` at `/sys/fs/cgroup`, and fail to write it.
+    ///
+    /// Returns `nil` when the job cgroups work. Otherwise it returns the
+    /// reason, and the runner grades without them.
+    static func jobCgroupProbe(cgroups: JobCgroups, workDir: URL) async -> String? {
+        #if os(Linux)
+        let probeDir = workDir.appendingPathComponent(
+            "chickadee-sandbox-probe-\(UUID().uuidString)", isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: probeDir, withIntermediateDirectories: false)) != nil
+        else { return "cannot write to the work root \(workDir.path)" }
+        defer { try? FileManager.default.removeItem(at: probeDir) }
+        let megabytes = 64
+        let cgroup: JobCgroup
+        do {
+            cgroup = try cgroups.makeJobCgroup(memoryLimitMegabytes: megabytes, processLimit: defaultProcessLimit)
+        } catch {
+            return error.description
+        }
+        let output = await executeScriptLaunch(
+            sandboxWrap(
+                executablePath: "/bin/sh",
+                arguments: [
+                    "-c",
+                    "cat /proc/self/cgroup; cat /sys/fs/cgroup/memory.max; "
+                        + "if { echo max > /sys/fs/cgroup/memory.max; } 2>/dev/null; then echo writable; fi",
+                ],
+                workDir: probeDir,
+                environment: mergedScriptEnvironment(overrides: [:]),
+                limits: SandboxLimits(
+                    processes: defaultProcessLimit, diskMegabytes: defaultDiskLimitMegabytes,
+                    keepsWorkingDirectoryWrites: false, cgroup: cgroup.directory)),
+            workDir: probeDir,
+            timeLimitSeconds: 10,
+            launchErrorPrefix: "Failed to launch job cgroup probe")
+        await cgroup.remove()
+        return jobCgroupProbeFailure(
+            output: output, jobCgroupName: cgroup.directory.lastPathComponent,
+            memoryLimitBytes: megabytes * 1024 * 1024)
+        #else
+        return "job cgroups need Linux"
+        #endif
+    }
+
+    /// Reads the probe's output: its cgroup, the limit it read, and whether it
+    /// could write that limit. Returns `nil` when all three are as expected.
+    static func jobCgroupProbeFailure(
+        output: ScriptOutput, jobCgroupName: String, memoryLimitBytes: Int
+    )
+        -> String?
+    {
+        guard output.exitCode == 0 else {
+            let detail = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? "the probe exited with code \(output.exitCode)" : detail
+        }
+        let lines = output.stdout.split(separator: "\n").map(String.init)
+        guard let cgroupLine = lines.first, cgroupLine.hasPrefix("0::"), cgroupLine.hasSuffix("/\(jobCgroupName)")
+        else {
+            return "the command did not run in its job cgroup: \(lines.first ?? "no output")"
+        }
+        guard lines.count > 1, lines[1] == String(memoryLimitBytes) else {
+            return "the command did not see its memory limit at /sys/fs/cgroup/memory.max"
+        }
+        guard !lines.contains("writable") else {
+            return "the command could change its own memory limit"
+        }
+        return nil
+    }
+}
+
 // MARK: - Platform-specific sandbox setup
 
 private func sandboxedLaunch(
-    script: URL, workDir: URL, env: [String: String], hiding hiddenFiles: [URL], processLimit: Int,
-    diskLimitMegabytes: Int
+    script: URL, workDir: URL, env: [String: String], hiding hiddenFiles: [URL], limits: SandboxLimits
 )
     -> ScriptLaunch
 {
@@ -248,9 +401,7 @@ private func sandboxedLaunch(
         workDir: workDir,
         environment: mergedScriptEnvironment(overrides: env),
         hiding: hiddenFiles,
-        limits: SandboxLimits(
-            processes: processLimit, diskMegabytes: diskLimitMegabytes,
-            keepsWorkingDirectoryWrites: false))
+        limits: limits)
 }
 
 /// The directories a script may see under the work root: its working
@@ -282,10 +433,13 @@ struct SandboxVisibleDirectories {
 /// What one sandboxed command may use: processes and threads, and megabytes
 /// of private space. `keepsWorkingDirectoryWrites` is `true` for a command
 /// whose writes in the working directory the job keeps: the make step.
+/// `cgroup` is the command's own cgroup, which holds its memory limit, or
+/// `nil` when it has none.
 struct SandboxLimits {
     let processes: Int
     let diskMegabytes: Int
     let keepsWorkingDirectoryWrites: Bool
+    let cgroup: URL?
 }
 
 /// The processes a Linux sandbox holds before its command starts any: the
@@ -326,6 +480,7 @@ private func sandboxWrap(
             String(limits.processes + sandboxOwnProcessCount),
             String(limits.diskMegabytes),
             limits.keepsWorkingDirectoryWrites ? "0" : "1",
+            limits.cgroup?.path ?? "-",
             visible.workRoot.path,
             String(visible.directories.count),
         ] + visible.directories.map(\.path)
@@ -356,7 +511,8 @@ private func sandboxWrap(
 #if os(Linux)
 /// Runs inside the new namespaces, before the real command. Arguments: the
 /// process limit, the size of the private space in megabytes, 1 to cover the
-/// working directory with the overlay or 0 to keep its writes, the work root,
+/// working directory with the overlay or 0 to keep its writes, the command's
+/// cgroup or `-` for none, the work root,
 /// the count of visible directories, the visible directories (the
 /// working directory first), the count of hidden files, the hidden files, then
 /// the command and its arguments.
@@ -400,14 +556,26 @@ private func sandboxWrap(
 /// sets and sets no-new-privs, so not even running a program as root in the
 /// namespace gives a capability back. The command needs none: it only reads
 /// and writes its own files.
+///
+/// With a cgroup (#2252), the prelude moves itself into it first, so the
+/// command, every process it starts, and every page of the private tmpfs it
+/// writes count against the cgroup's limits. It then binds that cgroup,
+/// read-only, over `/sys/fs/cgroup`. A cgroup that the runner created belongs
+/// to the runner's user, which is root in this namespace, so without the cover
+/// the command could raise its own limits or move itself out. With it, the
+/// command still reads its own limit there, as a JVM does to size its heap.
 private let linuxMountPrelude = """
     set -e
     limit=$1
     disk=$2
     overlay=$3
-    root=$4
-    count=$5
-    shift 5
+    cgroup=$4
+    root=$5
+    count=$6
+    shift 6
+    if [ "$cgroup" != - ]; then
+        echo $$ > "$cgroup/cgroup.procs"
+    fi
     if [ "$root" = / ]; then
         echo "sandbox: the working directory sits directly under /, so there is no work root to isolate" >&2
         exit 2
@@ -467,6 +635,10 @@ private let linuxMountPrelude = """
             chickadee-job-writes "$cwd"
     fi
     mount -o remount,ro,nosuid,nodev chickadee-work-root "$root"
+    if [ "$cgroup" != - ]; then
+        mount --bind "$cgroup" /sys/fs/cgroup
+        mount -o remount,bind,ro,nosuid,nodev,noexec /sys/fs/cgroup
+    fi
     if [ -f /mnt/hidden ]; then
         while IFS= read -r file; do
             if [ -e "$file" ]; then mount --bind /dev/null "$file"; fi

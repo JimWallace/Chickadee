@@ -221,13 +221,16 @@ actor LocalRunnerManager {
     private var runner: SupervisedProcess?
 
     func ensureRunning(app: Application, logger: Logger) async {
-        if let runner, runner.isRunning {
-            return
-        }
-
+        // Read the secret first. This actor is open to other calls during an
+        // await, so an await between the check below and the assignment of
+        // `runner` let two callers both pass the check and start two runners,
+        // one of which could then never be stopped (#2299).
         let secret = (await app.workerSecretStore.runtimeOverrideValue() ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines
         )
+        if let runner, runner.isRunning {
+            return
+        }
         guard !secret.isEmpty else {
             logger.warning("Local runner autostart is enabled, but worker secret is empty.")
             return
@@ -274,11 +277,13 @@ actor LocalRunnerManager {
 
     func stopIfRunning(logger: Logger) async {
         guard let runner else { return }
+        // Clear the handle before the await, so a start that runs during the
+        // stop is kept rather than overwritten with nil afterwards.
+        self.runner = nil
         if runner.isRunning {
             logger.info("Stopping local runner process...")
         }
         await runner.stop()
-        self.runner = nil
     }
 }
 

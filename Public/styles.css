@@ -2054,7 +2054,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .add-panel.is-open { display: block; }
 /* Cancel on a panel the URL fragment opened: :target would hold it open. */
 .add-panel.is-closed { display: none; }
-.section-items-seen { width: 8rem; }
+/* Wide enough for a long relative time ("59 minutes ago") on one line.
+   At 8rem it wrapped, and because the text ticks, rows grew and shrank. */
+.section-items-seen { width: 10rem; }
 .section-items-combo { width: 20rem; }
 /* The action buttons that sit at the top right of a facts card. */
 .facts-actions {
