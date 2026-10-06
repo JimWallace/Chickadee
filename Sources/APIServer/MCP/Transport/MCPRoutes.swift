@@ -93,8 +93,8 @@ struct MCPRoutes: RouteCollection {
         // the generic dispatch below (which still streams its single result as SSE
         // when the client accepts it). Generalizing live progress to all tools
         // needs a Sendable ToolContext — it currently wraps the non-Sendable
-        // Request — so the watch runs on the request-independent `application.db`
-        // and this stays a contained special case rather than threading a progress
+        // Request — so the watch runs on a request-independent connection to the
+        // same pool `ToolContext.db` uses (`mcpDatabaseID`), and this stays a contained special case rather than threading a progress
         // sink through the dispatcher.
         if let streaming = try await validationProgressStream(
             req: req, context: context, rpc: rpcRequest, era: era)
@@ -141,9 +141,9 @@ struct MCPRoutes: RouteCollection {
         }
 
         // Audit the call here, since the generic dispatcher (which normally does)
-        // is bypassed for the streaming path. The outcome is delivered over SSE
-        // after the watch, so only the target resource is recorded here.
-        await dispatcher.auditToolCall(
+        // is bypassed for the streaming path. Best-effort, as for any read tool.
+        // The outcome is stamped onto this row after the watch.
+        let auditRow = await dispatcher.recordToolCall(
             name: ValidateAssignmentTool.name, context: context,
             target: MCPAuditTarget(type: .assignment, id: assignment.publicID))
 
@@ -166,9 +166,10 @@ struct MCPRoutes: RouteCollection {
                 })
 
             let finalResponse: JSONRPCResponse
+            let toolOutcome: MCPToolOutcome
             do {
                 let outcome = try await watchValidation(
-                    on: application.db,
+                    on: application.db(application.mcpDatabaseID),
                     assignmentPublicID: publicID,
                     pollInterval: .milliseconds(500),
                     deadline: ContinuousClock().now.advanced(by: .seconds(timeout)),
@@ -181,9 +182,17 @@ struct MCPRoutes: RouteCollection {
                 finalResponse = mcpModernized(
                     .success(id: id, result: mcpToolSuccessResult(structured)),
                     era: era, serverInfo: serverInfo)
+                toolOutcome = .success
             } catch {
+                application.logger.error("MCP tool validate_assignment failed while watching: \(error)")
                 finalResponse = .failure(
                     id: id, error: .internalError("validate_assignment failed while watching validation."))
+                toolOutcome = .failed
+            }
+            if let auditRow {
+                await AuditLogger.updateMetadata(
+                    auditRow, merging: ["outcome": toolOutcome.rawValue],
+                    on: application.db, logger: application.logger)
             }
 
             if let frame = try? MCPTransport.sseMessageFrame(encoding: finalResponse) {

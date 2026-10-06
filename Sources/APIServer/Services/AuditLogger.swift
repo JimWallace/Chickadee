@@ -85,11 +85,19 @@ enum AuditLogger {
     static func updateMetadata(
         _ entry: APIAuditLogEntry, merging extra: [String: String], on req: Request
     ) async {
+        await updateMetadata(entry, merging: extra, on: req.db, logger: req.logger)
+    }
+
+    /// The same, outside a request (the MCP progress stream outlives its
+    /// request's handler).
+    static func updateMetadata(
+        _ entry: APIAuditLogEntry, merging extra: [String: String], on db: any Database, logger: Logger
+    ) async {
         entry.metadataDictionary.merge(extra) { _, new in new }
         do {
-            try await entry.update(on: req.db)
+            try await entry.update(on: db)
         } catch {
-            req.logger.error("audit_log metadata update failed: \(error.localizedDescription)")
+            logger.error("audit_log metadata update failed: \(error.localizedDescription)")
         }
     }
 }

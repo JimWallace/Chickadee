@@ -262,6 +262,34 @@ forever. The Lua audit sweep fixed the detector; the language gate now applies
 the same matching automatically, so declaring the assignment's own language as
 a requirement is redundant rather than dangerous.
 
+## Asking For One Runner (staff validation runs only)
+
+To see how one runner grades a suite, for example after a change to one host,
+staff call the MCP tool `run_validation` with a `runnerID`. It queues a fresh
+validation run of the current reference solution, and the run asks for that
+runner. It changes no content, so it neither closes an open assignment nor
+regrades student work.
+
+The target is a preference, not a pin, and it is not in the manifest:
+
+- It is stored on the one queued job (`submissions.target_runner_id`), never
+  on the assignment. Only `run_validation` sets it, so a student submission
+  never carries one.
+- For `RunnerTargetGate.fallbackSeconds` (5 minutes) after the job is queued,
+  only the named runner may claim it. After that any compatible runner may,
+  and the server logs `targeted_job_fallback`. An offline or sleeping target
+  delays the run and never strands it.
+- The target must still pass every gate above. A target cannot make a runner
+  claim a job that it cannot grade.
+- The tool refuses a runner that has not polled in the last 120 seconds, and
+  names the runners that are online.
+- Its output names the runner that claimed the run, so a fallback is visible.
+
+A per-assignment runner field in the manifest was rejected: it would apply to
+every student submission, so a field left set would leave an assignment
+ungradable whenever that runner is offline, and it would follow the content
+into a cloned course whose runners differ.
+
 ## Rollout And Backwards Compatibility
 
 The rollout rules are:

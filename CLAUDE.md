@@ -1111,7 +1111,7 @@ Python, R, Lua, Octave, C++, Racket and Java assignments; browser (xeus/wasm)
 and native worker grading that share one RunnerCore; per-student
 personalization; pattern-generated test families (10 kinds) and notebook checks
 (10 kinds); achievements; student slip days; per-course roles; BrightSpace grade
-sync (awaiting UW IST prod credentials); an MCP authoring surface of 56 tools
+sync (awaiting UW IST prod credentials); an MCP authoring surface of 57 tools
 plus a read-only admin-diagnostics MCP of 19 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source of
 truth for the count); OIDC SSO; and zero-downtime auto-deploys. The 0.4 arc is
