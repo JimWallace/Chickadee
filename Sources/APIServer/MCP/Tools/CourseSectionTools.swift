@@ -446,9 +446,13 @@ struct DeleteCourseSectionTool: ContentTool {
         guard let uuid = UUID(uuidString: raw) else {
             throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(raw)\" is not a valid id.")
         }
-        // Unknown id is an idempotent no-op (removed=false) — and reports nothing
-        // that distinguishes "doesn't exist" from "in a course you can't see".
-        guard let section = try await APICourseSection.find(uuid, on: context.db) else {
+        // An unknown id is an idempotent no-op (removed=false), and so is a
+        // section in a course the account is not enrolled in, so the answer
+        // does not tell "does not exist" from "in a course you cannot see"
+        // (#2342). A visible course still refuses a role that is too low.
+        guard let section = try await APICourseSection.find(uuid, on: context.db),
+            try await context.subjectIsEnrolled(in: section.courseID)
+        else {
             return Output(sectionID: raw, removed: false, ungroupedAssignmentCount: 0)
         }
         // Deleting a course section is instructor-level structure (#417); archived blocked too.

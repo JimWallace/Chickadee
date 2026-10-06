@@ -284,12 +284,8 @@ private let attachmentsInputSchema: JSONValue = .object([
             + "students through the gated /content-files route. Appended to any existing attachments."),
 ])
 
-private let kindEnumSchema: JSONValue = .object([
-    "type": .string("string"),
-    "enum": .array(ContentItemKind.allCases.map { .string($0.rawValue) }),
-    "description": .string(
-        "Icon / label hint: link, notebook, document, slides, outline, or heading."),
-])
+private let kindEnumSchema = MCPEnumProse<ContentItemKind>.stringSchema(
+    "Icon / label hint: \(MCPEnumProse<ContentItemKind>.orList).")
 
 // MARK: - list_content_items
 
@@ -442,7 +438,9 @@ struct CreateContentItemTool: ContentTool {
         let course = try await resolveCourseForWrite(
             code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
-        let kind = ContentItemKind(rawValue: input.kind ?? "") ?? .link
+        // An absent kind is a link; an unknown one is refused, as update does,
+        // rather than stored as a link without a word (#2337).
+        let kind = try MCPEnumProse<ContentItemKind>.parseOptional(input.kind, field: "kind") ?? .link
         let links = try contentLinksFromInput(input.links ?? [])
         let sectionID = try await resolveContentItemSectionID(
             input.courseSectionID, courseID: courseID, context: context)
@@ -575,10 +573,7 @@ struct UpdateContentItemTool: ContentTool {
             item.title = trimmed
         }
         if let kind = input.kind {
-            guard let parsed = ContentItemKind(rawValue: kind) else {
-                throw MCPToolError.invalidArguments(detail: "kind \"\(kind)\" is not a recognised content-item kind.")
-            }
-            item.kind = parsed
+            item.kind = try MCPEnumProse<ContentItemKind>.parse(kind, field: "kind")
         }
         if let links = input.links {
             item.links = try contentLinksFromInput(links)
@@ -654,9 +649,13 @@ struct DeleteContentItemTool: ContentTool {
         guard let uuid = UUID(uuidString: raw) else {
             throw MCPToolError.invalidArguments(detail: "contentItemID \"\(raw)\" is not a valid id.")
         }
-        // Unknown id is an idempotent no-op, revealing nothing that distinguishes
-        // "doesn't exist" from "in a course you can't see".
-        guard let item = try await APICourseContentItem.find(uuid, on: context.db) else {
+        // An unknown id is an idempotent no-op, and so is an item in a course
+        // the account is not enrolled in, so the answer does not tell "does not
+        // exist" from "in a course you cannot see" (#2342). A visible course
+        // still refuses a role that is too low.
+        guard let item = try await APICourseContentItem.find(uuid, on: context.db),
+            try await context.subjectIsEnrolled(in: item.courseID)
+        else {
             return Output(contentItemID: raw, removed: false)
         }
         try await context.authorizeCourseWriteAccess(item.courseID, atLeast: .ta)

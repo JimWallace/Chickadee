@@ -9,6 +9,41 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.520] - 2026-10-06
+
+### Security
+
+- **The MCP deletes no longer reveal rows in another course.** `delete_content_item` and `delete_course_section` answered an unknown id with `removed: false` but an existing row in a course the account is not enrolled in with "not enrolled", so an agent could tell which ids exist elsewhere. Both now answer that row as if it did not exist, and leave it in place, as their comments already claimed. A course the account can see still refuses a role that is too low. (#2342)
+
+
+## [0.5.519] - 2026-10-06
+
+### Fixed
+
+- **One MCP error policy on both surfaces.** A refusal from a shared web helper (4xx) reaches the agent with its reason, and a server fault (5xx) stays opaque to the agent and is logged. Seven MCP tools converted a 5xx into a visible, unlogged tool error, and the admin surface mapped nothing, so a refusal there reached the agent as an opaque internal error. (#2338)
+
+
+## [0.5.518] - 2026-10-06
+
+### Fixed
+
+- **get_assignment_version no longer returns binary files as text.** It read capped content by dropping one byte at a time and decoding the whole prefix again, which was quadratic and returned the ASCII start of a binary file as truncated text. It now shares one capped UTF-8 reader and one byte cap with `get_support_files`, and refuses content that is not UTF-8. (#2334)
+
+
+## [0.5.517] - 2026-10-06
+
+### Fixed
+
+- **MCP resource errors carry their reason and reach the log.** `resources/list` answered every error, a refusal included, with an opaque "Failed to list resources.", and neither resource method logged a server fault. Both now map a refusal to an invalid-params error with its reason, as the tools path does, and log every other error. (#2340)
+
+
+## [0.5.516] - 2026-10-06
+
+### Security
+
+- **The validate_assignment progress stream reads on the MCP database pool.** The streamed `validate_assignment` call watched validation on the default database pool, so with a dedicated least-privilege MCP role configured, this one path went around the role wall that every other MCP read relies on. It now uses the same pool as `ToolContext.db`, and its audit row records the call's outcome. (#2335)
+
+
 ## [0.5.515] - 2026-10-06
 
 ### Added

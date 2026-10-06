@@ -7,6 +7,7 @@
 // (docs/admin-mcp.md §3.4).  Every diagnostic tool is read-only.
 
 import Core
+import Vapor
 
 /// A single admin diagnostic tool.
 protocol DiagnosticTool: Sendable {
@@ -88,8 +89,15 @@ extension DiagnosticTool {
                 } catch {
                     throw MCPToolError.invalidArguments(detail: String(describing: error))
                 }
-                let output = try await self.execute(input, context)
-                return try JSONValue(encoding: output)
+                do {
+                    let output = try await self.execute(input, context)
+                    return try JSONValue(encoding: output)
+                } catch let error as any AbortError where error.isClientRefusal {
+                    // The same policy as the content erasure (#2338): a refusal
+                    // from a shared web helper reaches the agent with its
+                    // reason; a 5xx stays opaque and logged.
+                    throw MCPToolError.from(error)
+                }
             }
         )
     }
