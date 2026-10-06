@@ -365,6 +365,14 @@ jobs:
           fi
           echo "no path under /app is writable by the application user"
 
+          # A worker-graded R test can load dplyr, as a browser-graded one can
+          # in the xeus-r kernel. Without the package in the image, such a test
+          # passes in the browser and fails on the worker.
+          echo "----- R packages -----"
+          docker run --rm --entrypoint Rscript "$IMAGE" \
+            -e 'suppressPackageStartupMessages(library(dplyr)); cat("dplyr", format(packageVersion("dplyr")), "\n")' \
+            || { echo "::error::Rscript cannot load dplyr in the image. Keep r-cran-dplyr in the Dockerfile."; exit 1; }
+
           echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
           run_server
           probe 240 || dump_and_fail
