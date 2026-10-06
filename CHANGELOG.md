@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.500] - 2026-10-06
+
+### Fixed
+
+- **Stable row height in "Last active" columns.** The column was too narrow for a time such as "15 seconds ago", so the text wrapped. Because the time updates every few seconds, the rows on the admin runner table grew and shrank. The column is now wide enough for the longest relative time.
+
+
 ## [0.5.499] - 2026-10-06
 
 ### Security
