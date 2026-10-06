@@ -424,6 +424,12 @@ jobs:
           fi
           printf '%s\n' "$runner_log" | grep "job cgroups delegated at /sandbox/jobs" >/dev/null \
             || { echo "::error::The pre-step did not delegate the job cgroups."; exit 1; }
+          # The runner's own startup probe runs one sandboxed command in a job
+          # cgroup and requires it to run there, read its memory limit and fail
+          # to change it.
+          printf '%s\n' "$runner_log" | grep runner_configuration || true
+          printf '%s\n' "$runner_log" | grep '"job_cgroups":"enabled"' >/dev/null \
+            || { echo "::error::The runner does not use job cgroups; its warning is in the log above."; exit 1; }
           # Read the runner process from the host.
           pid="$(docker inspect -f '{{.State.Pid}}' "$cid")"
           status="$(sudo grep -E '^(Uid|CapEff|CapBnd):' "/proc/$pid/status")"
