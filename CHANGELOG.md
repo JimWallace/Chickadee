@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.472] - 2026-10-06
+
+### Fixed
+
+- **"Give new handle" no longer reports a database failure as an exhausted pool.** The redraw treated every failed save as a lost race and, after three tries, told staff that the course had no unused handle left. It now retries only when a classmate holds the drawn handle, and reports any other failure as an error (#2255).
+
+
 ## [0.5.471] - 2026-10-05
 
 ### Security
