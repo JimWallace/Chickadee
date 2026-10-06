@@ -22,18 +22,18 @@ import Vapor
         typealias Value = Int
     }
 
-    private enum T0 {}
-    private enum T1 {}
-    private enum T2 {}
-    private enum T3 {}
-    private enum T4 {}
-    private enum T5 {}
-    private enum T6 {}
-    private enum T7 {}
-    private enum T8 {}
-    private enum T9 {}
-    private enum T10 {}
-    private enum T11 {}
+    private enum Tag0 {}
+    private enum Tag1 {}
+    private enum Tag2 {}
+    private enum Tag3 {}
+    private enum Tag4 {}
+    private enum Tag5 {}
+    private enum Tag6 {}
+    private enum Tag7 {}
+    private enum Tag8 {}
+    private enum Tag9 {}
+    private enum Tag10 {}
+    private enum Tag11 {}
 
     /// Touches, reads and clears one key.
     private struct Probe: Sendable {
@@ -51,10 +51,10 @@ import Vapor
     }
 
     private static let probes: [Probe] = [
-        probe(T0.self, value: 0), probe(T1.self, value: 1), probe(T2.self, value: 2),
-        probe(T3.self, value: 3), probe(T4.self, value: 4), probe(T5.self, value: 5),
-        probe(T6.self, value: 6), probe(T7.self, value: 7), probe(T8.self, value: 8),
-        probe(T9.self, value: 9), probe(T10.self, value: 10), probe(T11.self, value: 11),
+        probe(Tag0.self, value: 0), probe(Tag1.self, value: 1), probe(Tag2.self, value: 2),
+        probe(Tag3.self, value: 3), probe(Tag4.self, value: 4), probe(Tag5.self, value: 5),
+        probe(Tag6.self, value: 6), probe(Tag7.self, value: 7), probe(Tag8.self, value: 8),
+        probe(Tag9.self, value: 9), probe(Tag10.self, value: 10), probe(Tag11.self, value: 11),
     ]
 
     @Test func concurrentFirstAccessesToDifferentKeysKeepEveryEntry() async throws {
@@ -74,8 +74,8 @@ import Vapor
 
     @Test func aStoredValueIsNotReplaced() async throws {
         try await withApp(app) { app in
-            let first = app.lazyStored(Slot<T0>.self) { 1 }
-            let second = app.lazyStored(Slot<T0>.self) { 2 }
+            let first = app.lazyStored(Slot<Tag0>.self) { 1 }
+            let second = app.lazyStored(Slot<Tag0>.self) { 2 }
             #expect(first == 1)
             #expect(second == 1)
         }
