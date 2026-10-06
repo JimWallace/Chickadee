@@ -463,8 +463,9 @@ duplicate.
   control links to the panel's id and `:target` opens it.  A link from another
   page opens a panel the same way, so Cancel also sets `is-closed`, which wins
   over `:target`.
-- **`.section-items-seen`** — the Students list's last-seen track of a
-  `.section-items` list.
+- **`.section-items-seen`** — the last-seen (or last-active) track of a
+  `.section-items` list.  It is wide enough to hold the longest relative time
+  on one line, so a ticking time does not change the row height.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
   `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
   `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so

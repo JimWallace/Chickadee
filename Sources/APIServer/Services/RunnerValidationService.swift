@@ -674,7 +674,7 @@ func ensureCompatibleValidationRunnerAvailability(
     await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
 
     for attempt in 0..<attempts {
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        try await Task.sleep(for: .seconds(1))
         if try await hasCompatibleValidationRunner(
             req: req,
             requirements: requirements,
