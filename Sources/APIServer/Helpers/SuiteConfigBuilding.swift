@@ -15,24 +15,47 @@ import Vapor
 
 // MARK: - Suite config decode/encode types
 
-struct ReindexedSuiteConfigRow: Encodable {
-    let index: Int
-    let isTest: Bool
-    let tier: String
-    let order: Int?
-    let dependsOn: [String]?  // script names of prerequisites
-    let points: Int  // grade weight; 1 = default (unweighted)
-    let displayName: String?  // optional human-readable name shown to students
+/// One row of a suite config. A row names its file by `index` into the
+/// uploaded suite files, or, before `mergeExistingFilesIntoSuiteFiles`
+/// resolves it, by `name` (with `source == "existing"`) for a file already in
+/// the draft zip. Unknown keys are ignored.
+struct SuiteConfigRow: Codable {
+    var index: Int?
+    var name: String?
+    var source: String?
+    var isTest: Bool?
+    var tier: String?
+    var order: Int?
+    var dependsOn: [String]?  // script names of prerequisites
+    var points: Int?  // grade weight; nil decoded as 1
+    var displayName: String?  // optional human-readable name shown to students
 }
 
-struct SuiteConfigRow: Decodable {
-    let index: Int
-    let isTest: Bool?
-    let tier: String?
-    let order: Int?
-    let dependsOn: [String]?  // script names of prerequisites
-    let points: Int?  // grade weight; nil decoded as 1
-    let displayName: String?  // optional human-readable name shown to students
+/// A suite config that is present but cannot be read. It used to fall back
+/// to the default suite without a word, which dropped the author's tiers,
+/// order and points (#2305).
+struct SuiteConfigDecodingError: AbortError {
+    let underlying: String
+    var status: HTTPResponseStatus { .badRequest }
+    var reason: String { "The suite configuration could not be read: \(underlying)" }
+}
+
+/// The rows of `json`, or nil when there is no config. A config that is
+/// present but is not an array of rows throws.
+func decodeSuiteConfigRows(_ json: String?) throws -> [SuiteConfigRow]? {
+    guard let raw = json?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+        return nil
+    }
+    do {
+        return try JSONDecoder().decode([SuiteConfigRow].self, from: Data(raw.utf8))
+    } catch {
+        throw SuiteConfigDecodingError(underlying: String(describing: error))
+    }
+}
+
+/// The JSON for `rows`. Nil fields are left out.
+func encodeSuiteConfigRows(_ rows: [SuiteConfigRow]) throws -> String? {
+    String(bytes: try JSONEncoder().encode(rows), encoding: .utf8)
 }
 
 struct ConfiguredSuiteEntry {
@@ -103,17 +126,14 @@ struct ConfiguredSuiteEntry {
 /// Resolves config rows that reference files by name (source=="existing") so that
 /// every row ends up with a numeric `index`.  The named files are extracted from
 /// the draft ZIP and appended to `suiteFiles`; their config rows are rewritten to
-/// use the new indices.  This lets `buildSuiteEntries` decode `SuiteConfigRow`
-/// (which requires `index`) regardless of which sources are present.
+/// use the new indices.  A config that cannot be read is returned unchanged, and
+/// `buildSuiteEntries` then rejects it.
 func mergeExistingFilesIntoSuiteFiles(
     suiteFiles: [File],
     suiteConfigJSON: String?,
     draftZipPath: String?
 ) async -> ([File], String?) {
-    guard let configJSON = suiteConfigJSON,
-        let configData = configJSON.data(using: .utf8),
-        var rows = (try? JSONSerialization.jsonObject(with: configData)) as? [[String: Any]]
-    else {
+    guard var rows = try? decodeSuiteConfigRows(suiteConfigJSON) else {
         return (suiteFiles, suiteConfigJSON)
     }
 
@@ -121,8 +141,7 @@ func mergeExistingFilesIntoSuiteFiles(
     let uploadedNames = Set(suiteFiles.map { $0.filename })
 
     for i in rows.indices {
-        var row = rows[i]
-        guard let name = row["name"] as? String, row["index"] == nil else { continue }
+        guard rows[i].index == nil, let name = rows[i].name else { continue }
         // Name-based row: find or extract the file, then rewrite row to use index.
         let fileIndex: Int
         if let existing = mergedFiles.firstIndex(where: { $0.filename == name }) {
@@ -138,18 +157,12 @@ func mergeExistingFilesIntoSuiteFiles(
         } else {
             continue
         }
-        row["index"] = fileIndex
-        row.removeValue(forKey: "name")
-        row.removeValue(forKey: "source")
-        rows[i] = row
+        rows[i].index = fileIndex
+        rows[i].name = nil
+        rows[i].source = nil
     }
 
-    guard let updatedData = try? JSONSerialization.data(withJSONObject: rows),
-        let updatedJSON = String(data: updatedData, encoding: .utf8)
-    else {
-        return (mergedFiles, suiteConfigJSON)
-    }
-    return (mergedFiles, updatedJSON)
+    return (mergedFiles, (try? encodeSuiteConfigRows(rows)) ?? suiteConfigJSON)
 }
 
 func sanitizeSuiteFilename(_ raw: String) -> String {
@@ -165,21 +178,14 @@ func buildSuiteEntries(
     storedNameByIndex: [Int: String],
     suiteConfigJSON: String?
 ) throws -> [ConfiguredSuiteEntry] {
-    let parsedRows: [SuiteConfigRow] = {
-        guard let raw = suiteConfigJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !raw.isEmpty,
-            let data = raw.data(using: .utf8),
-            let rows = try? JSONDecoder().decode([SuiteConfigRow].self, from: data)
-        else {
-            return []
-        }
-        return rows
-    }()
+    let parsedRows = try decodeSuiteConfigRows(suiteConfigJSON) ?? []
 
     if !parsedRows.isEmpty {
+        // A row still named, not indexed, is a file that was not found.
         var rowsByIndex: [Int: SuiteConfigRow] = [:]
         for row in parsedRows {
-            rowsByIndex[row.index] = row
+            guard let index = row.index else { continue }
+            rowsByIndex[index] = row
         }
         var selected: [ConfiguredSuiteEntry] = []
         for index in suiteFiles.indices {
