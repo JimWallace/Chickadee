@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.479] - 2026-10-06
+
+### Security
+
+- **A sandboxed test script can no longer remove the sandbox's mounts (#2268).** The sandbox prelude runs as root of a new user namespace that owns its mount namespace, and the test script kept every capability it had there, so it could `umount` the covers over the work root, `/tmp` and the hidden suite scripts, and read other jobs' directories and every cached test setup, including the secret tests of other assignments. The script now starts through `setpriv` with empty inheritable, ambient and bounding capability sets and no-new-privs, so it holds no capability and cannot regain one.
+
+
 ## [0.5.478] - 2026-10-06
 
 ### Security
