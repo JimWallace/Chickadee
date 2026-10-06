@@ -661,9 +661,13 @@ struct DeleteContentItemTool: ContentTool {
         guard let uuid = UUID(uuidString: raw) else {
             throw MCPToolError.invalidArguments(detail: "contentItemID \"\(raw)\" is not a valid id.")
         }
-        // Unknown id is an idempotent no-op, revealing nothing that distinguishes
-        // "doesn't exist" from "in a course you can't see".
-        guard let item = try await APICourseContentItem.find(uuid, on: context.db) else {
+        // An unknown id is an idempotent no-op, and so is an item in a course
+        // the account is not enrolled in, so the answer does not tell "does not
+        // exist" from "in a course you cannot see" (#2342). A visible course
+        // still refuses a role that is too low.
+        guard let item = try await APICourseContentItem.find(uuid, on: context.db),
+            try await context.subjectIsEnrolled(in: item.courseID)
+        else {
             return Output(contentItemID: raw, removed: false)
         }
         try await context.authorizeCourseWriteAccess(item.courseID, atLeast: .ta)
