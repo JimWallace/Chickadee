@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.485] - 2026-10-06
+
+### Fixed
+
+- **Session rows older than their `created_at` column are deleted.** The reaper skips a row with no `created_at`, and Vapor never fills that column when it updates a session. So the rows that predate the column stayed in the session table for ever. A one-time migration deletes them, and three comments that said they would age out are corrected. (#2281)
+
+
 ## [0.5.484] - 2026-10-06
 
 ### Fixed
