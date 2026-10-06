@@ -36,10 +36,11 @@ cgroup="$(cat /proc/self/cgroup)"
 [ "$cgroup" = "0::/sandbox/runner" ] && pass "runs in /sandbox/runner" || fail "runs in $cgroup"
 
 controllers="$(cat "$JOBS/cgroup.subtree_control" 2>/dev/null)"
-case " $controllers " in
-  *" memory "*" pids "* | *" pids "*" memory "*) pass "memory and pids are enabled for the jobs" ;;
-  *) fail "the jobs subtree enables only: $controllers" ;;
-esac
+if echo "$controllers" | grep -qw memory && echo "$controllers" | grep -qw pids; then
+  pass "memory and pids are enabled for the jobs"
+else
+  fail "the jobs subtree enables only: $controllers"
+fi
 
 # Without swap at 0, the job would swap and not be killed. The file exists
 # only when the kernel accounts swap.
@@ -53,7 +54,7 @@ else
 fi
 
 for file in /sys/fs/cgroup/sandbox/memory.max "$JOBS/memory.max" "$JOBS/pids.max"; do
-  if echo 1G > "$file" 2>/dev/null; then
+  if { echo 1G > "$file"; } 2>/dev/null; then
     fail "could change $file"
   else
     pass "cannot change $file"
