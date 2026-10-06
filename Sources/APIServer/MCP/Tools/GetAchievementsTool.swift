@@ -76,9 +76,7 @@ let achievementRowSchema: JSONValue = .object([
         ]),
         "scope": .object([
             "type": .string("string"),
-            "enum": .array([
-                .string("individual"), .string("classWide"), .string("record"),
-            ]),
+            "enum": MCPEnumProse<AchievementScope>.jsonEnum,
             "description": .string(
                 "individual = a per-student badge; classWide = a collaborative class goal "
                     + "(needs classPercent + points); record = a single-holder competitive title "
@@ -104,9 +102,7 @@ let achievementRowSchema: JSONValue = .object([
                     ]),
                     "comparator": .object([
                         "type": .string("string"),
-                        "enum": .array([
-                            .string("atLeast"), .string("atMost"), .string("equals"),
-                        ]),
+                        "enum": MCPEnumProse<ConditionComparator>.jsonEnum,
                     ]),
                     "value": .object([
                         "type": .string("number"),

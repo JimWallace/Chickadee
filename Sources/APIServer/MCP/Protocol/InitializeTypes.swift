@@ -165,7 +165,7 @@ enum MCPServerInstructions {
         mix of assignments and content items renumbered together), or reorder_assignments / \
         reorder_content_items for a section that holds only that one type.
         - Course content item — ungraded reference material shown to students inside a course section \
-        alongside assignments: a link, notebook, document, slides, outline, or heading, each with a \
+        alongside assignments: a \(MCPEnumProse<ContentItemKind>.orList), each with a \
         title and one or more labelled links ({label, url}; http(s) or site-relative only). It owns no \
         test setup, so creating or editing one never validates, re-grades, or closes anything. List with \
         list_content_items, create with create_content_item (optionally into a course section via \

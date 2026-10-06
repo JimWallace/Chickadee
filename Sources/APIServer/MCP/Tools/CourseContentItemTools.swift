@@ -296,12 +296,8 @@ private let attachmentsInputSchema: JSONValue = .object([
             + "students through the gated /content-files route. Appended to any existing attachments."),
 ])
 
-private let kindEnumSchema: JSONValue = .object([
-    "type": .string("string"),
-    "enum": .array(ContentItemKind.allCases.map { .string($0.rawValue) }),
-    "description": .string(
-        "Icon / label hint: link, notebook, document, slides, outline, or heading."),
-])
+private let kindEnumSchema = MCPEnumProse<ContentItemKind>.stringSchema(
+    "Icon / label hint: \(MCPEnumProse<ContentItemKind>.orList).")
 
 // MARK: - list_content_items
 
@@ -454,7 +450,9 @@ struct CreateContentItemTool: ContentTool {
         let course = try await resolveCourseForWrite(
             code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
-        let kind = ContentItemKind(rawValue: input.kind ?? "") ?? .link
+        // An absent kind is a link; an unknown one is refused, as update does,
+        // rather than stored as a link without a word (#2337).
+        let kind = try MCPEnumProse<ContentItemKind>.parseOptional(input.kind, field: "kind") ?? .link
         let links = try contentLinksFromInput(input.links ?? [])
         let sectionID = try await resolveContentItemSectionID(
             input.courseSectionID, courseID: courseID, context: context)
@@ -587,10 +585,7 @@ struct UpdateContentItemTool: ContentTool {
             item.title = trimmed
         }
         if let kind = input.kind {
-            guard let parsed = ContentItemKind(rawValue: kind) else {
-                throw MCPToolError.invalidArguments(detail: "kind \"\(kind)\" is not a recognised content-item kind.")
-            }
-            item.kind = parsed
+            item.kind = try MCPEnumProse<ContentItemKind>.parse(kind, field: "kind")
         }
         if let links = input.links {
             item.links = try contentLinksFromInput(links)
