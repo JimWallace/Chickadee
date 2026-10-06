@@ -525,6 +525,10 @@ func registerMigrations(on app: Application) {
     // One optional column; existing rows keep NULL.
     app.migrations.add(AddGitHubCourseRepositoryInvitedUser())
 
+    // The match-job lookup by `match_submission_id` (#2278). Index only;
+    // must follow `CreateTournamentRuns`, which creates the table.
+    app.migrations.add(CreateTournamentMatchSubmissionIndex())
+
     // ---------------------------------------------------------------------
     // DATA MIGRATIONS. Keep these at the end, and add every new schema
     // migration ABOVE this block (#1805).
