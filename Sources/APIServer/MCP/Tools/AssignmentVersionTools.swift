@@ -225,11 +225,7 @@ struct GetAssignmentVersionTool: ContentTool {
                     "A path from this version's file list (exact match). Omit to return metadata "
                         + "and the file list only."),
             ]),
-            "maxBytes": .object([
-                "type": .string("integer"),
-                "description": .string(
-                    "Read mode: max content bytes returned (default 65536, clamped 1-512000)."),
-            ]),
+            "maxBytes": MCPContentByteCap.schema,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("version")]),
         "additionalProperties": .bool(false),
@@ -258,9 +254,6 @@ struct GetAssignmentVersionTool: ContentTool {
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: true, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.read]
-
-    static let defaultMaxBytes = 65536
-    static let maxMaxBytes = 512_000
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (_, setup) = try await context.authorizedAssignmentAndSetup(
@@ -364,36 +357,13 @@ struct GetAssignmentVersionTool: ContentTool {
             throw MCPToolError.executionFailed(
                 detail: "Stored content for \"\(path)\" is missing from the version blob store.")
         }
-        let cap = min(max(input.maxBytes ?? defaultMaxBytes, 1), maxMaxBytes)
-        guard let text = truncatedUTF8(data, maxBytes: cap) else {
+        guard let text = MCPContentByteCap.cappedUTF8(data, cap: MCPContentByteCap.resolve(input.maxBytes))
+        else {
             throw MCPToolError.invalidArguments(
                 detail:
                     "\"\(path)\" is not UTF-8 text (\(data.count) bytes) — it can be restored, but "
                     + "not read here.")
         }
         return text
-    }
-
-    /// Decodes `data` as UTF-8, truncated to `maxBytes` on a character
-    /// boundary. Returns nil for content that isn't valid UTF-8 at all (a
-    /// bundled image or archive), so the caller can say so rather than hand an
-    /// agent mojibake it might mistake for the file's real contents.
-    private static func truncatedUTF8(
-        _ data: Data, maxBytes: Int
-    ) -> (content: String, truncated: Bool)? {
-        guard data.count > maxBytes else {
-            return String(bytes: data, encoding: .utf8).map { ($0, false) }
-        }
-        var slice = data.prefix(maxBytes)
-        // Back off to a character boundary so the tail isn't a broken scalar.
-        // Bounded by `maxBytes`: a non-UTF-8 file drains the slice and reports
-        // nil rather than looping.
-        while !slice.isEmpty, String(bytes: slice, encoding: .utf8) == nil {
-            slice = slice.dropLast()
-        }
-        guard let content = String(bytes: slice, encoding: .utf8), !slice.isEmpty else {
-            return nil
-        }
-        return (content, true)
     }
 }
