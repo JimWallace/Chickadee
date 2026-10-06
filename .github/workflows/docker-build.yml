@@ -412,12 +412,17 @@ jobs:
           sleep 15
           cid="$(docker compose ps -a -q runner)"
           state="$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$cid")"
-          docker compose logs runner 2>&1 | head -20
+          # Capture the log once, and filter it only with readers that read
+          # all their input. Piped into `head` or `grep -q`, which close the
+          # pipe early, `docker compose logs` exited 255 and pipefail ended
+          # the step.
+          runner_log="$(docker compose logs runner 2>&1)"
+          printf '%s\n' "$runner_log" | sed -n 1,20p
           if [ "$state" != "running 0" ]; then
             echo "::error::The runner does not stay up (state: $state)."
             exit 1
           fi
-          docker compose logs runner 2>&1 | grep -q "job cgroups delegated at /sandbox/jobs" \
+          printf '%s\n' "$runner_log" | grep "job cgroups delegated at /sandbox/jobs" >/dev/null \
             || { echo "::error::The pre-step did not delegate the job cgroups."; exit 1; }
           # The runner's own startup probe runs one sandboxed command in a job
           # cgroup and requires it to run there, read its memory limit and fail
