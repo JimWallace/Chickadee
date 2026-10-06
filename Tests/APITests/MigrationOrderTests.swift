@@ -93,7 +93,7 @@ import Testing
                 let table = try #require(declared, "\(model) declares no schema")
                 for later in names[(index + 1)...] {
                     #expect(
-                        !(try Self.migrationSource(later)).contains("schema(\"\(table)\")"),
+                        !(try MigrationSourceScan.tables(in: try Self.migrationSource(later))).contains(table),
                         "\(later) changes \(table) after \(name) full-queries \(model)")
                 }
                 checked += 1
