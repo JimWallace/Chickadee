@@ -374,7 +374,8 @@ func buildChampionPresentation(
     else { return nil }
     let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
     // The same lock as a ranking row: a classmate has now seen this handle.
-    if !includeNames, champion.userID != viewerID {
+    // A nil viewer is Present mode, a staff view, which locks nothing (#2254).
+    if !includeNames, let viewerID, champion.userID != viewerID {
         await AvatarStore.lockHandle(for: enrollment, on: db)
     }
     let spec = try await AvatarStore.ensureSpec(for: user, on: db)
@@ -739,7 +740,29 @@ struct RankedIdentities {
             .all()
         var enrollmentByUser: [UUID: APICourseEnrollment] = [:]
         for enrollment in enrollments { enrollmentByUser[enrollment.userID] = enrollment }
+        try await drawMissingHandles(enrollments, courseID: courseID, on: db)
         return RankedIdentities(userByID: userByID, enrollmentByUser: enrollmentByUser)
+    }
+
+    /// Draws a handle for each ranked enrollment that has none, reading the
+    /// course's taken handles once for the page rather than once per row
+    /// (#2257). `presentation` then finds every handle already in place.
+    private static func drawMissingHandles(
+        _ enrollments: [APICourseEnrollment], courseID: UUID, on db: Database
+    ) async throws {
+        var taken: Set<String>?
+        for enrollment in enrollments where !(enrollment.avatarHandle.map(AvatarHandle.hasHandleShape) ?? false) {
+            var current: Set<String>
+            if let taken {
+                current = taken
+            } else {
+                current = try await AvatarStore.takenHandles(inCourse: courseID, on: db)
+            }
+            if let handle = try await AvatarStore.ensureHandle(for: enrollment, taken: current, on: db) {
+                current.insert(handle)
+            }
+            taken = current
+        }
     }
 
     /// False for a student who has since dropped: the roster is what a

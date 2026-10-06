@@ -360,13 +360,11 @@ actor WorkerDaemon {
     /// allowlisted environment (no worker secrets).
     func runMake(in directory: URL, target: String?) async throws {
         let timeLimitSeconds = max(1, config.makeTimeoutSeconds)
-        let launch = ScriptLaunch(
-            executablePath: "/usr/bin/make",
+        // Through the job's script runner, so `--sandbox` covers `make` and
+        // everything a makefile runs, as it covers the test scripts (#2250).
+        let output = await runner.run(
+            command: "/usr/bin/make",
             arguments: target.map { [$0] } ?? [],
-            env: mergedScriptEnvironment(overrides: [:])
-        )
-        let output = await executeScriptLaunch(
-            launch,
             workDir: directory,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch make"

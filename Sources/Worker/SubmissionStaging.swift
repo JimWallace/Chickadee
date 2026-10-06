@@ -76,6 +76,15 @@ func protectedWorkspaceFilenames(manifest: TestProperties) -> Set<String> {
     names.formUnion(AssignmentLanguage.allCases.map(\.inputsFileName))
     names.insert(".chickadee_student_module")
     names.insert(".chickadee_student_source")
+    // With a make step, the makefile is the instructor's. The submission is
+    // merged before `make` runs, so a submission that supplied one would choose
+    // the step's commands (#2250). GNU make reads `GNUmakefile`, then
+    // `makefile`, then `Makefile`, so a new file of any of the three names
+    // would win too. Without a make step a submission's makefile is ordinary
+    // content, which a test script may use.
+    if manifest.makefile != nil {
+        names.formUnion(["GNUmakefile", "makefile", "Makefile"])
+    }
     return names
 }
 

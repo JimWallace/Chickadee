@@ -93,8 +93,9 @@ final class APIUser: Model, Content, @unchecked Sendable {
 
     /// The student's generated chickadee, as `AvatarSpec` JSON.
     ///
-    /// Nullable because it is materialized the first time an avatar is needed,
-    /// not at signup: nobody who never opens their account page pays a write.
+    /// Nullable because it is materialized the first time an avatar is needed
+    /// (the account page, a roster, a leaderboard or an admin list), not at
+    /// signup.
     /// Read it through `AvatarStore.ensureSpec`, which decodes it, draws one on
     /// first use, and stores the result — the spec is the record, not a seed to
     /// re-derive from (docs/student-avatars.md, decision 2).

@@ -28,8 +28,9 @@ enum AvatarStore {
         return AvatarPresentation(for: spec, size: .roster, accessibility: .decorative, isStaff: isStaff)
     }
 
-    /// This user's stored avatar, drawing and saving one on first call, and
-    /// filling any axis added since it was stored.
+    /// This user's stored avatar, drawing and saving one on first call.  A
+    /// spec stored before a later axis gets that axis from its decoder default;
+    /// the `FillLateAvatarAxes` migration stored the draw once.
     ///
     /// - Important: do NOT call inside an enclosing `db.transaction { … }`.
     ///   On Postgres a failed write aborts the whole transaction, so the
@@ -116,11 +117,21 @@ enum AvatarStore {
     ///
     /// Returns nil when the course has exhausted the current lists, and leaves
     /// the old handle in place.  A lost unique-index race is retried with the
-    /// winner's handle excluded.
+    /// winner's handle excluded; any other failure is thrown, so an outage is
+    /// never reported as an exhausted pool (#2255).
     static func redrawHandle(
         for enrollment: APICourseEnrollment, on db: Database
     ) async throws -> String? {
-        var taken = try await takenHandles(inCourse: enrollment.$course.id, on: db)
+        try await redrawHandle(
+            for: enrollment, taken: takenHandles(inCourse: enrollment.$course.id, on: db), on: db)
+    }
+
+    /// `redrawHandle(for:on:)` from a taken set the caller already loaded.
+    static func redrawHandle(
+        for enrollment: APICourseEnrollment, taken: Set<String>, on db: Database
+    ) async throws -> String? {
+        var taken = taken
+        let courseID = enrollment.$course.id
         let previous = enrollment.avatarHandle
         for _ in 0..<3 {
             guard let handle = AvatarHandle.make(excluding: taken) else { break }
@@ -129,6 +140,12 @@ enum AvatarStore {
                 try await enrollment.save(on: db)
                 return handle
             } catch {
+                // Retry only a lost race: the index refused a handle that a
+                // classmate now holds.
+                guard (try? await takenHandles(inCourse: courseID, on: db).contains(handle)) == true else {
+                    enrollment.avatarHandle = previous
+                    throw error
+                }
                 taken.insert(handle)
             }
         }
@@ -187,8 +204,18 @@ enum AvatarStore {
         _ handle: String, for enrollment: APICourseEnrollment, on db: Database
     ) async throws -> HandleChoice {
         guard enrollment.avatarHandleLockedAt == nil else { return .locked }
+        return try await chooseHandle(
+            handle, for: enrollment, taken: takenHandles(inCourse: enrollment.$course.id, on: db), on: db)
+    }
+
+    /// `chooseHandle(_:for:on:)` with the pre-check against a taken set the
+    /// caller already loaded.  The unique index still decides the race.
+    static func chooseHandle(
+        _ handle: String, for enrollment: APICourseEnrollment, taken: Set<String>, on db: Database
+    ) async throws -> HandleChoice {
+        guard enrollment.avatarHandleLockedAt == nil else { return .locked }
         let courseID = enrollment.$course.id
-        guard try await !takenHandles(inCourse: courseID, on: db).contains(handle) else { return .taken }
+        guard !taken.contains(handle) else { return .taken }
 
         let previous = enrollment.avatarHandle
         enrollment.avatarHandle = handle
