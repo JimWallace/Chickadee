@@ -97,7 +97,7 @@ enum RacketPersonalizationDriver {
         var lines: [String] = []
         // `racket/base`, not `racket`: the full language costs about 0.4 s of
         // start-up per evaluation, more than half of the driver's run, and
-        // the evaluator allows each run only 5 s. The driver itself needs
+        // the evaluator allows each run only 15 s. The driver itself needs
         // `string-join` and `nan?` / `infinite?` beyond the base language.
         // Expressions are unaffected: they evaluate in `make-base-namespace`.
         lines.append("#lang racket/base")

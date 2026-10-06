@@ -171,7 +171,7 @@ func protectedFileSkippedWarning(_ relativePath: String) -> String {
 /// language: an R job's `analysis.ipynb` becomes `analysis.R`, not `analysis.py`.
 /// Naming the Python file on an R job produced a hint pointing at a file that
 /// never exists, so `chickadee_student_file()` had nothing to prefer and fell
-/// back to scanning. Defaults to `.python`, so the Python path is unchanged.
+/// back to scanning. The caller must name the language; there is no default.
 func preferredStudentModuleFilename(
     submissionFilename: String?,
     language: AssignmentLanguage

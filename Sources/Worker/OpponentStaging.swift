@@ -8,9 +8,10 @@
 // setup directory: the setup directory is the script's working directory and
 // the place the submission is staged, and a stray directory there would be one
 // more thing the submission-file candidates and required-file checks had to
-// know to ignore. Both sandboxes can read it — the macOS profile reads the
-// whole filesystem and the Linux namespaces do not restrict reads — and the
-// work dir is removed with the job.
+// know to ignore. Both sandboxes hide the work root except for the
+// directories a script needs (#2061). The opponent directory is one of them:
+// `CHICKADEE_OPPONENT_DIR` names it, so `SandboxVisibleDirectories` keeps it
+// readable. The work dir is removed with the job.
 
 import Core
 import Foundation
