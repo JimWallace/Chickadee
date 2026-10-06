@@ -19,7 +19,8 @@ func enqueueRunnerValidationSubmission(
     setupID: String,
     solutionNotebookData: Data,
     filename: String = "solution.ipynb",
-    submitterUserID: UUID? = nil
+    submitterUserID: UUID? = nil,
+    targetRunnerID: String? = nil
 ) async throws -> String {
     let sanitizedFilename = submissionFilenameForStorage(
         uploadedName: filename,
@@ -54,6 +55,7 @@ func enqueueRunnerValidationSubmission(
         userID: resolvedSubmitterID,
         kind: APISubmission.Kind.validation
     )
+    submission.targetRunnerID = targetRunnerID
 
     // Resolve personalization and write the grading sidecar BEFORE the
     // submission is saved. Saving makes it `pending` — a polling worker can
@@ -83,10 +85,10 @@ func enqueueRunnerValidationSubmission(
     await enqueueValidationVariants(
         req: req,
         setupID: setupID,
-        solutionNotebookData: solutionNotebookData,
-        filename: sanitizedFilename,
+        solution: ExistingSolution(data: solutionNotebookData, filename: sanitizedFilename),
         priorValidationCount: priorCount + 1,
-        submitterUserID: resolvedSubmitterID)
+        submitterUserID: resolvedSubmitterID,
+        targetRunnerID: targetRunnerID)
 
     // Keep the server-side `shared/{setupID}/solution.py` in lockstep with the
     // reference solution, so a Global Input expression can compute an expected
@@ -150,11 +152,13 @@ let validationVariantCount = 4
 private func enqueueValidationVariants(
     req: Request,
     setupID: String,
-    solutionNotebookData: Data,
-    filename: String,
+    solution: ExistingSolution,
     priorValidationCount: Int,
-    submitterUserID: UUID?
+    submitterUserID: UUID?,
+    targetRunnerID: String?
 ) async {
+    let solutionNotebookData = solution.data
+    let filename = solution.filename
     do {
         try await ValidationVariant.query(on: req.db)
             .filter(\.$testSetupID == setupID)
@@ -185,6 +189,7 @@ private func enqueueValidationVariants(
                 filename: filename,
                 userID: submitterUserID,
                 kind: APISubmission.Kind.validation)
+            submission.targetRunnerID = targetRunnerID
             let materialized = await materializeValidationGrading(
                 submission: submission,
                 setupID: setupID,
@@ -434,6 +439,43 @@ func scheduleValidationAfterSuiteEdit(
     } catch {
         req.logger.warning("scheduleValidationAfterSuiteEdit: \(error)")
     }
+}
+
+/// Why `requeueValidationRun` queued nothing.
+enum ValidationRunError: Error, Equatable {
+    /// The assignment has no reference solution to validate.
+    case noSolution
+}
+
+/// Queues a fresh validation run of the assignment's current reference
+/// solution against its current suite, and returns the new run's id. Unlike
+/// `scheduleValidationAfterSuiteEdit` it changes no content and does not wait
+/// for a pending run to finish: it is a re-run that staff ask for, to check the
+/// runners (MCP `run_validation`). With `targetRunnerID`, the run (and its
+/// per-student variants) asks for that runner; see `RunnerTargetGate`.
+///
+/// Throws `ValidationRunError.noSolution` when there is nothing to validate.
+func requeueValidationRun(
+    req: Request,
+    assignment: APIAssignment,
+    submitterUserID: UUID,
+    targetRunnerID: String?
+) async throws -> String {
+    guard let solution = try await loadExistingSolution(req: req, assignment: assignment) else {
+        throw ValidationRunError.noSolution
+    }
+    let subID = try await enqueueRunnerValidationSubmission(
+        req: req,
+        setupID: assignment.testSetupID,
+        solutionNotebookData: solution.data,
+        filename: solution.filename,
+        submitterUserID: submitterUserID,
+        targetRunnerID: targetRunnerID
+    )
+    assignment.validationSubmissionID = subID
+    assignment.validationStatus = "pending"
+    try await assignment.save(on: req.db)
+    return subID
 }
 
 /// Re-queues every student submission for a test setup so the worker
