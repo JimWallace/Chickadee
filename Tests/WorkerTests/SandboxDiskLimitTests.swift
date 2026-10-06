@@ -8,8 +8,9 @@
 // is discarded when the script ends. An opponent directory is read-only. These
 // tests prove that a script that fills its space fails alone and leaves the job
 // directory as it was, that a script beside it still writes, that the job's
-// files stay readable and a program the script writes still runs, and that the
-// opponent directory cannot be written.
+// files stay readable and a program the script writes still runs, and that
+// neither the work root above the working directory nor the opponent directory
+// can be written.
 
 import ChickadeeTestSupport
 import Foundation
@@ -104,6 +105,22 @@ import Testing
         let given = try String(contentsOf: ownJob.appendingPathComponent("given.txt"), encoding: .utf8)
         #expect(given == "the instructor's data\n", "the script's change outlived it")
         #expect(!FileManager.default.fileExists(atPath: ownJob.appendingPathComponent("new.txt").path))
+    }
+
+    /// The working directory's parent is the covered work root. Without a
+    /// limit there, a script could write into `..` and get around its own.
+    @Test(.requiresSandbox) func theWorkRootAboveTheWorkingDirectoryCannotBeWritten() async throws {
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            if dd if=/dev/zero of=../escape bs=1M count=20 2>/dev/null; then echo "escaped"; fi
+            if mkdir ../escape-dir 2>/dev/null; then echo "escaped"; fi
+            exit 0
+            """, in: ownJob)
+        let output = await SandboxedScriptRunner(diskLimitMegabytes: 4)
+            .run(script: script, workDir: ownJob, timeLimitSeconds: 30)
+        #expect(output.exitCode == 0, "stderr: \(output.stderr)")
+        #expect(!output.stdout.contains("escaped"), "stdout: \(output.stdout)")
     }
 
     /// A C++ or Java test compiles into its working directory and runs what

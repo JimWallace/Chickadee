@@ -364,7 +364,9 @@ private func sandboxWrap(
 /// an overlay covers the working directory: the script reads the job's files
 /// through it, and what it writes goes to a private tmpfs of that size, which
 /// is discarded when the script ends (#2251). The other visible directories
-/// (an opponent) are read-only, so no write reaches the shared mount. The
+/// (an opponent) are read-only, and so is the tmpfs that covers the work root,
+/// so a script cannot write into `..` either: no write reaches the shared
+/// mount or escapes the limit. The
 /// overlay's `lowerdir` option cannot hold a comma or a colon, so the prelude
 /// refuses such a working directory. The command starts
 /// under the process limit, soft and hard, set last so the prelude's own
@@ -433,6 +435,7 @@ private let linuxMountPrelude = """
         mount -t overlay -o "lowerdir=$cwd,upperdir=/mnt/scratch/upper,workdir=/mnt/scratch/work" \
             chickadee-job-writes "$cwd"
     fi
+    mount -o remount,ro,nosuid,nodev chickadee-work-root "$root"
     if [ -f /mnt/hidden ]; then
         while IFS= read -r file; do
             if [ -e "$file" ]; then mount --bind /dev/null "$file"; fi
