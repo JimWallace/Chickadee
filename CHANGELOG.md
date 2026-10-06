@@ -9,6 +9,41 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.519] - 2026-10-06
+
+### Fixed
+
+- **One MCP error policy on both surfaces.** A refusal from a shared web helper (4xx) reaches the agent with its reason, and a server fault (5xx) stays opaque to the agent and is logged. Seven MCP tools converted a 5xx into a visible, unlogged tool error, and the admin surface mapped nothing, so a refusal there reached the agent as an opaque internal error. (#2338)
+
+
+## [0.5.518] - 2026-10-06
+
+### Fixed
+
+- **get_assignment_version no longer returns binary files as text.** It read capped content by dropping one byte at a time and decoding the whole prefix again, which was quadratic and returned the ASCII start of a binary file as truncated text. It now shares one capped UTF-8 reader and one byte cap with `get_support_files`, and refuses content that is not UTF-8. (#2334)
+
+
+## [0.5.517] - 2026-10-06
+
+### Fixed
+
+- **MCP resource errors carry their reason and reach the log.** `resources/list` answered every error, a refusal included, with an opaque "Failed to list resources.", and neither resource method logged a server fault. Both now map a refusal to an invalid-params error with its reason, as the tools path does, and log every other error. (#2340)
+
+
+## [0.5.516] - 2026-10-06
+
+### Security
+
+- **The validate_assignment progress stream reads on the MCP database pool.** The streamed `validate_assignment` call watched validation on the default database pool, so with a dedicated least-privilege MCP role configured, this one path went around the role wall that every other MCP read relies on. It now uses the same pool as `ToolContext.db`, and its audit row records the call's outcome. (#2335)
+
+
+## [0.5.515] - 2026-10-06
+
+### Added
+
+- **MCP `run_validation`: re-run validation, optionally on one runner.** It queues a fresh validation run of an assignment's reference solution against its current suite, without a content edit, and waits for the result. With `runnerID`, only that runner may claim the run for the first 5 minutes; after that any compatible runner may, so an offline runner delays the run and never strands it. The target is stored on the one queued job (`submissions.target_runner_id`, a new optional column), never in the manifest, and only this tool sets it, so student submissions are never pinned. The tool refuses a runner that has not polled in the last 120 seconds, and its output names the runner that claimed the run. It changes no content, so it neither closes an open assignment nor regrades student work.
+
+
 ## [0.5.514] - 2026-10-06
 
 ### Fixed

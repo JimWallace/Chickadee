@@ -227,6 +227,14 @@ extension Application {
         get { storage[UsesDedicatedMCPDatabaseKey.self] ?? false }
         set { storage[UsesDedicatedMCPDatabaseKey.self] = newValue }
     }
+
+    /// The database id every MCP content read uses: the least-privilege `.mcp`
+    /// pool when one is configured, else nil (the default pool). One answer for
+    /// `ToolContext.db` and for the `validate_assignment` progress stream,
+    /// which reads outside the request (#2335).
+    var mcpDatabaseID: DatabaseID? {
+        usesDedicatedMCPDatabase ? .mcp : nil
+    }
 }
 
 func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
@@ -565,4 +573,8 @@ func registerMigrations(on app: Application) {
     // the reaper can never age out (#2281). Raw SQL that reads
     // `_fluent_sessions.created_at`, so it must follow `AddSessionsCreatedAt`.
     app.migrations.add(DeleteUndatedSessions())
+
+    // The runner a staff-requested validation run asks for (MCP
+    // `run_validation`). One optional column; existing rows keep NULL.
+    app.migrations.add(AddSubmissionTargetRunner())
 }

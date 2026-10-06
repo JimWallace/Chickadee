@@ -83,7 +83,29 @@ struct MCPDispatcher: Sendable {
             }
             return mcpPaginatedListResponse(id: id, key: "resources", entries: entries, params: params)
         } catch {
-            return .failure(id: id, error: .internalError("Failed to list resources."))
+            return resourceFailure(error, id: id, context: context, fallback: "Failed to list resources.")
+        }
+    }
+
+    /// One mapping for both resource methods (#2340). A refusal the agent can
+    /// act on (an ineligible account, an unknown or inaccessible resource) is
+    /// `invalidParams` with its reason. Anything else is a server fault: it
+    /// stays opaque to the agent and reaches the log, as on the tools path, so a
+    /// database grant error on the `.mcp` role leaves a trace.
+    private func resourceFailure(
+        _ error: any Error, id: JSONRPCID, context: ToolContext, fallback: String
+    ) -> JSONRPCResponse {
+        switch error as? MCPToolError {
+        case .invalidArguments(let message), .notAuthorized(let message):
+            return .failure(id: id, error: .invalidParams(message))
+        case .unknownTool:
+            return .failure(id: id, error: .invalidParams("Unknown resource."))
+        case .executionFailed(let detail):
+            context.logger.error("MCP \(fallback) \(detail)")
+            return .failure(id: id, error: .internalError(detail))
+        case nil:
+            context.logger.error("MCP \(fallback) \(error)")
+            return .failure(id: id, error: .internalError(fallback))
         }
     }
 
@@ -108,22 +130,8 @@ struct MCPDispatcher: Sendable {
         }
         do {
             return .success(id: id, result: try await resources.read(uri: read.uri, context: context))
-        } catch let error as MCPToolError {
-            // Unknown/inaccessible resource → invalidParams; a genuine lookup
-            // failure → internalError. Mirrors the tool path's error mapping.
-            if case .executionFailed(let detail) = error {
-                return .failure(id: id, error: .internalError(detail))
-            }
-            let detail: String
-            switch error {
-            case .invalidArguments(let message), .notAuthorized(let message):
-                detail = message
-            default:
-                detail = "Unknown resource."
-            }
-            return .failure(id: id, error: .invalidParams(detail))
         } catch {
-            return .failure(id: id, error: .internalError("Failed to read resource."))
+            return resourceFailure(error, id: id, context: context, fallback: "Failed to read resource.")
         }
     }
 
@@ -256,15 +264,6 @@ struct MCPDispatcher: Sendable {
             metadata: metadata,
             actorUsernameOverride: "\(context.subject)-MCP",
             on: context.request)
-    }
-
-    /// Best-effort audit used by the streaming `validate_assignment` path (a read
-    /// tool, so no fail-closed): records the call without propagating failure.
-    func auditToolCall(
-        name: String, context: ToolContext,
-        target: MCPAuditTarget? = nil, outcome: MCPToolOutcome? = nil
-    ) async {
-        _ = await recordToolCall(name: name, context: context, target: target, outcome: outcome)
     }
 
     /// What this server advertises to the caller, shared by the legacy
