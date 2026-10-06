@@ -352,6 +352,18 @@ the user row is hard-deleted via `POST /admin/users/:userID/delete`.
 | `tournament_runs` | `started_by`, `winner_user_id` | SET NULL | Run row preserved (it is the bracket's history); who started it and who won it drop. No FK on either backend; **enforced by `AdminRoutes.deleteUser`** (#1808). |
 | `class_item_coverage` | `user_id` | **preserved** | Coverage never retreats when a student drops (docs/collaborative-class-assignments.md). No FK on either backend, on purpose. |
 | `brightspace_credentials`, `brightspace_sync_log`, `courses` | `user_id`, `captured_by_user_id`, `brightspace_sync_user_id` | **preserved** | A BrightSpace binding and its sync history outlive the instructor who made them. No FK on either backend. |
+| `activity_champions`, `activity_standings` | `user_id` | CASCADE | Class-activity rows for the user; go with the user. |
+| `assignment_participations`, `secret_reveal_unlocks`, `brightspace_grade_clears` | `user_id` | CASCADE | Per-user assignment state; goes with the user. |
+| `assignment_extensions`, `grade_overrides` | `user_id` | CASCADE | The student's extension or override; goes with the student. |
+| `assignment_extensions`, `grade_overrides` | `granted_by_user_id` | SET NULL | Row preserved; who granted it drops. |
+| `slip_day_spends` | `user_id` | CASCADE | The student's slip-day spend; goes with the student. |
+| `slip_day_spends` | `refunded_by_user_id` | SET NULL | Spend preserved; who refunded it drops. |
+| `assignment_versions` | `actor_user_id` | SET NULL | Content version preserved; its author link drops. |
+| `user_activity_events`, `data_exports` | `user_id` | CASCADE | The user's own activity and export records. |
+| `lti_identities`, `lti_grade_syncs`, `lti_deep_link_requests` | `user_id` | CASCADE | LTI link, pending grade push and deep-link ticket; go with the user. |
+| `github_account_links`, `github_course_repositories` | `user_id` | CASCADE | The linked GitHub account and the student's course repositories (the rows, not the repositories on GitHub). |
+| `oauth_grants`, `oauth_authorization_codes`, `oauth_consent_requests` | `user_id` | CASCADE | MCP grants and pending OAuth state; an agent loses access with the user. |
+| `oauth_clients` | `created_by` | SET NULL | Registered MCP client preserved; who registered it drops. |
 | `client_diagnostics` | `user_id` | CASCADE | Browser-error breadcrumb; tied to the user. |
 | `assignment_personalization_seeds` | `user_id` | CASCADE | Per-user seed; gone with the user. |
 | `job_execution_metrics` | `user_id` | SET NULL | Metric row preserved for capacity reporting; user attribution drops. |
