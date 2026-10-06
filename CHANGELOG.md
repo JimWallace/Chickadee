@@ -9,6 +9,63 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.498] - 2026-10-06
+
+### Changed
+
+- **The auto-deploy daemon keeps its own scripts at the release it deploys.** It ran from a git clone on the host that nothing updated, so fixes to the deploy scripts reached production only by a manual `git pull`. Once a release's image is staged, the daemon now checks out the release's own commit in that clone (the tag must name the same commit as the image), as the clone's owner, and restarts on the new scripts. A clone with local changes is left alone and the history says so; a paused daemon updates nothing. `status.json` and the admin MCP `get_deploy_status` report the scripts' revision. A daemon older than this change needs one `git pull` and a restart to start updating itself.
+
+
+## [0.5.497] - 2026-10-06
+
+### Fixed
+
+- **The local runner autostart cannot start two runners at once.** `LocalRunnerManager.ensureRunning` checked for a runner, then awaited the worker secret, then stored the new runner. Two saves at the same moment could both pass the check and start two processes, and one of them could then never be stopped. It now reads the secret before the check. `stopIfRunning` clears its handle before it awaits the stop. The validation pre-check's wait now ends when the request is cancelled. (#2299)
+
+
+## [0.5.496] - 2026-10-06
+
+### Changed
+
+- **The runner container delegates a cgroup subtree for its jobs.** The Compose runner now starts as root for one pre-step, `/app/runner-entrypoint.sh`. The pre-step remounts `/sys/fs/cgroup` read-write, creates `/sandbox/runner` and `/sandbox/jobs`, enables the `memory` and `pids` controllers for the jobs, gives that subtree to uid 999, and starts the runner as uid 999 with no capability, an empty bounding set and `no_new_privs`, as before. The container gets five capabilities for the pre-step only (`SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID`, `SETPCAP`). The runner log starts with `job cgroups delegated` or `job cgroups unavailable: <reason>`. This prepares a hard memory limit per job; the runner does not use the cgroups yet. The host check for the sandbox in `deploy/README.md` now runs through the pre-step, so that it still checks uid 999. The image build proves the delegation on a cgroup v2 Docker host.
+
+
+## [0.5.495] - 2026-10-06
+
+### Added
+
+- **A runner update script for runner hosts.** `deploy/chickadee-runner-update.sh` moves a runner on a separate host to the release that the server runs. Run it from cron. It reads the server's version at `/health`, pulls the image of that release's commit by its `:sha-` tag, checks the image's revision label, and recreates only the runner service. When the runner already runs that release, it does nothing and prints nothing. It reports a runner that does not stay up, with the runner's last log lines. Before this, a runner host's `docker compose pull` took `:latest`, which can be a build that is not a release, or an older one.
+
+
+## [0.5.494] - 2026-10-06
+
+### Fixed
+
+- **A deploy is recorded as a success only when the server runs the release's version.** The auto-deploy daemon recorded success once `/health` answered, with whatever version answered: on 2026-10-05 three "successful" deploys of v0.5.464 ran 0.5.463. It now rolls back and counts a failure when the reported version differs from the release.
+
+### Added
+
+- **A `deployerUnhealthy` health alert.** It pages when the auto-deploy daemon reports `stuck`, `error` or `certificate_invalid`, or when it has not written its status for 30 minutes. Until now those states showed only in the admin MCP.
+
+### Changed
+
+- **The `runnerVersionSkew` alert is now a warning that pages,** not an advisory: a runner left behind can lack a sandbox fix, which the minimum-runner-version gate does not cover.
+
+
+## [0.5.493] - 2026-10-06
+
+### Fixed
+
+- **A data export requested during shutdown no longer outlives the drain.** `DataExportManager` started new work while it was draining, so that work could read the database after Fluent closed it. It now refuses new work once the drain begins, as `BackgroundWork` does. The export row stays `pending`, and the reaper marks it failed. (#2302)
+
+
+## [0.5.492] - 2026-10-06
+
+### Fixed
+
+- **A lock error no longer loses a badge, leaderboard entry or coverage row.** Five "first insert wins" saves used `try?`, which also hid the stale-snapshot lock error that the retry around the result side effects exists for. The rows were then lost with no log. A new `createIgnoringConflict` ignores only a constraint failure, so the retry now sees the lock error and runs again. (#2300)
+
+
 ## [0.5.491] - 2026-10-06
 
 ### Changed

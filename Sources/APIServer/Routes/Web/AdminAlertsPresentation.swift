@@ -32,6 +32,8 @@ extension HealthRule {
         case .outboundEgressFailing:
             return
                 "≥ \(config.outboundFailureThreshold) outbound calls fail in \(config.outboundFailureWindowMinutes) min, none succeed"
+        case .deployerUnhealthy:
+            return "the deploy daemon is stuck, failing, or silent for \(Int(deployerStatusStaleAfterSeconds / 60)) min"
         }
     }
 }

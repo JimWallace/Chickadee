@@ -125,12 +125,16 @@ an older kernel the runner refuses to start with `--sandbox` and says why.
 
 The host must also allow unprivileged user namespaces, with mounts inside
 them. Check it before the first `docker compose up` with this file. The check
-runs `unshare` in the runner service, with the same namespaces a job uses,
-mounts a tmpfs inside them, and prints `sandbox OK` when it works:
+starts the runner service through its pre-step, so `unshare` runs as uid 999
+with the same namespaces a job uses. It mounts a tmpfs inside them, and prints
+`sandbox OK` when it works:
 
 ```bash
-docker compose run --rm --no-deps --entrypoint /usr/bin/unshare runner --fork --user --net --mount --map-root-user /bin/sh -c "mount -t tmpfs tmpfs /mnt && echo sandbox OK"
+docker compose run --rm --no-deps runner "exec /app/runner-entrypoint.sh unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
 ```
+
+The first line of the output tells you about the job cgroups (see "Job
+cgroups" below).
 
 If the check fails, the host refuses user namespaces. On Ubuntu 23.10 and
 later, the usual cause is the `kernel.apparmor_restrict_unprivileged_userns`
@@ -188,6 +192,31 @@ docker compose config | grep -n -e sandbox -e unconfined
 
 To run without the sandbox, remove `--sandbox` from the runner command and the
 two `unconfined` lines from its `security_opt`.
+
+### Job cgroups
+
+The runner container starts as root, for one pre-step only:
+`/app/runner-entrypoint.sh`. The pre-step remounts `/sys/fs/cgroup`
+read-write, creates `/sandbox/runner` and `/sandbox/jobs` in the container's
+cgroup, enables the `memory` and `pids` controllers for `/sandbox/jobs`, and
+gives that subtree to uid 999. Then it starts the runner as uid 999, with no
+capability, an empty bounding set and `no_new_privs`, as the runner ran
+before. The Compose file gives the container five capabilities for the
+pre-step: `SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID` and `SETPCAP`. The runner
+does not keep them.
+
+The runner log starts with one of these lines:
+
+- `[runner-entrypoint] job cgroups delegated at /sandbox/jobs`
+- `[runner-entrypoint] job cgroups unavailable: <reason>`
+
+The pre-step needs cgroup v2 (Docker on Ubuntu 22.04 and later uses it), with
+the `memory` and `pids` controllers available to the container. When it cannot
+delegate the cgroups, the runner still starts and grades. To read the line:
+
+```bash
+docker compose logs runner | grep runner-entrypoint
+```
 
 ### Optional PostgreSQL service example
 
@@ -418,6 +447,50 @@ sudo docker compose logs --tail 5
 
 If the chain is already gone, `sudo systemctl restart docker` recovers the
 host.
+
+### Runner hosts: keep the runner at the server's release
+
+The deployer on the server host moves the runner beside the server to each
+release. A runner on a separate host has no deployer. Do not update it with
+`docker compose pull`: that pulls `:latest`, which is the newest build of
+`main` to finish. That build is not always a release, and it can be older
+than the release.
+
+Use `deploy/chickadee-runner-update.sh` from cron. Each run does these steps:
+
+1. It reads the version that the server reports at its `/health` URL.
+2. When the runner already runs the image of that release, it stops, and it
+   prints nothing.
+3. Otherwise it pulls the image of the release commit (`:sha-<commit>`),
+   makes sure that the image was built from that commit, and recreates only
+   the runner service.
+4. It waits 15 seconds and makes sure that the runner stays up. If the runner
+   does not stay up, it prints the last lines of the runner log and exits
+   with status 1.
+
+The runner follows the server, so it never runs a release that the server
+does not run. After a rollback on the server, the runner follows it back.
+
+The script uses the Compose file in the clone that holds it, with the
+`runner` service. The flags `--compose-dir`, `--service` and `--health-url`
+change these. The service must use the image
+`ghcr.io/jimwallace/chickadee:latest`, as the bundled Compose file does. Run it
+as root, or as a user in the `docker` group, every 10 minutes:
+
+```bash
+sudo crontab -e
+```
+
+Add this line, with the path to your clone:
+
+```
+*/10 * * * * /opt/Chickadee/deploy/chickadee-runner-update.sh
+```
+
+Cron sends mail only when the script prints a line, which is when it updates
+the runner or when it fails.
+
+### Runner hosts: give each runner a stable ID
 
 Give each runner host a stable ID, for example `--worker-id Sparrow` or
 `RUNNER_WORKER_ID=Sparrow` in the Compose `.env`. The server health rule

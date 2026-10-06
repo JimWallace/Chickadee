@@ -143,7 +143,7 @@ private func setRecordHolder(
         let badge = APIClassAchievement(
             testSetupID: testSetupID, achievementID: achievementID,
             userID: userID, submissionID: submissionID)
-        try? await badge.save(on: db)
+        try await badge.createIgnoringConflict(on: db)
     }
 }
 
@@ -189,7 +189,7 @@ private func awardImmutableBadge(
         testSetupID: testSetupID, achievementID: achievementID,
         userID: userID, submissionID: submissionID)
     // Ignore conflict errors: two simultaneous 100% results, first insert wins.
-    try? await badge.save(on: db)
+    try await badge.createIgnoringConflict(on: db)
 }
 
 /// Inserts the badge if none exists, or updates it when the new metric is strictly better.
@@ -221,6 +221,6 @@ private func updateRecordBadge(
         let badge = APIClassAchievement(
             testSetupID: testSetupID, achievementID: achievementID,
             userID: userID, submissionID: submissionID, metricValue: newValue)
-        try? await badge.save(on: db)
+        try await badge.createIgnoringConflict(on: db)
     }
 }
