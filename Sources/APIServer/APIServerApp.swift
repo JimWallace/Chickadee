@@ -34,7 +34,7 @@ public func runAPIServer() async throws {
     app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
 
     do {
-        try configure(app, cliWorkerSecret: cliWorkerSecret)
+        try await configure(app, cliWorkerSecret: cliWorkerSecret)
 
         // Load OIDC configuration after configure() so app.client is ready.
         //
@@ -88,7 +88,7 @@ public func runAPIServer() async throws {
     try await app.asyncShutdown()
 }
 
-func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: AuthMode? = nil) throws {
+func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: AuthMode? = nil) async throws {
     let workDir = DirectoryConfiguration.detect().workingDirectory
 
     let appConfig = try resolveAppConfig(
@@ -106,7 +106,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
 
     try bootstrapAppDirectories(app, workDir: workDir, cliWorkerSecret: cliWorkerSecret)
     bootstrapAppMiddleware(app, appConfig: appConfig)
-    try bootstrapAppServices(app, appConfig: appConfig)
+    try await bootstrapAppServices(app, appConfig: appConfig)
 
     try routes(app)
 }

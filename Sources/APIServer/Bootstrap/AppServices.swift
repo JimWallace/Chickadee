@@ -11,7 +11,7 @@ import Core
 import Fluent
 import Vapor
 
-func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
+func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws {
     try configureDatabase(app, settings: appConfig.database)
     registerMigrations(on: app)
 
@@ -19,7 +19,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     // bring it up to date (#2282).
     try refuseLegacyMigrationNamespace(on: app)
 
-    try app.autoMigrate().wait()
+    try await app.autoMigrate()
     // Retention for the diagnostics tables, worker nonces and login attempts:
     // leased sweeps, not work inside a student's or a runner's request (#1924).
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.diagnosticsPruneMonitor })
@@ -82,10 +82,8 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
         // (authorized) key wins, else an env-provided full config.
         let resolved: BrightSpaceSyncConfig?
         do {
-            resolved = try app.eventLoopGroup.any().makeFutureWithTask {
-                try await BrightSpaceCredentialStore.resolveSyncConfig(
-                    app: bsApp, envConfig: appConfig.brightspace, on: app.db)
-            }.wait()
+            resolved = try await BrightSpaceCredentialStore.resolveSyncConfig(
+                app: bsApp, envConfig: appConfig.brightspace, on: app.db)
         } catch {
             app.logger.warning(
                 "BrightSpace: failed to load stored credential at startup: \(error.localizedDescription); falling back to env"
