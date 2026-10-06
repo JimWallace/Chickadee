@@ -507,8 +507,20 @@ these protections:
   nothing depends on the writes; a Java test recompiles rather than reuse an
   earlier test's classes. The make step keeps its writes, because the tests
   use what it builds. An opponent directory is read-only. The overlay needs
-  Linux 5.11 or later, and the startup probe includes it. Memory is still
-  shared by the jobs on a runner (#2252); the private tmpfs counts against it.
+  Linux 5.11 or later, and the startup probe includes it. The work root above
+  the working directory is read-only, so a script cannot write into `..`.
+- **Memory, with `--sandbox` on Linux, in part.** A script's `/tmp`,
+  `/var/tmp`, `/dev/shm`, `HOME` and working directory are folders in one
+  private tmpfs of `--job-disk-limit` (#2252), not one mount each, which added
+  up to about 1.1 GB. A tmpfs is memory that belongs to no process, so the
+  kernel's OOM killer cannot attribute it to the job that wrote it; it is now
+  at most the limit per job. Process memory is not limited per job: when the
+  container or host runs out, the kernel ends the process that uses the most,
+  usually the one at fault. An exact limit per job needs a cgroup that Docker
+  does not delegate to an unprivileged container, so it waits for a change to
+  how the runner is started. Raising a script's `oom_score_adj` would not
+  help: a script can lower its own back to 0 and so shift the kernel's choice
+  onto the other jobs.
 
 This is a property of the design, not a defect. Treat each value in a test,
 and each file in its test setup, as visible to a determined student. To hide
