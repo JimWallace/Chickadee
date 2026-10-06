@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.491] - 2026-10-06
+
+### Changed
+
+- **The server refuses to boot on a database from v0.4.200 or earlier.** The migration-namespace reconciler renamed such a database's history rows so that its migrations counted as applied. Since the consolidation rounds folded later migrations into their `Create*` files, that rename let the server start without the folded columns, and the first query on those models then failed. The server now stops at startup and names the problem. A database from a later release is not affected. (#2282)
+
+
 ## [0.5.490] - 2026-10-06
 
 ### Fixed
