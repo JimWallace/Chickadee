@@ -207,6 +207,12 @@ mechanism without moving any student traffic:
    already aborted by the script *before* the nginx flip, so traffic never moved
    — this covers the rarer "healthy at cutover, degrades after" case.)
 
+   **Healthy is not enough: the version must match.** After the probe passes,
+   `/health` must report the version the release names. If it reports another,
+   the daemon rolls back and counts a failure, with both versions in the
+   detail. Until 2026-10-05 a success was recorded with whatever answered: three
+   "successful" deploys of v0.5.464 ran 0.5.463.
+
    A **TLS failure is not a failed release.** TLS terminates at the host nginx,
    in front of both colors, so when the certificate check fails the probe asks
    again without verification. If the application answers, the release stays,
@@ -226,7 +232,9 @@ mechanism without moving any student traffic:
    is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
    Disable with `CHICKADEE_REFRESH_RUNNER=0`. Because this step is best-effort, a
    silently-failed refresh would leave the runner grading on a stale build; the
-   `runnerVersionSkew` health alert is the backstop — it pages once a runner stays
+   `runnerVersionSkew` health alert is the backstop — it pages (severity
+   `warning` since 2026-10-06, because a stale runner can lack a sandbox fix
+   that the minimum-version gate does not cover) once a runner stays
    behind the server past `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` (default 900s),
    which is set generously so the *expected* transient skew during this very step
    never fires.
@@ -273,6 +281,16 @@ Ctrl-C, then enable the service. Its first *real* auto-deploy then happens
 naturally on the next merge to `main` (the next release). Pause anytime by
 writing `{"command":"pause"}` to `command.json`, or `sudo systemctl stop
 chickadee-deployer`.
+
+### The `deployerUnhealthy` alert
+
+The server reads `status.json` from the read-only deploy state mount
+(`DeployerHealthRule.swift`). The rule pages (severity `warning`) when the
+daemon reports `stuck`, `error` or `certificate_invalid`, and when the daemon
+has not written its status for 30 minutes, which means it has stopped: it writes
+on every poll. A paused daemon does not fire, and neither does a deployment
+with no status file. Until this rule, those states showed only to someone who
+asked the admin MCP.
 
 ### App ⇄ daemon IPC (files in `STATE_DIR`)
 
