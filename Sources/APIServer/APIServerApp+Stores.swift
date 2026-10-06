@@ -194,6 +194,16 @@ actor WorkerActivityStore {
     /// never carried a version) are omitted, so they can't masquerade as skew.
     /// Non-mutating like `runnerPresence`: it does not prune, so evaluating the
     /// alert never races the dashboard's pruning in `snapshotsSortedByRecent`.
+    /// The workerID and version of each runner seen within `withinSeconds`.
+    /// It reads only: unlike `snapshotsSortedByRecent`, it prunes nothing, so
+    /// a short window here cannot drop an entry that another reader needs.
+    func activeRunners(withinSeconds: TimeInterval, now: Date = Date()) -> [(workerID: String, runnerVersion: String)] {
+        entries
+            .filter { now.timeIntervalSince($0.value.lastSeen) <= withinSeconds }
+            .map { (workerID: $0.key, runnerVersion: $0.value.runnerVersion) }
+            .sorted { $0.workerID < $1.workerID }
+    }
+
     func knownRunnerVersions(rememberSeconds: TimeInterval, now: Date = Date()) -> [String] {
         entries.values
             .filter { now.timeIntervalSince($0.lastSeen) <= rememberSeconds && !$0.runnerVersion.isEmpty }

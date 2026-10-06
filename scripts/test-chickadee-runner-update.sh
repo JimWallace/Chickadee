@@ -218,6 +218,58 @@ expect_output "does not stay up on v0.5.232"
 expect_output "cannot start the sandbox"
 
 # ---------------------------------------------------------------------------
+# macOS has no python3 until the developer tools are installed, and its
+# /usr/bin/python3 is then a stub that fails.
+start_case "a host without python3 reads the version and the commit"
+printf '#!/bin/sh\nexit 1\n' > "$BIN/python3"
+chmod +x "$BIN/python3"
+run_update
+rm -f "$BIN/python3"
+expect_status 0
+expect_calls "docker pull -q $IMAGE:sha-b485699" 1
+expect_output "'runner' runs v0.5.232"
+
+# ---------------------------------------------------------------------------
+# GitHub's commit object holds nested "sha" keys after its own.
+start_case "the commit is the top-level sha of the commit object"
+CASE="json_string"
+got="$(printf '{"sha":"%s","commit":{"tree":{"sha":"%s"}}}' "$RELEASE_SHA" "$OLD_SHA" | json_string sha)"
+[ "$got" = "$RELEASE_SHA" ] || fail "expected $RELEASE_SHA, saw $got"
+got="$(printf '{\n  "sha": "%s",\n  "tree": {"sha": "%s"}\n}\n' "$RELEASE_SHA" "$OLD_SHA" | json_string sha)"
+[ "$got" = "$RELEASE_SHA" ] || fail "expected $RELEASE_SHA from indented JSON, saw $got"
+
+# ---------------------------------------------------------------------------
+start_case "the lock is taken once, and a second run does not get it"
+LOCK_DIR="$WORK/lock"
+take_lock || fail "a free lock was not taken"
+[ "$(cat "$LOCK_DIR/pid")" = "$$" ] || fail "the lock does not hold the PID of its owner"
+take_lock && fail "a lock held by a live process was taken again"
+release_lock
+[ ! -e "$LOCK_DIR" ] || fail "release_lock left the lock behind"
+
+start_case "a lock whose owner is no longer alive is taken"
+LOCK_DIR="$WORK/lock"
+sh -c 'exit 0' &
+dead=$!
+wait "$dead"
+mkdir "$LOCK_DIR"
+echo "$dead" > "$LOCK_DIR/pid"
+take_lock || fail "a stale lock was not taken"
+[ "$(cat "$LOCK_DIR/pid")" = "$$" ] || fail "the stale lock does not hold the new owner"
+release_lock
+
+start_case "a run that finds the lock taken does nothing"
+LOCK_DIR="$WORK/lock"
+mkdir "$LOCK_DIR"
+echo "$$" > "$LOCK_DIR/pid"
+OUTPUT="$(main 2>&1)"
+STATUS=$?
+expect_status 0
+expect_calls "curl" 0
+expect_calls "docker" 0
+release_lock
+
+# ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then
   printf 'runner-update tests: %s failure(s)\n' "$FAILURES"
   exit 1

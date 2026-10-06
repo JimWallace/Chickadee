@@ -168,7 +168,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// **SQLite:** compare-and-set — the UPDATE's `status == pending` guard
     /// means concurrent claimers cannot both win (the same conditional-
     /// UPDATE idiom the MCP single-use token consumption uses), and the
-    /// re-read confirms *this* worker won. The WorkerClaimQueue actor
+    /// re-read confirms *this* worker won. The WorkerClaimQueue
     /// serializes in-process claim attempts so concurrent polls don't
     /// thrash SQLite's write lock.
     ///
