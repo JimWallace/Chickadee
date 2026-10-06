@@ -197,6 +197,15 @@ func evaluateAndClaimCandidate(
     var blockedCandidate: BlockedCandidate?
 
     for (submission, setup, manifest) in candidates {
+        // A job that asks for another runner waits for it, up to the
+        // fallback time. It is not a blocked candidate: this runner could
+        // grade it, it only goes second.
+        guard
+            RunnerTargetGate.allows(
+                targetRunnerID: submission.targetRunnerID, queuedAt: submission.submittedAt,
+                runnerID: body.workerID, now: Date())
+        else { continue }
+
         let loadedRequirements = try await evaluator.assignmentRequirements.loadRequirement(
             for: submission, on: evaluator.db)
         let requirementSpec = loadedRequirements.requirement?.requirementSpec
@@ -250,6 +259,16 @@ func evaluateAndClaimCandidate(
             // Lost the claim race (or a malformed row) — the next
             // candidate may still be ours.
             continue
+        }
+
+        if RunnerTargetGate.isFallback(targetRunnerID: claimed.targetRunnerID, runnerID: body.workerID) {
+            evaluator.logger.info(
+                "targeted_job_fallback",
+                metadata: [
+                    "submission_id": .string(submissionID),
+                    "target_runner_id": .string(claimed.targetRunnerID ?? ""),
+                    "runner_id": .string(body.workerID),
+                ])
         }
 
         return ClaimedJob(
