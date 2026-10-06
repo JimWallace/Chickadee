@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.473] - 2026-10-06
+
+### Changed
+
+- **The avatar design note and five code comments state the current counts.** `docs/student-avatars.md` now says twelve templates show the bird, seven `use` elements per bird, thirteen border options and nine spec fields, and names the sizes the leaderboard rows use; five comments no longer describe behaviour the code dropped (#2256).
+
+### Security
+
+- **The make step runs in the sandbox, and a submission cannot supply the makefile (#2250).** The pre-test `make` step ran outside the sandbox even with `--sandbox`, and the submission, merged into the workspace before `make` runs, could add a `GNUmakefile` (which GNU make reads first) or replace the instructor's `Makefile`. On an assignment with a make step, a student could therefore choose commands that ran with network access and could read the other jobs' directories on the runner. `make` now runs through the job's script runner, so it gets the same sandbox and process limit as the test scripts, and with a make step the three makefile names are protected from the merge, with a warning to the student.
+
+
 ## [0.5.472] - 2026-10-06
 
 ### Fixed
