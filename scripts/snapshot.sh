@@ -25,9 +25,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/deployment-target.sh
 . "$SCRIPT_DIR/lib/deployment-target.sh"
+# shellcheck source=lib/snapshot-retention.sh
+. "$SCRIPT_DIR/lib/snapshot-retention.sh"
 COMPOSE="docker compose $(chickadee_compose_file_args "$REPO_ROOT" | tr '\n' ' ')"
 BACKUP_DIR="$REPO_ROOT/backups"
 RETENTION_DAYS=7
+# Predeploy snapshots kept, newest first. See lib/snapshot-retention.sh.
+KEEP_PREDEPLOY=3
 
 # ----------------------------------------------------------------
 # Parse args
@@ -55,6 +59,21 @@ if [[ ! "$LABEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "ERROR: --label must match [A-Za-z0-9._-]+ (got: $LABEL)" >&2
   exit 2
 fi
+
+# ----------------------------------------------------------------
+# Prune old snapshots FIRST, before anything that needs the database.
+# When the disk is full, Postgres stops, and a check below fails. A prune that
+# ran only at the end would then never run, and the disk would stay full.
+# ----------------------------------------------------------------
+report_pruned() {
+  local pruned
+  pruned="$(prune_snapshots "$BACKUP_DIR" "$KEEP_PREDEPLOY" "$RETENTION_DAYS")"
+  if [[ -n "$pruned" ]]; then
+    echo "==> Pruned snapshots (older than $RETENTION_DAYS days, or beyond the newest $KEEP_PREDEPLOY predeploy):"
+    echo "$pruned" | sed 's/^/    /'
+  fi
+}
+report_pruned
 
 # ----------------------------------------------------------------
 # Read DATABASE_* from the live server container.
@@ -214,14 +233,8 @@ SNAPSHOT_COMPLETE=1
 echo "==> Snapshot complete: $DIR"
 
 # ----------------------------------------------------------------
-# 4. Prune old snapshots
+# 4. Prune old snapshots (again, now that the new one is complete)
 # ----------------------------------------------------------------
-if [[ -d "$BACKUP_DIR" ]]; then
-  PRUNED="$(find "$BACKUP_DIR" -maxdepth 1 -type d -name "snapshot-*" -mtime "+$RETENTION_DAYS" -print -exec rm -rf {} + 2>/dev/null || true)"
-  if [[ -n "$PRUNED" ]]; then
-    echo "==> Pruned snapshots older than $RETENTION_DAYS days:"
-    echo "$PRUNED" | sed 's/^/    /'
-  fi
-fi
+report_pruned
 
 echo "==> Done."

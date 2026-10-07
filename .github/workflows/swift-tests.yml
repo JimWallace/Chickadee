@@ -65,6 +65,8 @@ jobs:
         run: scripts/test-chickadee-deployer.sh
       - name: Runner update script behaviour tests
         run: scripts/test-chickadee-runner-update.sh
+      - name: Snapshot retention behaviour tests
+        run: scripts/test-snapshot-retention.sh
 
   # The class-handle word lists (Sources/Core/AvatarHandle.swift) against the
   # review data in Tools/handle-review/data. Node only, like the two jobs above
