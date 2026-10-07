@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.560] - 2026-10-07
+
+### Changed
+
+- **The visual and accessibility scan runs when web route code changes.** The route code builds each page's Leaf context, so a change there can change a page with no template edit. The workflow ran only for `Public/` and `Resources/Views/` changes. (#2409)
+
+
 ## [0.5.559] - 2026-10-07
 
 ### Fixed
