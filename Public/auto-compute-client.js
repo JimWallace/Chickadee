@@ -37,6 +37,9 @@
     // Bounded so a top-level infinite loop in a setup cell can't strand
     // auto-compute on "computing…" forever.
     var LOAD_TIMEOUT_MS = 30000;
+    // What a request reports when another request on the same worker ran past
+    // its limit and the worker was stopped under it.
+    var STOPPED_BY_OTHER_TIMEOUT = 'stopped because another case ran past its time limit';
 
     /// Splits a notebook into its code cells' source, skipping markdown,
     /// stripping IPython magic (`%`) and shell (`!`) lines.
@@ -101,36 +104,46 @@
             var workerScript = ChickadeeLanguage.autoComputeWorker();
             if (!workerScript) return null;
             var workerURL = workerScript + (version ? '?v=' + encodeURIComponent(version) : '');
-            _worker = new Worker(workerURL);
-            _worker.addEventListener('message', function (e) {
+            var worker = new Worker(workerURL);
+            _worker = worker;
+            worker.addEventListener('message', function (e) {
                 var data = e.data || {};
-                var handler = _pendingRequests.get(data.id);
-                if (handler) {
+                var pending = _pendingRequests.get(data.id);
+                if (pending) {
                     _pendingRequests.delete(data.id);
-                    handler(data);
+                    pending.handler(data);
                 }
             });
-            _worker.addEventListener('error', function (e) {
+            worker.addEventListener('error', function (e) {
                 // Surface uncaught worker errors to every pending request
                 // so the modal doesn't sit forever.  The next call spins
                 // up a fresh worker.
-                var err = (e && e.message) ? e.message : 'worker error';
-                _pendingRequests.forEach(function (handler) {
-                    handler({ ok: false, error: err });
-                });
-                _pendingRequests.clear();
-                killWorker();
+                stopWorker(worker, (e && e.message) ? e.message : 'worker error');
             });
-            return _worker;
+            return worker;
+        }
+
+        /// Terminates `worker` and fails every request still pending on it
+        /// with `error`. It forgets the worker only if it is still the
+        /// current one: a timer or an error event from a worker that was
+        /// already replaced must not stop the new worker (#2383).
+        function stopWorker(worker, error) {
+            try { worker.terminate(); } catch (_) {}
+            if (_worker === worker) {
+                _worker = null;
+                // The worker held the loaded solution module; the next call
+                // must re-load it.
+                _solutionLoadedPromise = null;
+            }
+            _pendingRequests.forEach(function (pending, id) {
+                if (pending.worker !== worker) return;
+                _pendingRequests.delete(id);
+                pending.handler({ ok: false, error: error });
+            });
         }
 
         function killWorker() {
-            if (_worker) {
-                try { _worker.terminate(); } catch (_) {}
-                _worker = null;
-            }
-            // The worker held the loaded solution module; the next call
-            // must re-load it.
+            if (_worker) stopWorker(_worker, 'auto-compute stopped');
             _solutionLoadedPromise = null;
         }
 
@@ -139,9 +152,9 @@
         /// worker (killing whatever the kernel is running, including
         /// synchronous tight loops) and reject with `__chickadee_timeout__`.
         ///
-        /// Only the request that timed out is rejected then. Another request
-        /// still pending on the killed worker keeps its own timer, and is
-        /// rejected with the same sentinel when that timer fires.
+        /// The other requests still pending on that worker fail at once, with
+        /// a message that names the cause, rather than each waiting out its
+        /// own timer to report a timeout of its own.
         function workerSend(message, requestTimeoutMs) {
             return new Promise(function (resolve, reject) {
                 var id = _nextRequestId++;
@@ -158,17 +171,20 @@
                 if (requestTimeoutMs && requestTimeoutMs > 0) {
                     timer = setTimeout(function () {
                         _pendingRequests.delete(id);
-                        killWorker();
+                        stopWorker(worker, STOPPED_BY_OTHER_TIMEOUT);
                         reject(new Error('__chickadee_timeout__'));
                     }, requestTimeoutMs);
                 }
-                _pendingRequests.set(id, function (data) {
-                    if (timer) { clearTimeout(timer); }
-                    if (data.ok) {
-                        resolve(data);
-                    } else {
-                        reject(new Error(data.error || 'unknown error'));
-                    }
+                _pendingRequests.set(id, {
+                    worker: worker,
+                    handler: function (data) {
+                        if (timer) { clearTimeout(timer); }
+                        if (data.ok) {
+                            resolve(data);
+                        } else {
+                            reject(new Error(data.error || 'unknown error'));
+                        }
+                    },
                 });
                 try {
                     var payload = Object.assign({ id: id }, message);
