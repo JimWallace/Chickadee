@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.540] - 2026-10-07
+
+### Fixed
+
+- **An auto-compute timeout stops only its own worker.** When a case ran past its time limit, the timer stopped whichever eval worker was current, which could be a newer worker that was loading the solution. It now stops the worker that ran the case, and the other cases on that worker fail at once with a message that names the cause, instead of each waiting to report a timeout of its own. (#2383)
+
+
+## [0.5.539] - 2026-10-07
+
+### Fixed
+
+- **Install breadcrumbs keep the package names.** When a browser grading worker installs a package on demand, the submit-phase telemetry now records which packages it installed, beside the timing. (#2387)
+
+
+## [0.5.538] - 2026-10-07
+
+### Tests
+
+- **One repository root for tests.** `ChickadeeTestSupport` now has `repositoryRoot`. About sixty sites that counted `deletingLastPathComponent` from their own file use it, and four sites that read the working directory now do not depend on it. (#2367)
+
+
 ## [0.5.537] - 2026-10-07
 
 ### Tests
