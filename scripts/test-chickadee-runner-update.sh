@@ -146,7 +146,7 @@ expect_calls "docker rmi $IMAGE:sha-b485699" 1
 expect_calls "docker compose .* up -d --no-deps runner" 1
 expect_calls "docker compose .* pull" 0
 expect_calls "docker pull -q $IMAGE:latest" 0
-expect_calls "docker image prune -f" 1
+expect_calls "docker image prune -a -f --filter label=org.opencontainers.image.source=https://github.com/JimWallace/Chickadee" 1
 expect_output "'runner' runs v0.5.232"
 
 # ---------------------------------------------------------------------------
