@@ -112,6 +112,50 @@
     var boundDocumentDragover = false;
     var boundPageshow = false;
 
+    /// The rows of one section, in display order: each root, then every item
+    /// that depends on it, directly or through a chain. A chain still shows
+    /// one indent level, because the table has only one; the descendants keep
+    /// their order. Before #2385 only direct children were added, so a test
+    /// two levels down (C depends on B, B depends on A) had no row at all,
+    /// though it still graded. An item whose parents form a cycle, which the
+    /// server refuses, is shown as a root rather than hidden.
+    function visualOrder(sectionItems) {
+        var byID = {};
+        sectionItems.forEach(function (it) { byID[it.id] = it; });
+        var childMap = {};
+        sectionItems.forEach(function (it) {
+            if (it.dependsOn && it.dependsOn.length > 0) {
+                var p = it.dependsOn[0];
+                if (byID[p]) {
+                    childMap[p] = childMap[p] || [];
+                    childMap[p].push(it);
+                }
+            }
+        });
+        var result = [];
+        var placed = {};
+        function addDescendants(id) {
+            (childMap[id] || []).forEach(function (child) {
+                if (placed[child.id]) return;
+                placed[child.id] = true;
+                result.push({ item: child, depth: 1 });
+                addDescendants(child.id);
+            });
+        }
+        function addRoot(root) {
+            if (placed[root.id]) return;
+            placed[root.id] = true;
+            result.push({ item: root, depth: 0 });
+            addDescendants(root.id);
+        }
+        sectionItems.filter(function (it) {
+            if (!it.dependsOn || it.dependsOn.length === 0) return true;
+            return !byID[it.dependsOn[0]];
+        }).forEach(addRoot);
+        sectionItems.forEach(addRoot);
+        return result;
+    }
+
     // Which drop indicator belongs on a row the pointer is over.
     //
     // Pure, and exported, because it is the whole correctness content of the
@@ -367,30 +411,7 @@
         /// indent — cross-section deps are allowed but don't render as
         /// visual parenting (the indent would span tables).
         function visualOrderForSection(sid) {
-            var sectionItems = itemsInSection(sid);
-            var byID = {};
-            sectionItems.forEach(function (it) { byID[it.id] = it; });
-            var childMap = {};
-            sectionItems.forEach(function (it) {
-                if (it.dependsOn && it.dependsOn.length > 0) {
-                    var p = it.dependsOn[0];
-                    if (byID[p]) {
-                        childMap[p] = childMap[p] || [];
-                        childMap[p].push(it);
-                    }
-                }
-            });
-            var result = [];
-            sectionItems.filter(function (it) {
-                if (!it.dependsOn || it.dependsOn.length === 0) return true;
-                return !byID[it.dependsOn[0]];
-            }).forEach(function (root) {
-                result.push({ item: root, depth: 0 });
-                (childMap[root.id] || []).forEach(function (child) {
-                    result.push({ item: child, depth: 1 });
-                });
-            });
-            return result;
+            return visualOrder(itemsInSection(sid));
         }
 
         function tierOptions(selected) {
@@ -1822,6 +1843,7 @@
         module.exports = {
             classify: classify,
             dropZoneFor: dropZoneFor,
+            visualOrder: visualOrder,
             classifyFile: classifyFile,
             isLikelyScriptName: isLikelyScriptName,
             hasRecognizedScriptShebang: hasRecognizedScriptShebang,

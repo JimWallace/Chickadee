@@ -36,14 +36,13 @@
 
 
     // Map a RunnerCore interpreter raw value to how the browser dispatches it.
-    // Each kernel language maps to its substrate kind.  Shell and the other
-    // interpreters have no browser substrate, so RoutingExecutor.run gives them
-    // a precise "not here" message.
-    function interpreterToKind(interp) {
-        if (interp === 'python') return 'python';
-        if (interp === 'rscript') return 'r';
-        if (interp === 'lua') return 'lua';
-        if (interp === 'octave') return 'octave';
+    // A kernel language's interpreter maps to its substrate kind through
+    // `interpreterKinds`, the GENERATED INTERPRETER_KINDS table in
+    // browser-runner.js (#2388). Shell and the other interpreters have no
+    // browser substrate, so RoutingExecutor.run gives them a precise "not
+    // here" message.
+    function interpreterToKind(interp, interpreterKinds) {
+        if (Object.prototype.hasOwnProperty.call(interpreterKinds, interp)) return interpreterKinds[interp];
         if (interp === 'sh' || interp === 'bash' || interp === 'zsh') return 'shell';
         return 'unsupported';  // ruby / perl / node / php / unknown
     }
@@ -440,6 +439,7 @@
     function makeGradingExecutors(tables) {
         const GRADING_WORKER_SCRIPTS = tables.workerScripts;
         const LANGUAGE_LABELS = tables.languageLabels;
+        const INTERPRETER_KINDS = tables.interpreterKinds;
 
         function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage) {
             return new RoutingExecutor(
@@ -482,7 +482,7 @@
 
             kindOf(name) {
                 const src = this.scriptExists(name) ? fileAsText(this.files[name]) : '';
-                return interpreterToKind(this.runnerCore.classifyScript(name, src));
+                return interpreterToKind(this.runnerCore.classifyScript(name, src), INTERPRETER_KINDS);
             }
 
             // The distinct substrate kinds this assignment's manifest actually
