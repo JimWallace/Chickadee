@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.547] - 2026-10-07
+
+### Fixed
+
+- **An R test's own `tryCatch(error =)` no longer swallows `passed()`.** In the browser, the condition that stands in for `quit()` was also an error, so a test that called `passed()` inside `tryCatch(..., error = )` reported an error there and a pass under Rscript. The condition is no longer an error, so the browser and the native runner give the same result. (#2386)
+
+
 ## [0.5.546] - 2026-10-07
 
 ### Fixed
