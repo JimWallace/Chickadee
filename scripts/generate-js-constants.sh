@@ -296,8 +296,8 @@ mv "$tmp" "$work"
 # read `EditorSupport.notebookKernel`'s `gradingWorkerScript`.
 #
 # Keyed by the enum case, which is also the substrate "kind" the router
-# computes (`interpreterToKind` maps rscript -> r and is otherwise identity), so
-# the lookup needs no translation. Only kernel languages appear: an upload-only
+# computes through INTERPRETER_KINDS (generated below), so the lookup needs no
+# translation. Only kernel languages appear: an upload-only
 # language has no `notebookKernel` and therefore no worker, which is the whole
 # point of the fact living inside that case.
 workers_file="$(mktemp)"
@@ -323,7 +323,6 @@ fi
 
 workers_joined="$(awk -v q="'" 'NR > 1 { out = out ", " } { out = out $1 ": " q $2 q } END { print out }' \
   "$workers_file")"
-rm -f "$workers_file"
 workers_generated="    const GRADING_WORKER_SCRIPTS = { $workers_joined };"
 workers_begin="CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:BEGIN"
 workers_end="CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:END"
@@ -338,6 +337,66 @@ done
 
 tmp="$(mktemp)"
 awk -v repl="$workers_generated" -v begin="$workers_begin" -v end="$workers_end" '
+  index($0, begin) { print; print repl; skipping = 1; next }
+  index($0, end)   { skipping = 0; print; next }
+  skipping { next }
+  { print }
+' "$work" > "$tmp"
+mv "$tmp" "$work"
+
+# --- Which interpreter each kernel language's tests run under ---------------
+#
+# The browser router asks RunnerCore's `classifyScript` for a script's
+# interpreter (`python`, `rscript`, `lua`, ...) and must turn it into the
+# substrate kind that GRADING_WORKER_SCRIPTS is keyed by. That map was a
+# hand-written function in grading-executors.js, so a new kernel language got
+# a generated worker script and still routed to "unsupported" (#2388).
+#
+# Derived from two facts the Swift already states: each kernel language's
+# `generatedScriptExtension` (LanguageDescriptor.swift), and the interpreter
+# `classifyScriptInterpreter` gives that extension (the extension switch in
+# Sources/RunnerCore/ScriptClassification.swift). A kernel language whose
+# extension the classifier does not map is an error, not a skip.
+classify_src="$repo_root/Sources/RunnerCore/ScriptClassification.swift"
+kinds_file="$(mktemp)"
+while read -r lang _; do
+  ext="$(awk -v want="$lang" '
+    /private static let [a-zA-Z]+Descriptor = LanguageDescriptor\(/ {
+      cur = ""
+      if (match($0, /let [a-zA-Z]+Descriptor/)) {
+        cur = substr($0, RSTART + 4, RLENGTH - 4)
+        sub(/Descriptor$/, "", cur)
+      }
+    }
+    cur == want && /generatedScriptExtension: "/ {
+      if (match($0, /"[^"]+"/)) { print tolower(substr($0, RSTART + 1, RLENGTH - 2)); exit }
+    }
+  ' "$descriptor_src")"
+  interp="$(sed -n "s/.*case \"${ext}\": return \.\([a-z]*\).*/\1/p" "$classify_src")"
+  if [ -z "$ext" ] || [ -z "$interp" ]; then
+    echo "generate-js-constants: kernel language '$lang' has extension '$ext'," >&2
+    echo "which classifyScriptInterpreter in $classify_src does not map." >&2
+    echo "The browser could not route that language's tests to its worker." >&2
+    rm -f "$work" "$workers_file" "$kinds_file"; exit 1
+  fi
+  printf '%s %s\n' "$interp" "$lang" >> "$kinds_file"
+done < "$workers_file"
+rm -f "$workers_file"
+LC_ALL=C sort -o "$kinds_file" "$kinds_file"
+kinds_joined="$(awk -v q="'" 'NR > 1 { out = out ", " } { out = out $1 ": " q $2 q } END { print out }' \
+  "$kinds_file")"
+rm -f "$kinds_file"
+kinds_generated="    const INTERPRETER_KINDS = { $kinds_joined };"
+kinds_begin="CHICKADEE_GENERATED:INTERPRETER_KINDS:BEGIN"
+kinds_end="CHICKADEE_GENERATED:INTERPRETER_KINDS:END"
+for marker in "$kinds_begin" "$kinds_end"; do
+  if ! grep -q "$marker" "$work"; then
+    echo "generate-js-constants: missing $marker marker in $js_src." >&2
+    rm -f "$work"; exit 1
+  fi
+done
+tmp="$(mktemp)"
+awk -v repl="$kinds_generated" -v begin="$kinds_begin" -v end="$kinds_end" '
   index($0, begin) { print; print repl; skipping = 1; next }
   index($0, end)   { skipping = 0; print; next }
   skipping { next }

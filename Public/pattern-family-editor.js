@@ -570,7 +570,7 @@
                     } else if (!wasProvided) {
                         val = '';
                     } else {
-                        val = (c.args && c.args[i] !== undefined) ? renderTypedCellValue(c.args[i]) : '';
+                        val = (c.args && c.args[i] !== undefined) ? renderArgCellValue(c.args[i]) : '';
                     }
                     // Placeholder signals "— default —" for optional params,
                     // so the instructor can tell at a glance which cells
@@ -1059,10 +1059,6 @@
             }
         }
 
-        /// Inverse of `parseTypedCellValue` for redisplaying an existing
-        /// value in a cell when the modal reopens.  Strings render without
-        /// surrounding quotes so the user's original typing round-trips;
-        /// everything else renders as JSON.
         /// A program_io cell (stdin text or expected stdout) as TEXT: a
         /// JSON-quoted cell — how `renderTypedCellValue` shows a multi-line
         /// string in a single-line input — decodes; anything else is taken
@@ -1079,24 +1075,32 @@
             return text;
         }
 
+        /// Inverse of `coerceByType` for redisplaying an existing value in a
+        /// cell when the modal reopens. A string shows without quotes when
+        /// the cell reads the bare text back as the same string, and
+        /// JSON-quoted when it would not, so `"42"` stays a string rather
+        /// than saving as 42 (#2381). Everything else renders as JSON.
+        ///
+        /// A program_io cell is read as text by `readProgramIOText`, so there
+        /// only a newline or tab, which the single-line input cannot hold,
+        /// needs the quotes, and the author's `42` shows as they typed it.
         function renderTypedCellValue(v) {
             if (v === null) return 'null';
             if (typeof v === 'string') {
-                // Single-line `<input type="text">` silently strips
-                // newlines / carriage returns on `.value` assignment,
-                // mangling multi-line expected values (e.g. the
-                // `mailingLabel` case from Assignment 3 returns a
-                // three-line string joined by `\n`).  When the string
-                // contains a control char that wouldn't survive the
-                // input, render as a JSON-quoted string so the escape
-                // sequences are literal text in the cell and the
-                // round-trip through `coerceByType` reconstructs the
-                // real value.  Plain strings stay unquoted so the
-                // common case reads naturally.
-                if (/[\n\r\t]/.test(v)) return JSON.stringify(v);
-                return v;
+                if (kindInput && kindInput.value === 'program_io') {
+                    return /[\n\r\t]/.test(v) ? JSON.stringify(v) : v;
+                }
+                return ChickadeeLanguage.stringCellText(v);
             }
             return JSON.stringify(v);
+        }
+
+        /// An argument cell: as `renderTypedCellValue`, except that an empty
+        /// string argument shows as `""`, because an empty argument cell
+        /// means "omitted" (the language's default).
+        function renderArgCellValue(v) {
+            if (v === '' && !(kindInput && kindInput.value === 'program_io')) return '""';
+            return renderTypedCellValue(v);
         }
 
         /// Reads current rows into PatternCase values.  Strict JSON is only

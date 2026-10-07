@@ -291,6 +291,10 @@
     //   textOf       — (result) => string to search
     //   afterInstall — optional source to execute once packages land
     //   onInstall    — optional (names) => void, for telemetry
+    //   onInstallStart, onInstallEnd
+    //                — optional () => void around each install, so the main
+    //                  thread can stop a test's clock while packages load
+    //                  (#2380). The end call runs even when the install fails.
     //
     // Returns whatever `attempt` last returned. Any step that cannot make
     // progress — no match, no owning package, nothing new installed — returns
@@ -307,10 +311,15 @@
             var pkg = packageForModule(match[1]);
             if (!pkg) return result;
 
-            var added = await addPackages([pkg]);
+            if (options.onInstallStart) options.onInstallStart();
+            var added;
+            try {
+                added = await addPackages([pkg]);
+                if (added.length && options.afterInstall) await execute(options.afterInstall);
+            } finally {
+                if (options.onInstallEnd) options.onInstallEnd();
+            }
             if (!added.length) return result;
-
-            if (options.afterInstall) await execute(options.afterInstall);
             if (options.onInstall) options.onInstall(added);
         }
     }
@@ -462,6 +471,12 @@
                 pattern: config.missingPackage.pattern,
                 textOf: function (result) { return config.missingPackage.textOf(result, parsed); },
                 afterInstall: config.missingPackage.afterInstall,
+                onInstallStart: function () {
+                    api.reply({ type: 'phase', phase: config.phasePrefix + '_package_install_start' });
+                },
+                onInstallEnd: function () {
+                    api.reply({ type: 'phase', phase: config.phasePrefix + '_package_install_end' });
+                },
                 onInstall: function (added) {
                     api.reply({
                         type: 'phase',
