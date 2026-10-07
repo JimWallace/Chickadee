@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.566] - 2026-10-07
+
+### Fixed
+
+- **The architecture document no longer states a stale MCP tool count.** It said 54 tools; the catalog has more. It now names `MCPToolCatalog.live` as the only source for the count. (#2434)
+
+
 ## [0.5.565] - 2026-10-07
 
 ### Fixed
