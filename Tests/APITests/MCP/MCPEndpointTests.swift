@@ -22,11 +22,12 @@ import VaporTesting
     }
 
     private func makeApp(configuration: MCPRoutes.Configuration = .init()) async throws -> Application {
-        let app = try await Application.make(.testing)
-        let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "Chickadee MCP", version: "test"))
-        let principal = MCPPrincipal(subject: "tester", grantedScopes: Set(ContentScope.allCases))
-        try app.grouped(StubPrincipalMiddleware(principal: principal))
-            .register(collection: MCPRoutes(dispatcher: dispatcher, configuration: configuration))
+        let app = try await makeTestingApplication { app in
+            let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "Chickadee MCP", version: "test"))
+            let principal = MCPPrincipal(subject: "tester", grantedScopes: Set(ContentScope.allCases))
+            try app.grouped(StubPrincipalMiddleware(principal: principal))
+                .register(collection: MCPRoutes(dispatcher: dispatcher, configuration: configuration))
+        }
         return app
     }
 

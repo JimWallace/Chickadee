@@ -15,22 +15,23 @@ import VaporTesting
     /// Builds a test app with the authority set and a `/guarded` route behind
     /// the middleware that echoes the principal.
     private func makeGuardedApp() async throws -> (Application, MCPTokenAuthority) {
-        let app = try await Application.make(.testing)
         let authority = try await MCPTokenAuthority.make(
             privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "k")
-        app.mcpTokenAuthority = authority
-        // The middleware clamps token scopes to the mode's ceiling; mounting it
-        // at all implies a mounted, write-capable mode in production.
-        app.appConfig = .testDefaults(
-            mcp: MCPConfig(
-                mode: .readWrite, allowedHosts: [], allowedOrigins: [],
-                tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource))
-        let middleware = MCPBearerAuthMiddleware(
-            expectedIssuer: issuer, expectedAudience: resource, resourceMetadataURL: metadataURL)
-        app.grouped(middleware).get("guarded") { req in
-            guard let principal = req.mcpPrincipal else { return "none" }
-            let scopes = principal.grantedScopes.map(\.rawValue).sorted().joined(separator: ",")
-            return "\(principal.subject):\(scopes)"
+        let app = try await makeTestingApplication { app in
+            app.mcpTokenAuthority = authority
+            // The middleware clamps token scopes to the mode's ceiling; mounting it
+            // at all implies a mounted, write-capable mode in production.
+            app.appConfig = .testDefaults(
+                mcp: MCPConfig(
+                    mode: .readWrite, allowedHosts: [], allowedOrigins: [],
+                    tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource))
+            let middleware = MCPBearerAuthMiddleware(
+                expectedIssuer: issuer, expectedAudience: resource, resourceMetadataURL: metadataURL)
+            app.grouped(middleware).get("guarded") { req in
+                guard let principal = req.mcpPrincipal else { return "none" }
+                let scopes = principal.grantedScopes.map(\.rawValue).sorted().joined(separator: ",")
+                return "\(principal.subject):\(scopes)"
+            }
         }
         return (app, authority)
     }
