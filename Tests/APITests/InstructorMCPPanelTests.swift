@@ -18,25 +18,6 @@ import VaporTesting
     /// Logs in a per-course TA in the shared TEST101 course: a plain user whose
     /// only staff standing is the `.ta` enrollment (upserted, since the `.auto`
     /// course auto-enrolls them as `.student` at login).
-    private func loginAsTA(on app: Application) async throws -> String {
-        let cookie = try await loginUser(
-            username: "testta", password: "testpassword", role: "student", on: app)
-        let courseID = try await app.testCourseID(enrollmentMode: .auto)
-        let user = try #require(
-            try await APIUser.query(on: app.db).filter(\.$username == "testta").first())
-        let userID = try user.requireID()
-        if let existing = try await APICourseEnrollment.query(on: app.db)
-            .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
-        {
-            existing.role = .ta
-            try await existing.save(on: app.db)
-        } else {
-            try await APICourseEnrollment(userID: userID, courseID: courseID, role: .ta)
-                .save(on: app.db)
-        }
-        return cookie
-    }
-
     private func activeCourse(on app: Application) async throws -> APICourse {
         let courseID = try await app.testCourseID(enrollmentMode: .auto)
         return try #require(try await APICourse.find(courseID, on: app.db))
@@ -77,7 +58,7 @@ import VaporTesting
 
     @Test func taSeesReadOnlyPanel() async throws {
         try await withAssignmentRoutesApp { app in
-            let cookie = try await loginAsTA(on: app)
+            let cookie = try await loginAsCourseTA("testta", on: app)
             try await app.asyncTest(
                 .GET, "/instructor/mcp",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
@@ -231,7 +212,7 @@ import VaporTesting
 
     @Test func taCannotSaveGuidance() async throws {
         try await withAssignmentRoutesApp { app in
-            let cookie = try await loginAsTA(on: app)
+            let cookie = try await loginAsCourseTA("testta", on: app)
             let (csrf, sessionCookie) = try await csrfFields(
                 for: "/instructor/mcp", cookie: cookie, on: app)
 

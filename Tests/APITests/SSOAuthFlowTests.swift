@@ -144,31 +144,36 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
     ) async throws -> (app: Application, port: Int, endpoint: MockTokenEndpoint) {
         let tokenEndpoint = MockTokenEndpoint(mode: mode)
 
-        let app = try await Application.make(Environment(name: "testing", arguments: ["test"]))
-        app.http.server.configuration.hostname = "127.0.0.1"
-        app.http.server.configuration.port = 0
+        var port = 0
+        let app = try await makeTestingApplication(
+            environment: Environment(name: "testing", arguments: ["test"])
+        ) { app in
+            app.http.server.configuration.hostname = "127.0.0.1"
+            app.http.server.configuration.port = 0
 
-        app.post("token") { req async throws -> Response in
-            var body = req.body.data ?? ByteBuffer()
-            let bodyString = body.readString(length: body.readableBytes) ?? ""
-            let result = await tokenEndpoint.record(body: bodyString)
-            let response = Response(status: result.status, body: .init(string: result.body))
-            response.headers.contentType = .json
-            return response
-        }
+            app.post("token") { req async throws -> Response in
+                var body = req.body.data ?? ByteBuffer()
+                let bodyString = body.readString(length: body.readableBytes) ?? ""
+                let result = await tokenEndpoint.record(body: bodyString)
+                let response = Response(status: result.status, body: .init(string: result.body))
+                response.headers.contentType = .json
+                return response
+            }
 
-        app.post("revoke") { req async throws -> HTTPStatus in
-            var body = req.body.data ?? ByteBuffer()
-            let bodyString = body.readString(length: body.readableBytes) ?? ""
-            await tokenEndpoint.recordRevocation(body: bodyString)
-            return .ok
-        }
+            app.post("revoke") { req async throws -> HTTPStatus in
+                var body = req.body.data ?? ByteBuffer()
+                let bodyString = body.readString(length: body.readableBytes) ?? ""
+                await tokenEndpoint.recordRevocation(body: bodyString)
+                return .ok
+            }
 
-        app.environment.arguments = ["serve"]
-        try await app.asyncBoot()
-        try await app.startup()
-        guard let port = app.http.server.shared.localAddress?.port else {
-            throw IssueRecorded("mock provider failed to bind a port")
+            app.environment.arguments = ["serve"]
+            try await app.asyncBoot()
+            try await app.startup()
+            guard let bound = app.http.server.shared.localAddress?.port else {
+                throw IssueRecorded("mock provider failed to bind a port")
+            }
+            port = bound
         }
         return (app, port, tokenEndpoint)
     }

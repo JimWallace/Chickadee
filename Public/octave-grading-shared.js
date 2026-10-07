@@ -254,6 +254,18 @@
         'end',
     ].join('\n');
 
+    // Each native test is a fresh `octave-cli` process; in the browser every
+    // script shares one kernel. `__ck_run` clears the globals per script, and
+    // this cell, run before every script, puts the working directory back, so
+    // a test that calls `cd` does not move every later test (#2384).
+    //
+    // Not restored: environment variables. Octave has no call that lists them,
+    // so there is nothing to compare against; a test that calls `setenv`
+    // still leaks the value into later tests.
+    function resetCellOctave(workDir) {
+        return 'cd(' + octaveStringLiteral(workDir) + ');';
+    }
+
     // Set CHICKADEE_ASSIGNMENT_SEED for the whole session, mirroring the
     // native runner exporting it into the test subprocess's environment.
     function assignmentSeedOctave(seed) {
@@ -310,6 +322,7 @@
         assignmentSeedOctave: assignmentSeedOctave,
         makeNonce: makeNonce,
         runScriptOctave: runScriptOctave,
+        resetCellOctave: resetCellOctave,
         parseRunOutput: parseRunOutput,
         personalizationInputsSourceOctave: personalizationInputsSourceOctave,
     };

@@ -30,12 +30,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsStudent() async throws -> String {
-        try await loginUser(
-            username: "teststudent_editor", password: "testpassword",
-            role: "student", on: app)
-    }
-
     // MARK: - DB / fixture helpers
 
     /// Minimal notebook JSON the JupyterLite normalizer accepts.
@@ -159,7 +153,7 @@ import VaporTesting
 
     @Test func downloadNotebookFileReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_editor", on: app)
             try await insertSetup(id: "ed_nb2", notebookOnDisk: sampleNotebookData())
             let a = try await insertAssignment(testSetupID: "ed_nb2", title: "Lab 2")
 
@@ -258,7 +252,7 @@ import VaporTesting
 
     @Test func downloadSetupItemReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_editor", on: app)
             try await insertSetup(id: "ed_item4")
             let a = try await insertAssignment(testSetupID: "ed_item4", title: "Lab 6")
 
@@ -322,7 +316,7 @@ import VaporTesting
 
     @Test func downloadSolutionFileReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_editor", on: app)
             try await insertSetup(
                 id: "ed_sol3",
                 zipEntries: [("solution.ipynb", sampleNotebookData())])
@@ -344,7 +338,7 @@ import VaporTesting
 
     @Test func createSolutionFromAssignmentReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_editor", on: app)
             try await insertSetup(id: "ed_csol1", notebookOnDisk: sampleNotebookData())
             let a = try await insertAssignment(testSetupID: "ed_csol1", title: "Lab 10")
 
@@ -504,7 +498,7 @@ import VaporTesting
 
     @Test func draftSolutionNotebookReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_editor", on: app)
             let setup = try await insertSetup(id: "ed_draft_sol3")
             try writeDraftSolutionNotebook(
                 setupID: setup.id ?? "", data: sampleNotebookData())
@@ -532,7 +526,7 @@ import VaporTesting
 
     @Test func saveEditedAssignmentReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_editor", on: app)
             try await insertSetup(id: "ed_save1")
             let a = try await insertAssignment(testSetupID: "ed_save1", title: "Lab Save 1")
 

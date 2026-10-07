@@ -29,31 +29,6 @@ import VaporTesting
 
     /// Creates a course + worker-mode test setup + published assignment and
     /// returns the course UUID, setup ID, and the assignment's public ID.
-    private func makeCourseAssignment(
-        code: String, archived: Bool, enrollmentMode: CourseEnrollmentMode
-    ) async throws -> (courseID: UUID, setupID: String, assignmentID: String) {
-        let courseID = UUID()
-        let course = APICourse(id: courseID, code: code, name: code, enrollmentMode: enrollmentMode)
-        course.isArchived = archived
-        try await course.save(on: app.db)
-
-        let setupID = "lc_\(UUID().uuidString.prefix(8))"
-        let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await arMakeZip(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
-        let manifest = """
-            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_a.py"}],"timeLimitSeconds":10,"makefile":null}
-            """
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
-        try await setup.save(on: app.db)
-
-        let assignment = APIAssignment(
-            testSetupID: setupID, title: code,
-            dueAt: nil, isOpen: true, deadlineOverrideActive: false, courseID: courseID
-        )
-        try await assignment.save(on: app.db)
-        return (courseID, setupID, assignment.publicID)
-    }
-
     /// The active + archived course fixtures plus the authenticated session for
     /// `lc_inst`. A struct rather than a tuple to stay within SwiftLint's
     /// `large_tuple` limit.
@@ -72,10 +47,10 @@ import VaporTesting
     private func setupInstructorWithBothCourses(
         activeCode: String, archivedCode: String
     ) async throws -> BothCoursesFixture {
-        let active = try await makeCourseAssignment(
-            code: activeCode, archived: false, enrollmentMode: .auto)
-        let archived = try await makeCourseAssignment(
-            code: archivedCode, archived: true, enrollmentMode: .closed)
+        let active = try await makeCourseWithAssignment(
+            code: activeCode, archived: false, enrollmentMode: .auto, setupPrefix: "lc_", on: app)
+        let archived = try await makeCourseWithAssignment(
+            code: archivedCode, archived: true, enrollmentMode: .closed, setupPrefix: "lc_", on: app)
 
         let cookie = try await loginUser(
             username: "lc_inst", password: "pw", role: "instructor", on: app)

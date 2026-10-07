@@ -385,6 +385,48 @@ test('a worker error fails every pending request and starts over', async () => {
   assert.equal(workers[1].messages[0].type, 'loadCells');
 });
 
+test('a timeout fails the other calls on the same worker at once, and names the cause (#2383)', async () => {
+  const { AutoCompute, workers } = loadClient({
+    respond: (m) => (m.type === 'loadCells' ? { ok: true, cellErrors: [] } : undefined),
+  });
+  const client = AutoCompute.createClient({ urls: URLS, timeoutMs: 20 });
+
+  const spin = client.callSolution('spin', [], {});
+  const sibling = client.callSolution('other', [], {});
+  const [spinResult, siblingResult] = (await Promise.all([spin, sibling])).map(plain);
+
+  assert.equal(spinResult.timedOut, true);
+  assert.equal(siblingResult.ok, false);
+  assert.notEqual(siblingResult.timedOut, true, 'only the call that hung timed out');
+  assert.match(siblingResult.error, /another case ran past its time limit/);
+  assert.equal(workers.length, 1);
+  assert.equal(workers[0].terminated, true);
+});
+
+test('an error event from a replaced worker does not stop the new worker (#2383)', async () => {
+  const { AutoCompute, workers } = loadClient({
+    respond: (m) => {
+      if (m.type === 'loadCells') return { ok: true, cellErrors: [] };
+      if (m.functionName === 'spin') return undefined;
+      return { ok: true, result: 'fast' };
+    },
+  });
+  const client = AutoCompute.createClient({ urls: URLS, timeoutMs: 20 });
+
+  await client.callSolution('spin', [], {});
+  assert.deepEqual(plain(await client.callSolution('quick', [], {})),
+    { ok: true, value: 'fast', returnedNone: false });
+  assert.equal(workers.length, 2);
+
+  workers[0].emit('error', { message: 'late error from the old worker' });
+
+  assert.equal(workers[1].terminated, false, 'the new worker must keep running');
+  assert.deepEqual(plain(await client.callSolution('quick', [], {})),
+    { ok: true, value: 'fast', returnedNone: false });
+  assert.equal(workers.length, 2, 'no third worker, and no second solution load');
+  assert.deepEqual(workers[1].messages.map((m) => m.type), ['loadCells', 'call', 'call']);
+});
+
 // ── Solution-load failures ──────────────────────────────────────────────────
 
 test('a solution that does not load is reported in readable copy, with no worker', async () => {

@@ -27,6 +27,7 @@
 // for reading the HTML a template declares, and for that job commented-out
 // markup is not markup.
 
+import ChickadeeTestSupport
 import Foundation
 
 enum LeafMarkupScanner {
@@ -34,9 +35,7 @@ enum LeafMarkupScanner {
     /// `Resources/Views`, resolved from this file rather than the working
     /// directory so the suites run the same from any launcher.
     static var viewsDirectory: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url.appendingPathComponent("Resources/Views")
+        repositoryRoot.appendingPathComponent("Resources/Views")
     }
 
     /// Elements that never enclose anything, so they are never the answer to

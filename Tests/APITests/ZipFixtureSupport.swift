@@ -28,8 +28,7 @@ import Core
 import Foundation
 import Testing
 
-/// Zips the contents of `directory` into `zipPath`, serialized against every
-/// other zip subprocess in the process.
+/// Zips the contents of `directory` into `zipPath`.
 ///
 /// Mirrors what the seventeen hand-rolled fixtures did — `zip -q -r <path> .`
 /// with the working directory set — including asserting the exit status, which
@@ -47,4 +46,27 @@ func writeZipFixture(
     #expect(
         result.terminationStatus == 0, "zip command must succeed",
         sourceLocation: sourceLocation)
+}
+
+/// Writes each `(name, contents)` entry into a fresh temporary directory, zips
+/// it into `zipPath`, and removes the directory. A name may contain `/`. An
+/// existing archive at `zipPath` is replaced, not added to: `zip -r` updates an
+/// archive in place. Thirteen suites carried a private copy of this (#2363).
+func writeZipFixture(
+    at zipPath: String,
+    entries: [(String, String)],
+    sourceLocation: SourceLocation = #_sourceLocation
+) async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("zip-fixture-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for (name, contents) in entries {
+        let fileURL = root.appendingPathComponent(name)
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(contents.utf8).write(to: fileURL)
+    }
+    try? FileManager.default.removeItem(atPath: zipPath)
+    try await writeZipFixture(of: root, to: zipPath, sourceLocation: sourceLocation)
 }

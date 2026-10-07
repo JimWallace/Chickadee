@@ -541,6 +541,14 @@
     }
     window.chickadeeRemountNotebook = remountNotebook;
 
+    // Whether `mountEditor` has bound the frame's load listener and its
+    // poll interval. See there.
+    let editorFrameHooksBound = false;
+    // Bumped by every `armEditorWatchdog`. A watchdog whose generation is no
+    // longer current stops at its next tick, so a remount leaves one watchdog,
+    // with one recovery attempt and one kernel-ready beacon (#2382).
+    let editorWatchdogGeneration = 0;
+
     function mountEditor() {
         // Drop any stale, now-redundant JupyterLite service worker before booting
         // (the SAB-only editor doesn't use it; a leftover one can break the boot).
@@ -653,6 +661,14 @@
             } catch (_) { /* frozen/cross-origin — rely on the server self-close backstop */ }
         }
 
+        // Bound once per page: the workbench re-mounts the SAME `#jl-frame`
+        // on every notebook switch, and a second listener and interval per
+        // switch would run the locked-path and tab hooks N times (#2382).
+        if (editorFrameHooksBound) {
+            armEditorWatchdog();
+            return;
+        }
+        editorFrameHooksBound = true;
         frame.addEventListener('load', () => {
             // A document committed; any forced reset we were waiting on has
             // landed, so the locked-path enforcement may act again.
@@ -724,6 +740,7 @@
             markEditorReady();
             return;
         }
+        const generation         = ++editorWatchdogGeneration;
         let startedAt            = Date.now();
         const shellDeadline      = 60000;
         const kernelMaxObserveMs = 120000;
@@ -741,6 +758,7 @@
         let kernelReadyReported     = false;
 
         function tick() {
+            if (generation !== editorWatchdogGeneration) cancelled = true;
             if (cancelled) return;
 
             const probe = core().probeIframeReadiness(frame);
@@ -809,7 +827,7 @@
                     // settle first so the fresh boot doesn't re-race it.
                     forcedEditorResetAt = Date.now();
                     whenServiceWorkerActive(5000).then(() => {
-                        if (cancelled) return;
+                        if (cancelled || generation !== editorWatchdogGeneration) return;
                         try { frame.src = editorURL; } catch (_) { /* retry on next tick */ }
                         // Re-arm both phases for the fresh boot.
                         startedAt     = Date.now();
@@ -1077,8 +1095,8 @@
                     if (!window.BrowserRunner || typeof window.BrowserRunner.runAndSubmit !== 'function') {
                         throw new Error('Browser grading is unavailable right now. Please reload and try again.');
                     }
-                    // Browser grading runs its own Pyodide, separate from the
-                    // editor kernel. Don't start it while the kernel is still
+                    // Browser grading boots its own xeus kernel, separate from
+                    // the editor kernel. Don't start it while the kernel is still
                     // cold-booting — that contention is what leaves the kernel
                     // dead/unknown. Wait for the editor shell first; resolves
                     // immediately once ready (the common case) and is bounded so
@@ -1087,7 +1105,7 @@
                         setStatus('loading', 'Waiting for the editor to finish loading…');
                         await awaitEditorReady(45000);
                     }
-                    // Browser-graded lab: run tests locally in Pyodide then submit atomically.
+                    // Browser-graded lab: run the tests in the browser, then submit atomically.
                     const { outcomes } = await submitBrowserNotebook(notebook, setupID);
                     const passCount = outcomes.filter(o => o.status === 'pass').length;
                     const allPassed = passCount === outcomes.length && outcomes.length > 0;
@@ -2039,7 +2057,7 @@
             </div>
             <div class="diagnostics-cards">
                 <div class="diagnostic-card"><div class="diagnostic-value">${pass}</div><div class="diagnostic-label">Passed</div></div>
-                <div class="diagnostic-card"><div class="diagnostic-value diagnostic-value-alert">${fail}</div><div class="diagnostic-label">Failed</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value${fail > 0 ? ' diagnostic-value-alert' : ''}">${fail}</div><div class="diagnostic-label">Failed</div></div>
                 <div class="diagnostic-card"><div class="diagnostic-value">${error}</div><div class="diagnostic-label">Errors</div></div>
                 <div class="diagnostic-card"><div class="diagnostic-value">${skipped}</div><div class="diagnostic-label">Skipped</div></div>
             </div>`;

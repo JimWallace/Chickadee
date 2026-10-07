@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -114,14 +115,8 @@ import Testing
 
     // MARK: - Drift against the files that own the art
 
-    private static var repoRoot: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/CoreTests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url
-    }
-
     private static func contents(of path: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
+        try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
     }
 
     /// Every symbol the renderer can name exists in the sprite, and every wing

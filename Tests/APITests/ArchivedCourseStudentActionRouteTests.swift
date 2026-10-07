@@ -34,31 +34,6 @@ import VaporTesting
 
     /// Creates a course + test setup + published assignment and returns the
     /// course UUID and the assignment's public ID.
-    private func makeCourseAssignment(
-        code: String, archived: Bool, enrollmentMode: CourseEnrollmentMode
-    ) async throws -> (courseID: UUID, assignmentID: String) {
-        let courseID = UUID()
-        let course = APICourse(id: courseID, code: code, name: code, enrollmentMode: enrollmentMode)
-        course.isArchived = archived
-        try await course.save(on: app.db)
-
-        let setupID = "asa_\(UUID().uuidString.prefix(8))"
-        let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await arMakeZip(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
-        let manifest = """
-            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_a.py"}],"timeLimitSeconds":10,"makefile":null}
-            """
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
-        try await setup.save(on: app.db)
-
-        let assignment = APIAssignment(
-            testSetupID: setupID, title: code,
-            dueAt: nil, isOpen: true, deadlineOverrideActive: false, courseID: courseID
-        )
-        try await assignment.save(on: app.db)
-        return (courseID, assignment.publicID)
-    }
-
     /// A per-course instructor whose *active* course is a normal (non-archived)
     /// course may retest that course's assignment, but a retest-all aimed by URL
     /// at an *archived* course they also instruct is rejected with 403. The
@@ -69,12 +44,12 @@ import VaporTesting
         try await withApp(app) { _ in
             // Active, non-archived course (.auto → the instructor auto-enrols as
             // a per-course instructor and it becomes their active course).
-            let active = try await makeCourseAssignment(
-                code: "ASAX", archived: false, enrollmentMode: .auto)
+            let active = try await makeCourseWithAssignment(
+                code: "ASAX", archived: false, enrollmentMode: .auto, setupPrefix: "asa_", on: app)
             // Archived course with an assignment; the same instructor is enrolled
             // here as a per-course instructor.
-            let archived = try await makeCourseAssignment(
-                code: "ASAY", archived: true, enrollmentMode: .closed)
+            let archived = try await makeCourseWithAssignment(
+                code: "ASAY", archived: true, enrollmentMode: .closed, setupPrefix: "asa_", on: app)
 
             let cookie = try await loginUser(
                 username: "asa_inst", password: "pw", role: "instructor", on: app)

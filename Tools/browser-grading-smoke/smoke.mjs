@@ -80,6 +80,8 @@ const LANGUAGES = {
         scripts: [
             'publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R',
             'publictest_context.R', 'publictest_nopackage.R', 'publictest_packages.R',
+            'publictest_trycatch.R',
+            'publictest_leak.R', 'publictest_isolation.R',
         ],
         files: {
             'test_runtime.R': TEST_RUNTIME_R,
@@ -137,6 +139,35 @@ passed("all declared packages attached and ran")
 cat("label=", .chickadee_label(), " seed=", chickadee_seed(), "\\n", sep = "")
 cat("input=", chickadee_inputs()[["threshold"]], "\\n", sep = "")
 passed("context ok")
+`,
+            // passed() inside the test's own tryCatch(error = ). Under Rscript
+            // quit() ends the process and the error handler never runs, so
+            // this is a pass. The exit condition must not be an error (#2386).
+            'publictest_trycatch.R': `source("test_runtime.R")
+tryCatch({
+  passed("the exit got through the test's error handler")
+}, error = function(e) failed("the exit was caught as an error"))
+failed("the script kept running after passed()")
+`,
+            // Cross-script isolation (#2384). Each native test is a fresh
+            // Rscript process, so a working directory, an environment variable
+            // or an option that one test sets must not reach the next. Both
+            // fixtures pass under plain \`Rscript\`, one process each.
+            'publictest_leak.R': `source("test_runtime.R")
+dir.create("ck_smoke_sub", showWarnings = FALSE)
+setwd("ck_smoke_sub")
+Sys.setenv(CK_SMOKE_LEAKED = "yes")
+options(digits = 3, ck_smoke_leaked = TRUE)
+passed("left process state behind")
+`,
+            'publictest_isolation.R': `problems <- character(0)
+if (!file.exists("test_runtime.R")) problems <- c(problems, "the working directory")
+if (nzchar(Sys.getenv("CK_SMOKE_LEAKED"))) problems <- c(problems, "an environment variable")
+if (getOption("digits") == 3) problems <- c(problems, "options(digits)")
+if (!is.null(getOption("ck_smoke_leaked"))) problems <- c(problems, "a new option")
+source("test_runtime.R")
+if (length(problems) > 0) failed(paste("a previous test leaked", paste(problems, collapse = ", ")))
+passed("each test starts clean")
 `,
             '_ck_inputs.R': '.ck_inputs <- list(\n    `threshold` = 42\n)\n',
             '.chickadee_student_module': 'submission.R',
@@ -248,6 +279,7 @@ passed("each test starts clean")
             'publictest_pass.lua', 'publictest_fail.lua', 'publictest_boom.lua',
             'publictest_context.lua', 'publictest_nomodule.lua',
             'publictest_student.lua', 'publictest_leak.lua', 'publictest_isolation.lua',
+            'publictest_leak_base.lua', 'publictest_isolation_base.lua',
         ],
         files: {
             'test_runtime.lua': TEST_RUNTIME_LUA,
@@ -312,6 +344,23 @@ if type(print) ~= "function" or type(os.getenv) ~= "function" then
 end
 t.passed("the workspace is fresh")
 `,
+            // A rebound base global and a replaced standard-library field
+            // must not reach the next script either (#2384). The leak uses two
+            // functions test_runtime.lua does not call, so it can still pass.
+            'publictest_leak_base.lua': `local t = require("test_runtime")
+collectgarbage = function() return "tampered" end
+string.reverse = function() return "tampered" end
+t.passed("rebound a base global and a library field")
+`,
+            'publictest_isolation_base.lua': `local t = require("test_runtime")
+if type(collectgarbage("count")) ~= "number" then
+  t.failed("a rebound base global survived into this test")
+end
+if string.reverse("ab") ~= "ba" or ("ab"):reverse() ~= "ba" then
+  t.failed("a replaced string library field survived into this test")
+end
+t.passed("the standard library is as it booted")
+`,
             '_ck_inputs.lua': 'return {\n    ["threshold"] = 42,\n}\n',
             '.chickadee_student_module': 'submission.lua',
             'submission.lua':
@@ -330,6 +379,7 @@ t.passed("the workspace is fresh")
             'publictest_pass.m', 'publictest_fail.m', 'publictest_boom.m',
             'publictest_context.m', 'publictest_nopackage.m',
             'publictest_student.m', 'publictest_leak.m', 'publictest_isolation.m',
+            'publictest_leak_cwd.m', 'publictest_isolation_cwd.m',
         ],
         files: {
             'test_runtime.m': TEST_RUNTIME_OCTAVE,
@@ -389,6 +439,18 @@ chickadee.passed("the submission loaded and ran");
             // harness call's own workspace, and globals — the one thing that
             // outlives it — are cleared per script. These two fixtures are
             // the only thing that can show both halves work.
+            // The working directory must not move for the next test (#2384).
+            'publictest_leak_cwd.m': `chickadee = test_runtime();
+mkdir("ck_smoke_sub");
+cd("ck_smoke_sub");
+chickadee.passed("moved the working directory");
+`,
+            'publictest_isolation_cwd.m': `if exist(fullfile(pwd(), "test_runtime.m"), "file") != 2
+  error("a previous test moved the working directory");
+end
+chickadee = test_runtime();
+chickadee.passed("the working directory is the workspace");
+`,
             'publictest_leak.m': `chickadee = test_runtime();
 leaked_plain = "yes";
 global leaked_global;
@@ -976,6 +1038,19 @@ if (language === 'r') {
     check('and says so, rather than looping or going silent',
         /notarealpackage/.test((noPackage?.stderr || '') + (noPackage?.stdout || '')),
         JSON.stringify(noPackage?.stderr));
+
+    const tryCatchR = result.results['publictest_trycatch.R'];
+    check("passed() inside the test's own tryCatch(error =) is still a pass (#2386)",
+        tryCatchR && tryCatchR.exitCode === 0, JSON.stringify(tryCatchR));
+
+    // Each native test is a fresh process; one kernel serves all of these, so
+    // the grader puts the process state back before each script (#2384).
+    const leakR = result.results['publictest_leak.R'];
+    const isolationR = result.results['publictest_isolation.R'];
+    check('the fixture that moves the directory and sets an env var and options passes',
+        leakR && leakR.exitCode === 0, JSON.stringify(leakR));
+    check('the next script starts in the workspace, with the env and options it booted with',
+        isolationR && isolationR.exitCode === 0, JSON.stringify(isolationR));
 }
 
 if (language === 'lua') {
@@ -1015,6 +1090,13 @@ if (language === 'lua') {
         leak && leak.exitCode === 0, JSON.stringify(leak));
     check('the next script does not see it, and still has its standard library',
         isolation && isolation.exitCode === 0, JSON.stringify(isolation));
+
+    const leakBase = result.results['publictest_leak_base.lua'];
+    const isolationBase = result.results['publictest_isolation_base.lua'];
+    check('the fixture that rebinds a base global and a library field passes',
+        leakBase && leakBase.exitCode === 0, JSON.stringify(leakBase));
+    check('the next script sees the originals (#2384)',
+        isolationBase && isolationBase.exitCode === 0, JSON.stringify(isolationBase));
 }
 
 if (language === 'octave') {
@@ -1054,6 +1136,13 @@ if (language === 'octave') {
         leakOct && leakOct.exitCode === 0, JSON.stringify(leakOct));
     check('the next script sees neither',
         isolationOct && isolationOct.exitCode === 0, JSON.stringify(isolationOct));
+
+    const leakCwd = result.results['publictest_leak_cwd.m'];
+    const isolationCwd = result.results['publictest_isolation_cwd.m'];
+    check('the fixture that changes the working directory passes',
+        leakCwd && leakCwd.exitCode === 0, JSON.stringify(leakCwd));
+    check('the next script starts in the workspace (#2384)',
+        isolationCwd && isolationCwd.exitCode === 0, JSON.stringify(isolationCwd));
 }
 
 const slowest = Math.max(...Object.values(result.results).map(r => r.ms));

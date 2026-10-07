@@ -39,6 +39,7 @@
 //     comes back clean. A rule refactored into a no-op turns that test red
 //     rather than turning this whole file into decoration.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -85,9 +86,7 @@ import Testing
     // MARK: - Reading the rulebook
 
     private static var rulebookURL: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url.appendingPathComponent("docs/ui-design.md")
+        repositoryRoot.appendingPathComponent("docs/ui-design.md")
     }
 
     /// The rows of the archetype table, in document order.

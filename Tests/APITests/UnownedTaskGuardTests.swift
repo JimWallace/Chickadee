@@ -14,6 +14,7 @@
 // does not report it. A file may start one only if `allowed` says why that is
 // safe; the list is empty.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -23,11 +24,7 @@ import Testing
     /// safe. Prefer `application.backgroundWork.start { … }` to an entry here.
     static let allowed: [String: String] = [:]
 
-    private static let serverSources: URL = {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("Sources/APIServer")
-    }()
+    private static let serverSources = repositoryRoot.appendingPathComponent("Sources/APIServer")
 
     /// The 1-based line numbers in `source` that start a task nobody keeps.
     static func unownedTaskLines(in source: String) -> [Int] {

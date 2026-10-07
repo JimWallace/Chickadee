@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Foundation
 import Testing
 import VaporTesting
@@ -256,12 +257,6 @@ import VaporTesting
         #expect(EditorAssetFastPathMiddleware.isContentHashedBundleAsset(path: path) == expected)
     }
 
-    private static var repoRoot: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url
-    }
-
     /// Reads the SHIPPED bytes, not the language table, and requires every
     /// vendored kernel to be on the fast path.
     ///
@@ -274,7 +269,7 @@ import VaporTesting
     /// forgot to declare a kernel would be invisible to a check that only read
     /// `allCases`.
     @Test func everyVendoredKernelPackageTreeTakesTheFastPath() throws {
-        let xeusDir = Self.repoRoot.appendingPathComponent("Public/jupyterlite/xeus")
+        let xeusDir = repositoryRoot.appendingPathComponent("Public/jupyterlite/xeus")
         let vendored = try FileManager.default.contentsOfDirectory(atPath: xeusDir.path)
             .filter { $0.hasPrefix("chickadee-") }
             .filter { environment in

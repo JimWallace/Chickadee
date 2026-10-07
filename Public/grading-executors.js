@@ -36,14 +36,13 @@
 
 
     // Map a RunnerCore interpreter raw value to how the browser dispatches it.
-    // Each kernel language maps to its substrate kind.  Shell and the other
-    // interpreters have no browser substrate, so RoutingExecutor.run gives them
-    // a precise "not here" message.
-    function interpreterToKind(interp) {
-        if (interp === 'python') return 'python';
-        if (interp === 'rscript') return 'r';
-        if (interp === 'lua') return 'lua';
-        if (interp === 'octave') return 'octave';
+    // A kernel language's interpreter maps to its substrate kind through
+    // `interpreterKinds`, the GENERATED INTERPRETER_KINDS table in
+    // browser-runner.js (#2388). Shell and the other interpreters have no
+    // browser substrate, so RoutingExecutor.run gives them a precise "not
+    // here" message.
+    function interpreterToKind(interp, interpreterKinds) {
+        if (Object.prototype.hasOwnProperty.call(interpreterKinds, interp)) return interpreterKinds[interp];
         if (interp === 'sh' || interp === 'bash' || interp === 'zsh') return 'shell';
         return 'unsupported';  // ruby / perl / node / php / unknown
     }
@@ -136,6 +135,15 @@
             ? Number(globalThis.__CHICKADEE_GRADING_INIT_TIMEOUT_MS__)
             : 120000;
 
+    // The telemetry detail of a worker breadcrumb: its timing and, for an
+    // on-demand install, which packages it installed (#2387).
+    function phaseDetail(msg) {
+        const parts = [];
+        if (msg.ms != null) parts.push('ms=' + msg.ms);
+        if (msg.packages) parts.push('packages=' + msg.packages);
+        return parts.length > 0 ? parts.join(';') : undefined;
+    }
+
     class GradingWorkerExecutor {
         constructor(files, assignmentSeed, runnerCore, factory, reportPhase, label) {
             this.files = files;
@@ -155,6 +163,9 @@
             this._initPromise = null;
             this._nextID = 1;
             this._pending = new Map();  // id -> { resolve, reject }
+            // The pausable clock of the run in flight, or null. See
+            // _postRunWithDeadline.
+            this._runDeadline = null;
             // Test-observable counters: how many workers we spawned and how many
             // we terminated (a fresh spawn after a timeout proves the kill path).
             this.spawnCount = 0;
@@ -181,7 +192,15 @@
                 // is localizable to the kernel-boot vs env-config step. Never
                 // grading state; ignored if telemetry is unwired.
                 if (msg.type === 'phase') {
-                    this._report(msg.phase, (msg.ms != null) ? ('ms=' + msg.ms) : undefined);
+                    // A package install does not count against the test's
+                    // time limit (#2380): the run's clock stops between these
+                    // two breadcrumbs.
+                    if (this._runDeadline && /_package_install_start$/.test(msg.phase)) {
+                        this._runDeadline.pause();
+                    } else if (this._runDeadline && /_package_install_end$/.test(msg.phase)) {
+                        this._runDeadline.resume();
+                    }
+                    this._report(msg.phase, phaseDetail(msg));
                     return;
                 }
                 const entry = this._pending.get(msg.id);
@@ -245,6 +264,52 @@
             });
             return Promise.race([this._post(message), timeoutPromise])
                 .finally(() => { if (timer !== null) clearTimeout(timer); });
+        }
+
+        // Post a `run` and race the reply against the test's time limit, with
+        // the clock stopped while the worker installs a package (#2380). An
+        // on-demand install fetches and loads a package the kernel did not
+        // boot with. It is not the script's own time, and before this a slow
+        // install timed the test out, the timeout killed the worker, and the
+        // next test installed the package again into a new kernel. A paused
+        // clock is still bounded: an install that runs past
+        // GRADING_INIT_TIMEOUT_MS times the test out, so a wedged install
+        // cannot hang the grade.
+        _postRunWithDeadline(message, limitMs) {
+            let resolveTimeout;
+            const timeoutPromise = new Promise((resolve) => { resolveTimeout = resolve; });
+            let remaining = limitMs;
+            let startedAt = 0;
+            let timer = null;
+            const arm = (ms) => {
+                startedAt = Date.now();
+                timer = setTimeout(() => resolveTimeout({ __timedOut: true }), Math.max(0, ms));
+            };
+            const disarm = () => {
+                if (timer !== null) { clearTimeout(timer); timer = null; }
+            };
+            let paused = false;
+            this._runDeadline = {
+                pause: () => {
+                    if (paused) return;
+                    paused = true;
+                    disarm();
+                    remaining -= Date.now() - startedAt;
+                    arm(GRADING_INIT_TIMEOUT_MS);
+                },
+                resume: () => {
+                    if (!paused) return;
+                    paused = false;
+                    disarm();
+                    arm(remaining);
+                },
+            };
+            arm(limitMs);
+            return Promise.race([this._post(message), timeoutPromise])
+                .finally(() => {
+                    disarm();
+                    this._runDeadline = null;
+                });
         }
 
         // Spawn (if needed) and init the worker with the file map + seed. Cached
@@ -314,7 +379,7 @@
             // the kernel on its own thread, the timer always fires even when
             // student code is in a synchronous CPU-bound loop — so terminate()
             // can kill it.
-            const reply = await this._postWithTimeout(
+            const reply = await this._postRunWithDeadline(
                 { type: 'run', script: name, limit: limitSeconds }, limitSeconds * 1000);
 
             if (reply && reply.__timedOut) {
@@ -374,6 +439,7 @@
     function makeGradingExecutors(tables) {
         const GRADING_WORKER_SCRIPTS = tables.workerScripts;
         const LANGUAGE_LABELS = tables.languageLabels;
+        const INTERPRETER_KINDS = tables.interpreterKinds;
 
         function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage) {
             return new RoutingExecutor(
@@ -416,7 +482,7 @@
 
             kindOf(name) {
                 const src = this.scriptExists(name) ? fileAsText(this.files[name]) : '';
-                return interpreterToKind(this.runnerCore.classifyScript(name, src));
+                return interpreterToKind(this.runnerCore.classifyScript(name, src), INTERPRETER_KINDS);
             }
 
             // The distinct substrate kinds this assignment's manifest actually
@@ -555,6 +621,7 @@
         gradingWorkerFactory,
         fileAsText,
         interpreterToKind,
+        phaseDetail,
         scriptExtension,
         rawError,
         toMessage,

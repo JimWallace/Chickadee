@@ -6,6 +6,7 @@
 // "must NOT report" cases below matter more than the "must report" ones, and
 // they are the ones to keep adding to.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -211,9 +212,7 @@ import Testing
 @Suite struct VendoredKernelModuleIndexTests {
 
     private static var publicDirectory: String {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url.appendingPathComponent("Public").path
+        repositoryRoot.appendingPathComponent("Public").path
     }
 
     @Test func theVendoredIndexLoadsAndDescribesTheRealEnvironment() throws {

@@ -30,6 +30,7 @@
 // regression, not a fix — so its spawn site lives in a file this test does not
 // read.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -44,12 +45,6 @@ import Testing
         "Public/browser-runner.js",  // grading workers, one per language
         "Public/notebook.js",  // freeze-watchdog failover
     ]
-
-    private static var repoRoot: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url
-    }
 
     /// Worker script paths spawned by `source`.
     ///
@@ -119,7 +114,7 @@ import Testing
     private func readIsolatedPageScripts() throws -> [String: Set<String>] {
         var byFile: [String: Set<String>] = [:]
         for relative in Self.isolatedPageScripts {
-            let url = Self.repoRoot.appendingPathComponent(relative)
+            let url = repositoryRoot.appendingPathComponent(relative)
             let source = try String(contentsOf: url, encoding: .utf8)
             byFile[relative] = spawnedWorkerScripts(in: source)
         }
@@ -166,7 +161,7 @@ import Testing
     /// stamped on a 404.
     @Test func everyAllowlistedWorkerFileExists() throws {
         for path in NotebookAssetIsolationMiddleware.isolatedWorkerScripts.sorted() {
-            let url = Self.repoRoot.appendingPathComponent("Public" + path)
+            let url = repositoryRoot.appendingPathComponent("Public" + path)
             #expect(
                 FileManager.default.fileExists(atPath: url.path),
                 "isolatedWorkerScripts lists \(path), but Public\(path) does not exist")

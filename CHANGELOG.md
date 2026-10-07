@@ -9,6 +9,139 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.548] - 2026-10-07
+
+### Fixed
+
+- **The "Failed" count on a results page is red again, and only when a test failed.** The red rule came before the base rule in the stylesheet, so the base colour won. The count now takes the red style only when it is above zero, so a clean submission does not show a red 0. (#2399)
+
+
+## [0.5.547] - 2026-10-07
+
+### Fixed
+
+- **An R test's own `tryCatch(error =)` no longer swallows `passed()`.** In the browser, the condition that stands in for `quit()` was also an error, so a test that called `passed()` inside `tryCatch(..., error = )` reported an error there and a pass under Rscript. The condition is no longer an error, so the browser and the native runner give the same result. (#2386)
+
+
+## [0.5.546] - 2026-10-07
+
+### Fixed
+
+- **Browser-graded R, Octave and Lua tests start from a clean state.** Each native test runs in a new process, but in the browser all the tests of a submission share one kernel. A test that changed the working directory, an environment variable or `options()` in R, the working directory in Octave, or a standard Lua function changed it for every later test. The grader now puts these back before each script. Octave cannot list its environment variables, so an Octave `setenv` still carries over. (#2384)
+
+
+## [0.5.545] - 2026-10-07
+
+### Fixed
+
+- **A package install no longer counts against a browser test's time limit.** When a browser-graded script needed a package the kernel had not loaded, the install ran inside the test's time limit. A slow install timed the test out, and the next test then installed the package again in a new kernel. The clock now stops while a package installs. The script's own time, including the first attach of a package, still counts. (#2380)
+
+
+## [0.5.544] - 2026-10-07
+
+### Changed
+
+- **The browser grading router derives its interpreter table.** Which browser substrate a test's interpreter routes to was a hand-written table, so a new kernel language could get a grading worker and still route to "unsupported". `scripts/generate-js-constants.sh` now writes the table from each kernel language's generated test extension and the interpreter RunnerCore classifies it as, and fails when a kernel language has no such interpreter. (#2388)
+
+
+## [0.5.543] - 2026-10-07
+
+### Fixed
+
+- **A pattern-family string value stays a string.** When an author opened a family again, a string case value such as `"42"` or `"TRUE"` showed without quotes, and the next save stored it as a number or a boolean. The cell now shows such a string JSON-quoted, so it reads back as the same string. Ordinary text still shows without quotes. (#2381)
+
+
+## [0.5.542] - 2026-10-07
+
+### Fixed
+
+- **A notebook switch in the workbench no longer adds editor hooks.** Each switch added one more frame listener, one more 1.5 s poll and one more kernel watchdog, so the page ran its editor hooks once per switch and could send duplicate kernel-ready beacons. The listener and the poll are now bound once per page, and a new watchdog stops the previous one. (#2382)
+
+
+## [0.5.541] - 2026-10-07
+
+### Fixed
+
+- **The suite table shows every test in a dependency chain.** A test that depended on a test which itself depended on another had no row in the suite table, so an author could not edit or delete it, although it still graded. Every link of a chain now has a row. (#2385)
+
+
+## [0.5.540] - 2026-10-07
+
+### Fixed
+
+- **An auto-compute timeout stops only its own worker.** When a case ran past its time limit, the timer stopped whichever eval worker was current, which could be a newer worker that was loading the solution. It now stops the worker that ran the case, and the other cases on that worker fail at once with a message that names the cause, instead of each waiting to report a timeout of its own. (#2383)
+
+
+## [0.5.539] - 2026-10-07
+
+### Fixed
+
+- **Install breadcrumbs keep the package names.** When a browser grading worker installs a package on demand, the submit-phase telemetry now records which packages it installed, beside the timing. (#2387)
+
+
+## [0.5.538] - 2026-10-07
+
+### Tests
+
+- **One repository root for tests.** `ChickadeeTestSupport` now has `repositoryRoot`. About sixty sites that counted `deletingLastPathComponent` from their own file use it, and four sites that read the working directory now do not depend on it. (#2367)
+
+
+## [0.5.537] - 2026-10-07
+
+### Tests
+
+- **One test-setup builder.** `wrInsertSetup`, `arInsertSetup` and six private copies now call the shared `makeTestSetup`, which can skip the zip file. `WorkerRoutesTests` no longer hides the shared builder behind its own `makeTestSetup`. (#2365)
+
+
+## [0.5.536] - 2026-10-07
+
+### Changed
+
+- **Tests write fixture zips through one helper.** Thirteen suites carried a private `writeZip(at:entries:)`, and the shared `arMakeZip` and `ahMakeZip` were a fifteenth and sixteenth copy that called `zip` themselves. All of them now use `writeZipFixture(at:entries:)` in `ZipFixtureSupport.swift`, which also replaces an existing archive instead of adding to it. (#2363)
+
+
+## [0.5.535] - 2026-10-07
+
+### Changed
+
+- **Test course builders use the shared fixture.** Ten suites built and saved an `APICourse` by hand, and the three archived-course route suites each copied one course-and-assignment builder. They now call `makeTestCourse`, and the archived suites share `makeCourseWithAssignment` in `AssignmentRoutesHelpers.swift`. (#2366)
+
+
+## [0.5.534] - 2026-10-07
+
+### Changed
+
+- **Page tests GET through one shared helper.** Fifteen suites carried a private `get` or `pageHTML` that sent the same cookie-carrying GET. They now call `getResponse(_:cookie:on:)` beside `getHTML` in `TestPageHelpers.swift`, and the suites that pass a check closure call it from their one-line wrapper. (#2362)
+
+
+## [0.5.533] - 2026-10-07
+
+### Changed
+
+- **Tests sign in as a student or a course TA through shared helpers.** Twelve suites carried a private `loginAsStudent` and two carried the same `loginAsTA`, each with its own copy of the enrolment upsert. They now use `loginAsStudent(_:on:)` and `loginAsCourseTA(_:on:)` in `TestLogin.swift`, and `enrollAsTestInstructor` is one case of a new `enrollInTestCourse(role:)`. (#2364)
+
+
+## [0.5.532] - 2026-10-07
+
+### Changed
+
+- **The worker HMAC tests sign with the shared test signer.** `WorkerHMACAuthMiddlewareTests` kept a second copy of the signing code because the shared `workerHMACHeaders` could not take a fixed timestamp or nonce, which the clock-skew and replay tests need. The shared helper now takes both, and the copy is gone. (#2368)
+
+
+## [0.5.531] - 2026-10-07
+
+### Changed
+
+- **The CLAUDE.md testing section is current.** It no longer gives test-file counts that go stale, it names the shared host traits for every interpreter, and its example uses the shared `.requiresLua` instead of the suite-local form that #1946 removed. (#2369)
+
+
+## [0.5.530] - 2026-10-07
+
+### Fixed
+
+- **Twelve test helpers no longer leak a half-built app when their setup throws.** They built a bare `Application.make(.testing)` and then ran setup that can throw (a database, a route registration, a token authority, a loopback server). If that setup threw, the leaked app's `deinit` called the synchronous shutdown, which ends the whole test process with SIGILL on Linux. They now use `makeTestingApplication`, which tears the app down before it rethrows. That helper takes an `environment:` for the two mock identity providers that serve on a loopback port. (#2360)
+
+
 ## [0.5.529] - 2026-10-07
 
 ### Fixed

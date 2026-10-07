@@ -108,11 +108,14 @@ func makeTestSetup(
     id: String,
     courseID: UUID,
     manifest: String = minimalBrowserGradingModeManifest,
-    withNotebook: Bool = true
+    withNotebook: Bool = true,
+    withZip: Bool = true
 ) async throws -> APITestSetup {
     let zipPath = app.testSetupsDirectory + "\(id).zip"
     let notebookPath = app.testSetupsDirectory + "\(id).ipynb"
-    try Data(minimalEmptyZipBytes).write(to: URL(fileURLWithPath: zipPath))
+    if withZip {
+        try Data(minimalEmptyZipBytes).write(to: URL(fileURLWithPath: zipPath))
+    }
     if withNotebook {
         try minimalEmptyNotebookJSON
             .write(to: URL(fileURLWithPath: notebookPath), atomically: true, encoding: .utf8)

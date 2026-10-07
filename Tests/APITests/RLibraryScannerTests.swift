@@ -10,6 +10,7 @@
 // must still not register. Those two requirements pull in opposite directions
 // and are the point of several cases below.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -205,9 +206,7 @@ import Testing
 @Suite struct VendoredRKernelModuleIndexTests {
 
     private static var publicDirectory: String {
-        var url = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url.appendingPathComponent("Public").path
+        repositoryRoot.appendingPathComponent("Public").path
     }
 
     @Test func theVendoredRIndexDescribesTheRealEnvironment() throws {

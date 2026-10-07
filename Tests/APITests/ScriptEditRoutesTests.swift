@@ -26,12 +26,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsStudent() async throws -> String {
-        return try await loginUser(
-            username: "teststudent_scripts", password: "testpassword",
-            role: "student", on: app)
-    }
-
     // MARK: - DB/fixture helpers
 
     @discardableResult
@@ -153,7 +147,7 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_get3", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_get3", title: "GetStudent")
             let id = a.publicID
@@ -263,7 +257,7 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_put3", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_put3", title: "PutStudent")
             let id = a.publicID
@@ -481,7 +475,7 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_post5", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_post5", title: "PostStudent")
             let id = a.publicID
@@ -668,7 +662,7 @@ import VaporTesting
             else {
                 throw IssueRecorded("zip/unzip not available")
             }
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_del5", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_del5", title: "DeleteStudent")
             let id = a.publicID

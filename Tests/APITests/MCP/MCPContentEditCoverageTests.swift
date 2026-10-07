@@ -15,6 +15,7 @@
 // build failure instead of a silent gap — and the classification itself is
 // written down exactly once, here.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -22,9 +23,7 @@ import Testing
 
 @Suite struct MCPContentEditCoverageTests {
     private static var toolsDirectory: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("Sources/APIServer/MCP/Tools")
+        repositoryRoot.appendingPathComponent("Sources/APIServer/MCP/Tools")
     }
 
     /// Write tools whose edits change what the suite grades: they MUST call

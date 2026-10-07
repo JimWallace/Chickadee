@@ -16,6 +16,7 @@
 // check is unchanged below, because the plugin cannot fix it: embedding a file
 // is not the same as some language asking for it.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -24,16 +25,9 @@ import Testing
 
 @Suite struct RuntimeSourceDriftTests {
 
-    private static func repoRoot() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // WorkerTests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
-    }
-
     private static func canonical(_ filename: String) throws -> String {
         try String(
-            contentsOf: repoRoot().appendingPathComponent("Tools/runner-support/\(filename)"),
+            contentsOf: repositoryRoot.appendingPathComponent("Tools/runner-support/\(filename)"),
             encoding: .utf8)
     }
 
@@ -75,7 +69,7 @@ import Testing
     /// binary with no arm of `runtimeHelperFiles(for:)` naming it, and every
     /// other assertion here would still pass.
     @Test func everyCanonicalRuntimeHelperIsInstalledBySomeLanguage() throws {
-        let directory = Self.repoRoot().appendingPathComponent("Tools/runner-support")
+        let directory = repositoryRoot.appendingPathComponent("Tools/runner-support")
         let onDisk = try FileManager.default.contentsOfDirectory(atPath: directory.path)
             .filter { $0.hasPrefix("test_runtime.") || $0 == "sitecustomize.py" }
         #expect(!onDisk.isEmpty, "found no canonical runtime helpers to check")

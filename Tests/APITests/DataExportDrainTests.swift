@@ -8,6 +8,7 @@
 // task, and the lifecycle handler runs that drain while the database is
 // still open, which is the reverse-registration order Vapor guarantees.
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import Synchronization
@@ -108,8 +109,7 @@ import VaporTesting
     /// — and dropped, it means a generation task can outlive the application
     /// again on every deploy cutover.
     @Test func productionBootstrapRegistersTheDrain() throws {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }  // -> repo root
+        let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
                 "Sources/APIServer/Bootstrap/AppServices.swift"),

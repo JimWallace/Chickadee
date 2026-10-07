@@ -35,26 +35,11 @@ import Vapor
         try await makeTestSetup(on: app, id: "setup_us", courseID: courseID, manifest: manifest)
         // Replace the empty fixture zip with one that actually contains the
         // scripts named in the manifest, so the suite-edit zip rebuild succeeds.
-        try await writeZip(
+        try await writeZipFixture(
             at: app.testSetupsDirectory + "setup_us.zip",
             entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n"), ("test_b.sh", "exit 0\n")])
         return try await makeTestAssignment(
             on: app, testSetupID: "setup_us", courseID: courseID, title: "Lab")
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("us-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            let url = root.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.data(using: .utf8)?.write(to: url)
-        }
-        try? FileManager.default.removeItem(atPath: zipPath)
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     @Test func updatesScriptTierAndPoints() async throws {

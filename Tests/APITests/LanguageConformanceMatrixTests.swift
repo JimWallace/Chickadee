@@ -375,7 +375,8 @@ import Testing
         guard
             case .notebookKernel(let environmentFileName, _, _, _, _) = language.editorSupport
         else { return }
-        let url = Self.repoRoot
+        let url =
+            repositoryRoot
             .appendingPathComponent("Tools/jupyterlite")
             .appendingPathComponent(environmentFileName)
         #expect(
@@ -390,7 +391,7 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func theRunnerImageProvidesEveryInterpreter(_ language: AssignmentLanguage) throws {
         let dockerfile = try String(
-            contentsOf: Self.repoRoot.appendingPathComponent("Dockerfile"), encoding: .utf8)
+            contentsOf: repositoryRoot.appendingPathComponent("Dockerfile"), encoding: .utf8)
         let package = Self.adapter(for: language).debianPackage
         #expect(
             dockerfile.contains(package),
@@ -440,7 +441,7 @@ import Testing
         let adapter = Self.adapter(for: language)
 
         let ciImage = try String(
-            contentsOf: Self.repoRoot.appendingPathComponent(
+            contentsOf: repositoryRoot.appendingPathComponent(
                 ".github/docker/ci-image/Dockerfile"), encoding: .utf8)
         #expect(
             Self.codeLines(of: ciImage).contains { $0.contains(adapter.debianPackage) },
@@ -453,7 +454,7 @@ import Testing
 
         let action = try Self.codeLines(
             of: String(
-                contentsOf: Self.repoRoot.appendingPathComponent(
+                contentsOf: repositoryRoot.appendingPathComponent(
                     ".github/actions/swift-test-setup/action.yml"), encoding: .utf8))
         let entry = "\(adapter.toolchainProbeCommand)=\(adapter.debianPackage)"
         #expect(
@@ -468,7 +469,7 @@ import Testing
         // A probe that a workflow writes by hand is the copy that drifts. The
         // interpreter half of every probe is in the action, so no workflow
         // code line can probe for an interpreter itself.
-        let workflowDirectory = Self.repoRoot.appendingPathComponent(".github/workflows")
+        let workflowDirectory = repositoryRoot.appendingPathComponent(".github/workflows")
         let workflows = try FileManager.default.contentsOfDirectory(atPath: workflowDirectory.path)
             .filter { $0.hasSuffix(".yml") }
         #expect(!workflows.isEmpty, ".github/workflows holds no workflow to check.")
@@ -517,7 +518,7 @@ import Testing
     @Test func everyLanguageProbeActuallyReportsAVersion() async {
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
-            let (code, _) = await Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
+            let (code, _) = await Self.run(probe.command, probe.versionArguments, in: repositoryRoot)
             // The interpreter simply not being on this machine is not a defect,
             // and it is **exit 127** — `/usr/bin/env` reports command-not-found
             // that way, the same code the original Lua defect surfaced as. (-1
@@ -552,7 +553,7 @@ import Testing
     @Test(.ciOnly) func noInterpreterIsSilentlyAbsentInCI() async {
         for language in AssignmentLanguage.allCases {
             let probe = language.interpreterProbe
-            let (code, _) = await Self.run(probe.command, probe.versionArguments, in: Self.repoRoot)
+            let (code, _) = await Self.run(probe.command, probe.versionArguments, in: repositoryRoot)
             #expect(
                 code == 0,
                 """
@@ -751,12 +752,6 @@ import Testing
     }
 
     // MARK: - Helpers
-
-    static var repoRoot: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<this>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url
-    }
 
     static func scratchDirectory() throws -> URL {
         let dir = FileManager.default.temporaryDirectory

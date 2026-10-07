@@ -22,6 +22,7 @@
 // conformance test that read `arguments: [.python, .r]` while looking like a
 // matrix) — a new renderer file would simply not be checked.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -105,7 +106,8 @@ import Testing
     /// Source files that emit generated student-facing scripts, found rather
     /// than listed, so a new renderer is covered the day it lands.
     static func rendererSources() throws -> [URL] {
-        let dir = LanguageConformanceMatrixTests.repoRoot
+        let dir =
+            repositoryRoot
             .appendingPathComponent("Sources/APIServer/Utilities")
         let all = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
         return

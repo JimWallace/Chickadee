@@ -18,6 +18,7 @@
 // extra markClass/row state for dependency-skipped tests
 // (SubmissionResultPresenter.swift) — so it is asserted alongside.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -26,14 +27,8 @@ import Testing
 
 @Suite struct StatusClassStylesheetTests {
 
-    private static var repoRoot: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
-        return url
-    }
-
     private static func globalStylesheet() throws -> String {
-        let url = repoRoot.appendingPathComponent("Public/styles.css")
+        let url = repositoryRoot.appendingPathComponent("Public/styles.css")
         return try String(contentsOf: url, encoding: .utf8)
     }
 

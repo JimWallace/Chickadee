@@ -404,14 +404,10 @@ import VaporTesting
     private func makeSetup(id: String) async throws -> APITestSetup {
         let course = APICourse(code: "CARDS_\(id)", name: "Card Series", enrollmentMode: .closed)
         try await course.save(on: app.db)
-        let setup = APITestSetup(
-            id: id,
+        return try await makeTestSetup(
+            on: app, id: id, courseID: try course.requireID(),
             manifest:
                 #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
-            zipPath: "/tmp/\(id).zip",
-            courseID: try course.requireID()
-        )
-        try await setup.save(on: app.db)
-        return setup
+            withNotebook: false, withZip: false)
     }
 }

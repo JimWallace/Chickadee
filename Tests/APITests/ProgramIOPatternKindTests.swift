@@ -143,13 +143,6 @@ import Vapor
         #expect(isAvailable, "python3 absent: every program-I/O execution test skipped silently")
     }
 
-    private static var repoRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // APITests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
-    }
-
     /// Mirrors the runner's `pythonBootstrap`: helpers into builtins, the
     /// student module loaded (which is where an unguarded program first runs),
     /// then the test under `runpy`.
@@ -174,7 +167,7 @@ import Vapor
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let support = repoRoot.appendingPathComponent("Tools/runner-support")
+        let support = repositoryRoot.appendingPathComponent("Tools/runner-support")
         try FileManager.default.copyItem(
             at: support.appendingPathComponent("test_runtime.py"),
             to: dir.appendingPathComponent("test_runtime.py"))

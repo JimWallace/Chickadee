@@ -7,6 +7,7 @@
 // A source scan, because a compile-time guarantee that is the whole point
 // cannot be observed by rendering a page.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -16,8 +17,7 @@ import Testing
 @Suite struct LeaderboardAggregationReadTests {
 
     private func source(_ relativePath: String) throws -> String {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
+        let url = repositoryRoot
         return try String(contentsOf: url.appendingPathComponent(relativePath), encoding: .utf8)
     }
 
