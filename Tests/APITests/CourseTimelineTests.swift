@@ -31,9 +31,7 @@ import VaporTesting
     // MARK: - Fixtures
 
     private func makeCourse(_ app: Application, code: String) async throws -> UUID {
-        let course = APICourse(code: code, name: "Activity \(code)", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return try course.requireID()
+        try await makeTestCourse(on: app, code: code, name: "Activity \(code)", mode: .auto).requireID()
     }
 
     @discardableResult

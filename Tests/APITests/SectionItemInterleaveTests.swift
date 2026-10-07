@@ -25,13 +25,6 @@ import VaporTesting
     // MARK: - Helpers
 
     @discardableResult
-    private func makeCourse(code: String) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Course \(code)", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return course
-    }
-
-    @discardableResult
     private func makeSection(name: String, order: Int, courseID: UUID) async throws -> APICourseSection {
         let section = APICourseSection(
             name: name, defaultGradingMode: "worker", sortOrder: order, courseID: courseID)
@@ -81,7 +74,7 @@ import VaporTesting
 
     @Test func instructorDashboardInterleavesContentBetweenAssignments() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "IL_ORDER")
+            let course = try await makeTestCourse(on: app, code: "IL_ORDER", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Week 1", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
@@ -114,7 +107,7 @@ import VaporTesting
 
     @Test func unifiedReorderRenumbersAcrossBothTables() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "IL_REORDER")
+            let course = try await makeTestCourse(on: app, code: "IL_REORDER", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Labs", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
@@ -152,7 +145,7 @@ import VaporTesting
 
     @Test func unifiedReorderDeniedForStudent() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "IL_AUTHZ")
+            let course = try await makeTestCourse(on: app, code: "IL_AUTHZ", mode: .auto)
             let courseID = try course.requireID()
             let content = try await makeContentItem(
                 title: "Reading", courseID: courseID, sectionID: nil, order: 1)
@@ -187,7 +180,7 @@ import VaporTesting
 
     @Test func movingAssignmentAppendsToDestinationLane() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "IL_MOVE")
+            let course = try await makeTestCourse(on: app, code: "IL_MOVE", mode: .auto)
             let courseID = try course.requireID()
             let source = try await makeSection(name: "Source", order: 1, courseID: courseID)
             let dest = try await makeSection(name: "Dest", order: 2, courseID: courseID)
@@ -221,7 +214,7 @@ import VaporTesting
 
     @Test func mcpReorderSectionItemsRenumbersBoth() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "IL_MCP")
+            let course = try await makeTestCourse(on: app, code: "IL_MCP", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Labs", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
