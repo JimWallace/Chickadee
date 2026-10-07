@@ -41,7 +41,7 @@ extension AdminRoutes {
     /// role and their own seeded bird. `mcp` service accounts are enrolled to
     /// scope an agent's access (admin MCP tab), so they are not listed.
     static func enrolledUserRows(
-        for enrollments: [APICourseEnrollment], on db: Database
+        for enrollments: [APICourseEnrollment], courseID: UUID, on db: Database
     ) async throws -> [AdminCourseEnrolledUserRow] {
         let enrolledUserIDs = enrollments.map { $0.userID }
         guard !enrolledUserIDs.isEmpty else { return [] }
@@ -68,6 +68,11 @@ extension AdminRoutes {
             // staff ring follows this course's role.
             row.avatar = try await AvatarStore.rosterAvatar(for: user, isStaff: role >= .ta, on: db)
             row.hasAvatar = true
+            row.roleSelect = RoleSelectCell(
+                userID: row.id,
+                action: "/admin/courses/\(courseID.uuidString)/role/\(row.id)",
+                personName: user.username,
+                role: row.role)
             rows.append(row)
         }
         return rows

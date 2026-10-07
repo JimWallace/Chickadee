@@ -275,6 +275,11 @@ extension InstructorDashboardRoutes {
                 registerURL: ""
             )
             row.newHandleURL = "/courses/\(activeCourseUUID.uuidString)/new-handle/\(id.uuidString)"
+            row.roleSelect = RoleSelectCell(
+                userID: row.id,
+                action: "/courses/\(activeCourseUUID.uuidString)/role/\(id.uuidString)",
+                personName: row.displayName,
+                role: row.role)
             return row
         }
     }

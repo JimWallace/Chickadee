@@ -467,6 +467,7 @@ struct AdminCourseEnrolledUserRow: Encodable {
     /// conditional is unreliable).
     var avatar: AvatarPresentation?
     var hasAvatar: Bool = false
+    var roleSelect: RoleSelectCell?
 }
 
 struct AdminCourseAssignmentRow: Encodable {
