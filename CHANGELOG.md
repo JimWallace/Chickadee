@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.531] - 2026-10-07
+
+### Changed
+
+- **The CLAUDE.md testing section is current.** It no longer gives test-file counts that go stale, it names the shared host traits for every interpreter, and its example uses the shared `.requiresLua` instead of the suite-local form that #1946 removed. (#2369)
+
+
+## [0.5.530] - 2026-10-07
+
+### Fixed
+
+- **Twelve test helpers no longer leak a half-built app when their setup throws.** They built a bare `Application.make(.testing)` and then ran setup that can throw (a database, a route registration, a token authority, a loopback server). If that setup threw, the leaked app's `deinit` called the synchronous shutdown, which ends the whole test process with SIGILL on Linux. They now use `makeTestingApplication`, which tears the app down before it rethrows. That helper takes an `environment:` for the two mock identity providers that serve on a loopback port. (#2360)
+
+
+## [0.5.529] - 2026-10-07
+
+### Fixed
+
+- **Nine test suites that spawn python3 or bind a loopback server now have a time limit.** A stall now fails with a named test, not by holding the CI job to its 20-minute kill. The raw loopback exchange in `ExtensionCSRFTokenTests` sets a receive timeout, because a time limit cannot interrupt a blocking `recv`. The five tests that run a generated case under python3 now carry `.requiresPython3`, so a host without python3 skips them instead of failing. (#2361)
+
+
 ## [0.5.528] - 2026-10-07
 
 ### Changed
