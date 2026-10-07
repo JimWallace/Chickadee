@@ -493,15 +493,21 @@ fi
 # reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift); the
 # partial test derives from that list, so a page cannot invent a sixth.
 PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border"
+# Every custom property in the attribute is checked, wherever it sits: the
+# first one only, in an attribute that starts with `--`, let a second one or
+# one after `display:none;` through (#2404).
 inline_prop_violations=""
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
-  name="$(printf '%s' "$hit" | sed -E 's/.*style="[[:space:]]*(--[A-Za-z0-9_-]+).*/\1/')"
-  case " $PER_DATUM_INLINE_PROPS " in
-    *" $name "*) ;;
-    *) inline_prop_violations+="  ${hit}"$'\n' ;;
-  esac
-done < <(grep -rno 'style="--[^"]*"' "${views[@]}" || true)
+  value="$(printf '%s' "$hit" | sed -E 's/.*style="([^"]*)".*/\1/')"
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    case " $PER_DATUM_INLINE_PROPS " in
+      *" $name "*) ;;
+      *) inline_prop_violations+="  ${hit}"$'\n'; break ;;
+    esac
+  done < <(printf '%s' "$value" | grep -oE -- '--[A-Za-z0-9_-]+[[:space:]]*:' | sed -E 's/[[:space:]]*:$//')
+done < <(grep -rno 'style="[^"]*--[^"]*"' "${views[@]}" || true)
 
 if [ -n "$inline_prop_violations" ]; then
   status=1
