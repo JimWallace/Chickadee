@@ -455,7 +455,8 @@ chickadee.passed("the working directory is the workspace");
 leaked_plain = "yes";
 global leaked_global;
 leaked_global = "yes";
-chickadee.passed("left a variable and a global behind");
+setenv("CK_SMOKE_LEAKED", "yes");
+chickadee.passed("left a variable, a global and an environment variable behind");
 `,
             'publictest_isolation.m': `chickadee = test_runtime();
 if exist("leaked_plain", "var")
@@ -464,6 +465,9 @@ end
 global leaked_global;
 if !isempty(leaked_global)
   chickadee.failed("a global from a previous test survived into this one");
+end
+if !isempty(getenv("CK_SMOKE_LEAKED"))
+  chickadee.failed("an environment variable from a previous test survived into this one");
 end
 if !strcmp(getenv("CK_SMOKE_CANARY"), "")
   chickadee.failed("unexpected canary env");
