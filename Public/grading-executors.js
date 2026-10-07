@@ -135,6 +135,15 @@
             ? Number(globalThis.__CHICKADEE_GRADING_INIT_TIMEOUT_MS__)
             : 120000;
 
+    // The telemetry detail of a worker breadcrumb: its timing and, for an
+    // on-demand install, which packages it installed (#2387).
+    function phaseDetail(msg) {
+        const parts = [];
+        if (msg.ms != null) parts.push('ms=' + msg.ms);
+        if (msg.packages) parts.push('packages=' + msg.packages);
+        return parts.length > 0 ? parts.join(';') : undefined;
+    }
+
     class GradingWorkerExecutor {
         constructor(files, assignmentSeed, runnerCore, factory, reportPhase, label) {
             this.files = files;
@@ -180,7 +189,7 @@
                 // is localizable to the kernel-boot vs env-config step. Never
                 // grading state; ignored if telemetry is unwired.
                 if (msg.type === 'phase') {
-                    this._report(msg.phase, (msg.ms != null) ? ('ms=' + msg.ms) : undefined);
+                    this._report(msg.phase, phaseDetail(msg));
                     return;
                 }
                 const entry = this._pending.get(msg.id);
@@ -555,6 +564,7 @@
         gradingWorkerFactory,
         fileAsText,
         interpreterToKind,
+        phaseDetail,
         scriptExtension,
         rawError,
         toMessage,
