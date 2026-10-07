@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.551] - 2026-10-07
+
+### Fixed
+
+- **Predeploy snapshots no longer fill the disk.** The deployer takes a full snapshot (database dump and every submission) before each release, and `snapshot.sh` deleted snapshots only after 7 days. With up to 25 releases a day, the copies filled the production disk, Postgres stopped, and login and both MCP surfaces failed. `snapshot.sh` now keeps only the newest 3 predeploy snapshots, and it prunes before it needs the database, so a run on a full disk still frees space. Old release images also stayed on the disk (22 of them, 29 GB): the deployer pulls each release by digest, so the image keeps a name, and `docker image prune -f` removes only images without one. The blue-green deploy and the deployer now run `docker image prune -a -f`, which removes every image that no container uses. The runner-host update script does the same, limited by label to Chickadee images, so a shared Mac keeps its other images.
+
+
 ## [0.5.550] - 2026-10-07
 
 ### Fixed
