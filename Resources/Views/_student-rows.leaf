@@ -1,5 +1,5 @@
     #for(student in enrolledStudents):
-        <tr class="student-row-link#if(student.isPending): student-row-pending#endif"
+        <tr class="js-student-row-link#if(student.isPending): js-student-row-pending#endif"
             data-student-id="#(student.id)"
             #if(!student.isPending):data-href="#(student.submissionsURL)"#endif>
             <td class="item-tile-cell">

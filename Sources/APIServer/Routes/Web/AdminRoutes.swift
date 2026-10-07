@@ -260,9 +260,13 @@ struct AdminRoutes: RouteCollection {
     /// MCP tool made it pollable. The walks now run at most once per TTL.
     static func makeStorageContext(req: Request) async throws -> AdminStorageContext {
         let app = req.application
-        return try await app.storageUsageCache.context {
+        var context = try await app.storageUsageCache.context {
             try await computeStorageContext(app: app)
         }
+        // Live, not cached: free space is what an admin opens this page to see
+        // when the disk is filling.
+        context.disk = app.diskSpaceOfDataVolume
+        return context
     }
 
     /// The uncached breakdown build. Directory walks are blocking, so they

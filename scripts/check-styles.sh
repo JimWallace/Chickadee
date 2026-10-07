@@ -175,14 +175,33 @@ fi
 # added here does not fail loudly; the control simply stops responding.  The
 # replacement is a data attribute read by a delegated listener: see the
 # declarative control behaviours at the foot of Public/app.js.
+# The scan reads each tag whole, so it finds a handler on a later line of a
+# multi-line tag and one in single quotes, and it reads the HTML strings in
+# Public/*.js that reach the page through innerHTML (#2405).
 event_attr_offenders="$(
-  grep -nEo '<[a-zA-Z][^>]*[[:space:]]on[a-z]+="[^"]*"' "${views[@]}" 2>/dev/null \
-    | grep -oE '^[^:]+:[0-9]+:.*[[:space:]]on[a-z]+="[^"]*"' \
-    || true
+  awk '
+    FNR == 1 && NR > 1 { scan(prev) }
+    FNR == 1 { text = ""; prev = FILENAME }
+    { text = text $0 "\n" }
+    END { if (NR > 0) scan(prev) }
+    function scan(file,   rest, line, p, q, pre, tag) {
+      rest = text; line = 1
+      while ((p = match(rest, /<[a-zA-Z]/)) > 0) {
+        pre = substr(rest, 1, p - 1); line += gsub(/\n/, "\n", pre)
+        rest = substr(rest, p)
+        q = index(rest, ">")
+        tag = (q > 0) ? substr(rest, 1, q) : rest
+        if (tag ~ /[ \t\n]on[a-z]+[ \t\n]*=/) {
+          gsub(/[ \t\n]+/, " ", tag); print file ":" line ": " substr(tag, 1, 120)
+        }
+        rest = substr(rest, 2)
+      }
+    }
+  ' "${views[@]}" Public/*.js
 )"
 if [ -n "$event_attr_offenders" ]; then
   status=1
-  echo "ERROR: inline event-handler attribute in a template."
+  echo "ERROR: inline event-handler attribute in a template or a JS-built HTML string."
   echo "       The CSP script-src carries no 'unsafe-inline', so this handler would"
   echo "       never fire.  Use a data-* attribute plus a delegated listener in"
   echo "       Public/app.js — see the declarative control behaviours there."
@@ -289,7 +308,9 @@ fi
 # `.main` is an allowlisted intentional global override (notebook.leaf narrows
 # the page container).  Heuristic extractor: selector = text before each `{`
 # (one selector per line, as authored here), skipping at-rules and comments —
-# errs toward false negatives, never false positives.
+# errs toward false negatives, never false positives. A one-line
+# `@media (...) { .x { ... } }` loses its at-rule prefix first, so `.x` is
+# still read (#2403).
 ALLOW_GLOBAL_OVERRIDE="^\.main$"
 
 extract_selectors() {
@@ -297,7 +318,7 @@ extract_selectors() {
   # doesn't trip pipefail.
   strip_css_comments \
     | { grep '{' || true; } \
-    | sed -E 's/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | sed -E 's/^[[:space:]]*@[^{]*\{[[:space:]]*//; s/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
     | { grep -vE '^$|^@|^/\*' || true; }
 }
 
@@ -341,6 +362,87 @@ if [ -n "$cross" ]; then
     files="$(printf '%s\n' "$pairs" | awk -F'\t' -v s="$sel" '$1==s{printf " %s", $2}')"
     echo "  ${sel} →${files}"
   done <<< "$cross"
+  echo
+fi
+
+# ── 4d. A modifier rule must follow its base rule ───────────────────────────
+# `.x--mod` or `.x-mod` on the same element as `.x` overrides it only when it
+# comes later: both are one class, so source order decides. A modifier placed
+# above its base never applies, and the page still renders, so no test sees
+# it (#2399, #2400; #2320 was the same defect). For each top-level rule whose
+# selector is one such class, the guard reports a later top-level rule for
+# exactly `.x` that sets the same property, when the two class names share a
+# line in a template or a first-party JS file (a child element such as
+# `.card-meta` is never on the same element as `.card`).
+modifier_order_hits="$(
+  strip_css_comments < Public/styles.css | awk '
+    { css = css $0 "\n" }
+    function line_of(pos,   t) { t = substr(css, 1, pos); return gsub(/\n/, "\n", t) + 1 }
+    END {
+      depth = 0; start = 1; n = 0; cnt = 0
+      len = length(css)
+      for (i = 1; i <= len; i++) {
+        c = substr(css, i, 1)
+        if (c == "{") {
+          if (depth == 0) {
+            sel = substr(css, start, i - start)
+            gsub(/^[ \t\n]+|[ \t\n]+$/, "", sel)
+            atrule = (substr(sel, 1, 1) == "@")
+            bodystart = i + 1
+          }
+          depth++
+        } else if (c == "}") {
+          depth--
+          if (depth == 0) {
+            if (!atrule) {
+              n++
+              body = substr(css, bodystart, i - bodystart)
+              props = ""
+              m = split(body, decls, /;/)
+              for (k = 1; k <= m; k++) {
+                p = decls[k]; sub(/:.*/, "", p); gsub(/[ \t\n]/, "", p)
+                if (p != "") props = props " " tolower(p) " "
+              }
+              nsel = split(sel, parts, /,/)
+              for (k = 1; k <= nsel; k++) {
+                s = parts[k]; gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
+                if (s !~ /^\.[A-Za-z0-9_-]+$/) continue
+                cnt++; rsel[cnt] = substr(s, 2); rord[cnt] = n; rprops[cnt] = props; rline[cnt] = line_of(i)
+              }
+            }
+            start = i + 1
+          }
+        } else if (c == ";" && depth == 0) {
+          start = i + 1
+        }
+      }
+      for (a = 1; a <= cnt; a++) {
+        for (b = 1; b <= cnt; b++) {
+          if (rord[b] <= rord[a] || index(rsel[a], rsel[b] "-") != 1) continue
+          np = split(rprops[a], pa, " ")
+          for (k = 1; k <= np; k++) {
+            if (pa[k] != "" && index(rprops[b], " " pa[k] " ") > 0) {
+              print rsel[a] "\t" rsel[b] "\t" pa[k] "\t" rline[a] "\t" rline[b]
+            }
+          }
+        }
+      }
+    }'
+)"
+modifier_order_violations=""
+while IFS=$'\t' read -r mod base prop mod_line base_line; do
+  [ -z "$mod" ] && continue
+  if grep -rhE "(^|[^A-Za-z0-9_-])${base}([^A-Za-z0-9_-]|$)" "${views[@]}" Public/*.js 2>/dev/null \
+      | grep -qE "(^|[^A-Za-z0-9_-])${mod}([^A-Za-z0-9_-]|$)"; then
+    modifier_order_violations+="  .${mod} (styles.css:${mod_line}) sets ${prop}; .${base} sets it again later (styles.css:${base_line})"$'\n'
+  fi
+done <<< "$modifier_order_hits"
+
+if [ -n "$modifier_order_violations" ]; then
+  status=1
+  echo "ERROR: a modifier rule comes before its base rule, so the base rule wins."
+  echo "       Move the modifier after the base rule in Public/styles.css."
+  printf '%s' "$modifier_order_violations"
   echo
 fi
 
@@ -416,15 +518,21 @@ fi
 # reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift); the
 # partial test derives from that list, so a page cannot invent a sixth.
 PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border"
+# Every custom property in the attribute is checked, wherever it sits: the
+# first one only, in an attribute that starts with `--`, let a second one or
+# one after `display:none;` through (#2404).
 inline_prop_violations=""
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
-  name="$(printf '%s' "$hit" | sed -E 's/.*style="[[:space:]]*(--[A-Za-z0-9_-]+).*/\1/')"
-  case " $PER_DATUM_INLINE_PROPS " in
-    *" $name "*) ;;
-    *) inline_prop_violations+="  ${hit}"$'\n' ;;
-  esac
-done < <(grep -rno 'style="--[^"]*"' "${views[@]}" || true)
+  value="$(printf '%s' "$hit" | sed -E 's/.*style="([^"]*)".*/\1/')"
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    case " $PER_DATUM_INLINE_PROPS " in
+      *" $name "*) ;;
+      *) inline_prop_violations+="  ${hit}"$'\n'; break ;;
+    esac
+  done < <(printf '%s' "$value" | grep -oE -- '--[A-Za-z0-9_-]+[[:space:]]*:' | sed -E 's/[[:space:]]*:$//')
+done < <(grep -rno 'style="[^"]*--[^"]*"' "${views[@]}" || true)
 
 if [ -n "$inline_prop_violations" ]; then
   status=1

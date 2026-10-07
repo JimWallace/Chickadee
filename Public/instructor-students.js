@@ -26,7 +26,7 @@
         var t = event.target;
         if (!(t instanceof Element)) return;
         if (t.closest('a') || t.closest('button') || t.closest('form')) return;
-        var row = t.closest('tr.student-row-link');
+        var row = t.closest('tr.js-student-row-link');
         if (!row) return;
         var href = row.getAttribute('data-href');
         if (!href) return;
@@ -42,10 +42,10 @@
     function updateCount() {
         var rows = Array.from(tbody.querySelectorAll('tr'));
         var pending = rows.filter(function (row) {
-            return row.classList.contains('student-row-pending');
+            return row.classList.contains('js-student-row-pending');
         }).length;
         var enrolled = rows.filter(function (row) {
-            if (row.classList.contains('student-row-pending')) return false;
+            if (row.classList.contains('js-student-row-pending')) return false;
             var cell = row.cells[2];
             if (!cell) return false;
             var sel = cell.querySelector('select');

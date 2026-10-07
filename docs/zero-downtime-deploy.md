@@ -293,11 +293,23 @@ chickadee-deployer`.
 
 The server reads `status.json` from the read-only deploy state mount
 (`DeployerHealthRule.swift`). The rule pages (severity `warning`) when the
-daemon reports `stuck`, `error` or `certificate_invalid`, and when the daemon
+daemon reports `stuck`, `error`, `certificate_invalid` or `disk_low`, and when the daemon
 has not written its status for 30 minutes, which means it has stopped: it writes
 on every poll. A paused daemon does not fire, and neither does a deployment
 with no status file. Until this rule, those states showed only to someone who
 asked the admin MCP.
+
+### Free disk space before a deploy (`disk_low`)
+
+A deploy pulls a release image of about 5 GB, and the predeploy snapshot comes on
+top. On 2026-10-07 old images and snapshots filled the disk, Postgres stopped and
+the site went down. So before each deploy the daemon checks the free space on
+Docker's data root and on the clone (`backups/`), and uses the smaller. Below
+10 GiB it removes images that no container uses and old snapshots
+(`scripts/lib/snapshot-retention.sh`), then checks again. If there is still not
+enough, it holds the deploy: the state is `disk_low`, the history says why once
+per release, and the deploy runs on the first poll after space is freed. The
+server's `deployerUnhealthy` rule pages on `disk_low`.
 
 ### App ⇄ daemon IPC (files in `STATE_DIR`)
 
@@ -307,7 +319,7 @@ asked the admin MCP.
   `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
   says when the next one is), `stuck` (five failures in a row, or two hours
   waiting for an image) and `certificate_invalid` (deployed, but the public
-  certificate failed verification; step 8).
+  certificate failed verification; step 8) and `disk_low` (see below).
 - `history.jsonl` — append-only deploy log.
 - `deployed_version` — the daemon's source of truth for what is live.
 

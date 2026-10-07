@@ -22,7 +22,8 @@ struct GetStorageUsageTool: DiagnosticTool {
     static let description =
         "On-disk footprint: total bytes by component (submissions / test-setups / results+logs / "
         + "static assets / database, with the database backend) plus a per-assignment breakdown "
-        + "(test-suite bytes, submission bytes, submission count, sorted largest-first). Use it to "
+        + "(test-suite bytes, submission bytes, submission count, sorted largest-first), and the "
+        + "free and total space on the data disk (disk, measured live). Use it to "
         + "diagnose disk pressure (which causes job failures) and see which assignment is consuming "
         + "space. Read-only; assignment/course identifiers and byte/count aggregates only — no student "
         + "identifiers."
