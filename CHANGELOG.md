@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.549] - 2026-10-07
+
+### Fixed
+
+- **The confirm dialog is narrow again.** `.modal-card--confirm` came before `.modal-card` in the stylesheet, so the editor width won. A new check in `scripts/check-styles.sh` fails when a modifier rule comes before its base rule and sets the same property. (#2400)
+
+
 ## [0.5.548] - 2026-10-07
 
 ### Fixed
