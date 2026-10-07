@@ -216,11 +216,6 @@ struct ClientDiagnosticsRateLimiterKey: StorageKey {
 
 extension Application {
     var clientDiagnosticsRateLimiter: ClientDiagnosticsRateLimiter {
-        if let existing = storage[ClientDiagnosticsRateLimiterKey.self] {
-            return existing
-        }
-        let new = ClientDiagnosticsRateLimiter()
-        storage[ClientDiagnosticsRateLimiterKey.self] = new
-        return new
+        lazyStored(ClientDiagnosticsRateLimiterKey.self) { ClientDiagnosticsRateLimiter() }
     }
 }

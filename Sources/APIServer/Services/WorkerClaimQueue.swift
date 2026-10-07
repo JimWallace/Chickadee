@@ -28,9 +28,6 @@ struct WorkerClaimQueueKey: StorageKey {
 
 extension Application {
     var workerClaimQueue: WorkerClaimQueue {
-        if let q = storage[WorkerClaimQueueKey.self] { return q }
-        let q = WorkerClaimQueue()
-        storage[WorkerClaimQueueKey.self] = q
-        return q
+        lazyStored(WorkerClaimQueueKey.self) { WorkerClaimQueue() }
     }
 }
