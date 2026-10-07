@@ -406,7 +406,7 @@ expect_calls "docker compose .* up -d --no-deps runner" 0
 start_case "a runner refresh removes the image the runner stopped using"
 run_cycle
 expect_history runner-refresh ok
-expect_calls "docker image prune -f" 1
+expect_calls "docker image prune -a -f" 1
 
 # ---------------------------------------------------------------------------
 start_case "a runner that does not stay up leaves its images alone"

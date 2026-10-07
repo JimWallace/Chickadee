@@ -501,9 +501,10 @@ refresh_runner() {  # $1 = version tag (history label only)
   fi
   append_history "$ver" runner-refresh ok "runner '$RUNNER_SERVICE' recreated on new image"
   # bluegreen-deploy.sh prunes before its pull, while the runner still uses the
-  # previous image. Now the runner has moved, so that image is free. Remove it,
-  # and only untagged images that no container uses.
-  docker image prune -f >/dev/null 2>&1 || true
+  # previous image. Now the runner has moved, so that image is free. `-a`,
+  # because an image pulled by digest keeps a name and plain `-f` skips it; an
+  # image that a container uses is never removed.
+  docker image prune -a -f >/dev/null 2>&1 || true
   log "runner refresh complete."
 }
 
