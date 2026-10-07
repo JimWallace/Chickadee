@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.568] - 2026-10-07
+
+### Fixed
+
+- **CLAUDE.md names the import guard by its current name.** It said `PythonImportGuard`, which no longer exists. The authoring doors call `KernelImportGuard`. (#2432)
+
+
 ## [0.5.567] - 2026-10-07
 
 ### Fixed
