@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.552] - 2026-10-07
+
+### Fixed
+
+- **The class-resolution check reads class names written against a Leaf tag.** A name such as `row#if(x): row-pending#endif` used to be dropped together with the tag, so it was never checked. Two roster hooks that had no rule now carry the `js-` prefix. (#2402)
+
+
+## [0.5.551] - 2026-10-07
+
+### Fixed
+
+- **Predeploy snapshots no longer fill the disk.** The deployer takes a full snapshot (database dump and every submission) before each release, and `snapshot.sh` deleted snapshots only after 7 days. With up to 25 releases a day, the copies filled the production disk, Postgres stopped, and login and both MCP surfaces failed. `snapshot.sh` now keeps only the newest 3 predeploy snapshots, and it prunes before it needs the database, so a run on a full disk still frees space. Old release images also stayed on the disk (22 of them, 29 GB): the deployer pulls each release by digest, so the image keeps a name, and `docker image prune -f` removes only images without one. The blue-green deploy and the deployer now run `docker image prune -a -f`, which removes every image that no container uses. The runner-host update script does the same, limited by label to Chickadee images, so a shared Mac keeps its other images.
+
+
+## [0.5.550] - 2026-10-07
+
+### Fixed
+
+- **Borders drawn with `--gray-300` are dark in dark mode.** The token had no dark value, so row menus, extension panels and closed-assignment strips showed near-white lines on a dark page. `scripts/check-css-vars.sh` now fails when a grey step has no value in either dark block. (#2401)
+
+
+## [0.5.549] - 2026-10-07
+
+### Fixed
+
+- **The confirm dialog is narrow again.** `.modal-card--confirm` came before `.modal-card` in the stylesheet, so the editor width won. A new check in `scripts/check-styles.sh` fails when a modifier rule comes before its base rule and sets the same property. (#2400)
+
+
+## [0.5.548] - 2026-10-07
+
+### Fixed
+
+- **The "Failed" count on a results page is red again, and only when a test failed.** The red rule came before the base rule in the stylesheet, so the base colour won. The count now takes the red style only when it is above zero, so a clean submission does not show a red 0. (#2399)
+
+
+## [0.5.547] - 2026-10-07
+
+### Fixed
+
+- **An R test's own `tryCatch(error =)` no longer swallows `passed()`.** In the browser, the condition that stands in for `quit()` was also an error, so a test that called `passed()` inside `tryCatch(..., error = )` reported an error there and a pass under Rscript. The condition is no longer an error, so the browser and the native runner give the same result. (#2386)
+
+
 ## [0.5.546] - 2026-10-07
 
 ### Fixed

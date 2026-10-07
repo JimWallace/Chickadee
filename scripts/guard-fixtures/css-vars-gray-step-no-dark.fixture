@@ -1,0 +1,9 @@
+# A grey step that only the light :root declares keeps its light value on a
+# dark surface, so its borders show near white in dark mode (#2401).
+guard="scripts/check-css-vars.sh"
+files="Public/styles.css"
+description="a --gray-N step with no value in a dark block"
+expect="a grey step has no dark-mode value"
+apply() {
+    sed -i '0,/--gray-300: #374151;/{/--gray-300: #374151;/d}' Public/styles.css
+}
