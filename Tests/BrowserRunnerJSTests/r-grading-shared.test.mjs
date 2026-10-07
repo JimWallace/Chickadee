@@ -162,3 +162,21 @@ test('_ck_inputs.R renders a .ck_inputs list with sorted, back-quoted names', ()
     '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n'
       + '.ck_inputs <- list()\n');
 });
+
+// #2384: each native test is a fresh Rscript process. The reset cell runs
+// before every browser script and puts the process state back.
+test('the per-script reset restores the working directory, the environment and options()', () => {
+  const cell = shared.resetCellR('/chickadee_work_1');
+  assert.match(cell, /setwd\("\/chickadee_work_1"\)/);
+  assert.match(cell, /Sys\.unsetenv\(/);
+  assert.match(cell, /do\.call\(Sys\.setenv,/);
+  assert.match(cell, /options\(\.ck_options\)/);
+  // The record is taken once, in an attached environment that the per-script
+  // rm(list = ls(globalenv())) does not reach.
+  assert.match(cell, /if \(!\("chickadee:state" %in% search\(\)\)\)/);
+  assert.match(cell, /attach\(NULL, name = "chickadee:state"\)/);
+});
+
+test('the per-script reset escapes the work directory', () => {
+  assert.match(shared.resetCellR('/a"b\\c'), /setwd\("\/a\\"b\\\\c"\)/);
+});

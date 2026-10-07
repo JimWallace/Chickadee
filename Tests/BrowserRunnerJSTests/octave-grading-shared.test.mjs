@@ -167,3 +167,10 @@ test('the inputs writer matches the server renderer byte for byte', async () => 
     '% Auto-generated per-student grading inputs (issue #461). Do not edit.\n'
       + 'ck_input_names = {};\nck_input_values = {};\n');
 });
+
+// #2384: each native test is a fresh octave-cli process. The reset cell runs
+// before every browser script and puts the working directory back.
+test('the per-script reset changes back to the work directory', () => {
+  assert.equal(shared.resetCellOctave('/chickadee_work_1'), 'cd("/chickadee_work_1");');
+  assert.equal(shared.resetCellOctave('/a"b'), 'cd(' + shared.octaveStringLiteral('/a"b') + ');');
+});
