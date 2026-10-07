@@ -1,0 +1,9 @@
+# A package named in an environment file reaches no student until the kernel
+# is rebuilt. Four were announced and never shipped before this guard existed.
+guard="scripts/check-env-vendored-sync.sh"
+files="Tools/jupyterlite/environment-lua.yml"
+description="an environment file names a package the vendored env does not contain"
+expect="but the vendored chickadee-lua does not contain"
+apply() {
+    printf '  - chickadee-guard-fixture\n' >> Tools/jupyterlite/environment-lua.yml
+}

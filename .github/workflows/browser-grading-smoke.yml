@@ -2,7 +2,7 @@ name: Browser grading smoke test
 
 # Boots a vendored xeus kernel in a headless browser and grades real test scripts
 # through the real grading worker — R on xeus-r, Python on xeus-python (#1271),
-# Lua on xeus-lua.
+# Lua on xeus-lua, Octave on xeus-octave.
 #
 # Why this needs a browser. The rest of the coverage proves code *resolves*:
 # Tests/BrowserRunnerJSTests runs the cell builders and reply parsers against a
@@ -111,11 +111,24 @@ jobs:
         with:
           node-version-file: .node-version
 
-      - name: Install Playwright and its Chromium
+      # `npm ci` installs exactly the committed lockfile, as browser-probe-setup
+      # does; `npm install` could resolve a different Playwright.
+      - name: Install the npm dependencies
         working-directory: Tools/browser-grading-smoke
-        run: |
-          npm install --no-audit --no-fund
-          npx playwright install --with-deps chromium
+        run: npm ci --no-audit --no-fund
+
+      # The engine download is the slow, network-dependent part of
+      # `playwright install`. Cache it on the lockfile, as browser-probe-setup
+      # does, so the eight matrix legs do not each download it.
+      - name: Cache the Playwright Chromium download
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Tools/browser-grading-smoke/package-lock.json') }}
+
+      - name: Install the Playwright Chromium engine
+        working-directory: Tools/browser-grading-smoke
+        run: npx playwright install --with-deps chromium
 
       - name: Drive the ${{ matrix.language }} ${{ matrix.mode }} probe on the real kernel
         run: |

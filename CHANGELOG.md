@@ -9,6 +9,41 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.572] - 2026-10-07
+
+### Fixed
+
+- **The browser grading smoke installs the committed lockfile and caches its browser.** It used `npm install`, which can resolve a version other than the lockfile, and each of its eight matrix legs downloaded Chromium again. It now uses `npm ci` and caches the Playwright download on the lockfile. Its header also names Octave, which the matrix already ran. (#2436)
+
+
+## [0.5.571] - 2026-10-07
+
+### Fixed
+
+- **A change to a bundle patch script now runs the kernel re-vendor check.** `build-jupyterlite.sh` runs the four `scripts/patch-*.py` scripts, but the re-vendor workflow did not list them, so a pull request that changed one did not prove that the bundle still builds. (#2437)
+
+
+## [0.5.570] - 2026-10-07
+
+### Fixed
+
+- **The Docker build now runs on a pull request that changes its other inputs.** The path filter omitted `.dockerignore`, the `restore-git-mtimes` action and `scripts/ci-runner-cgroup-probe.sh`, so a change to one of them reached `main` without the image build. (#2430)
+
+
+## [0.5.569] - 2026-10-07
+
+### Fixed
+
+- **CLAUDE.md no longer counts two kernels or six languages.** Seven passages still described the state before Lua, Octave, C++, Racket and Java were added. They now say "every" where the count follows the language list, and name the one extractor per language. (#2433)
+
+
+## [0.5.568] - 2026-10-07
+
+### Fixed
+
+- **CLAUDE.md names the import guard by its current name.** It said `PythonImportGuard`, which no longer exists. The authoring doors call `KernelImportGuard`. (#2432)
+
+
 ## [0.5.567] - 2026-10-07
 
 ### Fixed
