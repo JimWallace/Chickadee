@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.528] - 2026-10-07
+
+### Changed
+
+- **One MCP tool protocol and one tools/call path for both surfaces.** The content and admin MCP surfaces had separate copies of the tool protocol, the type-erased tool, the routing, the tools/list and tools/call code and the POST handler, and the copies had begun to drift. Both surfaces now use one generic `MCPTool`, one `AnyMCPTool`, one tools/call implementation with surface hooks (the content write audit and content snapshot, and the admin role check), and one `MCPTransport.serve`. The distinct scope types still keep the surfaces apart at compile time. Behaviour does not change. (#2339)
+
+
 ## [0.5.527] - 2026-10-07
 
 ### Changed
