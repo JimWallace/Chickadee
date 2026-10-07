@@ -175,14 +175,33 @@ fi
 # added here does not fail loudly; the control simply stops responding.  The
 # replacement is a data attribute read by a delegated listener: see the
 # declarative control behaviours at the foot of Public/app.js.
+# The scan reads each tag whole, so it finds a handler on a later line of a
+# multi-line tag and one in single quotes, and it reads the HTML strings in
+# Public/*.js that reach the page through innerHTML (#2405).
 event_attr_offenders="$(
-  grep -nEo '<[a-zA-Z][^>]*[[:space:]]on[a-z]+="[^"]*"' "${views[@]}" 2>/dev/null \
-    | grep -oE '^[^:]+:[0-9]+:.*[[:space:]]on[a-z]+="[^"]*"' \
-    || true
+  awk '
+    FNR == 1 && NR > 1 { scan(prev) }
+    FNR == 1 { text = ""; prev = FILENAME }
+    { text = text $0 "\n" }
+    END { if (NR > 0) scan(prev) }
+    function scan(file,   rest, line, p, q, pre, tag) {
+      rest = text; line = 1
+      while ((p = match(rest, /<[a-zA-Z]/)) > 0) {
+        pre = substr(rest, 1, p - 1); line += gsub(/\n/, "\n", pre)
+        rest = substr(rest, p)
+        q = index(rest, ">")
+        tag = (q > 0) ? substr(rest, 1, q) : rest
+        if (tag ~ /[ \t\n]on[a-z]+[ \t\n]*=/) {
+          gsub(/[ \t\n]+/, " ", tag); print file ":" line ": " substr(tag, 1, 120)
+        }
+        rest = substr(rest, 2)
+      }
+    }
+  ' "${views[@]}" Public/*.js
 )"
 if [ -n "$event_attr_offenders" ]; then
   status=1
-  echo "ERROR: inline event-handler attribute in a template."
+  echo "ERROR: inline event-handler attribute in a template or a JS-built HTML string."
   echo "       The CSP script-src carries no 'unsafe-inline', so this handler would"
   echo "       never fire.  Use a data-* attribute plus a delegated listener in"
   echo "       Public/app.js — see the declarative control behaviours there."
