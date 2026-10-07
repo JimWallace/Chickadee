@@ -42,7 +42,7 @@ import VaporTesting
     ) async throws -> (assignment: APIAssignment, setup: APITestSetup) {
         let setupID = "act_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await writeZip(at: zipPath, entries: [("test_a.sh", "exit 0\n")])
+        try await writeZipFixture(at: zipPath, entries: [("test_a.sh", "exit 0\n")])
         let setup = APITestSetup(
             id: setupID,
             manifest: #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#,
@@ -53,17 +53,6 @@ import VaporTesting
             deadlineOverrideActive: false, courseID: courseID)
         try await assignment.save(on: app.db)
         return (assignment, setup)
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("act-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            try Data(content.utf8).write(to: root.appendingPathComponent(name))
-        }
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     /// A version row written directly, so a test can control its timestamp and
