@@ -275,6 +275,10 @@ func makeTestApp(
         app.submissionsDirectory = dirs[2]
         app.dataExportsDirectory = dirs[3]
         app.contentFilesDirectory = dirs[4]
+        // A healthy disk for every test app, so the diskSpaceLow rule does not
+        // read the disk of the machine that runs the tests. A test of the rule
+        // sets its own reading.
+        app.diskSpaceProbe = { _ in DiskSpace(freeBytes: 50 << 30, totalBytes: 100 << 30) }
         // Seed the worker-secret and local-runner-autostart paths into the
         // per-test temp directory so admin/worker-management tests don't
         // collide with each other or with the dev .worker-secret on disk.

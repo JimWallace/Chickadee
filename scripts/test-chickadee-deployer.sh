@@ -42,6 +42,8 @@ case "$1" in
     case "$*" in
       *revision*) cat "$STUB/image_revision" ;;
       *RepoDigests*) echo "ghcr.io/jimwallace/chickadee@sha256:0123abcd" ;;
+      # Reclaiming space frees enough when the case says so.
+      *prune*) [ -f "$STUB/prune_frees" ] && echo $(( 50 * 1024 * 1024 )) > "$STUB/free_kib" ;;
     esac
     ;;
   compose)
@@ -96,6 +98,16 @@ esac
 exit 0
 SH
 
+# Free space in KiB for every path: plenty unless the case sets free_kib, and
+# unknown when it sets df_fails.
+cat > "$BIN/df" <<'SH'
+#!/usr/bin/env bash
+printf 'df %s\n' "$*" >> "$STUB/calls"
+[ -f "$STUB/df_fails" ] && exit 1
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "/dev/test 97517568 0 $(cat "$STUB/free_kib" 2>/dev/null || echo $(( 100 * 1024 * 1024 ))) 0% /"
+SH
+
 cat > "$WORK/deploy-script" <<'SH'
 #!/usr/bin/env bash
 printf 'deploy-script %s image=%s\n' "$*" "${CHICKADEE_IMAGE:-}" >> "$STUB/calls"
@@ -110,7 +122,7 @@ cat > "$WORK/snapshot-script" <<'SH'
 printf 'snapshot %s\n' "$*" >> "$STUB/calls"
 SH
 
-chmod +x "$BIN/docker" "$BIN/curl" "$WORK/deploy-script" "$WORK/snapshot-script"
+chmod +x "$BIN/docker" "$BIN/curl" "$BIN/df" "$WORK/deploy-script" "$WORK/snapshot-script"
 touch "$WORK/docker-compose.yml"
 
 export STUB
@@ -414,6 +426,37 @@ touch "$STUB/runner_crashing"
 run_cycle
 expect_history runner-refresh failed
 expect_calls "docker image prune" 0
+
+# ---------------------------------------------------------------------------
+start_case "a host short of disk space reclaims, then holds the deploy without pulling"
+echo $(( 4 * 1024 * 1024 )) > "$STUB/free_kib"
+run_cycle
+run_cycle
+expect_calls "docker image prune -a -f" 2
+expect_calls "docker pull" 0
+expect_calls "snapshot" 0
+expect_calls "deploy-script" 0
+expect_state disk_low
+grep -q 'only 4 GiB free' "$STATUS_FILE" || fail "the status detail does not say how much is free"
+[ "$(grep -c '"action": "disk"' "$HISTORY_FILE")" = "1" ] || fail "expected one disk-low history entry for two held cycles"
+[ "$DEPLOYED_VERSION" = "0.5.231" ] || fail "a held deploy changed the deployed version: $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+start_case "a host whose reclaim frees enough space deploys"
+echo $(( 4 * 1024 * 1024 )) > "$STUB/free_kib"
+touch "$STUB/prune_frees"
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_state idle
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed, saw $DEPLOYED_VERSION"
+
+# ---------------------------------------------------------------------------
+start_case "a host that cannot report its free space still deploys"
+touch "$STUB/df_fails"
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_calls "docker image prune -a -f" 1
+expect_state idle
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then

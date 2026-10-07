@@ -271,6 +271,34 @@ Runner retry behavior is intentionally stage-specific:
 - result uploads retry longer than heartbeats so transient API restarts are less
   likely to lose a completed grade
 
+## Health Alerts
+
+The server checks a set of health rules every 60 seconds
+(`ServerHealthAlertService.swift`). `/admin/alerts` and the admin MCP tool
+`get_health_alerts` show every rule, its threshold and its live state. A rule
+that starts to fire, or stops, posts to the alert webhook (Slack, Discord, ntfy
+or Pushover). A rule that keeps firing posts again after 30 minutes.
+
+To get alerts:
+
+1. `ALERT_ENABLED` must be on. `docker-compose.yml` passes it through with the
+   default `true`. Until 2026-10-07 it did not pass it through at all, so a
+   Compose or blue-green deploy could not turn alerts on, and the disk-full
+   outage that day sent no alert.
+2. Set the webhook on `/admin/alerts`. The server keeps it in
+   `.alert-webhook-url` on the data volume, so it survives a deploy.
+   `ALERT_WEBHOOK_URL` is the fallback when no webhook is set on the page.
+
+With alerts on and no webhook, a firing rule is only logged
+(`alert_emitted_noop`).
+
+`diskSpaceLow` ("Disk nearly full") fires when less than 15% of the disk that
+holds the data volume is free. On the production host, that disk also holds the
+Docker images and `backups/`. The rule reads no database, so it still answers
+when a full disk has stopped Postgres. `get_storage_usage` and `/admin/storage`
+show the same free space. The deploy daemon has its own check: see
+[zero-downtime-deploy.md](zero-downtime-deploy.md), state `disk_low`.
+
 ## Deployment Examples
 
 Docker Compose:

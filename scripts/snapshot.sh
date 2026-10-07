@@ -29,9 +29,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$SCRIPT_DIR/lib/snapshot-retention.sh"
 COMPOSE="docker compose $(chickadee_compose_file_args "$REPO_ROOT" | tr '\n' ' ')"
 BACKUP_DIR="$REPO_ROOT/backups"
-RETENTION_DAYS=7
-# Predeploy snapshots kept, newest first. See lib/snapshot-retention.sh.
-KEEP_PREDEPLOY=3
+# Both limits are in lib/snapshot-retention.sh.
+RETENTION_DAYS="$SNAPSHOT_RETENTION_DAYS"
+KEEP_PREDEPLOY="$SNAPSHOT_KEEP_PREDEPLOY"
 
 # ----------------------------------------------------------------
 # Parse args
