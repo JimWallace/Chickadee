@@ -25,14 +25,6 @@ import VaporTesting
 
     // MARK: - Helpers
 
-    /// Creates an .auto course (auto-enrolls the instructor on login).
-    @discardableResult
-    private func makeCourse(code: String) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Course \(code)", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return course
-    }
-
     /// Creates a section in the given course.
     @discardableResult
     private func makeSection(
@@ -70,7 +62,7 @@ import VaporTesting
 
     @Test func createSection_instructorCanCreateSection() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_CREATE1")
+            let course = try await makeTestCourse(on: app, code: "SECT_CREATE1", mode: .auto)
             let courseID = try course.requireID()
             let cookie = try await loginUser(
                 username: "sect_instructor1", password: "pw",
@@ -104,7 +96,7 @@ import VaporTesting
 
     @Test func createSection_secondSectionGetsHigherSortOrder() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_CREATE2")
+            let course = try await makeTestCourse(on: app, code: "SECT_CREATE2", mode: .auto)
             let courseID = try course.requireID()
             try await makeSection(name: "Existing", order: 1, courseID: courseID)
 
@@ -138,7 +130,7 @@ import VaporTesting
 
     @Test func createSection_emptyNameRejected() async throws {
         try await withApp(app) { _ in
-            try await makeCourse(code: "SECT_EMPTY")
+            try await makeTestCourse(on: app, code: "SECT_EMPTY", mode: .auto)
             let cookie = try await loginUser(
                 username: "sect_instructor3", password: "pw",
                 role: "instructor", on: app)
@@ -163,7 +155,7 @@ import VaporTesting
 
     @Test func createSection_invalidGradingModeRejected() async throws {
         try await withApp(app) { _ in
-            try await makeCourse(code: "SECT_BADMODE")
+            try await makeTestCourse(on: app, code: "SECT_BADMODE", mode: .auto)
             let cookie = try await loginUser(
                 username: "sect_instructor4", password: "pw",
                 role: "instructor", on: app)
@@ -188,7 +180,7 @@ import VaporTesting
 
     @Test func createSection_studentForbidden() async throws {
         try await withApp(app) { _ in
-            try await makeCourse(code: "SECT_STUDENT1")
+            try await makeTestCourse(on: app, code: "SECT_STUDENT1", mode: .auto)
             let cookie = try await loginUser(
                 username: "sect_student1", password: "pw",
                 role: "student", on: app)
@@ -215,7 +207,7 @@ import VaporTesting
 
     @Test func reorderSections_updatesOrder() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_REORDER1")
+            let course = try await makeTestCourse(on: app, code: "SECT_REORDER1", mode: .auto)
             let courseID = try course.requireID()
             let s1 = try await makeSection(name: "A", order: 1, courseID: courseID)
             let s2 = try await makeSection(name: "B", order: 2, courseID: courseID)
@@ -255,7 +247,7 @@ import VaporTesting
 
     @Test func reorderSections_invalidUUIDRejected() async throws {
         try await withApp(app) { _ in
-            try await makeCourse(code: "SECT_REORDER2")
+            try await makeTestCourse(on: app, code: "SECT_REORDER2", mode: .auto)
             let cookie = try await loginUser(
                 username: "sect_instructor_ri", password: "pw",
                 role: "instructor", on: app)
@@ -282,7 +274,7 @@ import VaporTesting
 
     @Test func renameSection_updatesNameAndMode() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_RENAME1")
+            let course = try await makeTestCourse(on: app, code: "SECT_RENAME1", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(
                 name: "OldName", mode: "worker",
@@ -317,7 +309,7 @@ import VaporTesting
 
     @Test func renameSection_emptyNameRejected() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_RENAME2")
+            let course = try await makeTestCourse(on: app, code: "SECT_RENAME2", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Good", order: 1, courseID: courseID)
             let sectionID = try section.requireID().uuidString
@@ -346,7 +338,7 @@ import VaporTesting
 
     @Test func renameSection_notFoundForUnknownID() async throws {
         try await withApp(app) { _ in
-            try await makeCourse(code: "SECT_RENAME3")
+            try await makeTestCourse(on: app, code: "SECT_RENAME3", mode: .auto)
             let cookie = try await loginUser(
                 username: "sect_instructor_rnf", password: "pw",
                 role: "instructor", on: app)
@@ -374,7 +366,7 @@ import VaporTesting
 
     @Test func deleteSection_removesSection() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_DEL1")
+            let course = try await makeTestCourse(on: app, code: "SECT_DEL1", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "ToDelete", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
@@ -403,7 +395,7 @@ import VaporTesting
 
     @Test func deleteSection_assignmentsBecomesUngrouped() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_DEL2")
+            let course = try await makeTestCourse(on: app, code: "SECT_DEL2", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Doomed", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
@@ -443,7 +435,7 @@ import VaporTesting
 
     @Test func moveToSection_setsSection() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_MOVE1")
+            let course = try await makeTestCourse(on: app, code: "SECT_MOVE1", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Target", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
@@ -479,7 +471,7 @@ import VaporTesting
 
     @Test func moveToSection_emptyIDClearsSection() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_MOVE2")
+            let course = try await makeTestCourse(on: app, code: "SECT_MOVE2", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "ASection", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
@@ -517,7 +509,7 @@ import VaporTesting
 
     @Test func moveToSection_syncsBrowserGradingMode() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "SECT_MOVE3")
+            let course = try await makeTestCourse(on: app, code: "SECT_MOVE3", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(
                 name: "BrowserSection", mode: "browser",

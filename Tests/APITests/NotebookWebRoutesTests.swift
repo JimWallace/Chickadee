@@ -77,19 +77,6 @@ import VaporTesting
         self.publicDir = publicDir
     }
 
-    private func loginAsStudent(username: String) async throws -> String {
-        try await loginUser(
-            username: username,
-            password: "testpassword",
-            role: "student",
-            on: app
-        )
-    }
-
-    private func loginAsStudent() async throws -> String {
-        try await loginAsStudent(username: "notebook_student")
-    }
-
     private func studentUser() async throws -> APIUser {
         let user = try await APIUser.query(on: app.db)
             .filter(\.$username == "notebook_student")
@@ -101,9 +88,7 @@ import VaporTesting
         if let existing = try await APICourse.query(on: app.db).filter(\.$code == "NOTE185").first() {
             return existing
         }
-        let course = APICourse(code: "NOTE185", name: "Notebook Coverage")
-        try await course.save(on: app.db)
-        return course
+        return try await makeTestCourse(on: app, code: "NOTE185", name: "Notebook Coverage")
     }
 
     private func enroll(_ user: APIUser) async throws {
@@ -240,7 +225,7 @@ import VaporTesting
     /// the only difference under test is the flag.
     @Test func notebookPageEmbeddedDropsSiteChromeButKeepsEditor() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -289,7 +274,7 @@ import VaporTesting
     /// staff-only guard runs before the flag is ever consulted.
     @Test func embeddedFlagGrantsNoAccessToTheSolution() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -313,7 +298,7 @@ import VaporTesting
 
     @Test func notebookPageSeedsWorkingCopyAndRendersEditorFrame() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -364,7 +349,7 @@ import VaporTesting
         try await withApp(app) { _ in
             // Open assignment: data-read-only="false", Submit button rendered,
             // no "closed" notice.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -401,7 +386,7 @@ import VaporTesting
             // the Submit button must disappear, and the closed-view notice must
             // appear.  This is the core contract for the closed-assignment
             // read-only review view.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -450,7 +435,7 @@ import VaporTesting
             // engaged with it — recent labs stay reviewable instead of bouncing
             // the student to the dashboard. Submission remains separately gated,
             // so the view is read-only (no Submit button, closed notice shown).
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -484,7 +469,7 @@ import VaporTesting
             // lab that ran and closed: a student who never engaged with it is
             // still bounced to the dashboard so authoring-in-progress content and
             // pre-posted links can't spoil it.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -516,7 +501,7 @@ import VaporTesting
             // The notebook page must render EDITABLE (not read-only) with the
             // Submit button, because the extension makes it effectively open for
             // this student — independent of any prior participation.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -560,7 +545,7 @@ import VaporTesting
             // The reference solution is staff-only. A student crafting
             // ?file=solution on the notebook route must be refused — the answer
             // key is never served to a student, on any assignment.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -879,7 +864,7 @@ import VaporTesting
             // The button is staff-only in the template; the endpoint is what
             // actually enforces it. A student POSTing directly must be refused
             // before anything is written.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1039,7 +1024,7 @@ import VaporTesting
                     #expect(res.body.string.contains("{{patients}}"))
                 })
 
-            let studentLogin = try await loginAsStudent()
+            let studentLogin = try await loginAsStudent("notebook_student", on: app)
             try await enroll(try await studentUser())
             try await app.asyncTest(
                 .GET, "/testsetups/\(setupID)/notebook/source",
@@ -1064,7 +1049,7 @@ import VaporTesting
                 manifest: personalizedManifest)
             _ = try await insertAssignment(testSetupID: setupID, title: "Forced Lab", isOpen: true)
 
-            let studentLogin = try await loginAsStudent(username: "notebook_view_forcer")
+            let studentLogin = try await loginAsStudent("notebook_view_forcer", on: app)
             try await enroll(
                 try #require(
                     try await APIUser.query(on: app.db)
@@ -1095,7 +1080,7 @@ import VaporTesting
                 ])
             _ = try await insertAssignment(testSetupID: setupID, title: "Guarded Lab", isOpen: true)
 
-            let studentLogin = try await loginAsStudent(username: "notebook_source_peeker")
+            let studentLogin = try await loginAsStudent("notebook_source_peeker", on: app)
             try await enroll(
                 try #require(
                     try await APIUser.query(on: app.db)
@@ -1276,7 +1261,7 @@ import VaporTesting
                     #expect(res.body.string.contains(#"id="nb-save-assignment""#))
                 })
 
-            let studentLogin = try await loginAsStudent()
+            let studentLogin = try await loginAsStudent("notebook_student", on: app)
             let student = try await studentUser()
             try await enroll(student)
             try await app.asyncTest(
@@ -1295,7 +1280,7 @@ import VaporTesting
             // than into the notebook — the future `startsAt` holds it closed for
             // everyone, so the closed-assignment gate fires just as it does for a
             // past-deadline lab.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1326,7 +1311,7 @@ import VaporTesting
             // A student self-resets their own working copy: the corrupted copy is
             // overwritten with the canonical starter and they are bounced back to
             // the dashboard.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
             let userID = try user.requireID()
@@ -1370,7 +1355,7 @@ import VaporTesting
             // The reset used to write the raw template, so the student's first
             // cell became `patients = {{patients}}` — a NameError with no
             // self-service way back to their data.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
             let userID = try user.requireID()
@@ -1420,7 +1405,7 @@ import VaporTesting
         try await withApp(app) { _ in
             // The self-reset route is gated on the assignment being open to the
             // student; a past-deadline assignment is refused with 403.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1452,7 +1437,7 @@ import VaporTesting
             // Having submitted at least once also counts as "previously opened",
             // so a closed assignment with a prior submission renders the
             // read-only review view rather than redirecting.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1488,7 +1473,7 @@ import VaporTesting
             // The durable mechanism: opening an assignment while it is open
             // records a participation row, which keeps it reachable once it
             // later closes — without depending on the on-disk working copy.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1530,7 +1515,7 @@ import VaporTesting
 
     @Test func notebookSourceReturnsExistingWorkingCopy() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1562,7 +1547,7 @@ import VaporTesting
 
     @Test func notebookPageSubmissionIDRestoresSelectedSubmission() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             let userID = try user.requireID()
             try await enroll(user)
@@ -1613,7 +1598,7 @@ import VaporTesting
 
     @Test func notebookPageLinksSupportFilesAndLeavesStrayUserFilesAlone() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             let userID = try user.requireID()
             try await enroll(user)
@@ -1687,7 +1672,7 @@ import VaporTesting
 
     @Test func notebookSourceReplacesCorruptWorkingCopyWithLatestNotebookSubmission() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             let userID = try user.requireID()
             try await enroll(user)
@@ -1729,7 +1714,7 @@ import VaporTesting
 
     @Test func notebookPageRejectsHistorySelectionFromDifferentAssignment() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             let userID = try user.requireID()
             try await enroll(user)
@@ -1760,7 +1745,7 @@ import VaporTesting
 
     @Test func notebookPageRejectsNonNotebookHistorySelection() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             let userID = try user.requireID()
             try await enroll(user)
@@ -1796,11 +1781,11 @@ import VaporTesting
 
     @Test func notebookPageRejectsHistorySelectionOwnedByAnotherStudent() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
-            let otherCookie = try await loginAsStudent(username: "notebook_student_other")
+            let otherCookie = try await loginAsStudent("notebook_student_other", on: app)
             #expect(otherCookie.isEmpty == false)
             let fetchedOtherUser = try await APIUser.query(on: app.db)
                 .filter(\.$username == "notebook_student_other")
@@ -1836,7 +1821,7 @@ import VaporTesting
             // files) should return 404 rather than silently serving an empty notebook.
             // This prevents students from opening a blank notebook when the instructor
             // hasn't uploaded an assignment notebook yet.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1868,7 +1853,7 @@ import VaporTesting
 
     @Test func notebookSourceFallsBackToNestedManifestStarterNotebookWhenZipOnlySetupHasNoFlatNotebook() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 
@@ -1911,7 +1896,7 @@ import VaporTesting
         try await withApp(app) { _ in
             // GET /reset-editor renders the confirmation form (no clearing yet),
             // preserving a safe same-origin `next` and dropping an unsafe one.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
 
             try await app.asyncTest(
                 .GET, "/reset-editor?next=/testsetups/abc/notebook",
@@ -1935,7 +1920,7 @@ import VaporTesting
         try await withApp(app) { _ in
             // An off-origin `next` must be neutralised to "/" so the page can't be
             // turned into an open redirect (or attribute injection).
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
 
             try await app.asyncTest(
                 .GET, "/reset-editor?next=https://evil.example.com/phish",
@@ -1956,7 +1941,7 @@ import VaporTesting
             // POST /reset-editor returns the "done" page AND a Clear-Site-Data
             // header that drops cache + storage (IndexedDB / service worker) but
             // NOT cookies — the student must stay logged in.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -1983,7 +1968,7 @@ import VaporTesting
             // Without a CSRF token the POST is rejected (the auth group's CSRF
             // middleware) — a cross-origin page can't silently wipe a student's
             // in-progress notebook.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
 
             try await app.asyncTest(
                 .POST, "/reset-editor",
@@ -2000,7 +1985,7 @@ import VaporTesting
 
     @Test func notebookSourceFallsBackToFirstNestedNotebookWhenZipOnlySetupHasNoManifestStarter() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("notebook_student", on: app)
             let user = try await studentUser()
             try await enroll(user)
 

@@ -27,13 +27,6 @@ import VaporTesting
     // MARK: - Helpers
 
     @discardableResult
-    private func makeCourse(code: String) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Course \(code)", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return course
-    }
-
-    @discardableResult
     private func makeSection(
         name: String, order: Int = 1, courseID: UUID
     ) async throws
@@ -79,7 +72,7 @@ import VaporTesting
 
     @Test func createContentItem_persistsWithLinks() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "CI_CREATE1")
+            let course = try await makeTestCourse(on: app, code: "CI_CREATE1", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Lectures", courseID: courseID)
             let cookie = try await loginUser(
@@ -117,7 +110,7 @@ import VaporTesting
 
     @Test func createContentItem_emptyTitleRejected() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "CI_CREATE2")
+            let course = try await makeTestCourse(on: app, code: "CI_CREATE2", mode: .auto)
             let cookie = try await loginUser(
                 username: "ci_instr2", password: "pw", role: "instructor", on: app)
             try await promoteToInstructor("ci_instr2", on: app)
@@ -141,7 +134,7 @@ import VaporTesting
 
     @Test func createContentItem_unsafeURLRejected() async throws {
         try await withApp(app) { _ in
-            _ = try await makeCourse(code: "CI_CREATE3")
+            _ = try await makeTestCourse(on: app, code: "CI_CREATE3", mode: .auto)
             let cookie = try await loginUser(
                 username: "ci_instr3", password: "pw", role: "instructor", on: app)
             try await promoteToInstructor("ci_instr3", on: app)
@@ -164,7 +157,7 @@ import VaporTesting
 
     @Test func createContentItem_studentForbidden() async throws {
         try await withApp(app) { _ in
-            _ = try await makeCourse(code: "CI_STUDENT")
+            _ = try await makeTestCourse(on: app, code: "CI_STUDENT", mode: .auto)
             let cookie = try await loginUser(
                 username: "ci_student", password: "pw", role: "student", on: app)
             let (token, newCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -190,7 +183,7 @@ import VaporTesting
 
     @Test func editContentItem_updatesFields() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "CI_EDIT")
+            let course = try await makeTestCourse(on: app, code: "CI_EDIT", mode: .auto)
             let courseID = try course.requireID()
             let item = try await makeContentItem(title: "Old", courseID: courseID)
             let cookie = try await loginUser(
@@ -220,7 +213,7 @@ import VaporTesting
 
     @Test func deleteContentItem_removesIt() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "CI_DELETE")
+            let course = try await makeTestCourse(on: app, code: "CI_DELETE", mode: .auto)
             let courseID = try course.requireID()
             let item = try await makeContentItem(title: "Doomed", courseID: courseID)
             let cookie = try await loginUser(
@@ -244,7 +237,7 @@ import VaporTesting
 
     @Test func studentDashboard_showsPublishedHidesDraft() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "CI_RENDER")
+            let course = try await makeTestCourse(on: app, code: "CI_RENDER", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Lectures", courseID: courseID)
             let sectionID = try section.requireID()
@@ -275,7 +268,7 @@ import VaporTesting
 
     @Test func instructorDashboard_showsAllItems() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "CI_RENDER_INSTR")
+            let course = try await makeTestCourse(on: app, code: "CI_RENDER_INSTR", mode: .auto)
             let courseID = try course.requireID()
             let section = try await makeSection(name: "Lectures", courseID: courseID)
             let sectionID = try section.requireID()

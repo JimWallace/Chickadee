@@ -34,10 +34,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsStudent() async throws -> String {
-        return try await loginUser(username: "teststudent", password: "testpassword", role: "student", on: app)
-    }
-
     /// Saves a notebook JSON directly as a flat .ipynb file and returns the setup ID.
     private func insertSetupWithNotebook(notebookJSON: String) async throws -> String {
         let setupID = "setup_test_\(UUID().uuidString.lowercased().prefix(6))"
@@ -62,7 +58,7 @@ import VaporTesting
     @Test func studentGetsFilteredNotebook() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/testsetups/\(setupID)/assignment",
@@ -111,7 +107,7 @@ import VaporTesting
     @Test func downloadStripsHiddenCells() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/testsetups/\(setupID)/assignment/download",
@@ -132,7 +128,7 @@ import VaporTesting
     @Test func downloadContentDispositionHeader() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/testsetups/\(setupID)/assignment/download",
@@ -151,7 +147,7 @@ import VaporTesting
     @Test func downloadFilenameUsesTitle() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
 
             // Create an assignment record with a title.
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
@@ -178,7 +174,7 @@ import VaporTesting
     @Test func downloadFilenameFallsBackToSetupID() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
             // No assignment record — filename falls back to setupID.
 
             try await app.asyncTest(
@@ -215,7 +211,7 @@ import VaporTesting
 
     @Test func studentCannotUploadTestSetup() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
             // Obtain a valid CSRF token so the middleware passes and the role check fires.
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
@@ -265,7 +261,7 @@ import VaporTesting
     @Test func browserSubmitMergesTestCells() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             // Simulate the student's notebook: only the public cell + solution cell
@@ -354,7 +350,7 @@ import VaporTesting
     @Test func browserSubmitCreatesSingleBrowserCompleteSubmission() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
             let notebookData = Data(mixedNotebookJSON.utf8)

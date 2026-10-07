@@ -10,15 +10,17 @@ import VaporTesting
 
 /// Generates HMAC-signed HTTPHeaders for worker requests in tests.
 /// Produces the same signature that WorkerHMACAuthMiddleware expects.
+/// `timestamp` and `nonce` default to now and a fresh UUID; a test of the
+/// clock-skew or replay checks passes its own (#2368).
 func workerHMACHeaders(
     method: HTTPMethod,
     path: String,
     body: ByteBuffer? = nil,
     workerSecret: String,
-    workerID: String = "test-runner"
+    workerID: String = "test-runner",
+    timestamp: Int64 = Int64(Date().timeIntervalSince1970),
+    nonce: String = UUID().uuidString
 ) -> HTTPHeaders {
-    let timestamp = Int64(Date().timeIntervalSince1970)
-    let nonce = UUID().uuidString
 
     var bodyCopy = body ?? ByteBuffer()
     let bodyBytes = bodyCopy.readBytes(length: bodyCopy.readableBytes) ?? []

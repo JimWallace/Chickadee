@@ -30,9 +30,7 @@ import VaporTesting
     private let policy = SlipDayPolicy(enabled: true, daysPerStudent: 2, extensionHours: 24)
 
     private func makeCourse() async throws -> APICourse {
-        let course = APICourse(code: "SLIP-\(UUID().uuidString.prefix(6))", name: "Slip Course")
-        try await course.save(on: app.db)
-        return course
+        try await makeTestCourse(on: app, code: "SLIP-\(UUID().uuidString.prefix(6))", name: "Slip Course")
     }
 
     @discardableResult

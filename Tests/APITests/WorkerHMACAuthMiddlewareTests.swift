@@ -1,4 +1,3 @@
-import Crypto
 import Fluent
 import Testing
 import VaporTesting
@@ -38,26 +37,9 @@ import VaporTesting
         timestamp: Int64,
         nonce: String
     ) -> HTTPHeaders {
-        var bodyCopy = body
-        let bodyBytes = bodyCopy.readBytes(length: bodyCopy.readableBytes) ?? []
-        let bodyHash = Data(SHA256.hash(data: Data(bodyBytes))).hexEncodedString()
-        let payload = [
-            method.rawValue.uppercased(),
-            path,
-            bodyHash,
-            String(timestamp),
-            nonce,
-        ].joined(separator: "\n")
-        let signature = hmacSHA256Hex(message: payload, secret: sharedSecret)
-
-        var headers = HTTPHeaders()
-        headers.replaceOrAdd(name: "X-Worker-Id", value: workerID)
-        headers.replaceOrAdd(name: "X-Worker-Timestamp", value: String(timestamp))
-        headers.replaceOrAdd(name: "X-Worker-Nonce", value: nonce)
-        headers.replaceOrAdd(name: "X-Worker-Body-SHA256", value: bodyHash)
-        headers.replaceOrAdd(name: "X-Worker-Signature", value: signature)
-        headers.contentType = .json
-        return headers
+        workerHMACHeaders(
+            method: method, path: path, body: body, workerSecret: sharedSecret,
+            workerID: workerID, timestamp: timestamp, nonce: nonce)
     }
 
     @Test func acceptsValidSignature() async throws {
@@ -236,17 +218,5 @@ import VaporTesting
                 #expect(res.status == .ok, "HMAC with a large streamed body must succeed over real HTTP")
             }
         }
-    }
-
-    private func hmacSHA256Hex(message: String, secret: String) -> String {
-        let key = SymmetricKey(data: Data(secret.utf8))
-        let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
-        return Data(mac).hexEncodedString()
-    }
-}
-
-private extension Data {
-    func hexEncodedString() -> String {
-        map { String(format: "%02x", $0) }.joined()
     }
 }

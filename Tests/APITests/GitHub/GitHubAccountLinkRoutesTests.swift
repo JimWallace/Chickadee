@@ -79,15 +79,9 @@ import VaporTesting
     private func get(
         _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void = { _ in }
     ) async throws -> String {
-        var next = cookie
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                if let set = res.headers.first(name: .setCookie) { next = set }
-                try check(res)
-            })
-        return next
+        let res = try await getResponse(path, cookie: cookie, on: app)
+        try check(res)
+        return res.headers.first(name: .setCookie) ?? cookie
     }
 
     /// POSTs with a CSRF token bound to the session; returns the cookie to use next.

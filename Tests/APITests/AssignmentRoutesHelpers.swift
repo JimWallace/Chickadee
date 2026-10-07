@@ -262,6 +262,35 @@ func arMultipartBody(
     return body
 }
 
+// MARK: - Course with one assignment
+
+/// A course (archived or not, in `enrollmentMode`) with one open assignment
+/// whose setup has a single public test. The archived-course route suites use
+/// it for an active and an archived course side by side (#2366).
+func makeCourseWithAssignment(
+    code: String, archived: Bool, enrollmentMode: CourseEnrollmentMode, setupPrefix: String,
+    on app: Application
+) async throws -> (courseID: UUID, setupID: String, assignmentID: String) {
+    let course = try await makeTestCourse(
+        on: app, code: code, name: code, archived: archived, mode: enrollmentMode)
+    let courseID = try course.requireID()
+
+    let setupID = "\(setupPrefix)\(UUID().uuidString.prefix(8))"
+    let zipPath = app.testSetupsDirectory + setupID + ".zip"
+    try await arMakeZip(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
+    let manifest = """
+        {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_a.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+    try await APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID).save(on: app.db)
+
+    let assignment = APIAssignment(
+        testSetupID: setupID, title: code,
+        dueAt: nil, isOpen: true, deadlineOverrideActive: false, courseID: courseID
+    )
+    try await assignment.save(on: app.db)
+    return (courseID, setupID, assignment.publicID)
+}
+
 // MARK: - Zip + notebook fixtures
 
 func arMakeZip(at path: String, entries: [(String, String)]) async throws {
