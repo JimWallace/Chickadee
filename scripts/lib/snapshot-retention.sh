@@ -19,6 +19,11 @@
 # A snapshot directory is named snapshot-<YYYYMMDD-HHMMSS>-<label>, so a sort
 # by name is a sort by time.
 
+# The two limits. snapshot.sh and the deployer (which prunes before a deploy on
+# a nearly full disk) both read them from here.
+SNAPSHOT_KEEP_PREDEPLOY=3
+SNAPSHOT_RETENTION_DAYS=7
+
 # prune_snapshots DIR KEEP_PREDEPLOY RETENTION_DAYS
 # Deletes what the two rules allow, and prints each deleted path.
 prune_snapshots() {

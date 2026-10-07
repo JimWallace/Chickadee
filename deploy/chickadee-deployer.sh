@@ -39,6 +39,8 @@ COMPOSE_DIR="${CHICKADEE_COMPOSE_DIR:-$REPO_ROOT}"
 COMPOSE_FILE="${CHICKADEE_COMPOSE_FILE:-$COMPOSE_DIR/docker-compose.yml}"
 # shellcheck source=../scripts/lib/deployment-target.sh
 . "$REPO_ROOT/scripts/lib/deployment-target.sh"
+# shellcheck source=../scripts/lib/snapshot-retention.sh
+. "$REPO_ROOT/scripts/lib/snapshot-retention.sh"
 # See the note in bluegreen-deploy.sh: an explicit -f suppresses
 # docker-compose.override.yml, so it is added by hand or the runner refresh
 # below recreates the runner from the base file alone.
@@ -83,6 +85,17 @@ MAX_RETRY_DELAY_SECS=3600
 WAITING_VERSION=""
 WAITING_SINCE=0
 WAIT_STUCK_AFTER_SECS=7200
+# Free space a deploy needs before it pulls: a release image is about 5 GB on
+# disk, and the predeploy snapshot comes on top. On 2026-10-07 the disk filled,
+# Postgres stopped and the site went down. A pull onto a nearly full disk can
+# be the write that fills it, so below this the daemon first reclaims space,
+# and if that is not enough it holds the deploy in state `disk_low`, which the
+# server's deployerUnhealthy rule pages on. A constant, not an environment
+# variable, by the standing rule.
+MIN_FREE_KIB_FOR_DEPLOY=$(( 10 * 1024 * 1024 ))
+# The release held for disk space, so the history says so once per release.
+DISK_LOW_VERSION=""
+DISK_REASON=""
 # How long refresh_runner waits after `compose up` before it asks Docker whether
 # the runner is still up. The runner checks its own command at startup (the
 # `--sandbox` probe) and exits within a few seconds when the check fails.
@@ -533,11 +546,64 @@ runner_exit_reason() {
   printf '%s' "$reason"
 }
 
+# ---------------------------------------------------------------------------
+# Free space before a deploy.
+#
+# Two file systems take a deploy's writes: Docker's data root (the image) and
+# this clone (backups/, the snapshot). On the production host they are the same
+# disk, and elsewhere the smaller of the two decides. An unknown answer does not
+# block a deploy: a host that cannot report its disk is no worse off than
+# before this check.
+# ---------------------------------------------------------------------------
+free_kib_at() {  # $1 = path
+  df -Pk "$1" 2>/dev/null | awk 'NR==2 {print $4}'
+}
+
+deploy_free_kib() {
+  local docker_root a b
+  docker_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)"
+  a="$(free_kib_at "${docker_root:-/}")"
+  b="$(free_kib_at "$REPO_ROOT")"
+  if [ -z "$a" ]; then printf '%s' "$b"; return 0; fi
+  if [ -z "$b" ] || [ "$a" -lt "$b" ]; then printf '%s' "$a"; else printf '%s' "$b"; fi
+}
+
+# Returns 0 when there is room for a deploy (after reclaiming space if needed),
+# 1 with DISK_REASON set when there is not.
+ensure_disk_for_deploy() {
+  local free
+  free="$(deploy_free_kib)"
+  [ -n "$free" ] || return 0
+  [ "$free" -ge "$MIN_FREE_KIB_FOR_DEPLOY" ] && return 0
+  log "only $(( free / 1024 / 1024 )) GiB free before a deploy; reclaiming images and old snapshots"
+  # Both are safe at any time: an image that a container uses is never removed,
+  # and the snapshot rule keeps the newest predeploy snapshots.
+  docker image prune -a -f >/dev/null 2>&1 || true
+  prune_snapshots "$REPO_ROOT/backups" "$SNAPSHOT_KEEP_PREDEPLOY" "$SNAPSHOT_RETENTION_DAYS" >/dev/null 2>&1 || true
+  free="$(deploy_free_kib)"
+  [ -n "$free" ] || return 0
+  [ "$free" -ge "$MIN_FREE_KIB_FOR_DEPLOY" ] && return 0
+  DISK_REASON="only $(( free / 1024 / 1024 )) GiB free after removing unused images and old snapshots; a deploy needs $(( MIN_FREE_KIB_FOR_DEPLOY / 1024 / 1024 )) GiB. Free space on the host."
+  return 1
+}
+
 # Returns 0 when deployed, 1 when the attempt failed (counted by
 # record_failure), 2 when the release image is not available yet (waiting).
+# A deploy is also held (2) while the host is too short of disk space to pull.
 do_deploy() {  # $1 = version tag
   local ver="$1"
   LATEST_SEEN="$ver"
+
+  if ! ensure_disk_for_deploy; then
+    if [ "$DISK_LOW_VERSION" != "$ver" ]; then
+      DISK_LOW_VERSION="$ver"
+      append_history "$ver" disk low "$DISK_REASON"
+      log "holding $ver: $DISK_REASON"
+    fi
+    write_status disk_low "$DISK_REASON"
+    return 2
+  fi
+  DISK_LOW_VERSION=""
 
   if ! stage_release_image "$ver"; then
     if [ "$WAITING_VERSION" != "$ver" ]; then

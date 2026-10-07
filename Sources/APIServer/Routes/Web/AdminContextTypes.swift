@@ -229,6 +229,26 @@ struct AdminStorageContext: Encodable, Sendable {
     /// Raw bytes behind `totalFormatted`, the denominator of each assignment's
     /// share. Zero when a caller does not know it.
     var totalBytes: Int = 0
+    /// Free and total space on the data disk, measured on each request rather
+    /// than cached with the totals above. Nil when the system does not report it.
+    var disk: DiskSpace?
+    /// `disk` as the page's "Disk free" tile shows it.
+    var diskText: String { disk?.freeOfTotalText ?? "unknown" }
+
+    private enum CodingKeys: String, CodingKey {
+        case rows, totalFormatted, dbBackend, assignments, totalBytes, disk, diskText
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rows, forKey: .rows)
+        try container.encode(totalFormatted, forKey: .totalFormatted)
+        try container.encode(dbBackend, forKey: .dbBackend)
+        try container.encode(assignments, forKey: .assignments)
+        try container.encode(totalBytes, forKey: .totalBytes)
+        try container.encodeIfPresent(disk, forKey: .disk)
+        try container.encode(diskText, forKey: .diskText)
+    }
 }
 
 /// One assignment as the Storage page draws it: its footprint as a share of the
