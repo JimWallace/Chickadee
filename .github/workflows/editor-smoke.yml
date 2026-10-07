@@ -139,8 +139,9 @@ jobs:
           set -uo pipefail
           if SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh; then
             exit 0
+          else
+            rc=$?
           fi
-          rc=$?
           if [ "$ENGINE" != "webkit" ]; then
             exit "$rc"
           fi
@@ -192,8 +193,9 @@ jobs:
           set -uo pipefail
           if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
             exit 0
+          else
+            rc=$?
           fi
-          rc=$?
           if [ "$ENGINE" != "webkit" ]; then
             exit "$rc"
           fi
@@ -216,8 +218,9 @@ jobs:
           set -uo pipefail
           if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
             exit 0
+          else
+            rc=$?
           fi
-          rc=$?
           if [ "$ENGINE" != "webkit" ]; then
             exit "$rc"
           fi
