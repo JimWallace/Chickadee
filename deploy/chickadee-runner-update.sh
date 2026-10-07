@@ -46,6 +46,8 @@ PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/R
 
 REPO="JimWallace/Chickadee"
 IMAGE_REPO="ghcr.io/jimwallace/chickadee"
+# The source label that docker/metadata-action puts on every Chickadee image.
+IMAGE_SOURCE="https://github.com/JimWallace/Chickadee"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HEALTH_URL="https://chickadee.uwaterloo.ca/health"
 COMPOSE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -157,8 +159,13 @@ update_runner() {
     [ -n "$cid" ] && docker logs --tail 5 "$cid" 2>&1
     return 1
   fi
-  # The old image is now untagged. Remove it, and only untagged images.
-  docker image prune -f >/dev/null 2>&1 || true
+  # Remove the old image. Plain `prune -f` removes only images with no name,
+  # and on Docker's containerd image store a pulled image keeps its
+  # `repo@sha256:...` name, so old releases stayed on the disk (29 GB on the
+  # server host on 2026-10-07). `-a` removes images that no container uses. The
+  # label filter limits it to Chickadee images, because on a shared Mac the
+  # owner's other images must stay.
+  docker image prune -a -f --filter "label=org.opencontainers.image.source=$IMAGE_SOURCE" >/dev/null 2>&1 || true
   log "'$SERVICE' runs v$version"
   return 0
 }

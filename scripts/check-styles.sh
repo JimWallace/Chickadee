@@ -340,6 +340,87 @@ if [ -n "$cross" ]; then
   echo
 fi
 
+# ── 4d. A modifier rule must follow its base rule ───────────────────────────
+# `.x--mod` or `.x-mod` on the same element as `.x` overrides it only when it
+# comes later: both are one class, so source order decides. A modifier placed
+# above its base never applies, and the page still renders, so no test sees
+# it (#2399, #2400; #2320 was the same defect). For each top-level rule whose
+# selector is one such class, the guard reports a later top-level rule for
+# exactly `.x` that sets the same property, when the two class names share a
+# line in a template or a first-party JS file (a child element such as
+# `.card-meta` is never on the same element as `.card`).
+modifier_order_hits="$(
+  strip_css_comments < Public/styles.css | awk '
+    { css = css $0 "\n" }
+    function line_of(pos,   t) { t = substr(css, 1, pos); return gsub(/\n/, "\n", t) + 1 }
+    END {
+      depth = 0; start = 1; n = 0; cnt = 0
+      len = length(css)
+      for (i = 1; i <= len; i++) {
+        c = substr(css, i, 1)
+        if (c == "{") {
+          if (depth == 0) {
+            sel = substr(css, start, i - start)
+            gsub(/^[ \t\n]+|[ \t\n]+$/, "", sel)
+            atrule = (substr(sel, 1, 1) == "@")
+            bodystart = i + 1
+          }
+          depth++
+        } else if (c == "}") {
+          depth--
+          if (depth == 0) {
+            if (!atrule) {
+              n++
+              body = substr(css, bodystart, i - bodystart)
+              props = ""
+              m = split(body, decls, /;/)
+              for (k = 1; k <= m; k++) {
+                p = decls[k]; sub(/:.*/, "", p); gsub(/[ \t\n]/, "", p)
+                if (p != "") props = props " " tolower(p) " "
+              }
+              nsel = split(sel, parts, /,/)
+              for (k = 1; k <= nsel; k++) {
+                s = parts[k]; gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
+                if (s !~ /^\.[A-Za-z0-9_-]+$/) continue
+                cnt++; rsel[cnt] = substr(s, 2); rord[cnt] = n; rprops[cnt] = props; rline[cnt] = line_of(i)
+              }
+            }
+            start = i + 1
+          }
+        } else if (c == ";" && depth == 0) {
+          start = i + 1
+        }
+      }
+      for (a = 1; a <= cnt; a++) {
+        for (b = 1; b <= cnt; b++) {
+          if (rord[b] <= rord[a] || index(rsel[a], rsel[b] "-") != 1) continue
+          np = split(rprops[a], pa, " ")
+          for (k = 1; k <= np; k++) {
+            if (pa[k] != "" && index(rprops[b], " " pa[k] " ") > 0) {
+              print rsel[a] "\t" rsel[b] "\t" pa[k] "\t" rline[a] "\t" rline[b]
+            }
+          }
+        }
+      }
+    }'
+)"
+modifier_order_violations=""
+while IFS=$'\t' read -r mod base prop mod_line base_line; do
+  [ -z "$mod" ] && continue
+  if grep -rhE "(^|[^A-Za-z0-9_-])${base}([^A-Za-z0-9_-]|$)" "${views[@]}" Public/*.js 2>/dev/null \
+      | grep -qE "(^|[^A-Za-z0-9_-])${mod}([^A-Za-z0-9_-]|$)"; then
+    modifier_order_violations+="  .${mod} (styles.css:${mod_line}) sets ${prop}; .${base} sets it again later (styles.css:${base_line})"$'\n'
+  fi
+done <<< "$modifier_order_hits"
+
+if [ -n "$modifier_order_violations" ]; then
+  status=1
+  echo "ERROR: a modifier rule comes before its base rule, so the base rule wins."
+  echo "       Move the modifier after the base rule in Public/styles.css."
+  printf '%s' "$modifier_order_violations"
+  echo
+fi
+
 # ── 4b. Page <style> block size ratchet ─────────────────────────────────────
 # Page-local CSS is the sanctioned escape hatch for genuinely page-unique
 # styling — and it is where concept drift lives: the same visual idea
