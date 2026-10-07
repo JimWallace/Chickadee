@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.567] - 2026-10-07
+
+### Fixed
+
+- **The xeus kernel runbook now records the Octave run.** Its opening note and its second-half status said that only Lua had been added and listed three languages. They now name Octave too and point to `AssignmentLanguage.allCases` for the list. (#2435)
+
+
 ## [0.5.566] - 2026-10-07
 
 ### Fixed
