@@ -54,7 +54,7 @@ Submission #(submissionID)
         </div>
         <div class="diagnostics-cards">
             <div class="diagnostic-card"><div class="diagnostic-value">#(passCount)</div><div class="diagnostic-label">Passed</div></div>
-            <div class="diagnostic-card"><div class="diagnostic-value diagnostic-value-alert">#(failCount)</div><div class="diagnostic-label">Failed</div></div>
+            <div class="diagnostic-card"><div class="diagnostic-value#if(failCount > 0): diagnostic-value-alert#endif">#(failCount)</div><div class="diagnostic-label">Failed</div></div>
             <div class="diagnostic-card"><div class="diagnostic-value">#(errorCount)</div><div class="diagnostic-label">Errors</div></div>
             <div class="diagnostic-card"><div class="diagnostic-value">#(skippedCount)</div><div class="diagnostic-label">Skipped</div></div>
         </div>
