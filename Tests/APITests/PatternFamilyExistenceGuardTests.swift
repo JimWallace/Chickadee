@@ -14,7 +14,7 @@ import Vapor
 
 @testable import APIServer
 
-@Suite struct PatternFamilyExistenceGuardTests {
+@Suite(.timeLimit(.minutes(2))) struct PatternFamilyExistenceGuardTests {
 
     // MARK: - existenceGuard(for:) shape
 
@@ -60,7 +60,7 @@ import Vapor
         try await pfAssertValidPythonSyntax(g.source, label: "existence guard")
     }
 
-    @Test func existenceGuard_passesWhenDefinedFailsOtherwise() async throws {
+    @Test(.requiresPython3) func existenceGuard_passesWhenDefinedFailsOtherwise() async throws {
         let body = try #require(existenceGuard(for: pfBMIFamily(), language: .python)).source
         // Defined + callable → pass.
         #expect(

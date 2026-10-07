@@ -5,7 +5,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite struct WorkerHMACAuthMiddlewareTests {
+@Suite(.timeLimit(.minutes(2))) struct WorkerHMACAuthMiddlewareTests {
     private let sharedSecret = "test-shared-secret"
     private let workerID = "worker-a"
 
