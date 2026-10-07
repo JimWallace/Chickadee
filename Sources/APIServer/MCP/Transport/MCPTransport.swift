@@ -3,11 +3,11 @@
 // The transport mechanics the content (`/mcp`) and admin (`/admin-mcp`)
 // endpoints share: the DNS-rebinding guards, body decoding, era resolution,
 // response framing (plain JSON or a one-shot SSE stream) and the
-// insufficient-scope challenge.  Each endpoint keeps its own principal,
-// context and dispatcher — the layer where the two surfaces differ
-// (docs/admin-mcp.md §3.4) — and hands the request through here before and
-// after dispatch.  Before this type existed the two route collections
-// carried byte-identical copies of everything below.
+// insufficient-scope challenge, and the POST that runs them (`serve`). Each
+// endpoint keeps its own principal, context and dispatcher — the layer where
+// the two surfaces differ (docs/admin-mcp.md §3.4). Before this type existed
+// the two route collections carried byte-identical copies of everything
+// below.
 //
 // DNS-rebinding mitigation (transport spec §Security): the `Origin` header is
 // validated against an allowlist (403 on mismatch), and — because Vapor does
@@ -68,6 +68,35 @@ struct MCPTransport: Sendable {
             return .rejected(rejection)
         }
         return .admitted(rpcRequest, era: era)
+    }
+
+    // MARK: - One POST
+
+    /// What an endpoint made of an admitted request.
+    enum Answer {
+        /// A dispatcher's answer, framed by `response(for:era:req:)`.
+        case rpc(JSONRPCResponse?)
+        /// A response the endpoint built itself (the content endpoint's
+        /// live-progress stream).
+        case response(Response)
+    }
+
+    /// One POST, end to end, for both endpoints (#2339): admit it, hand the
+    /// request to the endpoint, and frame what the endpoint answered.
+    func serve(
+        _ req: Request, handle: (JSONRPCRequest, MCPEra) async throws -> Answer
+    ) async throws -> Response {
+        switch try admit(req) {
+        case .rejected(let response):
+            return response
+        case .admitted(let rpcRequest, let era):
+            switch try await handle(rpcRequest, era) {
+            case .rpc(let rpcResponse):
+                return try response(for: rpcResponse, era: era, req: req)
+            case .response(let response):
+                return response
+            }
+        }
     }
 
     // MARK: - After dispatch

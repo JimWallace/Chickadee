@@ -1,109 +1,58 @@
 // APIServer/MCP/Admin/DiagnosticTool.swift
 //
-// The tool abstraction for the admin diagnostic MCP surface.  Parallel to
-// `ContentTool` but over `DiagnosticScope` + `AdminToolContext`: a deliberate
-// thin duplication rather than generalizing the shipped content stack, so the
-// two surfaces stay isolated and a change to one can't destabilize the other
-// (docs/admin-mcp.md §3.4).  Every diagnostic tool is read-only.
+// A tool on the admin diagnostic surface: an `MCPTool` over `DiagnosticScope`
+// and `AdminToolContext` (#2339). The distinct scope and context types keep it
+// apart from the content surface (docs/admin-mcp.md §3.4); the tool protocol,
+// the erasure and the tools/call code are shared. Every diagnostic tool is
+// read-only.
 
 import Core
-import Vapor
 
 /// A single admin diagnostic tool.
-protocol DiagnosticTool: Sendable {
-    associatedtype Input: Decodable & Sendable
-    associatedtype Output: Encodable & Sendable
-
-    /// Stable tool name: the `tools/list` identifier and the registry key.
-    static var name: String { get }
-    /// Human-friendly display name (defaults to a Title-Case derivation of `name`).
-    static var title: String { get }
-    /// Human-readable description surfaced in `tools/list`.
-    static var description: String { get }
-    /// JSON Schema (draft 2020-12) describing `Input`, surfaced in `tools/list`.
-    static var inputSchema: JSONValue { get }
-    /// JSON Schema (draft 2020-12) describing `Output` (defaults to nil).
-    static var outputSchema: JSONValue? { get }
-    /// Behavioural hints surfaced as the tool's `annotations` (defaults to
-    /// read-only, since the whole surface is read-only).
-    static var annotations: MCPToolAnnotations? { get }
-    /// Scopes the caller's token must carry (defaults to `diagnostics:read`).
-    static var requiredScopes: Set<DiagnosticScope> { get }
+protocol DiagnosticTool: MCPTool where Surface == AdminMCPSurface {
     /// Whether the dispatcher confirms the token subject is an admin before it
     /// runs the tool (defaults to true). The re-check used to be a line every
     /// tool had to remember, and a tool that forgot it was protected only by
     /// the bearer layer (#1943). Opting out is a stated decision.
     static var rechecksAdminRole: Bool { get }
-
-    func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output
 }
 
 extension DiagnosticTool {
-    static var title: String {
-        name.split(separator: "_").map { String($0).capitalized }.joined(separator: " ")
-    }
-    static var outputSchema: JSONValue? { nil }
+    /// The whole surface is read-only.
     static var annotations: MCPToolAnnotations? { MCPToolAnnotations(readOnlyHint: true) }
     /// The admin surface is read-only, so every tool requires exactly
     /// `diagnostics:read` unless it overrides this.
     static var requiredScopes: Set<DiagnosticScope> { [.read] }
     static var rechecksAdminRole: Bool { true }
-}
-
-// MARK: - Type erasure
-
-/// A type-erased `DiagnosticTool` stored in the name-keyed registry.  `invoke`
-/// performs decode -> execute -> encode so the dispatcher only ever handles
-/// `JSONValue`.
-struct AnyDiagnosticTool: Sendable {
-    let name: String
-    let title: String
-    let description: String
-    let inputSchema: JSONValue
-    let outputSchema: JSONValue?
-    let annotations: MCPToolAnnotations?
-    let requiredScopes: Set<DiagnosticScope>
-    let rechecksAdminRole: Bool
-    let invoke: @Sendable (_ arguments: JSONValue, _ context: AdminToolContext) async throws -> JSONValue
-}
-
-// The shared tools/list entry encoding reads these fields (#1121).
-extension AnyDiagnosticTool: MCPListableTool {}
-
-extension DiagnosticTool {
-    /// Erases this tool for storage in the registry.
-    func erased() -> AnyDiagnosticTool {
-        AnyDiagnosticTool(
-            name: Self.name,
-            title: Self.title,
-            description: Self.description,
-            inputSchema: Self.inputSchema,
-            outputSchema: Self.outputSchema,
-            annotations: Self.annotations,
-            requiredScopes: Self.requiredScopes,
-            rechecksAdminRole: Self.rechecksAdminRole,
-            invoke: { arguments, context in
-                let input: Input
-                do {
-                    input = try arguments.decoded(as: Input.self)
-                } catch {
-                    throw MCPToolError.invalidArguments(detail: String(describing: error))
-                }
-                do {
-                    let output = try await self.execute(input, context)
-                    return try JSONValue(encoding: output)
-                } catch let error as any AbortError where error.isClientRefusal {
-                    // The same policy as the content erasure (#2338): a refusal
-                    // from a shared web helper reaches the agent with its
-                    // reason; a 5xx stays opaque and logged.
-                    throw MCPToolError.from(error)
-                }
-            }
-        )
+    static var traits: AdminMCPSurface.ToolTraits {
+        AdminMCPSurface.ToolTraits(rechecksAdminRole: rechecksAdminRole)
     }
 }
 
-// MARK: - Registry
+/// A type-erased admin diagnostic tool, as the registry stores it.
+typealias AnyDiagnosticTool = AnyMCPTool<AdminMCPSurface>
+
+extension AnyMCPTool where Surface == AdminMCPSurface {
+    init(
+        name: String,
+        title: String,
+        description: String,
+        inputSchema: JSONValue,
+        outputSchema: JSONValue?,
+        annotations: MCPToolAnnotations?,
+        requiredScopes: Set<DiagnosticScope>,
+        rechecksAdminRole: Bool,
+        invoke: @escaping @Sendable (_ arguments: JSONValue, _ context: AdminToolContext) async throws -> JSONValue
+    ) {
+        self.init(
+            name: name, title: title, description: description, inputSchema: inputSchema,
+            outputSchema: outputSchema, annotations: annotations, requiredScopes: requiredScopes,
+            traits: AdminMCPSurface.ToolTraits(rechecksAdminRole: rechecksAdminRole), invoke: invoke)
+    }
+
+    /// Whether the dispatcher re-checks the admin role before this tool runs.
+    var rechecksAdminRole: Bool { traits.rechecksAdminRole }
+}
 
 /// Name-keyed registry of admin diagnostic tools.
 typealias DiagnosticToolRegistry = MCPToolRegistry<AnyDiagnosticTool>
