@@ -31,21 +31,10 @@ import VaporTesting
     /// Creates a test setup with a given manifest JSON and a small dummy zip.
     private func insertSetup(manifest: String) async throws -> String {
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
-        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-        // Write a minimal valid ZIP (end-of-central-directory record only).
-        let emptyZip = Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
-        try emptyZip.write(to: URL(fileURLWithPath: zipPath))
-
         let course = APICourse(code: "BR101", name: "Browser Runner Course", enrollmentMode: .auto)
         try await course.save(on: app.db)
-
-        let setup = APITestSetup(
-            id: setupID,
-            manifest: manifest,
-            zipPath: zipPath,
-            courseID: try course.requireID()
-        )
-        try await setup.save(on: app.db)
+        try await makeTestSetup(
+            on: app, id: setupID, courseID: try course.requireID(), manifest: manifest, withNotebook: false)
         return setupID
     }
 

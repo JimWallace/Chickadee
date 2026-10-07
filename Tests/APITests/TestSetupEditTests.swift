@@ -27,18 +27,8 @@ import VaporTesting
     /// Creates a test setup record in the DB (no real zip on disk).
     @discardableResult
     private func insertSetup(id: String, on app: Application) async throws -> APITestSetup {
-        let manifest = """
-            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-            """
         let courseID = try await app.testCourseID()
-        let setup = APITestSetup(
-            id: id,
-            manifest: manifest,
-            zipPath: app.testSetupsDirectory + "\(id).zip",
-            courseID: courseID
-        )
-        try await setup.save(on: app.db)
-        return setup
+        return try await makeTestSetup(on: app, id: id, courseID: courseID, withNotebook: false, withZip: false)
     }
 
     @discardableResult
