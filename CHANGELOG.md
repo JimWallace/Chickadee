@@ -9,6 +9,48 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.544] - 2026-10-07
+
+### Changed
+
+- **The browser grading router derives its interpreter table.** Which browser substrate a test's interpreter routes to was a hand-written table, so a new kernel language could get a grading worker and still route to "unsupported". `scripts/generate-js-constants.sh` now writes the table from each kernel language's generated test extension and the interpreter RunnerCore classifies it as, and fails when a kernel language has no such interpreter. (#2388)
+
+
+## [0.5.543] - 2026-10-07
+
+### Fixed
+
+- **A pattern-family string value stays a string.** When an author opened a family again, a string case value such as `"42"` or `"TRUE"` showed without quotes, and the next save stored it as a number or a boolean. The cell now shows such a string JSON-quoted, so it reads back as the same string. Ordinary text still shows without quotes. (#2381)
+
+
+## [0.5.542] - 2026-10-07
+
+### Fixed
+
+- **A notebook switch in the workbench no longer adds editor hooks.** Each switch added one more frame listener, one more 1.5 s poll and one more kernel watchdog, so the page ran its editor hooks once per switch and could send duplicate kernel-ready beacons. The listener and the poll are now bound once per page, and a new watchdog stops the previous one. (#2382)
+
+
+## [0.5.541] - 2026-10-07
+
+### Fixed
+
+- **The suite table shows every test in a dependency chain.** A test that depended on a test which itself depended on another had no row in the suite table, so an author could not edit or delete it, although it still graded. Every link of a chain now has a row. (#2385)
+
+
+## [0.5.540] - 2026-10-07
+
+### Fixed
+
+- **An auto-compute timeout stops only its own worker.** When a case ran past its time limit, the timer stopped whichever eval worker was current, which could be a newer worker that was loading the solution. It now stops the worker that ran the case, and the other cases on that worker fail at once with a message that names the cause, instead of each waiting to report a timeout of its own. (#2383)
+
+
+## [0.5.539] - 2026-10-07
+
+### Fixed
+
+- **Install breadcrumbs keep the package names.** When a browser grading worker installs a package on demand, the submit-phase telemetry now records which packages it installed, beside the timing. (#2387)
+
+
 ## [0.5.538] - 2026-10-07
 
 ### Tests

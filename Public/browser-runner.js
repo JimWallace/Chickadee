@@ -154,6 +154,13 @@
     const GRADING_WORKER_SCRIPTS = { lua: '/lua-grading-worker.js', octave: '/octave-grading-worker.js', python: '/python-grading-worker.js', r: '/r-grading-worker.js' };
     // CHICKADEE_GENERATED:GRADING_WORKER_SCRIPTS:END
 
+    // The substrate kind for each interpreter that a kernel language's tests
+    // run under, keyed by RunnerCore's `ScriptInterpreter` raw value. Derived
+    // from each language's generated extension and the classifier (#2388).
+    // CHICKADEE_GENERATED:INTERPRETER_KINDS:BEGIN
+    const INTERPRETER_KINDS = { lua: 'lua', octave: 'octave', python: 'python', rscript: 'r' };
+    // CHICKADEE_GENERATED:INTERPRETER_KINDS:END
+
     // -------------------------------------------------------------------------
     // Public API — called by notebook.js on Submit
     // -------------------------------------------------------------------------
@@ -561,6 +568,7 @@
         makeGradingExecutors({
             workerScripts: GRADING_WORKER_SCRIPTS,
             languageLabels: LANGUAGE_LABELS,
+            interpreterKinds: INTERPRETER_KINDS,
         });
 
     // -------------------------------------------------------------------------
