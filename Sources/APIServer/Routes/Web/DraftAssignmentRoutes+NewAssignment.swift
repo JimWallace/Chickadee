@@ -701,7 +701,9 @@ extension DraftAssignmentRoutes {
             testSuites: [],
             includeMakefile: false,
             gradingMode: gradingMode,
-            starterNotebook: "assignment.ipynb"
+            starterNotebook: "assignment.ipynb",
+            // A new draft has no declaration until its author picks one.
+            language: nil
         )
         let setup = APITestSetup(
             id: setupID,

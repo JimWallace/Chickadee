@@ -21,6 +21,7 @@ import VaporTesting
     private func robinOrTournamentManifest(kind: ActivityKind, opponentFile: String? = nil) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: kind, opponentFile: opponentFile),
             achievements: [ActivityAuthoring.seededTournamentRecord])
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))

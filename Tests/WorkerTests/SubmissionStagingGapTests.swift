@@ -52,7 +52,7 @@ import Testing
     private static func makeJob(
         testSetupID: String = "ts_1",
         testSetupURL: String = "https://server.test/ts.zip",
-        manifest: TestProperties = TestProperties()
+        manifest: TestProperties = TestProperties(language: nil)
     ) throws -> Job {
         Job(
             submissionID: "sub_1",
@@ -62,7 +62,7 @@ import Testing
             testSetupURL: try #require(URL(string: testSetupURL)),
             manifest: manifest,
             submissionFilename: "main.py",
-            assignmentSeed: nil
+            assignmentSeed: nil, language: nil
         )
     }
 

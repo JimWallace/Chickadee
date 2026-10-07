@@ -139,7 +139,7 @@ import VaporTesting
                     TestSuiteEntry(tier: .pub, script: "a.sh"),
                     TestSuiteEntry(tier: .pub, script: "b.sh", timeLimitSeconds: 30),
                 ],
-                timeLimitSeconds: 10)
+                timeLimitSeconds: 10, language: nil)
             #expect(suiteTimeBudget(manifest) == 40)
             #expect(suiteTimeBudget(nil) == 0)
         }

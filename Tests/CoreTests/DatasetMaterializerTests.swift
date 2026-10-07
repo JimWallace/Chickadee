@@ -131,14 +131,14 @@ import Testing
     }
 
     @Test func manifestDatasetsRoundTrip() throws {
-        let manifest = TestProperties(datasets: [DatasetSpec(file: "cases.csv", sampleSize: 500)])
+        let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 500)])
         let data = try JSONEncoder().encode(manifest)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
         #expect(decoded.datasets == manifest.datasets)
     }
 
     @Test func runnerSanitizedStripsDatasets() {
-        let manifest = TestProperties(datasets: [DatasetSpec(file: "cases.csv", sampleSize: 500)])
+        let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 500)])
         #expect(manifest.runnerSanitized().datasets.isEmpty)
     }
 }

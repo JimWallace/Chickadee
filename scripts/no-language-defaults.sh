@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# No function may default its `language:` parameter to a language.
+# No function may default its `language:` parameter, to a language or to nil.
 #
 # WHY THIS IS A GUARD AND NOT A CONVENTION. `language: AssignmentLanguage =
 # .python` compiles at every call site, forever, and silently renders Python for
@@ -22,6 +22,11 @@ set -euo pipefail
 # because not passing it compiled. A caller that genuinely means Python now says
 # so, and that is greppable; a caller that forgot gets a compile error.
 #
+# A default of nil is banned too (#2429). It does not name Python, but it
+# compiles at every call site in the same way, and seven functions used it,
+# one of which fell back to `?? .python` on the next line. A caller that means
+# "no language declared" now writes `language: nil`, which is greppable.
+#
 # This deliberately does NOT ban `?? .python` — a nil-coalescing fallback is a
 # separate judgement, made where an assignment legitimately has no language (a
 # plain `.sh` suite), and it is visible at the call site rather than hidden in a
@@ -31,9 +36,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 # Any parameter typed `AssignmentLanguage` (optional or not) with a default of a
-# language case. Matches across the whole declaration line, which is where
+# language case or of nil. Matches across the whole declaration line, which is where
 # swift-format puts a defaulted parameter.
-offenders=$(grep -rnE "AssignmentLanguage\??[[:space:]]*=[[:space:]]*\." \
+offenders=$(grep -rnE "AssignmentLanguage\??[[:space:]]*=[[:space:]]*(\.|nil\b)" \
   Sources/ 2>/dev/null | sort || true)
 
 if [ -n "$offenders" ]; then
@@ -41,9 +46,9 @@ if [ -n "$offenders" ]; then
   echo
   echo "$offenders" | sed 's/^/  /'
   echo
-  echo "A defaulted language compiles at every call site and renders Python for"
-  echo "assignments in five other languages. Delete the default and let the"
-  echo "compiler name the call sites; each one states the language it means."
+  echo "A defaulted language compiles at every call site, so a caller that forgot"
+  echo "the language still builds. Delete the default and let the compiler name"
+  echo "the call sites; each one states the language it means, or nil."
   exit 1
 fi
 

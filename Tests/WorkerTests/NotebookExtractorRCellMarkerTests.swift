@@ -33,7 +33,7 @@ import Testing
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
         try rNotebook(cells: cells).write(to: dir.appendingPathComponent("analysis.ipynb"))
-        try extractNotebooksToCode(in: dir)
+        try extractNotebooksToCode(in: dir, forcedLanguage: nil)
         return try String(
             contentsOf: dir.appendingPathComponent("analysis.R"), encoding: .utf8)
     }
@@ -87,7 +87,7 @@ import Testing
         ]
         try JSONSerialization.data(withJSONObject: notebook)
             .write(to: dir.appendingPathComponent("analysis.ipynb"))
-        try extractNotebooksToCode(in: dir)
+        try extractNotebooksToCode(in: dir, forcedLanguage: nil)
         let extracted = try String(
             contentsOf: dir.appendingPathComponent("analysis.R"), encoding: .utf8)
         #expect(extracted.contains(rCellBoundaryMarker(cellNumber: 1)))
@@ -130,7 +130,7 @@ import Testing
         ]
         try JSONSerialization.data(withJSONObject: notebook)
             .write(to: dir.appendingPathComponent("analysis.ipynb"))
-        try extractNotebooksToCode(in: dir)
+        try extractNotebooksToCode(in: dir, forcedLanguage: nil)
         let extracted = try String(
             contentsOf: dir.appendingPathComponent("analysis.py"), encoding: .utf8)
         #expect(!extracted.contains("chickadee:cell"))

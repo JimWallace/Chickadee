@@ -126,7 +126,7 @@ import Testing
         }
 
         // 4. Extract notebooks to code
-        try extractNotebooksToCode(in: workDir)
+        try extractNotebooksToCode(in: workDir, forcedLanguage: nil)
 
         // 5. Write student module hint (inline since it's a private method)
         if let submissionFilename, !submissionFilename.isEmpty {
@@ -700,7 +700,7 @@ import Testing
         // solution.ipynb should be extracted to solution.py
         try writeFile(notebook(defining: "my_solution"), name: "solution.ipynb")
 
-        try extractNotebooksToCode(in: workDir)
+        try extractNotebooksToCode(in: workDir, forcedLanguage: nil)
 
         #expect(
             fileExists("solution.py"),
@@ -714,7 +714,7 @@ import Testing
         // starter removal, e.g. when the student submitted assignment.ipynb)
         try writeFile(notebook(defining: "student_work"), name: "assignment.ipynb")
 
-        try extractNotebooksToCode(in: workDir)
+        try extractNotebooksToCode(in: workDir, forcedLanguage: nil)
 
         #expect(
             fileExists("assignment.py"),
@@ -726,7 +726,7 @@ import Testing
     @Test func extractNotebooksToCode_extractsArbitrarilyNamedNotebook() throws {
         try writeFile(notebook(defining: "lab_work"), name: "Lab3_Analysis.ipynb")
 
-        try extractNotebooksToCode(in: workDir)
+        try extractNotebooksToCode(in: workDir, forcedLanguage: nil)
 
         #expect(
             fileExists("Lab3_Analysis.py"),

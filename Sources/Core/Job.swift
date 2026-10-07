@@ -87,7 +87,7 @@ public struct Job: Codable, Sendable {
         assignmentSeed: String? = nil,
         personalizedInputs: [String: String]? = nil,
         personalizedFiles: [String: String]? = nil,
-        language: AssignmentLanguage? = nil,
+        language: AssignmentLanguage?,
         opponent: JobOpponent? = nil,
         opponents: [JobOpponent]? = nil
     ) {

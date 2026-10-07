@@ -28,6 +28,7 @@ import VaporTesting
             testSuites: try JSONDecoder().decode(
                 [TestSuiteEntry].self,
                 from: Data(#"[{"tier":"public","script":"t.sh","points":4}]"#.utf8)),
+            language: nil,
             achievements: [
                 Achievement(
                     id: id, name: "Class Goal", scope: .classWide,

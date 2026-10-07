@@ -145,6 +145,7 @@ import Testing
 
     @Test func testProperties_globalExpressionsRoundTrip() throws {
         let props = TestProperties(
+            language: nil,
             globalExpressions: [
                 PersonalizationExpression(name: "shift", expression: "seed % 26"),
                 PersonalizationExpression(name: "msg", expression: "f'hi {shift}'"),
@@ -159,6 +160,7 @@ import Testing
 
     @Test func testProperties_runnerSanitizedStripsExpressions() {
         let props = TestProperties(
+            language: nil,
             globalExpressions: [PersonalizationExpression(name: "x", expression: "seed % 2")]
         )
         let sanitized = props.runnerSanitized()

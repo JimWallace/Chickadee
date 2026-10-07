@@ -29,6 +29,7 @@ import Testing
                 TestSuiteEntry(tier: .pub, script: "b.py", sectionID: "sec-y"),
                 TestSuiteEntry(tier: .pub, script: "c.py", sectionID: nil),
             ],
+            language: nil,
             sections: [
                 TestSuiteSection(id: "sec-x", name: "Question 1"),
                 TestSuiteSection(id: "sec-y", name: "Question 2"),
@@ -79,6 +80,7 @@ import Testing
             testSuites: [
                 TestSuiteEntry(tier: .pub, script: "a.py", sectionID: "s1")
             ],
+            language: nil,
             sections: [TestSuiteSection(id: "s1", name: "One")]
         )
         let sanitized = props.runnerSanitized()
@@ -100,6 +102,7 @@ import Testing
                 TestSuiteEntry(tier: .pub, script: "b.py", sectionID: "s1"),
                 TestSuiteEntry(tier: .pub, script: "c.py", sectionID: "s2"),
             ],
+            language: nil,
             sections: [
                 TestSuiteSection(id: "s1", name: "One"),
                 TestSuiteSection(id: "s2", name: "Two"),
@@ -143,6 +146,7 @@ import Testing
                     sectionID: nil
                 ),
             ],
+            language: nil,
             notebookChecks: [check],
             sections: [TestSuiteSection(id: "s1", name: "One")]
         )

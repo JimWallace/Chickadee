@@ -17,32 +17,34 @@ import Testing
     private let literal = FamilyVariable(name: "limit", value: .int(5))
 
     @Test func emptyManifestHasNeither() {
-        let manifest = TestProperties()
+        let manifest = TestProperties(language: nil)
         #expect(!manifest.hasExpressions)
         #expect(!manifest.hasPersonalization)
     }
 
     @Test func globalExpressionSetsBoth() {
-        let manifest = TestProperties(globalExpressions: [expr])
+        let manifest = TestProperties(language: nil, globalExpressions: [expr])
         #expect(manifest.hasExpressions)
         #expect(manifest.hasPersonalization)
     }
 
     @Test func sectionExpressionSetsBoth() {
         let manifest = TestProperties(
+            language: nil,
             sections: [TestSuiteSection(id: "s1", name: "S1", expressions: [expr])])
         #expect(manifest.hasExpressions)
         #expect(manifest.hasPersonalization)
     }
 
     @Test func globalLiteralIsPersonalizationButNeedsNoSeed() {
-        let manifest = TestProperties(globalVariables: [literal])
+        let manifest = TestProperties(language: nil, globalVariables: [literal])
         #expect(!manifest.hasExpressions, "Literals substitute without a seed")
         #expect(manifest.hasPersonalization, "Literal-only manifests still substitute")
     }
 
     @Test func sectionLiteralIsPersonalizationButNeedsNoSeed() {
         let manifest = TestProperties(
+            language: nil,
             sections: [TestSuiteSection(id: "s1", name: "S1", variables: [literal])])
         #expect(!manifest.hasExpressions)
         #expect(manifest.hasPersonalization)
@@ -54,7 +56,7 @@ import Testing
     // steers the worker download path.
 
     @Test func aDatasetVariesPerStudentWithoutBeingPersonalization() {
-        let manifest = TestProperties(datasets: [DatasetSpec(file: "cases.csv", sampleSize: 5)])
+        let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 5)])
         #expect(manifest.variesPerStudent)
         #expect(
             !manifest.hasPersonalization,
@@ -62,14 +64,15 @@ import Testing
     }
 
     @Test func expressionsVaryPerStudentButLiteralsDoNot() {
-        #expect(TestProperties(globalExpressions: [expr]).variesPerStudent)
+        #expect(TestProperties(language: nil, globalExpressions: [expr]).variesPerStudent)
         #expect(
             TestProperties(
+                language: nil,
                 sections: [TestSuiteSection(id: "s1", name: "S1", expressions: [expr])]
             ).variesPerStudent)
         #expect(
-            !TestProperties(globalVariables: [literal]).variesPerStudent,
+            !TestProperties(language: nil, globalVariables: [literal]).variesPerStudent,
             "every student gets the same literal, so one validation run covers them all")
-        #expect(!TestProperties().variesPerStudent)
+        #expect(!TestProperties(language: nil).variesPerStudent)
     }
 }

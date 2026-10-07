@@ -237,7 +237,7 @@ struct CoreCodableTests {
             submissionURL: testURL("http://localhost:8080/worker/artifacts/sub_job"),
             testSetupURL: testURL("http://localhost:8080/api/v1/testsetups/setup_job/download"),
             manifest: manifest,
-            submissionFilename: "warmup.py"
+            submissionFilename: "warmup.py", language: nil
         )
 
         let data = try encoder.encode(job)
@@ -264,7 +264,7 @@ struct CoreCodableTests {
             submissionURL: testURL("http://localhost/a"),
             testSetupURL: testURL("http://localhost/b"),
             manifest: manifest,
-            submissionFilename: nil
+            submissionFilename: nil, language: nil
         )
         let data = try encoder.encode(job)
         let decoded = try decoder.decode(Job.self, from: data)
@@ -281,7 +281,7 @@ struct CoreCodableTests {
             testSetupURL: testURL("http://localhost/b"),
             manifest: manifest,
             assignmentSeed: "deadbeef",
-            personalizedInputs: ["patients": "[{'mrn': '1'}]", "adults_expected": "2"])
+            personalizedInputs: ["patients": "[{'mrn': '1'}]", "adults_expected": "2"], language: nil)
         let decoded = try decoder.decode(Job.self, from: encoder.encode(job))
         #expect(decoded.personalizedInputs?["patients"] == "[{'mrn': '1'}]")
         #expect(decoded.personalizedInputs?["adults_expected"] == "2")
@@ -326,6 +326,7 @@ struct CoreCodableTests {
             schemaVersion: 1,
             testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.py")],
             timeLimitSeconds: 7,
+            language: nil,
             patternFamilies: [family]
         )
 
@@ -361,6 +362,7 @@ struct CoreCodableTests {
                 )
             ],
             timeLimitSeconds: 7,
+            language: nil,
             notebookChecks: [check]
         )
 
@@ -404,7 +406,7 @@ struct CoreCodableTests {
         let fam = PatternFamily(
             id: "bmi", name: "BMI", kind: .boundaryEquality, functionName: "classify_bmi")
         let chk = NotebookCheck(id: "df_shape", kind: .dataFrameShape, variable: "df")
-        let props = TestProperties(patternFamilies: [fam], notebookChecks: [chk])
+        let props = TestProperties(language: nil, patternFamilies: [fam], notebookChecks: [chk])
         #expect(props.testItems.count == 2)
         // Families first, then checks (matches the documented synthesis order).
         #expect(props.testItems.first?.type == .family)
@@ -415,6 +417,7 @@ struct CoreCodableTests {
 
     @Test func testPropertiesEncodeMirrorsLegacyKeysAndEmitsTestItems() throws {
         let props = TestProperties(
+            language: nil,
             patternFamilies: [
                 PatternFamily(id: "f", name: "F", kind: .boundaryEquality, functionName: "g")
             ],
@@ -458,6 +461,7 @@ struct CoreCodableTests {
     @Test func runnerSanitizedStripsTestItems() throws {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "a.py")],
+            language: nil,
             patternFamilies: [
                 PatternFamily(id: "f", name: "F", kind: .boundaryEquality, functionName: "g")
             ],

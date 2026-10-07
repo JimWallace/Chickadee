@@ -101,6 +101,7 @@ import VaporTesting
                     tier: .pub, script: "wellformed.py", name: "Your test runs",
                     sectionID: "gate"),
             ],
+            language: nil,
             sections: [
                 TestSuiteSection(id: "bugs", name: "Seeded bugs"),
                 TestSuiteSection(id: "gate", name: "Well-formedness"),
@@ -208,6 +209,7 @@ import VaporTesting
                 TestSuiteEntry(tier: .secret, script: "variant_03.py", sectionID: "bugs"),
                 TestSuiteEntry(tier: .pub, script: "wellformed.py", sectionID: "gate"),
             ],
+            language: nil,
             sections: [
                 TestSuiteSection(id: "bugs", name: "Seeded bugs"),
                 TestSuiteSection(id: "gate", name: "Well-formedness"),

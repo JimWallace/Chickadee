@@ -23,21 +23,21 @@ import Testing
     }
 
     @Test func submissionModeRoundTrips() throws {
-        let manifest = TestProperties(submissionMode: .uploadOnly)
+        let manifest = TestProperties(submissionMode: .uploadOnly, language: nil)
         let data = try JSONEncoder().encode(manifest)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
         #expect(decoded.submissionMode == .uploadOnly)
     }
 
     @Test func notebookByDefault() {
-        #expect(TestProperties().submissionMode == .notebook)
+        #expect(TestProperties(language: nil).submissionMode == .notebook)
     }
 
     /// The runner-facing manifest keeps the field (like gradingMode): losing
     /// it would make any runner-side re-read resolve the mode differently
     /// from the server.
     @Test func runnerSanitizedPreservesSubmissionMode() {
-        let manifest = TestProperties(submissionMode: .uploadOnly)
+        let manifest = TestProperties(submissionMode: .uploadOnly, language: nil)
         #expect(manifest.runnerSanitized().submissionMode == .uploadOnly)
     }
 
@@ -52,7 +52,7 @@ import Testing
     func effectiveGradingModePinsUploadToWorker(
         _ stored: GradingMode, _ submission: SubmissionMode, _ expected: GradingMode
     ) {
-        let manifest = TestProperties(gradingMode: stored, submissionMode: submission)
+        let manifest = TestProperties(gradingMode: stored, submissionMode: submission, language: nil)
         #expect(manifest.effectiveGradingMode == expected)
     }
 

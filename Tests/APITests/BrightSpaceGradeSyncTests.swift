@@ -813,6 +813,7 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             testSuites: try JSONDecoder().decode(
                 [TestSuiteEntry].self,
                 from: Data(#"[{"tier":"public","script":"t1.sh","points":\#(total)}]"#.utf8)),
+            language: nil,
             achievements: [
                 Achievement(
                     id: "cg", name: "Class Goal", scope: .classWide,

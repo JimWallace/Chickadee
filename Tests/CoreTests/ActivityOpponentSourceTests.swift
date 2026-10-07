@@ -72,6 +72,7 @@ import Testing
     /// file included: the file travels on `Job.opponent`, never the manifest.
     @Test func runnerSanitizedDropsTheOpponentFileWithTheBlock() throws {
         let props = TestProperties(
+            language: nil,
             activity: ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py"))
         let json = try #require(String(data: encoder.encode(props.runnerSanitized()), encoding: .utf8))
         #expect(!json.contains("bot.py"))

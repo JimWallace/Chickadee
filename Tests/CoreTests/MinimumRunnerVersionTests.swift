@@ -20,7 +20,7 @@ import Testing
     }
 
     @Test func minimumRunnerVersionRoundTrips() throws {
-        let manifest = TestProperties(minimumRunnerVersion: "0.5.0")
+        let manifest = TestProperties(language: nil, minimumRunnerVersion: "0.5.0")
         let data = try JSONEncoder().encode(manifest)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
         #expect(decoded.minimumRunnerVersion == "0.5.0")
@@ -29,17 +29,17 @@ import Testing
     /// A nil gate must emit no `minimumRunnerVersion` key, so an un-gated
     /// manifest is byte-for-byte what it always was (encodeIfPresent).
     @Test func nilMinimumRunnerVersionEncodesNoKey() throws {
-        let data = try JSONEncoder().encode(TestProperties())
+        let data = try JSONEncoder().encode(TestProperties(language: nil))
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(!object.keys.contains("minimumRunnerVersion"))
     }
 
     @Test func runnerSanitizedStripsMinimumRunnerVersion() {
-        let manifest = TestProperties(minimumRunnerVersion: "0.5.0")
+        let manifest = TestProperties(language: nil, minimumRunnerVersion: "0.5.0")
         #expect(manifest.runnerSanitized().minimumRunnerVersion == nil)
     }
 
     @Test func nilByDefault() {
-        #expect(TestProperties().minimumRunnerVersion == nil)
+        #expect(TestProperties(language: nil).minimumRunnerVersion == nil)
     }
 }

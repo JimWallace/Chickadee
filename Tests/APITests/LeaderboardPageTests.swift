@@ -18,6 +18,7 @@ import VaporTesting
     private func activityManifest(visible: Bool) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .bestMetric, leaderboardVisibility: visible ? .visible : .hidden))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
@@ -196,6 +197,7 @@ import VaporTesting
     private func hillManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .kingOfTheHill, leaderboardVisibility: .visible, opponentFile: "bot.py"))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
@@ -242,6 +244,7 @@ import VaporTesting
     private func robinManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .roundRobin, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
@@ -302,6 +305,7 @@ import VaporTesting
     private func unionManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .testsVersusImplementations, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
@@ -367,6 +371,7 @@ import VaporTesting
     private func tournamentManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .elimination, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }

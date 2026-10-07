@@ -13,7 +13,7 @@ import Testing
 @Suite struct RunnerActivityGateTests {
 
     private func manifest(_ activity: ClassActivity?) -> TestProperties {
-        TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], activity: activity)
+        TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil, activity: activity)
     }
 
     private func profile(capabilities: [String]) -> RunnerCapabilityProfile {

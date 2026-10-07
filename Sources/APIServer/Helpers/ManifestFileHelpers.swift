@@ -153,7 +153,7 @@ func makeWorkerManifestJSON(
     disabledBuiltInAwardIDs: [String] = [],
     builtInAchievementsSeeded: Bool = false,
     datasets: [DatasetSpec] = [],
-    language: AssignmentLanguage? = nil,
+    language: AssignmentLanguage?,
     languageDeclared: Bool = false,
     minimumRunnerVersion: String? = nil,
     activity: ClassActivity? = nil
@@ -217,7 +217,7 @@ func rebuildDraftManifestJSON(
     guard var next = draft else {
         return try makeWorkerManifestJSON(
             testSuites: testSuites, includeMakefile: includeMakefile, gradingMode: sectionGradingMode,
-            starterNotebook: starterNotebook)
+            starterNotebook: starterNotebook, language: nil)
     }
     if let language = next.language, requiresUploadOnlySubmission(language) {
         next.submissionMode = .uploadOnly

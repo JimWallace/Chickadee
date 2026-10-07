@@ -264,6 +264,7 @@ import VaporTesting
     private func visibleLeaderboard(setupID: String, on app: Application) async throws {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible))
         let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
         let setup = try await wrInsertSetup(id: setupID, manifest: manifest, on: app)

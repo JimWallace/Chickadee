@@ -91,7 +91,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:1/submission.zip"),
             testSetupURL: testURL("http://127.0.0.1:1/testsetup.zip"),
             manifest: manifest,
-            submissionFilename: "submission.ipynb")
+            submissionFilename: "submission.ipynb", language: nil)
     }
 
     private func makeDaemon(
