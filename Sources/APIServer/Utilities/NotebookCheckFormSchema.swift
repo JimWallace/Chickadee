@@ -308,7 +308,7 @@ private let astStructureFormFields: [CheckFormField] = [
 /// language in labels that used to name Python. Pass nil for an assignment that
 /// declares no language: nothing is annotated, which is the pre-language
 /// behaviour and the right answer for a plain `.sh` suite.
-func notebookCheckFormSchema(language: AssignmentLanguage? = nil) -> NotebookCheckFormSchema {
+func notebookCheckFormSchema(language: AssignmentLanguage?) -> NotebookCheckFormSchema {
     var kinds: [String: [CheckFormField]] = [:]
     for kind in NotebookCheckKind.allCases {
         kinds[kind.rawValue] = formFields(for: kind).map { field in
@@ -342,7 +342,7 @@ private func localizedLabel(
 /// The schema serialised to a JSON object literal for the
 /// `<script id="check-schema">` seed.  `"{}"` on the (unreachable) encode
 /// failure so the page still renders.
-func notebookCheckFormSchemaJSON(language: AssignmentLanguage? = nil) -> String {
+func notebookCheckFormSchemaJSON(language: AssignmentLanguage?) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     guard let data = try? encoder.encode(notebookCheckFormSchema(language: language)),

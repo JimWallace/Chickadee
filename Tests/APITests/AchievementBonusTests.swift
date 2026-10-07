@@ -43,6 +43,7 @@ import VaporTesting
                 from: Data(#"[{"tier":"public","script":"t.sh","points":20}]"#.utf8))
             let props = TestProperties(
                 testSuites: testSuites,
+                language: nil,
                 achievements: [
                     Achievement(
                         id: "g_csv", name: "Mastery", scope: .classWide,

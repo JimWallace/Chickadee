@@ -23,6 +23,7 @@ import Testing
     private func manifestWithAchievements() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.sh")],
+            language: nil,
             achievements: [
                 Achievement(
                     id: "custom_badge", name: "Custom", scope: .individual,
@@ -75,7 +76,7 @@ import Testing
     }
 
     @Test func curatedEmptyManifestAwardsNoBuiltIns() throws {
-        let curated = TestProperties(achievements: [], builtInAchievementsSeeded: true)
+        let curated = TestProperties(language: nil, achievements: [], builtInAchievementsSeeded: true)
         // Must be a non-nil empty list — nil would mean "fall back to the registry".
         let perSubmission = BuiltInAchievements.manifestPerSubmission(props: curated)
         #expect(perSubmission?.isEmpty == true)
@@ -84,7 +85,7 @@ import Testing
     }
 
     @Test func unseededManifestStillFallsBackToRegistry() throws {
-        let unseeded = TestProperties()
+        let unseeded = TestProperties(language: nil)
         #expect(BuiltInAchievements.manifestPerSubmission(props: unseeded) == nil)
         let unseededSetup = try setup(withProps: unseeded)
         let records = BuiltInAchievements.classRecordsForAward(in: unseededSetup, disabled: [])

@@ -470,14 +470,16 @@ import VaporTesting
             let setupID = "setup_draft_finalize"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
             _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
-            let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
+            let manifest = try makeWorkerManifestJSON(
+                testSuites: [], includeMakefile: false, gradingMode: "worker", language: nil)
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
             let assignmentPath = notebookDir + "assignment.ipynb"
-            try #require(defaultNotebookData(title: "Draft Finalize")).write(to: URL(fileURLWithPath: assignmentPath))
+            try #require(defaultNotebookData(title: "Draft Finalize", language: nil)).write(
+                to: URL(fileURLWithPath: assignmentPath))
             let solutionPath = draftSolutionNotebookPath(
                 testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
-            try #require(defaultNotebookData(title: "Draft Finalize Solution")).write(
+            try #require(defaultNotebookData(title: "Draft Finalize Solution", language: nil)).write(
                 to: URL(fileURLWithPath: solutionPath))
 
             let setup = APITestSetup(
@@ -559,14 +561,16 @@ import VaporTesting
             let setupID = "setup_generated_suite_finalize"
             let zipPath = app.testSetupsDirectory + "\(setupID).zip"
             _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
-            let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
+            let manifest = try makeWorkerManifestJSON(
+                testSuites: [], includeMakefile: false, gradingMode: "worker", language: nil)
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
             let assignmentPath = notebookDir + "assignment.ipynb"
-            try #require(defaultNotebookData(title: "Generated Suite")).write(to: URL(fileURLWithPath: assignmentPath))
+            try #require(defaultNotebookData(title: "Generated Suite", language: nil)).write(
+                to: URL(fileURLWithPath: assignmentPath))
             let solutionPath = draftSolutionNotebookPath(
                 testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
-            try #require(defaultNotebookData(title: "Generated Suite Solution")).write(
+            try #require(defaultNotebookData(title: "Generated Suite Solution", language: nil)).write(
                 to: URL(fileURLWithPath: solutionPath))
 
             let setup = APITestSetup(
@@ -679,15 +683,16 @@ import VaporTesting
                     )
                 ],
                 includeMakefile: false,
-                gradingMode: "worker"
+                gradingMode: "worker", language: nil
             )
             let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
             try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
             let assignmentPath = notebookDir + "assignment.ipynb"
-            try #require(defaultNotebookData(title: "Runner Gate")).write(to: URL(fileURLWithPath: assignmentPath))
+            try #require(defaultNotebookData(title: "Runner Gate", language: nil)).write(
+                to: URL(fileURLWithPath: assignmentPath))
             let solutionPath = draftSolutionNotebookPath(
                 testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
-            try #require(defaultNotebookData(title: "Runner Gate Solution")).write(
+            try #require(defaultNotebookData(title: "Runner Gate Solution", language: nil)).write(
                 to: URL(fileURLWithPath: solutionPath))
 
             let setup = APITestSetup(

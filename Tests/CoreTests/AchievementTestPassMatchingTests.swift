@@ -43,7 +43,7 @@ import Testing
                 TestSuiteEntry(
                     tier: .pub, script: "publictest_bigo_linear.py", name: "Big-O: linear search"),
                 TestSuiteEntry(tier: .pub, script: "test_plain.sh"),
-            ])
+            ], language: nil)
     }
 
     @Test func filenameRefMatchesDisplayNamedOutcomeViaAliases() {
@@ -110,7 +110,7 @@ import Testing
                 TestSuiteEntry(
                     tier: .pub, script: "publictest_maximum_04.py",
                     name: "largest comes first", generatedBy: "maximum")
-            ])
+            ], language: nil)
         let signals = AchievementSignals(
             gradePercent: 0,
             outcomes: [passOutcome(named: "largest comes first")],

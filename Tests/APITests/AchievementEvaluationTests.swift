@@ -31,6 +31,7 @@ import VaporTesting
         id: String, threshold: Double, classFraction: Double
     ) throws -> String {
         let props = TestProperties(
+            language: nil,
             achievements: [
                 Achievement(
                     id: id, name: "Class Goal", scope: .classWide,
@@ -180,6 +181,7 @@ import VaporTesting
         try await withAssignmentRoutesApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let props = TestProperties(
+                language: nil,
                 achievements: [
                     Achievement(
                         id: "goalU", name: "Unsupported", scope: .classWide,

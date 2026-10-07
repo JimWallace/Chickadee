@@ -44,6 +44,7 @@ import Testing
         try await withSupportDir { dir in
             try indexedCSV(100).write(toFile: dir + "/cases.csv", atomically: true, encoding: .utf8)
             let manifest = TestProperties(
+                language: nil,
                 globalExpressions: [countRows],
                 datasets: [DatasetSpec(file: "cases.csv", sampleSize: 10)])
 
@@ -62,6 +63,7 @@ import Testing
             try pool.write(toFile: dir + "/cases.csv", atomically: true, encoding: .utf8)
             let spec = DatasetSpec(file: "cases.csv", sampleSize: 7)
             let manifest = TestProperties(
+                language: nil,
                 globalExpressions: [
                     PersonalizationExpression(
                         name: "first",
@@ -87,6 +89,7 @@ import Testing
             let pool = indexedCSV(40)
             try pool.write(toFile: dir + "/cases.csv", atomically: true, encoding: .utf8)
             let manifest = TestProperties(
+                language: nil,
                 globalExpressions: [countRows],
                 datasets: [DatasetSpec(file: "cases.csv", sampleSize: 5)])
 
@@ -104,6 +107,7 @@ import Testing
         try await withSupportDir { dir in
             try indexedCSV(200).write(toFile: dir + "/cases.csv", atomically: true, encoding: .utf8)
             let manifest = TestProperties(
+                language: nil,
                 globalExpressions: [
                     PersonalizationExpression(
                         name: "total",
@@ -130,6 +134,7 @@ import Testing
         try await withSupportDir { dir in
             try "hello".write(toFile: dir + "/quotes.txt", atomically: true, encoding: .utf8)
             let manifest = TestProperties(
+                language: nil,
                 globalExpressions: [
                     PersonalizationExpression(
                         name: "text", expression: "open('quotes.txt').read()")
@@ -147,6 +152,7 @@ import Testing
             try indexedCSV(30).write(toFile: dir + "/cases.csv", atomically: true, encoding: .utf8)
             try "ward-3B".write(toFile: dir + "/notes.txt", atomically: true, encoding: .utf8)
             let manifest = TestProperties(
+                language: nil,
                 globalExpressions: [
                     PersonalizationExpression(
                         name: "note", expression: "open('notes.txt').read()"),
@@ -170,6 +176,7 @@ import Testing
             try "def bump(n):\n    return n + 1\n"
                 .write(toFile: dir + "/helpers.py", atomically: true, encoding: .utf8)
             let manifest = TestProperties(
+                language: nil,
                 globalExpressions: [
                     PersonalizationExpression(name: "bumped", expression: "helpers.bump(41)")
                 ],

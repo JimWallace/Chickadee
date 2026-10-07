@@ -39,7 +39,7 @@ import Testing
             attemptNumber: 1,
             submissionURL: testURL("https://server.test/sub.zip"),
             testSetupURL: testURL("https://server.test/ts.zip"),
-            manifest: TestProperties(),
+            manifest: TestProperties(language: nil),
             personalizedInputs: inputs,
             personalizedFiles: files,
             language: language

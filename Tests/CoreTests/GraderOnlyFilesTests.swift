@@ -21,7 +21,7 @@ import Testing
     }
 
     @Test func graderOnlyFilesRoundTrip() throws {
-        let manifest = TestProperties(graderOnlyFiles: ["test.csv", "answers.json"])
+        let manifest = TestProperties(language: nil, graderOnlyFiles: ["test.csv", "answers.json"])
         let data = try JSONEncoder().encode(manifest)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
         #expect(decoded.graderOnlyFiles == ["test.csv", "answers.json"])
@@ -29,11 +29,11 @@ import Testing
     }
 
     @Test func runnerSanitizedStripsGraderOnlyFiles() {
-        let manifest = TestProperties(graderOnlyFiles: ["test.csv"])
+        let manifest = TestProperties(language: nil, graderOnlyFiles: ["test.csv"])
         #expect(manifest.runnerSanitized().graderOnlyFiles.isEmpty)
     }
 
     @Test func emptyByDefault() {
-        #expect(TestProperties().graderOnlyFiles.isEmpty)
+        #expect(TestProperties(language: nil).graderOnlyFiles.isEmpty)
     }
 }

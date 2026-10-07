@@ -93,7 +93,7 @@ final class AssignmentHelpersManifestTests {
                     displayName: nil
                 ),
             ],
-            includeMakefile: false
+            includeMakefile: false, language: nil
         )
 
         #expect(
@@ -147,7 +147,7 @@ final class AssignmentHelpersManifestTests {
                     script: "01_public.py", tier: "public", order: 1,
                     dependsOn: [], points: 1, displayName: nil)
             ],
-            includeMakefile: false
+            includeMakefile: false, language: nil
         )
 
         let updated = try #require(
@@ -194,7 +194,7 @@ final class AssignmentHelpersManifestTests {
                     displayName: nil
                 ),
             ],
-            includeMakefile: false
+            includeMakefile: false, language: nil
         )
 
         let updated = try #require(
@@ -226,7 +226,7 @@ final class AssignmentHelpersManifestTests {
                 TestSuiteSection(id: "sec-1", name: "Question 1"),
                 TestSuiteSection(id: "sec-2", name: "Question 2"),
             ],
-            globalVariables: [FamilyVariable(name: "limit", value: .int(5))]
+            globalVariables: [FamilyVariable(name: "limit", value: .int(5))], language: nil
         )
 
         let updated = try #require(
@@ -251,7 +251,7 @@ final class AssignmentHelpersManifestTests {
                     dependsOn: [], points: 1, displayName: nil, sectionID: "sec-1")
             ],
             includeMakefile: false,
-            sections: [TestSuiteSection(id: "sec-1", name: "Question 1")]
+            sections: [TestSuiteSection(id: "sec-1", name: "Question 1")], language: nil
         )
 
         let updated = try #require(
@@ -281,6 +281,7 @@ final class AssignmentHelpersManifestTests {
                     dependsOn: [], points: 1, displayName: nil)
             ],
             includeMakefile: false,
+            language: nil,
             minimumRunnerVersion: "0.5.0"
         )
         // Sanity: the builder emitted the gate.
@@ -320,6 +321,7 @@ final class AssignmentHelpersManifestTests {
                     dependsOn: [], points: 1, displayName: nil)
             ],
             includeMakefile: false,
+            language: nil,
             activity: activity
         )
         // Sanity: the builder emitted the block.
@@ -346,7 +348,7 @@ final class AssignmentHelpersManifestTests {
 
     // An ordinary assignment's manifest must not grow an `activity` key.
     @Test func makeWorkerManifestJSONOmitsActivityWhenNil() throws {
-        let json = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false)
+        let json = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, language: nil)
         #expect(!json.contains("activity"))
     }
 
@@ -468,7 +470,7 @@ final class AssignmentHelpersManifestTests {
             ],
             includeMakefile: true,
             gradingMode: "worker",
-            starterNotebook: nil
+            starterNotebook: nil, language: nil
         )
 
         let object = try #require(
@@ -498,7 +500,7 @@ final class AssignmentHelpersManifestTests {
                     script: "publictest_b.py", tier: "public", order: 2,
                     dependsOn: [], points: 1, displayName: nil, hint: nil),
             ],
-            includeMakefile: false
+            includeMakefile: false, language: nil
         )
 
         let object = try #require(
@@ -851,6 +853,7 @@ final class AssignmentHelpersManifestTests {
                     dependsOn: [], points: 1, displayName: nil)
             ],
             includeMakefile: false,
+            language: nil,
             activity: activity
         )
         let added = try #require(

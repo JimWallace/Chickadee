@@ -26,7 +26,7 @@ import Testing
     private static func manifest(script: String) -> TestProperties {
         TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: script)],
-            timeLimitSeconds: 10
+            timeLimitSeconds: 10, language: nil
         )
     }
 

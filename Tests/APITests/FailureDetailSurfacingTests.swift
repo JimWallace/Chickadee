@@ -15,11 +15,12 @@ import VaporTesting
 @Suite struct FailureDetailSurfacingTests {
 
     @Test func buildFailureDetailByFilename_keysFilenameAndStemAndSkipsFull() {
-        let props = TestProperties(testSuites: [
-            TestSuiteEntry(tier: .pub, script: "publictest_a.py", failureDetail: .actualOnly),
-            TestSuiteEntry(tier: .pub, script: "publictest_b.py", failureDetail: .full),
-            TestSuiteEntry(tier: .pub, script: "publictest_c.py"),
-        ])
+        let props = TestProperties(
+            testSuites: [
+                TestSuiteEntry(tier: .pub, script: "publictest_a.py", failureDetail: .actualOnly),
+                TestSuiteEntry(tier: .pub, script: "publictest_b.py", failureDetail: .full),
+                TestSuiteEntry(tier: .pub, script: "publictest_c.py"),
+            ], language: nil)
         let map = buildFailureDetailByFilename(props)
         #expect(map["publictest_a.py"] == .actualOnly)
         #expect(map["publictest_a"] == .actualOnly)

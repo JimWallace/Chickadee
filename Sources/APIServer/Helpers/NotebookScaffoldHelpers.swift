@@ -135,7 +135,7 @@ let uploadOnlyNotebookScaffoldMessage =
 /// workflow at all, and scaffolding one would promise students an editor that
 /// cannot serve them — the same refusal `submissionMode` already enforces,
 /// moved to the point where the file would be written.
-func defaultNotebookData(title: String, language: AssignmentLanguage? = nil) -> Data? {
+func defaultNotebookData(title: String, language: AssignmentLanguage?) -> Data? {
     let safeTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
     let kernel: (name: String, displayName: String, languageName: String)
     switch (language ?? .python).editorSupport {

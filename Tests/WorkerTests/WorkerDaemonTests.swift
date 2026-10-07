@@ -190,7 +190,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:1/submission.zip"),
             testSetupURL: testURL("http://127.0.0.1:1/testsetup.zip"),
             manifest: try makeManifest(),
-            submissionFilename: "submission.ipynb"
+            submissionFilename: "submission.ipynb", language: nil
         )
     }
 
@@ -272,7 +272,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:\(serverPort)/\(submissionID).ipynb"),
             testSetupURL: testURL("http://127.0.0.1:\(serverPort)/\(submissionID)-setup.zip"),
             manifest: try makeManifest(),
-            submissionFilename: "submission.ipynb"
+            submissionFilename: "submission.ipynb", language: nil
         )
     }
 
@@ -613,7 +613,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:\(server.port)/no-such-submission.ipynb"),
             testSetupURL: testURL("http://127.0.0.1:\(server.port)/\(marker)-setup.zip"),
             manifest: try makeManifest(),
-            submissionFilename: "submission.ipynb"
+            submissionFilename: "submission.ipynb", language: nil
         )
 
         let poller = MockPoller(jobs: [job, nil])
@@ -700,7 +700,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:\(server.port)/\(submissionID).ipynb"),
             testSetupURL: testURL("http://127.0.0.1:\(server.port)/\(submissionID)-setup.zip"),
             manifest: manifest,
-            submissionFilename: "submission.ipynb"
+            submissionFilename: "submission.ipynb", language: nil
         )
 
         var boundedMakeConfig = RunnerDaemonConfig.defaults
@@ -1090,7 +1090,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:\(failServer.port)/submission.zip"),
             testSetupURL: testURL("http://127.0.0.1:\(failServer.port)/testsetup.zip"),
             manifest: try makeManifest(),
-            submissionFilename: "submission.ipynb"
+            submissionFilename: "submission.ipynb", language: nil
         )
         let poller = MockPoller(jobs: [job, nil])
         let reporter = MockReporter()
@@ -1164,7 +1164,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:\(slowServer.port)/submission.zip"),
             testSetupURL: testURL("http://127.0.0.1:\(failServer.port)/testsetup.zip"),
             manifest: try makeManifest(),
-            submissionFilename: "submission.ipynb"
+            submissionFilename: "submission.ipynb", language: nil
         )
         let poller = MockPoller(jobs: [job, nil])
         let reporter = MockReporter()
@@ -1241,7 +1241,7 @@ import Testing
             submissionURL: testURL("http://127.0.0.1:\(slowServer.port)/submission.zip"),
             testSetupURL: testURL("http://127.0.0.1:\(setupServer.port)/\(marker)-setup.zip"),
             manifest: try makeManifest(),
-            submissionFilename: "submission.ipynb"
+            submissionFilename: "submission.ipynb", language: nil
         )
         let poller = MockPoller(jobs: [job, nil])
         let reporter = MockReporter()

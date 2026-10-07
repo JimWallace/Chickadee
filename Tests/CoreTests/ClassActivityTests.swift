@@ -18,7 +18,7 @@ import Testing
     private let decoder = JSONDecoder()
 
     @Test func absentBlockDecodesToNilAndEncodesNoKey() throws {
-        let plain = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "t.sh")])
+        let plain = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "t.sh")], language: nil)
         let json = try #require(String(data: encoder.encode(plain), encoding: .utf8))
         #expect(!json.contains("activity"))
         #expect(try decoder.decode(TestProperties.self, from: Data(json.utf8)).activity == nil)
@@ -26,6 +26,7 @@ import Testing
 
     @Test func blockRoundTripsThroughTestProperties() throws {
         let props = TestProperties(
+            language: nil,
             activity: ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible))
         let decoded = try decoder.decode(TestProperties.self, from: encoder.encode(props))
         #expect(decoded.activity == props.activity)
@@ -45,7 +46,7 @@ import Testing
     /// The runner never reads the block, and stripping it is what protects an
     /// older runner from an `ActivityKind` case its build predates.
     @Test func runnerSanitizedDropsTheBlock() throws {
-        let props = TestProperties(activity: ClassActivity(kind: .bestMetric))
+        let props = TestProperties(language: nil, activity: ClassActivity(kind: .bestMetric))
         #expect(props.runnerSanitized().activity == nil)
         let json = try #require(String(data: encoder.encode(props.runnerSanitized()), encoding: .utf8))
         #expect(!json.contains("activity"))

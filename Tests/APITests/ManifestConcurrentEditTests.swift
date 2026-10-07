@@ -17,7 +17,7 @@ import VaporTesting
     /// A saved setup with a default manifest, and its id.
     private func makeSetup(_ app: Application, id: String) async throws -> String {
         let courseID = try await app.testCourseID(enrollmentMode: .auto)
-        let manifest = try encodeManifest(TestProperties())
+        let manifest = try encodeManifest(TestProperties(language: nil))
         try await makeTestSetup(
             on: app, id: id, courseID: courseID, manifest: manifest, withNotebook: false, withZip: false)
         return id
