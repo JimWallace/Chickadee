@@ -41,7 +41,7 @@ Swift targets share a clean dependency boundary:
   grading core. Compiled two ways: natively (linked into the worker) and to
   **WebAssembly** (the in-browser runner). It owns suite execution
   (`executeSuites`), output interpretation (`interpretScriptOutput`), script
-  classification, notebook extraction (`extractPython` / `extractR`), and the
+  classification, notebook extraction (one `extract<Language>` per language), and the
   `TestOutcome` / `TestTier` / `TestStatus` types — so the native and browser
   graders run one implementation and cannot drift. Pinned by the shared
   `Tests/Fixtures/output-contract.json` contract, asserted against both the
@@ -341,9 +341,9 @@ derivation.
 but Python** (`POST /instructor/:id/compute-expected`). The in-page evaluator is
 a Python kernel; on another language it did not fail, it computed a *Python*
 answer for a value compared against that language's result.
-`PersonalizationEvaluator` already evaluates in all six behind an exhaustive
-switch, so the fix was to route to it rather than grow five more kernels into the
-page. Python keeps the in-page path (faster, and its `None`-return and
+`PersonalizationEvaluator` already evaluates in every language behind an
+exhaustive switch, so the fix was to route to it rather than grow a kernel per
+language into the page. Python keeps the in-page path (faster, and its `None`-return and
 non-round-trippable-type handling is behaviour existing assignments rely on).
 Two stated limits: the drivers report values as their language's REPR (base R and
 Lua have no JSON to serialize with), so a scalar round-trips into the Expected
@@ -554,8 +554,8 @@ r-base and every R boot pull numpy/pandas/matplotlib (slow enough to time out
 the editor probes). `check-xeus-vendored.sh` asserts they stay distinct. Python moved
 off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
 technology for every language. Notebook metadata is normalized to those names by
-`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`) — for Python
-for all three. A Lua notebook resolves to `xlua` and extracts through the
+`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`) — for every
+vendored kernel. A Lua notebook resolves to `xlua` and extracts through the
 same marker-emitting RunnerCore extractor R uses — vendoring a kernel puts it
 in the editor's picker, so a language that can be authored must be one that
 can be graded.
@@ -592,11 +592,11 @@ numpy / pandas / matplotlib / scipy / sympy / scikit-learn / statsmodels / PIL;
 the R side is the tidyverse core (dplyr, tidyr, readr, stringr, tibble, purrr,
 forcats).
 
-**Both kernel environments are checked at authoring time, and the check reads
+**The kernel environments are checked at authoring time, and the check reads
 the VENDORED bytes, never the environment YAML.**
 Since browser grading moved onto this env, saving a browser-graded `.py` whose
 imports the kernel cannot satisfy is rejected at the write
-(`PythonImportGuard`, wired into the web create/update handlers, `PUT /suite`,
+(`KernelImportGuard`, wired into the web create/update handlers, `PUT /suite`,
 and MCP `author_script`) — which matters because instructor validation is graded
 by the *native* worker on a full CPython, so such a test validates green and then
 fails for the first student who submits. The available set comes from
@@ -707,7 +707,7 @@ Public/vendor/xeus-unpack.wasm   — untarjs unpacker the bootstrap drives
 `check-pyodide-parity.sh`, `add-pyodide-extras.py`,
 `Tools/vendor/pyodide-extra-packages.json`, `patch-pyodide-kernel.py`, the
 nb_mypy/astor wheels and the `jupyterlite-pyodide-kernel` federated extension
-went with it. Both editor kernels and both browser graders are xeus.
+went with it. Every editor kernel and every browser grader is xeus.
 `verify-jupyterlite.sh` fails if any `pyodide` federated extension or plugin
 setting reappears, because re-adding the kernel means re-vendoring that payload
 and restoring its CSP allowances.
@@ -736,8 +736,8 @@ and restoring its CSP allowances.
 rewrites the `Atomics.waitAsync` polyfill's helper worker from a CSP-blocked
 `data:` URL to a `blob:` one. It was scoped to the pyodide-kernel extension —
 and when Pyodide was retired it turned out the **xeus** extension shipped the
-identical un-patched polyfill, in the kernel Chickadee actually runs, for both
-languages. A per-extension scope is how that went unseen for two releases; the
+identical un-patched polyfill, in the kernel Chickadee actually runs, for every
+language. A per-extension scope is how that went unseen for two releases; the
 glob and the matching `verify-jupyterlite.sh` assertion are how it stays seen.
 
 ---
@@ -1116,7 +1116,7 @@ plus a read-only admin-diagnostics MCP of 19 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source of
 truth for the count); OIDC SSO; and zero-downtime auto-deploys. The 0.4 arc is
 summarised at the top of `CHANGELOG-0.4.md`. The 0.5-boundary cleanup is in the
-0.5.0 entry of `CHANGELOG.md`. Both browser graders and every editor kernel are
+0.5.0 entry of `CHANGELOG.md`. Every browser grader and every editor kernel is
 xeus (#1271, done); the measurements are in `docs/archive/xeus-python-grading-*`.
 
 Instructor validation is a `kind == .validation` submission, graded by the

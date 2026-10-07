@@ -3,11 +3,12 @@
 How to teach Chickadee another in-browser language, and — more usefully — what
 that actually costs.
 
-> **This has now been done once, deliberately, with Lua.** Everything below was
-> written before; §"What the Lua run actually cost" at the end records what
-> held, what did not, and which of R's expensive lessons turned out not to
-> generalise. Read the two together — where they disagree, the Lua section is
-> the measurement and this text is the prediction.
+> **This has now been done twice, deliberately: Lua first, then Octave.**
+> Everything below was written before; §"What the Lua run actually cost" and
+> §"What the Octave run actually cost" at the end record what held, what did
+> not, and which of R's expensive lessons turned out not to generalise. Read
+> them together — where they disagree, those sections are the measurement and
+> this text is the prediction.
 
 ## Read this first: two halves, very different sizes
 
@@ -410,9 +411,10 @@ be **authored**. That gap is not a rough edge — it is most of the work, and
 Chickadee has now been on both sides of it. Lua reached the end of the first
 half in a day; the second half is an R-sized arc.
 
-> **Status: Lua has now finished the second half.** `AssignmentLanguage` is
-> `.python | .r | .lua`. Everything below is the runbook that produced it, and
-> the counts are what the compiler actually named. The section further down,
+> **Status: Lua finished the second half, and Octave followed.**
+> `AssignmentLanguage.allCases` is the current list. Everything below is the
+> runbook that produced them, and the counts are what the compiler named for
+> Lua. The section further down,
 > "What a half-supported language actually does", describes the state Lua was in
 > *before* this landed; it is kept because it is the measured argument for
 > finishing, not a description of current behaviour.

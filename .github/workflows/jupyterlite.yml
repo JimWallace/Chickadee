@@ -58,8 +58,8 @@ jobs:
       - name: Verify the committed JupyterLite bundle is coherent
         # No Pyodide may return, the diagnostics collector tag, and the xeus
         # parselmouth-fetch stub — the internal invariants a rebuild used to
-        # guarantee, asserted on the committed bytes. (The waitAsync blob-worker
-        # assertion is deliberately absent; see the note in the script.)
+        # guarantee, asserted on the committed bytes, plus the waitAsync
+        # polyfill worker in its blob: form.
         run: scripts/verify-jupyterlite.sh Public/jupyterlite
 
       # The FIPPA property — the editor kernel boots with ZERO external fetches —
