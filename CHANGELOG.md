@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.548] - 2026-10-07
+
+### Fixed
+
+- **The "Failed" count on a results page is red again, and only when a test failed.** The red rule came before the base rule in the stylesheet, so the base colour won. The count now takes the red style only when it is above zero, so a clean submission does not show a red 0. (#2399)
+
+
+## [0.5.547] - 2026-10-07
+
+### Fixed
+
+- **An R test's own `tryCatch(error =)` no longer swallows `passed()`.** In the browser, the condition that stands in for `quit()` was also an error, so a test that called `passed()` inside `tryCatch(..., error = )` reported an error there and a pass under Rscript. The condition is no longer an error, so the browser and the native runner give the same result. (#2386)
+
+
 ## [0.5.546] - 2026-10-07
 
 ### Fixed

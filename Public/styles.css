@@ -1602,9 +1602,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     font-weight: 700;
 }
 
-/* The one count that is not neutral information. */
-.diagnostic-value-alert { color: var(--red); }
-
 /* The reveal control sits at the end of the hidden-test header rather than in
    a notice of its own: it acts on the block it labels. */
 /* Not .inline-form: that rule sets `margin: 0` and is declared later in this
@@ -2496,6 +2493,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
     line-height: 1.2;
     color: var(--gray-900);
 }
+/* The one count that is not neutral information. It must follow
+   .diagnostic-value, which sets the colour with the same specificity. */
+.diagnostic-value-alert { color: var(--red); }
 
 /* ── Clickable diagnostic cards with sparklines ─────────
    Shared by the admin dashboard (admin.leaf) and the instructor dashboard
@@ -3091,12 +3091,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     background: var(--overlay-bg);
 }
 .modal-overlay[hidden] { display: none; }
-/* The destructive-action confirmation (ChickadeeUI.confirmAction) — the same
-   scrim and card as every other modal, at the width a sentence and two buttons
-   want rather than the editor's. It replaced window.confirm, which was the one
-   surface in the app outside the design system. */
-.modal-card--confirm { width: min(28rem, 92vw); }
-.confirm-message { font-size: var(--text-base); }
 .modal-card {
     background: var(--surface);
     color: var(--gray-900);
@@ -3107,6 +3101,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     flex-direction: column;
     box-shadow: var(--shadow-pop);
 }
+/* The destructive-action confirmation (ChickadeeUI.confirmAction) — the same
+   scrim and card as every other modal, at the width a sentence and two buttons
+   want rather than the editor's. It replaced window.confirm, which was the one
+   surface in the app outside the design system. It must follow .modal-card,
+   which sets the width with the same specificity. */
+.modal-card--confirm { width: min(28rem, 92vw); }
+.confirm-message { font-size: var(--text-base); }
 .modal-head,
 .modal-foot {
     display: flex;

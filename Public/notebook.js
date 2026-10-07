@@ -2057,7 +2057,7 @@
             </div>
             <div class="diagnostics-cards">
                 <div class="diagnostic-card"><div class="diagnostic-value">${pass}</div><div class="diagnostic-label">Passed</div></div>
-                <div class="diagnostic-card"><div class="diagnostic-value diagnostic-value-alert">${fail}</div><div class="diagnostic-label">Failed</div></div>
+                <div class="diagnostic-card"><div class="diagnostic-value${fail > 0 ? ' diagnostic-value-alert' : ''}">${fail}</div><div class="diagnostic-label">Failed</div></div>
                 <div class="diagnostic-card"><div class="diagnostic-value">${error}</div><div class="diagnostic-label">Errors</div></div>
                 <div class="diagnostic-card"><div class="diagnostic-value">${skipped}</div><div class="diagnostic-label">Skipped</div></div>
             </div>`;
