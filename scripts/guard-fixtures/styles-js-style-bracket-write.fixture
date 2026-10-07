@@ -1,0 +1,9 @@
+# `el.style[prop] = …` writes a style exactly as `el.style.prop = …` does, but
+# the ratchet counted only the dotted form until #2408.
+guard="scripts/check-styles.sh"
+files="Public/app.js"
+description="a JS style write in bracket form"
+expect="JS styling decisions grew"
+apply() {
+    printf "function ckGuardFixture(el) { el.style['width'] = '1px'; }\n" >> Public/app.js
+}

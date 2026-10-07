@@ -1,0 +1,9 @@
+# A CSS named colour bypasses the palette exactly as a hex value does; the
+# rule matched only hex, rgb() and hsl() until #2406.
+guard="scripts/check-design-tokens.sh"
+files="Public/styles.css"
+description="a CSS named colour in a rule body"
+expect="raw colour literal"
+apply() {
+    printf '\n.ck-guard-fixture-named { border: 1px solid white; }\n' >> Public/styles.css
+}

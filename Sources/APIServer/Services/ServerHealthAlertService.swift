@@ -34,6 +34,9 @@ func evaluateHealthRules(
 
     // Also before the database check: it reads a file the deploy daemon writes.
     results[.deployerUnhealthy] = evaluateDeployerUnhealthy(on: application, now: now)
+    // Before the database check too: a full disk is what stops the database,
+    // and this is the rule that has to answer then.
+    results[.diskSpaceLow] = evaluateDiskSpaceLow(on: application)
 
     let dbResult = await evaluateDatabaseUnreachable(on: application)
     results[.databaseUnreachable] = dbResult

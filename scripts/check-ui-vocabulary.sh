@@ -68,11 +68,12 @@ CATALOG_BASELINE=236
 # shellcheck source=lib/css.sh
 . "scripts/lib/css.sh"
 
-# Classes carrying a rule in the global sheet.
+# Classes carrying a rule in the global sheet. Each chunk is cut at its LAST
+# `{`, so a one-line `@media (...) { .x { ... } }` keeps `.x` (#2403).
 sheet_classes="$(
   strip_css_comments "$sheet" \
     | tr '}' '\n' \
-    | sed 's/{.*$//' \
+    | sed 's/{[^{]*$//' \
     | grep -oE '\.[a-zA-Z][A-Za-z0-9_-]*' \
     | sed 's/^\.//' \
     | grep -vE '^js-' \

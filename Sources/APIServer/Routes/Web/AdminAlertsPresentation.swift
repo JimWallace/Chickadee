@@ -36,6 +36,8 @@ extension HealthRule {
             return "the deploy daemon is stuck, failing, or silent for \(Int(deployerStatusStaleAfterSeconds / 60)) min"
         case .unclaimableJobs:
             return "a job waits \(Int(unclaimableJobsMinimumWaitSeconds / 60)) min and no online runner can grade it"
+        case .diskSpaceLow:
+            return "less than \(Int((diskSpaceLowFreeFraction * 100).rounded()))% of the data disk is free"
         }
     }
 }

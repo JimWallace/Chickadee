@@ -1,0 +1,9 @@
+# A modifier above its base rule never applies: both are one class, so the
+# later base rule wins on every property they share (#2400).
+guard="scripts/check-styles.sh"
+files="Public/styles.css"
+description="a base rule that comes after its modifier and sets the same property"
+expect="a modifier rule comes before its base rule"
+apply() {
+    printf '.modal-card { width: min(960px, 96vw); }\n' >> Public/styles.css
+}

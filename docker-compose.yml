@@ -81,6 +81,13 @@ services:
 
       LOG_LEVEL:                    ${LOG_LEVEL:-info}
 
+      # Health alerts (the rules on /admin/alerts). On by default: with no
+      # webhook they only log. Set the Slack webhook on /admin/alerts (stored on
+      # the data volume) or here. Until 2026-10-07 neither variable was passed
+      # through, so alerts could not be on in a Compose or blue-green deploy.
+      ALERT_ENABLED:                ${ALERT_ENABLED:-true}
+      ALERT_WEBHOOK_URL:            ${ALERT_WEBHOOK_URL:-}
+
       # Runner <-> server HMAC secret. Required: it is the only channel by
       # which the runner container learns the secret, now that it no longer
       # mounts the data volume. Generate one with the command in .env.example.

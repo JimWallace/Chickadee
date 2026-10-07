@@ -22,13 +22,14 @@ All tokens are CSS custom properties declared in the `:root` block of
 
 ### Colour
 
-- **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()` — may
-  only appear as the value of a `--token:` declaration in
-  `Public/styles.css`** — never in a rule body, and never in a page `<style>`
-  block.  Everything else uses `var(--x)`.  This is what makes dark mode
-  work: a hardcoded `#d4edda` success banner is invisible-text-on-dark
-  waiting to happen (that exact bug is why `--success-fg` / `--danger-fg`
-  exist).
+- **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()`, or a
+  CSS named colour such as `white` — may only appear as the value of a
+  `--token:` declaration in `Public/styles.css`** — never in a rule body, and
+  never in a page `<style>` block.  (`transparent` and `currentColor` are not
+  fixed colours and stay allowed.)  Everything else uses `var(--x)`.  This is
+  what makes dark mode work: a hardcoded `#d4edda` success banner is
+  invisible-text-on-dark waiting to happen (that exact bug is why
+  `--success-fg` / `--danger-fg` exist).
 - Prefer the **semantic** tokens (`--success-bg`/`--success-fg`,
   `--danger-bg`/`--danger-fg`, `--warning-bg`, `--open-bg`/`--open-fg`,
   `--accent-bg`/`--accent-fg`, `--muted`, `--text-secondary`, `--border`,
@@ -769,6 +770,14 @@ variants that exist nowhere and silently rendered as unstyled text.
   `chickadee-ui.js` scrapes out of fetch bodies) lives in the global sheet
   with a comment naming the contract — never in a page block where a rename
   looks safe.
+- **A modifier rule follows its base rule.** `.modal-card--confirm` and
+  `.modal-card` are both one class, so the later rule wins on each property
+  they share. A modifier placed above its base does nothing, and the page
+  still renders. Guard 4d in `scripts/check-styles.sh` fails CI when a rule
+  for `.x-mod` or `.x--mod` comes before a rule for `.x` that sets the same
+  property, and both names occur on one line of a template or a script.
+  Order decides only a tie: a more specific rule, such as
+  `textarea.form-input`, wins whatever the order.
 
 ## Page-local scripts
 
