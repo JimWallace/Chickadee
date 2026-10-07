@@ -31,6 +31,7 @@ import Testing
 
     private static let manifest = TestProperties(
         requiredFiles: [], testSuites: [], timeLimitSeconds: 10,
+        language: nil,
         globalVariables: [FamilyVariable(name: "threshold", value: .double(18.5))])
 
     /// A hand-written test filename in `language`, using the extension the
@@ -250,6 +251,7 @@ import Testing
 
         let manifest = TestProperties(
             requiredFiles: [], testSuites: [], timeLimitSeconds: 10,
+            language: nil,
             globalVariables: [FamilyVariable(name: "threshold", value: .double(18.5))])
         let name = "publictest_probe.\(language.sourceFileExtension)"
         let source = TestScriptVariablePrepender.applyForRawScript(

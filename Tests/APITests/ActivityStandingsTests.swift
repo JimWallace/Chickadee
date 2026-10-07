@@ -31,6 +31,7 @@ import VaporTesting
     private func robinManifest(opponentFile: String? = nil) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .roundRobin, opponentFile: opponentFile),
             achievements: [ActivityAuthoring.seededWinnerRecord])
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
@@ -511,7 +512,8 @@ import VaporTesting
             id: "streak", name: "Streak", scope: .individual,
             conditions: [AchievementCondition(signal: .matchesWon, comparator: .atLeast, value: 2)],
             reward: AchievementReward(type: .badge, label: "Streak"))
-        let props = TestProperties(activity: ClassActivity(kind: .roundRobin), achievements: [podium, streak])
+        let props = TestProperties(
+            language: nil, activity: ClassActivity(kind: .roundRobin), achievements: [podium, streak])
         let outcomes = [outcome("match", metric: 1)]
         #expect(earnedIndividualBadges(props: props, gradePercent: 100, outcomes: outcomes).isEmpty)
         let third = earnedIndividualBadges(

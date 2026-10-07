@@ -52,7 +52,7 @@ import VaporTesting
                     script: name, tier: "public", order: index + 1,
                     dependsOn: [], points: 1, displayName: nil))
         }
-        let manifest = try makeWorkerManifestJSON(testSuites: entries, includeMakefile: false)
+        let manifest = try makeWorkerManifestJSON(testSuites: entries, includeMakefile: false, language: nil)
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)

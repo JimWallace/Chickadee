@@ -663,7 +663,7 @@ import Testing
             }
             """
         try writeNotebook(nb)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         let pyURL = tmpDir.appendingPathComponent("assignment.py")
         #expect(
@@ -691,7 +691,7 @@ import Testing
             }
             """
         try writeNotebook(nb)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         #expect(
             FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
@@ -713,7 +713,7 @@ import Testing
             }
             """
         try writeNotebook(nb)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         #expect(
             FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
@@ -729,7 +729,7 @@ import Testing
             }
             """
         try writeNotebook(nb)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         #expect(
             FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
@@ -746,7 +746,7 @@ import Testing
             }
             """
         try writeNotebook(nb)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         #expect(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.py").path))
     }
@@ -764,7 +764,7 @@ import Testing
             }
             """
         try writeNotebook(nb)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"), encoding: .utf8)
         // Only "x = 1" should be present; empty/whitespace cells are skipped.
@@ -783,7 +783,7 @@ import Testing
         let txtURL = tmpDir.appendingPathComponent("readme.txt")
         try "hello".write(to: txtURL, atomically: true, encoding: .utf8)
 
-        try extractNotebooksToCode(in: tmpDir)  // no .ipynb → nothing to do
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)  // no .ipynb → nothing to do
 
         let pyContent = try String(contentsOf: pyURL, encoding: .utf8)
         #expect(pyContent == "original = True", "Non-notebook files must be untouched")
@@ -796,7 +796,7 @@ import Testing
             """
         try writeNotebook(nb, name: "lab1.ipynb")
         try writeNotebook(nb, name: "lab2.ipynb")
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         #expect(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("lab1.py").path))
         #expect(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("lab2.py").path))
@@ -812,7 +812,7 @@ import Testing
             }
             """
         try writeNotebook(nb)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
 
         let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"), encoding: .utf8)
         #expect(content.contains("x = 99"), "String-form source must be extracted")

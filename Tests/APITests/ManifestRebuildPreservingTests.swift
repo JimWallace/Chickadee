@@ -83,6 +83,7 @@ import Testing
             disabledBuiltInAwardIDs: ["first-try"],
             builtInAchievementsSeeded: true,
             datasets: [DatasetSpec(file: "data.csv", sampleSize: 5)],
+            language: nil,
             activity: ClassActivity(kind: .bestMetric))
         var props = try #require(decodeManifest(fromJSON: original))
         props.graderOnlyFiles = ["answers.R"]
@@ -108,7 +109,7 @@ import Testing
     }
 
     @Test func aTierThatIsNotATierIsRefusedNotStored() throws {
-        let props = TestProperties()
+        let props = TestProperties(language: nil)
         #expect(throws: WebAssignmentError.self) {
             try makeWorkerManifestJSON(
                 preserving: props,

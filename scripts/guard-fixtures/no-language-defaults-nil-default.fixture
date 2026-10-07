@@ -1,0 +1,9 @@
+# A nil default compiles at every call site just as `= .python` does, and the
+# callee then picks a language of its own. Seven functions had one (#2429).
+guard="scripts/no-language-defaults.sh"
+files="Sources/Core/AssignmentLanguage.swift"
+description="a language parameter that defaults to nil"
+expect="a language parameter carries a default"
+apply() {
+    printf '\nextension AssignmentLanguage {\n    static func guardFixture(language: AssignmentLanguage? = nil) {}\n}\n' >> Sources/Core/AssignmentLanguage.swift
+}

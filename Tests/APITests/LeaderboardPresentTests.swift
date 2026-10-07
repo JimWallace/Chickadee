@@ -17,6 +17,7 @@ import VaporTesting
     private func manifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
@@ -94,6 +95,7 @@ import VaporTesting
             _ = try await wrLoginAsStudent(on: app)
             let props = TestProperties(
                 testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+                language: nil,
                 activity: ClassActivity(kind: .kingOfTheHill, leaderboardVisibility: .visible))
             let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
             let setup = try await wrInsertSetup(id: "lp_hill", manifest: manifest, on: app)

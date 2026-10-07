@@ -128,7 +128,7 @@ import Testing
             let props = TestProperties(
                 requiredFiles: [],
                 testSuites: [TestSuiteEntry(tier: .pub, script: name)],
-                timeLimitSeconds: 10)
+                timeLimitSeconds: 10, language: nil)
             compared += 1
             #expect(
                 AssignmentLanguage.derivedDeclaration(manifest: props) == viaFoundation,
@@ -149,7 +149,7 @@ import Testing
         let props = TestProperties(
             requiredFiles: [],
             testSuites: [TestSuiteEntry(tier: .pub, script: script)],
-            timeLimitSeconds: 10)
+            timeLimitSeconds: 10, language: nil)
         #expect(
             AssignmentLanguage.derivedDeclaration(manifest: props) == nil,
             "\(script) is a hidden file and must not resolve a language")
@@ -167,7 +167,7 @@ import Testing
             let props = TestProperties(
                 requiredFiles: [],
                 testSuites: rotated.map { TestSuiteEntry(tier: .pub, script: $0) },
-                timeLimitSeconds: 10)
+                timeLimitSeconds: 10, language: nil)
             #expect(
                 AssignmentLanguage.derivedDeclaration(manifest: props) == .r,
                 "suite order \(rotated) must not change the resolved language")

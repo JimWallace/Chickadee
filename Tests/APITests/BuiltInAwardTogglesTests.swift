@@ -39,7 +39,7 @@ import VaporTesting
             classFraction: 0.8)
         let json = try makeWorkerManifestJSON(
             testSuites: [], includeMakefile: false,
-            achievements: [goal], disabledBuiltInAwardIDs: ["trailblazer", "speed_champion"])
+            achievements: [goal], disabledBuiltInAwardIDs: ["trailblazer", "speed_champion"], language: nil)
         let props = try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
         #expect(props.achievements.map(\.id) == ["g1"])
         #expect(Set(props.disabledBuiltInAwardIDs) == ["trailblazer", "speed_champion"])

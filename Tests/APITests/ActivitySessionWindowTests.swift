@@ -88,7 +88,7 @@ import VaporTesting
             kind: .bestMetric, leaderboardVisibility: .visible, opponentFile: nil,
             window: window(opens, opens.addingTimeInterval(3_000)))
         let props = TestProperties(
-            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], activity: activity)
+            testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")], language: nil, activity: activity)
         let encoded = try JSONEncoder().encode(props)
         let json = try #require(String(data: encoded, encoding: .utf8))
         #expect(json.contains("2023-11-14T"), "stored as ISO-8601, not as a number")
@@ -115,6 +115,7 @@ import VaporTesting
     private func manifest(window: LiveSessionWindow?) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .bestMetric, leaderboardVisibility: .visible, opponentFile: nil,
                 window: window))

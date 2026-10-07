@@ -134,6 +134,7 @@ import Testing
     @Test func literalGlobalsInlineIntoRawScriptsPerLanguage() {
         let manifest = TestProperties(
             requiredFiles: [], testSuites: [], timeLimitSeconds: 10,
+            language: nil,
             globalVariables: [
                 FamilyVariable(name: "threshold", value: .double(18.5)),
                 FamilyVariable(name: "labels", value: .array([.string("lo"), .string("hi")])),

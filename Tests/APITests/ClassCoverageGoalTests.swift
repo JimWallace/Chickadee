@@ -151,6 +151,7 @@ import VaporTesting
     private func coverageManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "coverage.sh")],
+            language: nil,
             achievements: [
                 Achievement(
                     id: "cov", name: "Class coverage", scope: .classWide,

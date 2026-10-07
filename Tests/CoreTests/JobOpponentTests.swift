@@ -53,7 +53,7 @@ import Testing
             submissionID: "s", testSetupID: "t", attemptNumber: 1,
             submissionURL: try #require(URL(string: "https://x.test/s.zip")),
             testSetupURL: try #require(URL(string: "https://x.test/t.zip")),
-            manifest: TestProperties(), opponent: opponent)
+            manifest: TestProperties(language: nil), language: nil, opponent: opponent)
         let decoded = try JSONDecoder().decode(Job.self, from: JSONEncoder().encode(job))
         #expect(decoded.opponent == opponent)
     }
@@ -106,7 +106,7 @@ import Testing
             submissionID: "s", testSetupID: "t", attemptNumber: 1,
             submissionURL: testURL("https://x.test/s.zip"),
             testSetupURL: testURL("https://x.test/t.zip"),
-            manifest: TestProperties(), opponents: [a, b])
+            manifest: TestProperties(language: nil), language: nil, opponents: [a, b])
         let decoded = try JSONDecoder().decode(Job.self, from: JSONEncoder().encode(job))
         #expect(decoded.opponents == [a, b])
         #expect(decoded.opponent == nil)

@@ -196,7 +196,7 @@ private func resolveNotebookForExtraction(
 @discardableResult
 func extractNotebooksToCode(
     in directory: URL,
-    forcedLanguage: AssignmentLanguage? = nil,
+    forcedLanguage: AssignmentLanguage?,
     studentNotebookName: String? = nil,
     protected: Set<String> = []
 ) throws -> [String] {

@@ -98,7 +98,6 @@ enum GlobalInputsService {
             manifest: manifest,
             inputs: inputs,
             testSetupsDirectory: testSetupsDirectory,
-            language: AssignmentLanguage.resolve(manifest: manifest),
             seedDB: pools.seed)
 
         // 5. Re-render through `applyPatternFamilies` so generated tests and raw
@@ -217,13 +216,6 @@ enum GlobalInputsService {
         manifest: TestProperties,
         inputs: Inputs,
         testSetupsDirectory: String,
-        // Defaulted to nil, not to `.python`. The old `= .python` default meant
-        // an omitted argument produced a confident wrong answer for an R or Lua
-        // assignment; omitting it now produces "unknown", which the refusal
-        // below reports. (Both callers pass it explicitly regardless; the
-        // default is here so the parameter count stays inside the lint
-        // threshold.)
-        language: AssignmentLanguage? = nil,
         seedDB: any Database
     ) async throws {
         guard !inputs.expressions.isEmpty,
@@ -240,7 +232,7 @@ enum GlobalInputsService {
         // runs on the save, where an instructor can act on the message.
         // `PersonalizationSubstitution.resolve` keeps its stated default,
         // because it runs when a student opens the notebook.
-        guard let language else {
+        guard let language = AssignmentLanguage.resolve(manifest: manifest) else {
             throw WebAssignmentError.unprocessable(reason: undeclaredLanguageExpressionMessage)
         }
         let seedHex = try await AssignmentSeedStore.ensureSeed(

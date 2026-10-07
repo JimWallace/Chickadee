@@ -12,6 +12,7 @@ import Testing
     private let manifest: String = {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.sh", sectionID: "s1")],
+            language: nil,
             sections: [TestSuiteSection(id: "s1", name: "One")])
         let data = (try? JSONEncoder().encode(props)) ?? Data()
         return String(bytes: data, encoding: .utf8) ?? ""

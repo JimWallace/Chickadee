@@ -44,7 +44,7 @@ import VaporTesting
             try await APIUser.query(on: app.db).filter(\.$username == "teststudent").first())
         try await arEnrollStudentInTestCourse(student, on: app)
 
-        let props = TestProperties(achievements: achievements)
+        let props = TestProperties(language: nil, achievements: achievements)
         let manifest = try #require(String(bytes: try JSONEncoder().encode(props), encoding: .utf8))
         try await arInsertSetup(id: setupID, manifest: manifest, on: app)
         try await arInsertAssignment(testSetupID: setupID, title: "Badge Lab", isOpen: true, on: app)

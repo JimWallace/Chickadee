@@ -16,6 +16,7 @@ import VaporTesting
     private func manifest(visible: Bool = true) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .bestMetric, leaderboardVisibility: visible ? .visible : .hidden))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))

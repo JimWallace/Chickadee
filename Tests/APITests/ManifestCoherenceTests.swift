@@ -12,7 +12,7 @@ import Testing
         gradingMode: GradingMode = .worker, submissionMode: SubmissionMode = .notebook,
         graderOnlyFiles: [String] = [], activity: ClassActivity? = nil, language: AssignmentLanguage? = nil
     ) -> TestProperties {
-        var props = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "t.sh")])
+        var props = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "t.sh")], language: nil)
         props.gradingMode = gradingMode
         props.submissionMode = submissionMode
         props.graderOnlyFiles = graderOnlyFiles

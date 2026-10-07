@@ -19,12 +19,14 @@ import VaporTesting
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             // Manifest authors a single custom "fastest" record — the registry
             // defaults (trailblazer / speed_champion / minimalist) must NOT apply.
-            let props = TestProperties(achievements: [
-                Achievement(
-                    id: "custom_speed", name: "Speedy", scope: .record,
-                    reward: AchievementReward(type: .title, label: "Speedy"),
-                    recordDimension: .fastest)
-            ])
+            let props = TestProperties(
+                language: nil,
+                achievements: [
+                    Achievement(
+                        id: "custom_speed", name: "Speedy", scope: .record,
+                        reward: AchievementReward(type: .title, label: "Speedy"),
+                        recordDimension: .fastest)
+                ])
             let manifest = try #require(String(bytes: try JSONEncoder().encode(props), encoding: .utf8))
             let setup = APITestSetup(
                 id: "cr_setup", manifest: manifest,

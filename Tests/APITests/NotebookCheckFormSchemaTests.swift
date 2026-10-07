@@ -25,7 +25,7 @@ import Testing
     // MARK: - Coverage
 
     @Test func schemaDeclaresFieldsForEveryKind() {
-        let schema = notebookCheckFormSchema()
+        let schema = notebookCheckFormSchema(language: nil)
         for kind in NotebookCheckKind.allCases {
             let fields = schema.kinds[kind.rawValue]
             #expect(fields != nil, "Schema is missing a field list for kind \(kind.rawValue)")
@@ -39,13 +39,13 @@ import Testing
     }
 
     @Test func commonFieldsIncludeHint() {
-        let schema = notebookCheckFormSchema()
+        let schema = notebookCheckFormSchema(language: nil)
         let names = schema.common.map(\.name)
         #expect(names.contains("hint"), "The pervasive instructor hint must be a common schema field")
     }
 
     @Test func schemaSerialisesToJSONObject() {
-        let json = notebookCheckFormSchemaJSON()
+        let json = notebookCheckFormSchemaJSON(language: nil)
         #expect(json.hasPrefix("{"))
         #expect(json.contains("\"common\""))
         #expect(json.contains("\"kinds\""))
@@ -55,7 +55,7 @@ import Testing
     // MARK: - required ⟷ validator agreement
 
     @Test func validSamplePassesAndRequiredFieldsAreEnforced() throws {
-        let schema = notebookCheckFormSchema()
+        let schema = notebookCheckFormSchema(language: nil)
         for kind in NotebookCheckKind.allCases {
             let handler = notebookCheckKindHandler(for: kind)
             let sample = validSample(for: kind)

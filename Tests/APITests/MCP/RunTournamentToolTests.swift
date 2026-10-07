@@ -24,6 +24,7 @@ import Vapor
     private func manifest(kind: ActivityKind) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: kind))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
