@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.563] - 2026-10-07
+
+### Fixed
+
+- **The editor smoke fails again when a Chromium check fails.** Three steps read the exit status after an `if` block, where it is always 0, so a Chromium failure of the selftest, the notebook-page test or the workbench test passed the required gate. The steps now take the status in the `else` branch. (#2426)
+
+
 ## [0.5.562] - 2026-10-07
 
 ### Removed
