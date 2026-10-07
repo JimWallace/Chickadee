@@ -1,4 +1,5 @@
 {
+  "model": "opusplan",
   "hooks": {
     "SessionStart": [
       {
@@ -48,7 +49,30 @@
       "mcp__Chickadee_Admin__get_request_metrics",
       "mcp__Chickadee_Admin__get_storage_usage",
       "mcp__Chickadee_Admin__get_brightspace_sync_status",
-      "mcp__Chickadee_Admin__list_connected_agents"
+      "mcp__Chickadee_Admin__list_connected_agents",
+      "Bash(swift build*)",
+      "Bash(swift test*)",
+      "Bash(git diff*)",
+      "Bash(git status*)",
+      "Bash(scripts/check-*.sh*)",
+      "Bash(scripts/no-*.sh*)",
+      "Bash(scripts/lint.sh)",
+      "Bash(scripts/swiftlint.sh)",
+      "Bash(scripts/generate-js-constants.sh --check)",
+      "Bash(scripts/ci-compose-env.sh --check)",
+      "Bash(scripts/deployment-target-tests.sh)",
+      "Bash(scripts/ci-build-retry.sh --self-test)"
+    ],
+    "ask": [
+      "Edit(/Tests/**)",
+      "Bash(scripts/check-guards.sh*)"
+    ],
+    "deny": [
+      "Edit(/VERSION)",
+      "Edit(/Sources/Core/ChickadeeVersion.swift)",
+      "Edit(/CHANGELOG.md)",
+      "Edit(/Public/jupyterlite/**)",
+      "Edit(/Public/vendor/**)"
     ]
   }
 }
