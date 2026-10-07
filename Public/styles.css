@@ -1600,7 +1600,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     font-weight: 700;
 }
 
-
 /* The reveal control sits at the end of the hidden-test header rather than in
    a notice of its own: it acts on the block it labels. */
 /* Not .inline-form: that rule sets `margin: 0` and is declared later in this
