@@ -10,7 +10,7 @@ import VaporTesting
 // (cross-suite) plus this within-suite serialization keeps the env
 // snapshots intact.  TODO(migration): drop after Phase 4 if we move OIDC
 // config off env vars.
-@Suite(.serialized) struct OIDCTests {
+@Suite(.serialized, .timeLimit(.minutes(2))) struct OIDCTests {
 
     private struct NoOpJWTAlgorithm: JWTAlgorithm {
         let name = "noop"
