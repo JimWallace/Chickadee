@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.539] - 2026-10-07
+
+### Fixed
+
+- **Install breadcrumbs keep the package names.** When a browser grading worker installs a package on demand, the submit-phase telemetry now records which packages it installed, beside the timing. (#2387)
+
+
 ## [0.5.538] - 2026-10-07
 
 ### Tests
