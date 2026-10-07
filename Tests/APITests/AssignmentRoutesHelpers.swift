@@ -68,10 +68,8 @@ func arInsertSetup(
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
             """
     let courseID = try await app.testCourseID(enrollmentMode: .auto)
-    let setup = APITestSetup(
-        id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
-    try await setup.save(on: app.db)
-    return setup
+    return try await makeTestSetup(
+        on: app, id: id, courseID: courseID, manifest: manifest, withNotebook: false, withZip: false)
 }
 
 @discardableResult

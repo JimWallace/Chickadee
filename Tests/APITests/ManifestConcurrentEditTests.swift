@@ -18,10 +18,8 @@ import VaporTesting
     private func makeSetup(_ app: Application, id: String) async throws -> String {
         let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let manifest = try encodeManifest(TestProperties())
-        try await APITestSetup(
-            id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip",
-            courseID: courseID
-        ).save(on: app.db)
+        try await makeTestSetup(
+            on: app, id: id, courseID: courseID, manifest: manifest, withNotebook: false, withZip: false)
         return id
     }
 
