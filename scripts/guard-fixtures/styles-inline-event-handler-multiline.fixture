@@ -1,0 +1,10 @@
+# The handler rule read one line at a time, so a handler on a later line of a
+# multi-line tag passed (#2405).
+guard="scripts/check-styles.sh"
+files="Resources/Views/login.leaf"
+description="an inline event-handler attribute on a later line of a multi-line tag"
+expect="inline event-handler attribute"
+apply() {
+    printf '<button\n    type="button"\n    onclick="alert(1)">Guard fixture</button>\n' \
+        >> Resources/Views/login.leaf
+}

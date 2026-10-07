@@ -1,0 +1,9 @@
+# A class name written directly against a Leaf tag used to be dropped with
+# the tag, so a name with no rule there passed (#2402).
+guard="scripts/check-class-resolution.sh"
+files="Resources/Views/login.leaf"
+description="a class name with no rule, written directly against a Leaf conditional"
+expect="ck-guard-fixture-beside-tag"
+apply() {
+    printf '<div class="ck-guard-fixture-beside-tag#if(true): other#endif">x</div>\n' >> Resources/Views/login.leaf
+}

@@ -1,0 +1,10 @@
+# An HTML string built in first-party JS and inserted with innerHTML is under
+# the same CSP: a handler in it never fires (#2405).
+guard="scripts/check-styles.sh"
+files="Public/app.js"
+description="an inline event-handler attribute in a JS-built HTML string"
+expect="inline event-handler attribute"
+apply() {
+    printf "document.body.insertAdjacentHTML('beforeend', '<button type=\"button\" onclick=\"go()\">Go</button>');\n" \
+        >> Public/app.js
+}

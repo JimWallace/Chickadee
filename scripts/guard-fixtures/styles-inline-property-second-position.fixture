@@ -1,0 +1,10 @@
+# Only the first custom property of an attribute that started with `--` was
+# checked, so a component property in second place, or after display:none,
+# passed (#2404).
+guard="scripts/check-styles.sh"
+files="Resources/Views/enroll.leaf"
+description="a component custom property set inline after display:none"
+expect="assigns a component custom property inline"
+apply() {
+    printf '<div style="display:none; --filter-width:220px"></div>\n' >> Resources/Views/enroll.leaf
+}
