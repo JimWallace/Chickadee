@@ -17,6 +17,12 @@ on:
       - ".github/workflows/docker-build.yml"
       # It gives the toolchain key of the release cache.
       - ".github/actions/swift-test-setup/**"
+      # build-release runs it before the compile.
+      - ".github/actions/restore-git-mtimes/**"
+      # It decides what reaches the image build context.
+      - ".dockerignore"
+      # The container smoke test mounts it.
+      - "scripts/ci-runner-cgroup-probe.sh"
   push:
     branches: [main]
     tags: ["v*"]
