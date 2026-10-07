@@ -23,13 +23,13 @@ All tokens are CSS custom properties declared in the `:root` block of
 ### Colour
 
 - **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()`, or a
-  CSS named colour such as `white` — may
-  only appear as the value of a `--token:` declaration in
-  `Public/styles.css`** — never in a rule body, and never in a page `<style>`
-  block.  Everything else uses `var(--x)`.  This is what makes dark mode
-  work: a hardcoded `#d4edda` success banner is invisible-text-on-dark
-  waiting to happen (that exact bug is why `--success-fg` / `--danger-fg`
-  exist).
+  CSS named colour such as `white` — may only appear as the value of a
+  `--token:` declaration in `Public/styles.css`** — never in a rule body, and
+  never in a page `<style>` block.  (`transparent` and `currentColor` are not
+  fixed colours and stay allowed.)  Everything else uses `var(--x)`.  This is
+  what makes dark mode work: a hardcoded `#d4edda` success banner is
+  invisible-text-on-dark waiting to happen (that exact bug is why
+  `--success-fg` / `--danger-fg` exist).
 - Prefer the **semantic** tokens (`--success-bg`/`--success-fg`,
   `--danger-bg`/`--danger-fg`, `--warning-bg`, `--open-bg`/`--open-fg`,
   `--accent-bg`/`--accent-fg`, `--muted`, `--text-secondary`, `--border`,
