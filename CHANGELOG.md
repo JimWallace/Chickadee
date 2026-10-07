@@ -9,6 +9,34 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.533] - 2026-10-07
+
+### Changed
+
+- **Tests sign in as a student or a course TA through shared helpers.** Twelve suites carried a private `loginAsStudent` and two carried the same `loginAsTA`, each with its own copy of the enrolment upsert. They now use `loginAsStudent(_:on:)` and `loginAsCourseTA(_:on:)` in `TestLogin.swift`, and `enrollAsTestInstructor` is one case of a new `enrollInTestCourse(role:)`. (#2364)
+
+
+## [0.5.532] - 2026-10-07
+
+### Changed
+
+- **The worker HMAC tests sign with the shared test signer.** `WorkerHMACAuthMiddlewareTests` kept a second copy of the signing code because the shared `workerHMACHeaders` could not take a fixed timestamp or nonce, which the clock-skew and replay tests need. The shared helper now takes both, and the copy is gone. (#2368)
+
+
+## [0.5.531] - 2026-10-07
+
+### Changed
+
+- **The CLAUDE.md testing section is current.** It no longer gives test-file counts that go stale, it names the shared host traits for every interpreter, and its example uses the shared `.requiresLua` instead of the suite-local form that #1946 removed. (#2369)
+
+
+## [0.5.530] - 2026-10-07
+
+### Fixed
+
+- **Twelve test helpers no longer leak a half-built app when their setup throws.** They built a bare `Application.make(.testing)` and then ran setup that can throw (a database, a route registration, a token authority, a loopback server). If that setup threw, the leaked app's `deinit` called the synchronous shutdown, which ends the whole test process with SIGILL on Linux. They now use `makeTestingApplication`, which tears the app down before it rethrows. That helper takes an `environment:` for the two mock identity providers that serve on a loopback port. (#2360)
+
+
 ## [0.5.529] - 2026-10-07
 
 ### Fixed

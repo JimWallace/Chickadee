@@ -18,25 +18,6 @@ import VaporTesting
     /// Logs in a per-course TA in the shared TEST101 course: a plain user
     /// whose only staff standing is the `.ta` enrollment (upserted, since
     /// the `.auto` course auto-enrolls them as `.student` at login).
-    private func loginAsTA(on app: Application) async throws -> String {
-        let cookie = try await loginUser(
-            username: "testta", password: "testpassword", role: "student", on: app)
-        let courseID = try await app.testCourseID(enrollmentMode: .auto)
-        let user = try #require(
-            try await APIUser.query(on: app.db).filter(\.$username == "testta").first())
-        let userID = try user.requireID()
-        if let existing = try await APICourseEnrollment.query(on: app.db)
-            .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
-        {
-            existing.role = .ta
-            try await existing.save(on: app.db)
-        } else {
-            try await APICourseEnrollment(userID: userID, courseID: courseID, role: .ta)
-                .save(on: app.db)
-        }
-        return cookie
-    }
-
     /// Enrolls a fresh student-role user in TEST101 and returns them.
     private func seedEnrolledStudent(
         username: String, on app: Application
@@ -112,7 +93,7 @@ import VaporTesting
 
     @Test func taSeesReadOnlySettings() async throws {
         try await withAssignmentRoutesApp { app in
-            let cookie = try await loginAsTA(on: app)
+            let cookie = try await loginAsCourseTA("testta", on: app)
             try await app.asyncTest(
                 .GET, "/instructor/slip-days",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
@@ -152,7 +133,7 @@ import VaporTesting
 
     @Test func taCannotSaveSettings() async throws {
         try await withAssignmentRoutesApp { app in
-            let cookie = try await loginAsTA(on: app)
+            let cookie = try await loginAsCourseTA("testta", on: app)
             let status = try await panelPOST(
                 app: app, path: "/instructor/slip-days/settings",
                 fields: ["enabled": "on", "daysPerStudent": "3", "extensionHours": "48"],
@@ -179,7 +160,7 @@ import VaporTesting
 
     @Test func taAdjustsAStudentBudget() async throws {
         try await withAssignmentRoutesApp { app in
-            let cookie = try await loginAsTA(on: app)
+            let cookie = try await loginAsCourseTA("testta", on: app)
             let student = try await seedEnrolledStudent(username: "sdp_adjust", on: app)
             let studentID = try student.requireID()
 
