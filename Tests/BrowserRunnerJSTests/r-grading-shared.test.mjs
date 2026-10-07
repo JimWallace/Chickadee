@@ -162,3 +162,17 @@ test('_ck_inputs.R renders a .ck_inputs list with sorted, back-quoted names', ()
     '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n'
       + '.ck_inputs <- list()\n');
 });
+
+// #2386: a test's own tryCatch(..., error = ) must not catch the masked
+// quit(), because under Rscript quit() ends the process before any handler
+// runs. The exit condition therefore is not an error.
+test('the exit condition is not an error', () => {
+  const wrapper = shared.runScriptR('publictest_bmi.R', 'n0nce');
+  const classes = wrapper.match(/class = c\(([^)]*)\)/);
+  assert.ok(classes, 'the wrapper must build the exit condition with an explicit class');
+  assert.match(classes[1], /"chickadee_exit"/);
+  assert.match(classes[1], /"condition"/);
+  assert.doesNotMatch(classes[1], /"error"/);
+  // The wrapper still catches it by name.
+  assert.match(wrapper, /chickadee_exit = function\(cond\) cond\$status/);
+});

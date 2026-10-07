@@ -24,7 +24,9 @@
 // So the wrapper re-creates the process contract inside one R session:
 //
 //   * `quit`/`q` are masked in the global environment with a function that
-//     signals a `chickadee_exit` condition carrying the status.  test_runtime.R
+//     signals a `chickadee_exit` condition carrying the status.  It is not an
+//     `error`, so a test's own `tryCatch(..., error = )` or `try()` does not
+//     catch it, just as neither catches a real `quit()` under Rscript (#2386).  test_runtime.R
 //     resolves `quit` through its enclosure (the global environment), so the
 //     mask is what its helpers call — no edit to test_runtime.R is needed, and
 //     the canonical copy stays byte-identical across both runners.
@@ -225,7 +227,7 @@
   .ck_g <- globalenv()
   rm(list = ls(.ck_g, all.names = TRUE), envir = .ck_g)
   assign("quit", function(save = "default", status = 0L, runLast = TRUE) {
-    stop(structure(class = c("chickadee_exit", "error", "condition"),
+    stop(structure(class = c("chickadee_exit", "condition"),
                    list(message = "chickadee_exit", call = NULL,
                         status = as.integer(status))))
   }, envir = .ck_g)
