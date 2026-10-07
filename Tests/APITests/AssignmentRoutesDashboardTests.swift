@@ -405,9 +405,9 @@ import VaporTesting
                     #expect(!html.contains("<table"))
                     #expect(!html.contains("<thead"))
                     #expect(html.contains("fragment_student"))
-                    // Full row markup, not a reduced copy: the row-link class,
+                    // Full row markup, not a reduced copy: the row-link hook,
                     // the per-course role form, and its CSRF field.
-                    #expect(html.contains("student-row-link"))
+                    #expect(html.contains("js-student-row-link"))
                     #expect(html.contains("name='_csrf'"))
                 })
         }
