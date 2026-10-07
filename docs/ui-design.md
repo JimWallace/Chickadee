@@ -769,6 +769,14 @@ variants that exist nowhere and silently rendered as unstyled text.
   `chickadee-ui.js` scrapes out of fetch bodies) lives in the global sheet
   with a comment naming the contract — never in a page block where a rename
   looks safe.
+- **A modifier rule follows its base rule.** `.modal-card--confirm` and
+  `.modal-card` are both one class, so the later rule wins on each property
+  they share. A modifier placed above its base does nothing, and the page
+  still renders. Guard 4d in `scripts/check-styles.sh` fails CI when a rule
+  for `.x-mod` or `.x--mod` comes before a rule for `.x` that sets the same
+  property, and both names occur on one line of a template or a script.
+  Order decides only a tie: a more specific rule, such as
+  `textarea.form-input`, wins whatever the order.
 
 ## Page-local scripts
 
