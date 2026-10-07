@@ -14,7 +14,7 @@ import Vapor
 
 @testable import APIServer
 
-@Suite struct PatternFamilyKindsTests {
+@Suite(.timeLimit(.minutes(2))) struct PatternFamilyKindsTests {
 
     // MARK: - approximateEquality kind
 

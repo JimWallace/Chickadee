@@ -39,7 +39,7 @@ import VaporTesting
 import Glibc
 #endif
 
-@Suite struct ExtensionCSRFTokenTests {
+@Suite(.timeLimit(.minutes(2))) struct ExtensionCSRFTokenTests {
 
     /// Seeds an instructor session, an enrolled student, and a published
     /// assignment; returns the login cookie, the student, and the assignment.
@@ -191,6 +191,12 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
     let fd = socket(AF_INET, sockStream, 0)
     try #require(fd >= 0, "socket() failed: errno \(errno)")
     defer { close(fd) }
+    // A suite time limit cancels the task but cannot interrupt a blocking
+    // recv(), so the socket itself gives up after ten seconds (#2361).
+    var receiveTimeout = timeval(tv_sec: 10, tv_usec: 0)
+    let timeoutSet = setsockopt(
+        fd, SOL_SOCKET, SO_RCVTIMEO, &receiveTimeout, socklen_t(MemoryLayout<timeval>.size))
+    try #require(timeoutSet == 0, "setsockopt(SO_RCVTIMEO) failed: errno \(errno)")
 
     var addr = sockaddr_in()
     addr.sin_family = sa_family_t(AF_INET)

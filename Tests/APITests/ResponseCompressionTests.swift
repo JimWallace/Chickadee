@@ -8,7 +8,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite struct ResponseCompressionTests {
+@Suite(.timeLimit(.minutes(2))) struct ResponseCompressionTests {
 
     private func makeApp() async throws -> Application {
         let app = try await Application.make(.testing)

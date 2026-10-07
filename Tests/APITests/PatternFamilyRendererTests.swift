@@ -14,7 +14,7 @@ import Vapor
 
 @testable import APIServer
 
-@Suite struct PatternFamilyRendererTests {
+@Suite(.timeLimit(.minutes(2))) struct PatternFamilyRendererTests {
 
     // MARK: - JSONValue
 
@@ -524,7 +524,7 @@ import Vapor
     /// crash) when the seed (hence `_ck_inputs.py`) is absent.  Exercises the
     /// exact file the worker / browser write, so a renderer/runtime contract
     /// drift on either side is caught here.
-    @Test func perStudentScriptGradesAgainstCkInputsAtRuntime() async throws {
+    @Test(.requiresPython3) func perStudentScriptGradesAgainstCkInputsAtRuntime() async throws {
         let scripts = renderPatternFamily(
             perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"], language: .python)
         let body = try #require(scripts.first).source
@@ -740,7 +740,7 @@ import Vapor
         #expect(src.contains("expected = 4.0"))
     }
 
-    @Test func perStudentApproxGradesAgainstCkInputsAtRuntime() async throws {
+    @Test(.requiresPython3) func perStudentApproxGradesAgainstCkInputsAtRuntime() async throws {
         let scripts = renderPatternFamily(
             perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"], language: .python)
         let body = try #require(scripts.first).source
@@ -787,7 +787,7 @@ import Vapor
         #expect(src.contains("student_module.pick("))
     }
 
-    @Test func unorderedGradesOrderInsensitivelyAtRuntime() async throws {
+    @Test(.requiresPython3) func unorderedGradesOrderInsensitivelyAtRuntime() async throws {
         let body = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: [], language: .python).first)
             .source
         // Same elements, original (different) order → pass: order is ignored.
@@ -801,7 +801,7 @@ import Vapor
         #expect(try await pfRunGeneratedCase(body: body, ckInputs: nil, student: notList) == .fail)
     }
 
-    @Test func unorderedPerStudentGradesAtRuntime() async throws {
+    @Test(.requiresPython3) func unorderedPerStudentGradesAtRuntime() async throws {
         let scripts = renderPatternFamily(
             unorderedPerStudentFamily(), perStudentNames: ["patients", "matches"], language: .python)
         let body = try #require(scripts.first).source
