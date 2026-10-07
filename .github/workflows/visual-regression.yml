@@ -25,6 +25,9 @@ on:
       - "Public/**"
       - "!Public/jupyterlite/**"
       - "Resources/Views/**"
+      # The route code builds each page's Leaf context, so a change there can
+      # change what a page renders with no template edit (#2409).
+      - "Sources/APIServer/Routes/Web/**"
       - "Tools/visual-regression/**"
       - ".github/workflows/visual-regression.yml"
   workflow_dispatch:

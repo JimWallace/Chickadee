@@ -17,6 +17,10 @@ Storage
             <div class="diagnostic-value">#(row.formatted)</div>
         </div>
         #endfor
+        <div class="diagnostic-card">
+            <div class="diagnostic-label">Disk free</div>
+            <div class="diagnostic-value">#(storage.diskText)</div>
+        </div>
     </div>
 </section>
 <section class="page-section">

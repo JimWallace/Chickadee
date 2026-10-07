@@ -175,14 +175,33 @@ fi
 # added here does not fail loudly; the control simply stops responding.  The
 # replacement is a data attribute read by a delegated listener: see the
 # declarative control behaviours at the foot of Public/app.js.
+# The scan reads each tag whole, so it finds a handler on a later line of a
+# multi-line tag and one in single quotes, and it reads the HTML strings in
+# Public/*.js that reach the page through innerHTML (#2405).
 event_attr_offenders="$(
-  grep -nEo '<[a-zA-Z][^>]*[[:space:]]on[a-z]+="[^"]*"' "${views[@]}" 2>/dev/null \
-    | grep -oE '^[^:]+:[0-9]+:.*[[:space:]]on[a-z]+="[^"]*"' \
-    || true
+  awk '
+    FNR == 1 && NR > 1 { scan(prev) }
+    FNR == 1 { text = ""; prev = FILENAME }
+    { text = text $0 "\n" }
+    END { if (NR > 0) scan(prev) }
+    function scan(file,   rest, line, p, q, pre, tag) {
+      rest = text; line = 1
+      while ((p = match(rest, /<[a-zA-Z]/)) > 0) {
+        pre = substr(rest, 1, p - 1); line += gsub(/\n/, "\n", pre)
+        rest = substr(rest, p)
+        q = index(rest, ">")
+        tag = (q > 0) ? substr(rest, 1, q) : rest
+        if (tag ~ /[ \t\n]on[a-z]+[ \t\n]*=/) {
+          gsub(/[ \t\n]+/, " ", tag); print file ":" line ": " substr(tag, 1, 120)
+        }
+        rest = substr(rest, 2)
+      }
+    }
+  ' "${views[@]}" Public/*.js
 )"
 if [ -n "$event_attr_offenders" ]; then
   status=1
-  echo "ERROR: inline event-handler attribute in a template."
+  echo "ERROR: inline event-handler attribute in a template or a JS-built HTML string."
   echo "       The CSP script-src carries no 'unsafe-inline', so this handler would"
   echo "       never fire.  Use a data-* attribute plus a delegated listener in"
   echo "       Public/app.js — see the declarative control behaviours there."
@@ -195,22 +214,28 @@ fi
 # audit found the type and radius scales 100% bypassed in JS (11 font-size
 # literals, none a token), an injected stylesheet with its own dark-mode
 # block, and spacing values that would fail rule 4 verbatim in a .css file.
-# Counted here: style="…" inside generated-HTML strings, .style.<prop>
-# writes (display toggles exempt — show/hide is behaviour, not styling),
-# and cssText. A custom-property write — .style.setProperty('--…') — is the
-# sanctioned pattern and is NOT counted: it carries a value into a rule that
-# lives in styles.css, where every guard above can see it. Baseline may only
-# go DOWN. The rule for new code
+# Counted here, as WRITES only (#2408; a read such as `node.style.fontSize ||`
+# decides nothing and used to count): style="…" inside generated-HTML
+# strings, `.style.<prop> =` (display toggles exempt — show/hide is
+# behaviour, not styling), `.style[prop] =`, `setAttribute('style', …)`,
+# `.style.setProperty()` on a non-custom property, cssText, and a <style>
+# element built in JS. A custom-property write — .style.setProperty('--…') —
+# is the sanctioned pattern and is NOT counted: it carries a value into a rule
+# that lives in styles.css, where every guard above can see it. Baseline may
+# only go DOWN. The rule for new code
 # (docs/ui-design.md): JS toggles classes or sets a custom property
 # (workbench.js's --wb-left-width is the pattern); it does not decide
 # styling.
-JS_STYLE_DECISION_BASELINE=9
+JS_STYLE_DECISION_BASELINE=10
 js_style_count="$(
   {
     grep -ho 'style="' Public/*.js || true
-    grep -hE '\.style\.[a-zA-Z]+' Public/*.js | grep -v "\.style\.setProperty('--" \
-      | grep -oE '\.style\.[a-zA-Z]+' | grep -v '\.style\.display' || true
+    grep -hoE '\.style\.[a-zA-Z]+[[:space:]]*=([^=]|$)' Public/*.js | grep -v '^\.style\.display' || true
+    grep -hoE '\.style\[[^]]*\][[:space:]]*=([^=]|$)' Public/*.js || true
+    grep -hoE "\.style\.setProperty\([[:space:]]*['\"][^-'\"]" Public/*.js || true
+    grep -hoE "setAttribute\([[:space:]]*['\"]style['\"]" Public/*.js || true
     grep -ho 'cssText' Public/*.js || true
+    grep -hoE "createElement\([[:space:]]*['\"]style['\"]" Public/*.js || true
   } | wc -l | tr -d ' '
 )"
 if [ "$js_style_count" -gt "$JS_STYLE_DECISION_BASELINE" ]; then
@@ -283,7 +308,9 @@ fi
 # `.main` is an allowlisted intentional global override (notebook.leaf narrows
 # the page container).  Heuristic extractor: selector = text before each `{`
 # (one selector per line, as authored here), skipping at-rules and comments —
-# errs toward false negatives, never false positives.
+# errs toward false negatives, never false positives. A one-line
+# `@media (...) { .x { ... } }` loses its at-rule prefix first, so `.x` is
+# still read (#2403).
 ALLOW_GLOBAL_OVERRIDE="^\.main$"
 
 extract_selectors() {
@@ -291,7 +318,7 @@ extract_selectors() {
   # doesn't trip pipefail.
   strip_css_comments \
     | { grep '{' || true; } \
-    | sed -E 's/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | sed -E 's/^[[:space:]]*@[^{]*\{[[:space:]]*//; s/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
     | { grep -vE '^$|^@|^/\*' || true; }
 }
 
@@ -491,15 +518,21 @@ fi
 # reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift); the
 # partial test derives from that list, so a page cannot invent a sixth.
 PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border"
+# Every custom property in the attribute is checked, wherever it sits: the
+# first one only, in an attribute that starts with `--`, let a second one or
+# one after `display:none;` through (#2404).
 inline_prop_violations=""
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
-  name="$(printf '%s' "$hit" | sed -E 's/.*style="[[:space:]]*(--[A-Za-z0-9_-]+).*/\1/')"
-  case " $PER_DATUM_INLINE_PROPS " in
-    *" $name "*) ;;
-    *) inline_prop_violations+="  ${hit}"$'\n' ;;
-  esac
-done < <(grep -rno 'style="--[^"]*"' "${views[@]}" || true)
+  value="$(printf '%s' "$hit" | sed -E 's/.*style="([^"]*)".*/\1/')"
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    case " $PER_DATUM_INLINE_PROPS " in
+      *" $name "*) ;;
+      *) inline_prop_violations+="  ${hit}"$'\n'; break ;;
+    esac
+  done < <(printf '%s' "$value" | grep -oE -- '--[A-Za-z0-9_-]+[[:space:]]*:' | sed -E 's/[[:space:]]*:$//')
+done < <(grep -rno 'style="[^"]*--[^"]*"' "${views[@]}" || true)
 
 if [ -n "$inline_prop_violations" ]; then
   status=1

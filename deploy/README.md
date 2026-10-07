@@ -749,7 +749,9 @@ The script:
 - dumps Postgres via `docker compose exec db pg_dump -Fc`,
 - archives the artifact paths from the `chickadee-data` volume,
 - writes `manifest.json` last (atomic-publish trick),
-- prunes `backups/snapshot-*` directories older than **7 days**.
+- prunes `backups/snapshot-*` directories older than **7 days**, and keeps
+  only the newest **3** `predeploy` snapshots. It prunes first, before it
+  needs the database, so a run on a full disk still frees space.
 
 The server keeps running. Postgres dumps are consistent at a single
 transaction snapshot.
@@ -805,8 +807,9 @@ production host:
 ```
 
 3am local time, label `scheduled` so they're easy to distinguish from
-on-demand snapshots. The 7-day prune inside `snapshot.sh` keeps `backups/`
-bounded.
+on-demand snapshots. The prune inside `snapshot.sh` keeps `backups/`
+bounded: 7 days of scheduled snapshots, and the newest 3 predeploy snapshots
+however many releases ship.
 
 #### Refreshing a staging server from prod
 

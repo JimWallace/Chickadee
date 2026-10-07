@@ -9,6 +9,95 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.560] - 2026-10-07
+
+### Changed
+
+- **The visual and accessibility scan runs when web route code changes.** The route code builds each page's Leaf context, so a change there can change a page with no template edit. The workflow ran only for `Public/` and `Resources/Views/` changes. (#2409)
+
+
+## [0.5.559] - 2026-10-07
+
+### Fixed
+
+- **The JS styling ratchet counts writes, and all of them.** It counted a read in `jl-cell-perf-patch.js` and missed `el.style[prop] =`, `setAttribute('style', …)` and a `<style>` element built in JS. It now counts writes only, in every form. The true count is 10, so the baseline moves from 9 to 10 with no new code. (#2408)
+
+
+## [0.5.558] - 2026-10-07
+
+### Fixed
+
+- **The Leaf comment check catches function tags and CSS comments.** It caught only the interpolation and the structural tags inside an HTML comment. Leaf also runs a function tag with parameters there, and it reads a CSS comment in a page `<style>` block as plain text too. There were no such tags. (#2407)
+
+
+## [0.5.557] - 2026-10-07
+
+### Added
+
+- **Disk space alert.** A new health rule, "Disk nearly full" (`diskSpaceLow`), fires when less than 15% of the data disk is free. It reads no database, so it still answers when a full disk has stopped Postgres. `get_storage_usage` and `/admin/storage` show the free space too.
+- **The deployer holds a deploy on a nearly full disk.** Before it pulls a release image, the deploy daemon checks for 10 GiB free. If there is less, it removes unused images and old snapshots, and if that is not enough, it holds the deploy in state `disk_low`. The `deployerUnhealthy` rule pages on that state.
+
+### Fixed
+
+- **Health alerts can be turned on.** `docker-compose.yml` did not pass `ALERT_ENABLED` or `ALERT_WEBHOOK_URL` to the server, so a Compose or blue-green deploy ran with alerts off. The disk-full outage on 2026-10-07 sent no alert for that reason. Both now pass through, and alerts are on by default. Set the webhook on `/admin/alerts`.
+
+
+## [0.5.556] - 2026-10-07
+
+### Fixed
+
+- **The colour-token check catches CSS named colours.** It matched only hex, `rgb()` and `hsl()` values, so `color: white` on the primary button passed. That rule now uses a palette token. (#2406)
+
+
+## [0.5.555] - 2026-10-07
+
+### Fixed
+
+- **The inline event-handler check reads whole tags and JS-built HTML.** It read one line at a time and only double quotes, so a handler on a later line of a tag, in single quotes, or in an HTML string in `Public/*.js` passed. The CSP blocks each of these without an error. There were no such handlers. (#2405)
+
+
+## [0.5.554] - 2026-10-07
+
+### Fixed
+
+- **The inline custom-property check reads every property in a `style` attribute.** It read only the first one, and only in an attribute that started with `--`, so a component property in second place or after `display:none;` passed. (#2404)
+
+
+## [0.5.553] - 2026-10-07
+
+### Fixed
+
+- **The stylesheet checks read selectors inside one-line `@media` rules.** The catalog count and the page-against-global check cut each rule at its first `{`, so a class whose rule was `@media (...) { .x { ... } }` was invisible to both. The dead `.col-hide-tablet` rule hid this way and is deleted. (#2403)
+
+
+## [0.5.552] - 2026-10-07
+
+### Fixed
+
+- **The class-resolution check reads class names written against a Leaf tag.** A name such as `row#if(x): row-pending#endif` used to be dropped together with the tag, so it was never checked. Two roster hooks that had no rule now carry the `js-` prefix. (#2402)
+
+
+## [0.5.551] - 2026-10-07
+
+### Fixed
+
+- **Predeploy snapshots no longer fill the disk.** The deployer takes a full snapshot (database dump and every submission) before each release, and `snapshot.sh` deleted snapshots only after 7 days. With up to 25 releases a day, the copies filled the production disk, Postgres stopped, and login and both MCP surfaces failed. `snapshot.sh` now keeps only the newest 3 predeploy snapshots, and it prunes before it needs the database, so a run on a full disk still frees space. Old release images also stayed on the disk (22 of them, 29 GB): the deployer pulls each release by digest, so the image keeps a name, and `docker image prune -f` removes only images without one. The blue-green deploy and the deployer now run `docker image prune -a -f`, which removes every image that no container uses. The runner-host update script does the same, limited by label to Chickadee images, so a shared Mac keeps its other images.
+
+
+## [0.5.550] - 2026-10-07
+
+### Fixed
+
+- **Borders drawn with `--gray-300` are dark in dark mode.** The token had no dark value, so row menus, extension panels and closed-assignment strips showed near-white lines on a dark page. `scripts/check-css-vars.sh` now fails when a grey step has no value in either dark block. (#2401)
+
+
+## [0.5.549] - 2026-10-07
+
+### Fixed
+
+- **The confirm dialog is narrow again.** `.modal-card--confirm` came before `.modal-card` in the stylesheet, so the editor width won. A new check in `scripts/check-styles.sh` fails when a modifier rule comes before its base rule and sets the same property. (#2400)
+
+
 ## [0.5.548] - 2026-10-07
 
 ### Fixed
