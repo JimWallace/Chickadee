@@ -4,6 +4,7 @@
 // every ring is sprite art, the patterned rings are tiered, and the staff ring
 // is reserved — drawn from a course role and never something a student stores.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -108,8 +109,7 @@ import Testing
     // MARK: - Drift against the files that own the art
 
     private static func contents(of path: String) throws -> String {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/CoreTests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
+        let url = repositoryRoot
         return try String(contentsOf: url.appendingPathComponent(path), encoding: .utf8)
     }
 

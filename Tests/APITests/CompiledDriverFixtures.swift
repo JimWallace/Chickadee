@@ -5,19 +5,15 @@
 // Swift, so a test asserts the reduction itself and not only that two copies
 // agree with each other.
 
+import ChickadeeTestSupport
 import Foundation
 
 enum CompiledDriverFixtures {
 
-    static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // APITests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // repo root
-
     /// The canonical grading runtime `name` under Tools/runner-support.
     static func runtime(_ name: String) throws -> String {
         try String(
-            contentsOf: repoRoot.appendingPathComponent("Tools/runner-support/\(name)"), encoding: .utf8)
+            contentsOf: repositoryRoot.appendingPathComponent("Tools/runner-support/\(name)"), encoding: .utf8)
     }
 
     /// A fresh directory holding `files`. The caller removes it.

@@ -42,6 +42,7 @@
 // best-effort wrapper, and both ingest routes call the service rather than an
 // effect directly.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -51,10 +52,8 @@ import Testing
 
     private static func handlerBody() throws -> String {
         let source = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()  // APITests
-                .deletingLastPathComponent()  // Tests
-                .deletingLastPathComponent()  // repo root
+            contentsOf:
+                repositoryRoot
                 .appendingPathComponent("Sources/APIServer/Routes/BrowserResultRoutes.swift"),
             encoding: .utf8)
         let start = try #require(
@@ -85,9 +84,8 @@ import Testing
 
     private static func source(_ path: String) throws -> String {
         try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent().deletingLastPathComponent()
-                .deletingLastPathComponent()
+            contentsOf:
+                repositoryRoot
                 .appendingPathComponent(path),
             encoding: .utf8)
     }

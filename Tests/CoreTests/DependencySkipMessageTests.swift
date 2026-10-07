@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -21,10 +22,7 @@ import Testing
 
     private func loadFixture() throws -> Fixture {
         // .../Tests/CoreTests/DependencySkipMessageTests.swift -> repo root
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // CoreTests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
+        let root = repositoryRoot
         let url = root.appendingPathComponent("Tests/Fixtures/dependency-skip-message.json")
         return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
     }

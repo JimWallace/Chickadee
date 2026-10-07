@@ -3,6 +3,7 @@
 // Present mode: the leaderboard for a projector. Staff only, never a name, dark
 // whatever the viewer prefers, and refreshed through its own fragment.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -167,8 +168,7 @@ import VaporTesting
     }
 
     @Test func theAttributeDarkBlockMatchesTheMediaQueryBlock() throws {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
+        let root = repositoryRoot
         let css = try String(
             contentsOf: root.appendingPathComponent("Public/styles.css"), encoding: .utf8)
         func declarations(after marker: String) throws -> [String] {

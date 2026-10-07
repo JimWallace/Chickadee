@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -32,10 +33,7 @@ import Testing
 
     private func loadCorpus() throws -> Corpus {
         // .../Tests/WorkerTests/OutputContractTests.swift -> repo root
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // WorkerTests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
+        let root = repositoryRoot
         let url = root.appendingPathComponent("Tests/Fixtures/output-contract.json")
         return try JSONDecoder().decode(Corpus.self, from: Data(contentsOf: url))
     }

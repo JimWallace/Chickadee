@@ -25,10 +25,7 @@ import Testing
     /// The canonical Octave runtime, read from the repo so the test exercises
     /// the same source the runner injects.
     static func canonicalRuntime() throws -> String {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // APITests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
+        let root = repositoryRoot
         return try String(
             contentsOf: root.appendingPathComponent("Tools/runner-support/test_runtime.m"),
             encoding: .utf8)

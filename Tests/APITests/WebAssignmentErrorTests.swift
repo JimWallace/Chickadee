@@ -12,6 +12,7 @@
 //      sites, locking in the migration so a future copy-paste regression
 //      gets caught at PR time instead of in production traffic.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 import Vapor
@@ -114,16 +115,8 @@ import Vapor
         )
     }
 
-    /// Walks up from this test's `#filePath` to the project root and
-    /// returns the `Sources/APIServer/Routes/Web/` directory.  Avoids
-    /// hard-coding an absolute path so the test runs in any checkout
-    /// (CI, worktree, etc.).
-    private func sourceWebRoutesDirectory(file: StaticString = #filePath) -> URL {
-        // #filePath is …/Tests/APITests/WebAssignmentErrorTests.swift
-        URL(fileURLWithPath: "\(file)")
-            .deletingLastPathComponent()  // .../Tests/APITests
-            .deletingLastPathComponent()  // .../Tests
-            .deletingLastPathComponent()  // project root
-            .appendingPathComponent("Sources/APIServer/Routes/Web", isDirectory: true)
+    /// The `Sources/APIServer/Routes/Web/` directory of this checkout.
+    private func sourceWebRoutesDirectory() -> URL {
+        repositoryRoot.appendingPathComponent("Sources/APIServer/Routes/Web", isDirectory: true)
     }
 }

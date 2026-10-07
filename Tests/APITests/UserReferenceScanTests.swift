@@ -5,6 +5,7 @@
 // scan reads the `Create*` migrations, so a new such column fails here until
 // it is classified; nothing else would notice a dangling UUID.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -38,8 +39,7 @@ import VaporTesting
     /// `table.column` for every `.uuid` column in a `Create*` migration whose
     /// name says it holds a user and that declares no reference to `users`.
     private static func userColumnsWithoutForeignKey() throws -> Set<String> {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
+        let root = repositoryRoot
         let migrations = root.appendingPathComponent("Sources/APIServer/Migrations")
         let files = try FileManager.default.contentsOfDirectory(at: migrations, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.hasPrefix("Create") && $0.pathExtension == "swift" }

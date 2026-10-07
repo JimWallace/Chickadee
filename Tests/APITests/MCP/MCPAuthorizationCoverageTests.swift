@@ -10,6 +10,7 @@
 // each tool decodes different required arguments before its authz check runs,
 // so a source-level guard is the robust form.)
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -17,9 +18,7 @@ import Testing
 
 @Suite struct MCPAuthorizationCoverageTests {
     private static var toolsDirectory: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("Sources/APIServer/MCP/Tools")
+        repositoryRoot.appendingPathComponent("Sources/APIServer/MCP/Tools")
     }
 
     /// Any of these in a tool's source satisfies the per-resource check.

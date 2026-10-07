@@ -13,18 +13,14 @@
 // Both rules are read from the source, so a migration appended in the wrong
 // place fails here the day it lands, not on the next fresh boot.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
 @Suite struct MigrationOrderTests {
 
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // APITests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // repo root
-
     private static func read(_ path: String) throws -> String {
-        try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
+        try String(contentsOf: repositoryRoot.appendingPathComponent(path), encoding: .utf8)
     }
 
     /// The registered migration types, in order. Vapor's own
@@ -79,7 +75,7 @@ import Testing
         for name in names {
             #expect(
                 FileManager.default.fileExists(
-                    atPath: Self.repoRoot.appendingPathComponent("Sources/APIServer/Migrations/\(name).swift").path),
+                    atPath: repositoryRoot.appendingPathComponent("Sources/APIServer/Migrations/\(name).swift").path),
                 "no source file for \(name)")
         }
     }

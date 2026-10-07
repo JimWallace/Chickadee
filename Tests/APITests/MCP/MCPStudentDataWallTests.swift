@@ -8,6 +8,7 @@
 // technique the repo already uses for `no-new-xctest` and the audit-action
 // coverage test.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -16,9 +17,7 @@ import Testing
 @Suite struct MCPStudentDataWallTests {
     /// `Sources/APIServer/MCP/Tools`, resolved from this test file's location.
     private static var toolsDirectory: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("Sources/APIServer/MCP/Tools")
+        repositoryRoot.appendingPathComponent("Sources/APIServer/MCP/Tools")
     }
 
     /// The content surface's non-tool directories, in scope for the same wall:
@@ -28,8 +27,7 @@ import Testing
     /// legitimately read diagnostic tables behind their own allowlisted DTOs,
     /// and the OAuth layer resolves the human account by design.
     private static var additionalContentDirectories: [URL] {
-        var url = URL(fileURLWithPath: #filePath)
-        for _ in 0..<4 { url.deleteLastPathComponent() }
+        let url = repositoryRoot
         let mcp = url.appendingPathComponent("Sources/APIServer/MCP")
         return [
             mcp.appendingPathComponent("Transport"),

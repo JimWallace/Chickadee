@@ -60,14 +60,6 @@ import Testing
         }
     }
 
-    /// Repo root derived from this file's location.
-    private static var repoRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // APITests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
-    }
-
     /// Builds a grading workspace from notebook cells + a rendered check, runs
     /// the check under python3, and returns the outcome.  Extra support files
     /// (e.g. a CSV) are written verbatim.
@@ -83,7 +75,7 @@ import Testing
         defer { try? fm.removeItem(at: workDir) }
 
         let runtime = try String(
-            contentsOf: Self.repoRoot.appendingPathComponent("Tools/runner-support/test_runtime.py"),
+            contentsOf: repositoryRoot.appendingPathComponent("Tools/runner-support/test_runtime.py"),
             encoding: .utf8)
         try runtime.write(
             to: workDir.appendingPathComponent("test_runtime.py"), atomically: true, encoding: .utf8)

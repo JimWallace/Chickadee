@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -161,10 +162,7 @@ import Testing
     /// One review list from Tools/handle-review/data, lower-cased. Lines that
     /// start with `#` are comments.
     private static func reviewList(_ file: String) throws -> Set<String> {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // CoreTests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
+        let root = repositoryRoot
         let url = root.appendingPathComponent("Tools/handle-review/data/\(file)")
         let text = try String(contentsOf: url, encoding: .utf8)
         return Set(

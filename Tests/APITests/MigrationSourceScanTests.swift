@@ -8,13 +8,14 @@
 // or raw DDL as one that changes its database, and this suite only reads
 // files.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
 @Suite struct MigrationSourceScanTests {
 
     private static func tables(inMigration name: String) throws -> Set<String> {
-        let url = MigrationSourceScan.repoRoot.appendingPathComponent("Sources/APIServer/Migrations/\(name).swift")
+        let url = repositoryRoot.appendingPathComponent("Sources/APIServer/Migrations/\(name).swift")
         return try MigrationSourceScan.tables(in: try String(contentsOf: url, encoding: .utf8))
     }
 
