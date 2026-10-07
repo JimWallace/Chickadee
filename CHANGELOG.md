@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.531] - 2026-10-07
+
+### Changed
+
+- **The CLAUDE.md testing section is current.** It no longer gives test-file counts that go stale, it names the shared host traits for every interpreter, and its example uses the shared `.requiresLua` instead of the suite-local form that #1946 removed. (#2369)
+
+
 ## [0.5.530] - 2026-10-07
 
 ### Fixed
