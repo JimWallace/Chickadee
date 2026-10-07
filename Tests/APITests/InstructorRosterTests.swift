@@ -121,7 +121,7 @@ import VaporTesting
             try await APIPreEnrollment(courseID: courseID, username: "pending_pupil").save(on: app.db)
 
             let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
-            let start = try #require(html.range(of: "student-row-pending"))
+            let start = try #require(html.range(of: "js-student-row-pending"))
             let end = try #require(html.range(of: "</tr>", range: start.upperBound..<html.endIndex))
             let row = html[start.lowerBound..<end.upperBound]
             #expect(row.contains("pending_pupil"))

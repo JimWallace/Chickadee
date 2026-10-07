@@ -280,11 +280,14 @@ cmd_deploy() {
   # multi-GB image; without this, the images superseded by past swaps pile up
   # until the data disk fills and Postgres PANICs on its next write ("No space
   # left on device"), taking the whole site down — which is exactly what
-  # happened once. Only DANGLING images are removed (the old `:latest` digests
-  # that newer pulls left untagged); the active and previous colors' containers
-  # still reference their own images, so the rollback target is never pruned.
+  # happened once, and again on 2026-10-07. `-a` removes every image that no
+  # container uses. Plain `prune -f` removes only images with no name at all,
+  # and an image pulled by digest keeps its `repo@sha256:...` name, so it never
+  # removed a release: 22 old releases (29 GB) stayed on the disk. The active
+  # and previous colors' containers still use their own images, so the rollback
+  # target is never pruned.
   log "Reclaiming disk from images orphaned by past swaps (before pull)..."
-  run "docker image prune -f || true"
+  run "docker image prune -a -f || true"
   log "Free space on $(df -P / | awk 'NR==2{print $4 " KiB on " $6}')"
 
   run "docker pull '$IMAGE'"
