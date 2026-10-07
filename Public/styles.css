@@ -1600,8 +1600,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     font-weight: 700;
 }
 
-/* The one count that is not neutral information. */
-.diagnostic-value-alert { color: var(--red); }
 
 /* The reveal control sits at the end of the hidden-test header rather than in
    a notice of its own: it acts on the block it labels. */
@@ -2494,6 +2492,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
     line-height: 1.2;
     color: var(--gray-900);
 }
+/* The one count that is not neutral information. It must follow
+   .diagnostic-value, which sets the colour with the same specificity. */
+.diagnostic-value-alert { color: var(--red); }
 
 /* ── Clickable diagnostic cards with sparklines ─────────
    Shared by the admin dashboard (admin.leaf) and the instructor dashboard
