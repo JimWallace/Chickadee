@@ -21,22 +21,23 @@ import VaporTesting
         user: APIUser,
         idleTimeoutSeconds: TimeInterval
     ) async throws -> Application {
-        let app = try await Application.make(.testing)
-        // The middleware-under-test reads `req.session.data` to clear OIDC
-        // tokens and calls `req.session.unauthenticate`, both of which need
-        // the session middleware to have initialised the session on the
-        // request.
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        // AuditLogger writes a row through `req.db` on every expiry, so a
-        // database has to be in place even though no test reads it back.
-        try await configureTestDatabase(app)
-        app.middleware.use(PreAuthenticator(user: user))
-        app.middleware.use(
-            SessionIdleTimeoutMiddleware(idleTimeoutSeconds: idleTimeoutSeconds)
-        )
-        app.get("page") { _ in "ok" }
-        app.get("api", "v1", "thing") { _ in "ok-api" }
+        let app = try await makeTestingApplication { app in
+            // The middleware-under-test reads `req.session.data` to clear OIDC
+            // tokens and calls `req.session.unauthenticate`, both of which need
+            // the session middleware to have initialised the session on the
+            // request.
+            app.sessions.use(.memory)
+            app.middleware.use(app.sessions.middleware)
+            // AuditLogger writes a row through `req.db` on every expiry, so a
+            // database has to be in place even though no test reads it back.
+            try await configureTestDatabase(app)
+            app.middleware.use(PreAuthenticator(user: user))
+            app.middleware.use(
+                SessionIdleTimeoutMiddleware(idleTimeoutSeconds: idleTimeoutSeconds)
+            )
+            app.get("page") { _ in "ok" }
+            app.get("api", "v1", "thing") { _ in "ok-api" }
+        }
         return app
     }
 

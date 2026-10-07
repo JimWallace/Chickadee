@@ -60,49 +60,54 @@ import VaporTesting
         jwksStatus: HTTPResponseStatus = .ok,
         jwksBody: String = #"{"keys":[]}"#
     ) async throws -> (app: Application, port: Int) {
-        let app = try await Application.make(Environment(name: "testing", arguments: ["test"]))
-        app.http.server.configuration.hostname = "127.0.0.1"
-        app.http.server.configuration.port = 0
+        var port = 0
+        let app = try await makeTestingApplication(
+            environment: Environment(name: "testing", arguments: ["test"])
+        ) { app in
+            app.http.server.configuration.hostname = "127.0.0.1"
+            app.http.server.configuration.port = 0
 
-        app.get(.catchall) { req -> Response in
-            switch req.url.path {
-            case discoveryPath:
-                guard let port = req.application.http.server.shared.localAddress?.port else {
-                    throw Abort(.internalServerError, reason: "mock OIDC provider did not bind a port")
+            app.get(.catchall) { req -> Response in
+                switch req.url.path {
+                case discoveryPath:
+                    guard let port = req.application.http.server.shared.localAddress?.port else {
+                        throw Abort(.internalServerError, reason: "mock OIDC provider did not bind a port")
+                    }
+                    let issuerBase = "http://127.0.0.1:\(port)"
+                    let issuer = issuerBase + "/issuer"
+                    let authorizationEndpoint = issuerBase + "/authorize"
+                    let tokenEndpoint = issuerBase + "/token"
+                    let jwksURI = issuerBase + "/keys"
+                    let discovery = OIDCDiscovery(
+                        issuer: issuer,
+                        authorizationEndpoint: authorizationEndpoint,
+                        tokenEndpoint: tokenEndpoint,
+                        jwksURI: jwksURI,
+                        revocationEndpoint: nil,
+                        endSessionEndpoint: nil
+                    )
+                    let response = try Response(
+                        status: discoveryStatus,
+                        body: .init(data: JSONEncoder().encode(discovery))
+                    )
+                    response.headers.contentType = .json
+                    return response
+                case "/keys":
+                    let response = Response(status: jwksStatus, body: .init(string: jwksBody))
+                    response.headers.contentType = .json
+                    return response
+                default:
+                    return Response(status: .notFound)
                 }
-                let issuerBase = "http://127.0.0.1:\(port)"
-                let issuer = issuerBase + "/issuer"
-                let authorizationEndpoint = issuerBase + "/authorize"
-                let tokenEndpoint = issuerBase + "/token"
-                let jwksURI = issuerBase + "/keys"
-                let discovery = OIDCDiscovery(
-                    issuer: issuer,
-                    authorizationEndpoint: authorizationEndpoint,
-                    tokenEndpoint: tokenEndpoint,
-                    jwksURI: jwksURI,
-                    revocationEndpoint: nil,
-                    endSessionEndpoint: nil
-                )
-                let response = try Response(
-                    status: discoveryStatus,
-                    body: .init(data: JSONEncoder().encode(discovery))
-                )
-                response.headers.contentType = .json
-                return response
-            case "/keys":
-                let response = Response(status: jwksStatus, body: .init(string: jwksBody))
-                response.headers.contentType = .json
-                return response
-            default:
-                return Response(status: .notFound)
             }
-        }
 
-        app.environment.arguments = ["serve"]
-        try await app.asyncBoot()
-        try await app.startup()
-        guard let port = app.http.server.shared.localAddress?.port else {
-            throw Abort(.internalServerError, reason: "mock OIDC provider did not expose a bound port")
+            app.environment.arguments = ["serve"]
+            try await app.asyncBoot()
+            try await app.startup()
+            guard let bound = app.http.server.shared.localAddress?.port else {
+                throw Abort(.internalServerError, reason: "mock OIDC provider did not expose a bound port")
+            }
+            port = bound
         }
         return (app, port)
     }

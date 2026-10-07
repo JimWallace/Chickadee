@@ -64,10 +64,14 @@ func withApp(_ app: Application, _ body: (Application) async throws -> Void) asy
 /// NIO event loops + FluentKit pools that trips an assertion in
 /// `ServeCommand.deinit` → SIGILL on Linux.  That terminates the whole
 /// xctest process and kills every other concurrent test.
+///
+/// `environment` is `.testing` unless a helper needs other arguments, such as
+/// a loopback server that `startup()` serves.
 func makeTestingApplication(
+    environment: Environment = .testing,
     setup: (Application) async throws -> Void
 ) async throws -> Application {
-    let app = try await Application.make(.testing)
+    let app = try await Application.make(environment)
     do {
         try await setup(app)
         return app
