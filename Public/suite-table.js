@@ -44,68 +44,6 @@
         return document.getElementById('suite-sections');
     }
 
-    // ── Upload classification (folded in from the retired suite-list.js,
-    // #1126 — that file was ~90% dead; only this classification survived) ──
-    //
-    // NO LONGER DECIDES ANYTHING. The upload below sends no tier and no
-    // `isTest`, so the server decides with `isLikelyTestSuiteScript`, the rule
-    // its multipart upload already used. This list had gone stale and filed
-    // Lua, Octave, Racket and Java tests as support files (#1960). The helpers
-    // stay only because Tests/BrowserRunnerJSTests/suite-table.test.mjs tests
-    // them; deleting both is a test change that waits for the maintainer.
-
-    var SCRIPT_EXTS = ['sh','bash','zsh','py','r','rb','pl','js','php'];
-    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
-                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
-                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
-
-    function extensionOf(name) {
-        var base = String(name || '').split('/').pop();
-        var dot = base.lastIndexOf('.');
-        return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
-    }
-
-    function isLikelyScriptName(name) {
-        return SCRIPT_EXTS.indexOf(extensionOf(name)) >= 0;
-    }
-
-    function hasRecognizedScriptShebang(text) {
-        var firstLine = String(text || '').split(/\r?\n/, 1)[0].trim().toLowerCase();
-        if (firstLine.indexOf('#!') !== 0) return false;
-        return /(^#!\s*\/.*\/(ba|z)?sh\b)|(^#!\s*\/usr\/bin\/env\s+(ba|z)?sh\b)|(^#!.*\bpython[0-9.]*\b)/.test(firstLine);
-    }
-
-    function classify(name, content, size) {
-        var ext = extensionOf(name);
-        var hasExt = ext.length > 0;
-        var binary = BINARY_EXTS.indexOf(ext) >= 0;
-        var scriptShebang = !hasExt && hasRecognizedScriptShebang(content || '');
-        var isScript = isLikelyScriptName(name) || scriptShebang;
-        var errs = [];
-        if (binary) errs.push('Binary file — unlikely to work as a test script');
-        if (!hasExt && !scriptShebang) {
-            errs.push('No extension or recognized shebang; this file will be included as support unless marked as a test');
-        }
-        if (size === 0) errs.push('Empty file');
-        return {
-            isScript: isScript,
-            tier: isScript ? 'public' : 'support',
-            errors: errs
-        };
-    }
-
-    function classifyFile(file) {
-        if (!file) return Promise.resolve(classify('', '', 0));
-        var ext = extensionOf(file.name);
-        if (ext) return Promise.resolve(classify(file.name, '', file.size));
-        var reader = typeof file.text === 'function'
-            ? file.text()
-            : Promise.resolve('');
-        return reader
-            .then(function (text) { return classify(file.name, text, file.size); })
-            .catch(function () { return classify(file.name, '', file.size); });
-    }
-
     // Module-level, deliberately outside initSuiteTable: these gate listeners
     // that live on `document`/`window` rather than on the swapped subtree, so
     // they must survive re-initialisation rather than be reset by it.
@@ -1837,16 +1775,12 @@
 
     global.initSuiteTable = initSuiteTable;
 
-    // Node export for the .mjs unit tests (the pure classification helpers
-    // only — everything else is DOM-bound).
+    // Node export for the .mjs unit tests (the pure helpers only — everything
+    // else is DOM-bound).
     if (typeof module === 'object' && module.exports) {
         module.exports = {
-            classify: classify,
             dropZoneFor: dropZoneFor,
             visualOrder: visualOrder,
-            classifyFile: classifyFile,
-            isLikelyScriptName: isLikelyScriptName,
-            hasRecognizedScriptShebang: hasRecognizedScriptShebang,
             // Exported for the config-validation test only. Everything past
             // the urls check is DOM-bound and is not callable under node.
             initSuiteTable: initSuiteTable
