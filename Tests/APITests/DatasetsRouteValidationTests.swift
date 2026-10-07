@@ -32,7 +32,7 @@ import VaporTesting
 
         let setupID = "dsv_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await writeZip(
+        try await writeZipFixture(
             at: zipPath, entries: [("cases.csv", "id\n1\n2\n3\n"), ("publictest_a.py", "passed('ok')\n")])
         let manifest = """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
@@ -49,17 +49,6 @@ import VaporTesting
         let (csrf, sessionCookie) = try await csrfFields(
             for: "/instructor/\(assignment.publicID)/edit", cookie: cookie, on: app)
         return (assignment.publicID, sessionCookie, csrf)
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("dsv-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            try content.data(using: .utf8)?.write(to: root.appendingPathComponent(name))
-        }
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func putDatasets(

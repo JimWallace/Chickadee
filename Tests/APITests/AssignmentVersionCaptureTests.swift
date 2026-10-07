@@ -43,7 +43,7 @@ import VaporTesting
 
         let setupID = "vcap_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
+        try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x")] + scripts)
 
         var entries: [ConfiguredSuiteEntry] = []
         for (index, (name, _)) in scripts.enumerated() {
@@ -61,20 +61,6 @@ import VaporTesting
             deadlineOverrideActive: false, courseID: courseID)
         try await assignment.save(on: app.db)
         return (assignment.publicID, setupID)
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vcap-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            let url = root.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.data(using: .utf8)?.write(to: url)
-        }
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func versions(_ setupID: String) async throws -> [APIAssignmentVersion] {
@@ -241,7 +227,7 @@ import VaporTesting
                 ],"timeLimitSeconds":10}
                 """
             try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-            try await writeZip(
+            try await writeZipFixture(
                 at: app.testSetupsDirectory + setupID + ".zip",
                 entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n")])
             let assignment = try await makeTestAssignment(

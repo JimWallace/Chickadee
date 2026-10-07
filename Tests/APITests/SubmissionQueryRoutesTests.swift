@@ -173,7 +173,7 @@ import VaporTesting
     /// `userID == caller.id`).
     @Test func listSubmissionsScopesStudentToOwnSubmissions() async throws {
         try await withApp(app) { _ in
-            let cookieA = try await loginAsStudent(username: "stu_scope_a")
+            let cookieA = try await loginAsStudent("stu_scope_a", on: app)
             let studentA = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "stu_scope_a").first())
             let studentB = try await makeTestUser(on: app, username: "stu_scope_b", role: "student")
@@ -600,20 +600,12 @@ import VaporTesting
         return assignment
     }
 
-    private func loginAsStudent(username: String = "student_tier") async throws -> String {
-        return try await loginUser(username: username, password: "pass", role: "student", on: app)
-    }
-
-    private func loginAsInstructor(username: String = "instructor_tier") async throws -> String {
-        return try await loginUser(username: username, password: "pass", role: "instructor", on: app)
-    }
-
     /// Student cannot see `release` or `secret` outcomes before the deadline.
     @Test func getResultsHidesReleaseAndSecretBeforeDeadline() async throws {
         try await withApp(app) { _ in
             let setupID = "setup_deadline_before"
             let username = "student_db1"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
             let student = try #require(studentOpt)
             try await ensureAssignment(
@@ -653,7 +645,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_deadline_after"
             let username = "student_da1"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
             let student = try #require(studentOpt)
             try await ensureAssignment(
@@ -696,7 +688,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_ext_active"
             let username = "student_ext_active"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let student = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == username).first())
             // Class deadline already passed…
@@ -746,7 +738,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_ext_lapsed"
             let username = "student_ext_lapsed"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let student = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == username).first())
             let assignment = try await ensureAssignment(
@@ -792,7 +784,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_secret_hide"
             let username = "student_sh1"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
             let student = try #require(studentOpt)
             try await ensureAssignment(
@@ -827,7 +819,8 @@ import VaporTesting
     @Test func getResultsInstructorSeesAllTiersRegardlessOfDeadline() async throws {
         try await withApp(app) { _ in
             let setupID = "setup_instr_all"
-            let cookie = try await loginAsInstructor()
+            let cookie = try await loginUser(
+                username: "instructor_tier", password: "testpassword", role: "instructor", on: app)
             // All-tier visibility is per-course staff now (#417 Slice G); enrol
             // the instructor in the setup's course (shared TEST101).
             try await enrollAsTestInstructor(username: "instructor_tier", on: app)
@@ -866,7 +859,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_alltier_grade"
             let username = "student_atg"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let student = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == username).first())
             try await ensureAssignment(setupID: setupID, dueAt: Date().addingTimeInterval(3600))  // future
@@ -911,7 +904,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_slice"
             let username = "student_slice"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let student = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == username).first())
             try await ensureAssignment(setupID: setupID, dueAt: Date().addingTimeInterval(3600))
@@ -948,7 +941,7 @@ import VaporTesting
     @Test func getSubmissionOwnerCanPollOwnSubmission() async throws {
         try await withApp(app) { _ in
             let username = "student_owner_poll"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let owner = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == username).first())
             try await insertSubmission(
@@ -969,7 +962,7 @@ import VaporTesting
     /// staff check and is rejected — the owner fast path must not widen access.
     @Test func getSubmissionForbiddenForNonOwnerNonStaff() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent(username: "student_poll_intruder")
+            let cookie = try await loginAsStudent("student_poll_intruder", on: app)
             let other = try await makeTestUser(
                 on: app, username: "student_poll_victim", role: "student")
             try await insertSubmission(
@@ -1041,7 +1034,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_etag_deadline"
             let username = "student_etag_dl"
-            let cookie = try await loginAsStudent(username: username)
+            let cookie = try await loginAsStudent(username, on: app)
             let student = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == username).first())
             let assignment = try await ensureAssignment(

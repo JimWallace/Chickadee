@@ -31,20 +31,7 @@ func ahMakeFile(named name: String, contents: String) -> File {
 }
 
 func ahMakeZip(at zipPath: String, entries: [(name: String, content: String)]) async throws {
-    let tempDir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("assignment-helper-zip-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: tempDir) }
-
-    for entry in entries {
-        let path = tempDir.appendingPathComponent(entry.name)
-        let parent = path.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-        try Data(entry.content.utf8).write(to: path)
-    }
-
-    let run = try await runTool(["zip", "-q", "-r", zipPath, "."], workingDirectory: tempDir)
-    #expect(run.exitCode == 0, "zip should succeed")
+    try await writeZipFixture(at: zipPath, entries: entries.map { ($0.name, $0.content) })
 }
 
 func ahNotebookData(language: String = "python", source: String) throws -> Data {

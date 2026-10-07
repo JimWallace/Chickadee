@@ -50,25 +50,52 @@ extension Application {
 func enrollAsTestInstructor(
     username: String, on app: Application, courseCode: String = "TEST101"
 ) async throws {
+    try await enrollInTestCourse(username: username, role: .instructor, on: app, courseCode: courseCode)
+}
+
+/// Enrols `username` in the shared test course at `role`, or moves an
+/// existing enrolment to `role`. Idempotent.
+func enrollInTestCourse(
+    username: String, role: CourseRole, on app: Application, courseCode: String = "TEST101"
+) async throws {
     let courseID = try await app.testCourseID(code: courseCode)
     guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
     else { return }
     let userID = try user.requireID()
-    // Upsert to `.instructor` — a `.auto` course auto-enrolls the user at login
+    // Upsert, not insert — a `.auto` course auto-enrolls the user at login
     // and (post role-collapse, #417 Slice G2) seeds a non-admin as a per-course
     // `.student`, so skipping on "already enrolled" could leave them a student
     // and 403 the per-course staff gates.
     if let existing = try await APICourseEnrollment.query(on: app.db)
         .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
     {
-        if existing.role != .instructor {
-            existing.role = .instructor
+        if existing.role != role {
+            existing.role = role
             try await existing.save(on: app.db)
         }
     } else {
-        try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
+        try await APICourseEnrollment(userID: userID, courseID: courseID, role: role)
             .save(on: app.db)
     }
+}
+
+/// Signs in as the student `username` and returns the session cookie. Creates
+/// the account on first use.
+@discardableResult
+func loginAsStudent(
+    _ username: String, password: String = "testpassword", on app: Application
+) async throws -> String {
+    try await loginUser(username: username, password: password, role: "student", on: app)
+}
+
+/// Signs in as `username` and makes them a TA in the shared TEST101 course,
+/// which these suites use in `.auto` mode. Returns the session cookie.
+@discardableResult
+func loginAsCourseTA(_ username: String, on app: Application) async throws -> String {
+    let cookie = try await loginAsStudent(username, on: app)
+    _ = try await app.testCourseID(enrollmentMode: .auto)
+    try await enrollInTestCourse(username: username, role: .ta, on: app)
+    return cookie
 }
 
 /// Demotes every one of `username`'s course enrollments to `.student` — the
