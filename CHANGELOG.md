@@ -9,6 +9,41 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.535] - 2026-10-07
+
+### Changed
+
+- **Test course builders use the shared fixture.** Ten suites built and saved an `APICourse` by hand, and the three archived-course route suites each copied one course-and-assignment builder. They now call `makeTestCourse`, and the archived suites share `makeCourseWithAssignment` in `AssignmentRoutesHelpers.swift`. (#2366)
+
+
+## [0.5.534] - 2026-10-07
+
+### Changed
+
+- **Page tests GET through one shared helper.** Fifteen suites carried a private `get` or `pageHTML` that sent the same cookie-carrying GET. They now call `getResponse(_:cookie:on:)` beside `getHTML` in `TestPageHelpers.swift`, and the suites that pass a check closure call it from their one-line wrapper. (#2362)
+
+
+## [0.5.533] - 2026-10-07
+
+### Changed
+
+- **Tests sign in as a student or a course TA through shared helpers.** Twelve suites carried a private `loginAsStudent` and two carried the same `loginAsTA`, each with its own copy of the enrolment upsert. They now use `loginAsStudent(_:on:)` and `loginAsCourseTA(_:on:)` in `TestLogin.swift`, and `enrollAsTestInstructor` is one case of a new `enrollInTestCourse(role:)`. (#2364)
+
+
+## [0.5.532] - 2026-10-07
+
+### Changed
+
+- **The worker HMAC tests sign with the shared test signer.** `WorkerHMACAuthMiddlewareTests` kept a second copy of the signing code because the shared `workerHMACHeaders` could not take a fixed timestamp or nonce, which the clock-skew and replay tests need. The shared helper now takes both, and the copy is gone. (#2368)
+
+
+## [0.5.531] - 2026-10-07
+
+### Changed
+
+- **The CLAUDE.md testing section is current.** It no longer gives test-file counts that go stale, it names the shared host traits for every interpreter, and its example uses the shared `.requiresLua` instead of the suite-local form that #1946 removed. (#2369)
+
+
 ## [0.5.530] - 2026-10-07
 
 ### Fixed

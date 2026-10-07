@@ -53,18 +53,8 @@ import VaporTesting
     private func pageHTML(
         app: Application, path: String, cookie: String
     ) async throws -> (status: HTTPStatus, html: String) {
-        var status = HTTPStatus.imATeapot
-        var html = ""
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                status = res.status
-                html = res.body.string
-            })
-        return (status, html)
+        let res = try await getResponse(path, cookie: cookie, on: app)
+        return (res.status, res.body.string)
     }
 
     private func slipDayPOST(

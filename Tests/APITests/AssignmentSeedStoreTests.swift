@@ -48,9 +48,7 @@ import VaporTesting
     }
 
     private func makeCourse() async throws -> APICourse {
-        let course = APICourse(code: "TEST-\(UUID().uuidString.prefix(6))", name: "Test Course")
-        try await course.save(on: app.db)
-        return course
+        try await makeTestCourse(on: app, code: "TEST-\(UUID().uuidString.prefix(6))", name: "Test Course")
     }
 
     // MARK: - Tests

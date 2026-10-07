@@ -28,10 +28,6 @@ import VaporTesting
 
     // MARK: - Helpers
 
-    private func loginAsStudent() async throws -> String {
-        return try await loginUser(username: "student1", password: "pass", role: "student", on: app)
-    }
-
     /// Creates a test setup with a given manifest JSON and a small dummy zip.
     private func insertSetup(manifest: String) async throws -> String {
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
@@ -82,7 +78,7 @@ import VaporTesting
     @Test func manifestReturnsJSON() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
@@ -103,7 +99,7 @@ import VaporTesting
     @Test func manifestBodyIsParseable() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
@@ -143,7 +139,7 @@ import VaporTesting
                 }
                 """
             let setupID = try await insertSetup(manifest: manifest)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
@@ -180,7 +176,7 @@ import VaporTesting
 
     @Test func manifestReturns404ForUnknownSetup() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/setup_doesnotexist/manifest",
@@ -214,7 +210,7 @@ import VaporTesting
     @Test func downloadSucceedsForAuthenticatedStudent() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
@@ -230,7 +226,7 @@ import VaporTesting
 
     @Test func downloadReturns404ForUnknownSetup() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/setup_missing/download",
@@ -263,7 +259,7 @@ import VaporTesting
 
     @Test func seedReturns404ForUnknownSetup() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/setup_missing_seed/seed",
@@ -283,7 +279,7 @@ import VaporTesting
     @Test func seedReturnsNullWhenSetupHasNoAssignment() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
@@ -309,7 +305,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
             let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             func fetchSeed() async throws -> String? {
                 var seed: String?
@@ -359,7 +355,7 @@ import VaporTesting
                 """
             let setupID = try await insertSetup(manifest: manifest)
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
@@ -391,7 +387,7 @@ import VaporTesting
             _ = try await insertAssignment(testSetupID: setupID, isOpen: false)
             // loginAsStudent auto-enrolls in the .auto course, so a 403 here is
             // the effective-open gate firing, not a missing-enrollment 403.
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
 
             for endpoint in ["manifest", "download", "seed"] {
                 try await app.asyncTest(
@@ -418,7 +414,7 @@ import VaporTesting
             assignment.visibility = .preview
             try await assignment.save(on: app.db)
 
-            let studentCookie = try await loginAsStudent()
+            let studentCookie = try await loginAsStudent("student1", on: app)
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: studentCookie) },
@@ -451,7 +447,7 @@ import VaporTesting
             assignment.startsAt = Date().addingTimeInterval(7 * 24 * 3_600)  // a week out
             try await assignment.save(on: app.db)
 
-            let studentCookie = try await loginAsStudent()
+            let studentCookie = try await loginAsStudent("student1", on: app)
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: studentCookie) },
@@ -485,7 +481,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = minimalNotebook()
 
@@ -590,7 +586,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = minimalNotebook()
 
@@ -680,7 +676,7 @@ import VaporTesting
                 baseURL: "https://learn.example.edu", appID: "app", appKey: "key", debounceSecs: 90)
             defer { app.brightSpaceAppCredentials = nil }
 
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = minimalNotebook()
 
@@ -754,7 +750,7 @@ import VaporTesting
                 baseURL: "https://learn.example.edu", appID: "app", appKey: "key", debounceSecs: 90)
             defer { app.brightSpaceAppCredentials = nil }
 
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = minimalNotebook()
 
@@ -804,7 +800,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = minimalNotebook()
 
@@ -845,7 +841,7 @@ import VaporTesting
                 isOpen: true,
                 dueAt: Date().addingTimeInterval(-60)
             )
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = minimalNotebook()
             let collection = """
@@ -898,7 +894,7 @@ import VaporTesting
                 isOpen: true,
                 dueAt: Date().addingTimeInterval(-60)
             )
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = minimalNotebook()
 
@@ -962,7 +958,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())  // browser
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
 
@@ -986,7 +982,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
 
@@ -1021,7 +1017,7 @@ import VaporTesting
                 """
             let setupID = try await insertSetup(manifest: manifest)
             _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
 
@@ -1040,7 +1036,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
             _ = try await insertAssignment(testSetupID: setupID, isOpen: false)
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("student1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
             let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
 

@@ -19,12 +19,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsStudent(on app: Application) async throws -> String {
-        return try await loginUser(
-            username: "teststudent_nbscan", password: "testpassword",
-            role: "student", on: app)
-    }
-
     // MARK: - Sample notebook fixtures
 
     private let notebookWithTwoFunctions = """
@@ -273,7 +267,7 @@ import VaporTesting
 
     @Test func scanNotebookReturns403ForStudent() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsStudent(on: app)
+            let cookie = try await loginAsStudent("teststudent_nbscan", on: app)
 
             try await app.asyncTest(
                 .POST, "/instructor/scan-notebook",

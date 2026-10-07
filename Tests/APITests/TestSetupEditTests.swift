@@ -22,10 +22,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsStudent(on app: Application) async throws -> String {
-        return try await loginUser(username: "teststudent_edit", password: "testpassword", role: "student", on: app)
-    }
-
     // MARK: - Setup helpers
 
     /// Creates a test setup record in the DB (no real zip on disk).
@@ -352,7 +348,7 @@ import VaporTesting
 
     @Test func studentCannotPutAssignment() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsStudent(on: app)
+            let cookie = try await loginAsStudent("teststudent_edit", on: app)
             try await insertSetup(id: "setup_student_put", on: app)
 
             // Students are not on the instructor route group — middleware rejects them.
@@ -375,7 +371,7 @@ import VaporTesting
 
     @Test func editPageRequiresInstructor() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsStudent(on: app)
+            let cookie = try await loginAsStudent("teststudent_edit", on: app)
             try await insertSetup(id: "setup_ep1", on: app)
             let a = try await insertAssignment(testSetupID: "setup_ep1", title: "Lab", on: app)
             let id = a.publicID

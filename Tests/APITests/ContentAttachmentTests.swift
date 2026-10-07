@@ -26,13 +26,6 @@ import VaporTesting
         Request(application: app, on: app.eventLoopGroup.any())
     }
 
-    @discardableResult
-    private func makeCourse(code: String) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Course \(code)", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return course
-    }
-
     /// Creates a content item and stores one attachment (bytes on disk +
     /// metadata on the item), returning both ids.
     private func makeItemWithAttachment(
@@ -55,7 +48,7 @@ import VaporTesting
 
     @Test func storeWritesFileAndMetadata() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "AT_STORE")
+            let course = try await makeTestCourse(on: app, code: "AT_STORE", mode: .auto)
             let (item, attachmentID) = try await makeItemWithAttachment(
                 courseID: try course.requireID(), name: "lecture.pdf")
             let itemID = try item.requireID()
@@ -71,7 +64,7 @@ import VaporTesting
 
     @Test func enrolledStudentDownloadsAttachment() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "AT_SERVE")
+            let course = try await makeTestCourse(on: app, code: "AT_SERVE", mode: .auto)
             let (item, attachmentID) = try await makeItemWithAttachment(
                 courseID: try course.requireID(), bytes: Data("PDF-BYTES".utf8))
             let itemID = try item.requireID()
@@ -109,7 +102,7 @@ import VaporTesting
 
     @Test func draftAttachmentHiddenFromStudentButVisibleToStaff() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "AT_DRAFT")
+            let course = try await makeTestCourse(on: app, code: "AT_DRAFT", mode: .auto)
             let courseID = try course.requireID()
             let (item, attachmentID) = try await makeItemWithAttachment(
                 courseID: courseID, isPublished: false)
@@ -137,7 +130,7 @@ import VaporTesting
 
     @Test func deletingItemRemovesAttachmentFiles() async throws {
         try await withApp(app) { _ in
-            let course = try await makeCourse(code: "AT_DELETE")
+            let course = try await makeTestCourse(on: app, code: "AT_DELETE", mode: .auto)
             let (item, attachmentID) = try await makeItemWithAttachment(courseID: try course.requireID())
             let itemID = try item.requireID()
             let path = ContentAttachmentStore.path(app, itemID: itemID, attachmentID: attachmentID)
@@ -152,7 +145,7 @@ import VaporTesting
 
     @Test func mcpAttachRejectsPrivateAddress() async throws {
         try await withApp(app) { app in
-            let course = try await makeCourse(code: "AT_MCP")
+            let course = try await makeTestCourse(on: app, code: "AT_MCP", mode: .auto)
             let courseID = try course.requireID()
             let tester = try await makeTestUser(on: app, username: "at_mcp", role: "instructor")
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)

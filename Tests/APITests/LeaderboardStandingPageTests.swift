@@ -52,15 +52,6 @@ import VaporTesting
         return viewer
     }
 
-    private func get(_ path: String, cookie: String, on app: Application) async throws -> TestingHTTPResponse {
-        var captured: TestingHTTPResponse?
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in captured = res })
-        return try #require(captured)
-    }
-
     private func handle(of user: APIUser, on app: Application) async throws -> String {
         let enrollment = try #require(
             try await APICourseEnrollment.query(on: app.db)
@@ -74,7 +65,7 @@ import VaporTesting
             let metrics = (0..<20).map { Double(100 - $0) }
             let viewer = try await seedBoard(
                 on: app, setupID: "lb_card", metrics: metrics, viewerPlace: 13)
-            let html = try await get("/testsetups/lb_card/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_card/leaderboard", cookie: cookie, on: app).body.string
             let handle = try await handle(of: viewer, on: app)
 
             #expect(html.contains("class=\"you-card card\""))
@@ -98,7 +89,7 @@ import VaporTesting
             try await seedBoard(
                 on: app, setupID: "lb_win", metrics: (0..<31).map { Double(100 - $0) },
                 viewerPlace: 13)
-            let html = try await get("/testsetups/lb_win/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_win/leaderboard", cookie: cookie, on: app).body.string
             #expect(html.contains("8 more · 4–11"))
             #expect(html.contains("15 more below"))
             #expect(html.contains("href=\"/testsetups/lb_win/leaderboard?all=1\""))
@@ -114,7 +105,8 @@ import VaporTesting
             try await seedBoard(
                 on: app, setupID: "lb_all", metrics: (0..<31).map { Double(100 - $0) },
                 viewerPlace: 13)
-            let html = try await get("/testsetups/lb_all/leaderboard?all=1", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_all/leaderboard?all=1", cookie: cookie, on: app).body
+                .string
             #expect(html.components(separatedBy: "<td class=\"item-status item-grade\">").count - 1 == 31)
             #expect(html.contains("Show my standing"))
             #expect(html.contains("data-list-filter=\"leaderboard-table\""))
@@ -130,7 +122,7 @@ import VaporTesting
             // Place 1 and 2 tie at 50; the viewer (index 1) reached it second.
             try await seedBoard(
                 on: app, setupID: "lb_tie", metrics: [50, 50, 40, 30], viewerPlace: 1)
-            let html = try await get("/testsetups/lb_tie/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_tie/leaderboard", cookie: cookie, on: app).body.string
             #expect(html.contains("Tied 1st"))
             #expect(html.contains(">1=<"))
             #expect(html.contains("Tied · reached it"))
@@ -145,7 +137,7 @@ import VaporTesting
             try await seedBoard(
                 on: app, setupID: "lb_none", metrics: (0..<9).map { Double(50 - $0) },
                 viewerPlace: nil)
-            let html = try await get("/testsetups/lb_none/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_none/leaderboard", cookie: cookie, on: app).body.string
             #expect(html.contains("Not on the board yet"))
             #expect(html.contains("href=\"/testsetups/lb_none/submit\""))
             #expect(html.components(separatedBy: "<td class=\"item-status item-grade\">").count - 1 == 5)
@@ -164,7 +156,7 @@ import VaporTesting
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
             try await wrEnrollUser(instructor, on: app)
 
-            let html = try await get("/testsetups/lb_staff2/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_staff2/leaderboard", cookie: cookie, on: app).body.string
             #expect(!html.contains("you-card card"))
             #expect(html.components(separatedBy: "<td class=\"item-status item-grade\">").count - 1 == 10)
             #expect(html.contains("<code>lb_staff2_s0</code>"))
@@ -181,7 +173,7 @@ import VaporTesting
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(
                 on: app, setupID: "lb_priv", metrics: [9, 8, 7], viewerPlace: 1)
-            let html = try await get("/testsetups/lb_priv/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_priv/leaderboard", cookie: cookie, on: app).body.string
             #expect(!html.contains("lb_priv_s0"))
             #expect(!html.contains("submissions ·"))
             #expect(!html.contains("/submissions/lb_priv_"))
@@ -198,7 +190,7 @@ import VaporTesting
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
             try await wrEnrollUser(instructor, on: app)
 
-            let html = try await get("/testsetups/lb_vis2/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lb_vis2/leaderboard", cookie: cookie, on: app).body.string
             #expect(html.contains("name=\"visibility\""))
             #expect(html.contains("name=\"returnTo\" value=\"/testsetups/lb_vis2/leaderboard\""))
             #expect(html.contains("<option value=\"visible\" selected>Visible to students</option>"))
