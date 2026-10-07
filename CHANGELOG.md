@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.570] - 2026-10-07
+
+### Fixed
+
+- **The Docker build now runs on a pull request that changes its other inputs.** The path filter omitted `.dockerignore`, the `restore-git-mtimes` action and `scripts/ci-runner-cgroup-probe.sh`, so a change to one of them reached `main` without the image build. (#2430)
+
+
 ## [0.5.569] - 2026-10-07
 
 ### Fixed
