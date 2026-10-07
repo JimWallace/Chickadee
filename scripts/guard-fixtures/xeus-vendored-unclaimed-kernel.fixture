@@ -1,0 +1,9 @@
+# A kernel renamed on one side only. The derivation behind this check once went
+# silently partial for five releases, so it must be seen to fail.
+guard="scripts/check-xeus-vendored.sh"
+files="Sources/Core/LanguageDescriptor.swift"
+description="a language names a kernel that kernels.json does not register"
+expect="which no AssignmentLanguage claims"
+apply() {
+    sed -i 's|kernelName: "xlua",|kernelName: "xlua-guard-fixture",|' Sources/Core/LanguageDescriptor.swift
+}

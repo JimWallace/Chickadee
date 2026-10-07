@@ -23,11 +23,15 @@ jobs:
   # format-lint: each fixture re-runs a whole guard, so the suite costs
   # minutes, and paying that in wall-clock beside format-lint is free while
   # paying it inside format-lint is not.
+  #
+  # The -ci image, not the plain one: the JupyterLite guards
+  # (verify-jupyterlite.sh, check-xeus-vendored.sh, check-env-vendored-sync.sh)
+  # are python3 scripts, and the plain image has no python3 (#2428).
   guard-self-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.4-resolute
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
