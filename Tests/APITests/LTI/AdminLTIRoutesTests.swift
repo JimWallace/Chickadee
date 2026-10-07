@@ -49,10 +49,7 @@ import VaporTesting
     private func get(
         _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
     ) async throws {
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: check)
+        try check(try await getResponse(path, cookie: cookie, on: app))
     }
 
     private func auditActions() async throws -> [String] {

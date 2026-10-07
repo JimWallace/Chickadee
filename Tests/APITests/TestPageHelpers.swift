@@ -1,7 +1,7 @@
 // Tests/APITests/TestPageHelpers.swift
 //
-// Two helpers that many page tests share: sign in as an admin, and GET a page
-// with a session cookie and return its HTML. About thirty suites used to
+// Helpers that many page tests share: sign in as an admin, and GET a page
+// with a session cookie and return its HTML or its whole response. About thirty suites used to
 // carry a private copy of one or both.
 
 import Testing
@@ -27,9 +27,15 @@ func getHTML(
     expecting status: HTTPStatus = .ok,
     sourceLocation: SourceLocation = #_sourceLocation
 ) async throws -> String {
-    let response = try await app.asyncSendRequest(.GET, path) { req in
-        req.headers.add(name: .cookie, value: cookie)
-    }
+    let response = try await getResponse(path, cookie: cookie, on: app)
     #expect(response.status == status, "GET \(path)", sourceLocation: sourceLocation)
     return response.body.string
+}
+
+/// GETs `path` with the session `cookie` and returns the whole response, for a
+/// test that reads its status or headers (#2362).
+func getResponse(_ path: String, cookie: String, on app: Application) async throws -> TestingHTTPResponse {
+    try await app.asyncSendRequest(.GET, path) { req in
+        req.headers.add(name: .cookie, value: cookie)
+    }
 }

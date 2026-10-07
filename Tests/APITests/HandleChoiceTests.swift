@@ -18,15 +18,6 @@ import VaporTesting
 
     // MARK: - Helpers
 
-    private func get(_ path: String, cookie: String, on app: Application) async throws -> TestingHTTPResponse {
-        var captured: TestingHTTPResponse?
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in captured = res })
-        return try #require(captured)
-    }
-
     /// The student logged in and enrolled in the default course. Returns the
     /// session cookie, carrying a CSRF token, and the enrollment.
     private func loggedInStudent(on app: Application) async throws -> (cookie: String, enrollment: APICourseEnrollment)
@@ -90,7 +81,7 @@ import VaporTesting
     @Test func anEndedCourseOffersNoChangeAndRefusesOne() async throws {
         try await withWebRoutesApp { app in
             let (cookie, enrollment) = try await loggedInStudent(on: app)
-            let html = try await get("/account", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/account", cookie: cookie, on: app).body.string
             let pick = try #require(offeredHandles(in: html).first)
 
             let course = try #require(try await APICourse.find(enrollment.$course.id, on: app.db))
@@ -103,7 +94,7 @@ import VaporTesting
             #expect(stored.avatarHandle != pick)
             #expect(stored.avatarHandleLockedAt == nil)
 
-            let after = try await get("/account", cookie: cookie, on: app).body.string
+            let after = try await getResponse("/account", cookie: cookie, on: app).body.string
             #expect(offeredHandles(in: after).isEmpty)
         }
     }
@@ -115,7 +106,7 @@ import VaporTesting
             let mate = try await makeTestUser(on: app, username: "hc_mate", role: "student")
             try await wrEnrollUser(mate, on: app)
 
-            let html = try await get("/account", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/account", cookie: cookie, on: app).body.string
             #expect(html.contains("Change handle"))
             let offered = offeredHandles(in: html)
             #expect(offered.count == 2)
@@ -134,8 +125,8 @@ import VaporTesting
     @Test func reloadingKeepsTheSameAlternates() async throws {
         try await withWebRoutesApp { app in
             let (cookie, _) = try await loggedInStudent(on: app)
-            let first = offeredHandles(in: try await get("/account", cookie: cookie, on: app).body.string)
-            let second = offeredHandles(in: try await get("/account", cookie: cookie, on: app).body.string)
+            let first = offeredHandles(in: try await getResponse("/account", cookie: cookie, on: app).body.string)
+            let second = offeredHandles(in: try await getResponse("/account", cookie: cookie, on: app).body.string)
             #expect(first.count == 2)
             #expect(first == second)
         }
@@ -144,7 +135,7 @@ import VaporTesting
     @Test func pickingAnAlternateSavesItAndLocksIt() async throws {
         try await withWebRoutesApp { app in
             let (cookie, enrollment) = try await loggedInStudent(on: app)
-            let offered = offeredHandles(in: try await get("/account", cookie: cookie, on: app).body.string)
+            let offered = offeredHandles(in: try await getResponse("/account", cookie: cookie, on: app).body.string)
             let pick = try #require(offered.first)
 
             let res = try await choose(pick, courseID: enrollment.$course.id, cookie: cookie, on: app)
@@ -154,7 +145,7 @@ import VaporTesting
             #expect(stored.avatarHandleLockedAt != nil)
 
             // One change, full stop: the row says so and offers nothing.
-            let html = try await get("/account", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/account", cookie: cookie, on: app).body.string
             #expect(html.contains("Class handle: \(pick)"))
             #expect(html.contains("Your handle is set for this course."))
             #expect(!html.contains("Change handle"))
@@ -164,7 +155,7 @@ import VaporTesting
     @Test func aSecondChangeIsRefused() async throws {
         try await withWebRoutesApp { app in
             let (cookie, enrollment) = try await loggedInStudent(on: app)
-            let offered = offeredHandles(in: try await get("/account", cookie: cookie, on: app).body.string)
+            let offered = offeredHandles(in: try await getResponse("/account", cookie: cookie, on: app).body.string)
             let first = try #require(offered.first)
             let second = try #require(offered.last)
             _ = try await choose(first, courseID: enrollment.$course.id, cookie: cookie, on: app)
@@ -179,7 +170,7 @@ import VaporTesting
     @Test func savingTheCurrentHandleSpendsNothing() async throws {
         try await withWebRoutesApp { app in
             let (cookie, enrollment) = try await loggedInStudent(on: app)
-            _ = try await get("/account", cookie: cookie, on: app)
+            _ = try await getResponse("/account", cookie: cookie, on: app)
             let current = try #require(try await storedEnrollment(enrollment, on: app).avatarHandle)
 
             _ = try await choose(current, courseID: enrollment.$course.id, cookie: cookie, on: app)
@@ -193,7 +184,7 @@ import VaporTesting
     @Test func aHandleThatWasNotOfferedIsIgnored() async throws {
         try await withWebRoutesApp { app in
             let (cookie, enrollment) = try await loggedInStudent(on: app)
-            let html = try await get("/account", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/account", cookie: cookie, on: app).body.string
             let before = try await storedEnrollment(enrollment, on: app).avatarHandle
             let offered = Set(offeredHandles(in: html))
             let taken = try await AvatarStore.takenHandles(inCourse: enrollment.$course.id, on: app.db)
@@ -212,7 +203,8 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let (cookie, enrollment) = try await loggedInStudent(on: app)
             let form = try await csrfFields(for: "/account", cookie: cookie, on: app)
-            let offered = offeredHandles(in: try await get("/account", cookie: form.cookie, on: app).body.string)
+            let offered = offeredHandles(
+                in: try await getResponse("/account", cookie: form.cookie, on: app).body.string)
             let pick = try #require(offered.first)
             // The lock lands between the page and the post.
             let locked = try await storedEnrollment(enrollment, on: app)
@@ -226,7 +218,7 @@ import VaporTesting
             #expect(location.contains("handleLocked="))
             #expect(try await storedEnrollment(enrollment, on: app).avatarHandle == before)
 
-            let html = try await get(location, cookie: form.cookie, on: app).body.string
+            let html = try await getResponse(location, cookie: form.cookie, on: app).body.string
             #expect(html.contains("Your handle is set for this course."))
             #expect(html.contains("It was set before your last choice arrived."))
         }
@@ -239,7 +231,8 @@ import VaporTesting
             let (cookie, enrollment) = try await loggedInStudent(on: app)
             // The page the student has open: its token and its offer.
             let form = try await csrfFields(for: "/account", cookie: cookie, on: app)
-            let offered = offeredHandles(in: try await get("/account", cookie: form.cookie, on: app).body.string)
+            let offered = offeredHandles(
+                in: try await getResponse("/account", cookie: form.cookie, on: app).body.string)
             let pick = try #require(offered.first)
             let before = try await storedEnrollment(enrollment, on: app).avatarHandle
 
@@ -258,7 +251,7 @@ import VaporTesting
             #expect(stored.avatarHandle == before)
             #expect(stored.avatarHandleLockedAt == nil)
 
-            let html = try await get(location, cookie: form.cookie, on: app).body.string
+            let html = try await getResponse(location, cookie: form.cookie, on: app).body.string
             #expect(html.contains("That one was just taken. Here are two more."))
             let fresh = offeredHandles(in: html)
             #expect(fresh.count == 2)
@@ -302,7 +295,7 @@ import VaporTesting
             try await rank(mate, setupID: "hc_lock", metric: 42, on: app)
             try await rank(viewer, setupID: "hc_lock", metric: 7, on: app)
 
-            #expect(try await get("/testsetups/hc_lock/leaderboard", cookie: cookie, on: app).status == .ok)
+            #expect(try await getResponse("/testsetups/hc_lock/leaderboard", cookie: cookie, on: app).status == .ok)
             #expect(try await enrollment(of: mate, on: app).avatarHandleLockedAt != nil)
             #expect(try await enrollment(of: viewer, on: app).avatarHandleLockedAt == nil)
         }
@@ -321,7 +314,7 @@ import VaporTesting
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
             try await wrEnrollUser(instructor, on: app)
 
-            let res = try await get("/testsetups/hc_staff/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/hc_staff/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let stored = try await enrollment(of: student, on: app)
             #expect(stored.avatarHandle != nil)
