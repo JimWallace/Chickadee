@@ -946,10 +946,9 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
 
 ## Testing Conventions
 
-- **Framework: Swift Testing only.** All ~490 Swift test files / ~4,200
-  tests (plus the 52 `.mjs` frontend test files in
-  `Tests/BrowserRunnerJSTests/`) are on Swift Testing as of the migration
-  completion (PRs #597–#608). `scripts/no-new-xctest.sh`
+- **Framework: Swift Testing only.** Every Swift test (plus the `.mjs`
+  frontend tests in `Tests/BrowserRunnerJSTests/`, run by `node --test`) has
+  been on Swift Testing since the migration completed (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`. The nightly
   `test-coverage.yml` run measures line coverage over all four targets
   (87 % on 2026-09-20) against an 80 % floor.
@@ -995,12 +994,13 @@ committed baseline bootstraps loudly — commit the CI capture in the same PR.
 - **Skipping a test at runtime.** Don't use `Issue.record` to skip — it
   records a failure. A condition the host may not meet (an interpreter on
   PATH, a Python module, CI itself) is a `ConditionTrait` on the test:
-  `@Test(Self.requiresLua)`, `@Test(.ciOnly)`, `@Test(.requiresRscript)`,
-  each a `static let` built with `.enabled("requires lua on PATH") { await
-  Self.luaAvailable }`. The traits more than one file needs live in one
-  `HostConditionTraits.swift` per test target (`WorkerTestSkip.swift` in
-  WorkerTests): `.ciOnly`, `.requiresRscript`, `.requiresOctave`,
-  `.requiresZipTools`, `.requiresSandbox`, `.requiresMake`; the probes behind them
+  `@Test(.requiresLua)`, `@Test(.ciOnly)`, `@Test(.requiresRscript)`, each a
+  `static let` built with `.enabled("requires lua on PATH") { … }`. The
+  traits more than one file needs live in one `HostConditionTraits.swift` per
+  test target (`WorkerTestSkip.swift` in WorkerTests): `.ciOnly` and one
+  `.requires…` per interpreter or tool (`Rscript`, `Octave`, `Gpp`, `Javac`,
+  `Racket`, `Lua`, `Python3`, `ZipTools`, `Sandbox`, `Make`). Add a new one
+  there, not in a suite. The probes behind them
   (`cachedToolIsAvailable`) are in `ChickadeeTestSupport`, which also holds
   `IssueRecorded` and `testURL` for all three targets. Swift Testing then
   reports the test as skipped with that reason, in the log and in the xUnit report, and

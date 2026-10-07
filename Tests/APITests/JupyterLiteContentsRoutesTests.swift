@@ -23,34 +23,37 @@ import VaporTesting
     let app: Application
 
     init() async throws {
-        self.app = try await Application.make(.testing)
-
-        tmpRoot =
+        let tmpRoot =
             FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-jlite-\(UUID().uuidString)/")
             .path
-        app.directory = DirectoryConfiguration(workingDirectory: tmpRoot)
-        publicDir = app.directory.publicDirectory
-        instructorUser = APIUser(
+        let instructorUser = APIUser(
             id: UUID(),
             username: "jlite-test-instructor",
             passwordHash: "unused",
             role: "admin"
         )
-        app.middleware.use(InjectAuthMiddleware(user: instructorUser))
+        self.app = try await makeTestingApplication { app in
+            app.directory = DirectoryConfiguration(workingDirectory: tmpRoot)
+            let publicDir = app.directory.publicDirectory
+            app.middleware.use(InjectAuthMiddleware(user: instructorUser))
 
-        try FileManager.default.createDirectory(atPath: publicDir, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(
-            atPath: publicDir + "jupyterlite/files/",
-            withIntermediateDirectories: true
-        )
-        // Recorded so the per-test `withApp` teardown removes the tree (#1298).
-        app.testDataDirectory = tmpRoot
-        // The contents routes now resolve the viewer's per-course staff status
-        // through `req.db` (#417 Slice G), so the test app needs a database —
-        // previously the route was filesystem-only.
-        try await configureTestDatabase(app)
-        try app.register(collection: JupyterLiteContentsRoutes())
+            try FileManager.default.createDirectory(atPath: publicDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: publicDir + "jupyterlite/files/",
+                withIntermediateDirectories: true
+            )
+            // Recorded so the per-test `withApp` teardown removes the tree (#1298).
+            app.testDataDirectory = tmpRoot
+            // The contents routes now resolve the viewer's per-course staff status
+            // through `req.db` (#417 Slice G), so the test app needs a database —
+            // previously the route was filesystem-only.
+            try await configureTestDatabase(app)
+            try app.register(collection: JupyterLiteContentsRoutes())
+        }
+        self.tmpRoot = tmpRoot
+        self.publicDir = app.directory.publicDirectory
+        self.instructorUser = instructorUser
     }
 
     @Test func allJSONListsNotebook() async throws {

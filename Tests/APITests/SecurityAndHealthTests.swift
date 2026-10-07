@@ -25,18 +25,19 @@ import VaporTesting
     }
 
     private func makeNamespaceApp(user: APIUser?) async throws -> Application {
-        let app = try await Application.make(.testing)
-        // The namespace guard now resolves per-course staff status through
-        // `req.db` (#417 Slice G), so the app needs a database — it used to read
-        // the global `caller.isInstructor` off the injected user with no DB.
-        try await configureTestDatabase(app)
-        app.middleware.use(InjectAuthMiddleware(user: user))
-        app.middleware.use(UserFileNamespaceMiddleware())
-        app.get("ok") { _ in
-            Response(status: .ok, body: .init(string: "ok"))
-        }
-        app.get("jupyterlite", "files", "users", ":userID", "assignment.ipynb") { _ in
-            Response(status: .ok, body: .init(string: "notebook"))
+        let app = try await makeTestingApplication { app in
+            // The namespace guard now resolves per-course staff status through
+            // `req.db` (#417 Slice G), so the app needs a database — it used to read
+            // the global `caller.isInstructor` off the injected user with no DB.
+            try await configureTestDatabase(app)
+            app.middleware.use(InjectAuthMiddleware(user: user))
+            app.middleware.use(UserFileNamespaceMiddleware())
+            app.get("ok") { _ in
+                Response(status: .ok, body: .init(string: "ok"))
+            }
+            app.get("jupyterlite", "files", "users", ":userID", "assignment.ipynb") { _ in
+                Response(status: .ok, body: .init(string: "notebook"))
+            }
         }
         return app
     }
