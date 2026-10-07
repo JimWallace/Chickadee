@@ -18,13 +18,14 @@ import VaporTesting
     }
 
     private func makeApp(configuration: MCPRoutes.Configuration = .init()) async throws -> Application {
-        let app = try await Application.make(.testing)
-        let dispatcher = AdminMCPDispatcher(
-            serverInfo: MCPServerInfo(name: "Chickadee Admin MCP", version: "test"),
-            tools: AdminMCPToolCatalog.live)
-        let principal = AdminMCPPrincipal(subject: "tester", grantedScopes: Set(DiagnosticScope.allCases))
-        try app.grouped(StubPrincipalMiddleware(principal: principal))
-            .register(collection: AdminMCPRoutes(dispatcher: dispatcher, configuration: configuration))
+        let app = try await makeTestingApplication { app in
+            let dispatcher = AdminMCPDispatcher(
+                serverInfo: MCPServerInfo(name: "Chickadee Admin MCP", version: "test"),
+                tools: AdminMCPToolCatalog.live)
+            let principal = AdminMCPPrincipal(subject: "tester", grantedScopes: Set(DiagnosticScope.allCases))
+            try app.grouped(StubPrincipalMiddleware(principal: principal))
+                .register(collection: AdminMCPRoutes(dispatcher: dispatcher, configuration: configuration))
+        }
         return app
     }
 
