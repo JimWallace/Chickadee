@@ -32,9 +32,7 @@ import Vapor
     // MARK: - Fixtures
 
     private func makeCourse(_ app: Application, code: String) async throws -> UUID {
-        let course = APICourse(code: code, name: "Lifecycle \(code)", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return try course.requireID()
+        try await makeTestCourse(on: app, code: code, name: "Lifecycle \(code)", mode: .auto).requireID()
     }
 
     private func makeAssignment(

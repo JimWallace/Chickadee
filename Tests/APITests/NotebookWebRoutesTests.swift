@@ -88,9 +88,7 @@ import VaporTesting
         if let existing = try await APICourse.query(on: app.db).filter(\.$code == "NOTE185").first() {
             return existing
         }
-        let course = APICourse(code: "NOTE185", name: "Notebook Coverage")
-        try await course.save(on: app.db)
-        return course
+        return try await makeTestCourse(on: app, code: "NOTE185", name: "Notebook Coverage")
     }
 
     private func enroll(_ user: APIUser) async throws {
