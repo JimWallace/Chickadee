@@ -3089,12 +3089,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     background: var(--overlay-bg);
 }
 .modal-overlay[hidden] { display: none; }
-/* The destructive-action confirmation (ChickadeeUI.confirmAction) — the same
-   scrim and card as every other modal, at the width a sentence and two buttons
-   want rather than the editor's. It replaced window.confirm, which was the one
-   surface in the app outside the design system. */
-.modal-card--confirm { width: min(28rem, 92vw); }
-.confirm-message { font-size: var(--text-base); }
 .modal-card {
     background: var(--surface);
     color: var(--gray-900);
@@ -3105,6 +3099,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     flex-direction: column;
     box-shadow: var(--shadow-pop);
 }
+/* The destructive-action confirmation (ChickadeeUI.confirmAction) — the same
+   scrim and card as every other modal, at the width a sentence and two buttons
+   want rather than the editor's. It replaced window.confirm, which was the one
+   surface in the app outside the design system. It must follow .modal-card,
+   which sets the width with the same specificity. */
+.modal-card--confirm { width: min(28rem, 92vw); }
+.confirm-message { font-size: var(--text-base); }
 .modal-head,
 .modal-foot {
     display: flex;
