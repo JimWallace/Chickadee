@@ -12,6 +12,7 @@
 // `.serialized`: these spawn zip/unzip subprocesses, which hit the Foundation
 // posix_spawn EFAULT race under within-suite parallelism.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -279,8 +280,7 @@ import VaporTesting
     /// would notice if the production registration were dropped — and dropped,
     /// it means a silent history hole for every browser edit.
     @Test func productionBootstrapRegistersTheCaptureMiddleware() throws {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }  // -> repo root
+        let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
                 "Sources/APIServer/Bootstrap/AppMiddleware.swift"),
@@ -291,8 +291,7 @@ import VaporTesting
     /// The web write seam must seed the baseline before a handler mutates
     /// anything — after the fact the pre-edit content is already gone.
     @Test func theWebWriteSeamSeedsTheBaseline() throws {
-        var url = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { url.deleteLastPathComponent() }
+        let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
                 "Sources/APIServer/Routes/Web/AssignmentHelpers.swift"),

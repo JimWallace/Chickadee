@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -36,14 +37,6 @@ import Testing
 
     private struct Fixture: Decodable {
         let cases: [DispatchCase]
-    }
-
-    // .../Tests/WorkerTests/ScriptDispatchContractTests.swift -> repo root
-    private func repoRoot() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // WorkerTests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
     }
 
     // Collapse a concrete ScriptInvocation down to a coarse vocabulary:
@@ -89,7 +82,8 @@ import Testing
             #expect(!reason.isEmpty, "\(language) is exempt for no stated reason")
             return
         }
-        let fixtureURL = repoRoot()
+        let fixtureURL =
+            repositoryRoot
             .appendingPathComponent("Tests/Fixtures/script-dispatch-cases.json")
         let fixture = try JSONDecoder().decode(
             Fixture.self, from: Data(contentsOf: fixtureURL))
@@ -105,7 +99,8 @@ import Testing
     }
 
     @Test func workerDispatchMatchesSharedContract() throws {
-        let fixtureURL = repoRoot()
+        let fixtureURL =
+            repositoryRoot
             .appendingPathComponent("Tests/Fixtures/script-dispatch-cases.json")
         let data = try Data(contentsOf: fixtureURL)
         let fixture = try JSONDecoder().decode(Fixture.self, from: data)

@@ -16,6 +16,7 @@
 //
 // The browser half is Tests/BrowserRunnerJSTests/octave-literal-contract.test.mjs.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -33,10 +34,9 @@ import Testing
     }
 
     private static func loadContract() throws -> Contract {
-        let fixture = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // CoreTests
-            .deletingLastPathComponent()  // Tests
-            .appendingPathComponent("Fixtures/octave-literal-contract.json")
+        let fixture =
+            repositoryRoot
+            .appendingPathComponent("Tests/Fixtures/octave-literal-contract.json")
         let data = try Data(contentsOf: fixture)
         return try JSONDecoder().decode(Contract.self, from: data)
     }

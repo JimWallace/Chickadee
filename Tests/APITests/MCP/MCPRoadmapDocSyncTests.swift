@@ -7,6 +7,7 @@
 // catalog tool name appears in it, so adding a tool without documenting it
 // is a build failure instead of quiet drift.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -14,9 +15,7 @@ import Testing
 
 @Suite struct MCPRoadmapDocSyncTests {
     private static var roadmapDoc: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("docs/mcp-authoring-roadmap.md")
+        repositoryRoot.appendingPathComponent("docs/mcp-authoring-roadmap.md")
     }
 
     @Test func everyCatalogToolAppearsInTheRoadmapTable() throws {

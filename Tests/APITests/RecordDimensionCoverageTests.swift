@@ -6,6 +6,7 @@
 // schema enum were three hand-typed copies of four cases — the exact shape
 // `MCPLanguageCoverageTests` exists for, one enum over.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -49,8 +50,7 @@ import Testing
     /// The editor template renders the select from the context, and the JS
     /// reads labels off that select — neither holds a dimension name.
     @Test func editorAndJSHoldNoHandTypedDimensionList() throws {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let root = repositoryRoot
         let template = try String(
             contentsOf: root.appendingPathComponent("Resources/Views/_assignment-edit-body.leaf"),
             encoding: .utf8)

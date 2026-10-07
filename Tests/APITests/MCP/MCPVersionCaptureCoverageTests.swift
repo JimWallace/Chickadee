@@ -14,6 +14,7 @@
 // the same intent — the classification is written down exactly once, and a new
 // write tool that slips through is a build failure with instructions.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -21,9 +22,7 @@ import Testing
 
 @Suite struct MCPVersionCaptureCoverageTests {
     private static var toolsDirectory: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("Sources/APIServer/MCP/Tools")
+        repositoryRoot.appendingPathComponent("Sources/APIServer/MCP/Tools")
     }
 
     /// Write tools that own no assignment content, so there is nothing to

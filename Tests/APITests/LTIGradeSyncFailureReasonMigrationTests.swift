@@ -7,6 +7,7 @@
 // sentence before a database applies the migration would otherwise backfill
 // nothing, silently (#1811).
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -25,8 +26,7 @@ import Testing
 
     /// The migration source never reaches for the live sentence.
     @Test func theMigrationDoesNotTrackTheLiveSentence() throws {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
+        let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
                 "Sources/APIServer/Migrations/AddLTIGradeSyncFailureReasonColumn.swift"),

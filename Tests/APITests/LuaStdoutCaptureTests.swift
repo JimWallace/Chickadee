@@ -17,13 +17,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaStdoutCaptureTests {
 
-    private static var repoRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // APITests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
-    }
-
     /// The generated `.stdoutEquality` case script for Lua (the one that reads
     /// `expected_output`, not any existence guard).
     private func stdoutCaseScript() throws -> String {
@@ -41,7 +34,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let runtime = try String(
-            contentsOf: Self.repoRoot.appendingPathComponent(
+            contentsOf: repositoryRoot.appendingPathComponent(
                 "Tools/runner-support/test_runtime.lua"), encoding: .utf8)
         try runtime.write(
             to: dir.appendingPathComponent("test_runtime.lua"), atomically: true, encoding: .utf8)

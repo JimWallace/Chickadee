@@ -11,6 +11,7 @@
 // silently, and a stale editor hash breaks the editor page BEFORE any kernel
 // is fetched, which is upstream of everything the editor smoke test measures.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 import Vapor
@@ -20,14 +21,9 @@ import VaporTesting
 
 @Suite struct ContentSecurityPolicyInlineScriptTests {
 
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // APITests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // repo root
-
     /// The entry point of the vendored editor that the notebook page frames.
     private static let vendoredEditorEntryPoint =
-        repoRoot
+        repositoryRoot
         .appendingPathComponent("Public", isDirectory: true)
         .appendingPathComponent(EditorInlineScriptHashes.vendoredEditorDirectory)
         .appendingPathComponent("lab/index.html")
@@ -207,7 +203,7 @@ import VaporTesting
         // vendored tree has an inline bootstrap per app entry point; a
         // derivation that found none would leave the editor with no allowance
         // at all, and nothing else in the suite would notice.
-        let publicDirectory = Self.repoRoot.appendingPathComponent("Public", isDirectory: true)
+        let publicDirectory = repositoryRoot.appendingPathComponent("Public", isDirectory: true)
         let entryPoint = Self.vendoredEditorEntryPoint
 
         let hashes = try #require(

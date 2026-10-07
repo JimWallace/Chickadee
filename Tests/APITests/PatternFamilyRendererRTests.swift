@@ -166,10 +166,7 @@ import Testing
     /// The canonical R runtime, read from the repo so the test exercises the
     /// same source the runner injects.
     private static func canonicalRuntime() throws -> String {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // APITests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
+        let root = repositoryRoot
         return try String(
             contentsOf: root.appendingPathComponent("Tools/runner-support/test_runtime.R"),
             encoding: .utf8)

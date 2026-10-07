@@ -15,6 +15,7 @@
 // declared in `SchemaMutatingSuites`. That list is the one place this design
 // names a suite, and this is what stops the names going stale silently.
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import SQLKit
@@ -176,8 +177,7 @@ import Vapor
     /// auto-incrementing one. It is what makes the runtime refusal a guard
     /// against a future change rather than a check that fails today.
     @Test func noModelUsesADatabaseGeneratedIdentifier() throws {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }  // -> repo root
+        let root = repositoryRoot
         let sources = root.appendingPathComponent("Sources/APIServer")
         let files = try swiftFiles(under: sources)
         #expect(!files.isEmpty)

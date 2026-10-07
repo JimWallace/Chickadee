@@ -7,6 +7,7 @@
 // owner, the shutdown order, and the two guards that stop a manual grade-sync
 // sweep from running beside the periodic one.
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import Synchronization
@@ -194,8 +195,7 @@ import VaporTesting
 @Suite struct BackgroundWorkWiringTests {
 
     @Test func productionBootstrapCreatesTheOwnerAndTheSlotAndRegistersTheDrain() throws {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }  // -> repo root
+        let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
                 "Sources/APIServer/Bootstrap/AppServices.swift"),

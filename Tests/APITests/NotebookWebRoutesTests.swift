@@ -12,12 +12,10 @@ import VaporTesting
     private var tmpRoot: String!
     private var tmpDir: String!
     private var publicDir: String!
-    private var repoRoot: String!
 
     let app: Application
 
     init() async throws {
-        let repoRoot = FileManager.default.currentDirectoryPath
         let tmpRoot =
             FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-notebook-web-\(UUID().uuidString)")
@@ -39,7 +37,7 @@ import VaporTesting
             app.testDataDirectory = tmpRoot
             try FileManager.default.createSymbolicLink(
                 atPath: tmpRoot + "Resources",
-                withDestinationPath: repoRoot + "/Resources"
+                withDestinationPath: repositoryRoot.appendingPathComponent("Resources").path
             )
             try FileManager.default.createDirectory(
                 atPath: publicDir, withIntermediateDirectories: true)
@@ -71,7 +69,6 @@ import VaporTesting
             try routes(app)
         }
 
-        self.repoRoot = repoRoot
         self.tmpRoot = tmpRoot
         self.tmpDir = tmpRoot
         self.publicDir = publicDir

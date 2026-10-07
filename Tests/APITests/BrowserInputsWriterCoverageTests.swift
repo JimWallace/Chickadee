@@ -21,6 +21,7 @@
 // deployment — and a fifth kernel language absent from the table is precisely
 // what would make it reachable again.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -29,14 +30,9 @@ import Testing
 
 @Suite struct BrowserInputsWriterCoverageTests {
 
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // APITests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // repo root
-
     private static func browserRunnerSource() throws -> String {
         try String(
-            contentsOf: repoRoot.appendingPathComponent("Public/browser-runner.js"),
+            contentsOf: repositoryRoot.appendingPathComponent("Public/browser-runner.js"),
             encoding: .utf8)
     }
 

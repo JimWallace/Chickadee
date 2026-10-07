@@ -16,12 +16,7 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct OpponentStagingTests {
 
-    private static let fixturesDir: URL = {
-        var url = URL(fileURLWithPath: #filePath)
-        url.deleteLastPathComponent()  // OpponentStagingTests.swift
-        url.deleteLastPathComponent()  // WorkerTests
-        return url.appendingPathComponent("Fixtures").appendingPathComponent("activity-match")
-    }()
+    private static let fixturesDir = repositoryRoot.appendingPathComponent("Tests/Fixtures/activity-match")
 
     private static func makeDir(_ label: String) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
