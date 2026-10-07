@@ -294,22 +294,7 @@ func makeCourseWithAssignment(
 // MARK: - Zip + notebook fixtures
 
 func arMakeZip(at path: String, entries: [(String, String)]) async throws {
-    let root = FileManager.default.temporaryDirectory
-        .appendingPathComponent("assignment-routes-zip-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: root) }
-
-    for (name, contents) in entries {
-        let fileURL = root.appendingPathComponent(name)
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try Data(contents.utf8).write(to: fileURL)
-    }
-
-    let run = try await runTool(["zip", "-q", "-r", path, "."], workingDirectory: root)
-    #expect(run.exitCode == 0)
+    try await writeZipFixture(at: path, entries: entries)
 }
 
 @discardableResult

@@ -35,7 +35,7 @@ import VaporTesting
 
         let setupID = "srt_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
+        try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x")] + scripts)
 
         var entries: [ConfiguredSuiteEntry] = []
         for (i, (name, _)) in scripts.enumerated() {
@@ -58,20 +58,6 @@ import VaporTesting
         )
         try await assignment.save(on: app.db)
         return assignment.publicID
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("srt-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            let url = root.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.data(using: .utf8)?.write(to: url)
-        }
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func csrfPair(for id: String, cookie: String) async throws -> (String, String) {

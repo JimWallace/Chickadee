@@ -49,7 +49,7 @@ import Vapor
         let setupID = "vr_setup"
         try await makeTestSetup(
             on: app, id: setupID, courseID: courseID, manifest: manifest(timeLimit: 10))
-        try await writeZip(
+        try await writeZipFixture(
             at: app.testSetupsDirectory + setupID + ".zip",
             entries: [(".placeholder", "x")] + scripts)
         let notebookPath = app.testSetupsDirectory + setupID + ".ipynb"
@@ -61,21 +61,6 @@ import Vapor
         setup.notebookPath = notebookPath
         try await setup.save(on: app.db)
         return (assignment, setup)
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vr-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            let url = root.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.data(using: .utf8)?.write(to: url)
-        }
-        try? FileManager.default.removeItem(atPath: zipPath)
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func record(_ app: Application, _ setup: APITestSetup, origin: String) async throws {
@@ -109,7 +94,7 @@ import Vapor
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
             // Break it.
-            try await writeZip(
+            try await writeZipFixture(
                 at: setup.zipPath,
                 entries: [(".placeholder", "x"), ("test_a.sh", "exit 1  # broken\n")])
             setup.manifest = manifest(timeLimit: 999)
@@ -135,7 +120,7 @@ import Vapor
         try await withApp(app) { app in
             let (assignment, setup) = try await fixture(on: app)
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
-            try await writeZip(
+            try await writeZipFixture(
                 at: setup.zipPath, entries: [(".placeholder", "x"), ("test_a.sh", "exit 1\n")])
             try await record(app, setup, origin: "mcp:author_script")
 
@@ -163,7 +148,7 @@ import Vapor
             let (assignment, setup) = try await fixture(on: app)
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
-            try await writeZip(
+            try await writeZipFixture(
                 at: setup.zipPath,
                 entries: [
                     (".placeholder", "x"), ("test_a.sh", "exit 0\n"), ("test_extra.sh", "exit 0\n"),
@@ -211,7 +196,7 @@ import Vapor
             try await assignment.save(on: app.db)
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
-            try await writeZip(
+            try await writeZipFixture(
                 at: setup.zipPath, entries: [(".placeholder", "x"), ("test_a.sh", "exit 1\n")])
             try await record(app, setup, origin: "mcp:author_script")
 

@@ -41,7 +41,7 @@ import Vapor
     ) async throws -> (assignment: APIAssignment, setup: APITestSetup) {
         let setupID = "vl_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
+        try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x")] + scripts)
         let manifest = """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
             """
@@ -53,20 +53,6 @@ import Vapor
             deadlineOverrideActive: false, courseID: courseID)
         try await assignment.save(on: app.db)
         return (assignment, setup)
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vl-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            let url = root.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.data(using: .utf8)?.write(to: url)
-        }
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func versions(
