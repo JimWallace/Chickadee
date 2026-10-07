@@ -80,6 +80,7 @@ const LANGUAGES = {
         scripts: [
             'publictest_pass.R', 'publictest_fail.R', 'publictest_boom.R',
             'publictest_context.R', 'publictest_nopackage.R', 'publictest_packages.R',
+            'publictest_trycatch.R',
             'publictest_leak.R', 'publictest_isolation.R',
         ],
         files: {
@@ -138,6 +139,15 @@ passed("all declared packages attached and ran")
 cat("label=", .chickadee_label(), " seed=", chickadee_seed(), "\\n", sep = "")
 cat("input=", chickadee_inputs()[["threshold"]], "\\n", sep = "")
 passed("context ok")
+`,
+            // passed() inside the test's own tryCatch(error = ). Under Rscript
+            // quit() ends the process and the error handler never runs, so
+            // this is a pass. The exit condition must not be an error (#2386).
+            'publictest_trycatch.R': `source("test_runtime.R")
+tryCatch({
+  passed("the exit got through the test's error handler")
+}, error = function(e) failed("the exit was caught as an error"))
+failed("the script kept running after passed()")
 `,
             // Cross-script isolation (#2384). Each native test is a fresh
             // Rscript process, so a working directory, an environment variable
@@ -1028,6 +1038,10 @@ if (language === 'r') {
     check('and says so, rather than looping or going silent',
         /notarealpackage/.test((noPackage?.stderr || '') + (noPackage?.stdout || '')),
         JSON.stringify(noPackage?.stderr));
+
+    const tryCatchR = result.results['publictest_trycatch.R'];
+    check("passed() inside the test's own tryCatch(error =) is still a pass (#2386)",
+        tryCatchR && tryCatchR.exitCode === 0, JSON.stringify(tryCatchR));
 
     // Each native test is a fresh process; one kernel serves all of these, so
     // the grader puts the process state back before each script (#2384).
