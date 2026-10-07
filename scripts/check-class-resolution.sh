@@ -56,10 +56,15 @@ defined="$(
 
 # ── Referenced classes ───────────────────────────────────────────────────────
 # 1. class="…" values in templates and first-party JS (the JS hits are
-#    class attributes inside generated-HTML strings).
+#    class attributes inside generated-HTML strings). Leaf tags are removed
+#    before the split, so a name written directly against one
+#    (`row#if(x): row-pending#endif`) is still checked (#2402). An
+#    interpolation becomes `_`, which no class name holds, so a name built
+#    from a value (`status-#(s)`) stays out of reach, as it was.
 attr_refs="$(
   grep -rhoE 'class="[^"]*"' "${views[@]}" Public/*.js 2>/dev/null \
     | sed -E 's/^class="//; s/"$//' \
+    | sed -E 's/#(if|elseif)\([^:]*\):/ /g; s/#else:/ /g; s/#endif/ /g; s/#\([^)]*\)/_/g' \
     | tr ' ' '\n'
 )"
 
