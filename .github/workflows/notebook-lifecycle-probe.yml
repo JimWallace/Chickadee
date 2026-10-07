@@ -25,6 +25,9 @@ on:
       - ".github/workflows/notebook-lifecycle-probe.yml"
       - "Public/notebook*.js"
       - "Public/jupyterlite/**"
+      # The page the probe loads is built from these two templates.
+      - "Resources/Views/notebook.leaf"
+      - "Resources/Views/_notebook-body.leaf"
 
 concurrency:
   group: notebook-lifecycle-probe-${{ github.event_name }}-${{ github.ref }}
