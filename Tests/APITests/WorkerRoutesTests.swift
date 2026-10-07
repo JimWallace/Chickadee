@@ -71,7 +71,7 @@ import VaporTesting
         return path
     }
 
-    private func makeTestSetup(id: String, manifest: String) async throws -> APITestSetup {
+    private func makeWorkerSetup(id: String, manifest: String) async throws -> APITestSetup {
         let zipPath = try makeDummyZip(
             named: "\(id).zip",
             in: URL(fileURLWithPath: app.testSetupsDirectory))
@@ -195,7 +195,7 @@ import VaporTesting
 
     @Test func requestJob_pendingWorkerModeStudent_returnsJob() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_01", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_01", manifest: workerManifestJSON)
             let sub = try await makeSubmission(id: "wsub_01", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
@@ -230,7 +230,7 @@ import VaporTesting
 
     @Test func requestJobTestSetupVersionChangesWhenZipContentsChangeWithoutSizeChanging() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_version", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_version", manifest: workerManifestJSON)
             try Data("print('A')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
             let firstSub = try await makeSubmission(id: "wsub_version_1", setupID: (try setup.requireID()))
 
@@ -284,7 +284,7 @@ import VaporTesting
         try await withApp(app) { _ in
             // Browser-mode pending submissions ARE claimed by the worker as a backstop
             // (e.g., browser runner failed, timed out, or these are pre-fix stuck submissions).
-            let setup = try await makeTestSetup(id: "bsetup_01", manifest: browserManifestJSON)
+            let setup = try await makeWorkerSetup(id: "bsetup_01", manifest: browserManifestJSON)
             let sub = try await makeSubmission(
                 id: "bsub_01", setupID: (try setup.requireID()), kind: APISubmission.Kind.student)
 
@@ -314,7 +314,7 @@ import VaporTesting
         try await withApp(app) { _ in
             // A submission already completed by the browser runner must never be reclaimed.
             // The worker should only see "pending" submissions; "complete" ones are invisible.
-            let setup = try await makeTestSetup(id: "bsetup_02", manifest: browserManifestJSON)
+            let setup = try await makeWorkerSetup(id: "bsetup_02", manifest: browserManifestJSON)
             _ = try await makeSubmission(
                 id: "bsub_complete", setupID: (try setup.requireID()),
                 status: "complete", kind: APISubmission.Kind.student)
@@ -339,8 +339,8 @@ import VaporTesting
         try await withApp(app) { _ in
             // Both browser-mode and worker-mode pending submissions are claimable.
             // Two sequential worker polls should each claim one; no double-claiming.
-            let workerSetup = try await makeTestSetup(id: "mixed_wsetup", manifest: workerManifestJSON)
-            let browserSetup = try await makeTestSetup(id: "mixed_bsetup", manifest: browserManifestJSON)
+            let workerSetup = try await makeWorkerSetup(id: "mixed_wsetup", manifest: workerManifestJSON)
+            let browserSetup = try await makeWorkerSetup(id: "mixed_bsetup", manifest: browserManifestJSON)
             let workerSub = try await makeSubmission(id: "mixed_wsub", setupID: (try workerSetup.requireID()))
             let browserSub = try await makeSubmission(id: "mixed_bsub", setupID: (try browserSetup.requireID()))
 
@@ -398,7 +398,7 @@ import VaporTesting
     @Test func requestJob_pendingValidation_returnsJob() async throws {
         try await withApp(app) { _ in
             // Validation submissions are always worker-mode regardless of manifest gradingMode
-            let setup = try await makeTestSetup(id: "vsetup_01", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "vsetup_01", manifest: workerManifestJSON)
             let sub = try await makeSubmission(
                 id: "vsub_01", setupID: (try setup.requireID()),
                 kind: APISubmission.Kind.validation)
@@ -423,7 +423,7 @@ import VaporTesting
     @Test func requestJob_studentPreferredOverValidation() async throws {
         try await withApp(app) { _ in
             // Worker-mode student submission should be returned before a validation submission
-            let setup = try await makeTestSetup(id: "psetup_01", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "psetup_01", manifest: workerManifestJSON)
             let student = try await makeSubmission(
                 id: "psub_student", setupID: (try setup.requireID()),
                 kind: APISubmission.Kind.student)
@@ -452,7 +452,7 @@ import VaporTesting
         try await withApp(app) { _ in
             // One pending submission; two workers race to claim it.
             // The transaction in requestJob must ensure only one succeeds.
-            let setup = try await makeTestSetup(id: "cc_setup", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "cc_setup", manifest: workerManifestJSON)
             _ = try await makeSubmission(id: "cc_sub", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
@@ -498,7 +498,7 @@ import VaporTesting
             // Even when a retest has an older submittedAt, a fresh student
             // submission must be claimed first so manifest-revision sweeps
             // can't starve active students (#427).
-            let setup = try await makeTestSetup(id: "prio_setup", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "prio_setup", manifest: workerManifestJSON)
 
             let now = Date()
             let earlier = now.addingTimeInterval(-3600)
@@ -551,7 +551,7 @@ import VaporTesting
     @Test func requestJob_amongRetests_oldestSubmittedAtFirst() async throws {
         try await withApp(app) { _ in
             // With no fresh work, retests drain in submittedAt order (oldest first).
-            let setup = try await makeTestSetup(id: "rprio_setup", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "rprio_setup", manifest: workerManifestJSON)
 
             let now = Date()
             let earlier = now.addingTimeInterval(-3600)
@@ -590,7 +590,7 @@ import VaporTesting
 
     @Test func downloadSubmission_existingFile_returns200() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "dlsetup_01", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "dlsetup_01", manifest: workerManifestJSON)
             let sub = try await makeSubmission(id: "dlsub_01", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/submissions/\((try sub.requireID()))/download"
@@ -653,7 +653,7 @@ import VaporTesting
 
     @Test func materializeValidation_writesSidecar_andDownloadStreamsIt() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "subst_setup_01", manifest: substManifestJSON)
+            let setup = try await makeWorkerSetup(id: "subst_setup_01", manifest: substManifestJSON)
             let setupID = try setup.requireID()
             let sub = try await self.makeNotebookSubmission(
                 id: "subst_val_01", setupID: setupID,
@@ -686,7 +686,7 @@ import VaporTesting
         // streams the stored template verbatim — pure I/O, never substituting
         // on this path (so it can't trip the runner's download timeout).
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "subst_setup_03", manifest: substManifestJSON)
+            let setup = try await makeWorkerSetup(id: "subst_setup_03", manifest: substManifestJSON)
             _ = try await self.makeNotebookSubmission(
                 id: "subst_val_03", setupID: (try setup.requireID()),
                 kind: APISubmission.Kind.validation, source: "x = {{answer}}")
@@ -706,7 +706,7 @@ import VaporTesting
         // Student submissions are already-substituted working copies, so the
         // download path must NOT re-process them.
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "subst_setup_02", manifest: substManifestJSON)
+            let setup = try await makeWorkerSetup(id: "subst_setup_02", manifest: substManifestJSON)
             _ = try await self.makeNotebookSubmission(
                 id: "subst_stu_01", setupID: (try setup.requireID()),
                 kind: APISubmission.Kind.student, source: "x = {{answer}}")
@@ -733,7 +733,7 @@ import VaporTesting
                 "timeLimitSeconds":10,\
                 "globalExpressions":[{"name":"shift","expression":"1 + seed % 25"}]}
                 """
-            let setup = try await makeTestSetup(id: "subst_setup_expr", manifest: manifest)
+            let setup = try await makeWorkerSetup(id: "subst_setup_expr", manifest: manifest)
             let setupID = try setup.requireID()
             _ = try await self.makeAssignment(setupID: setupID)
             let user = APIUser(username: "ck_val_user", passwordHash: "x", role: "student")
@@ -767,7 +767,7 @@ import VaporTesting
 
     @Test func downloadTestSetup_existingFile_returns200() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "dlts_01", manifest: workerManifestJSON)
+            let setup = try await makeWorkerSetup(id: "dlts_01", manifest: workerManifestJSON)
 
             let path = "/api/v1/worker/testsetups/\((try setup.requireID()))/download"
             try await app.asyncTest(
@@ -813,7 +813,7 @@ import VaporTesting
     /// submission — while the sanitized manifest carries no activity block.
     @Test func requestJob_matchActivity_carriesTheOpponentOnTheJob() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_match", manifest: opponentManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_match", manifest: opponentManifestJSON)
             let sub = try await makeSubmission(id: "wsub_match", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
@@ -849,7 +849,7 @@ import VaporTesting
     ])
     func requestJob_withoutAChosenOpponent_carriesNoOpponent(manifestJSON: String) async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_plain", manifest: manifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_plain", manifest: manifestJSON)
             _ = try await makeSubmission(id: "wsub_plain", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
@@ -873,7 +873,7 @@ import VaporTesting
     /// advertises it.
     @Test func requestJob_matchActivity_waitsForARunnerThatCanStageTheOpponent() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_gate", manifest: opponentManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_gate", manifest: opponentManifestJSON)
             let sub = try await makeSubmission(id: "wsub_gate", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
@@ -939,7 +939,7 @@ import VaporTesting
     /// opens the match row the result path will complete.
     @Test func requestJob_hill_playsTheBotUntilAStudentHoldsIt() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_hill1", manifest: hillManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_hill1", manifest: hillManifestJSON)
             let sub = try await makeSubmission(id: "wsub_hill1", setupID: (try setup.requireID()))
             let job = try #require(try await requestJob(workerID: "w-hill", profile: hillProfile()))
             #expect(job.submissionID == sub.id)
@@ -958,7 +958,7 @@ import VaporTesting
     /// submission — its download URL and filename — and never the bot.
     @Test func requestJob_hill_carriesTheChampionsSubmission() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_hill2", manifest: hillManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_hill2", manifest: hillManifestJSON)
             let champ = try await makeSubmission(id: "wsub_champ", setupID: (try setup.requireID()), status: "complete")
             champ.filename = "strategy.py"
             try await champ.save(on: app.db)
@@ -989,7 +989,7 @@ import VaporTesting
     /// A slice-2 build (activity-match only) never claims a hill job.
     @Test func requestJob_hill_waitsForARunnerThatStagesSubmissions() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_hill3", manifest: hillManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_hill3", manifest: hillManifestJSON)
             _ = try await makeSubmission(id: "wsub_hill3", setupID: (try setup.requireID()))
             let old = try await requestJob(
                 workerID: "w-old-hill", profile: profile(capabilities: [RunnerCapability.activityMatch.name]))
@@ -1029,7 +1029,7 @@ import VaporTesting
     /// with a row opened per opponent, and no single `opponent`.
     @Test func requestJob_roundRobin_carriesEveryClassmate() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_robin1", manifest: robinManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_robin1", manifest: robinManifestJSON)
             _ = try await enrolClassmate(
                 username: "robin_b", submissionID: "wsub_robin_b", setup: setup, filename: "b.py")
             _ = try await enrolClassmate(
@@ -1062,7 +1062,7 @@ import VaporTesting
     /// single-opponent path, so the first match still has a row.
     @Test func requestJob_roundRobin_playsTheBotUntilAClassmateSubmits() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_robin2", manifest: robinManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_robin2", manifest: robinManifestJSON)
             _ = try await makeSubmission(id: "wsub_robin_first", setupID: try setup.requireID())
             let job = try #require(try await requestJob(workerID: "w-robin2", profile: robinProfile()))
             #expect(job.opponents == nil)
@@ -1085,7 +1085,7 @@ import VaporTesting
     /// opened under the round — claimable by a hill-capable build.
     @Test func requestJob_tournament_carriesThePairedEntrant() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_cup", manifest: tournamentManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_cup", manifest: tournamentManifestJSON)
             _ = try await enrolClassmate(username: "cup_a", submissionID: "wsub_cup_a", setup: setup, filename: "a.py")
             _ = try await enrolClassmate(username: "cup_b", submissionID: "wsub_cup_b", setup: setup, filename: "b.py")
             let run = try await startTournament(setup: setup, schedule: .bracket, startedBy: nil, on: app.db)
@@ -1113,7 +1113,7 @@ import VaporTesting
     /// bundled bot as practice, with no row, and never a classmate.
     @Test func requestJob_tournament_aStudentSubmissionPlaysTheBot() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_cup2", manifest: tournamentManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_cup2", manifest: tournamentManifestJSON)
             _ = try await makeSubmission(id: "wsub_cup_practice", setupID: try setup.requireID())
             let job = try #require(try await requestJob(workerID: "w-cup3", profile: hillProfile()))
             #expect(job.submissionID == "wsub_cup_practice")
@@ -1128,7 +1128,7 @@ import VaporTesting
     /// A slice-3 build (hill-capable, no matrix) never claims a round-robin job.
     @Test func requestJob_roundRobin_waitsForARunnerThatRunsAMatrix() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_robin3", manifest: robinManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_robin3", manifest: robinManifestJSON)
             _ = try await makeSubmission(id: "wsub_robin3", setupID: try setup.requireID())
             let old = try await requestJob(workerID: "w-old-robin", profile: hillProfile())
             #expect(old == nil)
@@ -1143,7 +1143,7 @@ import VaporTesting
     /// class, and opens no match row.
     @Test func requestJob_roundRobin_validationPlaysTheBotNotTheClass() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_robin_val", manifest: robinManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_robin_val", manifest: robinManifestJSON)
             _ = try await enrolClassmate(
                 username: "robin_val_b", submissionID: "wsub_robin_val_b", setup: setup, filename: "b.py")
             _ = try await makeSubmission(
@@ -1164,7 +1164,7 @@ import VaporTesting
     /// the hill, and opens no match row.
     @Test func requestJob_hill_validationPlaysTheBotNotTheChampion() async throws {
         try await withApp(app) { _ in
-            let setup = try await makeTestSetup(id: "wsetup_hill_val", manifest: hillManifestJSON)
+            let setup = try await makeWorkerSetup(id: "wsetup_hill_val", manifest: hillManifestJSON)
             _ = try await makeSubmission(id: "wsub_champ_val", setupID: try setup.requireID(), status: "complete")
             let holder = try await makeTestUser(on: app, username: "hill_val_holder", role: "student")
             try await APIActivityChampion(

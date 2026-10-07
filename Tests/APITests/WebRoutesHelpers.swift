@@ -85,13 +85,9 @@ func wrInsertSetup(
             ?? """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
             """
-    let course = try await wrMakeCourse(on: app)
-    let courseID = try course.requireID()
-    let setup = APITestSetup(
-        id: id, manifest: manifestJSON, zipPath: app.testSetupsDirectory + "\(id).zip",
-        courseID: courseID)
-    try await setup.save(on: app.db)
-    return setup
+    let courseID = try await wrMakeCourse(on: app).requireID()
+    return try await makeTestSetup(
+        on: app, id: id, courseID: courseID, manifest: manifestJSON, withNotebook: false, withZip: false)
 }
 
 /// A manifest with one public and one secret suite entry — the seed for
