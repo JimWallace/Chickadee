@@ -168,6 +168,15 @@ Re-running a script after each install is cheap despite R's very expensive first
 attach, because attaching a package already attached in this session is instant:
 a re-run pays only for the newly installed one.
 
+**The time limit does not count the install (#2380).** The worker sends a
+`<prefix>_package_install_start` breadcrumb before each install and a
+`<prefix>_package_install_end` breadcrumb after it, also when the install fails.
+`GradingWorkerExecutor` stops the test's clock between the two. The time that the
+script runs before and after the install still counts, and so does the first
+attach of a package, because the attach happens in the script. A stopped clock
+is still bounded: an install that runs longer than `GRADING_INIT_TIMEOUT_MS`
+(120 s) times the test out.
+
 Measured on the smoke's fixture, which attaches **and exercises** all seven
 tidyverse packages, Chromium, same harness before and after:
 
