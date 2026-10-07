@@ -13,7 +13,7 @@ set -euo pipefail
 # so it needs a static guard.  Four rules:
 #
 #   1. COLOUR PLACEMENT: a raw colour literal — #hex, rgb()/rgba(),
-#      hsl()/hsla() — may appear ONLY as the value of a custom-property
+#      hsl()/hsla(), or a CSS named colour — may appear ONLY as the value of a custom-property
 #      declaration (`--x: #hex`) in Public/*.css — i.e. in the palette.
 #      Rule bodies and page <style> blocks must use var(--x) so every
 #      colour routes through the palette and adapts to dark mode.
@@ -74,6 +74,33 @@ spacing_violations=""
 
 COLOUR_LITERAL='#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\('
 
+# A CSS named colour (`white`, `red`) in a declaration is a raw colour too: it
+# bypasses the palette exactly as a hex value does, and `.btn-primary` had
+# `color: white` until #2406. `transparent` and `currentColor` are not on the
+# list; they follow the surrounding colour rather than fix one.
+NAMED_COLOURS='aliceblue antiquewhite aqua aquamarine azure beige bisque
+  black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse
+  chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
+  darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta
+  darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen
+  darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink
+  deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen
+  fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey
+  honeydew hotpink indianred indigo ivory khaki lavender lavenderblush
+  lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow
+  lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen
+  lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime
+  limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid
+  mediumpurple mediumseagreen mediumslateblue mediumspringgreen
+  mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin
+  navajowhite navy oldlace olive olivedrab orange orangered orchid
+  palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff
+  peru pink plum powderblue purple rebeccapurple red rosybrown royalblue
+  saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue
+  slateblue slategray slategrey snow springgreen steelblue tan teal thistle
+  tomato turquoise violet wheat white whitesmoke yellow yellowgreen'
+NAMED_COLOUR_DECL="(^|[{;])[[:space:]]*[a-z-]+[[:space:]]*:[^;{}]*(^|[^A-Za-z0-9_-])($(printf '%s' "$NAMED_COLOURS" | tr -s ' ' '\n' | grep . | paste -sd'|' -))([^A-Za-z0-9_-]|$)"
+
 check_source() {
   local label="$1" css
   css="$(cat)"
@@ -83,10 +110,10 @@ check_source() {
   local hexes
   if [[ "$label" == Public/*.css ]]; then
     hexes="$(printf '%s\n' "$css" \
-      | grep -nE "$COLOUR_LITERAL" \
+      | grep -nE "$COLOUR_LITERAL|$NAMED_COLOUR_DECL" \
       | grep -vE '^[0-9]+:[[:space:]]*--[A-Za-z0-9_-]+[[:space:]]*:' || true)"
   else
-    hexes="$(printf '%s\n' "$css" | grep -nE "$COLOUR_LITERAL" || true)"
+    hexes="$(printf '%s\n' "$css" | grep -nE "$COLOUR_LITERAL|$NAMED_COLOUR_DECL" || true)"
   fi
   if [ -n "$hexes" ]; then
     while IFS= read -r hit; do
@@ -148,7 +175,7 @@ done
 
 if [ -n "$hex_violations" ]; then
   status=1
-  echo "ERROR: raw colour literal (#hex / rgb / rgba / hsl) outside the palette."
+  echo "ERROR: raw colour literal (#hex / rgb / rgba / hsl / named colour) outside the palette."
   echo "       Colour literals are allowed only as --token declarations in"
   echo "       Public/styles.css.  Use an existing var(--x), or add a semantic"
   echo "       token (with a dark-mode value) to the palette."

@@ -22,7 +22,8 @@ All tokens are CSS custom properties declared in the `:root` block of
 
 ### Colour
 
-- **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()` — may
+- **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()`, or a
+  CSS named colour such as `white` — may
   only appear as the value of a `--token:` declaration in
   `Public/styles.css`** — never in a rule body, and never in a page `<style>`
   block.  Everything else uses `var(--x)`.  This is what makes dark mode

@@ -70,6 +70,7 @@
     --danger-fg: #B42318;   /* dark red — readable on danger tint */
     --nav-bg: #000000;      /* nav bar — black in both colour schemes */
     --health-teal-darker: #003D47;  /* primary button hover */
+    --btn-primary-fg: #FFFFFF;      /* primary button text: its fill is the same in both modes, so no dark value */
 
     /* ── Design tokens: type + radius scales ─────────────────────
        Every font-size and border-radius in the global sheet and in page
@@ -549,7 +550,7 @@ h2 { font-size: var(--text-md);   margin-bottom: .4rem; }
 .btn-primary {
     background: var(--health-teal-dark);
     border-color: var(--health-teal-dark);
-    color: white;
+    color: var(--btn-primary-fg);
 }
 
 .btn-primary:hover {
