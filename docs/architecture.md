@@ -747,9 +747,9 @@ survives Safari/ITP cross-site cookie blocking.
 
 Lets an agent author course content on an instructor's behalf. Gated by
 `MCP_MODE` (`off` / `read_only` / `read_write`); scopes are clamped to the
-mode ceiling. The catalog holds **54 tools** — `MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source
-of truth — covering course/assignment/suite/notebook/solution reads, suite +
+mode ceiling. `MCPToolCatalog.live` in
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` holds the tool
+catalog and is the only source for its size. The tools cover course/assignment/suite/notebook/solution reads, suite +
 pattern-family + notebook-check + script authoring, course sections and
 content items, personalization inputs, achievements, validation, and
 assignment version history/restore. The surface deliberately exposes **no

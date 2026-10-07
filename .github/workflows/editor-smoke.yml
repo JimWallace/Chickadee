@@ -65,7 +65,7 @@ jobs:
         uses: ./.github/actions/changed-paths
         with:
           label: editor smoke
-          pattern: '^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/[a-z0-9]+-(grading|eval)-|Public/grading-shared\.js|Public/eval-protocol-shared\.js|Public/xeus-kernel-shared\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/jupyterlite/|Public/vendor/|Resources/Views/workbench\.leaf|Resources/Views/notebook\.leaf|Resources/Views/base\.leaf|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml|\.github/actions/changed-paths/)'
+          pattern: '^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/[a-z0-9]+-(grading|eval)-|Public/grading-shared\.js|Public/grading-executors\.js|Public/runner-support-sources\.js|Public/eval-protocol-shared\.js|Public/xeus-kernel-shared\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/jupyterlite/|Public/vendor/|Resources/Views/workbench\.leaf|Resources/Views/notebook\.leaf|Resources/Views/_notebook-body\.leaf|Resources/Views/base\.leaf|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml|\.github/actions/changed-paths/)'
 
   smoke:
     needs: changes
@@ -139,8 +139,9 @@ jobs:
           set -uo pipefail
           if SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh; then
             exit 0
+          else
+            rc=$?
           fi
-          rc=$?
           if [ "$ENGINE" != "webkit" ]; then
             exit "$rc"
           fi
@@ -192,8 +193,9 @@ jobs:
           set -uo pipefail
           if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
             exit 0
+          else
+            rc=$?
           fi
-          rc=$?
           if [ "$ENGINE" != "webkit" ]; then
             exit "$rc"
           fi
@@ -216,8 +218,9 @@ jobs:
           set -uo pipefail
           if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
             exit 0
+          else
+            rc=$?
           fi
-          rc=$?
           if [ "$ENGINE" != "webkit" ]; then
             exit "$rc"
           fi
