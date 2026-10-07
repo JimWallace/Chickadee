@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.566] - 2026-10-07
+
+### Fixed
+
+- **The architecture document no longer states a stale MCP tool count.** It said 54 tools; the catalog has more. It now names `MCPToolCatalog.live` as the only source for the count. (#2434)
+
+
+## [0.5.565] - 2026-10-07
+
+### Fixed
+
+- **The JupyterLite workflow comment matches its check.** It said the waitAsync assertion was deliberately absent; `verify-jupyterlite.sh` makes that assertion. (#2431)
+
+
+## [0.5.564] - 2026-10-07
+
+### Fixed
+
+- **The editor smoke and the notebook probes run when the files they load change.** The editor-smoke change detector did not match `grading-executors.js`, `runner-support-sources.js` or `_notebook-body.leaf`, and the four notebook probes did not list the two templates that build the page they load. (#2427)
+
+
 ## [0.5.563] - 2026-10-07
 
 ### Fixed
