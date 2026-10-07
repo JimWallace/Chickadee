@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.550] - 2026-10-07
+
+### Fixed
+
+- **Borders drawn with `--gray-300` are dark in dark mode.** The token had no dark value, so row menus, extension panels and closed-assignment strips showed near-white lines on a dark page. `scripts/check-css-vars.sh` now fails when a grey step has no value in either dark block. (#2401)
+
+
 ## [0.5.549] - 2026-10-07
 
 ### Fixed
