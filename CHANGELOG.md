@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.569] - 2026-10-07
+
+### Fixed
+
+- **CLAUDE.md no longer counts two kernels or six languages.** Seven passages still described the state before Lua, Octave, C++, Racket and Java were added. They now say "every" where the count follows the language list, and name the one extractor per language. (#2433)
+
+
 ## [0.5.568] - 2026-10-07
 
 ### Fixed
