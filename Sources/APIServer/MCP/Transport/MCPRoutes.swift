@@ -63,47 +63,41 @@ struct MCPRoutes: RouteCollection {
     // MARK: - Handlers
 
     func handlePost(req: Request) async throws -> Response {
-        let rpcRequest: JSONRPCRequest
-        let era: MCPEra
-        switch try transport.admit(req) {
-        case .rejected(let response):
-            return response
-        case .admitted(let admitted, let admittedEra):
-            (rpcRequest, era) = (admitted, admittedEra)
-        }
+        try await transport.serve(req) { rpcRequest, era in
+            // The route is mounted behind MCPBearerAuthMiddleware, which
+            // authenticates the caller and populates `request.mcpPrincipal` (or
+            // rejects with 401/403) before dispatch ever runs.
+            guard let principal = req.mcpPrincipal else {
+                throw Abort(
+                    .unauthorized, reason: "MCP request reached the transport without an authenticated principal.")
+            }
+            let context = ToolContext(
+                request: req,
+                subject: principal.subject,
+                grantedScopes: principal.grantedScopes,
+                actingClientID: principal.actingClientID,
+                actingClientName: principal.actingClientName
+            )
 
-        // The route is mounted behind MCPBearerAuthMiddleware, which
-        // authenticates the caller and populates `request.mcpPrincipal` (or
-        // rejects with 401/403) before dispatch ever runs.
-        guard let principal = req.mcpPrincipal else {
-            throw Abort(.unauthorized, reason: "MCP request reached the transport without an authenticated principal.")
+            // Live-progress streaming: a `validate_assignment` tools/call over an
+            // SSE connection that carries a progressToken streams
+            // `notifications/progress` (queued → running → done) while it waits,
+            // then the final result. This is the one tool wired for live progress;
+            // every other call falls through to the generic dispatch below (which
+            // still streams its single result as SSE when the client accepts it).
+            // Generalizing live progress to all tools needs a Sendable
+            // ToolContext — it currently wraps the non-Sendable Request — so the
+            // watch runs on a request-independent connection to the same pool
+            // `ToolContext.db` uses (`mcpDatabaseID`), and this stays a contained
+            // special case rather than threading a progress sink through the
+            // dispatcher.
+            if let streaming = try await validationProgressStream(
+                req: req, context: context, rpc: rpcRequest, era: era)
+            {
+                return .response(streaming)
+            }
+            return .rpc(await dispatcher.dispatch(rpcRequest, context: context, era: era))
         }
-        let context = ToolContext(
-            request: req,
-            subject: principal.subject,
-            grantedScopes: principal.grantedScopes,
-            actingClientID: principal.actingClientID,
-            actingClientName: principal.actingClientName
-        )
-
-        // Live-progress streaming: a `validate_assignment` tools/call over an SSE
-        // connection that carries a progressToken streams `notifications/progress`
-        // (queued → running → done) while it waits, then the final result. This is
-        // the one tool wired for live progress; every other call falls through to
-        // the generic dispatch below (which still streams its single result as SSE
-        // when the client accepts it). Generalizing live progress to all tools
-        // needs a Sendable ToolContext — it currently wraps the non-Sendable
-        // Request — so the watch runs on a request-independent connection to the
-        // same pool `ToolContext.db` uses (`mcpDatabaseID`), and this stays a contained special case rather than threading a progress
-        // sink through the dispatcher.
-        if let streaming = try await validationProgressStream(
-            req: req, context: context, rpc: rpcRequest, era: era)
-        {
-            return streaming
-        }
-
-        let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context, era: era)
-        return try transport.response(for: rpcResponse, era: era, req: req)
     }
 
     func streamingUnsupported(req: Request) async throws -> Response {
@@ -143,7 +137,7 @@ struct MCPRoutes: RouteCollection {
         // Audit the call here, since the generic dispatcher (which normally does)
         // is bypassed for the streaming path. Best-effort, as for any read tool.
         // The outcome is stamped onto this row after the watch.
-        let auditRow = await dispatcher.recordToolCall(
+        let auditRow = await ContentMCPSurface.recordToolCall(
             name: ValidateAssignmentTool.name, context: context,
             target: MCPAuditTarget(type: .assignment, id: assignment.publicID))
 
@@ -207,11 +201,7 @@ struct MCPRoutes: RouteCollection {
     /// isn't a tools/call for that tool.
     private static func validateAssignmentCall(_ rpc: JSONRPCRequest) -> ValidateAssignmentTool.Input? {
         guard rpc.method == "tools/call", let params = rpc.params else { return nil }
-        struct Call: Decodable {
-            let name: String
-            let arguments: JSONValue?
-        }
-        guard let call = try? params.decoded(as: Call.self),
+        guard let call = try? params.decoded(as: MCPToolCall.self),
             call.name == ValidateAssignmentTool.name,
             let input = try? (call.arguments ?? .object([:])).decoded(
                 as: ValidateAssignmentTool.Input.self)

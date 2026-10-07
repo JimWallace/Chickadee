@@ -2,10 +2,10 @@
 //
 // The MCP Streamable HTTP transport for the admin diagnostic surface, mounted at
 // `/admin-mcp` (NOT `/admin/mcp`, which is the admin web page for content-MCP
-// service accounts).  Parallel to `MCPRoutes` but trimmed: no live-progress
-// streaming special case (the admin surface has no streaming tool).  The
-// transport mechanics — guards, decoding, era resolution, response framing —
-// are `MCPTransport`, shared with the content endpoint.
+// service accounts). Like `MCPRoutes` without the live-progress streaming
+// special case (the admin surface has no streaming tool). The POST itself —
+// guards, decoding, era resolution, response framing — is
+// `MCPTransport.serve`, shared with the content endpoint (#2339).
 //
 // Mounted behind `AdminMCPBearerAuthMiddleware`, which authenticates the caller
 // and populates `request.adminMcpPrincipal` before dispatch runs.
@@ -28,30 +28,21 @@ struct AdminMCPRoutes: RouteCollection {
     }
 
     func handlePost(req: Request) async throws -> Response {
-        let rpcRequest: JSONRPCRequest
-        let era: MCPEra
-        switch try transport.admit(req) {
-        case .rejected(let response):
-            return response
-        case .admitted(let admitted, let admittedEra):
-            (rpcRequest, era) = (admitted, admittedEra)
+        try await transport.serve(req) { rpcRequest, era in
+            guard let principal = req.adminMcpPrincipal else {
+                throw Abort(
+                    .unauthorized,
+                    reason: "Admin MCP request reached the transport without an authenticated principal.")
+            }
+            let context = AdminToolContext(
+                request: req,
+                subject: principal.subject,
+                grantedScopes: principal.grantedScopes,
+                actingClientID: principal.actingClientID,
+                actingClientName: principal.actingClientName
+            )
+            return .rpc(await dispatcher.dispatch(rpcRequest, context: context, era: era))
         }
-
-        guard let principal = req.adminMcpPrincipal else {
-            throw Abort(
-                .unauthorized,
-                reason: "Admin MCP request reached the transport without an authenticated principal.")
-        }
-        let context = AdminToolContext(
-            request: req,
-            subject: principal.subject,
-            grantedScopes: principal.grantedScopes,
-            actingClientID: principal.actingClientID,
-            actingClientName: principal.actingClientName
-        )
-
-        let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context, era: era)
-        return try transport.response(for: rpcResponse, era: era, req: req)
     }
 
     func streamingUnsupported(req: Request) async throws -> Response {

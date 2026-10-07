@@ -2,13 +2,13 @@
 //
 // The surface-agnostic halves of MCP dispatch, shared by the content
 // dispatcher (`MCPDispatcher`) and the admin diagnostic dispatcher
-// (`AdminMCPDispatcher`) (#1121).  The two surfaces keep separate tool
-// protocols, registries, contexts, and scope types on purpose — isolation, so
-// a change to one can't destabilize the other (docs/admin-mcp.md §3.4) — but
+// (`AdminMCPDispatcher`) (#1121). The two surfaces keep separate contexts and
+// scope types, so the compiler keeps them apart (docs/admin-mcp.md §3.4), but
 // the wire behaviour must never drift between them: tools/list entry
 // encoding, spec pagination, the tools/call result envelopes, and initialize
 // version negotiation all live here, parameterized by capabilities and
-// instructions.
+// instructions. The tool protocol is `MCPTool`, and the tools/list and
+// tools/call code is in `MCPSurface.swift` (#2339).
 
 import Core
 import Logging
@@ -16,8 +16,7 @@ import Logging
 // MARK: - tools/list entries
 
 /// The listable surface of a type-erased MCP tool — the fields a
-/// `tools/list` entry encodes.  `AnyContentTool` and `AnyDiagnosticTool`
-/// both conform.
+/// `tools/list` entry encodes. `AnyMCPTool` conforms.
 protocol MCPListableTool {
     var name: String { get }
     var title: String { get }
