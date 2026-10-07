@@ -283,7 +283,9 @@ fi
 # `.main` is an allowlisted intentional global override (notebook.leaf narrows
 # the page container).  Heuristic extractor: selector = text before each `{`
 # (one selector per line, as authored here), skipping at-rules and comments —
-# errs toward false negatives, never false positives.
+# errs toward false negatives, never false positives. A one-line
+# `@media (...) { .x { ... } }` loses its at-rule prefix first, so `.x` is
+# still read (#2403).
 ALLOW_GLOBAL_OVERRIDE="^\.main$"
 
 extract_selectors() {
@@ -291,7 +293,7 @@ extract_selectors() {
   # doesn't trip pipefail.
   strip_css_comments \
     | { grep '{' || true; } \
-    | sed -E 's/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | sed -E 's/^[[:space:]]*@[^{]*\{[[:space:]]*//; s/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
     | { grep -vE '^$|^@|^/\*' || true; }
 }
 
