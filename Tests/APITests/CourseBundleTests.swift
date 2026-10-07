@@ -25,10 +25,6 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsStudent() async throws -> String {
-        return try await loginUser(username: "teststudent_cb", password: "testpassword", role: "student", on: app)
-    }
-
     // MARK: - Fixture helpers
 
     @discardableResult
@@ -180,7 +176,7 @@ import VaporTesting
 
     @Test func exportRequiresAdmin() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_cb", on: app)
             let course = try await makeTestCourse(code: "EXP_AUTH")
             let id = try course.requireID().uuidString
 
@@ -369,7 +365,7 @@ import VaporTesting
 
     @Test func importRequiresAdmin() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsStudent()
+            let cookie = try await loginAsStudent("teststudent_cb", on: app)
             let zipData = try await makeMinimalBundleZip(courseCode: "IMP_AUTH")
             let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
             #expect(status == .forbidden)
