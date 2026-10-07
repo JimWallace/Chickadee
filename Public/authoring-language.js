@@ -178,6 +178,24 @@
         return { ok: true, value: text, kind: 'string', strict: false };
     }
 
+    /// The text a value cell shows for a STRING value, chosen so that reading
+    /// the cell back gives the same string (#2381).
+    ///
+    /// A plain string shows without quotes, so the common case reads
+    /// naturally. A string that the cell would read as something else shows
+    /// JSON-quoted: one that parses as a number, a boolean, null or JSON
+    /// (`"42"`, `"true"`), an empty string (an empty cell means "omitted"), a
+    /// string that looks like a `$name` reference, and a string with a
+    /// newline or tab, which a single-line input cannot hold.
+    function stringCellText(s) {
+        var text = String(s);
+        if (text === '' || /[\n\r\t]/.test(text) || /^\$\S+$/.test(text.trim())) {
+            return JSON.stringify(text);
+        }
+        var parsed = parseValue(text, { rewriteRepr: false });
+        return (parsed.ok && parsed.value === text) ? text : JSON.stringify(text);
+    }
+
     /// The title of a value cell that `parseValue` did not read exactly, or ''
     /// when it did. The editors give both loose readings the same amber cue,
     /// but they have different causes, so the title names which one (#1996):
@@ -265,6 +283,7 @@
         matchScalarToken: matchScalarToken,
         reprToJSON: reprToJSON,
         parseValue: parseValue,
+        stringCellText: stringCellText,
         looseValueTitle: looseValueTitle,
         scriptExtension: scriptExtension,
         canScanFunctions: canScanFunctions,

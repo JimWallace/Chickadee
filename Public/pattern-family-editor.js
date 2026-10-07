@@ -1082,19 +1082,10 @@
         function renderTypedCellValue(v) {
             if (v === null) return 'null';
             if (typeof v === 'string') {
-                // Single-line `<input type="text">` silently strips
-                // newlines / carriage returns on `.value` assignment,
-                // mangling multi-line expected values (e.g. the
-                // `mailingLabel` case from Assignment 3 returns a
-                // three-line string joined by `\n`).  When the string
-                // contains a control char that wouldn't survive the
-                // input, render as a JSON-quoted string so the escape
-                // sequences are literal text in the cell and the
-                // round-trip through `coerceByType` reconstructs the
-                // real value.  Plain strings stay unquoted so the
-                // common case reads naturally.
-                if (/[\n\r\t]/.test(v)) return JSON.stringify(v);
-                return v;
+                // Quoted whenever the cell would not read the bare text back
+                // as this string: `"42"` stays a string, and a multi-line
+                // expected value survives the single-line input (#2381).
+                return ChickadeeLanguage.stringCellText(v);
             }
             return JSON.stringify(v);
         }
