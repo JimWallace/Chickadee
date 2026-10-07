@@ -570,7 +570,7 @@
                     } else if (!wasProvided) {
                         val = '';
                     } else {
-                        val = (c.args && c.args[i] !== undefined) ? renderTypedCellValue(c.args[i]) : '';
+                        val = (c.args && c.args[i] !== undefined) ? renderArgCellValue(c.args[i]) : '';
                     }
                     // Placeholder signals "— default —" for optional params,
                     // so the instructor can tell at a glance which cells
@@ -1059,10 +1059,6 @@
             }
         }
 
-        /// Inverse of `parseTypedCellValue` for redisplaying an existing
-        /// value in a cell when the modal reopens.  Strings render without
-        /// surrounding quotes so the user's original typing round-trips;
-        /// everything else renders as JSON.
         /// A program_io cell (stdin text or expected stdout) as TEXT: a
         /// JSON-quoted cell — how `renderTypedCellValue` shows a multi-line
         /// string in a single-line input — decodes; anything else is taken
@@ -1079,15 +1075,32 @@
             return text;
         }
 
+        /// Inverse of `coerceByType` for redisplaying an existing value in a
+        /// cell when the modal reopens. A string shows without quotes when
+        /// the cell reads the bare text back as the same string, and
+        /// JSON-quoted when it would not, so `"42"` stays a string rather
+        /// than saving as 42 (#2381). Everything else renders as JSON.
+        ///
+        /// A program_io cell is read as text by `readProgramIOText`, so there
+        /// only a newline or tab, which the single-line input cannot hold,
+        /// needs the quotes, and the author's `42` shows as they typed it.
         function renderTypedCellValue(v) {
             if (v === null) return 'null';
             if (typeof v === 'string') {
-                // Quoted whenever the cell would not read the bare text back
-                // as this string: `"42"` stays a string, and a multi-line
-                // expected value survives the single-line input (#2381).
+                if (kindInput && kindInput.value === 'program_io') {
+                    return /[\n\r\t]/.test(v) ? JSON.stringify(v) : v;
+                }
                 return ChickadeeLanguage.stringCellText(v);
             }
             return JSON.stringify(v);
+        }
+
+        /// An argument cell: as `renderTypedCellValue`, except that an empty
+        /// string argument shows as `""`, because an empty argument cell
+        /// means "omitted" (the language's default).
+        function renderArgCellValue(v) {
+            if (v === '' && !(kindInput && kindInput.value === 'program_io')) return '""';
+            return renderTypedCellValue(v);
         }
 
         /// Reads current rows into PatternCase values.  Strict JSON is only

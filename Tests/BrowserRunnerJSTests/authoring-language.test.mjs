@@ -235,7 +235,7 @@ for (const [label, seed] of [['Python', null], ['R', R_SEED]]) {
   test(`stringCellText round-trips every string in ${label}`, () => {
     const lang = loadWith(seed);
     const strings = ['underweight', 'hello world', '42', '-3.5', 'true', 'TRUE', 'False',
-      'null', 'NULL', 'None', '[1, 2]', '{"a": 1}', '', '$name', 'line one\nline two',
+      'null', 'NULL', 'None', '[1, 2]', '{"a": 1}', '$name', 'line one\nline two',
       'tab\there', '"already quoted"', "it's"];
     for (const s of strings) {
       const text = lang.stringCellText(s);
@@ -253,4 +253,6 @@ test('stringCellText shows an ordinary string without quotes', () => {
   assert.equal(lang.stringCellText('hello world'), 'hello world');
   assert.equal(lang.stringCellText('42'), '"42"');
   assert.equal(lang.stringCellText('TRUE'), '"TRUE"');
+  // The caller decides what an empty cell means, so an empty string stays empty.
+  assert.equal(lang.stringCellText(''), '');
 });

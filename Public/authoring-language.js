@@ -184,12 +184,14 @@
     /// A plain string shows without quotes, so the common case reads
     /// naturally. A string that the cell would read as something else shows
     /// JSON-quoted: one that parses as a number, a boolean, null or JSON
-    /// (`"42"`, `"true"`), an empty string (an empty cell means "omitted"), a
-    /// string that looks like a `$name` reference, and a string with a
-    /// newline or tab, which a single-line input cannot hold.
+    /// (`"42"`, `"true"`), a string that looks like a `$name` reference, and a
+    /// string with a newline or tab, which a single-line input cannot hold.
+    /// An empty string stays empty; a caller whose empty cell means
+    /// "omitted" quotes it itself.
     function stringCellText(s) {
         var text = String(s);
-        if (text === '' || /[\n\r\t]/.test(text) || /^\$\S+$/.test(text.trim())) {
+        if (text === '') return '';
+        if (/[\n\r\t]/.test(text) || /^\$\S+$/.test(text.trim())) {
             return JSON.stringify(text);
         }
         var parsed = parseValue(text, { rewriteRepr: false });
