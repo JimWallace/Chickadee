@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.552] - 2026-10-07
+
+### Fixed
+
+- **The class-resolution check reads class names written against a Leaf tag.** A name such as `row#if(x): row-pending#endif` used to be dropped together with the tag, so it was never checked. Two roster hooks that had no rule now carry the `js-` prefix. (#2402)
+
+
 ## [0.5.551] - 2026-10-07
 
 ### Fixed
