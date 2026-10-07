@@ -182,6 +182,10 @@
   local G = _G
   local base = {}
   for k in pairs(G) do base[k] = true end
+  -- The boot globals by VALUE, so a test that rebinds \`print\` or
+  -- \`tostring\` gets the original back for the next one (#2384).
+  local boot = {}
+  for k, v in pairs(G) do boot[k] = v end
   local loaded = {}
   for k in pairs(package.loaded) do loaded[k] = true end
 
@@ -223,9 +227,33 @@
     return n
   end
 
+  -- The fields of every standard-library table (string, math, os, ...), as
+  -- the harness leaves them: a test that replaces \`string.format\` changes
+  -- the one shared table, and the next test must see the original.
+  local libs = {}
+  for k, v in pairs(boot) do
+    if type(v) == "table" and v ~= G then
+      local copy = {}
+      for f, fv in pairs(v) do copy[f] = fv end
+      libs[k] = copy
+    end
+  end
+
   ck.run = function(name, nonce)
     for k in pairs(G) do
       if not base[k] then G[k] = nil end
+    end
+    for k, v in pairs(boot) do
+      if rawget(G, k) ~= v then G[k] = v end
+    end
+    for k, copy in pairs(libs) do
+      local lib = boot[k]
+      for f in pairs(lib) do
+        if copy[f] == nil then lib[f] = nil end
+      end
+      for f, fv in pairs(copy) do
+        if rawget(lib, f) ~= fv then lib[f] = fv end
+      end
     end
     for k in pairs(package.loaded) do
       if not loaded[k] then package.loaded[k] = nil end

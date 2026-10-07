@@ -39,6 +39,8 @@ self.ChickadeeXeusKernel.serveGradingWorker({
     kernel: _octave.OCTAVE_KERNEL,
     harness: { source: _octave.SETUP_OCTAVE, what: 'the Octave grading harness failed to install' },
     seedCell: _octave.assignmentSeedOctave,
+    // Puts the working directory back before every script (#2384).
+    beforeEachScript: _octave.resetCellOctave,
     makeNonce: _octave.makeNonce,
     runScript: _octave.runScriptOctave,
     parseRunOutput: _octave.parseRunOutput,

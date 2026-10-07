@@ -83,7 +83,9 @@
 
     // Each native test is a fresh `python3` process; in the browser every
     // script shares one kernel. So the grader puts the kernel back the way it
-    // was before every script (#1959), as the R, Lua and Octave graders do.
+    // was before every script (#1959). The R, Lua and Octave graders reset what
+    // their own language can change (#2384); Octave cannot list environment
+    // variables, so it restores the working directory but not the environment.
     //
     // `cleanStateCellPython` runs ONCE, after the seed and before the
     // environment config, and records what a fresh process would have: the
