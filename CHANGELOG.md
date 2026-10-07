@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.565] - 2026-10-07
+
+### Fixed
+
+- **The JupyterLite workflow comment matches its check.** It said the waitAsync assertion was deliberately absent; `verify-jupyterlite.sh` makes that assertion. (#2431)
+
+
 ## [0.5.564] - 2026-10-07
 
 ### Fixed
