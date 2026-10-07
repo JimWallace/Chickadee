@@ -596,7 +596,7 @@ forcats).
 the VENDORED bytes, never the environment YAML.**
 Since browser grading moved onto this env, saving a browser-graded `.py` whose
 imports the kernel cannot satisfy is rejected at the write
-(`PythonImportGuard`, wired into the web create/update handlers, `PUT /suite`,
+(`KernelImportGuard`, wired into the web create/update handlers, `PUT /suite`,
 and MCP `author_script`) — which matters because instructor validation is graded
 by the *native* worker on a full CPython, so such a test validates green and then
 fails for the first student who submits. The available set comes from
