@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.535] - 2026-10-07
+
+### Changed
+
+- **Test course builders use the shared fixture.** Ten suites built and saved an `APICourse` by hand, and the three archived-course route suites each copied one course-and-assignment builder. They now call `makeTestCourse`, and the archived suites share `makeCourseWithAssignment` in `AssignmentRoutesHelpers.swift`. (#2366)
+
+
 ## [0.5.534] - 2026-10-07
 
 ### Changed
