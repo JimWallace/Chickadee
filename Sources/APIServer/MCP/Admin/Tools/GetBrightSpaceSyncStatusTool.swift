@@ -46,31 +46,27 @@ struct GetBrightSpaceSyncStatusTool: DiagnosticTool {
     }
 
     static let name = "get_brightspace_sync_status"
+    static let windowBound = MCPBoundedInt(default: 168, max: 720)
+    static let sampleBound = MCPBoundedInt(default: 20, max: 100)
     static let description =
         "BrightSpace grade-sync health: totals and counts by status (success / error / skipped) over "
         + "a window, plus recent ERROR samples carrying the D2L API error detail. Use it to tell "
-        + "whether grade pushes are failing and why. Optional windowHours (default 168, max 720) and "
+        + "whether grade pushes are failing and why. Optional windowHours \(windowBound.rangeText) and "
         + "sampleLimit. Read-only; the per-row student username and pushed grade (points) are "
         + "deliberately omitted — only status, error detail, assignment/test-setup, org unit, and "
         + "timestamp are returned."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "windowHours": .object([
-                "type": .string("integer"),
-                "description": .string("Look-back window in hours (default 168, max 720)."),
-            ]),
-            "sampleLimit": .object([
-                "type": .string("integer"),
-                "description": .string("Max recent error samples (default 20, max 100)."),
-            ]),
+            "windowHours": Self.windowBound.property("Look-back window in hours"),
+            "sampleLimit": Self.sampleBound.property("Max recent error samples"),
         ]),
         "additionalProperties": .bool(false),
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        let windowHours = min(max(input.windowHours ?? 168, 1), 720)
-        let sampleLimit = min(max(input.sampleLimit ?? 20, 1), 100)
+        let windowHours = Self.windowBound.resolve(input.windowHours)
+        let sampleLimit = Self.sampleBound.resolve(input.sampleLimit)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 
         let rows = try await APIBrightSpaceSyncLog.query(on: context.db)

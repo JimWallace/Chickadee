@@ -34,7 +34,7 @@ struct SetTimeLimitTool: ContentTool {
         + "number of seconds one test script may run before it is killed and recorded as a timeout. "
         + "This is the assignment-wide fallback; a hand-written script can override it per-test via "
         + "author_script / update_suite (timeLimitSeconds), and get_suite reports both the default and "
-        + "any per-script overrides. seconds must be an integer between 1 and 600. Changing the limit "
+        + "any per-script overrides. seconds must be an integer, \(mcpTimeLimitRangeText). Changing the limit "
         + "is a grading-environment knob, not a change to what the tests check, so it does NOT "
         + "re-grade existing submissions, re-run validation, or change the open/closed state (matching "
         + "set_grading_mode)."

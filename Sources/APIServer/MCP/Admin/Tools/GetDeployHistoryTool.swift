@@ -43,28 +43,24 @@ struct GetDeployHistoryTool: DiagnosticTool {
     }
 
     static let name = "get_deploy_history"
+    static let limitBound = MCPBoundedInt(default: 20, max: 100)
     static let description =
         "Return the most recent entries from the auto-deploy daemon's append-only history log: "
         + "each deploy / gate-hold / rollback event with its version, action, result, and detail, "
-        + "newest first. Accepts an optional `limit` (default 20, max 100). Returns "
+        + "newest first. Accepts an optional `limit` \(limitBound.rangeText). Returns "
         + "available=false if the daemon is not running or its state dir is not mounted. "
         + "Read-only; reads a small log file the daemon owns and touches no course, student, or "
         + "database state."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "limit": .object([
-                "type": .string("integer"),
-                "description": .string("Max entries to return, newest first (default 20, max 100)."),
-                "minimum": .int(1),
-                "maximum": .int(100),
-            ])
+            "limit": Self.limitBound.property("Max entries to return, newest first")
         ]),
         "additionalProperties": .bool(false),
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        let limit = min(max(input.limit ?? 20, 1), 100)
+        let limit = Self.limitBound.resolve(input.limit)
         let path = URL(fileURLWithPath: context.request.application.deployStateDirectory)
             .appendingPathComponent("history.jsonl")
 
