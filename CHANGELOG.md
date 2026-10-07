@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.537] - 2026-10-07
+
+### Tests
+
+- **One test-setup builder.** `wrInsertSetup`, `arInsertSetup` and six private copies now call the shared `makeTestSetup`, which can skip the zip file. `WorkerRoutesTests` no longer hides the shared builder behind its own `makeTestSetup`. (#2365)
+
+
 ## [0.5.536] - 2026-10-07
 
 ### Changed
