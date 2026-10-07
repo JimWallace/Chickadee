@@ -214,22 +214,28 @@ fi
 # audit found the type and radius scales 100% bypassed in JS (11 font-size
 # literals, none a token), an injected stylesheet with its own dark-mode
 # block, and spacing values that would fail rule 4 verbatim in a .css file.
-# Counted here: style="…" inside generated-HTML strings, .style.<prop>
-# writes (display toggles exempt — show/hide is behaviour, not styling),
-# and cssText. A custom-property write — .style.setProperty('--…') — is the
-# sanctioned pattern and is NOT counted: it carries a value into a rule that
-# lives in styles.css, where every guard above can see it. Baseline may only
-# go DOWN. The rule for new code
+# Counted here, as WRITES only (#2408; a read such as `node.style.fontSize ||`
+# decides nothing and used to count): style="…" inside generated-HTML
+# strings, `.style.<prop> =` (display toggles exempt — show/hide is
+# behaviour, not styling), `.style[prop] =`, `setAttribute('style', …)`,
+# `.style.setProperty()` on a non-custom property, cssText, and a <style>
+# element built in JS. A custom-property write — .style.setProperty('--…') —
+# is the sanctioned pattern and is NOT counted: it carries a value into a rule
+# that lives in styles.css, where every guard above can see it. Baseline may
+# only go DOWN. The rule for new code
 # (docs/ui-design.md): JS toggles classes or sets a custom property
 # (workbench.js's --wb-left-width is the pattern); it does not decide
 # styling.
-JS_STYLE_DECISION_BASELINE=9
+JS_STYLE_DECISION_BASELINE=10
 js_style_count="$(
   {
     grep -ho 'style="' Public/*.js || true
-    grep -hE '\.style\.[a-zA-Z]+' Public/*.js | grep -v "\.style\.setProperty('--" \
-      | grep -oE '\.style\.[a-zA-Z]+' | grep -v '\.style\.display' || true
+    grep -hoE '\.style\.[a-zA-Z]+[[:space:]]*=([^=]|$)' Public/*.js | grep -v '^\.style\.display' || true
+    grep -hoE '\.style\[[^]]*\][[:space:]]*=([^=]|$)' Public/*.js || true
+    grep -hoE "\.style\.setProperty\([[:space:]]*['\"][^-'\"]" Public/*.js || true
+    grep -hoE "setAttribute\([[:space:]]*['\"]style['\"]" Public/*.js || true
     grep -ho 'cssText' Public/*.js || true
+    grep -hoE "createElement\([[:space:]]*['\"]style['\"]" Public/*.js || true
   } | wc -l | tr -d ' '
 )"
 if [ "$js_style_count" -gt "$JS_STYLE_DECISION_BASELINE" ]; then
