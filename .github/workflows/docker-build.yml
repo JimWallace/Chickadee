@@ -365,6 +365,17 @@ jobs:
           fi
           echo "no path under /app is writable by the application user"
 
+          # A worker-graded R test can load the tidyverse core, as a
+          # browser-graded one can in the xeus-r kernel. Without a package in
+          # the image, such a test passes in the browser and fails on the worker.
+          echo "----- R packages -----"
+          docker run --rm --entrypoint Rscript "$IMAGE" -e '
+            for (p in c("dplyr", "tidyr", "readr", "stringr", "tibble", "purrr", "forcats")) {
+              suppressPackageStartupMessages(library(p, character.only = TRUE))
+              cat(p, format(packageVersion(p)), "\n")
+            }' \
+            || { echo "::error::Rscript cannot load the tidyverse core in the image. Keep the r-cran-* packages in the Dockerfile."; exit 1; }
+
           echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
           run_server
           probe 240 || dump_and_fail

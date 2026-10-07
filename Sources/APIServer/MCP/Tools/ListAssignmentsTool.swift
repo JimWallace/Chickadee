@@ -77,10 +77,8 @@ struct ListAssignmentsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let course = try await resolveMCPCourse(
-            key: input.courseCode, context: context, forWrite: false)
+        let course = try await resolveCourse(code: input.courseCode, context: context)
         let courseID = try course.requireID()
-        try await context.authorizeCourseAccess(courseID)
         let assignments = try await APIAssignment.query(on: context.db)
             .filter(\.$courseID == courseID)
             .sort(\.$title)
