@@ -118,13 +118,27 @@ struct ResultIngestEffects {
     /// per student and need 100%. Only a student's own submission counts, so
     /// a validation run, a tournament match or a corpus run reaches none of
     /// this.
+    ///
+    /// A retest result is the exception for the records: it recomputes them
+    /// from every submission's latest result, whatever this result's grade or
+    /// build, because a worse retest result must be able to take a record away
+    /// (#2054, A12). `recomputeClassRecords` explains the rule.
     func apply(submission: APISubmission, collection: TestOutcomeCollection, matches: [MatchReport]? = nil) async {
         guard submission.kind == APISubmission.Kind.student,
-            collection.buildStatus == .passed,
             let userID = submission.userID,
             let submissionID = submission.id
         else { return }
         let testSetupID = submission.testSetupID
+        let isRetest = submission.retestedAt != nil
+        if isRetest {
+            await application.classRecordRecomputeQueue.run(testSetupID) {
+                await bestEffort("class_record_recompute", submissionID: submissionID) {
+                    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
+                    try await recomputeClassRecords(setup: setup, on: db)
+                }
+            }
+        }
+        guard collection.buildStatus == .passed else { return }
 
         // Only contribution assignments accumulate a union, so the slot count
         // comes from the instructor's starter notebook, read through
@@ -160,7 +174,7 @@ struct ResultIngestEffects {
                 outcomes: collection.outcomes, matches: matches, on: db)
         }
 
-        guard gradePercent(from: collection) == 100 else { return }
+        guard !isRetest, gradePercent(from: collection) == 100 else { return }
         let disabled =
             (try? await APITestSetup.find(testSetupID, on: db))
             .map { BuiltInAchievements.disabled(in: $0) } ?? []
