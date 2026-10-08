@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.587] - 2026-10-08
+
+### Changed
+
+- **One request pushes a changed grade to both LMS integrations.** A new result, a grade override and a frozen class-goal bonus each called the BrightSpace and the LTI grade sync separately. They now call `requestGradePush`, and `GradePushCoverageTests` fails when a file outside it asks only one integration. Behaviour is unchanged (#2259).
+
+### Changed
+
+- **The worker and browser result routes build a result row through one step.** Both encoded the collection, built the result row and flagged it for grade sync, and the browser copy once skipped the flag. `ResultIngestEffects.prepareResult` now does the three steps, and each route saves the row inside its own transaction or retry. Behaviour is unchanged (#2259).
+
+
 ## [0.5.586] - 2026-10-08
 
 ### Fixed
