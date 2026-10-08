@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.599] - 2026-10-08
+
+### Changed
+
+- **The tests-and-code "you" card says what your tests found and how your code stands.** Its headline now reads "Your tests found N faults · your code is holding" (or "defeated", or "not tested yet"), and its note reads "Tested N classmates · M have tested you", as in the leaderboard redesign.
+
+
 ## [0.5.598] - 2026-10-08
 
 ### Fixed
