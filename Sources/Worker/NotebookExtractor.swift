@@ -62,23 +62,6 @@ struct NotebookExtractor {
             codeCellCount: extracted.codeCellCount
         )
     }
-
-    // The per-cell transforms now live in RunnerCore (the single, wasm-ready
-    // source of truth shared with the browser runner). These thin wrappers are
-    // kept so existing call sites and tests stay unchanged — they must qualify
-    // the core functions to avoid recursing into themselves.
-
-    func sanitizeCellForModule(_ source: String) -> String {
-        RunnerCore.sanitizeCellForModule(source)
-    }
-
-    func wrapCellForResilientLoad(_ body: String, label: String) -> String {
-        RunnerCore.wrapCellForResilientLoad(body, label: label)
-    }
-
-    func pythonStringLiteral(_ s: String) -> String {
-        RunnerCore.pythonStringLiteral(s)
-    }
 }
 
 /// One notebook's language and cells, after the submission policy has had its
@@ -298,18 +281,17 @@ private func assembleExtractedSource(
         return extracted.source
     case .python:
         var assembled = "# Generated from \(filename)\n\n"
-        let extractor = NotebookExtractor()
         for (index, cell) in cells.enumerated() {
             guard cell["cell_type"] as? String == "code" else { continue }
             var src = NotebookCellSources.cellSource(cell)
             while src.last?.isWhitespace == true { src.removeLast() }
             guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            let cellSource = extractor.sanitizeCellForModule(src)
+            let cellSource = sanitizeCellForModule(src)
             guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 continue
             }
             assembled +=
-                extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
+                wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
         }
         return assembled
     }

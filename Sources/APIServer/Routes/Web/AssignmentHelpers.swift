@@ -153,19 +153,6 @@ func nextAssignmentSortOrder(
     return Swift.max(maxAssignment, maxContent) + 1
 }
 
-/// The earned points recorded on a submission result, for LEARN-style CSV
-/// export: weighted points when present, else the pass count.
-func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
-    CollectionGradeFields(json: collectionJSON)?.gradePoints
-}
-
-/// The total possible points recorded on a submission result, used as the
-/// denominator when converting a percent grade override into BrightSpace
-/// points. Nil when the result predates weighted grading (no `totalPoints`).
-func gradeTotalPointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
-    CollectionGradeFields(json: collectionJSON)?.gradeTotalPoints
-}
-
 /// The grade percent recorded on a submission result: weighted when present,
 /// else passed tests over all tests.
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {

@@ -23,6 +23,7 @@ actor WorkerSecretStore {
         self.runtimeOverride = initialOverride
     }
 
+    /// A test seam: production sets the secret once, through `init`.
     func setRuntimeOverride(_ secret: String?) {
         runtimeOverride = secret
     }

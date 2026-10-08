@@ -61,7 +61,7 @@ func runtimeHelperFiles(for language: AssignmentLanguage) -> [String: String] {
 
 /// The `test_runtime.*` source for a language — the one file its generated
 /// tests load explicitly, as distinct from Python's interpreter-loaded
-/// `sitecustomize.py`.
+/// `sitecustomize.py`. Tests use it to run a runtime on its own.
 ///
 /// Derived from the switch above rather than being a second per-language table,
 /// so it cannot name a file the runner does not actually write.

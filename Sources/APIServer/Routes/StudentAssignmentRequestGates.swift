@@ -89,8 +89,9 @@ private func requireOpenActivityWindow(
     now: Date
 ) async throws {
     guard let setup = try await APITestSetup.find(testSetupID, on: req.db),
-        let window = setup.decodedManifest()?.activity?.window,
-        !window.accepts(at: now)
+        let activity = setup.decodedManifest()?.activity,
+        !activity.acceptsSubmissions(at: now),
+        let window = activity.window
     else { return }
     if try await isCourseStaff(user, inCourse: assignment.courseID, db: req.db) { return }
 

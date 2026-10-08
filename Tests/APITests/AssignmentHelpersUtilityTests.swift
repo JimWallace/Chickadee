@@ -23,7 +23,7 @@ final class AssignmentHelpersUtilityTests {
             gradePercentFromCollectionJSON(
                 #"{"earnedPoints":2.75,"totalPoints":4,"passCount":3,"totalTests":4}"#
             ) == 69)
-        #expect(gradePointsFromCollectionJSON(#"{"earnedPoints":2.75,"totalPoints":4}"#) == 2.75)
+        #expect(CollectionGradeFields(json: #"{"earnedPoints":2.75,"totalPoints":4}"#)?.gradePoints == 2.75)
 
         #expect(
             gradePercentFromCollectionJSON(
