@@ -308,17 +308,3 @@ extension WebRoutes {
         }
     }
 }
-
-/// Number of cells in `raw`, or nil when it is not notebook-shaped JSON (an
-/// object carrying a `cells` array).  The web mirror of the MCP tools'
-/// `validateNotebookShape` guard: the same rejection, one step earlier, so a
-/// stray POST can never overwrite a notebook with something that isn't one.
-func notebookCellCount(fromRaw raw: Data) -> Int? {
-    guard
-        let object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-        let cells = object["cells"] as? [Any]
-    else {
-        return nil
-    }
-    return cells.count
-}

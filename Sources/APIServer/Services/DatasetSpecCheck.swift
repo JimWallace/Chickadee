@@ -59,3 +59,14 @@ func datasetSpecRefusal(
         .flatMap { String(data: $0, encoding: .utf8) }
     return DatasetSpecValidation.issue(with: spec, sourceCSV: text)
 }
+
+/// Reads the dataset specs off a setup's manifest.  An undecodable manifest
+/// reports no datasets rather than failing the read: the panel then shows every
+/// support file as unmarked, which is what a manifest carrying no `datasets`
+/// key means anyway.
+func datasetSpecs(inManifest manifest: String) -> [DatasetSpec] {
+    guard let data = manifest.data(using: .utf8),
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else { return [] }
+    return props.datasets
+}
