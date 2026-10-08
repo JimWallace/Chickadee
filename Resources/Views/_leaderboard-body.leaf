@@ -142,7 +142,7 @@
     #else:
     <table class="results-table section-items" id="leaderboard-table">
         <colgroup>
-            <col class="leaderboard-rank"><col class="section-items-tile"><col><col class="section-items-status">#if(isStaff):<col class="section-items-actions">#endif
+            <col class="leaderboard-rank"><col class="section-items-tile"><col><col class="section-items-status">#if(isStaff):<col class="section-items-count">#endif
         </colgroup>
         <thead class="visually-hidden">
             <tr>

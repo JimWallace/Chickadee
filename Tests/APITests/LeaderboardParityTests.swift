@@ -138,4 +138,14 @@ import VaporTesting
             #expect(!html.contains("Show all"))
         }
     }
+
+    @Test func theStaffValueSitsBesideItsEyeButton() async throws {
+        try await withWebRoutesApp { app in
+            _ = try await seedMetricBoard("lpy_eye", count: 3, viewerIndex: 0, on: app)
+            let html = try await getHTML(
+                "/testsetups/lpy_eye/leaderboard", cookie: try await staffCookie(on: app), on: app)
+            #expect(html.contains("<col class=\"section-items-count\">"))
+            #expect(!html.contains("<col class=\"section-items-actions\">"))
+        }
+    }
 }
