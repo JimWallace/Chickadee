@@ -18,6 +18,9 @@ enum ScriptZipError: Error {
     case fileNotFound(String)
     case invalidUTF8
     case zipFailed
+    /// An entry of the existing zip could not be read, so rewriting the zip
+    /// would lose it.
+    case extractFailed(String)
 }
 
 /// Packs `sourceDir` into `zipPath` via `/usr/bin/zip -q -r`, spawned
@@ -188,35 +191,11 @@ func readScriptFromZip(zipPath: String, filename: String) async -> String? {
 }
 
 /// Replaces or adds a file in the test setup zip with new UTF-8 text content.
-///
-/// Strategy: extract all entries to a temp directory, overwrite/add the target
-/// file, delete the original zip, then re-create it from the temp directory.
 func updateScriptInZip(zipPath: String, filename: String, content: String) async throws {
     guard let contentData = content.data(using: .utf8) else {
         throw ScriptZipError.invalidUTF8
     }
-    let fm = FileManager.default
-    let tempDir = fm.temporaryDirectory
-        .appendingPathComponent("chickadee_zip_edit_\(UUID().uuidString)")
-    try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    defer { try? fm.removeItem(at: tempDir) }
-
-    // Extract all current entries.
-    for entry in await listZipEntries(zipPath: zipPath) {
-        guard let data = await extractZipEntry(zipPath: zipPath, entryName: entry) else { continue }
-        let dest = tempDir.appendingPathComponent(entry)
-        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: dest)
-    }
-
-    // Write the new/updated file.
-    let fileURL = tempDir.appendingPathComponent(filename)
-    try fm.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try contentData.write(to: fileURL)
-
-    // Remove old zip and re-create from temp directory.
-    try? fm.removeItem(atPath: zipPath)
-    try await repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
+    try await mutateSetupZip(zipPath: zipPath, writes: [filename: contentData], deletions: [])
 }
 
 /// Applies a batch of script writes and deletions to a test setup zip in a
@@ -232,70 +211,103 @@ func applyScriptChangesToZip(
     writes: [String: String],
     deletions: [String]
 ) async throws {
-    let fm = FileManager.default
-    let tempDir = fm.temporaryDirectory
-        .appendingPathComponent("chickadee_zip_apply_\(UUID().uuidString)")
-    try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    defer { try? fm.removeItem(at: tempDir) }
-
-    let deletionSet = Set(deletions)
-
-    for entry in await listZipEntries(zipPath: zipPath) {
-        guard !deletionSet.contains(entry) else { continue }
-        guard let data = await extractZipEntry(zipPath: zipPath, entryName: entry) else { continue }
-        let dest = tempDir.appendingPathComponent(entry)
-        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: dest)
-    }
-
+    var data: [String: Data] = [:]
     for (filename, content) in writes {
         guard let contentData = content.data(using: .utf8) else {
             throw ScriptZipError.invalidUTF8
         }
-        let dest = tempDir.appendingPathComponent(filename)
-        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try contentData.write(to: dest)
+        data[filename] = contentData
     }
-
-    try? fm.removeItem(atPath: zipPath)
-    try await repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
+    try await mutateSetupZip(zipPath: zipPath, writes: data, deletions: Set(deletions))
 }
 
 /// Removes a file from the test setup zip.
 /// Throws `ScriptZipError.fileNotFound` if the entry does not exist.
 func removeScriptFromZip(zipPath: String, filename: String) async throws {
-    let entries = await listZipEntries(zipPath: zipPath)
-    guard entries.contains(filename) else {
+    guard await listZipEntries(zipPath: zipPath).contains(filename) else {
         throw ScriptZipError.fileNotFound(filename)
     }
+    try await mutateSetupZip(zipPath: zipPath, writes: [:], deletions: [filename])
+}
+
+/// The one way a test setup zip is rewritten: extract every entry that is not
+/// deleted, apply the writes, repack into a temporary file next to the zip,
+/// and move that file into place (#2491).
+///
+/// The three helpers above used to repack in place. Each deleted the live zip
+/// first, so a failed `zip` left the setup with no zip at all; and each
+/// skipped an entry that failed to extract, so a file could vanish from the
+/// setup with no error. Now the live zip changes only when the new one is
+/// complete, and an entry that cannot be extracted fails the edit.
+///
+/// Deletions apply before writes, so a name in both is written.
+func mutateSetupZip(zipPath: String, writes: [String: Data], deletions: Set<String>) async throws {
     let fm = FileManager.default
     let tempDir = fm.temporaryDirectory
         .appendingPathComponent("chickadee_zip_edit_\(UUID().uuidString)")
     try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: tempDir) }
 
-    // Extract all entries except the one to remove.
-    for entry in entries where entry != filename {
-        guard let data = await extractZipEntry(zipPath: zipPath, entryName: entry) else { continue }
-        let dest = tempDir.appendingPathComponent(entry)
-        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: dest)
+    for entry in await listZipEntries(zipPath: zipPath) where !deletions.contains(entry) {
+        guard let data = await extractZipEntry(zipPath: zipPath, entryName: entry) else {
+            throw ScriptZipError.extractFailed(entry)
+        }
+        try writeZipStagingFile(data, named: entry, in: tempDir)
+    }
+    for (filename, data) in writes {
+        try writeZipStagingFile(data, named: filename, in: tempDir)
     }
 
-    // Remove old zip and re-create.
-    try? fm.removeItem(atPath: zipPath)
-    try await repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
+    try await replaceSetupZip(zipPath: zipPath, withContentsOf: tempDir)
+}
+
+/// Packs `sourceDir` into a temporary zip next to `zipPath`, then moves it over
+/// `zipPath`. The live zip is never deleted first, so a failed `zip` leaves it
+/// as it was. The temporary file is in the same directory, so the move is a
+/// rename on one file system and readers see either the old zip or the new one.
+func replaceSetupZip(zipPath: String, withContentsOf sourceDir: URL) async throws {
+    let fm = FileManager.default
+    let stagedZip = URL(fileURLWithPath: zipPath + ".staged-\(UUID().uuidString)")
+    defer { try? fm.removeItem(at: stagedZip) }
+    try await repackZipFromDirectory(zipPath: stagedZip.path, sourceDir: sourceDir)
+    let liveZip = URL(fileURLWithPath: zipPath)
+    if fm.fileExists(atPath: zipPath) {
+        _ = try fm.replaceItemAt(liveZip, withItemAt: stagedZip)
+    } else {
+        try fm.moveItem(at: stagedZip, to: liveZip)
+    }
+}
+
+private func writeZipStagingFile(_ data: Data, named name: String, in dir: URL) throws {
+    let dest = dir.appendingPathComponent(name)
+    try FileManager.default.createDirectory(
+        at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: dest)
 }
 
 func extractZipEntry(zipPath: String, entryName: String) async -> Data? {
     guard
         let result = try? await runZipProcess(
             executablePath: "/usr/bin/unzip",
-            arguments: ["-p", zipPath, entryName]
+            arguments: ["-p", zipPath, unzipLiteralPattern(entryName)]
         ),
         result.terminationStatus == 0
     else { return nil }
     return result.stdout
+}
+
+/// `entryName` escaped so that `unzip` matches it literally.
+///
+/// `unzip` reads a member name as a wildcard pattern. Unescaped, `data[1].csv`
+/// matches nothing, so the entry could not be read; and a name with `*` or `?`
+/// can match several entries, whose contents `unzip -p` then joins (#2491).
+func unzipLiteralPattern(_ entryName: String) -> String {
+    var escaped = ""
+    for character in entryName {
+        if "\\[]*?".contains(character) { escaped.append("\\") }
+        escaped.append(character)
+    }
+    return escaped
 }
 
 func createRunnerSetupZip(
@@ -357,10 +369,10 @@ func createRunnerSetupZip(
         // Rebuilding an existing setup zip must start from a clean archive.
         // `zip -r existing.zip .` updates/adds entries but does not remove files
         // that are absent from the new source directory, which makes deleted
-        // suite/support files reappear on the next edit.
-        try? fm.removeItem(atPath: zipPath)
+        // suite/support files reappear on the next edit. `replaceSetupZip`
+        // packs into a new staged file and then moves it into place (#2491).
         do {
-            try await repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
+            try await replaceSetupZip(zipPath: zipPath, withContentsOf: tempDir)
         } catch {
             throw WebAssignmentError.internalFailure(reason: "Failed to package setup zip")
         }

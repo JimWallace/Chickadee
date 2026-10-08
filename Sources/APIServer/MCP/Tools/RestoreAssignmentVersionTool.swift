@@ -200,8 +200,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
         for (path, hash) in fileMap {
             try blobs.materialize(hash, to: workDir.appendingPathComponent(path))
         }
-        try? fileManager.removeItem(atPath: setup.zipPath)
-        try await repackZipFromDirectory(zipPath: setup.zipPath, sourceDir: workDir)
+        try await replaceSetupZip(zipPath: setup.zipPath, withContentsOf: workDir)
 
         if let notebookHash = target.notebookHash {
             let path =
