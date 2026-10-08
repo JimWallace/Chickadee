@@ -104,11 +104,10 @@ func sharedNameExpectation(for language: AssignmentLanguage?) -> String {
 /// a module-level identifier.
 ///
 /// Distinct from `isValidFunctionTarget`, and deliberately so: the two answer
-/// different questions and disagree on two languages. A Java call target is a
-/// qualified `Solution.classify`, which is not a Java identifier; a Lua bare
-/// name is checked against Lua's own grammar while a Lua call target still
-/// borrows Python's. Collapsing them would either let a dotted name through as
-/// a variable or refuse Java's only legal call target.
+/// different questions and disagree on Java: a Java call target is a
+/// qualified `Solution.classify`, which is not a Java identifier. Collapsing
+/// them would either let a dotted name through as a variable or refuse Java's
+/// only legal call target.
 ///
 /// Lives here rather than beside its first caller because it has several: it
 /// was written for notebook checks, stayed `private` in that file, and the
@@ -158,18 +157,21 @@ func identifierKindName(_ language: AssignmentLanguage) -> String {
 /// Each arm delegates to the grammar that language's RENDERER already uses, so
 /// what validation accepts and what rendering can emit cannot drift apart.
 ///
-/// Only Lua still borrows Python's rule, because Lua has a sanitizer
-/// (`luaIdentifier`) rather than a validator and the two grammars agree on
-/// every name an author can realistically type. C++, Octave, Java and Racket
-/// each answer with their own — which matters: those four reject their
-/// language's RESERVED WORDS, so a family targeting `class` on a C++ assignment
-/// is refused at save instead of rendering a test that cannot compile.
+/// Each language answers with its own grammar. This matters because C++,
+/// Octave, Java, Racket and Lua reject their language's RESERVED WORDS, so a
+/// family targeting `class` on a C++ assignment is refused at save instead of
+/// rendering a test that cannot compile. Lua borrowed Python's rule until
+/// #2259 found that it accepted `end` and `then`: the Lua renderer looks the
+/// target up as a string key, so the test rendered, but no student can define
+/// a function with that name, so the test could never pass.
 func isValidFunctionTarget(_ s: String, language: AssignmentLanguage) -> Bool {
     switch language {
-    case .python, .lua:
+    case .python:
         return isValidPythonIdentifier(s)
     case .r:
         return isValidRIdentifier(s)
+    case .lua:
+        return isValidLuaIdentifier(s)
     case .cpp:
         return isValidCppIdentifier(s)
     case .octave:
