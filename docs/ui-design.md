@@ -362,12 +362,17 @@ duplicate.
   bronze tint only for ranks 1 to 3 through `data-rank-tier`; every other rank
   is a plain numeral); and on the `.section-items` list `.leaderboard-rank`,
   `.leaderboard-row--you` (the viewer's row, tinted `--you-bg`) and
-  `.leaderboard-gap` (a run of rows folded away, linking to the full list).
+  `.leaderboard-gap` (a run of rows folded away, as plain text).
+  A `.leaderboard-more` row under the list toggles a student between their
+  window of it ("Show all N") and the full list ("Show my standing").
+  A live session's countdown is a `.tier`: `.tier-open` while submissions are
+  accepted, and the neutral bare `.tier` before it opens or after it closes.
   The tokens are `--you-bg`, `--teal-ink`, `--teal-ink-fg` and the
   `--rank-gold|silver|bronze-bg|fg` pairs, each with a dark-mode value.
   The hill holder and the tournament winner share the card as
-  `.champion-card` (its markup carries both `champion-card` and `you-card` when the viewer holds it, for the tint) with a
-  `.you-card-kicker` line.  A tournament is a `.bracket` of `.bracket-round`
+  `.champion-card`, pale gold (`--champion-bg`), with a `.you-card-kicker`
+  line.  When the viewer holds it, its markup carries both `champion-card` and
+  `you-card`, and the card takes the you tint.  A tournament is a `.bracket` of `.bracket-round`
   columns (`.bracket-round-label`) of `.bracket-match` cards of two
   `.bracket-entrant` lines (`.bracket-entrant--won` bold,
   `.bracket-entrant--you` tinted), inside a `.table-scroll`.  A won tag is
@@ -522,7 +527,9 @@ duplicate.
   `.action-copied` and a "Copied!" title for two seconds.  The copy-student-link
   button on a dashboard row and the LTI tool URLs.
 - **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
-  above an admin page title.  Visual only; the hidden `h1` already names it.
+  above an admin page title, or the course above a leaderboard's title, as its
+  course tab names it.
+  Visual only; the `h1` already names the page.
 - **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
   row type only sometimes has one, so the actions track lines up.  Never an
   empty menu.

@@ -43,6 +43,7 @@ extension WebRoutes {
         }
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
+        let course = try await APICourse.find(setup.courseID, on: req.db)
         // Each flag names its own aggregation. The metric board used to be
         // "none of the other three", which a fifth aggregation would have
         // satisfied silently (#1745).
@@ -85,6 +86,8 @@ extension WebRoutes {
             LeaderboardContext(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
+                courseLabel: course.map { [$0.code, $0.term?.shortLabel].compactMap { $0 }.joined(separator: " ") }
+                    ?? "",
                 assignmentPublicID: assignment?.publicID ?? "",
                 kindLabel: activity.kind.displayName,
                 isStaff: isStaff,
