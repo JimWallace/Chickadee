@@ -29,7 +29,7 @@ import {
     EditorState, Compartment,
     defaultKeymap, history, historyKeymap, indentWithTab,
     syntaxHighlighting, defaultHighlightStyle, StreamLanguage,
-    python, shell, r
+    python, shell, r, lua, octave, scheme, java, cpp
 } from '/vendor/codemirror.js';
 
 (function (global) {
@@ -47,13 +47,15 @@ import {
     function cfg() { return global.ChickadeeScriptRendererConfig || {}; }
 
     var langComp = new Compartment();
-    /// Syntax highlighting for the open file: the core names the mode, this
-    /// maps it onto the three the vendored CodeMirror bundle carries.
+    /// Syntax highlighting for the open file. The core names the language;
+    /// this maps it onto a mode in the vendored CodeMirror bundle. Python has a
+    /// full language package, the others are legacy stream modes, and Racket
+    /// uses the Scheme mode. A language with no mode here is shown as shell.
+    var STREAM_MODES = { r: r, lua: lua, octave: octave, racket: scheme, java: java, cpp: cpp };
     function langExtensionFor(filename) {
-        var mode = Core.highlightModeFor(filename);
+        var mode = Core.highlightModeFor(filename, global.ChickadeeLanguage);
         if (mode === 'python') return python();
-        if (mode === 'r') return StreamLanguage.define(r);
-        return StreamLanguage.define(shell);
+        return StreamLanguage.define(STREAM_MODES[mode] || shell);
     }
     function makeEditorState(content, filename) {
         return EditorState.create({

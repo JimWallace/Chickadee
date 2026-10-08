@@ -124,8 +124,20 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
     /// looks like, and the instructor would never see which one was wrong.
     let autoComputeRuntimeSource: String?
 
+    /// The language each graded-script extension implies, as wire tokens
+    /// (`"m": "octave"`), for every language and not only this one.
+    ///
+    /// The script editor highlights a file by its OWN extension, because that
+    /// extension decides how the file runs: a `.R` helper in a Python
+    /// assignment is R. Derived from `AssignmentLanguage(scriptExtension:)`,
+    /// the mapping the runner gate uses, so the editor cannot highlight a file
+    /// as one language while the runner treats it as another. An extension
+    /// with no language (`sh`, data files) is absent.
+    let languageByScriptExtension: [String: String]
+
     /// Facts for `language`, or the language-less answer when it is nil.
     init(_ language: AssignmentLanguage?) {
+        self.languageByScriptExtension = Self.scriptExtensionLanguages
         guard let language else {
             self.name = nil
             self.displayName = nil
@@ -192,6 +204,15 @@ struct AuthoringLanguageFacts: Encodable, Equatable {
         }
         self.autoComputeRuntimeSource = language.autoComputeRuntimeSource
     }
+
+    private static let scriptExtensionLanguages: [String: String] =
+        AssignmentLanguage.allCases.reduce(into: [:]) { table, language in
+            for ext in language.scriptExtensions {
+                if let owner = AssignmentLanguage(scriptExtension: ext) {
+                    table[ext] = owner.rawValue
+                }
+            }
+        }
 }
 
 /// `AuthoringLanguageFacts` as the JSON the page seeds. Mirrors

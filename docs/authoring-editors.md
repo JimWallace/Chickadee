@@ -55,7 +55,8 @@ support from `notebookFunctionScanSupport`, and evaluation support from
 `PersonalizationEvaluator`.
 
 The consequence worth knowing before touching this: **a seventh language needs
-zero JavaScript edits.** There is no per-language list in any authoring JS, and
+zero JavaScript edits.** The one exception is a new syntax-highlighting
+grammar, when the bundle does not carry one yet. There is no per-language list in any authoring JS, and
 the invariant is greppable (see the runbook's "The authoring UI: what you do NOT
 have to do"). If a new *fact* is needed, add a field to `AuthoringLanguageFacts`
 and derive it from whatever already owns the answer — do not answer it twice.

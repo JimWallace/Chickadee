@@ -92,6 +92,26 @@ import Testing
         #expect(!facts.expressionEvaluation)
     }
 
+    /// The extension map the script editor highlights by is DERIVED from
+    /// `AssignmentLanguage(scriptExtension:)`, for every language, whatever
+    /// the assignment's own language is. A language-less assignment carries it
+    /// too, because a file's extension, not the assignment, decides how it runs.
+    @Test(arguments: [nil] + AssignmentLanguage.allCases.map { Optional($0) })
+    func theScriptExtensionMapIsDerivedForEveryLanguage(_ assignmentLanguage: AssignmentLanguage?) {
+        let map = AuthoringLanguageFacts(assignmentLanguage).languageByScriptExtension
+        var expected: [String: String] = [:]
+        for language in AssignmentLanguage.allCases {
+            for ext in language.scriptExtensions {
+                expected[ext] = AssignmentLanguage(scriptExtension: ext)?.rawValue
+            }
+        }
+        #expect(map == expected)
+        for language in AssignmentLanguage.allCases {
+            #expect(language.scriptExtensions.allSatisfy { map[$0] == language.rawValue })
+        }
+        #expect(map["sh"] == nil)
+    }
+
     /// Both capability flags are DERIVED from the subsystems that own them,
     /// not restated here.
     ///
