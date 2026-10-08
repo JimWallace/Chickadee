@@ -28,7 +28,11 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite(.timeLimit(.minutes(3))) struct RunnerProfileDetectorGapTests {
+// Serialized because every test runs a full `detect()`, and each one spawns
+// every probe at once. Four detections in parallel saturated the mutation
+// sweep's runner until `import pandas` timed out, and the suite compared that
+// timeout against an import that succeeded (2026-10-06 sweep, shards 2, 3, 10).
+@Suite(.serialized, .timeLimit(.minutes(3))) struct RunnerProfileDetectorGapTests {
 
     /// True when `/usr/bin/env <command>` runs and exits 0 -- the same question
     /// `commandExists` asks, answered independently of the code under test.
@@ -116,6 +120,13 @@ import Testing
                 names.contains(module) == importable,
                 "\(module) advertised: \(names.contains(module)), importable on host: \(importable)")
         }
+    }
+
+    /// A module import loads far more than a `--version` banner, so its probe
+    /// must not share the short cap. With one cap, a loaded host timed out on
+    /// `import pandas` and the runner stopped advertising a module it had.
+    @Test func moduleImportProbesOutlastVersionProbes() {
+        #expect(RunnerProfileDetector.moduleImportTimeoutSeconds > RunnerProfileDetector.probeTimeoutSeconds)
     }
 
     private static func hostCanImportPythonModule(_ module: String) async -> Bool {

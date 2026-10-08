@@ -14,6 +14,15 @@ struct RunnerProfileDetector {
     /// indefinitely.
     static let probeTimeoutSeconds: Double = 5.0
 
+    /// Wall-clock cap on a Python module-import probe. Longer than
+    /// `probeTimeoutSeconds` because a cold `import pandas` loads far more than
+    /// a `--version` banner, and every probe runs at once. On a loaded host the
+    /// import took more than 5 s, the probe timed out, and the runner stopped
+    /// advertising a module it had. `RunnerLanguageGate` then leaves every job
+    /// that needs the module in the queue, with no error. A timeout is not an
+    /// answer, so give the import room to finish.
+    static let moduleImportTimeoutSeconds: Double = 30.0
+
     func detect() async -> RunnerCapabilityProfile? {
         guard discoveryEnabled else { return nil }
 
@@ -214,7 +223,8 @@ struct RunnerProfileDetector {
     private func pythonImportAvailable(module: String) async -> Bool {
         await runStatus(
             command: "python3",
-            arguments: ["-c", "import \(module)"]
+            arguments: ["-c", "import \(module)"],
+            timeoutSeconds: Self.moduleImportTimeoutSeconds
         ) == 0
     }
 
@@ -229,12 +239,14 @@ struct RunnerProfileDetector {
         return probe.combined.isEmpty ? nil : probe.combined
     }
 
-    private func runStatus(command: String, arguments: [String]) async -> Int32? {
-        await runProbe(command: command, arguments: arguments)?.exitCode
+    private func runStatus(
+        command: String, arguments: [String], timeoutSeconds: Double = Self.probeTimeoutSeconds
+    ) async -> Int32? {
+        await runProbe(command: command, arguments: arguments, timeoutSeconds: timeoutSeconds)?.exitCode
     }
 
     /// One capability probe: `/usr/bin/env <command> <args…>`, bounded by
-    /// `probeTimeoutSeconds`, stdout and stderr collected and joined.
+    /// `timeoutSeconds` (`probeTimeoutSeconds` unless the caller says), stdout and stderr collected and joined.
     ///
     /// Spawns through `swift-subprocess` rather than Foundation's `Process`.
     /// Detection runs every probe concurrently (a task group over every
@@ -243,14 +255,16 @@ struct RunnerProfileDetector {
     /// so the hand-rolled CLOEXEC pipes, deadline-bounded drain and
     /// `isRunning` poll loop this replaces have nothing left to do. The 25 ms
     /// poll is gone with them: the run now suspends until the child exits.
-    private func runProbe(command: String, arguments: [String]) async -> (combined: String, exitCode: Int32)? {
+    private func runProbe(
+        command: String, arguments: [String], timeoutSeconds: Double = Self.probeTimeoutSeconds
+    ) async -> (combined: String, exitCode: Int32)? {
         let run: BoundedRunResult?
         do {
             run = try await runBounded(
                 executable: "/usr/bin/env",
                 arguments: [command] + arguments,
                 limits: BoundedRunLimits(
-                    timeout: .seconds(Self.probeTimeoutSeconds), outputLimit: Self.probeOutputLimitBytes,
+                    timeout: .seconds(timeoutSeconds), outputLimit: Self.probeOutputLimitBytes,
                     teardownGrace: .milliseconds(200)))
         } catch {
             writeStructuredRunnerLog(
@@ -267,7 +281,7 @@ struct RunnerProfileDetector {
                 fields: [
                     "error_type": "capability_detection_timeout",
                     "error_message_summary": "\(command) \(arguments.joined(separator: " "))",
-                    "timeout_seconds": Self.probeTimeoutSeconds,
+                    "timeout_seconds": timeoutSeconds,
                 ])
             return nil
         }
