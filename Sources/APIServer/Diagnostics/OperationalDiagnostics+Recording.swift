@@ -612,6 +612,9 @@ extension OperationalDiagnosticsService {
         )
     }
 
+    /// A test seam: records a result from its collection alone, inferring the
+    /// diagnostics that `recordWorkerExecutionReport` (the production path)
+    /// receives from the runner.
     func recordWorkerResult(
         collection: TestOutcomeCollection,
         submission: APISubmission,
