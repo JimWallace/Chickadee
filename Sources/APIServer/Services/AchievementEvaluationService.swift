@@ -209,9 +209,7 @@ func evaluateClassGoalAchievements(
         // an assignment whose class goal completed late lands in LEARN with
         // every early submitter's bonus permanently under-counted.
         if outcome.bonusFroze {
-            try await LTIGradeSyncQueue.queueAllStudents(testSetupID: setupID, on: db)
-            try await requeueFrozenClassGoalBonusPushes(
-                assignment: assignment, testSetupID: setupID, on: db, logger: logger)
+            try await requestGradePush(.allStudents(assignment, logger: logger), testSetupID: setupID, on: db)
         }
     }
 
@@ -452,8 +450,9 @@ private func writeClassGoalSnapshots(
 ///
 /// An assignment with no due date never freezes and so is never re-pushed here;
 /// its bonus stays live-but-stale in LEARN, and "Push all" remains the way to
-/// settle it.
-private func requeueFrozenClassGoalBonusPushes(
+/// settle it. Call it through `requestGradePush`, which also queues the LTI
+/// push.
+func requeueFrozenClassGoalBonusPushes(
     assignment: APIAssignment,
     testSetupID: String,
     on db: Database,

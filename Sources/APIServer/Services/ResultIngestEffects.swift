@@ -30,9 +30,7 @@ struct ResultIngestEffects {
     static func flagForGradeSync(
         _ result: APIResult, testSetupID: String, application: Application, on db: any Database
     ) async throws {
-        try await flagResultForBrightSpaceSync(
-            result, testSetupID: testSetupID, application: application, on: db)
-        try await LTIGradeSyncQueue.queue(submissionID: result.submissionID, testSetupID: testSetupID, on: db)
+        try await requestGradePush(.result(result, application: application), testSetupID: testSetupID, on: db)
     }
 
     /// Records a validation run's verdict on the assignment it validates, or
