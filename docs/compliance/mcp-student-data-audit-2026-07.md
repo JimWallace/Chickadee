@@ -154,8 +154,9 @@ is layered:
    touch student rows and are explicitly routed to the privileged pool
    (`ToolContext.mainDB` / `request.db`), never the MCP pool, and return no
    row data to the agent:
-   - the **content-edit auto-regrade** (`ContentEditClose.swift`,
-     `retestSubmissionsAfterContentEdit`) — flips student submissions to
+   - the **content-edit auto-regrade** (`ContentEditClose.swift`
+     `finalizeContentEdit`, which calls `applyContentEditEffects` in
+     `ContentEditEffects.swift`; the function was renamed in #2259) — flips student submissions to
      pending after a suite edit; the agent sees only `submissionsRequeued`, an
      integer count;
    - the **acting account's own personalization-seed bookkeeping**

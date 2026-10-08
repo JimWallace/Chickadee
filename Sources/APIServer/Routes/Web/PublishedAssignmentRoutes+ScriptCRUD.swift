@@ -42,7 +42,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func updateScript(req: Request) async throws -> HTTPStatus {
-        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let filename = try safeScriptFilename(from: req)
 
         struct UpdateBody: Content { var content: String }
@@ -84,6 +84,11 @@ extension PublishedAssignmentRoutes {
         } catch ScriptZipError.zipFailed {
             throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
         }
+        // Re-grade and re-validate on the server; the page no longer has to
+        // send a follow-up suite request (#2259).
+        await applyContentEditEffects(
+            .gradeAffecting, assignment: assignment, setup: setup,
+            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
         return .noContent
     }
 
@@ -121,6 +126,12 @@ extension PublishedAssignmentRoutes {
                 testSetupsDirectory: req.application.testSetupsDirectory
             )
         }
+
+        // Re-grade and re-validate on the server; the page no longer has to
+        // send a follow-up suite request (#2259).
+        await applyContentEditEffects(
+            .gradeAffecting, assignment: assignment, setup: setup,
+            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
 
         struct CreatedResponse: Content {
             var filename: String
@@ -167,8 +178,14 @@ extension PublishedAssignmentRoutes {
             testSuiteScripts: activeTestSuiteScripts,
             testSetupsDirectory: req.application.testSetupsDirectory
         )
+        // Re-grade and re-validate on the server; the page no longer has to
+        // send a follow-up suite request (#2259).
+        await applyContentEditEffects(
+            .gradeAffecting, assignment: assignment, setup: setup,
+            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
         return .noContent
     }
+
 }
 
 // MARK: - Route parameter helpers
