@@ -894,6 +894,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/student-avatars.md` — generated avatars and the per-course pseudonymous handle
 - `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
 - `docs/ci-flakiness.md` — CI flake families; start here before chasing a red check on an unrelated PR
+- `docs/abstraction-survey.md` — the 2026-10 survey of parallel code paths that need a shared abstraction (#2259)
 - `docs/grading-integrity.md` — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)
 - `docs/archive/` — finished-era documents; nothing there describes current behaviour
 - `CHANGELOG.md` — release history from 0.5.0; `CHANGELOG-0.4.md` — the 0.1.0–0.4.x history
