@@ -1,0 +1,78 @@
+# handle|full name|field|born|died|region|gender|note
+# Mathematics and statistics.
+Pythagoras|Pythagoras of Samos|Mathematics|~-570|~-495|Europe|M|The theorem on right triangles; numbers and music
+Euclid|Euclid of Alexandria|Mathematics|~-325|~-265|Africa|M|The Elements, the model for mathematical proof
+Brahmagupta|Brahmagupta|Mathematics|598|668|South Asia|M|Rules for zero and negative numbers
+Al-Khwārizmī|Muhammad ibn Musa al-Khwarizmi|Mathematics|~780|~850|West & Central Asia|M|Founded algebra; the word "algorithm" comes from his name
+Al-Kindī|Abu Yusuf al-Kindi|Mathematics|~801|~873|West & Central Asia|M|Frequency analysis for breaking codes
+Khayyam|Omar Khayyam|Mathematics|1048|1131|West & Central Asia|M|Solved cubic equations with geometry; reformed the calendar
+Bhāskara|Bhāskara II|Mathematics|1114|1185|South Asia|M|Early ideas of calculus; the Lilavati
+Fibonacci|Leonardo of Pisa|Mathematics|~1170|~1250|Europe|M|Brought Hindu–Arabic numerals to Europe
+Al-Kāshī|Jamshid al-Kashi|Mathematics|~1380|1429|West & Central Asia|M|Calculated pi to sixteen digits
+Napier|John Napier|Mathematics|1550|1617|Europe|M|Invented logarithms
+Descartes|René Descartes|Mathematics|1596|1650|Europe|M|Coordinate geometry
+Fermat|Pierre de Fermat|Mathematics|1607|1665|Europe|M|Number theory; Fermat's last theorem
+Pascal|Blaise Pascal|Mathematics|1623|1662|Europe|M|Probability; Pascal's triangle; a mechanical calculator
+Seki|Seki Takakazu|Mathematics|1642|1708|East Asia|M|Found determinants before Leibniz
+Leibniz|Gottfried Wilhelm Leibniz|Mathematics|1646|1716|Europe|M|Calculus notation; binary numbers
+Bernoulli|The Bernoulli family|Mathematics|1655|1782|Europe|M|Probability, calculus and fluid flow
+Bayes|Thomas Bayes|Statistics|1701|1761|Europe|M|Bayes' theorem on conditional probability
+Euler|Leonhard Euler|Mathematics|1707|1783|Europe|M|Graph theory; the notation e, i and f(x)
+Agnesi|Maria Gaetana Agnesi|Mathematics|1718|1799|Europe|F|Wrote the first textbook on both differential and integral calculus
+Lagrange|Joseph-Louis Lagrange|Mathematics|1736|1813|Europe|M|Analytical mechanics; the calculus of variations
+Laplace|Pierre-Simon Laplace|Mathematics|1749|1827|Europe|M|Celestial mechanics; probability theory
+Fourier|Joseph Fourier|Mathematics|1768|1830|Europe|M|Fourier series; heat flow
+Germain|Sophie Germain|Mathematics|1776|1831|Europe|F|Elasticity theory; work toward Fermat's last theorem
+Gauss|Carl Friedrich Gauss|Mathematics|1777|1855|Europe|M|Number theory; the normal distribution
+Cauchy|Augustin-Louis Cauchy|Mathematics|1789|1857|Europe|M|Made calculus rigorous
+Lobachevsky|Nikolai Lobachevsky|Mathematics|1792|1856|Europe|M|Non-Euclidean geometry
+Quetelet|Adolphe Quetelet|Statistics|1796|1874|Europe|M|Applied statistics to society
+Jacobi|Carl Gustav Jacob Jacobi|Mathematics|1804|1851|Europe|M|Elliptic functions; the Jacobian
+Dirichlet|Peter Gustav Lejeune Dirichlet|Mathematics|1805|1859|Europe|M|Analytic number theory; the modern definition of a function
+Hamilton|William Rowan Hamilton|Mathematics|1805|1865|Europe|M|Quaternions; Hamiltonian mechanics
+Galois|Évariste Galois|Mathematics|1811|1832|Europe|M|Group theory and the solvability of equations
+Boole|George Boole|Mathematics|1815|1864|Europe|M|Boolean algebra, the logic of computers
+Weierstrass|Karl Weierstrass|Mathematics|1815|1897|Europe|M|Rigorous analysis
+Cayley|Arthur Cayley|Mathematics|1821|1895|Europe|M|Matrix algebra; group theory
+Chebyshev|Pafnuty Chebyshev|Mathematics|1821|1894|Europe|M|Probability; Chebyshev polynomials
+Riemann|Bernhard Riemann|Mathematics|1826|1866|Europe|M|Riemann geometry; the Riemann hypothesis
+Dedekind|Richard Dedekind|Mathematics|1831|1916|Europe|M|Real numbers; ideals in algebra
+Venn|John Venn|Mathematics|1834|1923|Europe|M|Venn diagrams
+Cantor|Georg Cantor|Mathematics|1845|1918|Europe|M|Set theory; sizes of infinity
+Kovalevskaya|Sofya Kovalevskaya|Mathematics|1850|1891|Europe|F|Partial differential equations; first woman with a full professorship in Northern Europe
+Poincaré|Henri Poincaré|Mathematics|1854|1912|Europe|M|Topology; chaos in the three-body problem
+Markov|Andrey Markov|Mathematics|1856|1922|Europe|M|Markov chains
+Lyapunov|Aleksandr Lyapunov|Mathematics|1857|1918|Europe|M|Stability of dynamical systems
+Hilbert|David Hilbert|Mathematics|1862|1943|Europe|M|Hilbert spaces; the 23 problems
+Fields|John Charles Fields|Mathematics|1863|1932|North America|M|Canadian; founded the Fields Medal
+Minkowski|Hermann Minkowski|Mathematics|1864|1909|Europe|M|Spacetime geometry
+Takagi|Teiji Takagi|Mathematics|1875|1960|East Asia|M|Class field theory
+Gosset|William Sealy Gosset|Statistics|1876|1937|Europe|M|Student's t-test, made for brewing at Guinness
+Noether|Emmy Noether|Mathematics|1882|1935|Europe|F|Abstract algebra; symmetry and conservation laws
+Littlewood|John Edensor Littlewood|Mathematics|1885|1977|Europe|M|Analysis and number theory
+Ramanujan|Srinivasa Ramanujan|Mathematics|1887|1920|South Asia|M|Self-taught; thousands of results on series and partitions
+Banach|Stefan Banach|Mathematics|1892|1945|Europe|M|Functional analysis
+Mahalanobis|Prasanta Chandra Mahalanobis|Statistics|1893|1972|South Asia|M|Mahalanobis distance; founded the Indian Statistical Institute
+Neyman|Jerzy Neyman|Statistics|1894|1981|Europe|M|Confidence intervals; hypothesis testing
+Oka|Kiyoshi Oka|Mathematics|1901|1978|East Asia|M|Functions of several complex variables
+Wald|Abraham Wald|Statistics|1902|1950|Europe|M|Sequential analysis; survivorship bias in aircraft armour
+Kolmogorov|Andrey Kolmogorov|Mathematics|1903|1987|Europe|M|Axioms of probability
+Neumann|John von Neumann|Mathematics|1903|1957|Europe|M|Game theory; the stored-program computer
+Gödel|Kurt Gödel|Mathematics|1906|1978|Europe|M|Incompleteness theorems
+Coxeter|H. S. M. Coxeter|Mathematics|1907|2003|North America|M|Canadian; geometry and symmetry groups
+Chern|Shiing-Shen Chern|Mathematics|1911|2004|East Asia|M|Differential geometry; Chern classes
+Erdős|Paul Erdős|Mathematics|1913|1996|Europe|M|Combinatorics; more than 1,500 papers
+Kodaira|Kunihiko Kodaira|Mathematics|1915|1997|East Asia|M|Complex manifolds; first Fields Medal from Japan
+Tukey|John Tukey|Statistics|1915|2000|North America|M|Exploratory data analysis; the fast Fourier transform; named the bit
+Ito|Kiyosi Itô|Mathematics|1915|2008|East Asia|M|Stochastic calculus
+Tutte|W. T. Tutte|Mathematics|1917|2002|North America|M|Broke the Lorenz cipher; graph theory at the University of Waterloo
+Iwasawa|Kenkichi Iwasawa|Mathematics|1917|1998|East Asia|M|Iwasawa theory in number theory
+Lambek|Joachim Lambek|Mathematics|1922|2014|North America|M|Canadian; category theory and the Lambek calculus
+Harish-Chandra|Harish-Chandra|Mathematics|1923|1983|South Asia|M|Representation theory of Lie groups
+Mandelbrot|Benoit Mandelbrot|Mathematics|1924|2010|Europe|M|Fractal geometry
+Nash|John Forbes Nash Jr.|Mathematics|1928|2015|North America|M|Game theory; the Nash equilibrium
+Grothendieck|Alexander Grothendieck|Mathematics|1928|2014|Europe|M|Rebuilt algebraic geometry
+Conway|John Horton Conway and Lynn Conway|Mathematics|1937|2024|Europe|M|The Game of Life (John); VLSI chip design (Lynn)
+Thurston|William Thurston|Mathematics|1946|2012|North America|M|Geometry of three-dimensional manifolds
+Mirzakhani|Maryam Mirzakhani|Mathematics|1977|2017|West & Central Asia|F|Geometry of Riemann surfaces; first woman to win the Fields Medal
+Rao|C. R. Rao|Statistics|1920|2023|South Asia|M|Cramér–Rao bound; Rao–Blackwell theorem

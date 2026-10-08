@@ -1,0 +1,61 @@
+# handle|full name|field|born|died|region|gender|note
+# Computing and engineering.
+Al-Jazarī|Ismail al-Jazari|Engineering|1136|1206|West & Central Asia|M|Book of ingenious mechanical devices; early robots and the crankshaft
+Watt|James Watt|Engineering|1736|1819|Europe|M|Improved the steam engine
+Jacquard|Joseph Marie Jacquard|Engineering|1752|1834|Europe|M|Punched-card loom, an ancestor of programming
+Telford|Thomas Telford|Engineering|1757|1834|Europe|M|Roads, bridges and canals
+Navier|Claude-Louis Navier|Engineering|1785|1836|Europe|M|The Navier–Stokes equations of fluid flow
+Babbage|Charles Babbage|Computing|1791|1871|Europe|M|Designed the Difference and Analytical Engines
+Coriolis|Gaspard-Gustave de Coriolis|Physics|1792|1843|Europe|M|The Coriolis effect; defined work and kinetic energy
+Carnot|Sadi Carnot|Engineering|1796|1832|Europe|M|Founded thermodynamics; the efficiency of heat engines
+Brunel|Isambard Kingdom Brunel|Engineering|1806|1859|Europe|M|Railways, bridges and steamships
+Lovelace|Ada Lovelace|Computing|1815|1852|Europe|F|Wrote the first published computer program
+McCoy|Elijah McCoy|Engineering|1844|1929|North America|M|Canadian-born; automatic lubricators for steam engines
+Latimer|Lewis Howard Latimer|Engineering|1848|1928|North America|M|Improved the carbon filament of the light bulb
+Matzeliger|Jan Ernst Matzeliger|Engineering|1852|1889|Latin America|M|Born in Suriname; invented the shoe-lasting machine
+Tesla|Nikola Tesla|Engineering|1856|1943|Europe|M|Alternating-current motors and power systems
+Tsiolkovsky|Konstantin Tsiolkovsky|Engineering|1857|1935|Europe|M|The rocket equation; theory of spaceflight
+Hollerith|Herman Hollerith|Computing|1860|1929|North America|M|Punched-card tabulator for the census
+Visvesvaraya|M. Visvesvaraya|Engineering|1861|1962|South Asia|M|Dams, flood control and irrigation in India
+Fessenden|Reginald Fessenden|Engineering|1866|1932|North America|M|Canadian; first radio broadcast of voice and music
+Santos-Dumont|Alberto Santos-Dumont|Engineering|1873|1932|Latin America|M|Brazilian pioneer of airships and aircraft
+Gilbreth|Lillian Moller Gilbreth|Engineering|1878|1972|North America|F|Industrial engineering and ergonomics
+Kármán|Theodore von Kármán|Engineering|1881|1963|Europe|M|Aerodynamics; supersonic flight
+Goddard|Robert Goddard|Engineering|1882|1945|North America|M|Built the first liquid-fuelled rocket
+Clarke|Edith Clarke|Engineering|1883|1959|North America|F|First woman professor of electrical engineering in the US
+Yagi|Hidetsugu Yagi|Engineering|1886|1976|East Asia|M|The Yagi–Uda antenna
+Nyquist|Harry Nyquist|Engineering|1889|1976|North America|M|Sampling theory; feedback stability
+Atanasoff|John Vincent Atanasoff|Computing|1903|1995|North America|M|Built the first electronic digital computer
+Hopper|Grace Hopper|Computing|1906|1992|North America|F|First compiler; COBOL
+Korolev|Sergei Korolev|Engineering|1907|1966|Europe|M|Chief designer of Sputnik and the first crewed spaceflight
+Mauchly|John Mauchly|Computing|1907|1980|North America|M|Co-designed ENIAC
+Vaughan|Dorothy Vaughan|Computing|1910|2008|North America|F|Led NASA's West Area Computing unit; taught FORTRAN
+Turing|Alan Turing|Computing|1912|1954|Europe|M|Theory of computation; broke Enigma
+Wilkes|Maurice Wilkes|Computing|1913|2010|Europe|M|EDSAC; microprogramming
+Lamarr|Hedy Lamarr|Engineering|1914|2000|Europe|F|Co-invented frequency hopping for secure radio
+Licklider|J. C. R. Licklider|Computing|1915|1990|North America|M|Imagined the network that became the internet
+Hamming|Richard Hamming|Computing|1915|1998|North America|M|Error-correcting codes
+Shannon|Claude Shannon|Computing|1916|2001|North America|M|Founded information theory
+Holberton|Betty Holberton|Computing|1917|2001|North America|F|ENIAC programmer; early sort-merge generator
+Johnson|Katherine Johnson|Mathematics|1918|2020|North America|F|Calculated the trajectories for NASA's first crewed flights
+Eckert|J. Presper Eckert|Computing|1919|1995|North America|M|Co-designed ENIAC
+Shima|Hideo Shima|Engineering|1901|1998|East Asia|M|Chief engineer of the Shinkansen bullet train
+Dhawan|Satish Dhawan|Engineering|1920|2002|South Asia|M|Led India's space program; fluid dynamics
+Antonelli|Kathleen Antonelli|Computing|1921|2006|Europe|F|Irish-born ENIAC programmer; invented the subroutine call
+Kilby|Jack Kilby|Engineering|1923|2005|North America|M|Invented the integrated circuit
+Backus|John Backus|Computing|1924|2007|North America|M|FORTRAN; Backus–Naur form
+Bartik|Jean Bartik|Computing|1924|2011|North America|F|ENIAC programmer; stored-program conversion
+Teitelbaum|Ruth Teitelbaum|Computing|1924|1986|North America|F|ENIAC programmer
+Engelbart|Douglas Engelbart|Computing|1925|2013|North America|M|The computer mouse; hypertext and the "mother of all demos"
+Kemeny|John G. Kemeny|Computing|1926|1992|North America|M|Co-created BASIC
+Baran|Paul Baran|Computing|1926|2011|North America|M|Packet switching
+Noyce|Robert Noyce|Engineering|1927|1990|North America|M|Co-invented the integrated circuit
+Sammet|Jean E. Sammet|Computing|1928|2017|North America|F|COBOL; history of programming languages
+Dijkstra|Edsger W. Dijkstra|Computing|1930|2002|Europe|M|Shortest-path algorithm; structured programming
+Kalam|A. P. J. Abdul Kalam|Engineering|1931|2015|South Asia|M|Aerospace engineer; India's launch vehicles
+Easley|Annie Easley|Computing|1933|2011|North America|F|NASA programmer; the Centaur rocket stage
+Wirth|Niklaus Wirth|Computing|1934|2024|Europe|M|Pascal and Modula-2
+Ritchie|Dennis Ritchie|Computing|1941|2011|North America|M|The C language; co-created Unix
+Kildall|Gary Kildall|Computing|1942|1994|North America|M|CP/M, an early operating system for personal computers
+Postel|Jon Postel|Computing|1943|1998|North America|M|Edited the internet's core protocols; ran the IANA
+Camarena|Guillermo González Camarena|Engineering|1917|1965|Latin America|M|Mexican; invented a colour television system
