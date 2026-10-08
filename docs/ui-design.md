@@ -564,7 +564,9 @@ duplicate.
   `.suite-drag-handle` and `.suite-row-dragging`.  There the whole `<tr>` is
   the drag source (`section-items-dnd.js` sets `draggable` on the row, where
   the suite table sets it on the grip), so `tr[draggable="true"] td` carries
-  the grab cursor across the row and the grip is a signpost.
+  the grab cursor across the row and the grip is a signpost.  A control inside
+  such a row keeps `pointer`.  A row that navigates on click (`tr[data-href]`,
+  the instructor roster) shows `pointer` across the row.
 - **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
   targets.  Unrelated to the reorder cues above despite the shared verb.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
@@ -853,7 +855,7 @@ pattern above and is not counted (`workbench.js`'s `--wb-left-width` and
 
 A page `<style>` block is for styling that genuinely exists on one page only.
 
-- Class names are **role-named** (`.guide-textarea`, `.students-titlebar`), never
+- Class names are **role-named** (`.students-titlebar`), never
   utility-named (`.mt-1`, `.red-text`).
 - A page block may not re-define a selector from the global sheet
   (`.main` is the one allowlisted override).

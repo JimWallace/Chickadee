@@ -51,23 +51,21 @@ LEARN
         <button class="btn action-btn" type="button" id="bs-test-connection"
                 title="Verify this course's grade-push credentials against D2L">Test connection</button>
         #if(canBindOrgUnit):
-        <details class="ext-details row-menu">
-            <summary class="btn action-btn action-btn-icon ext-summary" title="More actions" aria-label="More actions for the LEARN connection">
-                <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
-            </summary>
-            <div class="popover-panel row-menu-panel" role="menu">
-                <form method="post" action="/instructor/brightspace/bind-org-unit" class="toolbar">
+        <details class="add-section-details popup-anchor">
+            <summary class="btn action-btn summary-btn">Change org unit <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="add-section-popup card suite-section-popup" role="dialog" aria-label="Change org unit">
+                <form method="post" action="/instructor/brightspace/bind-org-unit" class="form popup-form">
                     #csrfFormField()
-                    <label class="field-inline">
+                    <label class="form-label" for="bs-org-unit-input">
                         LEARN org unit ID
-                        <input class="form-input input-compact" type="text" id="bs-org-unit-input"
+                        <input class="form-input" type="text" id="bs-org-unit-input"
                                name="orgUnitID" value="#(orgUnitFieldValue)" autocomplete="off"
                                placeholder="e.g. 1106038">
+                        <span class="field-note field-note--muted">Leave blank to unlink the course.</span>
                     </label>
-                    <button class="row-menu-item" type="submit" role="menuitem"
-                            title="Bind this course to its LEARN org unit (blank to clear)">
-                        <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>Change org unit
-                    </button>
+                    <div class="toolbar">
+                        <button class="btn btn-primary btn-compact" type="submit">Save org unit</button>
+                    </div>
                 </form>
             </div>
         </details>
@@ -237,9 +235,9 @@ LEARN
         </form>
         #endif
     </div>
-    #if(!courseLinked):
+    #if(!courseLinked && canBindOrgUnit):
     <p class="section-note">
-        Link this course to its LEARN org unit (the ⋯ menu in the card above) to check
+        Link this course to its LEARN org unit (Change org unit, above) to check
         whether each student's grade can be delivered to the LEARN gradebook.
     </p>
     #endif

@@ -13,6 +13,14 @@ name, due date, notebook uploads, and the validation enqueue. Dependencies
 accept `family:<id>` tokens which the server expands to concrete filenames
 before persistence; cycle detection runs on the authored graph.
 
+To set a dependency in the web editor, drag a row onto the middle of another
+row in the same section. The dropped row then depends on that row and shows
+nested under it. A drop on the top or bottom edge of a row only reorders. A
+notebook check cannot take part in a dependency, and a row that already has a
+dependency or children cannot take a new child (`dropZoneFor` in
+`Public/suite-table.js`). The page states the basic rule in one note above the
+suite table.
+
 **The embedded editor writes back (`POST /testsetups/:id/notebook/save`).**
 JupyterLite keeps the live document in the browser, so authoring edits used to
 reach the server only via an upload on the new-assignment page or the MCP

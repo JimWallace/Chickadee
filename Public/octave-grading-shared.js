@@ -217,6 +217,31 @@
         '  global __ck_script_name;',
         '  name = __ck_script_name;',
         'end',
+        // Octave has no call that lists the environment, so it cannot be
+        // recorded once and compared, as R's reset does. Instead these masks
+        // note each name a script sets or unsets, with its value before the
+        // first change, and __ck_run puts it back when the script ends
+        // (#2384). Outside a script the record is not a map, so the seed's
+        // own setenv is not noted and stays for the whole session.
+        'function __ck_note_env(name)',
+        '  global __ck_env_saved;',
+        '  if isobject(__ck_env_saved) && !isKey(__ck_env_saved, name)',
+        '    __ck_env_saved(name) = getenv(name);',
+        '  end',
+        'end',
+        'function setenv(varargin)',
+        '  __ck_note_env(varargin{1});',
+        '  builtin("setenv", varargin{:});',
+        'end',
+        // putenv is Octave's alias of setenv, so it calls the same built-in.
+        'function putenv(varargin)',
+        '  __ck_note_env(varargin{1});',
+        '  builtin("setenv", varargin{:});',
+        'end',
+        'function status = unsetenv(name)',
+        '  __ck_note_env(name);',
+        '  status = builtin("unsetenv", name);',
+        'end',
         'function __ck_run(script_name, nonce)',
         '  global __ck_script_name;',
         '  __ck_script_name = script_name;',
@@ -232,6 +257,8 @@
         '      clear("-global", __ck_globals{__ck_i});',
         '    end',
         '  end',
+        '  global __ck_env_saved;',
+        '  __ck_env_saved = containers.Map();',
         '  status = 0;',
         '  try',
         '    source(script_name);',
@@ -248,6 +275,23 @@
         '      fprintf(2, "error: %s\\n", err.message);',
         '    end',
         '  end',
+        // Put back every variable the script changed. getenv cannot tell an
+        // unset variable from an empty one, so an empty earlier value is
+        // restored as unset. A script that cleared the harness's globals
+        // leaves nothing to restore, which is why this is guarded.
+        '  try',
+        '    __ck_names = keys(__ck_env_saved);',
+        '    for __ck_k = 1:numel(__ck_names)',
+        '      __ck_before = __ck_env_saved(__ck_names{__ck_k});',
+        '      if isempty(__ck_before)',
+        '        builtin("unsetenv", __ck_names{__ck_k});',
+        '      else',
+        '        builtin("setenv", __ck_names{__ck_k}, __ck_before);',
+        '      end',
+        '    end',
+        '  catch',
+        '  end',
+        '  __ck_env_saved = [];',
         // The status line, last and nonce-delimited. Everything the kernel
         // published on stdout before it is the script's own output.
         '  printf("\\n%s:status:%d\\n", nonce, status);',
@@ -259,9 +303,8 @@
     // this cell, run before every script, puts the working directory back, so
     // a test that calls `cd` does not move every later test (#2384).
     //
-    // Not restored: environment variables. Octave has no call that lists them,
-    // so there is nothing to compare against; a test that calls `setenv`
-    // still leaks the value into later tests.
+    // Environment variables are put back by `__ck_run` itself: the masked
+    // `setenv`, `putenv` and `unsetenv` record what a script changes.
     function resetCellOctave(workDir) {
         return 'cd(' + octaveStringLiteral(workDir) + ');';
     }

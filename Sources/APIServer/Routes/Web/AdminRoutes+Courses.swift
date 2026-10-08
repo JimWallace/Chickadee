@@ -507,7 +507,7 @@ extension AdminRoutes {
         let enrollments = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseID)
             .all()
-        let enrolledUsers = try await Self.enrolledUserRows(for: enrollments, on: req.db)
+        let enrolledUsers = try await Self.enrolledUserRows(for: enrollments, courseID: courseID, on: req.db)
         let assignments = try await Self.assignmentRows(forCourse: courseID, on: req.db)
 
         // One `error` query serves the settings and clone forms; each form
