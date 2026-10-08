@@ -46,7 +46,16 @@ import Vapor
     }
 
     @Test func aVaporAbortRefusalReachesTheAgentWithItsReason() async throws {
-        await #expect(throws: MCPToolError.invalidArguments(detail: "not yours")) {
+        await #expect(throws: MCPToolError.invalidArguments(detail: "no such section")) {
+            try await Self.invoke(throwing: Abort(.badRequest, reason: "no such section"))
+        }
+    }
+
+    /// A permission refusal is `notAuthorized`, the error the tools throw for
+    /// an enrolment refusal, and not `invalidArguments`: no change to the
+    /// arguments can make the call succeed.
+    @Test func aPermissionRefusalReachesTheAgentAsNotAuthorized() async throws {
+        await #expect(throws: MCPToolError.notAuthorized(detail: "not yours")) {
             try await Self.invoke(throwing: Abort(.forbidden, reason: "not yours"))
         }
     }
@@ -68,8 +77,9 @@ import Vapor
         }
     }
 
-    /// The one remaining `from` maps every `WebAssignmentError` the way the
-    /// deleted overload did: only `internalFailure` is a server failure.
+    /// The one remaining `from` maps every `WebAssignmentError`: `forbidden`
+    /// is a permission refusal, `internalFailure` is a server failure, and
+    /// every other case is a refusal the agent can act on.
     @Test(arguments: [
         AppError.notFound(resource: "Assignment"), .badRequest(reason: "r"),
         .invalidParameter(name: "n", reason: "r"), .noActiveCourse(action: "a"),
@@ -80,6 +90,8 @@ import Vapor
         let mapped = MCPToolError.from(error)
         if case .internalFailure = error {
             #expect(mapped == .executionFailed(detail: error.reason))
+        } else if case .forbidden = error {
+            #expect(mapped == .notAuthorized(detail: error.reason))
         } else {
             #expect(mapped == .invalidArguments(detail: error.reason))
         }
