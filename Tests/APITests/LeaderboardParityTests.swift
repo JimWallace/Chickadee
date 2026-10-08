@@ -169,6 +169,24 @@ import VaporTesting
         }
     }
 
+    @Test func anOpenSessionIsALiveTagAndAClosedOneIsAChip() async throws {
+        try await withWebRoutesApp { app in
+            let open = LiveSessionWindow(opensAt: nil, closesAt: Date().addingTimeInterval(3600))
+            let cookie = try await seedMetricBoard("lpy_live", count: 1, viewerIndex: 0, window: open, on: app)
+            let live = try await getHTML("/testsetups/lpy_live/leaderboard", cookie: cookie, on: app)
+            #expect(live.contains("<span class=\"tier tier-open\">Closes "))
+
+            let closed = LiveSessionWindow(
+                opensAt: Date().addingTimeInterval(-7200), closesAt: Date().addingTimeInterval(-3600))
+            let shut = try #require(try await APITestSetup.find("lpy_live", on: app.db))
+            shut.manifest = try manifest(.bestMetric, window: closed)
+            try await shut.update(on: app.db)
+            let after = try await getHTML("/testsetups/lpy_live/leaderboard", cookie: cookie, on: app)
+            #expect(after.contains("<span class=\"tier\">Closed "))
+            #expect(!after.contains("tier tier-open"))
+        }
+    }
+
     @Test func theChampionCardHasItsOwnTintInBothThemes() throws {
         let css = try String(
             contentsOf: repositoryRoot.appendingPathComponent("Public/styles.css"), encoding: .utf8)

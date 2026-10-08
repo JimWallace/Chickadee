@@ -4,7 +4,7 @@
      controls (slice 8)". -->
     #if(hasWindow):
     <div class="chip-row">
-        <span class="chip">#(window.label) <span class="js-relative-time" data-iso="#(window.boundaryISO)">#(window.boundaryText)</span></span>
+        <span class="tier#if(window.isOpen): tier-open#endif">#(window.label) <span class="js-relative-time" data-iso="#(window.boundaryISO)">#(window.boundaryText)</span></span>
     </div>
     #endif
     #if(hasYou):

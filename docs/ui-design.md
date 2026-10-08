@@ -362,6 +362,8 @@ duplicate.
   `.leaderboard-gap` (a run of rows folded away, as plain text).
   A `.leaderboard-more` row under the list toggles a student between their
   window of it ("Show all N") and the full list ("Show my standing").
+  A live session's countdown is a `.tier`: `.tier-open` while submissions are
+  accepted, and the neutral bare `.tier` before it opens or after it closes.
   The tokens are `--you-bg`, `--teal-ink`, `--teal-ink-fg` and the
   `--rank-gold|silver|bronze-bg|fg` pairs, each with a dark-mode value.
   The hill holder and the tournament winner share the card as
