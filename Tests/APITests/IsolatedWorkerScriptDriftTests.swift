@@ -42,14 +42,23 @@ import Testing
     /// Every `new Worker(...)` in one of these is a worker the isolated page
     /// spawns, and therefore needs COEP.
     private static let isolatedPageScripts = [
-        "Public/browser-runner.js",  // grading workers, one per language
+        "Public/browser-runner.js",  // the generated GRADING_WORKER_SCRIPTS table
         "Public/notebook.js",  // freeze-watchdog failover
+    ]
+
+    /// Page scripts on the isolated page that hold the spawn code but name no
+    /// worker today. `grading-executors.js` (split out of browser-runner.js by
+    /// #1965) spawns from the table it is passed, so it has no literal path.
+    /// It is scanned so that a literal spawn added there is checked too, but
+    /// the scanner guard below does not require it to have one.
+    private static let isolatedFactoryScripts = [
+        "Public/grading-executors.js"
     ]
 
     /// Worker script paths spawned by `source`.
     ///
     /// Matches the two call shapes that name a script literally —
-    /// `new Worker('/x.js')` and browser-runner's `gradingWorkerFactory('/x.js')`
+    /// `new Worker('/x.js')` and grading-executors' `gradingWorkerFactory('/x.js')`
     /// wrapper — and ignores the indirect `new Worker(scriptPath + v)` inside
     /// that wrapper, which has no literal to check.
     ///
@@ -67,7 +76,7 @@ import Testing
             .joined(separator: "\n")
 
         // Three shapes now. The first two name a script at the call:
-        // `new Worker('/x.js')` and browser-runner's
+        // `new Worker('/x.js')` and grading-executors'
         // `gradingWorkerFactory('/x.js')` wrapper. The third is the GENERATED
         // `GRADING_WORKER_SCRIPTS` table, which is where every grading worker
         // path lives since the four hand-written `<lang>Executor()` methods
@@ -113,7 +122,7 @@ import Testing
 
     private func readIsolatedPageScripts() throws -> [String: Set<String>] {
         var byFile: [String: Set<String>] = [:]
-        for relative in Self.isolatedPageScripts {
+        for relative in Self.isolatedPageScripts + Self.isolatedFactoryScripts {
             let url = repositoryRoot.appendingPathComponent(relative)
             let source = try String(contentsOf: url, encoding: .utf8)
             byFile[relative] = spawnedWorkerScripts(in: source)
@@ -125,7 +134,7 @@ import Testing
         let spawned = try readIsolatedPageScripts()
         // Guard the scanner itself: a regex that silently stops matching would
         // otherwise turn this test into a no-op that passes forever.
-        for (file, paths) in spawned {
+        for (file, paths) in spawned where Self.isolatedPageScripts.contains(file) {
             #expect(!paths.isEmpty, "found no worker spawn sites in \(file) — the scanner is broken")
         }
 
