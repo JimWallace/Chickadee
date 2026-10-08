@@ -96,7 +96,7 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// the template never has to test for one.
     public let tiltTransform: String
     /// "avatar" plus the size modifier, e.g. "avatar avatar-md".
-    public let sizeClass: String
+    public private(set) var sizeClass: String
     /// Whether to announce the bird. An explicit Bool rather than testing the
     /// optional label in the template: Leaf's truthiness rules make a bare
     /// optional in a conditional unreliable.
@@ -158,6 +158,15 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// is declared in the stylesheet, and that the stylesheet declares no
     /// avatar token no presentation can name.
     public var tokens: [String] { inlineProperties.map(\.token) }
+
+    /// The same bird at another size. For a surface that shows a bird it was
+    /// handed at one size, such as a bracket entrant on Present mode's winner
+    /// card, and that has no spec to build it again.
+    public func resized(to size: AvatarSize) -> AvatarPresentation {
+        var copy = self
+        copy.sizeClass = size.cssClass
+        return copy
+    }
 
     /// Every symbol this presentation names, in the order the partial stacks
     /// them — with the two that never vary. Seven, not one per feature: body,
