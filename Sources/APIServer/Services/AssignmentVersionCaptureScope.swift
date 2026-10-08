@@ -82,6 +82,3 @@ final class AssignmentVersionCaptureScope: Sendable {
         }
     }
 }
-
-/// The MCP name for the shared scope, which `ToolContext` holds.
-typealias MCPVersionCaptureScope = AssignmentVersionCaptureScope

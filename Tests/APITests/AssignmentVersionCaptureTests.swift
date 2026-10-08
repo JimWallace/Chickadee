@@ -260,7 +260,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let (_, setupID) = try await makeAssignment()
             let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
-            let scope = MCPVersionCaptureScope()
+            let scope = AssignmentVersionCaptureScope()
 
             scope.register(setup)
             #expect(scope.drain().count == 1)
