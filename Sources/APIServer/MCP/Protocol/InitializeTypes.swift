@@ -255,9 +255,10 @@ enum MCPServerInstructions {
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
         set_submission_mode (notebook editor vs upload-only hand-in), \
-        set_assignment_language (change the declared language to one of \(MCPLanguageProse.tokens); \
-        a \(LanguageProse.uploadOnlyTokens) assignment must be uploadOnly, and the change is \
-        refused once any pattern family or notebook check has generated a test), \
+        set_assignment_language (change the declared language to one of \(MCPLanguageProse.tokens), \
+        or "none"; declaring \(LanguageProse.uploadOnlyTokens) also sets uploadOnly and worker \
+        grading, and the change is refused once any pattern family or notebook check has \
+        generated a test), \
         set_time_limit (the assignment's default per-test timeout in seconds; a per-test \
         timeLimitSeconds override, \(mcpTimeLimitRangeText)s, can be set on a hand-written script via author_script / \
         update_suite, on a pattern family via create_pattern_family / update_pattern_family \
