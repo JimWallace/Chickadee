@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.583] - 2026-10-08
+
+### Fixed
+
+- A retest result now recomputes the first-to-solve, fastest and fewest-attempts class records from each student submission's latest result. A worse retest result can take a record away, and after a retest-all, first to solve goes to the earliest submitter (#2468).
+
+
 ## [0.5.582] - 2026-10-08
 
 ### Fixed
