@@ -256,3 +256,23 @@ test('stringCellText shows an ordinary string without quotes', () => {
   // The caller decides what an empty cell means, so an empty string stays empty.
   assert.equal(lang.stringCellText(''), '');
 });
+
+test('scriptLanguageFor reads the seeded extension map, case-insensitively', () => {
+  const lang = loadWith({ ...R_SEED, languageByScriptExtension: { py: 'python', r: 'r', m: 'octave' } });
+  assert.equal(lang.scriptLanguageFor('helper.R'), 'r');
+  assert.equal(lang.scriptLanguageFor('test_a.py'), 'python');
+  assert.equal(lang.scriptLanguageFor('solution.m'), 'octave');
+  assert.equal(lang.scriptLanguageFor('test_a.sh'), null);
+  assert.equal(lang.scriptLanguageFor('Makefile'), null);
+  assert.equal(lang.scriptLanguageFor(''), null);
+});
+
+test('a language-less assignment still carries the extension map', () => {
+  const lang = loadWith({ name: null, languageByScriptExtension: { r: 'r' } });
+  assert.equal(lang.scriptLanguageFor('helper.R'), 'r');
+});
+
+test('a page with no seed knows no extension', () => {
+  const lang = loadWith(null);
+  assert.equal(lang.scriptLanguageFor('test_a.py'), null);
+});
