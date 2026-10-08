@@ -22,7 +22,7 @@
     <div class="section-block" data-section-id="#(sec.sectionID)">
     #if(!sec.isUngrouped):
         <div class="section-header" draggable="true">
-            <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
+            <span class="section-drag-handle" aria-hidden="true">⋮⋮</span>
 
             <!-- View mode -->
             <div class="section-view">

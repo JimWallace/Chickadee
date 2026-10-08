@@ -374,7 +374,7 @@
             var nameVal   = escAttr(item.displayName || stemOf(item.script));
             return '<tr data-id="' + escAttr(item.id) + '" data-kind="script" data-source="existing">'
                 + '<td' + indent + '><div class="suite-name-cell">'
-                +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
+                +   '<span class="suite-drag-handle" draggable="true" aria-hidden="true">⋮⋮</span>'
                 +   connector
                 +   '<input type="text" class="form-input cell-input suite-name-input js-suite-display-name" value="' + nameVal + '">'
                 +   depBadgeHTML(item.dependsOn)
@@ -401,7 +401,7 @@
             var tier = defaults.tier || 'public';
             return '<tr data-id="' + escAttr(item.id) + '" data-kind="family" data-source="family" data-family-id="' + escAttr(family.id || '') + '">'
                 + '<td' + indent + '><div class="suite-name-cell">'
-                +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
+                +   '<span class="suite-drag-handle" draggable="true" aria-hidden="true">⋮⋮</span>'
                 +   connector
                 +   '<div class="cell-stack">'
                 +     '<strong class="cell-title">' + escHtml(family.name || family.id || '') + '</strong>'
@@ -432,7 +432,7 @@
             var points = Math.max(0, parseInt(check.points) || 0);
             return '<tr data-id="' + escAttr(item.id) + '" data-kind="check" data-source="check" data-check-id="' + escAttr(check.id || '') + '">'
                 + '<td' + indent + '><div class="suite-name-cell">'
-                +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder">⋮⋮</span>'
+                +   '<span class="suite-drag-handle" draggable="true" aria-hidden="true">⋮⋮</span>'
                 +   connector
                 +   '<div class="cell-stack">'
                 +     '<strong class="cell-title">' + escHtml(label) + '</strong>'

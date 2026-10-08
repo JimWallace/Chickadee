@@ -206,17 +206,7 @@
                     #if(course.isArchived):
                     #(user.role)
                     #else:
-                    <form method="post" action="/admin/courses/#(course.id)/role/#(user.id)" class="inline-form form-flush">
-                        #csrfFormField()
-                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
-                        <span class="state-select" data-state="#(user.role)">
-                            <select id="role-#(user.id)" name="role" class="form-input" data-ck-submit-on-change>
-                                <option value="student"#if(user.role == "student"): selected#endif>Student</option>
-                                <option value="ta"#if(user.role == "ta"): selected#endif>TA</option>
-                                <option value="instructor"#if(user.role == "instructor"): selected#endif>Instructor</option>
-                            </select>
-                        </span>
-                    </form>
+                    #extend("_role-select", user.roleSelect)
                     #endif
                 </td>
                 <td class="item-actions-td">

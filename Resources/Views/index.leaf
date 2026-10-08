@@ -130,7 +130,7 @@
                 #if(item.row.staffOnly):
                 <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">preview</span>
                 #elseif(item.row.status == "extended"):
-                <span class="tier tier-extended" title="Your instructor granted you a personal deadline extension — you can still submit past the class deadline.">extended</span>
+                <span class="tier tier-extended" title="You can submit past the class deadline">extended</span>
                 #else:
                 <span class="tier
                     #if(item.row.status == "open"):tier-open
