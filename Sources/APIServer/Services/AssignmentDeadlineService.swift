@@ -229,14 +229,34 @@ func isAssignmentEffectivelyOpenResolved(
     on db: Database,
     now: Date
 ) async throws -> Bool {
-    let gate = assignment.visibility.submissionGate(isStaff: isStaff)
-    let baseline = assignment.dueAt
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
+    return isAssignmentOpenForViewer(
+        assignment, isStaff: isStaff, extensionDueAt: extensionDueAt, now: now)
+}
+
+/// Whether `assignment` accepts a submission from one viewer right now, from
+/// inputs that are already resolved: the viewer's staff bit and their raw
+/// extension date (nil when they have none).
+///
+/// The one place that builds the inputs of `isAssignmentOpenForUser`. The
+/// submit gate (`isAssignmentEffectivelyOpenResolved`) loads the extension and
+/// calls this. The student dashboard passes the extension it has preloaded for
+/// every row, so its Submit button and the server gate cannot disagree when an
+/// input is added (#2259).
+func isAssignmentOpenForViewer(
+    _ assignment: APIAssignment,
+    isStaff: Bool,
+    extensionDueAt: Date?,
+    now: Date = Date()
+) -> Bool {
+    // Preview is open for staff and closed for students. Staff testing a
+    // preview also bypass the future-open-date gate (see `submissionGate`).
+    let gate = assignment.visibility.submissionGate(isStaff: isStaff)
     return isAssignmentOpenForUser(
         isOpen: gate.treatAsOpen,
         overrideActive: assignmentDeadlineOverrideIsActive(assignment),
-        baselineDueAt: baseline,
-        effectiveDueAt: laterDeadline(baseline: baseline, extensionDueAt: extensionDueAt),
+        baselineDueAt: assignment.dueAt,
+        effectiveDueAt: laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt),
         hasActiveExtension: studentHasActiveExtension(extensionDueAt: extensionDueAt, now: now),
         startsAt: gate.honorsStartDate ? assignment.startsAt : nil,
         now: now
@@ -262,10 +282,18 @@ private func postDeadlineRevealDeadline(
     now: Date = Date()
 ) async throws -> Date? {
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
-    let effective = laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt)
     let ceiling = try await slipDayClaimWindowCeiling(
         for: assignment, user: user, extensionDueAt: extensionDueAt, on: db, now: now)
-    return laterDeadline(baseline: effective, extensionDueAt: ceiling)
+    return postDeadlineRevealDeadline(
+        effectiveDueAt: laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt),
+        slipDayClaimCeiling: ceiling)
+}
+
+/// `postDeadlineRevealDeadline` from inputs that are already resolved: the
+/// student's effective deadline and the end of their slip-day claim window
+/// (`slipDayClaimWindowCeiling`), either of which may be nil.
+func postDeadlineRevealDeadline(effectiveDueAt: Date?, slipDayClaimCeiling: Date?) -> Date? {
+    laterDeadline(baseline: effectiveDueAt, extensionDueAt: slipDayClaimCeiling)
 }
 
 /// The deadline that gates release-tier *result visibility* for `user` viewing
@@ -336,12 +364,38 @@ func solutionVisibleToStudent(
     on db: Database,
     now: Date = Date()
 ) async throws -> Bool {
+    // The policy check first, so that the common case (no reveal) runs no
+    // query. The rule itself is the pure form below.
+    guard assignment.solutionVisibility == .afterDue else { return false }
+    let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
+    let ceiling = try await slipDayClaimWindowCeiling(
+        for: assignment, user: user, extensionDueAt: extensionDueAt, on: db, now: now)
+    return solutionVisibleToStudent(
+        assignment: assignment,
+        effectiveDueAt: laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt),
+        slipDayClaimCeiling: ceiling,
+        now: now)
+}
+
+/// The solution-reveal rule from inputs that are already resolved: the
+/// student's effective deadline and the end of their slip-day claim window.
+///
+/// The database form above loads those inputs and calls this. The student
+/// dashboard passes the inputs it has preloaded for every row, so the "View
+/// solution" link and the serving gate cannot disagree when a guard is added
+/// (#2259).
+func solutionVisibleToStudent(
+    assignment: APIAssignment,
+    effectiveDueAt: Date?,
+    slipDayClaimCeiling: Date?,
+    now: Date = Date()
+) -> Bool {
     guard assignment.solutionVisibility == .afterDue else { return false }
     guard !assignmentDeadlineOverrideIsActive(assignment) else { return false }
     guard assignmentVisibleToStudentByState(assignment, now: now) else { return false }
     guard
-        let revealAt = try await postDeadlineRevealDeadline(
-            for: assignment, user: user, on: db, now: now)
+        let revealAt = postDeadlineRevealDeadline(
+            effectiveDueAt: effectiveDueAt, slipDayClaimCeiling: slipDayClaimCeiling)
     else { return true }
     return revealAt <= now
 }

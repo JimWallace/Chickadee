@@ -370,20 +370,12 @@ extension WebRoutes {
         let hasActiveExtension = studentHasActiveExtension(extensionDueAt: extensionDueAt)
         let effectiveDueAt = laterDeadline(
             baseline: baselineDueAt, extensionDueAt: extensionDueAt)
-        let isOpenForThisUser: Bool = {
-            guard let assignment else { return false }
-            // Preview is open for staff, closed for students; staff testing a
-            // preview also bypass the future-open-date gate (see submissionGate).
-            let gate = assignment.visibility.submissionGate(isStaff: context.isActiveCourseStaff)
-            return isAssignmentOpenForUser(
-                isOpen: gate.treatAsOpen,
-                overrideActive: assignment.deadlineOverrideActive ?? false,
-                baselineDueAt: baselineDueAt,
-                effectiveDueAt: effectiveDueAt,
-                hasActiveExtension: hasActiveExtension,
-                startsAt: gate.honorsStartDate ? assignment.startsAt : nil
-            )
-        }()
+        // The same rule as the server's submit gate, from the preloaded row.
+        let isOpenForThisUser =
+            assignment.map {
+                isAssignmentOpenForViewer(
+                    $0, isStaff: context.isActiveCourseStaff, extensionDueAt: extensionDueAt)
+            } ?? false
         // A published-but-closed assignment is openable read-only, so it
         // still gets the open-notebook action even for a student who never
         // engaged with it (the page renders read-only and hides Submit).
@@ -498,12 +490,11 @@ extension WebRoutes {
             : "Use a slip day — extends your deadline to \(deadlineText)"
     }
 
-    /// Whether the "View solution" action is offered on this row: the same
-    /// rule the serving routes enforce (`solutionVisibleToStudent` — policy
-    /// on, published, no re-open override, this student's effective deadline
-    /// passed, no slip-day claim still reachable), computed from the row
-    /// inputs the dashboard has already loaded so no extra per-row queries
-    /// run.  Students only; staff reach the solution through the workbench.
+    /// Whether the "View solution" action is offered on this row. It calls
+    /// the rule the serving routes enforce (`solutionVisibleToStudent`), with
+    /// the row inputs the dashboard has already loaded, so no extra per-row
+    /// queries run. Students only; staff reach the solution through the
+    /// workbench.
     private static func solutionRevealAvailable(
         assignment: APIAssignment?,
         extensionDueAt: Date?,
@@ -513,9 +504,6 @@ extension WebRoutes {
         now: Date = Date()
     ) -> Bool {
         guard let assignment, !context.isActiveCourseStaff else { return false }
-        guard assignment.solutionVisibility == .afterDue else { return false }
-        guard !(assignment.deadlineOverrideActive ?? false) else { return false }
-        guard assignmentVisibleToStudentByState(assignment, now: now) else { return false }
         let spentCount = context.slipDay.spendCountBySetupID[setupID] ?? 0
         let ceiling = slipDayClaimWindowCeiling(
             policy: context.slipDay.policy,
@@ -524,8 +512,8 @@ extension WebRoutes {
             spentOnAssignment: spentCount,
             hasForeignExtension: extensionDueAt != nil && spentCount == 0,
             now: now)
-        guard let revealAt = laterDeadline(baseline: effectiveDueAt, extensionDueAt: ceiling)
-        else { return true }
-        return revealAt <= now
+        return solutionVisibleToStudent(
+            assignment: assignment, effectiveDueAt: effectiveDueAt,
+            slipDayClaimCeiling: ceiling, now: now)
     }
 }

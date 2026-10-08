@@ -112,7 +112,9 @@ per-assignment policy off.
   upload form. The instructor files route stays staff-gated; the notebook
   page's Download button targets the route matching the viewer.
 - Affordances render through the same rule: the dashboard row action
-  (computed from the row inputs already loaded — no extra per-row queries),
+  (computed from the row inputs already loaded — no extra per-row queries —
+  by the pure form of `solutionVisibleToStudent`, which takes the effective
+  deadline and the slip-day claim ceiling as inputs),
   the notebook-toolbar "View solution" link, and the submission-page notice.
   An affordance can hide while a direct URL would serve (e.g. an archived
   course's ceiling) but never the reverse.
