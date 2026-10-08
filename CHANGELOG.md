@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.596] - 2026-10-08
+
+### Fixed
+
+- **The leaderboard page matches the redesign's reference frames more closely.** The course code stands above the title. A student's window of the list ends with a "Show all N" button. On the staff list, the value sits beside its eye button. Round-robin and Tests values carry their caption ("Average", "Faults"). The hill's holder and a tournament's winner have a pale gold card. An open session's countdown is a live status tag.
+
+### Changed
+
+- **pixelmatch 8 in the visual-regression harness.** pixelmatch 8 measures colour difference as an OKLab HyAB distance instead of YIQ. Measured on the committed baselines, the existing threshold of 0.15 keeps the same tolerance for rendering noise and catches smaller palette changes than before, so the threshold stays as it is.
+
+
 ## [0.5.595] - 2026-10-08
 
 ### Changed
