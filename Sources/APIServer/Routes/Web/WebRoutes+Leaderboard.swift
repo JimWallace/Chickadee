@@ -285,9 +285,9 @@ private func buildUnionYouCard(
     return UnionYouCard(
         isRanked: true, handle: identity.handle, hasHandle: !identity.handle.isEmpty,
         avatar: identity.avatar, kicker: "You · \(identity.handle)",
-        titleText: "\(found) \(found == 1 ? "fault" : "faults") found",
+        titleText: "Your tests found \(found) \(found == 1 ? "fault" : "faults") · your code is \(status)",
         noteText:
-            "Your code is \(status) · tested \(tested) \(tested == 1 ? "classmate" : "classmates"), tested by \(testedBy)",
+            "Tested \(tested) \(tested == 1 ? "classmate" : "classmates") · \(testedBy) \(testedBy == 1 ? "has" : "have") tested you",
         privacyLine: identity.privacyLine, submitURL: identity.submitURL)
 }
 
