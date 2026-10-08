@@ -299,7 +299,7 @@ SwiftLint `--strict` clean, tests green.
   content edits now **automatically re-grade** every existing student submission
   against the new suite (gated on a real manifest change, idempotent), matching
   the human "Retest all" button — so prior grades no longer silently go stale
-  (`retestSubmissionsAfterContentEdit`). Still open: a `dryRun` preview, and
+  (`applyContentEditEffects`). Still open: a `dryRun` preview, and
   surfacing the affected-submission count in the tool result rather than only the
   server log (design principle #3).
 
