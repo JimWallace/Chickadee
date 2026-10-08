@@ -51,7 +51,7 @@ extension CourseAdminRoutes {
         let kind = ContentItemKind(rawValue: body.kind ?? "") ?? .link
         let links = try buildContentLinks(labels: body.linkLabels ?? [], urls: body.linkURLs ?? [])
         let sectionID = try await resolveSectionID(body.sectionID, courseID: courseID, db: req.db)
-        let sortOrder = try await nextContentItemSortOrder(
+        let sortOrder = try await nextSectionItemSortOrder(
             courseID: courseID, sectionID: sectionID, db: req.db)
 
         let item = APICourseContentItem(
@@ -205,7 +205,7 @@ extension CourseAdminRoutes {
         item.sectionID = newSectionID
         // Append to the destination lane so it doesn't collide with an existing
         // sortOrder; the client may follow with a reorder to place it exactly.
-        item.sortOrder = try await nextContentItemSortOrder(
+        item.sortOrder = try await nextSectionItemSortOrder(
             courseID: item.courseID, sectionID: newSectionID, db: req.db)
         try await item.save(on: req.db)
         return .ok
@@ -261,20 +261,6 @@ extension CourseAdminRoutes {
         }
         item.attachments = attachments
         try await item.save(on: req.db)
-    }
-
-    /// Next sort order in the content-item lane of `(course, section)`.
-    private func nextContentItemSortOrder(
-        courseID: UUID, sectionID: UUID?, db: any Database
-    ) async throws -> Int {
-        let query = APICourseContentItem.query(on: db).filter(\.$courseID == courseID)
-        if let sectionID {
-            query.filter(\.$sectionID == sectionID)
-        } else {
-            query.filter(\.$sectionID == nil)
-        }
-        let maxOrder = try await query.max(\.$sortOrder) ?? 0
-        return maxOrder + 1
     }
 
     /// Builds `[ContentLink]` from parallel form arrays, dropping fully-blank

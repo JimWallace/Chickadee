@@ -183,32 +183,18 @@ extension CourseAdminRoutes {
         // Append to the destination lane's shared (assignment + content) order so
         // the moved assignment doesn't collide with an existing sort_order; the
         // DnD client follows with a reorder to place it exactly.
-        assignment.sortOrder = try await nextAssignmentSortOrder(
+        assignment.sortOrder = try await nextSectionItemSortOrder(
             courseID: courseID, sectionID: newSectionID, db: req.db)
         try await assignment.save(on: req.db)
 
-        // When moving into a named section, sync the test setup's grading mode
-        // to match the section's defaultGradingMode.  Moving to "ungrouped"
-        // (nil section) leaves the grading mode unchanged.  Shares
-        // `setManifestGradingMode` with the MCP set_grading_mode tool so both
-        // paths produce identical (sorted-key) manifest bytes — the
-        // manifest-hash retest gate depends on that determinism.
-        //
-        // An upload-only assignment — or one marking grader-only files —
-        // skips the sync rather than failing the move: adopting a browser
-        // default would be refused (no notebook page to grade in, or withheld
-        // files the browser path would deliver), and a drag into a section is
-        // not the place to surface that — the assignment simply keeps worker
-        // grading.
+        // Moving into a named section adopts that section's default grading
+        // mode, unless that would break a manifest rule. Moving to
+        // "ungrouped" (nil section) leaves the grading mode unchanged.
         if let sectionUUID = newSectionID,
             let section = try await APICourseSection.find(sectionUUID, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db),
-            !(section.defaultGradingMode == GradingMode.browser.rawValue
-                && (currentManifestSubmissionMode(setup.manifest) == SubmissionMode.uploadOnly.rawValue
-                    || !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
-                    || currentManifestActivityStagesAnOpponent(setup.manifest)))
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         {
-            _ = try await setManifestGradingMode(setup: setup, to: section.defaultGradingMode, on: req.db)
+            try await adoptSectionGradingMode(section, setup: setup, on: req.db)
         }
 
         return .ok

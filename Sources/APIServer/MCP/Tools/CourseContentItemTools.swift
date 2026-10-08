@@ -174,19 +174,6 @@ func resolveContentItemSectionID(
     try await resolveCourseSectionID(raw, inCourse: courseID, owner: "content item", context: context)
 }
 
-/// Next sort order in the content-item lane of `(course, section)`.
-func nextContentItemLaneSortOrder(
-    courseID: UUID, sectionID: UUID?, db: any Database
-) async throws -> Int {
-    let query = APICourseContentItem.query(on: db).filter(\.$courseID == courseID)
-    if let sectionID {
-        query.filter(\.$sectionID == sectionID)
-    } else {
-        query.filter(\.$sectionID == nil)
-    }
-    return (try await query.max(\.$sortOrder) ?? 0) + 1
-}
-
 /// Reusable JSON-schema fragment for the `links` array.
 private let contentLinksSchema: JSONValue = .object([
     "type": .string("array"),
@@ -444,7 +431,7 @@ struct CreateContentItemTool: ContentTool {
         let links = try contentLinksFromInput(input.links ?? [])
         let sectionID = try await resolveContentItemSectionID(
             input.courseSectionID, courseID: courseID, context: context)
-        let sortOrder = try await nextContentItemLaneSortOrder(
+        let sortOrder = try await nextSectionItemSortOrder(
             courseID: courseID, sectionID: sectionID, db: context.db)
 
         let item = APICourseContentItem(
@@ -592,7 +579,7 @@ struct UpdateContentItemTool: ContentTool {
                 rawSection, courseID: item.courseID, context: context)
             if newSectionID != item.sectionID {
                 item.sectionID = newSectionID
-                item.sortOrder = try await nextContentItemLaneSortOrder(
+                item.sortOrder = try await nextSectionItemSortOrder(
                     courseID: item.courseID, sectionID: newSectionID, db: context.db)
             }
         }

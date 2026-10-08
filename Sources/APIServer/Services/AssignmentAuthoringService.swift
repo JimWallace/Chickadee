@@ -232,6 +232,10 @@ enum AssignmentAuthoringService {
                     title: newTitle,
                     courseID: targetCourseID,
                     visibility: .closed,
+                    // Ungrouped, after the items already there (#2490). The
+                    // course clone sets its own section and order next.
+                    sortOrder: try await nextSectionItemSortOrder(
+                        courseID: targetCourseID, sectionID: nil, db: db),
                     validationSubmissionID: clonedSolution?.id),
                 on: db)
             // The per-assignment policies travel with every clone (#1738).
@@ -377,7 +381,10 @@ enum AssignmentAuthoringService {
                 setup: setup, notebookData: notebookData, setupsDirectory: setupsDirectory, on: db)
             let assignment = try await createAssignmentWithUniquePublicID(
                 NewAssignmentFields(
-                    testSetupID: setupID, title: title, courseID: courseID, visibility: .closed),
+                    testSetupID: setupID, title: title, courseID: courseID, visibility: .closed,
+                    // Ungrouped, after the items already there (#2490).
+                    sortOrder: try await nextSectionItemSortOrder(
+                        courseID: courseID, sectionID: nil, db: db)),
                 on: db)
             await AssignmentVersionStore.seedInitialVersion(
                 setup: setup, origin: AssignmentVersionOrigin.create,

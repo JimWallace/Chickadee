@@ -125,34 +125,6 @@ func dueAtLocalInputString(_ date: Date?) -> String {
     return fmt.string(from: date)
 }
 
-/// Next `sort_order` in the shared per-section item lane of `(course, section)`.
-/// Assignments and content items share one interleaved sequence, so the next
-/// order is the maximum across BOTH tables in this lane, plus one — a newly
-/// published assignment appends to its section rather than to a course-global
-/// maximum (mirrors `nextContentItemSortOrder`).
-func nextAssignmentSortOrder(
-    courseID: UUID, sectionID: UUID?, db: any Database
-) async throws -> Int {
-    let assignmentQuery = APIAssignment.query(on: db)
-        .filter(\.$courseID == courseID)
-        // MAX over the non-null rows only; an explicit filter + sort avoids the
-        // driver-dependent NULL ordering Postgres and SQLite disagree on.
-        .filter(\.$sortOrder != nil)
-    let contentQuery = APICourseContentItem.query(on: db)
-        .filter(\.$courseID == courseID)
-    if let sectionID {
-        assignmentQuery.filter(\.$sectionID == sectionID)
-        contentQuery.filter(\.$sectionID == sectionID)
-    } else {
-        assignmentQuery.filter(\.$sectionID == nil)
-        contentQuery.filter(\.$sectionID == nil)
-    }
-    let maxAssignment =
-        try await assignmentQuery.sort(\.$sortOrder, .descending).first()?.sortOrder ?? 0
-    let maxContent = try await contentQuery.max(\.$sortOrder) ?? 0
-    return Swift.max(maxAssignment, maxContent) + 1
-}
-
 /// The grade percent recorded on a submission result: weighted when present,
 /// else passed tests over all tests.
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {

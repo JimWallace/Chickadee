@@ -158,12 +158,6 @@ func currentManifestGradingMode(_ manifest: String?) -> String {
     (manifest.flatMap(decodeManifest(fromJSON:))?.gradingMode ?? .worker).rawValue
 }
 
-/// Reads the `graderOnlyFiles` list of a manifest JSON string — empty when
-/// the manifest can't be decoded.
-func currentManifestGraderOnlyFiles(_ manifest: String?) -> [String] {
-    manifest.flatMap(decodeManifest(fromJSON:))?.graderOnlyFiles ?? []
-}
-
 /// Sets the test setup's `gradingMode` to `mode` when it differs.  Returns the
 /// effective mode.
 ///
@@ -497,13 +491,6 @@ func setManifestGitHubStatusChecks(setup: APITestSetup, enabled: Bool, on db: an
 /// kind this build does not know).
 func currentManifestActivity(_ manifest: String?) -> ClassActivity? {
     manifest.flatMap(decodeManifest(fromJSON:))?.activity
-}
-
-/// True when the manifest's activity stages an opponent (a bot kind with its
-/// file chosen) — the predicate every browser-grading door asks, so they
-/// cannot disagree about what it covers.
-func currentManifestActivityStagesAnOpponent(_ manifest: String?) -> Bool {
-    currentManifestActivity(manifest)?.stagesAnOpponent == true
 }
 
 /// Sets (or clears, with nil) the test setup's `activity` block.

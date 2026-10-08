@@ -614,7 +614,7 @@ extension DraftAssignmentRoutes {
                 visibility: .closed,
                 dueAt: validated.dueAt,
                 startsAt: validated.startsAt,
-                sortOrder: try await nextAssignmentSortOrder(
+                sortOrder: try await nextSectionItemSortOrder(
                     courseID: courseID, sectionID: sectionID, db: req.db),
                 validationStatus: shouldQueueValidation ? "pending" : nil,
                 sectionID: sectionID
@@ -767,7 +767,7 @@ extension DraftAssignmentRoutes {
                 dueAt: due,
                 // Quick-publish creates an ungrouped assignment (no section picker),
                 // so it appends to the ungrouped lane.
-                sortOrder: try await nextAssignmentSortOrder(
+                sortOrder: try await nextSectionItemSortOrder(
                     courseID: courseID, sectionID: nil, db: req.db)
             ),
             on: req.db
