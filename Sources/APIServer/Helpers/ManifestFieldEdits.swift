@@ -245,42 +245,29 @@ func currentManifestLanguage(_ manifest: String?) -> String? {
     manifest.flatMap(decodeManifest(fromJSON:))?.language?.rawValue
 }
 
-/// Sets the test setup's recorded `language` to `language` when it differs.
-/// Returns the effective language.
+/// Changes the language an existing assignment declares. The web Language
+/// select and MCP `set_assignment_language` both call it, so the two doors
+/// apply one rule (#2486).
 ///
-/// The recorded field is the author's declaration, and this setter is the one
-/// place a route or tool changes it: `AssignmentLanguage.resolve(manifest:)`
-/// reads it and nothing derives it from content. Hence its two guards.
+/// The rule is the declaration rule (`applyLanguageDeclaration`): nil declares
+/// "none", and an upload-only language also sets upload-only submission and
+/// worker grading.
 ///
-/// Refuses an upload-only language while the setup is still in notebook mode:
-/// the mirror of `setManifestSubmissionMode`'s guard, so the incoherent
-/// combination cannot be authored from either direction.
-///
-/// Refuses any change once generated scripts exist. A language change rewrites
+/// It refuses a change once generated tests exist. A language change rewrites
 /// every generated filename (the extension is part of the name), and only the
-/// pattern-family application path knows how to re-render and clean up the old
-/// side. Rather than half-perform that here, the change is confined to a suite
-/// with nothing generated in it yet — which is where an author declares the
-/// language anyway.
-func setManifestLanguage(
-    setup: APITestSetup, to language: String, on db: any Database
-) async throws -> String {
-    guard let parsed = AssignmentLanguage(rawValue: language) else {
-        throw AppError.badRequest(reason: unknownLanguageMessage(language))
-    }
-    // Not a save-only-when-changed rule, which `mutateManifest` owns: a
-    // same-value call must not meet the generated-scripts refusal below.
-    guard currentManifestLanguage(setup.manifest) != language else { return language }
-    if let violation = ManifestCoherence.violation(introducedBy: { $0.language = parsed }, in: setup.manifest) {
-        throw AppError.badRequest(reason: violation)
-    }
-    if manifestHasGeneratedScripts(setup.manifest) {
-        throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
-    }
+/// pattern-family application path can re-render them and remove the old
+/// ones. Declaring the current language again is not a change, so it is never
+/// refused. The check runs inside the conditional write, so it reads the same
+/// manifest that the write replaces.
+func changeDeclaredLanguage(
+    setup: APITestSetup, to language: AssignmentLanguage?, on db: any Database
+) async throws {
     try await mutateManifest(setup: setup, on: db) { props in
-        props.language = parsed
+        if props.language != language, props.testSuites.contains(where: \.isGenerated) {
+            throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
+        }
+        applyLanguageDeclaration(language, to: &props)
     }
-    return language
 }
 
 /// The wire value meaning "this assignment has no language — its suite is plain
@@ -309,19 +296,19 @@ func parseLanguageChoice(_ raw: String) throws -> AssignmentLanguage? {
 /// language itself, or its declared absence, plus the flag saying the question
 /// was answered at all.
 ///
-/// This is the declaration primitive, distinct from `setManifestLanguage`
-/// (which edits a language on an assignment that already has content and guards
-/// accordingly). Two differences matter:
+/// This is the declaration at creation. `changeDeclaredLanguage` is the edit
+/// of an assignment that already has content; it applies the same rule and
+/// adds the generated-tests guard. The rule:
 ///
 /// 1. It records `languageDeclared`, so a nil language afterwards means "the
 ///    author says there is none" rather than "nobody has been asked".
 /// 2. An upload-only language sets `submissionMode` AND `gradingMode` too,
-///    because the language implies both. That is what makes declare-at-creation
-///    possible for C++ at all: `setManifestLanguage` refuses an upload-only
-///    language while the setup is in notebook mode, and a brand-new assignment
-///    always is — so requiring the declaration up front would otherwise leave
+///    because the language implies both. A brand-new assignment is in notebook
+///    mode, so a rule that refused an upload-only language there would leave
 ///    C++ uncreatable. It also collapses the old three-step authoring dance
 ///    (grading mode, then submission mode, then language) into one answer.
+///    Until #2486 the MCP edit refused instead of switching; now both edit
+///    doors switch too.
 ///
 ///    `gradingMode` must move with it. A new assignment defaults to `browser`,
 ///    so setting only `submissionMode` left the manifest holding
@@ -337,12 +324,18 @@ func declareManifestLanguage(
     setup: APITestSetup, to language: AssignmentLanguage?, on db: any Database
 ) async throws {
     try await mutateManifest(setup: setup, on: db) { props in
-        props.languageDeclared = true
-        props.language = language
-        if let language, case .uploadOnly = language.editorSupport {
-            props.submissionMode = .uploadOnly
-            props.gradingMode = .worker
-        }
+        applyLanguageDeclaration(language, to: &props)
+    }
+}
+
+/// The declaration rule that `declareManifestLanguage` documents, shared with
+/// `changeDeclaredLanguage`.
+func applyLanguageDeclaration(_ language: AssignmentLanguage?, to props: inout TestProperties) {
+    props.languageDeclared = true
+    props.language = language
+    if let language, requiresUploadOnlySubmission(language) {
+        props.submissionMode = .uploadOnly
+        props.gradingMode = .worker
     }
 }
 

@@ -34,7 +34,7 @@ struct SetSubmissionModeTool: ContentTool {
         "Set how students hand work in for an assignment by its public ID: \"notebook\" (the embedded "
         + "editor, with the upload form beside it) or \"uploadOnly\" (file upload only, no editor). Use "
         + "uploadOnly for a language with no in-browser kernel — \(LanguageProse.uploadOnlyTokens) "
-        + "assignments must be uploadOnly, and set_assignment_language refuses them until they are. "
+        + "assignments must be uploadOnly, and set_assignment_language sets it when it declares one. "
         + "An uploadOnly assignment is always graded "
         + "by the native worker, so switch the grading mode to \"worker\" first (set_grading_mode); this "
         + "tool refuses the browser combination rather than storing a value that could never execute. "

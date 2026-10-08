@@ -243,10 +243,9 @@ extension PublishedAssignmentRoutes {
     /// else is an answer, including `noLanguageChoice` ("none"), which declares
     /// the assignment has no language rather than asking for one to be detected.
     ///
-    /// The reason is the thrown error's own, not one fixed message: the shared
-    /// helpers have three distinct refusals — unknown language, C++ outside
-    /// upload-only mode, and a change once generated tests exist — and which one
-    /// applies is exactly what the author needs in order to act.
+    /// The reason is the thrown error's own, not one fixed message: an unknown
+    /// language and a change once generated tests exist are distinct refusals,
+    /// and which one applies is what the author needs in order to act.
     fileprivate func persistDeclaredLanguage(
         requested: String?, setup: APITestSetup, on db: any Database
     ) async -> String? {
@@ -255,15 +254,7 @@ extension PublishedAssignmentRoutes {
         else { return nil }
         do {
             let language = try parseLanguageChoice(requested)
-            // Changing the language rewrites every generated filename, so the
-            // existing guard still applies to an edit even though a declaration
-            // at creation has nothing generated to protect.
-            if manifestHasGeneratedScripts(setup.manifest),
-                currentManifestLanguage(setup.manifest) != language?.rawValue
-            {
-                throw AppError.badRequest(reason: languageChangeAfterGenerationMessage)
-            }
-            try await declareManifestLanguage(setup: setup, to: language, on: db)
+            try await changeDeclaredLanguage(setup: setup, to: language, on: db)
             return nil
         } catch {
             // `any AbortError` rather than `AppError`, so a Vapor `Abort` thrown

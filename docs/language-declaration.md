@@ -72,12 +72,14 @@ Four doors create an assignment, and all four answer the question:
 
 Plus two paths that change an existing declaration:
 
-- Web edit save (`PublishedAssignmentRoutes+SaveEdit`) — refuses a change once
-  generated scripts exist, because changing the language rewrites every
-  generated filename.
-- MCP `set_assignment_language` — same guard.
+- Web edit save (`PublishedAssignmentRoutes+SaveEdit`).
+- MCP `set_assignment_language`.
 
-All of them go through `declareManifestLanguage(setup:to:on:)`
+Both call `changeDeclaredLanguage(setup:to:on:)`, so they apply one rule
+(#2486). It refuses a change once generated scripts exist, because changing the
+language rewrites every generated filename.
+
+All of them go through `applyLanguageDeclaration(_:to:)`
 (`Helpers/ManifestFieldEdits.swift`), which is the only writer. It sets
 `languageDeclared`, writes or removes `language`, and — for an `.uploadOnly`
 language — moves `submissionMode` and `gradingMode` with it, so creation cannot
