@@ -148,4 +148,24 @@ import VaporTesting
             #expect(!html.contains("<col class=\"section-items-actions\">"))
         }
     }
+
+    @Test func standingsCaptionTheirValue() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let setup = try await wrInsertSetup(id: "lpy_robin", manifest: try manifest(.roundRobin), on: app)
+            _ = try await makeTestAssignment(
+                on: app, testSetupID: "lpy_robin", courseID: setup.courseID, title: "League")
+            let viewer = try await wrStudentUser(on: app)
+            try await wrEnrollUser(viewer, on: app)
+            try await APIActivityStanding(
+                testSetupID: "lpy_robin", userID: try viewer.requireID(), submissionID: "lpy_robin_v",
+                played: 2, wins: 2, draws: 0, losses: 0, scoreSum: 2, updatedAt: Date()
+            ).save(on: app.db)
+            let html = try await getHTML("/testsetups/lpy_robin/leaderboard", cookie: cookie, on: app)
+            #expect(
+                html.contains(
+                    "<td class=\"item-status item-grade\">1<div class=\"item-details\" aria-hidden=\"true\">Average</div></td>"
+                ))
+        }
+    }
 }
