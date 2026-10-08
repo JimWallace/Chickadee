@@ -455,6 +455,7 @@
          via the debounced `PUT /suite`.  Section CRUD (create / rename /
          delete / reorder) goes through dedicated endpoints — see
          AssignmentRoutes+SuiteSections.swift. -->
+    <p class="field-note field-note--muted">Drag a test onto another test in the same section to make it depend on that test.</p>
     #extend("_suite-sections")
 </div>
 
