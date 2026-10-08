@@ -21,32 +21,7 @@
 
 import Fluent
 import Foundation
-import Synchronization
 import Vapor
-
-/// Per-request collection of setups resolved for write, plus the seeding of
-/// their baselines. Lives in `Request.storage`.
-final class AssignmentVersionCaptureScope: Sendable {
-    /// Shared between the handler and the middleware that awaits it.
-    private let pending = Mutex<[String: APITestSetup]>([:])
-
-    func register(_ setup: APITestSetup) {
-        guard let id = setup.id else { return }
-        pending.withLock { $0[id] = setup }
-    }
-
-    func drain() -> [APITestSetup] {
-        pending.withLock { pending in
-            let setups = Array(pending.values)
-            pending.removeAll()
-            return setups
-        }
-    }
-
-    var isEmpty: Bool {
-        pending.withLock { $0.isEmpty }
-    }
-}
 
 private struct AssignmentVersionCaptureScopeKey: StorageKey {
     typealias Value = AssignmentVersionCaptureScope
@@ -69,19 +44,8 @@ extension Request {
     /// Best-effort: an instructor's save must not fail because its history
     /// could not be written.
     func beginAssignmentContentEdit(setup: APITestSetup) async {
-        assignmentVersionCapture.register(setup)
-        do {
-            _ = try await AssignmentVersionStore.ensureBaseline(
-                setup: setup,
-                testSetupsDirectory: application.testSetupsDirectory,
-                on: db)
-        } catch {
-            logger.warning(
-                "assignment version baseline failed",
-                metadata: [
-                    "setup": .string(setup.id ?? "?"), "error": .string("\(error)"),
-                ])
-        }
+        await assignmentVersionCapture.begin(
+            setup: setup, testSetupsDirectory: application.testSetupsDirectory, logger: logger, on: db)
     }
 }
 
@@ -105,20 +69,12 @@ struct AssignmentVersionCaptureMiddleware: AsyncMiddleware {
     private func capture(on request: Request) async {
         let scope = request.assignmentVersionCapture
         guard !scope.isEmpty else { return }
-        let actor = request.auth.get(APIUser.self)
-        let origin = AssignmentVersionOrigin.web(action: Self.action(for: request))
-
-        for setup in scope.drain() {
-            // Re-read so a handler that reloaded or replaced the row is
-            // snapshotted from what actually persisted, not a stale object.
-            let current = (try? await APITestSetup.find(setup.id ?? "", on: request.db)) ?? setup
-            _ = await AssignmentVersionStore.recordBestEffort(
-                setup: current,
-                request: AssignmentVersionRequest(origin: origin, actor: actor),
-                testSetupsDirectory: request.application.testSetupsDirectory,
-                logger: request.logger,
-                on: request.db)
-        }
+        await scope.recordRegistered(
+            origin: AssignmentVersionOrigin.web(action: Self.action(for: request)),
+            actor: request.auth.get(APIUser.self),
+            testSetupsDirectory: request.application.testSetupsDirectory,
+            logger: request.logger,
+            on: request.db)
     }
 
     /// A short, stable label for what produced the version: the matched route
