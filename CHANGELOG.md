@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.580] - 2026-10-08
+
+### Fixed
+
+- **A local HTTP server test no longer times `stop()` against the wall clock.** The one-second bound could not catch a `stop()` that waited for the server, and could fail when a loaded runner paused the test. The test still proves that each server stops and that its siblings keep serving. (#2453)
+
+### Fixed
+
+- **An MCP agent refused for permission now gets `notAuthorized`, not `invalidArguments`.** A 401 or 403 from a shared web path told the agent that its arguments were wrong, although no argument could make the call succeed. It now maps to the error the tools already throw for an enrolment refusal. Every other 4xx still maps to `invalidArguments`. (#2454)
+
+
 ## [0.5.579] - 2026-10-08
 
 ### Fixed
