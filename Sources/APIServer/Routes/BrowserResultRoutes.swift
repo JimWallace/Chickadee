@@ -127,28 +127,16 @@ struct BrowserResultRoutes: RouteCollection {
         // stay correct for browser-graded assignments.
         let reconciled = Self.reconcileBrowserCollection(
             collection, submissionID: subID, attemptNumber: attemptNumber)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let collectionJSON = try String(data: encoder.encode(reconciled), encoding: .utf8) ?? "{}"
-
-        let browserResult = APIResult(
-            id: freshShortID(prefix: "res"),
-            submissionID: subID,
-            source: "browser"
-        )
-        // Mark for BrightSpace sync exactly as the worker path does. Without
-        // this a browser-graded assignment never auto-pushed a grade to LEARN:
-        // the 60-second sweep only ever sees rows flagged here, so notebook
-        // labs silently reached LEARN only via an instructor's manual "Push
-        // all" or a retest that routed through a worker.
-        try await ResultIngestEffects.flagForGradeSync(
-            browserResult, testSetupID: body.testSetupID, application: req.application, on: req.db)
+        // Built, and flagged for grade sync, exactly as the worker report is.
+        let prepared = try await ResultIngestEffects.prepareResult(
+            reconciled, source: "browser", testSetupID: body.testSetupID,
+            application: req.application, on: req.db)
         // Same transient-SQLite-lock guard as the submission insert above: this
         // second write can also lose a race with a concurrent commit (session
         // write / background monitor) and surface as a 500 otherwise.
         // saveWithCollection is itself transactional (row + blob together).
         try await withTransientDatabaseLockRetry(on: req.db) {
-            try await browserResult.saveWithCollection(json: collectionJSON, on: req.db)
+            try await prepared.row.saveWithCollection(json: prepared.json, on: req.db)
         }
 
         req.logger.info("Browser result stored for \(subID)")

@@ -66,7 +66,12 @@ struct ResultRoutes: RouteCollection {
         // with the submission stuck `assigned` until the stuck-submission
         // reaper re-queued and regraded it (wasted work, duplicate results).
         let completedSubmission = try await req.db.transaction { tx -> APISubmission? in
-            try await persistToDB(collection, on: req, db: tx)
+            let prepared = try await ResultIngestEffects.prepareResult(
+                collection, source: "worker", testSetupID: collection.testSetupID,
+                application: req.application, on: tx)
+            // Row and blob side-table row persist together, inside this
+            // transaction (persist and submission status flip).
+            try await prepared.row.saveWithCollection(json: prepared.json, on: tx)
             guard let submission = try await APISubmission.find(collection.submissionID, on: tx)
             else { return nil }
             submission.setStatus(.complete)
@@ -124,31 +129,6 @@ struct ResultRoutes: RouteCollection {
         }
 
         return ReportResponse(received: true)
-    }
-
-    // MARK: - DB persistence
-
-    private func persistToDB(
-        _ collection: TestOutcomeCollection, on req: Request, db: Database
-    ) async throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let json = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
-
-        let result = APIResult(
-            id: freshShortID(prefix: "res"),
-            submissionID: collection.submissionID
-        )
-
-        // Mark for BrightSpace and LTI sync. Shared with the browser-result
-        // path so the two ingest routes can't drift apart on which grades
-        // reach the LMS.
-        try await ResultIngestEffects.flagForGradeSync(
-            result, testSetupID: collection.testSetupID, application: req.application, on: db)
-
-        // Row + blob side-table row persist together; the caller's
-        // transaction (persist + submission status flip) encloses both.
-        try await result.saveWithCollection(json: json, on: db)
     }
 }
 
