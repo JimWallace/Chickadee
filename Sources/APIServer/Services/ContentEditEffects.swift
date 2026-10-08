@@ -37,7 +37,7 @@ enum ContentEditKind: Sendable {
 /// validation run. An MCP caller must pass it, because a bearer-authenticated
 /// request has no session user (see `scheduleValidationAfterSuiteEdit`).
 ///
-/// The re-grade runs on `req.db`, the privileged default pool, also for MCP:
+/// The re-grade runs on `context.db`, the privileged default pool, also for MCP:
 /// it changes student submission rows as a system re-grade, not as
 /// agent-facing data access.
 @discardableResult
@@ -46,19 +46,19 @@ func applyContentEditEffects(
     assignment: APIAssignment,
     setup: APITestSetup,
     actingUserID: UUID?,
-    req: Request
+    context: some ServiceContext
 ) async -> Int {
     var requeued = 0
     if kind == .gradeAffecting {
         do {
             requeued = try await retestSubmissionsIfManifestChanged(
-                setup: setup, triggeredBy: actingUserID, on: req.db)
+                setup: setup, triggeredBy: actingUserID, on: context.db)
         } catch {
-            req.logger.warning("content-edit auto-retest failed: \(error)")
+            context.logger.warning("content-edit auto-retest failed: \(error)")
         }
     }
     // Debounced: a no-op when a validation run is already pending.
     await scheduleValidationAfterSuiteEdit(
-        req: req, assignment: assignment, submitterUserID: actingUserID)
+        context: context, assignment: assignment, submitterUserID: actingUserID)
     return requeued
 }

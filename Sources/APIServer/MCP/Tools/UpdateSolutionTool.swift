@@ -229,7 +229,7 @@ struct UpdateSolutionTool: ContentTool {
         let validationSubmissionID: String
         do {
             validationSubmissionID = try await enqueueRunnerValidationSubmission(
-                req: context.request,
+                context: context.request,
                 setupID: assignment.testSetupID,
                 solutionNotebookData: data,
                 filename: storedFilename,

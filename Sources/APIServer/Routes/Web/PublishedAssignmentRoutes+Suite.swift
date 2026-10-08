@@ -60,7 +60,7 @@ extension PublishedAssignmentRoutes {
         // the Save button onto this live endpoint.
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup,
-            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
+            actingUserID: req.auth.get(APIUser.self)?.id, context: req)
 
         let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)

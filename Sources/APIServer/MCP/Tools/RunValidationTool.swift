@@ -97,7 +97,7 @@ struct RunValidationTool: ContentTool {
 
         do {
             _ = try await requeueValidationRun(
-                req: context.request, assignment: assignment, submitterUserID: subjectID,
+                context: context.request, assignment: assignment, submitterUserID: subjectID,
                 targetRunnerID: target)
         } catch ValidationRunError.noSolution {
             throw MCPToolError.invalidArguments(
