@@ -45,12 +45,26 @@ func mutateManifest(
     on db: Database,
     _ mutate: (inout TestProperties) throws -> Void
 ) async throws {
-    for _ in 0..<manifestWriteAttempts {
-        guard var props = setup.decodedManifest() else {
+    try await mutateManifestJSON(setup: setup, on: db) { manifest in
+        guard var props = decodeManifest(fromJSON: manifest) else {
             throw WebAssignmentError.internalFailure(reason: "Test setup manifest could not be decoded.")
         }
         try mutate(&props)
-        let written = try encodeManifest(props)
+        return try encodeManifest(props)
+    }
+}
+
+/// `mutateManifest` for an edit written against the manifest JSON, such as
+/// `updateManifestAddingScript`. `transform` returns the new manifest, or nil
+/// to write nothing. It must be a pure function of the manifest it is given,
+/// because a lost race applies it again to the newer manifest (#2485).
+func mutateManifestJSON(
+    setup: APITestSetup,
+    on db: Database,
+    _ transform: (String) throws -> String?
+) async throws {
+    for _ in 0..<manifestWriteAttempts {
+        guard let written = try transform(setup.manifest) else { return }
         // A no-op edit writes nothing, so nothing keyed on the bytes (a
         // version snapshot, the runner's setup cache) sees a change.
         if written == setup.manifest { return }
@@ -61,12 +75,33 @@ func mutateManifest(
         }
         try setup.$manifest.output(from: ManifestRow(manifest: current.manifest))
     }
-    throw AppError.conflict(
-        reason: "Another edit to this assignment saved at the same time. Reload and try again.")
+    throw AppError.conflict(reason: concurrentManifestEditMessage)
 }
 
 /// How many times `mutateManifest` re-applies an edit that lost a race.
 private let manifestWriteAttempts = 3
+
+/// The refusal for an edit that lost a race and cannot simply be applied again.
+let concurrentManifestEditMessage =
+    "Another edit to this assignment saved at the same time. Reload and try again."
+
+/// Writes `manifest` over the manifest that `setup` was read with, or throws a
+/// conflict when another edit saved first (#2485).
+///
+/// For a write whose new manifest was built from slow work on the old one,
+/// such as `applyPatternFamilies`, which renders generated tests from it.
+/// `mutateManifest` re-applies a lost edit to the newer manifest, but this
+/// write cannot: its rendered files were based on a manifest that is no longer
+/// current. Before this, it saved without a condition, and a concurrent edit
+/// (achievements, datasets) was lost with no error.
+///
+/// Only the manifest is written. A caller that also changed another field of
+/// `setup` must save that field itself.
+func saveManifestReplacing(_ setup: APITestSetup, with manifest: String, on db: Database) async throws {
+    guard try await replaceManifest(of: setup, with: manifest, on: db) else {
+        throw AppError.conflict(reason: concurrentManifestEditMessage)
+    }
+}
 
 /// Writes `manifest` only if the stored manifest is still the one `setup`
 /// holds, in one `UPDATE … WHERE manifest = … RETURNING` statement, which is
