@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.590] - 2026-10-08
+
+### Changed
+
+- **The version-capture scope has one name.** `MCPVersionCaptureScope` was a second name for `AssignmentVersionCaptureScope`; the MCP tool context and its test now use the shared name (#2259).
+
+
 ## [0.5.589] - 2026-10-08
 
 ### Changed
