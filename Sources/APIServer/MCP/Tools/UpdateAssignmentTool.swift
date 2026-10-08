@@ -216,7 +216,6 @@ struct UpdateAssignmentTool: ContentTool {
             }
         }
         let previousDueAt = assignment.dueAt
-        let previousVisibility = assignment.visibility
         do {
             // Title/date metadata first. The legacy `isOpen` is applied here only
             // when `visibility` was not given (visibility is the richer form and
@@ -226,10 +225,10 @@ struct UpdateAssignmentTool: ContentTool {
                 open: visibilityUpdate == nil ? input.isOpen : nil,
                 secretRevealEnabled: input.secretRevealEnabled,
                 solutionVisibility: solutionVisibilityUpdate,
-                passingThreshold: thresholdUpdate, on: context.db)
+                passingThreshold: thresholdUpdate, audit: .mcp(context), on: context.db)
             if let visibilityUpdate {
                 try await AssignmentAuthoringService.setVisibility(
-                    assignment, visibilityUpdate, on: context.db)
+                    assignment, visibilityUpdate, audit: .mcp(context), on: context.db)
             }
         } catch AssignmentAuthoringError.validationNotPassed {
             throw MCPToolError.invalidArguments(
@@ -249,12 +248,6 @@ struct UpdateAssignmentTool: ContentTool {
                     "current": assignment.dueAt.map(formatter.string(from:)) ?? "none",
                     "via": "mcp",
                 ], on: context.request)
-        }
-        if previousVisibility != assignment.visibility {
-            await AuditLogger.recordAssignmentLifecycle(
-                .assignmentVisibilityChanged, assignment: assignment,
-                metadata: ["visibility": assignment.visibility.rawValue, "via": "mcp"],
-                on: context.request)
         }
 
         return Output(

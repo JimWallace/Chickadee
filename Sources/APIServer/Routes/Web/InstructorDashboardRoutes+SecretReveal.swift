@@ -28,7 +28,7 @@ extension InstructorDashboardRoutes {
         }
         let enabled = ((try? req.content.decode(ToggleBody.self))?.enabled) != nil
         try await AssignmentAuthoringService.updateMetadata(
-            assignment, secretRevealEnabled: enabled, on: req.db)
+            assignment, secretRevealEnabled: enabled, audit: .web(req), on: req.db)
         await AuditLogger.record(
             action: .secretRevealToggled,
             targetType: .assignment,

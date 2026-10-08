@@ -128,17 +128,16 @@ extension PublishedAssignmentRoutes {
         //
         // A TA's Save never closes: the close is an instructor action (#2484),
         // so a TA's Save writes live, as the workbench does.
-        if !form.liveEdit, isInstructor {
-            assignment.visibility = .closed
-        }
         // The same write the MCP update tool makes, so the two cannot drift
         // on how a due-date change re-normalises the deadline override. It
-        // saves the row, with the fields set above.
+        // saves the row, with the fields set above, and audits the close.
         try await AssignmentAuthoringService.updateMetadata(
             assignment,
             title: title,
             dueAt: due.map { .set($0) } ?? .clear,
             startsAt: starts.map { .set($0) } ?? .clear,
+            open: !form.liveEdit && isInstructor ? false : nil,
+            audit: .web(req, reason: "save"),
             on: req.db)
 
         // Only when it actually moved: the Save button posts the whole form on

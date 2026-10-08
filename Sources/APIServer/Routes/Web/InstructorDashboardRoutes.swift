@@ -211,7 +211,8 @@ struct InstructorDashboardRoutes: RouteCollection {
     func openAssignment(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         do {
-            try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
+            try await AssignmentAuthoringService.setOpenState(
+                assignment, open: true, audit: .web(req), on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
             throw WebAssignmentError.validationRequired(
                 reason: "Assignment cannot be opened until runner validation passes."
@@ -363,15 +364,13 @@ struct InstructorDashboardRoutes: RouteCollection {
             )
         }
         do {
-            try await AssignmentAuthoringService.setVisibility(assignment, visibility, on: req.db)
+            try await AssignmentAuthoringService.setVisibility(
+                assignment, visibility, audit: .web(req), on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
             throw WebAssignmentError.validationRequired(
                 reason: "Assignment cannot be opened until runner validation passes."
             )
         }
-        await AuditLogger.recordAssignmentLifecycle(
-            .assignmentVisibilityChanged, assignment: assignment,
-            metadata: ["visibility": visibility.rawValue], on: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -380,10 +379,8 @@ struct InstructorDashboardRoutes: RouteCollection {
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
-        try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
-        await AuditLogger.recordAssignmentLifecycle(
-            .assignmentVisibilityChanged, assignment: assignment,
-            metadata: ["visibility": AssignmentVisibility.closed.rawValue], on: req)
+        try await AssignmentAuthoringService.setOpenState(
+            assignment, open: false, audit: .web(req), on: req.db)
         return req.redirect(to: "/instructor")
     }
 

@@ -246,7 +246,7 @@ struct UpdateSolutionTool: ContentTool {
         // (scheduleValidationAfterSuiteEdit would re-run against the old one),
         // and a solution-only edit never changes the test manifest, so the
         // manifest-gated regrade would be a no-op (matching the web save path).
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, context: context)
         assignment.validationSubmissionID = validationSubmissionID
         assignment.validationStatus = "pending"
         try await assignment.save(on: context.db)
