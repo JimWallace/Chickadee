@@ -86,7 +86,7 @@ func finalizeContentEdit(
     let kind: ContentEditKind = retest && actingUserID != nil ? .gradeAffecting : .placementOnly
     let requeued = await applyContentEditEffects(
         kind,
-        assignment: assignment, setup: setup, actingUserID: actingUserID, req: context.request)
+        assignment: assignment, setup: setup, actingUserID: actingUserID, context: context.request)
     return ContentEditFinalizeResult(assignmentClosed: closed, submissionsRequeued: requeued)
 }
 

@@ -354,7 +354,7 @@ extension DraftAssignmentRoutes {
         let shouldQueueValidation = !setupPackage.testSuites.isEmpty
         if shouldQueueValidation {
             let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
-                req: req,
+                context: req,
                 requirements: validated.requirementSpec
             )
             guard hasEligibleRunner else {
@@ -641,7 +641,7 @@ extension DraftAssignmentRoutes {
         setupID: String
     ) async throws {
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
-            req: req,
+            context: req,
             setupID: setupID,
             solutionNotebookData: normalizeNotebookForJupyterLite(validated.solutionNotebookRaw),
             filename: validated.uploadedSolutionNotebookFilename
@@ -650,7 +650,7 @@ extension DraftAssignmentRoutes {
         )
         assignment.validationSubmissionID = validationSubmissionID
         try await assignment.save(on: req.db)
-        await ensureValidationRunnerAvailability(req: req)
+        await ensureValidationRunnerAvailability(context: req)
     }
 
     // MARK: - POST /instructor

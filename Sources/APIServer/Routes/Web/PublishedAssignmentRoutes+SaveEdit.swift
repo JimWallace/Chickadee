@@ -546,7 +546,7 @@ extension PublishedAssignmentRoutes {
             on: req.db
         )
         let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
-            req: req,
+            context: req,
             requirements: requirementSpec
         )
         guard hasEligibleRunner else {
@@ -565,7 +565,7 @@ extension PublishedAssignmentRoutes {
             ? normalizeNotebookForJupyterLite(solution.data)
             : solution.data
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
-            req: req,
+            context: req,
             setupID: assignment.testSetupID,
             solutionNotebookData: solutionDataToSubmit,
             filename: solution.filename

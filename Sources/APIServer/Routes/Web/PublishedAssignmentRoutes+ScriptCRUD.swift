@@ -88,7 +88,7 @@ extension PublishedAssignmentRoutes {
         // send a follow-up suite request (#2259).
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup,
-            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
+            actingUserID: req.auth.get(APIUser.self)?.id, context: req)
         return .noContent
     }
 
@@ -131,7 +131,7 @@ extension PublishedAssignmentRoutes {
         // send a follow-up suite request (#2259).
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup,
-            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
+            actingUserID: req.auth.get(APIUser.self)?.id, context: req)
 
         struct CreatedResponse: Content {
             var filename: String
@@ -182,7 +182,7 @@ extension PublishedAssignmentRoutes {
         // send a follow-up suite request (#2259).
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup,
-            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
+            actingUserID: req.auth.get(APIUser.self)?.id, context: req)
         return .noContent
     }
 
