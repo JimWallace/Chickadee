@@ -314,10 +314,9 @@ extension Application {
 
     var diagnostics: OperationalDiagnosticsService {
         get {
-            if let existing = storage[OperationalDiagnosticsServiceKey.self] { return existing }
-            let created = OperationalDiagnosticsService(configuration: diagnosticsConfiguration)
-            storage[OperationalDiagnosticsServiceKey.self] = created
-            return created
+            lazyStored(OperationalDiagnosticsServiceKey.self) {
+                OperationalDiagnosticsService(configuration: diagnosticsConfiguration)
+            }
         }
         set { storage[OperationalDiagnosticsServiceKey.self] = newValue }
     }
