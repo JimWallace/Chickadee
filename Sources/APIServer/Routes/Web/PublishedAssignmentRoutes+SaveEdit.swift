@@ -29,6 +29,23 @@ extension PublishedAssignmentRoutes {
             return redirectToEditForm(req: req, assignmentID: idStr, form: form, error: "Assignment name is required")
         }
 
+        // The route admits a TA, because a TA edits content. The form also
+        // carries fields that only an instructor may change, as on MCP and on
+        // the `/close`, `/activity` and `/brightspace` routes (#2484). A TA's
+        // Save that changes one is refused before anything is written.
+        let isInstructor =
+            try await evaluateCourseWrite(
+                user: user, courseID: assignment.courseID, atLeast: .instructor, db: req.db) == nil
+        if !isInstructor {
+            let changed = instructorOnlyFieldsChanged(
+                form: form, title: title, due: due, starts: starts,
+                assignment: assignment, setup: setup)
+            if !changed.isEmpty {
+                throw AppError.forbidden(
+                    action: "change \(changed.joined(separator: ", ")). Only an instructor can change it")
+            }
+        }
+
         // As of v0.4.79, the assignment Save button is for notebook +
         // metadata + (re-)validation only.  The test suite itself is
         // edited live via the per-script and PUT /suite endpoints; the
@@ -108,7 +125,10 @@ extension PublishedAssignmentRoutes {
         // way; the only difference is whether students lose access while it
         // does.  This is a contract, not a permission: the caller already holds
         // TA+ write access to this course, checked above.
-        if !form.liveEdit {
+        //
+        // A TA's Save never closes: the close is an instructor action (#2484),
+        // so a TA's Save writes live, as the workbench does.
+        if !form.liveEdit, isInstructor {
             assignment.visibility = .closed
         }
         // The same write the MCP update tool makes, so the two cannot drift
@@ -141,6 +161,51 @@ extension PublishedAssignmentRoutes {
     }
 
     // MARK: - saveEditedAssignment helpers
+
+    /// The instructor-only fields that this Save would change, named for the
+    /// refusal. Empty when the Save changes content only.
+    ///
+    /// Each field is compared as the form shows it. Dates compare at the
+    /// minute, because the form shows the minute, so a date that MCP stored
+    /// with seconds is not a change.
+    fileprivate func instructorOnlyFieldsChanged(
+        form: SaveEditedAssignmentForm, title: String, due: Date?, starts: Date?,
+        assignment: APIAssignment, setup: APITestSetup
+    ) -> [String] {
+        var changed: [String] = []
+        if title != assignment.title.trimmingCharacters(in: .whitespacesAndNewlines) {
+            changed.append("the title")
+        }
+        if dueAtLocalInputString(due) != dueAtLocalInputString(assignment.dueAt) {
+            changed.append("the due date")
+        }
+        if dueAtLocalInputString(starts) != dueAtLocalInputString(assignment.startsAt) {
+            changed.append("the open date")
+        }
+        if let rawID = form.gradeObjectID {
+            let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if (trimmed.isEmpty ? nil : trimmed) != assignment.brightspaceGradeObjectID {
+                changed.append("the LEARN assessment")
+            }
+        }
+        if let mode = form.submissionMode.flatMap(SubmissionMode.init(rawValue:)),
+            mode.rawValue != currentManifestSubmissionMode(setup.manifest)
+        {
+            changed.append("the submission method")
+        }
+        // `try?` would flatten "none" (a nil language) into "not parsed".
+        if let requested = form.assignmentLanguage,
+            !requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            case .success(let parsed) = Result(catching: { try parseLanguageChoice(requested) }),
+            parsed?.rawValue != currentManifestLanguage(setup.manifest)
+        {
+            changed.append("the language")
+        }
+        if requestedActivityChange(form.activityKind, current: currentManifestActivity(setup.manifest)) != nil {
+            changed.append("the class activity")
+        }
+        return changed
+    }
 
     /// Returns the author to the edit form with what they typed and one
     /// error, the way every refusal in `saveEditedAssignment` does. The name
@@ -193,11 +258,10 @@ extension PublishedAssignmentRoutes {
     }
 
     /// Applies the three manifest selects in order, returning the first
-    /// refusal or nil. The order is deliberate: an upload-only language (C++)
-    /// is refused while the setup is still in notebook mode, so a save that
-    /// switches both at once has to apply the mode first or the pair would be
-    /// rejected on its way to a coherent state; the activity kind comes last
-    /// and is locked once a student has submitted.
+    /// refusal or nil. The mode goes first and the language after it, because
+    /// an upload-only language sets the mode itself and must not be undone by
+    /// the select that posted the old one. The activity kind comes last and is
+    /// locked once a student has submitted.
     fileprivate func persistManifestSettings(
         form: SaveEditedAssignmentForm, setup: APITestSetup, on db: any Database
     ) async -> String? {
@@ -230,7 +294,9 @@ extension PublishedAssignmentRoutes {
             _ = try await setManifestSubmissionMode(setup: setup, to: requested, on: db)
             return nil
         } catch {
-            return uploadModeGradingConflictMessage
+            // The reason `ManifestCoherence` gives: it has more than one rule
+            // that a mode change can break (#2484).
+            return (error as? any AbortError)?.reason ?? uploadModeGradingConflictMessage
         }
     }
 
@@ -264,37 +330,47 @@ extension PublishedAssignmentRoutes {
         }
     }
 
-    /// Applies the Class activity select's value, returning a user-facing
-    /// refusal or nil. nil `requested` is silence (see the form field); "none"
-    /// clears; a kind token sets it, keeping the stored leaderboard visibility
-    /// and opponent file when the kind is unchanged so a Save does not
-    /// un-publish a leaderboard or drop the bot.
+    /// Applies the Class activity select's value (`requestedActivityChange`),
+    /// returning a user-facing refusal or nil.
     fileprivate func persistActivityKind(
         requested: String?, setup: APITestSetup, on db: any Database
     ) async -> String? {
-        guard let requested else { return nil }
-        let token = requested.trimmingCharacters(in: .whitespacesAndNewlines)
-        let current = currentManifestActivity(setup.manifest)
-        let next: ClassActivity?
-        if token == SetActivityTool.noActivityChoice {
-            next = nil
-        } else if let kind = ActivityKind(rawValue: token) {
-            next =
-                current?.kind == kind
-                ? current
-                : ClassActivity(kind: kind)
-        } else {
-            // An unrecognised value — a stale tab posting a kind this build no
-            // longer has — is ignored, as the submission-mode helper does.
-            return nil
-        }
-        guard next != current else { return nil }
+        guard
+            let change = requestedActivityChange(
+                requested, current: currentManifestActivity(setup.manifest))
+        else { return nil }
         do {
-            try await ActivityAuthoring.setActivity(setup: setup, to: next, on: db)
+            try await ActivityAuthoring.setActivity(setup: setup, to: change.next, on: db)
             return nil
         } catch {
             return (error as? any AbortError)?.reason ?? "Could not set the class activity."
         }
+    }
+
+    /// The activity that the Class activity select asks for.
+    fileprivate struct ActivityChange {
+        let next: ClassActivity?
+    }
+
+    /// Reads the Class activity select's value. Returns nil when it asks for no
+    /// change: nil `requested` is silence (see the form field), and an
+    /// unrecognised value (a stale tab posting a kind this build no longer has)
+    /// is ignored, as the submission-mode helper does. "none" clears. A kind
+    /// token keeps the stored leaderboard visibility and opponent file when the
+    /// kind is unchanged, so a Save does not un-publish a leaderboard or drop
+    /// the bot.
+    fileprivate func requestedActivityChange(_ requested: String?, current: ClassActivity?) -> ActivityChange? {
+        guard let requested else { return nil }
+        let token = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+        let next: ClassActivity?
+        if token == SetActivityTool.noActivityChoice {
+            next = nil
+        } else if let kind = ActivityKind(rawValue: token) {
+            next = current?.kind == kind ? current : ClassActivity(kind: kind)
+        } else {
+            return nil
+        }
+        return next == current ? nil : ActivityChange(next: next)
     }
 
     fileprivate func parseSaveEditedAssignmentForm(req: Request) throws -> SaveEditedAssignmentForm {

@@ -319,6 +319,11 @@ behaviour-changing Phases 4–5, not the behaviour-neutral Phases 1–3.
    rung shipped in #417 Slice E — with a broader mandate than sketched here:
    TAs also author content, and the line TA/instructor is
    content-and-grading vs lifecycle-and-structure. See the slice glossary.)*
+   The assignment Save form (`POST /instructor/:assignmentID/edit/save`)
+   admits a TA but carries lifecycle fields too. A TA's Save that changes the
+   title, a date, the LEARN assessment, the submission method, the language or
+   the class activity returns 403 and writes nothing, and a TA's Save does not
+   close the assignment (#2484).
 3. **SSO mapping (decided 2026-06-22).** `SSO_INSTRUCTOR_USERS` is **retired** —
    there is no "global instructor via SSO" under the per-course model. An admin
    sets up a course and assigns its instructor manually (the Phase 4b roster
