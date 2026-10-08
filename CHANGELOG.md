@@ -9,6 +9,23 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.581] - 2026-10-08
+
+### Fixed
+
+- **A browser-graded Octave test that calls `setenv` no longer changes the environment of later tests.** Native grading gives each test a fresh process. In the browser every script shares one kernel, and Octave has no call that lists the environment, so the reset could not restore it. The harness now masks `setenv`, `putenv` and `unsetenv`, records each variable a script changes, and puts it back when the script ends. The session seed is not affected. (#2456)
+
+### Fixed
+
+- **Three more process-wide singletons are created under the application lock.** The client-diagnostics rate limiter, the worker claim queue and the diagnostics service each spelled get-or-create by hand, so two first accesses at the same time could create two of them. They now use `lazyStored`, like every other store. (#2457)
+
+### Fixed
+
+- The LEARN page's org-unit field is a small popover form, not a field inside an actions menu (#2065).
+- Two field notes on the assignment edit page are one sentence each. The secret-test reveal detail is in `docs/solution-visibility.md` (#2078).
+- The course-role select is one partial for the instructor roster and the admin course page. Controls in a draggable row and roster rows that open on click show a pointer. Removed a repeated variant title, hover titles on hidden drag handles, a 17-word title and a dead stylesheet rule. The suite editor now says how to make one test depend on another (#2460).
+
+
 ## [0.5.580] - 2026-10-08
 
 ### Fixed
