@@ -510,7 +510,9 @@ duplicate.
   `.action-copied` and a "Copied!" title for two seconds.  The copy-student-link
   button on a dashboard row and the LTI tool URLs.
 - **`.page-crumb`** — the group name ("Data", "Integrations") in small capitals
-  above an admin page title.  Visual only; the hidden `h1` already names it.
+  above an admin page title, or the course above a leaderboard's title, as its
+  course tab names it.
+  Visual only; the `h1` already names the page.
 - **`.row-menu-spacer`** — an empty 1.95rem square in the place of a ⋯ menu when a
   row type only sometimes has one, so the actions track lines up.  Never an
   empty menu.

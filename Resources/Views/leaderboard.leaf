@@ -3,6 +3,9 @@
 #(assignmentTitle) — Leaderboard
 #endexport
 #export("content"):
+#if(courseLabel != ""):
+<p class="page-crumb">#(courseLabel)</p>
+#endif
 <h1>#(assignmentTitle)</h1>
 
 #extend("_avatar-sprite")

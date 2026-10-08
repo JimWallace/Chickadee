@@ -2142,8 +2142,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .card > .detail-grid { margin: 0; padding: 1rem 1.25rem; }
 .card > .section-note { margin: 0; padding: 0 1.25rem 1rem; }
 
-/* A group name above a page title: "Data", "Integrations". Visual only; the
-   visually hidden h1 already names the area. */
+/* A group name above a page title: "Data", "Integrations", or the course above
+   a leaderboard. Visual only; the h1 already names the page. */
 .page-crumb {
     margin: 0;
     font-size: var(--text-xs);

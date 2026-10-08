@@ -14,6 +14,9 @@ import Vapor
 struct LeaderboardContext: Encodable {
     let testSetupID: String
     let assignmentTitle: String
+    /// The course above the title, as its course tab names it: the code and
+    /// the short term, e.g. "CS135 F26". Empty for a setup whose course is gone.
+    let courseLabel: String
     /// The assignment's 6-character ID, for the staff visibility form.
     let assignmentPublicID: String
     /// The activity kind's chrome label, e.g. "Best metric".
