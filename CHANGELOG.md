@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.588] - 2026-10-08
+
+### Changed
+
+- **The web and MCP version capture share one scope.** The web middleware and the MCP dispatcher each had a copy of the capture scope and of the loop that records a version. Both now use `AssignmentVersionCaptureScope` and its `begin` and `recordRegistered` steps, and keep only their own seam, origin label and database. Behaviour is unchanged (#2259).
+
+
 ## [0.5.587] - 2026-10-08
 
 ### Changed
