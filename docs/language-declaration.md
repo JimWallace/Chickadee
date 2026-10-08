@@ -105,8 +105,9 @@ path.
 
 ## The `?? .python` sites
 
-There were fourteen. Five are gone; ten lines remain and are correct as they
-stand.
+There were fourteen. Five are gone. Eleven lines remain, and each is correct as
+it stands: ten from the original census, plus the opponent-staging hint that
+class activities added later (#2494).
 
 These are **not** resolution fallbacks. Resolution has no fallback. They are
 sites asking a different question:
@@ -217,21 +218,22 @@ paths, which build a manifest from nothing, still pass both halves.
 
 ### Group 3 — keep the explicit default, and keep the comment
 
-Ten lines where "none" is not an answerable value and failing is worse than
+Eleven lines where "none" is not an answerable value and failing is worse than
 defaulting. Each states the default locally rather than inheriting it, which is
 the property the Optional bought.
 
 | Site | Why the default stays |
 |---|---|
-| `Worker/NotebookExtractor.swift:130` | Extraction has to write a file in *some* syntax; grading path |
-| `Worker/RunnerDaemon+JobPreparation.swift:332` | The student-module hint must name the file the extractor actually wrote |
+| `Worker/NotebookExtractor.swift:135` | Extraction has to write a file in *some* syntax; grading path |
+| `Worker/RunnerDaemon+JobPreparation.swift:334` | The student-module hint must name the file the extractor actually wrote |
+| `Worker/OpponentStaging.swift:124` | The same hint, for a class activity's opponent: it must name the file the extractor wrote for the opponent's notebook; grading path |
 | `PersonalizationSubstitution.swift:55` | There is no literal without a syntax |
 | ~~`TestScriptTemplates.swift`~~ | **Gone.** A language-less suite gets a *shell* scaffold — see below |
-| `NotebookScaffoldHelpers.swift:165,167,174` | A notebook needs a kernelspec; nil already returns nil for upload-only |
-| `PublishedAssignmentRoutes+NotebookTools.swift:87` | Scans an *arbitrary* notebook, not an assignment: the fallback chain is `?language=` → kernelspec → Python, and the distinction being drawn is between kernels we can read and ones we cannot |
-| `SubmissionResultPresenter.swift:517` | Display; computes generated filenames, which only exist when families do, which requires a recorded language — unreachable with effect |
-| `PublishedAssignmentRoutes+Suite.swift:133` | Same, for the author-facing suite view |
-| `PatternFamilyApplication.swift:207` | The render standin on the declared-None path, inert by the guard above: nothing is rendered there, and the manifest records the declaration rather than this |
+| `NotebookScaffoldHelpers.swift:141,143,150` | A notebook needs a kernelspec; nil already returns nil for upload-only |
+| `PublishedAssignmentRoutes+NotebookTools.swift:88` | Scans an *arbitrary* notebook, not an assignment: the fallback chain is `?language=` → kernelspec → Python, and the distinction being drawn is between kernels we can read and ones we cannot |
+| `SubmissionResultPresenter.swift:683` | Display; computes generated filenames, which only exist when families do, which requires a recorded language — unreachable with effect |
+| `PublishedAssignmentRoutes+Suite.swift:125` | Same, for the author-facing suite view |
+| `PatternFamilyApplication.swift:211` | The render standin on the declared-None path, inert by the guard above: nothing is rendered there, and the manifest records the declaration rather than this |
 
 ---
 
