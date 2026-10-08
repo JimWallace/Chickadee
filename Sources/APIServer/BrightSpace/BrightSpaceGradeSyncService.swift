@@ -114,7 +114,8 @@ func recordSweepFailure(
 /// this assignment" — the sweep had nothing to find.
 ///
 /// Gates on app-level config (not a live global client) so per-instructor-only
-/// deployments still flag results for the per-course sync to pick up.
+/// deployments still flag results for the per-course sync to pick up. Call it
+/// through `requestGradePush`, which also queues the LTI push.
 func flagResultForBrightSpaceSync(
     _ result: APIResult,
     testSetupID: String,
