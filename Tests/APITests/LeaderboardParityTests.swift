@@ -168,4 +168,12 @@ import VaporTesting
                 ))
         }
     }
+
+    @Test func theChampionCardHasItsOwnTintInBothThemes() throws {
+        let css = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Public/styles.css"), encoding: .utf8)
+        #expect(css.contains(".champion-card:not(.you-card) { background: var(--champion-bg); }"))
+        // The light value, and the dark mirror once per dark block.
+        #expect(css.components(separatedBy: "--champion-bg: #").count - 1 == 3)
+    }
 }

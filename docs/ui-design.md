@@ -365,8 +365,9 @@ duplicate.
   The tokens are `--you-bg`, `--teal-ink`, `--teal-ink-fg` and the
   `--rank-gold|silver|bronze-bg|fg` pairs, each with a dark-mode value.
   The hill holder and the tournament winner share the card as
-  `.champion-card` (its markup carries both `champion-card` and `you-card` when the viewer holds it, for the tint) with a
-  `.you-card-kicker` line.  A tournament is a `.bracket` of `.bracket-round`
+  `.champion-card`, pale gold (`--champion-bg`), with a `.you-card-kicker`
+  line.  When the viewer holds it, its markup carries both `champion-card` and
+  `you-card`, and the card takes the you tint.  A tournament is a `.bracket` of `.bracket-round`
   columns (`.bracket-round-label`) of `.bracket-match` cards of two
   `.bracket-entrant` lines (`.bracket-entrant--won` bold,
   `.bracket-entrant--you` tinted), inside a `.table-scroll`.  A won tag is

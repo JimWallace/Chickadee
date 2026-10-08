@@ -184,6 +184,9 @@
     --teal-ink-fg: #FFFFFF;
     --rank-gold-bg: #FFCC33;
     --rank-gold-fg: #4A3300;
+    /* The champion card: a pale gold that marks a holder without a medal's
+       weight. */
+    --champion-bg: #FFF4D1;
     --rank-silver-bg: #D1D5DB;
     --rank-silver-fg: #1F2937;
     --rank-bronze-bg: #E0A872;
@@ -261,6 +264,7 @@
         --teal-ink-fg: #00262B;
         --rank-gold-bg: #7A5C00;
         --rank-gold-fg: #FFF4CC;
+        --champion-bg: #3A2F0B;
         --rank-silver-bg: #5B6472;
         --rank-silver-fg: #F3F4F6;
         --rank-bronze-bg: #8A5A2B;
@@ -342,6 +346,7 @@
     --teal-ink-fg: #00262B;
     --rank-gold-bg: #7A5C00;
     --rank-gold-fg: #FFF4CC;
+    --champion-bg: #3A2F0B;
     --rank-silver-bg: #5B6472;
     --rank-silver-fg: #F3F4F6;
     --rank-bronze-bg: #8A5A2B;
@@ -1848,6 +1853,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
     margin-bottom: 1.25rem;
 }
 .you-card { background: var(--you-bg); }
+/* The hill's holder and a tournament's winner, unless the viewer holds it:
+   then the card is theirs and takes the you tint. */
+.champion-card:not(.you-card) { background: var(--champion-bg); }
 .you-card-who { flex: 1 1 14rem; min-width: 0; }
 .you-card-kicker {
     font-size: var(--text-xs);
