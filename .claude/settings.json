@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ask-before-test-edit.py"
+          }
+        ]
+      }
     ]
   },
   "permissions": {
@@ -52,8 +63,8 @@
       "mcp__Chickadee_Admin__list_connected_agents",
       "Bash(swift build*)",
       "Bash(swift test*)",
-      "Bash(git diff*)",
-      "Bash(git status*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
       "Bash(scripts/check-*.sh*)",
       "Bash(scripts/no-*.sh*)",
       "Bash(scripts/lint.sh)",
@@ -64,7 +75,6 @@
       "Bash(scripts/ci-build-retry.sh --self-test)"
     ],
     "ask": [
-      "Edit(/Tests/**)",
       "Bash(scripts/check-guards.sh*)"
     ],
     "deny": [
