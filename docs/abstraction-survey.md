@@ -22,24 +22,25 @@ Read this section first. It says what was measured and what was not.
 | Leaf view-model builders | yes | compared the dashboard row builder with `AssignmentDeadlineService` |
 
 All references are to `main` at v0.5.583. Each line reference was read in that
-tree. No test was run. Where a finding is a possible bug, the first step of its
+tree. Later changes moved some of them; the Status column of the summary says
+which PR changed each item. No test was run. Where a finding is a possible bug, the first step of its
 PR is a failing test that proves it.
 
 ## Summary
 
-| # | Candidate | Drift now | Recommendation |
-|---|---|---|---|
-| 1 | Post-edit effects: web vs. MCP | yes — one web path skips revalidation | do now |
-| 2 | LMS grade-push fan-out | no — three sites, each calls both LMSes | do now |
-| 3 | Solution-reveal rule: dashboard vs. serving route | no — a hand copy | do now |
-| 4 | Version capture scope: web vs. MCP | small | do now |
-| 5 | Result-row write: worker vs. browser | yes, fixed once | do now |
-| 6 | Open-for-user inputs: dashboard vs. service | no — a hand copy | do now, with #3 |
-| 7 | Notebook-check kind support: two encodings | small | do now |
-| 8 | Lua function-target rule | yes — a latent bug | fix now; no abstraction |
-| 9 | Token caches: GitHub and LTI | no | wait |
-| 10 | Browser result-post retry | not drift | no action |
-| — | Reapers, per-language switches, R run-output parser | — | no action |
+| # | Candidate | Drift now | Recommendation | Status |
+|---|---|---|---|---|
+| 1 | Post-edit effects: web vs. MCP | yes — one web path skips revalidation | do now | done, #2472 |
+| 2 | LMS grade-push fan-out | no — three sites, each calls both LMSes | do now | done, #2473 |
+| 3 | Solution-reveal rule: dashboard vs. serving route | no — a hand copy | do now | dropped (#2475 closed) |
+| 4 | Version capture scope: web vs. MCP | small | do now | done, #2476 |
+| 5 | Result-row write: worker vs. browser | yes, fixed once | do now | done, #2474 |
+| 6 | Open-for-user inputs: dashboard vs. service | no — a hand copy | do now, with #3 | dropped (#2475 closed) |
+| 7 | Notebook-check kind support: two encodings | small | do now | done, #2477 |
+| 8 | Lua function-target rule | yes — a latent bug | fix now; no abstraction | done, #2471 |
+| 9 | Token caches: GitHub and LTI | no | wait | no action |
+| 10 | Browser result-post retry | not drift | no action | no action |
+| — | Reapers, per-language switches, R run-output parser | — | no action | no action |
 
 Items 1, 2 and 3 have the highest value. A miss in each is silent: a broken
 suite stays open to students, a grade in LEARN stays wrong, or a solution is

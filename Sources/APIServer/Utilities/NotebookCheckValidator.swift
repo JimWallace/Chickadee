@@ -167,46 +167,37 @@ func notebookCheckFieldUnsupportedReason(
 /// silently skip kind-support validation (docs/language-handling-review.md §4).
 private func validateKindSupport(_ check: NotebookCheck, language: AssignmentLanguage) throws {
     switch language {
-    case .python:
-        break
-    case .r:
-        if !notebookCheckKindSupportsR(check.kind) {
-            throw unsupportedKind(
-                check, language: "R", supports: notebookCheckKindSupportsR,
-                handWrittenExtension: ".R")
+    case .python, .r, .lua, .octave:
+        // One arm for every notebook language, built from the same predicate
+        // the Add Test menu and `get_server_info` read. The R, Lua and Octave
+        // arms used to encode the support table a second time, with the
+        // language name and the hand-written extension typed as literals
+        // (#2259, item 7). The message is byte-identical to theirs.
+        if !notebookCheckKindIsSupported(check.kind, language: language) {
+            throw AuthoringValidationError.notebookCheckKindUnsupported(
+                checkID: check.id, kind: check.kind, language: language.displayName,
+                supportedKinds: NotebookCheckKind.allCases
+                    .filter { notebookCheckKindIsSupported($0, language: language) }
+                    .map(\.rawValue).sorted(),
+                handWrittenExtension: handWrittenTestExtension(language))
         }
-    case .lua:
-        if !notebookCheckKindSupportsLua(check.kind) {
-            throw unsupportedKind(
-                check, language: "Lua", supports: notebookCheckKindSupportsLua,
-                handWrittenExtension: ".lua")
-        }
-        // Regex cell-matching is rejected rather than approximated in the
-        // renderer: a pattern authored against the Python or R renderer would
-        // not error under Lua, it would quietly match the wrong thing and
-        // award marks on that basis.
+        // Regex cell-matching is refused where the language's pattern engine
+        // is not compatible with the Python renderer's (only Lua today). It is
+        // refused rather than approximated: a pattern authored against the
+        // Python or R renderer would not error under Lua, it would quietly
+        // match the wrong thing and award marks on that basis. Octave's regexp
+        // is PCRE, so a pattern transfers (verified against octave-cli).
         //
-        // The REASON now comes from `notebookCheckFieldUnsupportedReason`, so
-        // the authoring form can disable the checkbox with the same words this
-        // refusal uses. Save time used to be the only point at which an
-        // instructor learned this, which made it the only point at which it was
-        // fixable — after they had written the pattern.
+        // The reason comes from `notebookCheckFieldUnsupportedReason`, so the
+        // authoring form disables the checkbox with the same words this
+        // refusal uses.
         if check.regex == true,
             let reason = notebookCheckFieldUnsupportedReason(
-                "regex", kind: check.kind, language: .lua)
+                "regex", kind: check.kind, language: language)
         {
             throw AuthoringValidationError.notebookCheckRegexUnsupported(
-                checkID: check.id, kind: check.kind, language: "Lua", reason: reason)
+                checkID: check.id, kind: check.kind, language: language.displayName, reason: reason)
         }
-    case .octave:
-        if !notebookCheckKindSupportsOctave(check.kind) {
-            throw unsupportedKind(
-                check, language: "Octave", supports: notebookCheckKindSupportsOctave,
-                handWrittenExtension: ".m")
-        }
-    // No `regex: true` refusal here, deliberately: Octave's regexp is
-    // PCRE, so a pattern authored against the Python or R renderer
-    // transfers — verified against octave-cli before claiming it.
     case .cpp, .racket, .java:
         // Categorical, not per-kind, for all three: notebook checks inspect a
         // submitted notebook, and an upload-only language has no notebook
@@ -250,14 +241,4 @@ private func handWrittenTestExtension(_ language: AssignmentLanguage) -> String 
     case .racket, .java, .python, .r, .lua, .octave:
         return ".\(language.sourceFileExtension)"
     }
-}
-
-private func unsupportedKind(
-    _ check: NotebookCheck, language: String,
-    supports: (NotebookCheckKind) -> Bool, handWrittenExtension: String
-) -> AuthoringValidationError {
-    .notebookCheckKindUnsupported(
-        checkID: check.id, kind: check.kind, language: language,
-        supportedKinds: NotebookCheckKind.allCases.filter(supports).map(\.rawValue).sorted(),
-        handWrittenExtension: handWrittenExtension)
 }
