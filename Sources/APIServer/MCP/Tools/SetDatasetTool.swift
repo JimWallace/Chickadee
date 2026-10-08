@@ -163,45 +163,13 @@ struct SetDatasetTool: ContentTool {
             from: input, filename: cleaned,
             existing: setup.decodedManifest()?.datasetSpecsByFile[cleaned])
 
-        if !remove {
-            guard let sampleSize = input.sampleSize, sampleSize >= 1 else {
-                throw MCPToolError.invalidArguments(
-                    detail: "sampleSize (>= 1) is required when marking a dataset; "
-                        + "pass remove:true to clear a mark.")
-            }
-            // The file must be a bundled *support* file: a dataset marks
-            // existing data as per-student, it never introduces a file, and a
-            // graded script or canonical notebook can't be one.
-            let zipEntries = await Set(
-                listZipEntries(zipPath: setup.zipPath).map { entry in
-                    entry.hasPrefix("./") ? String(entry.dropFirst(2)) : entry
-                })
-            let suiteScripts = Set(setup.decodedManifest()?.testSuites.map(\.script) ?? [])
-            guard zipEntries.contains(cleaned) else {
-                throw MCPToolError.invalidArguments(
-                    detail: "\"\(cleaned)\" is not among this assignment's bundled files "
-                        + "(list them with get_support_files; upload one with "
-                        + "author_script(tier:\"support\")).")
-            }
-            guard !suiteScripts.contains(cleaned), cleaned != "assignment.ipynb",
-                cleaned != "solution.ipynb"
-            else {
-                throw MCPToolError.invalidArguments(
-                    detail: "\"\(cleaned)\" is not a support file — only support data files can "
-                        + "be per-student datasets.")
-            }
-            // The same check the web endpoints run, from the same place: a
-            // stratum column has to exist in this file and have no more
-            // categories than the sample has rows. The materializer degrades
-            // quietly on both at delivery time, so this is where an agent finds
-            // out — with the file's real column names in the message.
-            if let issue = await DatasetSpecValidation.issue(
-                with: written,
-                sourceCSV: extractZipEntry(zipPath: setup.zipPath, entryName: cleaned)
-                    .flatMap { String(data: $0, encoding: .utf8) })
-            {
-                throw MCPToolError.invalidArguments(detail: issue)
-            }
+        // The check the web `PUT /datasets` routes run too (#2487), on the
+        // spec that is stored.
+        if !remove,
+            let refusal = await datasetSpecRefusal(
+                written, setup: setup, bundledFiles: bundledFileNames(zipPath: setup.zipPath))
+        {
+            throw MCPToolError.invalidArguments(detail: refusal)
         }
 
         try await mutateManifest(setup: setup, on: context.db) { props in

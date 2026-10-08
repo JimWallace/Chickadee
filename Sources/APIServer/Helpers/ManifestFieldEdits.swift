@@ -239,6 +239,22 @@ func requiresUploadOnlySubmission(_ language: AssignmentLanguage) -> Bool {
     return false
 }
 
+/// Removes the manifest marks that name `filename`: its grader-only mark and
+/// its dataset spec. Returns true when one was removed.
+///
+/// The web delete and MCP `delete_support_file` both call it after they remove
+/// the file (#2487). A mark left behind names a file that is gone: a dataset
+/// spec then names a missing file, a grader-only mark blocks browser grading
+/// through `ManifestCoherence`, and a later file that reuses the name inherits
+/// both.
+@discardableResult
+func clearFileMarks(_ filename: String, in props: inout TestProperties) -> Bool {
+    let before = (props.graderOnlyFiles.count, props.datasets.count)
+    props.graderOnlyFiles.removeAll { $0 == filename }
+    props.datasets.removeAll { $0.file == filename }
+    return before != (props.graderOnlyFiles.count, props.datasets.count)
+}
+
 /// Reads the recorded `language` of a manifest JSON string, or nil when none
 /// is recorded (or the manifest can't be decoded).
 func currentManifestLanguage(_ manifest: String?) -> String? {

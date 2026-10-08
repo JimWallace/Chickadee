@@ -96,7 +96,7 @@ func createScriptInSetup(
 
 /// Guards that the file exists and is neither pattern-family-generated nor a
 /// prerequisite of another script, then removes it from the setup zip and drops
-/// its manifest entry.
+/// its manifest entry and its marks (`clearFileMarks`).
 func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Database) async throws {
     guard await listZipEntries(zipPath: setup.zipPath).contains(filename) else {
         throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
@@ -128,4 +128,5 @@ func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Dat
     try await mutateManifestJSON(setup: setup, on: db) {
         updateManifestRemovingScript(manifestJSON: $0, filename: filename)
     }
+    try await mutateManifest(setup: setup, on: db) { clearFileMarks(filename, in: &$0) }
 }

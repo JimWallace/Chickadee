@@ -138,8 +138,10 @@ struct DeleteSupportFileTool: ContentTool {
 
         // Drop any manifest marks that named the file, so a future file reusing
         // the name doesn't inherit them.
-        let clearedMarks = try await Self.clearManifestMarks(
-            setup: setup, filename: cleaned, on: context.db)
+        var clearedMarks = false
+        try await mutateManifest(setup: setup, on: context.db) { props in
+            clearedMarks = clearFileMarks(cleaned, in: &props)
+        }
 
         // Re-sync the shared support directory: it is wiped and re-extracted
         // from the zip, so the removed file (and student symlinks to it) go too.
@@ -172,22 +174,5 @@ struct DeleteSupportFileTool: ContentTool {
             clearedManifestMarks: clearedMarks,
             validationStatus: assignment.validationStatus,
             assignmentClosed: finalized.assignmentClosed)
-    }
-
-    /// Removes `filename` from the manifest's `graderOnlyFiles` and `datasets`
-    /// lists. Returns true when either actually changed.
-    private static func clearManifestMarks(
-        setup: APITestSetup, filename: String, on db: any Database
-    ) async throws -> Bool {
-        guard let props = setup.decodedManifest() else { return false }
-        let wasGraderOnly = props.graderOnlyFiles.contains(filename)
-        let wasDataset = props.datasets.contains { $0.file == filename }
-        guard wasGraderOnly || wasDataset else { return false }
-
-        try await mutateManifest(setup: setup, on: db) { props in
-            props.graderOnlyFiles.removeAll { $0 == filename }
-            props.datasets.removeAll { $0.file == filename }
-        }
-        return true
     }
 }
