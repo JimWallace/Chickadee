@@ -24,35 +24,7 @@
 
 import Fluent
 import Foundation
-import Synchronization
 import Vapor
-
-/// Collects the setups an MCP call resolved for write, so the dispatcher can
-/// snapshot them once the call succeeds.
-///
-/// Reference type held by the per-request `ToolContext` (a struct), so a tool
-/// registering a setup is visible to the dispatcher that invoked it.
-final class MCPVersionCaptureScope: Sendable {
-    /// The box is shared between the tool body and the dispatcher that
-    /// awaits it.
-    private let pending = Mutex<[String: APITestSetup]>([:])
-
-    /// Registers a setup as touched by the current call. Idempotent per setup.
-    func register(_ setup: APITestSetup) {
-        guard let id = setup.id else { return }
-        pending.withLock { $0[id] = setup }
-    }
-
-    /// Returns the registered setups and clears the scope, so a batched second
-    /// call can't re-snapshot the first call's setups.
-    func drain() -> [APITestSetup] {
-        pending.withLock { pending in
-            let setups = Array(pending.values)
-            pending.removeAll()
-            return setups
-        }
-    }
-}
 
 extension ToolContext {
     /// Seeds the pre-edit baseline for `setup` and registers it for a
@@ -65,42 +37,21 @@ extension ToolContext {
     /// Best-effort in both directions: an assignment edit must not fail because
     /// its history could not be written.
     func beginContentWrite(setup: APITestSetup) async {
-        versionCapture.register(setup)
-        do {
-            _ = try await AssignmentVersionStore.ensureBaseline(
-                setup: setup,
-                testSetupsDirectory: request.application.testSetupsDirectory,
-                on: mainDB)
-        } catch {
-            logger.warning(
-                "assignment version baseline failed",
-                metadata: [
-                    "setup": .string(setup.id ?? "?"), "error": .string("\(error)"),
-                ])
-        }
+        await versionCapture.begin(
+            setup: setup, testSetupsDirectory: request.application.testSetupsDirectory,
+            logger: logger, on: mainDB)
     }
 
     /// Snapshots every setup registered during this call. Invoked by the
     /// dispatcher after a write tool returns successfully; a failed call
     /// registers nothing worth recording because its edit did not persist.
     func finishContentWrites(tool: String) async {
-        let setups = versionCapture.drain()
-        guard !setups.isEmpty else { return }
-
-        let actor = try? await requireEligibleSubject()
-        for setup in setups {
-            // Re-read: the tool mutated its own in-memory copy, and for a
-            // manifest edit that copy is the one that was saved — but a tool
-            // that reloaded or replaced the row would otherwise be snapshotted
-            // from a stale object.
-            let current = (try? await APITestSetup.find(setup.id ?? "", on: mainDB)) ?? setup
-            _ = await AssignmentVersionStore.recordBestEffort(
-                setup: current,
-                request: AssignmentVersionRequest(
-                    origin: AssignmentVersionOrigin.mcp(tool: tool), actor: actor),
-                testSetupsDirectory: request.application.testSetupsDirectory,
-                logger: logger,
-                on: mainDB)
-        }
+        guard !versionCapture.isEmpty else { return }
+        await versionCapture.recordRegistered(
+            origin: AssignmentVersionOrigin.mcp(tool: tool),
+            actor: try? await requireEligibleSubject(),
+            testSetupsDirectory: request.application.testSetupsDirectory,
+            logger: logger,
+            on: mainDB)
     }
 }
