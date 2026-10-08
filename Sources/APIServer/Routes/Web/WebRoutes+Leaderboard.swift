@@ -352,9 +352,21 @@ func buildTournamentPresentation(
     }
     let winner = run.winnerUserID.flatMap { winnerID in entrants.first { $0.userID == winnerID } }
         .flatMap { entrant($0.seed) }
+    let progress: (label: String, value: String)
+    switch run.status {
+    case APITournamentRun.Status.complete:
+        progress = ("Complete", "\(run.roundCount) round\(run.roundCount == 1 ? "" : "s")")
+    case APITournamentRun.Status.superseded:
+        progress = ("Run", "Superseded")
+    default:
+        progress = ("Round", "\(run.currentRound) of \(run.roundCount)")
+    }
     return TournamentPresentation(
         showsNames: includeNames,
         statusText: tournamentStatusText(run: run),
+        scheduleName: run.tournamentSchedule?.displayName ?? run.schedule,
+        progressLabel: progress.label,
+        progressValue: progress.value,
         isComplete: run.status == APITournamentRun.Status.complete,
         hasWinner: winner != nil,
         winner: winner,

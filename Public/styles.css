@@ -1951,46 +1951,104 @@ code { font-family: var(--font-mono); font-size: .9em; }
    relative to one font size that steps up with the screen, so a podium made
    for 1600 pixels still fits a laptop. */
 .present {
-    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    min-height: 100vh;
+    padding: 3rem;
     background: var(--gray-50);
     color: var(--gray-900);
+    font-size: var(--text-md);
 }
+/* Display sizes below are em of this one size, set for a 1600-pixel screen.
+   The type scale forbids a fluid font size, so the whole page steps by zoom:
+   down on a 1280 projector, up on a wide one. */
+@media (max-width: 1500px) { .present { zoom: .8; } }
 @media (min-width: 1900px) { .present { zoom: 1.15; } }
+/* Back and Full screen are for the presenter, not the room: small, in the
+   corner, and gone once the page is full screen. */
+.present > .toolbar { position: absolute; top: .75rem; right: .75rem; opacity: .6; }
+.present > .toolbar:hover { opacity: 1; }
+:fullscreen .present > .toolbar { display: none; }
+#present-results { display: flex; flex: 1; flex-direction: column; gap: 2rem; }
 .present-header {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
     gap: 1.5rem;
-    margin-bottom: 2rem;
 }
 .present-kicker {
     font-size: var(--text-base);
+    font-weight: 700;
+    letter-spacing: .08em;
     text-transform: uppercase;
-    letter-spacing: .04em;
+    color: var(--blue);
+}
+.present-title { margin: .25rem 0 0; font-size: 3.2em; line-height: 1.1; }
+.present-clock { display: grid; justify-items: end; }
+.present-clock-label {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
     color: var(--gray-600);
 }
-.present-title { margin: 0; font-size: var(--text-2xl); }
-.present-clock {
-    font-size: var(--text-2xl);
+.present-clock-time {
+    font-size: 3.2em;
+    font-weight: 800;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
-    font-weight: 700;
 }
+
+/* The podium on the left, places four to ten on the right. */
+.present-stage {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 3rem;
+    align-items: end;
+}
+@media (max-width: 1100px) { .present-stage { grid-template-columns: 1fr; } }
 .podium {
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 2rem;
-    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+    gap: 1.25rem;
+    margin: 0;
 }
 .podium-place {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: .5rem;
-    min-width: 12rem;
+    gap: .75rem;
+    min-width: 0;
 }
-.podium-handle { font-size: var(--text-xl); font-weight: 700; text-align: center; }
-.podium-value { font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
+/* One place stands in the middle, where first place stands on a full podium. */
+.podium-place:only-child { grid-column: 2; }
+.podium-place .avatar { width: 9.5rem; height: 9.5rem; }
+.podium-place[data-rank-tier="1"] .avatar { width: 12rem; height: 12rem; }
+.podium-kicker {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+.podium-handle {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 1.6em;
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.podium-value {
+    font-size: 2.75em;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--blue);
+}
 .podium-plinth {
     display: flex;
     align-items: flex-start;
@@ -2000,31 +2058,52 @@ code { font-family: var(--font-mono); font-size: .9em; }
     background: var(--surface);
     border: 1px solid var(--border);
     border-top-width: .4rem;
-    border-radius: var(--radius-lg);
+    border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
-.podium-place[data-rank-tier="1"] .podium-plinth { height: 6rem; border-top-color: var(--rank-gold-bg); }
-.podium-place[data-rank-tier="2"] .podium-plinth { height: 4rem; border-top-color: var(--rank-silver-bg); }
-.podium-place[data-rank-tier="3"] .podium-plinth { height: 3rem; border-top-color: var(--rank-bronze-bg); }
-.podium-place .avatar { width: 10rem; height: 10rem; }
-.present-rows { display: grid; gap: .75rem; max-width: 48rem; margin: 0 auto 2rem; }
+.podium-place[data-rank-tier="1"] .podium-plinth { height: 7.5rem; border-top-color: var(--rank-gold-bg); }
+.podium-place[data-rank-tier="2"] .podium-plinth { height: 5rem; border-top-color: var(--rank-silver-bg); }
+.podium-place[data-rank-tier="3"] .podium-plinth { height: 3.5rem; border-top-color: var(--rank-bronze-bg); }
+.podium-plinth .rank-disc { width: 3rem; height: 3rem; font-size: 1.6em; }
+
+.present-rows { display: grid; gap: .6rem; margin: 0; }
 .present-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 2.5rem 3.5rem minmax(0, 1fr) auto;
+    gap: 1.25rem;
     align-items: center;
-    gap: 1rem;
-    padding: .5rem 1rem;
+    padding: .5rem 1.25rem;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    font-size: var(--text-xl);
+    font-size: 1.6em;
 }
 .present-row .avatar { width: 3.5rem; height: 3.5rem; }
-.present-row-handle { flex: 1 1 auto; font-weight: 600; }
+.present-row .rank-disc { font-size: inherit; }
+.present-row-handle { overflow: hidden; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
 .present-row-value { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* A tournament's winner, or a hill holder who is not on the podium: the
+   page's champion card, gold for the room. */
+.present .champion-card { margin: 0; background: var(--rank-gold-bg); color: var(--rank-gold-fg); }
+.present .champion-card .you-card-kicker { font-size: var(--text-sm); font-weight: 700; color: inherit; }
+.present .champion-card .you-card-name { font-size: 1.6em; }
+.present-bracket .bracket-round { flex: 1 1 0; max-width: 30rem; }
+.present-bracket .bracket-round-label { font-size: var(--text-base); }
+.present-bracket .bracket-entrant { gap: .6rem; padding: .3rem .6rem; font-size: var(--text-lg); }
+.present-bracket .bracket-entrant .avatar { width: 2.25rem; height: 2.25rem; }
+.present-bracket .tier { font-size: var(--text-sm); }
+
 .present-footer {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
     font-size: var(--text-base);
     color: var(--gray-600);
 }
+.present-footer .tier { margin-left: auto; font-size: var(--text-sm); }
 
 .section-items .leaderboard-rank { width: 3.25rem; text-align: center; }
 /* Under a list: Show all from a student's window, Show my standing back. */
