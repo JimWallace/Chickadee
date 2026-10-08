@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.595] - 2026-10-08
+
+### Changed
+
+- **mambajs-core 0.23.0 for the xeus grading bootstrap.** `Tools/vendor` moves from `@emscripten-forge/mambajs-core` 0.22.0 to 0.23.0. The package's `lib/` is identical between the two releases, so `scripts/setup-vendor.sh` regenerates `Public/vendor/` with no byte change.
+
+
 ## [0.5.594] - 2026-10-08
 
 ### Fixed
