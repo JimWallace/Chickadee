@@ -131,6 +131,45 @@ import VaporTesting
         }
     }
 
+    @Test func theUnionCardSaysWhatYourTestsFoundAndHowYourCodeStands() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let setup = try await wrInsertSetup(
+                id: "lpy_card", manifest: try manifest(.testsVersusImplementations), on: app)
+            _ = try await makeTestAssignment(on: app, testSetupID: "lpy_card", courseID: setup.courseID, title: "Break")
+            let viewer = try await wrStudentUser(on: app)
+            try await wrEnrollUser(viewer, on: app)
+            var users = [viewer]
+            for index in 0..<2 {
+                let mate = try await makeTestUser(on: app, username: "lpy_card_s\(index)", role: "student")
+                try await wrEnrollUser(mate, on: app)
+                users.append(mate)
+            }
+            for (index, user) in users.enumerated() {
+                try await APISubmission(
+                    id: "lpy_card_\(index)", testSetupID: "lpy_card", zipPath: "/tmp/lpy_card_\(index).zip",
+                    attemptNumber: 1, status: SubmissionStatus.complete.rawValue,
+                    filename: "lpy_card_\(index).py", userID: try user.requireID()
+                ).save(on: app.db)
+            }
+            // The viewer's tests beat both classmates; one classmate's tests fail
+            // to beat the viewer's code.
+            for (tester, target, won) in [(0, 1, true), (0, 2, true), (1, 0, false)] {
+                let row = APIMatchResult(
+                    testSetupID: "lpy_card", submissionID: "lpy_card_\(tester)",
+                    opponentSubmissionID: "lpy_card_\(target)",
+                    opponentIdentity: JobOpponent.submissionIdentity("lpy_card_\(target)"),
+                    seed: "s", createdAt: Date())
+                row.won = won
+                row.completedAt = Date()
+                try await row.save(on: app.db)
+            }
+            let html = try await getHTML("/testsetups/lpy_card/leaderboard", cookie: cookie, on: app)
+            #expect(html.contains("Your tests found 2 faults · your code is holding"))
+            #expect(html.contains("Tested 2 classmates · 1 has tested you"))
+        }
+    }
+
     @Test func aBoardThatFitsHasNoShowAll() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await seedMetricBoard("lpy_fit", count: 4, viewerIndex: 3, on: app)
