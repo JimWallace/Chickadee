@@ -284,73 +284,20 @@ Generated filenames are deterministic (`{tier}test_{familyID}_{caseKey}`, with
 the language's generated extension) and embed a `spec_hash` header so manifest
 bytes change when any case changes.
 
-**Server-authoritative suite editor (v0.4.79+).** The instructor assignment
-edit page is wired to `PUT /instructor/:assignmentID/suite` and
-`PUT /instructor/:assignmentID/families` — drag-reorder, tier/points edits,
-and family edits persist live with the server returning the reconciled state.
-The legacy client-side `#suite-config-field` JSON blob and the
-`/edit/save` suite-rebuild path are gone; the main Save button only handles
-name, due date, notebook uploads, and the validation enqueue. Dependencies
-accept `family:<id>` tokens which the server expands to concrete filenames
-before persistence; cycle detection runs on the authored graph.
+**The authoring editors ([docs/authoring-editors.md](docs/authoring-editors.md)).**
 
-**The embedded editor writes back (`POST /testsetups/:id/notebook/save`).**
-JupyterLite keeps the live document in the browser, so authoring edits used to
-reach the server only via an upload on the new-assignment page or the MCP
-`update_notebook` / `update_solution` tools. Course staff (TA+) now get a
-"Save to assignment" button on the notebook page that POSTs the open notebook
-back through the same server-side steps those tools use —
-`AssignmentAuthoringService.writeAssignmentNotebook` for the starter, a fresh
-`kind == .validation` submission for the solution — plus the author's working
-copy so a reload shows the save, and the version snapshot every authoring write
-gets. It is a **live-edit** endpoint: like `PUT /suite` and unlike the MCP
-tools, it never changes visibility, so fixing a typo mid-lab does not close the
-assignment out from under students. Re-validation still runs (debounced for the
-starter, always for a solution, since the new solution *is* what validates).
-
-**The authoring UI reads the assignment's language from ONE seed (v0.5.36).**
-The browser editors had no notion of language at all: `pattern-family-editor.js`
-contained the string "language" zero times, and `inputs-editor-core.js` had the
-identical defect, so both parsed instructor input by Python's rules — `True` /
-`False` / `None` plus a Python-repr rewrite — on every assignment. An R author
-typing the boolean true stored the **string**, silently, in a value a generated
-test then compares.
-
-`AuthoringLanguageFacts` is now encoded into an `#assignment-language-seed`
-script tag on both authoring pages, and `Public/authoring-language.js`
-(`window.ChickadeeLanguage`) is the single reader. **Every value in the seed is
-derived, never tabulated:** the scalar spellings come from
-`JSONValue.literal(_:)` — the same call that renders the real generated test, so
-the editor cannot show one spelling while the renderer emits another — kind
-availability from `notebookCheckKindIsSupported` (the predicate the save-time
-refusal uses, so the Add Test menu and the rejection cannot disagree), scan
-support from `notebookFunctionScanSupport`, and evaluation support from
-`PersonalizationEvaluator`.
-
-The consequence worth knowing before touching this: **a seventh language needs
-zero JavaScript edits.** There is no per-language list in any authoring JS, and
-the invariant is greppable (see the runbook's "The authoring UI: what you do NOT
-have to do"). If a new *fact* is needed, add a field to `AuthoringLanguageFacts`
-and derive it from whatever already owns the answer — do not answer it twice.
-Both mistakes were made and undone here: the literals were nearly generated into
-a JS table, and two capability flags shipped as hand-written bools before being
-pointed at their real owners. `AuthoringLanguageFactsTests` asserts the
-derivation.
-
-**Auto-computing a case's expected value runs on the SERVER for every language
-but Python** (`POST /instructor/:id/compute-expected`). The in-page evaluator is
-a Python kernel; on another language it did not fail, it computed a *Python*
-answer for a value compared against that language's result.
-`PersonalizationEvaluator` already evaluates in every language behind an
-exhaustive switch, so the fix was to route to it rather than grow a kernel per
-language into the page. Python keeps the in-page path (faster, and its `None`-return and
-non-round-trippable-type handling is behaviour existing assignments rely on).
-Two stated limits: the drivers report values as their language's REPR (base R and
-Lua have no JSON to serialize with), so a scalar round-trips into the Expected
-cell and a composite may not — the client decides, using the same language-aware
-reader hand-typed values go through; and automatic stdout capture is offered
-where one expression expresses it (R's `capture.output`, Octave's `evalc`) and
-reported unavailable where it does not.
+- The suite editor is server-authoritative. `PUT /instructor/:assignmentID/suite`
+  and `PUT /instructor/:assignmentID/families` persist each edit and return the
+  reconciled state. `dependsOn` accepts `family:<id>` tokens, which the server
+  expands before it persists them.
+- `POST /testsetups/:id/notebook/save` is a live-edit endpoint, like `PUT /suite`.
+  It never changes visibility. Re-validation still runs.
+- The authoring pages read the language from one seed, `AuthoringLanguageFacts`,
+  and every value in the seed is derived from the code that owns the answer. A
+  new language needs zero JavaScript edits. A new fact is a new field, derived
+  from its owner. `AuthoringLanguageFactsTests` asserts the derivation.
+- Auto-compute of a case's expected value runs on the server
+  (`PersonalizationEvaluator`) for every language but Python.
 
 **Assignment vanity URLs (v0.4.71).** Each assignment gets a per-course
 unique slug. Student links prefer `/:courseCode/:assignmentSlug` routes while
@@ -528,217 +475,44 @@ is non-local.
 
 ## JupyterLite
 
-Chickadee embeds a full JupyterLite instance at `Public/jupyterlite/`. This
-enables in-browser notebook editing for both students (submit) and instructors
-(create/validate assignments).
+Chickadee embeds JupyterLite at `Public/jupyterlite/` for in-browser notebook
+editing. The config is in `Tools/jupyterlite/`. `Public/jupyterlite` is generated
+output and is checked in. The measurements and the history behind each rule
+below are in [docs/jupyterlite.md](docs/jupyterlite.md).
 
-Source-of-truth config lives in `Tools/jupyterlite/`. Rebuild:
-
-```bash
-scripts/setup-jupyterlite.sh
-scripts/build-jupyterlite.sh
-```
-
-`Public/jupyterlite` is generated output and is checked in; rebuild only when
-updating kernel versions or config.
-
-**Every vendored kernel is a xeus kernel, one env each.**
-`Tools/jupyterlite/environment-python.yml`, `environment-r.yml`,
-`environment-lua.yml` and `environment-octave.yml` declare one
-emscripten-forge environment each, yielding `xpython` (Python, xeus-python),
-`xr` (R, xeus-r), `xlua` (Lua, xeus-lua) and `xoctave` (Octave, xeus-octave);
-`jupyter lite build` compiles them all into
-`Public/jupyterlite/xeus/`. They are **separate envs on purpose** — a kernel
-fetches its whole env at boot, so a shared env makes every Python boot pull
-r-base and every R boot pull numpy/pandas/matplotlib (slow enough to time out
-the editor probes). `check-xeus-vendored.sh` asserts they stay distinct. Python moved
-off the Pyodide kernel in the 0.5 series, so the editor runs one kernel
-technology for every language. Notebook metadata is normalized to those names by
-`normalizeNotebookForJupyterLite` (`NotebookContentHelpers.swift`) — for every
-vendored kernel. A Lua notebook resolves to `xlua` and extracts through the
-same marker-emitting RunnerCore extractor R uses — vendoring a kernel puts it
-in the editor's picker, so a language that can be authored must be one that
-can be graded.
-
-**One place still enumerates the kernels rather than discovering them, and it
-fails open for one it has never heard of:** the `chickadee-*` glob in
-`build-jupyterlite.sh`, which decides who gets a module index. It does not error
-— you simply get a kernel nothing checks. Its twin is closed: `expected_language`
-in `check-xeus-vendored.sh` derives the expected set from each language's
-`editorSupport.notebookKernel(kernelName:)`, so a kernel is guarded the day its
-descriptor names it.
-
-**Deriving it did not make it safe.** That derivation reads Swift with a regex
-and paired language to kernel by line PROXIMITY, so when #1330 hoisted the
-descriptors into their own `static let`s it went silently partial — one kernel,
-mapped to the wrong language — and `main` was red for five releases while every
-PR showed green, because the workflow's path filter reported the job green when
-it skipped it and only `push` counted as relevant. Three rules came out of it: a
-derivation must assert its own **completeness** (only an empty one used to fail,
-and a partial one is indistinguishable from a correct one); read the mapping the
-compiler already forces to be exhaustive rather than inferring one from
-proximity; and **a guard whose answer depends on the event it runs under is not
-a guard**. `docs/adding-a-xeus-kernel.md` is the runbook.
-
-The channel is **`emscripten-forge-4x`**. The older `emscripten-forge-dev` alias
-serves the 3x (emscripten 3.x ABI) channel, which stopped receiving builds of
-any kind on 2026-04-09 — frozen, not merely older. Do not point the env file
-back at it.
-
-Anything a student imports must be baked into the matching env: the editor's CSP is
-`connect-src 'self'`, so there is no runtime pip/piplite escape hatch and a
-missing package is an ImportError with no recovery. The Python set is currently
-numpy / pandas / matplotlib / scipy / sympy / scikit-learn / statsmodels / PIL;
-the R side is the tidyverse core (dplyr, tidyr, readr, stringr, tibble, purrr,
-forcats).
-
-**The kernel environments are checked at authoring time, and the check reads
-the VENDORED bytes, never the environment YAML.**
-Since browser grading moved onto this env, saving a browser-graded `.py` whose
-imports the kernel cannot satisfy is rejected at the write
-(`KernelImportGuard`, wired into the web create/update handlers, `PUT /suite`,
-and MCP `author_script`) — which matters because instructor validation is graded
-by the *native* worker on a full CPython, so such a test validates green and then
-fails for the first student who submits. The available set comes from
-`importable-modules.json`, derived from `kernel_packages/*.tar.gz` by
-`scripts/derive-kernel-modules.py`. Adding a name to the env file changes
-nothing until `build-jupyterlite.sh` runs, so a check derived from the env file
-would accept imports the shipped kernel cannot serve — the exact failure it
-exists to prevent. Reading the tarballs also means there is no
-distribution-name-to-import-name table to maintain. The check applies to
-browser-graded assignments only (worker grading runs a real interpreter) and
-resolves every ambiguity toward reporting nothing, since a false positive blocks
-an instructor from saving with no self-service fix. `KernelImportGuard` dispatches on file
-extension; R is scanned by `RLibraryScanner` for `library()`/`require()`/`::`.
-It declines `.lua` on purpose: emscripten-forge ships no Lua library packages,
-so the `chickadee-lua` inventory is empty and a guard against it would reject
-every `require`, starting with the `require("test_runtime")` that opens every
-generated Lua test.
-
-**A kernel env has TWO costs, and they fall on different people. Be sparing.**
-*Boot* — fetching and mounting the whole env — is paid by everyone on every
-notebook open and every browser-graded submission, whether or not they touch the
-package. *Import/attach* is paid only by a script that uses it, but is charged
-against the default **10-second** per-test limit. Measured in real kernels:
-
-| | R | Python |
-|---|---|---|
-| boot | ~5-10s (52-91 MB; single runs, noisy) | ~8-10s (85 MB) |
-| worst single import | `ggplot2` **193s**, `lubridate` 32s | `scikit-learn` **10.8s**, `sympy` 5.9s, `pandas` 4.8s |
-
-Attach costs are **not independent**: the R tidyverse shares a dependency graph,
-so whichever package attaches first pays for all of it (~26s cold, ~58s for the
-set) and the rest come cheap. `ggplot2` and `lubridate` are excluded from the
-default R env on that basis despite solving fine; `scikit-learn` already exceeds
-the default limit in Python. `Tools/browser-grading-smoke` prints per-package
-timings and asserts every declared package actually loads — measure there rather
-than reasoning about package counts, and treat single boot numbers as a trend
-only.
-
-Building the kernels needs **micromamba on PATH plus network to
-repo.prefix.dev**. This was long documented as something *CI cannot do*, and
-that was simply **wrong** — a hosted runner has unrestricted network and
-micromamba is a single ~7 MB download. Re-vendoring is now a workflow:
-`.github/workflows/revendor-kernels.yml`, on demand or when a PR changes an
-environment file. It does not run unattended, because the output is ~100 MB of
-content-hashed binary assets and an automatic rebuild would bury unrelated work
-in unreviewable diffs.
-
-That false belief had a cost worth remembering. Adding a name to
-`environment-*.yml` changes nothing until the kernel is rebuilt, so
-"maintainer-machine only" meant env files drifted from the shipped bytes:
-scipy/sympy/scikit-learn/statsmodels were declared, announced in a changelog,
-and absent from the kernel — an unrecoverable `ImportError` waiting for the
-first student who imported one. Every existing guard compared the vendored tree
-to *itself*, so none of them could see it.
-`scripts/check-env-vendored-sync.sh` is the one that compares **declared intent
-to shipped bytes**, costs two file reads, and fails the PR pointing at the
-workflow.
-
-The committed `Public/jupyterlite/xeus/` bytes remain authoritative for every
-other job (`scripts/check-xeus-vendored.sh` guards their integrity; the
-reproducibility check excludes that path) — the rebuild is a deliberate act, not
-part of the normal build.
-
-**The vendored `pyodide-http` is patched, and must stay patched.**
-`xeus-python → xeus-python-shell-lite → pyodide-http` is an unavoidable
-dependency chain, and `pyodide-http` selects a Pyodide-specific streaming
-implementation whenever `crossOriginIsolated` is true. It is not pyjs-compatible,
-so un-patched the kernel never leaves `kernel_starting` on an isolated engine and
-the editor sits on "Kernel Connecting" forever.
-`scripts/patch-xeus-python-http.py` (run from `build-jupyterlite.sh`, asserted by
-`check-xeus-vendored.sh`) forces the library's own XHR fallback on every engine.
-The guard matters more than usual because this failure is invisible in the
-JupyterLite REPL (no Drive-backed file, so no HTTP call) *and* on WebKit (not
-isolated, so it takes the fallback anyway) — only isolated engines hit it.
-
-**Synchronous stdin uses a different transport per engine — check the
-middleware, not the static config.** `input()` works on both, but not the same
-way, and reading `Tools/jupyterlite/jupyter-lite.json` alone gives the wrong
-answer:
-
-| engine | isolation | stdin transport |
-|---|---|---|
-| Chromium / Firefox | isolated (`COEPMiddleware`) | `SharedArrayBuffer`; service worker disabled as redundant |
-| WebKit (Safari) | **non-isolated on purpose** | **service worker**, which `JupyterLiteConfigFlagMiddleware` re-enables *per request* for this engine |
-
-So "the service worker is disabled" is true of Chromium only. Both paths are
-covered by a blocking `SMOKE_KERNEL=xpython` probe in `editor-smoke.yml`, run on
-both engines because the transports fail independently.
-
----
-
-## Vendored browser libraries
-
-jszip and CodeMirror are vendored under `Public/` rather than pulled from
-third-party CDNs at runtime, so student / instructor IPs aren't leaked to
-`cdn.jsdelivr.net` and `esm.sh` on every page load (FIPPA / PIPEDA concern
-surfaced in the v0.4.171 audit). The editor kernels are vendored under
-`Public/jupyterlite/xeus/` for the same reason.
-
-```
-Public/vendor/jszip.min.js       — jszip the browser runner uses for zip extraction
-Public/vendor/codemirror.js      — bundled CodeMirror 6 ESM
-Public/vendor/xeus-bootstrap.js  — mambajs slice that boots a xeus kernel
-Public/vendor/xeus-unpack.wasm   — untarjs unpacker the bootstrap drives
-```
-
-**Pyodide is gone (v0.5.19).** `Public/pyodide` was ~465 MB of vendored bytes;
-`check-pyodide-parity.sh`, `add-pyodide-extras.py`,
-`Tools/vendor/pyodide-extra-packages.json`, `patch-pyodide-kernel.py`, the
-nb_mypy/astor wheels and the `jupyterlite-pyodide-kernel` federated extension
-went with it. Every editor kernel and every browser grader is xeus.
-`verify-jupyterlite.sh` fails if any `pyodide` federated extension or plugin
-setting reappears, because re-adding the kernel means re-vendoring that payload
-and restoring its CSP allowances.
-
-**Two things the retirement did NOT deliver, both measured:**
-
-- **`'unsafe-eval'` cannot be narrowed to `'wasm-unsafe-eval'`.** The plan
-  assumed Pyodide was the only thing needing it. It is not: with Pyodide fully
-  removed, `wasm-unsafe-eval` leaves JupyterLab unable to activate its plugins —
-  the editor loads, reports `crossOriginIsolated`, fetches both kernel manifests,
-  then never renders a console. Restoring `'unsafe-eval'` with no other change
-  makes the same smoke pass. JupyterLab compiles JSON-schema validators at run
-  time. Do not retry without a plan for that.
-- **Kernel packages still revalidate on every boot.** They are `no-cache`
-  because conda filenames are stable across an in-place patch
-  (`patch-xeus-python-http.py` rewrites bytes under the same name), so immutable
-  caching would pin an unpatched copy — the #574 failure class. Making them
-  immutable needs content-addressed filenames, because
-  `empackLockToMambajsLock` builds package URLs as `pkgRootUrl + '/' + filename`
-  inside the vendored bundle, leaving no seam for a `?v=` cache-buster.
-  `/jupyterlite/xeus/` IS now on `EditorAssetFastPathMiddleware`, so those ~50
-  revalidations per boot no longer each cost a Fluent session lookup.
-
-**The waitAsync polyfill patch covers every extension, not one.**
-`scripts/patch-waitasync-worker.py` (was `patch-pyodide-waitasync-worker.py`)
-rewrites the `Atomics.waitAsync` polyfill's helper worker from a CSP-blocked
-`data:` URL to a `blob:` one. It was scoped to the pyodide-kernel extension —
-and when Pyodide was retired it turned out the **xeus** extension shipped the
-identical un-patched polyfill, in the kernel Chickadee actually runs, for every
-language. A per-extension scope is how that went unseen for two releases; the
-glob and the matching `verify-jupyterlite.sh` assertion are how it stays seen.
+- **Every vendored kernel is a xeus kernel, one environment each**
+  (`Tools/jupyterlite/environment-<language>.yml`). The environments are
+  separate on purpose, because a kernel fetches its whole environment at boot.
+  `check-xeus-vendored.sh` asserts that they stay distinct. A vendored kernel
+  appears in the editor's picker, so a language that can be authored must be
+  one that can be graded.
+- **The channel is `emscripten-forge-4x`.** The `emscripten-forge-dev` alias
+  serves the frozen 3x channel. Do not point an environment file at it.
+- **A student can import only what the environment contains.** The CSP is
+  `connect-src 'self'`, so there is no runtime install.
+- **Import checks read the vendored bytes, never the environment YAML.**
+  `KernelImportGuard` refuses a browser-graded script whose imports the kernel
+  cannot satisfy, from `importable-modules.json`.
+- **A name in an environment file changes nothing until the kernel is rebuilt.**
+  Re-vendor with `.github/workflows/revendor-kernels.yml`.
+  `check-env-vendored-sync.sh` compares the declared packages with the shipped
+  bytes.
+- **A package has two costs: boot, paid by everyone, and attach, charged to the
+  10-second test limit. Be sparing.** Measure with `Tools/browser-grading-smoke`.
+- **A guard derivation must assert its own completeness, and a guard whose
+  answer depends on the CI event it runs under is not a guard.** The
+  `chickadee-*` glob in `build-jupyterlite.sh` still fails open for a kernel it
+  does not know.
+- **The vendored `pyodide-http` and the waitAsync polyfill worker are patched,
+  and must stay patched** (`scripts/patch-*.py`, asserted by
+  `check-xeus-vendored.sh` and `verify-jupyterlite.sh`).
+- **Synchronous stdin uses a different transport per engine.** Read the
+  middleware, not `jupyter-lite.json`: Chromium and Firefox are isolated and use
+  `SharedArrayBuffer`; WebKit is not isolated and uses the service worker.
+- **jszip, CodeMirror and the xeus bootstrap are vendored under `Public/vendor/`**,
+  so no page load reaches a third-party CDN. Pyodide is gone (v0.5.19).
+  `'unsafe-eval'` cannot be narrowed to `'wasm-unsafe-eval'`, because JupyterLab
+  compiles JSON-schema validators at run time.
 
 ---
 
@@ -828,93 +602,32 @@ greeting. The example below does so in R."
 
 ## UI / Stylesheet Conventions
 
-The web UI is Leaf templates + one stylesheet (`Public/styles.css`). The
-render tests assert pages *render*, not how they look, so the following
-invariants are enforced statically by `scripts/check-styles.sh` (wired into
-the `format-lint` CI job) — keep them green:
+The web UI is Leaf templates and one stylesheet (`Public/styles.css`). The
+render tests prove that a page renders, not how it looks, so
+`scripts/check-styles.sh` enforces these rules statically in `format-lint`. The
+rules, the token tables, the component vocabulary and the page archetypes are
+in [docs/ui-design.md](docs/ui-design.md).
 
-- **No inline `style=""` in templates** except a JS-toggled `display:none`
-  initial state, or a CSS custom-property assignment (e.g.
-  `style="--filter-width:220px"`). Everything else belongs in a class.
-- **Shared styling lives in `Public/styles.css`;** page-unique styling lives
-  in a page-local `<style>` block with **role-named** classes (e.g.
-  `.section-header`, not `.mt-1`). Don't paste the same rule into multiple
-  templates — hoist it to the global sheet. (`scripts/check-styles.sh` fails
-  if a page block re-defines a global selector or the same selector appears
-  in more than one page block; `.main` is an allowlisted page override.)
-- **Every `var(--x)` must resolve.** Declare new custom properties in
-  `styles.css` (with a `prefers-color-scheme: dark` value if it's a colour).
-  Never reference an undeclared var, and never use a hardcoded colour
-  fallback `var(--x, #hex)` — define the var so it routes through the palette
-  and adapts to dark mode. (`scripts/check-css-vars.sh` enforces both.)
-- **No native `alert()` in templates** — surface errors with the inline
-  `.form-error` banner pattern. The guard ratchets a baseline down only.
-- **Design tokens are mandatory** (`scripts/check-design-tokens.sh`): raw
-  colour literals (`#hex`/`rgb(a)`/`hsl(a)`) may appear only as `--token:`
-  declarations in `styles.css` (palette + dark-mode mirror); every
-  `font-size` uses the `--text-*` type scale (em/`inherit` allowed for
-  relative sizing); every `border-radius` uses the `--radius-*` scale
-  (`0`/`50%`/multi-corner allowed); every rem component of
-  `padding`/`margin`/`gap` sits on the shrink-only spacing lattice
-  (`SPACING_STEPS`); pop-out shadows use `--shadow-pop`. Pick the nearest
-  step — never introduce a new literal. Full principles, the token tables,
-  and the component vocabulary live in [docs/ui-design.md](docs/ui-design.md).
-- **Pages follow a named archetype** (docs/ui-design.md "Page archetypes"):
-  tab bars are the `_admin-tabs`/`_instructor-tabs` partials, flash banners
-  render only through the `_flash` partial (ARIA roles included), sections
-  are `.page-section`, page headers are `.page-titlebar`. Assemble new pages
-  from the component vocabulary — the page `<style>` total is a shrink-only
-  ratchet (`PAGE_STYLE_BASELINE`), so a private re-implementation of a
-  shared concept fails CI on growth.
-- **Start a new page by copying its archetype's exemplar.** Every archetype
-  row names one — `alerts` / `instructor-mcp` / `admin-user` / `account` /
-  `register` / `assignment-edit` / `workbench`. The component vocabulary and
-  the idiom table say what to *reach for*; this is the only rule naming a
-  **starting artifact**, and it exists because the skeleton column describes
-  a shape without providing one, so an author imitating whichever page they
-  opened inherited its private habits too. `PageArchetypeTests` reads the
-  exemplar column out of the table (so doc and guard cannot drift) and
-  re-checks each exemplar against its own row — the exemplars and **nothing
-  else**; no page fails for not being one. Do not answer this with a
-  scaffold generator: a `new-page.sh` is a second source of truth that
-  drifts from the exemplar the moment either moves.
-- **Every assigned class name must resolve to a stylesheet rule**
-  (`scripts/check-class-resolution.sh`). Behaviour-only hooks take the `js-`
-  prefix (pre-existing ones live in a shrink-only allowlist). Leaf-
-  interpolated families (`status-…` etc.) are pinned by
-  `StatusClassStylesheetTests` iterating the enum instead.
-- **JS makes no styling decisions** — it toggles classes or sets a custom
-  property (`--wb-left-width` pattern). Two absolute rules: no colour or
-  typography property written via `.style`, and a `style="…"` in a JS-built
-  HTML string may only assign a custom prop or `display:none`. The residue
-  (computed geometry, `setProperty`, `.style` reads) ratchets down only
-  (`JS_STYLE_DECISION_BASELINE`).
-- **The nginx maintenance page mirrors the palette by value** —
-  `scripts/check-maintenance-palette.sh` fails when a colour there stops
-  existing in `styles.css`.
-- **Do not invent a second way to say something the UI already says.** The
-  token guards prove a value is on the palette and the class-resolution guard
-  proves a name has a rule; neither can see a component that duplicates one in
-  the vocabulary under a different name, and until v0.5.137 the *global* sheet
-  had no budget at all — so the cheapest way to add a second spelling was to
-  skip the page block and put it in `styles.css`. That is how a pair of
-  estimate chips shipped as chips in the changelog, the commit message and
-  their own CSS comment, under a name sharing nothing with `.chip`, past a
-  fully green `format-lint`. `scripts/check-ui-vocabulary.sh` now prices it:
-  the count of global classes [docs/ui-design.md](docs/ui-design.md) does not
-  name is a shrink-only ratchet, `cursor` and `text-decoration` values are a
-  closed **affordance registry** (a new one is a rulebook edit, not a CSS
-  line), and hover text written in a template is capped at 20 words.
-- **Chrome is not prose, and a tooltip is not a disclosure.** Labels and chips
-  are two-or-three-word noun phrases; a `title` is one phrase; a note under a
-  control is one sentence; **anything longer goes in `docs/` and the UI links
-  there**. A hover title is invisible on touch, unsearchable, and read
-  inconsistently by screen readers, so it may never hold the only copy of
-  something a reader needs. The rules and the cheapest-first table of
-  interaction idioms — on the page → `<details>` → row popover → modal — are
-  in ui-design.md under "Interaction idioms" and "UI copy". The script only
-  reads templates, so prose assembled in Swift or JS needs its own budget
-  assertion (`datasetEstimateTitleWordCap` is the worked example).
+- No inline `style=""` in a template, except a JS-toggled `display:none` or a
+  custom-property assignment.
+- Shared styling goes in `styles.css`. Page-unique styling goes in a page
+  `<style>` block with role-named classes. The page `<style>` total is a
+  shrink-only ratchet.
+- Every `var(--x)` resolves, with no hardcoded fallback (`check-css-vars.sh`).
+- Design tokens are mandatory for colours, font sizes, radii, spacing and pop-out
+  shadows (`check-design-tokens.sh`).
+- Pages follow a named archetype. Start a new page by copying its archetype's
+  exemplar (`PageArchetypeTests`).
+- Every assigned class name resolves to a rule (`check-class-resolution.sh`).
+  Behaviour-only hooks take the `js-` prefix.
+- JS makes no styling decisions. It toggles a class or sets a custom property.
+- Do not invent a second name for a component the vocabulary already has
+  (`check-ui-vocabulary.sh`). `cursor` and `text-decoration` values are a closed
+  affordance registry.
+- Chrome is not prose. Text longer than one sentence goes in `docs/`, and the UI
+  links there. No native `alert()`.
+- The nginx maintenance page mirrors the palette by value
+  (`check-maintenance-palette.sh`).
 - **Run the `ui-review` agent on any change touching `Resources/Views/`,
   `Public/styles.css`, or a page-wiring `Public/*.js`.** It reviews the layer
   the guards structurally cannot: whether a construct duplicates the
@@ -936,95 +649,51 @@ the `format-lint` CI job) — keep them green:
   passes with a warning when neither is set. A UI change that has not been
   through `ui-review`, by either route, is not finished.
 
-Run `scripts/check-styles.sh` locally before pushing UI changes (it runs all
-of the above — same as the CI `format-lint` job). The visual-regression
-harness (`Tools/visual-regression/`, page list in `pages.mjs` shared with
-the axe scan) covers one page per archetype; a page captured without a
-committed baseline bootstraps loudly — commit the CI capture in the same PR.
+Run `scripts/check-styles.sh` before you push a UI change. The
+visual-regression harness (`Tools/visual-regression/`) covers one page per
+archetype. A page with no committed baseline bootstraps loudly: commit the CI
+capture in the same PR.
+
+---
+
+## Subagents
+
+The subagents are in `.claude/agents/`. Each one reports and does not edit.
+- After a code change, run `test-runner`. It reports only the failing tests.
+- After a change to a Leaf template, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
+- Before a commit, run `diff-reviewer` on the uncommitted diff. Before a push, run `lint-guard`.
 
 ---
 
 ## Testing Conventions
 
-- **Framework: Swift Testing only.** Every Swift test (plus the `.mjs`
-  frontend tests in `Tests/BrowserRunnerJSTests/`, run by `node --test`) has
-  been on Swift Testing since the migration completed (PRs #597–#608). `scripts/no-new-xctest.sh`
-  blocks any new `import XCTest` under `Tests/`. The nightly
-  `test-coverage.yml` run measures line coverage over all four targets
-  (87 % on 2026-09-20) against an 80 % floor.
-- **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
-  `#require`, `.serialized`, `.tags(...)`, `.enabled(if:)` / `.enabled { }` /
-  `.disabled(if:)`, `@Test(arguments:)`, `#expect(processExitsWith:)` (an exit
-  test: the body runs in a child process, for a path that ends the process or
-  writes process-global state such as `setenv` — see
-  `WedgeWatchdogAbortTests` and the WorkerTests env tests; the body cannot
-  capture `self`, so the helpers it calls are static or file-scope), and
-  `.timeLimit(.minutes(n))` (put it on any suite
-  that spawns subprocesses or awaits daemons/network, so a stall fails
-  with a named test instead of holding the CI job to its 20-minute kill —
-  see the #1139 postmortem in `docs/ci-flakiness.md`). Avoid
-  `CustomExecutionTrait`, hand-rolled trait types, and anything still
-  labelled experimental in the Swift Testing source — the API is still
-  evolving.
-- **Struct vs class suites.**
-  - **`@Suite struct Foo`** — default. Per-test instance is cheap.
-  - **`@Suite final class Foo`** with `init()` / `deinit` — when the
-    suite needs expensive shared state per-test instance (temp
-    directories, Vapor app fixtures). For Vapor apps, store `let app`
-    and wrap each `@Test` body in `try await withApp(app) { _ in ... }`
-    so teardown is deterministic (`withApp` runs the full
-    `tearDownTestApp`: shutdown plus removal of the app's temp
-    directories and sqlite-kit's fake-memory database file — #1298);
-    the next test's `init` builds a fresh app.
-- **`with*App` helpers** for DB-backed suite clusters
-  (`withWebRoutesApp`, `withAssignmentRoutesApp`, `withPatternFamilyFixture`).
-  See `Tests/APITests/WebRoutesHelpers.swift` etc. for the pattern.
-- **`.serialized` on DB- or env-touching suites.** Swift Testing runs
-  tests in parallel within a suite by default; `.serialized` gates
-  within-suite parallelism. For cross-suite serialization (e.g. tests
-  that mutate process env vars), use the actor-backed
-  `withAsyncEnvLock { ... }` in `Tests/APITests/EnvTestLock.swift` or
-  `withMockURLProtocolLock { ... }` in
-  `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
-- **No force unwraps in tests.** The corpus cleanup finished in the 0.5
-  pass — `Tests/.swiftlint.yml` no longer exempts `!` / `try!` / `as!`
-  (its only remaining relaxation is `type_body_length`). Use
-  `try #require(value)` — the idiomatic Swift Testing replacement for
-  `XCTUnwrap`.
-- **Skipping a test at runtime.** Don't use `Issue.record` to skip — it
-  records a failure. A condition the host may not meet (an interpreter on
-  PATH, a Python module, CI itself) is a `ConditionTrait` on the test:
-  `@Test(.requiresLua)`, `@Test(.ciOnly)`, `@Test(.requiresRscript)`, each a
-  `static let` built with `.enabled("requires lua on PATH") { … }`. The
-  traits more than one file needs live in one `HostConditionTraits.swift` per
-  test target (`WorkerTestSkip.swift` in WorkerTests): `.ciOnly` and one
-  `.requires…` per interpreter or tool (`Rscript`, `Octave`, `Gpp`, `Javac`,
-  `Racket`, `Lua`, `Python3`, `ZipTools`, `Sandbox`, `Make`). Add a new one
-  there, not in a suite. The probes behind them
-  (`cachedToolIsAvailable`) are in `ChickadeeTestSupport`, which also holds
-  `IssueRecorded` and `testURL` for all three targets. Swift Testing then
-  reports the test as skipped with that reason, in the log and in the xUnit report, and
-  `scripts/check-no-skipped-tests.sh` fails every CI test lane on any skip,
-  because the CI image carries every interpreter. That closed the silent-skip
-  trap: a `guard condition else { return }` kept a lane green having executed
-  nothing in a language, three times. The guard form survives only where a
-  trait cannot express the condition — per-argument availability in a
-  parameterized test, or a body whose first half runs without the tool — and
-  each such site says so in a comment. "Test setup is broken" is still
-  `throw IssueRecorded("...")`, which fails with a clear message.
-- **Pattern references.**
-  - Standalone struct suite:
-    [Tests/APITests/COEPMiddlewareTests.swift](Tests/APITests/COEPMiddlewareTests.swift)
-  - Class suite with sync `init`/`deinit`:
-    [Tests/APITests/ZipArchiverTests.swift](Tests/APITests/ZipArchiverTests.swift)
-  - Class suite with stored `app` + per-test `withApp`:
-    [Tests/APITests/AdminRoutesTests.swift](Tests/APITests/AdminRoutesTests.swift)
-  - `with*App` helper-driven suite:
-    [Tests/APITests/WebRoutesIndexTests.swift](Tests/APITests/WebRoutesIndexTests.swift)
-  - Parameterized + `try #require`:
-    [Tests/APITests/MCP/MCPModeScopeContractTests.swift](Tests/APITests/MCP/MCPModeScopeContractTests.swift)
-  - Worker-side class suite:
-    [Tests/WorkerTests/DirectorySizeBytesTests.swift](Tests/WorkerTests/DirectorySizeBytesTests.swift)
+The reason for each rule is in
+[docs/testing-conventions.md](docs/testing-conventions.md).
+
+- **Swift Testing only.** `scripts/no-new-xctest.sh` blocks a new `import XCTest`.
+  The `.mjs` frontend tests run under `node --test`.
+- **Use the approved vocabulary:** `@Suite`, `@Test`, `#expect`, `#require`,
+  `.serialized`, `.tags(...)`, `.enabled` / `.disabled`, `@Test(arguments:)`,
+  `#expect(processExitsWith:)` and `.timeLimit(.minutes(n))`. Put a time limit on
+  any suite that spawns a subprocess or waits on a daemon or the network. Do not
+  use `CustomExecutionTrait`, a hand-rolled trait, or an experimental API.
+- **`@Suite struct` by default.** Use a `final class` with `init` / `deinit` for
+  expensive per-test state, and wrap each Vapor test body in `withApp(app)`.
+  DB-backed suite clusters use the `with*App` helpers.
+- **`.serialized` on a suite that touches the database or the environment.**
+  Across suites, use `withAsyncEnvLock` or `withMockURLProtocolLock`.
+- **No force unwraps in tests.** Use `try #require(value)`.
+- **Skip with a `ConditionTrait`, never with `Issue.record`.** A bare
+  `guard … else { return }` is allowed only where a trait cannot express the
+  condition, with a comment that says so. The shared traits (`.ciOnly`, `.requires<Tool>`) live in one
+  `HostConditionTraits.swift` per target. `scripts/check-no-skipped-tests.sh`
+  fails every CI lane on any skip. A broken test setup throws
+  `IssueRecorded("...")`.
+- **Pattern references:** `COEPMiddlewareTests` (struct suite),
+  `ZipArchiverTests` (class suite), `AdminRoutesTests` (stored `app` with
+  `withApp`), `WebRoutesIndexTests` (`with*App` helper),
+  `MCPModeScopeContractTests` (parameterized) and `DirectorySizeBytesTests`
+  (worker class suite).
 
 ---
 
@@ -1203,6 +872,9 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/program-io.md` — the `programIO` pattern kind: stdin in, stdout graded, per language
 - `docs/adding-a-xeus-kernel.md` — the runbook for a new language: both halves, the compiler-invisible list, the parity checklist, the per-language postmortems
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, and on-demand package loading
+- `docs/jupyterlite.md` — the vendored editor and kernels: environments, import checks, re-vendoring, patches, stdin transports
+- `docs/authoring-editors.md` — the suite editor, the notebook write-back, the language seed and server-side auto-compute
+- `docs/testing-conventions.md` — the test rules in full, with the reason for each
 - `docs/r-support.md` — first-class R: runtime, personalization, renderers
 - `docs/language-declaration.md` — language is declared, never inferred, and the per-site `?? .python` table
 - `docs/language-handling-review.md` — design review of language dispatch, scored against the real third language
