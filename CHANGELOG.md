@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.582] - 2026-10-08
+
+### Fixed
+
+- The script editor highlights Lua, Octave, Racket, Java and C++ files in their own language. Before, it highlighted them as shell (#2460).
+
+
 ## [0.5.581] - 2026-10-08
 
 ### Fixed
