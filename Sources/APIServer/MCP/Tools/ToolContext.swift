@@ -20,7 +20,7 @@ struct ToolContext {
     let actingClientName: String?
     /// Setups this call resolved for write, collected so the dispatcher can
     /// snapshot their content afterwards. See `MCPVersionCapture.swift`.
-    let versionCapture: MCPVersionCaptureScope
+    let versionCapture: AssignmentVersionCaptureScope
 
     init(
         request: Request,
@@ -28,7 +28,7 @@ struct ToolContext {
         grantedScopes: Set<ContentScope>,
         actingClientID: String? = nil,
         actingClientName: String? = nil,
-        versionCapture: MCPVersionCaptureScope = MCPVersionCaptureScope()
+        versionCapture: AssignmentVersionCaptureScope = AssignmentVersionCaptureScope()
     ) {
         self.request = request
         self.subject = subject
