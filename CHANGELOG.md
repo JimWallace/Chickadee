@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.578] - 2026-10-08
+
+### Changed
+
+- **Claude Code asks only before an existing test changes.** A PreToolUse hook (`.claude/hooks/ask-before-test-edit.py`) asks for approval when a tool edits a file that already exists under `Tests/`. A new test file needs no approval. The hook replaces the `Edit(/Tests/**)` ask rule, which also stopped new test files. The `git diff` and `git status` allow rules now use the stricter prefix form.
+
+
 ## [0.5.577] - 2026-10-07
 
 ### Added
