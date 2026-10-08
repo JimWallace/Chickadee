@@ -32,6 +32,12 @@ if (!baselineDir || !candidateDir || !diffDir) {
 // Anti-aliasing / font-hinting slack: pixels must differ meaningfully
 // (threshold), and up to 0.1% of the page may differ before we fail — enough
 // for sub-pixel text rendering drift, far below any real palette/layout change.
+//
+// Since pixelmatch 8 the threshold is a perceptual OKLab HyAB distance (1 is
+// black against white), not the YIQ metric of pixelmatch 7. Measured on the
+// committed baselines, 0.15 keeps the same noise tolerance as before (no page
+// fails under +-16 per channel on 5% of its pixels) and catches a palette
+// shift about a quarter smaller than pixelmatch 7 did.
 const PIXEL_THRESHOLD = 0.15;
 const MAX_DIFF_RATIO = 0.001;
 
