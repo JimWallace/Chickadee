@@ -359,7 +359,9 @@ duplicate.
   bronze tint only for ranks 1 to 3 through `data-rank-tier`; every other rank
   is a plain numeral); and on the `.section-items` list `.leaderboard-rank`,
   `.leaderboard-row--you` (the viewer's row, tinted `--you-bg`) and
-  `.leaderboard-gap` (a run of rows folded away, linking to the full list).
+  `.leaderboard-gap` (a run of rows folded away, as plain text).
+  A `.leaderboard-more` row under the list toggles a student between their
+  window of it ("Show all N") and the full list ("Show my standing").
   The tokens are `--you-bg`, `--teal-ink`, `--teal-ink-fg` and the
   `--rank-gold|silver|bronze-bg|fg` pairs, each with a dark-mode value.
   The hill holder and the tournament winner share the card as

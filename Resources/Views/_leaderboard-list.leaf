@@ -19,7 +19,7 @@
     #for(item in items):
     #if(item.isGap):
         <tr class="leaderboard-gap">
-            <td colspan="4"><a href="#(allURL)">#(item.gapLabel)</a></td>
+            <td colspan="4">#(item.gapLabel)</td>
         </tr>
     #else:
         <tr#if(item.row.isViewer): class="leaderboard-row--you"#endif>

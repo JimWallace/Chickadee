@@ -2019,6 +2019,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 
 .section-items .leaderboard-rank { width: 3.25rem; text-align: center; }
+/* Under a list: Show all from a student's window, Show my standing back. */
+.leaderboard-more { margin: .75rem 0 1rem; text-align: center; }
 .section-items .leaderboard-row--you td { background: var(--you-bg); }
 .section-items .leaderboard-gap td {
     text-align: center;

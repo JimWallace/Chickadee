@@ -67,4 +67,75 @@ import VaporTesting
             #expect(kicker.upperBound < title.lowerBound)
         }
     }
+
+    @Test func aWindowedListOffersShowAllAndTheFullListDoesNot() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await seedMetricBoard("lpy_all", count: 20, viewerIndex: 13, on: app)
+            let windowed = try await getHTML("/testsetups/lpy_all/leaderboard", cookie: cookie, on: app)
+            #expect(
+                windowed.contains(
+                    "<p class=\"leaderboard-more\"><a class=\"btn\" href=\"/testsetups/lpy_all/leaderboard?all=1\">Show all 20</a></p>"
+                ))
+
+            // The folded rows are text; the button is the one way to the full list.
+            #expect(!windowed.contains("<a href=\"/testsetups/lpy_all/leaderboard?all=1\">"))
+
+            let full = try await getHTML("/testsetups/lpy_all/leaderboard?all=1", cookie: cookie, on: app)
+            #expect(!full.contains("Show all 20"))
+            #expect(full.contains("<a class=\"btn\" href=\"/testsetups/lpy_all/leaderboard\">Show my standing</a>"))
+
+            let staff = try await getHTML(
+                "/testsetups/lpy_all/leaderboard", cookie: try await staffCookie(on: app), on: app)
+            #expect(!staff.contains("Show all 20"))
+        }
+    }
+
+    @Test func theTestsListOffersShowAllToo() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let setup = try await wrInsertSetup(
+                id: "lpy_union", manifest: try manifest(.testsVersusImplementations), on: app)
+            _ = try await makeTestAssignment(
+                on: app, testSetupID: "lpy_union", courseID: setup.courseID, title: "Break")
+            let viewer = try await wrStudentUser(on: app)
+            try await wrEnrollUser(viewer, on: app)
+            for index in 0..<12 {
+                let user: APIUser
+                if index == 11 {
+                    user = viewer
+                } else {
+                    user = try await makeTestUser(on: app, username: "lpy_union_s\(index)", role: "student")
+                    try await wrEnrollUser(user, on: app)
+                }
+                try await APISubmission(
+                    id: "lpy_union_\(index)", testSetupID: "lpy_union", zipPath: "/tmp/lpy_union_\(index).zip",
+                    attemptNumber: 1, status: SubmissionStatus.complete.rawValue,
+                    filename: "lpy_union_\(index).py", userID: try user.requireID()
+                ).save(on: app.db)
+            }
+            // Student i finds i faults, so every rank but the last is its own.
+            for tester in 1..<11 {
+                for target in 0..<tester {
+                    let row = APIMatchResult(
+                        testSetupID: "lpy_union", submissionID: "lpy_union_\(tester)",
+                        opponentSubmissionID: "lpy_union_\(target)",
+                        opponentIdentity: JobOpponent.submissionIdentity("lpy_union_\(target)"),
+                        seed: "s", createdAt: Date())
+                    row.won = true
+                    row.completedAt = Date()
+                    try await row.save(on: app.db)
+                }
+            }
+            let html = try await getHTML("/testsetups/lpy_union/leaderboard", cookie: cookie, on: app)
+            #expect(html.contains("<a class=\"btn\" href=\"/testsetups/lpy_union/leaderboard?all=1\">Show all 12</a>"))
+        }
+    }
+
+    @Test func aBoardThatFitsHasNoShowAll() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await seedMetricBoard("lpy_fit", count: 4, viewerIndex: 3, on: app)
+            let html = try await getHTML("/testsetups/lpy_fit/leaderboard", cookie: cookie, on: app)
+            #expect(!html.contains("Show all"))
+        }
+    }
 }

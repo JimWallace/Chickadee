@@ -96,7 +96,9 @@
     <h3 class="submission-section-heading">Tests</h3>
     #extend("_leaderboard-list", union.killList)
     #if(showingAll):
-    <p class="section-note"><a href="#(boardURL)">Show my standing</a></p>
+    <p class="leaderboard-more"><a class="btn" href="#(boardURL)">Show my standing</a></p>
+    #elseif(count(union.kills) > count(union.killList.items)):
+    <p class="leaderboard-more"><a class="btn" href="#(allURL)">Show all #count(union.kills)</a></p>
     #endif
     <h3 class="submission-section-heading">Code</h3>
     <table class="results-table section-items" id="leaderboard-code-table">
@@ -130,7 +132,9 @@
     #else:
     #extend("_leaderboard-list", standingList)
     #if(showingAll):
-    <p class="section-note"><a href="#(boardURL)">Show my standing</a></p>
+    <p class="leaderboard-more"><a class="btn" href="#(boardURL)">Show my standing</a></p>
+    #elseif(rankedCount > count(standingList.items)):
+    <p class="leaderboard-more"><a class="btn" href="#(allURL)">Show all #(rankedCount)</a></p>
     #endif
     #endif
     #elseif(count(rows) == 0):
@@ -155,7 +159,7 @@
         #for(item in displayItems):
         #if(item.isGap):
             <tr class="leaderboard-gap">
-                <td colspan="#if(isStaff):5#else:4#endif"><a href="#(allURL)">#(item.gapLabel)</a></td>
+                <td colspan="#if(isStaff):5#else:4#endif">#(item.gapLabel)</td>
             </tr>
         #else:
             <tr#if(item.row.isViewer): class="leaderboard-row--you"#endif>
@@ -183,6 +187,8 @@
         </tbody>
     </table>
     #if(showingAll):
-    <p class="section-note"><a href="#(boardURL)">Show my standing</a></p>
+    <p class="leaderboard-more"><a class="btn" href="#(boardURL)">Show my standing</a></p>
+    #elseif(rankedCount > count(displayItems)):
+    <p class="leaderboard-more"><a class="btn" href="#(allURL)">Show all #(rankedCount)</a></p>
     #endif
     #endif
