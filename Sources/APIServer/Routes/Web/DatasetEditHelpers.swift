@@ -201,17 +201,6 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
     return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
 }
 
-/// Reads the dataset specs off a setup's manifest.  An undecodable manifest
-/// reports no datasets rather than failing the read: the panel then shows every
-/// support file as unmarked, which is what a manifest carrying no `datasets`
-/// key means anyway.
-func datasetSpecs(inManifest manifest: String) -> [DatasetSpec] {
-    guard let data = manifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
-    else { return [] }
-    return props.datasets
-}
-
 /// Validates `datasets` against the setup's bundled files and writes the
 /// resulting array into the manifest, replacing whatever was there.
 ///

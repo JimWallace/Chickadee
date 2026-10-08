@@ -234,7 +234,7 @@ the property the Optional bought.
 | `NotebookScaffoldHelpers.swift:141,143,150` | A notebook needs a kernelspec; nil already returns nil for upload-only |
 | `PublishedAssignmentRoutes+NotebookTools.swift:88` | Scans an *arbitrary* notebook, not an assignment: the fallback chain is `?language=` → kernelspec → Python, and the distinction being drawn is between kernels we can read and ones we cannot |
 | `SubmissionResultPresenter.swift:683` | Display; computes generated filenames, which only exist when families do, which requires a recorded language — unreachable with effect |
-| `PublishedAssignmentRoutes+Suite.swift:125` | Same, for the author-facing suite view |
+| `Services/SuiteEditing.swift:155` | Same, for the author-facing suite view |
 | `PatternFamilyApplication.swift:211` | The render standin on the declared-None path, inert by the guard above: nothing is rendered there, and the manifest records the declaration rather than this |
 
 ---
