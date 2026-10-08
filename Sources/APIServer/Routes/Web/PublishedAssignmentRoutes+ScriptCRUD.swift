@@ -81,7 +81,7 @@ extension PublishedAssignmentRoutes {
 
         do {
             try await updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: inlinedContent)
-        } catch ScriptZipError.zipFailed {
+        } catch ScriptZipError.zipFailed, ScriptZipError.extractFailed {
             throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
         }
         // Re-grade and re-validate on the server; the page no longer has to

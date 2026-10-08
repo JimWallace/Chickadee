@@ -119,7 +119,7 @@ func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Dat
 
     do {
         try await removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
-    } catch ScriptZipError.zipFailed {
+    } catch ScriptZipError.zipFailed, ScriptZipError.extractFailed {
         throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
     }
 
