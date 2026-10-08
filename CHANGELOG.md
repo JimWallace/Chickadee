@@ -9,6 +9,29 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.600] - 2026-10-08
+
+### Fixed
+
+- **A TA can no longer change a deadline through the assignment Save form.** The form admits a TA, because a TA edits content, but it also carries the title, the dates, the LEARN assessment, the submission method, the language and the class activity, which MCP and the other web routes keep for instructors. A TA's Save that changes one of them now returns 403 and writes nothing. A TA's Save does not close the assignment. A refused submission-method change now reports the rule it breaks, not always the upload and browser-grading message (#2484).
+
+### Changed
+
+- **`set_assignment_language` follows the web Language select.** Both doors now call one function. Declaring an upload-only language on a notebook assignment switches it to upload-only submission and worker grading instead of refusing, and `"none"` is accepted. Both still refuse a change once generated tests exist. The tool also reports `gradingMode` (#2486).
+
+### Fixed
+
+- **`get_solution` finds the same solution the reveal page serves.** Four functions searched for an assignment's reference solution over three different source lists, so with only the unvalidated draft on disk the reveal page served the draft while MCP `get_solution` said there was no solution. One resolver now searches the setup zip, the linked validation run, the newest validation run and the draft in a fixed order, and each caller names the sources it accepts. A validation run still uses only a validation submission (#2488).
+
+### Changed
+
+- **Dead code removed.** Two grade-point wrappers that only forwarded to `CollectionGradeFields`, and three `NotebookExtractor` wrappers that only forwarded to RunnerCore, are gone; the callers use the owners directly. The activity-window gate reads the manifest once. Three functions that exist only for tests now say so (#2493).
+
+### Changed
+
+- **The `?? .python` table in docs/language-declaration.md is complete again.** It listed ten sites; the code has eleven, because the opponent-staging hint added with class activities was missing, and five line numbers were stale. `PythonFallbackCensusTests` now fails when a site is added or removed without the table changing with it (#2494).
+
+
 ## [0.5.599] - 2026-10-08
 
 ### Changed
