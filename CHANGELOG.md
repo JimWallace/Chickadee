@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.584] - 2026-10-08
+
+### Added
+
+- **Abstraction survey (#2259).** `docs/abstraction-survey.md` lists the parallel code paths that do the same job, the drift found in each, and a do-now, wait or no-action recommendation. It changes no code.
+
+
 ## [0.5.583] - 2026-10-08
 
 ### Fixed
