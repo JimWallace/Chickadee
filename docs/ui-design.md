@@ -350,6 +350,9 @@ duplicate.
   is the student's own seeded one, the same as on their account page.
   **`.avatar-lg`** (6rem, `AvatarSize.hero`) is the leaderboard "you" card and
   **`.avatar-xl`** (10rem, `AvatarSize.podium`) a Present-mode podium place.
+  Present mode alone scales its birds past the class, because the room reads
+  them from the back row: first place 12rem, second and third 9.5rem, places
+  four to ten 3.5rem, and a bracket's `.avatar-sm` birds 2.25rem.
   Nothing is drawn on the bird to mark a rank.  See
   [student-avatars.md](student-avatars.md).
 - **Leaderboard classes.**  `.you-card` (the viewer's card: bird, handle, place,
@@ -371,13 +374,22 @@ duplicate.
   `.tier-open`; a live tag is `.tier-preview`.
   **Present mode** (`leaderboard-present.leaf`, staff only, dark whatever the
   viewer prefers, no site chrome) is a `.present` page: `.present-header` with
-  `.present-kicker`, `.present-title` and `.present-clock`; a `.podium` of three
+  `.present-kicker`, `.present-title` and `.present-clock` (a
+  `.present-clock-label` over a large `.present-clock-time`); then a
+  `.present-stage` of two columns.  On the left, a `.podium` of three
   `.podium-place` columns (`.podium-handle`, `.podium-value`, and a
-  `.podium-plinth` whose top edge takes the place's gold, silver or bronze; every podium bird is 10rem);
-  places four to ten as `.present-rows` of `.present-row` lines (3.5rem birds;
-  `.present-row-handle`, `.present-row-value`); and a `.present-footer`.  The page
-  fits one 1080-pixel screen; it steps up by `zoom` only on wide ones, since
-  the type scale forbids a fluid font size.
+  `.podium-plinth` whose top edge takes the place's gold, silver or bronze; the
+  first-place bird is 12rem, the others 9.5rem; the hill's holder carries a
+  `.podium-kicker`).  On the right, places four to ten as `.present-rows` of
+  `.present-row` lines (3.5rem birds; `.present-row-handle`,
+  `.present-row-value`).  A tournament replaces the stage with a
+  `.present-bracket` (the page's bracket at display scale) under the winner's
+  `.champion-card`, gold on this page; a hill holder who is not on the podium
+  gets the same card.  A tournament with no session window shows where the
+  run stands in the clock's place.  A `.present-footer` ends the page, with a
+  `.tier-preview` Live tag while it polls.  Display sizes are `em` of one size set for a 1600-pixel screen; the
+  page steps by `zoom` (down at 1500 pixels, up at 1900), since the type scale
+  forbids a fluid font size.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the Chickadee picker).  Use it for any group

@@ -214,6 +214,12 @@ struct TournamentPresentation: Encodable {
     let showsNames: Bool
     /// One sentence naming the schedule and where the run stands.
     let statusText: String
+    /// The same facts in parts, for Present mode, where the schedule is the
+    /// title and the progress stands in the clock's place: "Single
+    /// elimination", then "Round" over "2 of 3".
+    let scheduleName: String
+    let progressLabel: String
+    let progressValue: String
     let isComplete: Bool
     let hasWinner: Bool
     let winner: TournamentEntrantPresentation?
