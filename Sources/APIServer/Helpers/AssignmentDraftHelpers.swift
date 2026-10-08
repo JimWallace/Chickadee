@@ -53,43 +53,19 @@ func loadExistingSolution(req: Request, assignment: APIAssignment) async throws 
     try await loadExistingSolution(assignment: assignment, on: req.db)
 }
 
-/// Database-only resolver for an assignment's reference solution notebook,
-/// shared by the web edit flow (`loadExistingSolution(req:assignment:)`) and the
-/// MCP `get_solution` / `update_solution` tools, which authenticate via a bearer
-/// token and have only a `ToolContext` (no `Request.auth`).
-///
-/// Resolves the instructor's solution from the linked validation submission, or
-/// failing that the most recent `kind == .validation` submission for the setup.
-/// Only ever returns a validation (solution) submission — never a student one.
+/// The solution a validation run uses: the linked validation submission, or
+/// failing that the newest one for the setup. Never a student submission, and
+/// never the unvalidated draft (`SolutionSource.validationRuns`).
 func loadExistingSolution(
     assignment: APIAssignment, on db: any Database
 ) async throws -> ExistingSolution? {
-    if let validationID = assignment.validationSubmissionID,
-        let validationSubmission = try await APISubmission.find(validationID, on: db),
-        let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
-        !data.isEmpty
-    {
-        return ExistingSolution(
-            data: data,
-            filename: validationSubmission.filename ?? "solution.ipynb"
-        )
-    }
-
-    if let fallbackSubmission = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == assignment.testSetupID)
-        .filter(\.$kind == APISubmission.Kind.validation)
-        .sort(\.$submittedAt, .descending)
-        .first(),
-        let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
-        !data.isEmpty
-    {
-        return ExistingSolution(
-            data: data,
-            filename: fallbackSubmission.filename ?? "solution.ipynb"
-        )
-    }
-
-    return nil
+    // The two validation sources read no files under the setups directory.
+    guard
+        let found = try await resolveSolution(
+            at: SolutionLocation(assignment), sources: SolutionSource.validationRuns, db: db,
+            testSetupsDirectory: "")
+    else { return nil }
+    return ExistingSolution(data: found.data, filename: found.filename)
 }
 
 func existingSolutionFilename(req: Request, assignment: APIAssignment) async throws -> String? {
@@ -118,25 +94,21 @@ func existingSolutionFilename(assignment: APIAssignment, on db: any Database) as
     return nil
 }
 
-/// Whether the assignment has a reference solution on file, counting the same
-/// four sources the edit page's Files table and the workbench count: a
-/// validation submission (linked or newest — folded into
-/// `existingSolutionFilename` — or the `validationStatus`/`validationSubmissionID`
-/// fields that record one), plus the unvalidated draft on disk.  Shared by
-/// the workbench's Solution-tab gate and the solution-visibility enable
-/// guard, so "there is a solution" has one answer everywhere it is asked.
+/// Whether the assignment has a reference solution on file: the fields that
+/// record a validation run, or any source `resolveSolution` searches, the
+/// unvalidated draft included. Shared by the workbench's Solution-tab gate and
+/// the solution-visibility enable guard, and it uses the same sources as the
+/// reveal page and `get_solution` (`SolutionSource.any`), so "there is a
+/// solution" has one answer everywhere it is asked (#2488).
 func assignmentHasSolution(
     assignment: APIAssignment, db: any Database, testSetupsDirectory: String
 ) async throws -> Bool {
     if assignment.validationStatus == "passed" || assignment.validationSubmissionID != nil {
         return true
     }
-    if try await existingSolutionFilename(assignment: assignment, on: db) != nil {
-        return true
-    }
-    let draftPath = draftSolutionNotebookPath(
-        testSetupsDirectory: testSetupsDirectory, setupID: assignment.testSetupID)
-    return FileManager.default.fileExists(atPath: draftPath)
+    return try await resolveSolution(
+        at: SolutionLocation(assignment), sources: SolutionSource.any, db: db,
+        testSetupsDirectory: testSetupsDirectory) != nil
 }
 
 private func draftFormStateSessionKey(_ draftID: String) -> String {

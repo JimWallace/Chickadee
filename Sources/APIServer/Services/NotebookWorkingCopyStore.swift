@@ -444,7 +444,7 @@ private func applySubstitutions(
 }
 
 /// The bytes of an assignment's reference solution, from whichever of the four
-/// places one can live.
+/// places one can live (`resolveSolution`, `SolutionSource.any`).
 ///
 /// The order is oldest-authority-first and deliberately unchanged from the
 /// three original sources; the draft is checked last so nothing that resolved
@@ -464,39 +464,16 @@ func solutionNotebookData(
     db: Database,
     testSetupsDirectory: String
 ) async throws -> Data {
-    if let entryName = await listZipEntries(zipPath: setup.zipPath).first(where: { $0.hasPrefix("solution.") }),
-        let data = await extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
-        !data.isEmpty
+    // A draft setup with no assignment yet has no linked submission, and its
+    // validation runs are not searched.
+    let location =
+        assignment.map(SolutionLocation.init)
+        ?? SolutionLocation(testSetupID: setup.id ?? "", linkedValidationID: nil)
+    let sources = assignment == nil ? SolutionSource.any.filter { $0 != .newestValidation } : SolutionSource.any
+    if let found = try await resolveSolution(
+        at: location, setup: setup, sources: sources, db: db, testSetupsDirectory: testSetupsDirectory)
     {
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    if let validationID = assignment?.validationSubmissionID,
-        let validationSubmission = try await APISubmission.find(validationID, on: db),
-        let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
-        !data.isEmpty
-    {
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    if let setupID = assignment?.testSetupID,
-        let fallbackSubmission = try await APISubmission.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$kind == APISubmission.Kind.validation)
-            .sort(\.$submittedAt, .descending)
-            .first(),
-        let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
-        !data.isEmpty
-    {
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    if let setupID = assignment?.testSetupID ?? setup.id {
-        let draftPath = draftSolutionNotebookPath(
-            testSetupsDirectory: testSetupsDirectory, setupID: setupID)
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: draftPath)), !data.isEmpty {
-            return normalizeNotebookForJupyterLite(data)
-        }
+        return normalizeNotebookForJupyterLite(found.data)
     }
 
     throw AppError.notFound(resource: "Solution notebook (not yet available for this assignment)")
