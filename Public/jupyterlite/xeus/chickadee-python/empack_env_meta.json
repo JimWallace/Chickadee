@@ -242,11 +242,11 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "python-tzdata",
-      "version": "2026.4",
+      "name": "pytz",
+      "version": "2026.5",
       "build": "pyh5ded981_0",
-      "filename_stem": "python-tzdata-2026.4-pyh5ded981_0",
-      "filename": "python-tzdata-2026.4-pyh5ded981_0.tar.gz",
+      "filename_stem": "pytz-2026.5-pyh5ded981_0",
+      "filename": "pytz-2026.5-pyh5ded981_0.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.11",
@@ -467,19 +467,6 @@
       "subdir": "noarch"
     },
     {
-      "name": "pytz",
-      "version": "2026.4",
-      "build": "pyh5ded981_0",
-      "filename_stem": "pytz-2026.4-pyh5ded981_0",
-      "filename": "pytz-2026.4-pyh5ded981_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "asttokens",
       "version": "3.0.2",
       "build": "pyhd8ed1ab_0",
@@ -594,6 +581,19 @@
       "depends": [
         "ptyprocess >=0.5",
         "python >=3.9"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "python-tzdata",
+      "version": "2026.5",
+      "build": "pyh5ded981_0",
+      "filename_stem": "python-tzdata-2026.5-pyh5ded981_0",
+      "filename": "python-tzdata-2026.5-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
       ],
       "subdir": "noarch"
     },

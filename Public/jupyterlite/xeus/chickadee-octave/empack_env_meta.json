@@ -2,6 +2,19 @@
   "prefix": "/",
   "packages": [
     {
+      "name": "narwhals",
+      "version": "2.27.0",
+      "build": "pyh5ded981_0",
+      "filename_stem": "narwhals-2.27.0-pyh5ded981_0",
+      "filename": "narwhals-2.27.0-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
       "name": "emscripten-abi",
       "version": "4.0.9",
       "build": "h267e887_9",
@@ -76,19 +89,6 @@
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.9",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "narwhals",
-      "version": "2.26.0",
-      "build": "pyh5ded981_0",
-      "filename_stem": "narwhals-2.26.0-pyh5ded981_0",
-      "filename": "narwhals-2.26.0-pyh5ded981_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11",
         "python"
       ],
       "subdir": "noarch"
