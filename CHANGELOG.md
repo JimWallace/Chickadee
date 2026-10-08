@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.579] - 2026-10-08
+
+### Fixed
+
+- **The isolated-worker drift test now reads `grading-executors.js`.** #1965 moved the grading worker factory into that file, which the isolated notebook page loads, but the test still scanned only `browser-runner.js` and `notebook.js`. A literal worker spawn added there would have been refused by an isolated engine with no test failing. Two comments that still named `browser-runner.js` are corrected. (#2452)
+
+
 ## [0.5.578] - 2026-10-08
 
 ### Changed
