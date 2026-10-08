@@ -84,9 +84,10 @@ func createScriptInSetup(
         let entry = ConfiguredSuiteEntry(
             script: cleaned, tier: tier, order: 0,
             dependsOn: [], points: points, displayName: nil)
-        if let updated = updateManifestAddingScript(manifestJSON: setup.manifest, entry: entry) {
-            setup.manifest = updated
-            try await setup.save(on: db)
+        // Conditional, and applied again to a newer manifest if another edit
+        // saved first, so that edit is kept (#2485).
+        try await mutateManifestJSON(setup: setup, on: db) {
+            updateManifestAddingScript(manifestJSON: $0, entry: entry)
         }
     }
 
@@ -122,8 +123,9 @@ func deleteScriptFromSetup(setup: APITestSetup, filename: String, on db: any Dat
         throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
     }
 
-    if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
-        setup.manifest = updated
-        try await setup.save(on: db)
+    // Conditional, and applied again to a newer manifest if another edit
+    // saved first, so that edit is kept (#2485).
+    try await mutateManifestJSON(setup: setup, on: db) {
+        updateManifestRemovingScript(manifestJSON: $0, filename: filename)
     }
 }

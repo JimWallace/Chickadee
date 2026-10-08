@@ -253,8 +253,10 @@ func applyPatternFamilies(
         language: language.language
     )
 
-    setup.manifest = newManifest
-    try await setup.save(on: db)
+    // Conditional on the manifest read at the start: the zip and the
+    // generated scripts were built from it, so an edit that saved meanwhile
+    // is refused rather than overwritten (#2485).
+    try await saveManifestReplacing(setup, with: newManifest, on: db)
 
     return PatternFamilyApplyResult(
         writtenFiles: mutations.writtenFilenames,
