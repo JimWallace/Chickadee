@@ -70,6 +70,7 @@
     --danger-fg: #B42318;   /* dark red — readable on danger tint */
     --nav-bg: #000000;      /* nav bar — black in both colour schemes */
     --health-teal-darker: #003D47;  /* primary button hover */
+    --btn-primary-fg: #FFFFFF;      /* primary button text — white in both colour schemes */
 
     /* ── Design tokens: type + radius scales ─────────────────────
        Every font-size and border-radius in the global sheet and in page
@@ -203,6 +204,7 @@
         --gray-50: #0B1220;
         --gray-100: #111827;
         --gray-200: #1F2937;
+        --gray-300: #374151;
         --gray-400: #9CA3AF;
         --gray-500: #9CA3AF;
         --gray-600: #CBD5E1;
@@ -283,6 +285,7 @@
     --gray-50: #0B1220;
     --gray-100: #111827;
     --gray-200: #1F2937;
+    --gray-300: #374151;
     --gray-400: #9CA3AF;
     --gray-500: #9CA3AF;
     --gray-600: #CBD5E1;
@@ -549,7 +552,7 @@ h2 { font-size: var(--text-md);   margin-bottom: .4rem; }
 .btn-primary {
     background: var(--health-teal-dark);
     border-color: var(--health-teal-dark);
-    color: white;
+    color: var(--btn-primary-fg);
 }
 
 .btn-primary:hover {
@@ -1600,9 +1603,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     font-weight: 700;
 }
 
-/* The one count that is not neutral information. */
-.diagnostic-value-alert { color: var(--red); }
-
 /* The reveal control sits at the end of the hidden-test header rather than in
    a notice of its own: it acts on the block it labels. */
 /* Not .inline-form: that rule sets `margin: 0` and is declared later in this
@@ -2054,7 +2054,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .add-panel.is-open { display: block; }
 /* Cancel on a panel the URL fragment opened: :target would hold it open. */
 .add-panel.is-closed { display: none; }
-.section-items-seen { width: 8rem; }
+/* Wide enough for a long relative time ("59 minutes ago") on one line.
+   At 8rem it wrapped, and because the text ticks, rows grew and shrank. */
+.section-items-seen { width: 10rem; }
 .section-items-combo { width: 20rem; }
 /* The action buttons that sit at the top right of a facts card. */
 .facts-actions {
@@ -2153,17 +2155,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 /* Holds the place of a row's ⋯ menu when that row has none, so the buttons in
    the actions track still line up. Never an empty menu. */
 .row-menu-spacer { display: inline-block; flex: none; width: 1.95rem; height: 1.95rem; }
-
-/* A facts card whose facts are cells in an auto-fitting grid
-   (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them. */
-.detail-grid--cells {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-    gap: 1rem 1.25rem;
-    max-width: none;
-}
-.detail-grid--cells dt { font-size: var(--text-xs); }
-.detail-grid--cells code { overflow-wrap: anywhere; }
-.detail-grid--cells dd { margin: .15rem 0 0; font-weight: 600; }
 
 /* The sparkline drawn large: a y-scale, a taller plot with a midline, and an
    x-axis of clock times. Same bars as a card sparkline; amber is a full runner
@@ -2322,6 +2313,19 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .detail-grid dt { color: var(--gray-600); }
 .detail-grid dd { margin: 0; }
+
+/* A facts card whose facts are cells in an auto-fitting grid
+   (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them.
+   Keep these rules after .detail-grid: the selectors have the same
+   specificity, so the later rule wins. */
+.detail-grid--cells {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: 1rem 1.25rem;
+    max-width: none;
+}
+.detail-grid--cells dt { font-size: var(--text-xs); }
+.detail-grid--cells code { overflow-wrap: anywhere; }
+.detail-grid--cells dd { margin: .15rem 0 0; font-weight: 600; }
 
 /* The payload block inside a log/event row's disclosure (audit log, alert
    firings): a .detail-grid that needs to clear its own <summary>.  Global
@@ -2490,6 +2494,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
     line-height: 1.2;
     color: var(--gray-900);
 }
+/* The one count that is not neutral information. It must follow
+   .diagnostic-value, which sets the colour with the same specificity. */
+.diagnostic-value-alert { color: var(--red); }
 
 /* ── Clickable diagnostic cards with sparklines ─────────
    Shared by the admin dashboard (admin.leaf) and the instructor dashboard
@@ -2667,13 +2674,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .add-test-item:disabled:hover, .add-test-item:disabled:focus {
     background: none;
-}
-
-/* The differential family's reference implementation: source code, so it gets
-   the code face rather than the form face. */
-.family-reference-input {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
 }
 
 /* Inline editor (accordion) hosted in a detail row beneath a suite/achievement
@@ -3011,6 +3011,10 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
    whole row, since any cell starts the drag. Named in docs/ui-design.md
    "Drag to reorder". */
 tr[draggable="true"] td { cursor: grab; }
+/* A control inside a draggable row keeps the cursor that says it activates. */
+tr[draggable="true"] td :is(a, button, summary, select, label) { cursor: pointer; }
+/* A roster row that navigates on click (instructor-students.js). */
+tr[data-href] td { cursor: pointer; }
 tr.drop-before td:first-child { border-top: 2px solid var(--blue); }
 tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue); }
 tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
@@ -3056,12 +3060,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    Breakpoints:   phone ≤640px      tablet ≤1024px      desktop >1024px
    ════════════════════════════════════════════════════════════════════ */
 
-/* Column-hiding utilities for tables.  Tag a <th> and the matching <td>s in
-   every row with one of these to drop that column on small screens.  Outside
-   the media queries the classes carry no rule, so applying them in markup can
-   never change the desktop layout. */
-@media (max-width: 1024px) { .col-hide-tablet { display: none; } }
-@media (max-width: 640px)  { .col-hide-phone  { display: none; } }
+/* Column-hiding utility for tables.  Tag a <th> and the matching <td>s in
+   every row with it to drop that column on phones.  Outside the media query
+   the class carries no rule, so applying it in markup can never change the
+   desktop layout. */
+@media (max-width: 640px) { .col-hide-phone { display: none; } }
 
 /* Horizontal-scroll wrapper for dense, desktop-first tables (admin runner /
    audit log).  Width-agnostic: no scrollbar at desktop when the table fits;
@@ -3085,12 +3088,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     background: var(--overlay-bg);
 }
 .modal-overlay[hidden] { display: none; }
-/* The destructive-action confirmation (ChickadeeUI.confirmAction) — the same
-   scrim and card as every other modal, at the width a sentence and two buttons
-   want rather than the editor's. It replaced window.confirm, which was the one
-   surface in the app outside the design system. */
-.modal-card--confirm { width: min(28rem, 92vw); }
-.confirm-message { font-size: var(--text-base); }
 .modal-card {
     background: var(--surface);
     color: var(--gray-900);
@@ -3101,6 +3098,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     flex-direction: column;
     box-shadow: var(--shadow-pop);
 }
+/* The destructive-action confirmation (ChickadeeUI.confirmAction) — the same
+   scrim and card as every other modal, at the width a sentence and two buttons
+   want rather than the editor's. It replaced window.confirm, which was the one
+   surface in the app outside the design system. It must follow .modal-card,
+   which sets the width with the same specificity. */
+.modal-card--confirm { width: min(28rem, 92vw); }
+.confirm-message { font-size: var(--text-base); }
 .modal-head,
 .modal-foot {
     display: flex;

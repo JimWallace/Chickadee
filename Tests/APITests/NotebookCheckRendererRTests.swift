@@ -121,10 +121,7 @@ import Testing
 @Suite(.serialized, .timeLimit(.minutes(3))) struct NotebookCheckRendererRExecutionTests {
 
     private static func canonicalRuntime() throws -> String {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let root = repositoryRoot
         return try String(
             contentsOf: root.appendingPathComponent("Tools/runner-support/test_runtime.R"),
             encoding: .utf8)

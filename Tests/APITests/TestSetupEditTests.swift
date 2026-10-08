@@ -22,27 +22,13 @@ import VaporTesting
 
     // MARK: - Auth helpers
 
-    private func loginAsStudent(on app: Application) async throws -> String {
-        return try await loginUser(username: "teststudent_edit", password: "testpassword", role: "student", on: app)
-    }
-
     // MARK: - Setup helpers
 
     /// Creates a test setup record in the DB (no real zip on disk).
     @discardableResult
     private func insertSetup(id: String, on app: Application) async throws -> APITestSetup {
-        let manifest = """
-            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-            """
         let courseID = try await app.testCourseID()
-        let setup = APITestSetup(
-            id: id,
-            manifest: manifest,
-            zipPath: app.testSetupsDirectory + "\(id).zip",
-            courseID: courseID
-        )
-        try await setup.save(on: app.db)
-        return setup
+        return try await makeTestSetup(on: app, id: id, courseID: courseID, withNotebook: false, withZip: false)
     }
 
     @discardableResult
@@ -362,7 +348,7 @@ import VaporTesting
 
     @Test func studentCannotPutAssignment() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsStudent(on: app)
+            let cookie = try await loginAsStudent("teststudent_edit", on: app)
             try await insertSetup(id: "setup_student_put", on: app)
 
             // Students are not on the instructor route group — middleware rejects them.
@@ -385,7 +371,7 @@ import VaporTesting
 
     @Test func editPageRequiresInstructor() async throws {
         try await withApp(try await makeApp()) { app in
-            let cookie = try await loginAsStudent(on: app)
+            let cookie = try await loginAsStudent("teststudent_edit", on: app)
             try await insertSetup(id: "setup_ep1", on: app)
             let a = try await insertAssignment(testSetupID: "setup_ep1", title: "Lab", on: app)
             let id = a.publicID

@@ -39,21 +39,19 @@ struct QueryAuditLogTool: DiagnosticTool {
     }
 
     static let name = "query_audit_log"
+    static let windowBound = MCPBoundedInt(default: 168, max: 2160)
     static let description =
         "Audit-log activity as aggregate counts over a window: totals by action (e.g. "
         + "auth.login_failure, mcp.refresh_reuse_detected, user.role_changed) and by category "
         + "(Authentication, MCP / agents, Users & roles, …). Use it to spot a failed-login spike, a "
         + "burst of refresh-token-reuse events, or a wave of admin actions. Optional windowHours "
-        + "(default 168, max 2160) and an exact action filter. Read-only and COUNTS ONLY — by design "
+        + "\(windowBound.rangeText) and an exact action filter. Read-only and COUNTS ONLY — by design "
         + "it never returns an audit row, actor, IP, or metadata (actors can be students), so no "
         + "student identifier is reachable."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "windowHours": .object([
-                "type": .string("integer"),
-                "description": .string("Look-back window in hours (default 168, max 2160)."),
-            ]),
+            "windowHours": Self.windowBound.property("Look-back window in hours"),
             "action": .object([
                 "type": .string("string"),
                 "description": .string("Optional exact action filter, e.g. \"auth.login_failure\"."),
@@ -63,9 +61,7 @@ struct QueryAuditLogTool: DiagnosticTool {
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
-        let windowHours = min(max(input.windowHours ?? 168, 1), 2160)
+        let windowHours = Self.windowBound.resolve(input.windowHours)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 
         var query = APIAuditLogEntry.query(on: context.db)

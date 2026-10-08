@@ -134,6 +134,15 @@ per-assignment policy off.
   affordances simply do not render when the gate refuses.
 - Every change is audited (`solution_visibility.changed`, web path).
 
+## The secret-test reveal
+
+The other "Student Options" checkbox. When it is on, a student can spend their
+one reveal token on the assignment to see its secret test results.
+
+- A spent token stays spent. Staff can give it back on the submissions page.
+- A revealed secret test shows like a public one: its name, output and hint.
+- The reveal does not change a grade.
+
 ## Edge cases and deliberate limits (v1)
 
 - **No participation prerequisite.** Any enrolled student may view a revealed

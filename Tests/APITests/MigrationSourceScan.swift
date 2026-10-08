@@ -6,14 +6,10 @@
 // table`. A scan that read only the first missed every migration written in
 // the other two shapes.
 
+import ChickadeeTestSupport
 import Foundation
 
 enum MigrationSourceScan {
-
-    static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // APITests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // repo root
 
     /// A `schema(...)` call: the literal table name is capture 1, the model
     /// name is capture 2.
@@ -24,7 +20,7 @@ enum MigrationSourceScan {
     /// The table a model declares with `static let schema`, or nil when the
     /// model has no file of its name or declares no schema there.
     static func table(ofModel model: String) -> String? {
-        let url = repoRoot.appendingPathComponent("Sources/APIServer/Models/\(model).swift")
+        let url = repositoryRoot.appendingPathComponent("Sources/APIServer/Models/\(model).swift")
         guard let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         return source.firstMatch(of: #/static let schema = "([a-z_]+)"/#).map { String($0.output.1) }
     }

@@ -14,6 +14,8 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     case brightspaceSyncFailing
     case outboundEgressFailing
     case deployerUnhealthy
+    case unclaimableJobs
+    case diskSpaceLow
 
     var humanReadable: String {
         switch self {
@@ -27,6 +29,8 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .brightspaceSyncFailing: return "BrightSpace grade sync failing"
         case .outboundEgressFailing: return "Outbound network unreachable"
         case .deployerUnhealthy: return "Auto-deploy not healthy"
+        case .unclaimableJobs: return "Jobs no runner can grade"
+        case .diskSpaceLow: return "Disk nearly full"
         }
     }
 
@@ -48,6 +52,10 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         // Warning: prod stays on an old release, or stops receiving releases at
         // all, until someone acts on the host.
         case .deployerUnhealthy: return "warning"
+        case .unclaimableJobs: return "warning"
+        // Warning, not critical: it fires while there is still room to act.
+        // The outage it predicts is what `databaseUnreachable` reports.
+        case .diskSpaceLow: return "warning"
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
         case .editorKernelUnrecoverable: return "warning"

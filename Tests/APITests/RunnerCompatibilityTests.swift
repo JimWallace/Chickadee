@@ -275,14 +275,9 @@ import VaporTesting
         if let minimumRunnerVersion {
             fields += #","minimumRunnerVersion":"\#(minimumRunnerVersion)""#
         }
-        let setup = APITestSetup(
-            id: id,
-            manifest: "{\(fields)}",
-            zipPath: "/tmp/\(id).zip",
-            courseID: try course.requireID()
-        )
-        try await setup.save(on: app.db)
-        return setup
+        return try await makeTestSetup(
+            on: app, id: id, courseID: try course.requireID(),
+            manifest: "{\(fields)}", withNotebook: false, withZip: false)
     }
 
     private func makeAssignment(setupID: String, title: String) async throws -> APIAssignment {

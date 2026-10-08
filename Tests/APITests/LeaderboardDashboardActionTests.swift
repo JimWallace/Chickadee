@@ -20,6 +20,7 @@ import VaporTesting
     private func activityManifest(visible: Bool) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .beatTheInstructor, leaderboardVisibility: visible ? .visible : .hidden))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))

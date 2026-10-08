@@ -81,6 +81,13 @@ services:
 
       LOG_LEVEL:                    ${LOG_LEVEL:-info}
 
+      # Health alerts (the rules on /admin/alerts). On by default: with no
+      # webhook they only log. Set the Slack webhook on /admin/alerts (stored on
+      # the data volume) or here. Until 2026-10-07 neither variable was passed
+      # through, so alerts could not be on in a Compose or blue-green deploy.
+      ALERT_ENABLED:                ${ALERT_ENABLED:-true}
+      ALERT_WEBHOOK_URL:            ${ALERT_WEBHOOK_URL:-}
+
       # Runner <-> server HMAC secret. Required: it is the only channel by
       # which the runner container learns the secret, now that it no longer
       # mounts the data volume. Generate one with the command in .env.example.
@@ -109,18 +116,25 @@ services:
   # container can no longer see student data at all.
   runner:
     image: ghcr.io/jimwallace/chickadee:latest
-    entrypoint: ["/bin/sh", "-lc"]
-    environment:
-      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
     # The container starts as root, and only for the runner-entrypoint.sh
     # pre-step: it delegates a cgroup subtree for the jobs, then starts the
-    # runner as uid 999 with no capability, an empty bounding set and
+    # command as uid 999 with no capability, an empty bounding set and
     # no_new_privs. The runner itself runs as it did before. See the comment
     # at the head of deploy/runner-entrypoint.sh.
+    #
+    # The pre-step is the ENTRYPOINT, not part of the command, so every
+    # command passes through it, including one that a
+    # docker-compose.override.yml or `docker compose run` sets. It was in the
+    # command until a host's override replaced the command: that runner then
+    # started as root with SYS_ADMIN, and refused to start only because its
+    # sandbox check failed.
+    entrypoint: ["/app/runner-entrypoint.sh", "/bin/sh", "-lc"]
+    environment:
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?set RUNNER_SHARED_SECRET in .env - see .env.example}
     user: "0:0"
     command:
       - >
-        exec /app/runner-entrypoint.sh /app/chickadee-runner
+        exec /app/chickadee-runner
         --api-base-url http://server:8080
         --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
         --max-jobs "${RUNNER_MAX_JOBS:-4}"
@@ -142,6 +156,12 @@ services:
       server:
         condition: service_healthy
     restart: unless-stopped
+    # Cordon and drain. On SIGTERM (docker stop, or `compose up` on a new
+    # image) the runner claims no new job, finishes and reports the jobs it is
+    # running, and exits. Docker waits this long before SIGKILL; ten minutes is
+    # the server's reaper age, past which a job counts as lost anyway. Other
+    # runners take new jobs while this one drains.
+    stop_grace_period: 10m
     # The image carries one HEALTHCHECK, and it curls the server's /health on
     # :8080. The runner serves no HTTP at all, so that check fails every 15s
     # forever and the container reports `unhealthy` while polling and grading

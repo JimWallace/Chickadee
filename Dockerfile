@@ -116,7 +116,12 @@ RUN groupadd --system --gid 999 chickadee \
 #     ever present transitively; installed explicitly so a future base-image
 #     change can't silently drop them and break those paths.
 #   - Python 3 + common scientific packages (for Python test scripts / submissions)
-#   - R base (for R test scripts / submissions)
+#   - R base (for R test scripts / submissions), and the tidyverse core that
+#     the xeus-r browser kernel also has (dplyr, tidyr, readr, stringr,
+#     tibble, purrr, forcats; Tools/jupyterlite/environment-r.yml), so an R
+#     test that loads one grades the same on the worker as in the browser.
+#     Debian packages them as r-cran-*, binaries, so the image compiles
+#     nothing from CRAN.
 #
 # If your courses need additional Python packages, extend this image:
 #   FROM chickadee:latest
@@ -143,6 +148,13 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         python3-scipy \
         python3-matplotlib \
         r-base \
+        r-cran-dplyr \
+        r-cran-forcats \
+        r-cran-purrr \
+        r-cran-readr \
+        r-cran-stringr \
+        r-cran-tibble \
+        r-cran-tidyr \
         lua5.4 \
         octave \
         gnuplot-nox \

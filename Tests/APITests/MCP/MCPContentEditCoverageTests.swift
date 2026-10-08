@@ -15,6 +15,7 @@
 // build failure instead of a silent gap — and the classification itself is
 // written down exactly once, here.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -22,9 +23,7 @@ import Testing
 
 @Suite struct MCPContentEditCoverageTests {
     private static var toolsDirectory: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("Sources/APIServer/MCP/Tools")
+        repositoryRoot.appendingPathComponent("Sources/APIServer/MCP/Tools")
     }
 
     /// Write tools whose edits change what the suite grades: they MUST call
@@ -89,6 +88,9 @@ import Testing
         // jobs, changes no content, and the assignment stays open for the
         // live session it serves. No close/regrade.
         "RunTournamentTool.swift",
+        // Re-runs validation of the unchanged solution and suite, optionally
+        // on one runner; nothing it does changes what the suite grades.
+        "RunValidationTool.swift",
         // Dataset marks change delivery (per-student slices), not the graded
         // suite; mirrors the web PUT /datasets endpoint, which neither closes
         // nor regrades. Slices apply on the next (re)grade.

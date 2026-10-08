@@ -10,6 +10,7 @@
 // derivation asserts its own size, so a parse that goes quietly partial
 // cannot pass as a correct one.
 
+import ChickadeeTestSupport
 import Fluent
 import Foundation
 import SQLKit
@@ -28,8 +29,7 @@ import VaporTesting
     /// The `idx_*` names the migrations leave in place after every `prepare`
     /// has run: created in some `prepare`, not dropped in another.
     static func declaredIndexNames() throws -> Set<String> {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
+        let root = repositoryRoot
         let migrations = root.appendingPathComponent("Sources/APIServer/Migrations")
         let files = try FileManager.default.contentsOfDirectory(at: migrations, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "swift" }

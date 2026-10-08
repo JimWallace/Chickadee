@@ -62,6 +62,39 @@ if [ -n "$deadhex" ]; then
   echo
 fi
 
+# 3. A grey step with no dark value. The grey scale inverts in dark mode, so a
+#    step that only the light :root declares keeps its light value on a dark
+#    surface: --gray-300 did, and every border drawn with it showed near white
+#    (#2401). Each --gray-N in the light :root must also be declared in the
+#    prefers-color-scheme block and in :root[data-theme="dark"].
+block_decls() {
+  awk -v open="$1" '
+    !inside && index($0, open) == 1 { inside = 1; next }
+    inside && /^}/ { exit }
+    inside { print }
+  ' Public/styles.css | grep -oE -- '--gray-[0-9]+[[:space:]]*:' | sed -E 's/[[:space:]]*:$//' | sort -u
+}
+light_grays="$(block_decls ':root {')"
+missing_dark=""
+for open in '@media (prefers-color-scheme: dark) {' ':root[data-theme="dark"] {'; do
+  dark_grays="$(block_decls "$open")"
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    grep -qxF -- "$name" <<< "$dark_grays" || missing_dark+="  ${name} (missing from: ${open%" {"})"$'\n'
+  done <<< "$light_grays"
+done
+if [ -z "$light_grays" ]; then
+  status=1
+  echo "ERROR: found no --gray-N declarations in the light :root block of Public/styles.css."
+  echo "       This check is not reading the stylesheet."
+elif [ -n "$missing_dark" ]; then
+  status=1
+  echo "ERROR: a grey step has no dark-mode value."
+  echo "       Declare it in both dark blocks of Public/styles.css."
+  printf '%s' "$missing_dark"
+  echo
+fi
+
 if [ "$status" -eq 0 ]; then
   decl_count="$(printf '%s\n' "$declared" | grep -c . || true)"
   echo "check-css-vars: OK (${decl_count} vars declared, all references resolve)"

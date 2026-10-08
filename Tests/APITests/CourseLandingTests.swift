@@ -240,12 +240,8 @@ import VaporTesting
     }
 
     private func get(_ path: String, cookie: String) async throws -> (HTTPStatus, HTTPHeaders, String) {
-        var result: (HTTPStatus, HTTPHeaders, String) = (.internalServerError, [:], "")
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in result = (res.status, res.headers, res.body.string) })
-        return result
+        let res = try await getResponse(path, cookie: cookie, on: app)
+        return (res.status, res.headers, res.body.string)
     }
 
     @Test func pdfIsServedInlineWithHardeningHeaders() async throws {

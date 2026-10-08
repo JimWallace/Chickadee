@@ -27,8 +27,9 @@ struct DeployerStatus: Decodable, Sendable {
 let deployerStatusStaleAfterSeconds: TimeInterval = 1800
 
 /// States in which the daemon is not deploying the latest release, and needs an
-/// operator.
-let deployerUnhealthyStates: Set<String> = ["stuck", "error", "certificate_invalid"]
+/// operator. `disk_low`: the host has too little free space to pull a release
+/// image, so the daemon holds the deploy rather than fill the disk.
+let deployerUnhealthyStates: Set<String> = ["stuck", "error", "certificate_invalid", "disk_low"]
 
 /// Decides the rule from the daemon's last status.
 ///

@@ -57,7 +57,7 @@ status=0
 #
 # Shrink-only.  Lower it in the PR that earns it; headroom left behind gets
 # spent by the next person adding a copy.
-CATALOG_BASELINE=236
+CATALOG_BASELINE=235
 
 # Comment stripper (scripts/lib/css.sh).  A scanner cannot tell a selector
 # from prose about a selector, and this codebase has been bitten by that three
@@ -68,11 +68,12 @@ CATALOG_BASELINE=236
 # shellcheck source=lib/css.sh
 . "scripts/lib/css.sh"
 
-# Classes carrying a rule in the global sheet.
+# Classes carrying a rule in the global sheet. Each chunk is cut at its LAST
+# `{`, so a one-line `@media (...) { .x { ... } }` keeps `.x` (#2403).
 sheet_classes="$(
   strip_css_comments "$sheet" \
     | tr '}' '\n' \
-    | sed 's/{.*$//' \
+    | sed 's/{[^{]*$//' \
     | grep -oE '\.[a-zA-Z][A-Za-z0-9_-]*' \
     | sed 's/^\.//' \
     | grep -vE '^js-' \

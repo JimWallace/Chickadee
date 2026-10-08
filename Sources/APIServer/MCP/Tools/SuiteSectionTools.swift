@@ -85,7 +85,7 @@ struct CreateSuiteSectionTool: ContentTool {
             try await mutateManifest(setup: resolved.setup, on: context.db) { props in
                 props.sections.append(TestSuiteSection(id: newID, name: name))
             }
-        } catch let error as WebAssignmentError {
+        } catch let error as WebAssignmentError where error.isClientRefusal {
             throw MCPToolError.from(error)
         }
         return Output(assignmentPublicID: resolved.assignment.publicID, sectionID: newID, name: name)
@@ -162,7 +162,7 @@ struct RenameSuiteSectionTool: ContentTool {
                 }
                 props.sections[idx].name = name
             }
-        } catch let error as WebAssignmentError {
+        } catch let error as WebAssignmentError where error.isClientRefusal {
             throw MCPToolError.from(error)
         }
         return Output(assignmentPublicID: resolved.assignment.publicID, sectionID: input.sectionID, name: name)
@@ -244,7 +244,7 @@ struct DeleteSuiteSectionTool: ContentTool {
                     ungrouped += 1
                 }
             }
-        } catch let error as WebAssignmentError {
+        } catch let error as WebAssignmentError where error.isClientRefusal {
             throw MCPToolError.from(error)
         }
         return Output(

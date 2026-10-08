@@ -26,7 +26,7 @@ import Testing
         TestProperties(
             requiredFiles: requiredFiles,
             testSuites: scripts.map { TestSuiteEntry(tier: .pub, script: $0) },
-            timeLimitSeconds: 10
+            timeLimitSeconds: 10, language: nil
         )
     }
 

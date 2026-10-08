@@ -11,7 +11,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized) final class LTIRoutesTests {
+@Suite(.serialized, .timeLimit(.minutes(2))) final class LTIRoutesTests {
     let app: Application
     let keyDirectory: URL
 

@@ -24,15 +24,39 @@ struct ResultIngestEffects {
 
     // MARK: - With the result save
 
-    /// Marks a result for the two grade-sync channels, BrightSpace and LTI.
-    /// Runs with the result save, inside its transaction where there is one:
-    /// a result the sweeps never see never reaches the LMS.
-    static func flagForGradeSync(
-        _ result: APIResult, testSetupID: String, application: Application, on db: any Database
-    ) async throws {
-        try await flagResultForBrightSpaceSync(
-            result, testSetupID: testSetupID, application: application, on: db)
-        try await LTIGradeSyncQueue.queue(submissionID: result.submissionID, testSetupID: testSetupID, on: db)
+    /// A graded collection, ready to store as a new result row: the row,
+    /// already marked for the two grade-sync channels (BrightSpace and LTI),
+    /// and the encoded collection. The caller saves it with
+    /// `row.saveWithCollection(json:on:)`.
+    struct PreparedResult {
+        let row: APIResult
+        let json: String
+    }
+
+    /// Encodes `collection`, builds its result row and marks the row for grade
+    /// sync, on `db`.
+    ///
+    /// Both ingest paths call this (#2259, item 5). The browser copy once
+    /// skipped the grade-sync flag, so notebook labs never reached LEARN on
+    /// their own. Each caller saves the row inside its own transaction or
+    /// retry, because the two differ for a reason: the worker report completes
+    /// its submission in the same transaction, and the browser path has just
+    /// created its submission row. On the worker path the flag rides inside
+    /// that transaction: a result the sweeps never see never reaches the LMS.
+    static func prepareResult(
+        _ collection: TestOutcomeCollection,
+        source: String,
+        testSetupID: String,
+        application: Application,
+        on db: any Database
+    ) async throws -> PreparedResult {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let json = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
+        let row = APIResult(
+            id: freshShortID(prefix: "res"), submissionID: collection.submissionID, source: source)
+        try await requestGradePush(.result(row, application: application), testSetupID: testSetupID, on: db)
+        return PreparedResult(row: row, json: json)
     }
 
     /// Records a validation run's verdict on the assignment it validates, or
@@ -118,13 +142,27 @@ struct ResultIngestEffects {
     /// per student and need 100%. Only a student's own submission counts, so
     /// a validation run, a tournament match or a corpus run reaches none of
     /// this.
+    ///
+    /// A retest result is the exception for the records: it recomputes them
+    /// from every submission's latest result, whatever this result's grade or
+    /// build, because a worse retest result must be able to take a record away
+    /// (#2054, A12). `recomputeClassRecords` explains the rule.
     func apply(submission: APISubmission, collection: TestOutcomeCollection, matches: [MatchReport]? = nil) async {
         guard submission.kind == APISubmission.Kind.student,
-            collection.buildStatus == .passed,
             let userID = submission.userID,
             let submissionID = submission.id
         else { return }
         let testSetupID = submission.testSetupID
+        let isRetest = submission.retestedAt != nil
+        if isRetest {
+            await application.classRecordRecomputeQueue.run(testSetupID) {
+                await bestEffort("class_record_recompute", submissionID: submissionID) {
+                    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
+                    try await recomputeClassRecords(setup: setup, on: db)
+                }
+            }
+        }
+        guard collection.buildStatus == .passed else { return }
 
         // Only contribution assignments accumulate a union, so the slot count
         // comes from the instructor's starter notebook, read through
@@ -160,7 +198,7 @@ struct ResultIngestEffects {
                 outcomes: collection.outcomes, matches: matches, on: db)
         }
 
-        guard gradePercent(from: collection) == 100 else { return }
+        guard !isRetest, gradePercent(from: collection) == 100 else { return }
         let disabled =
             (try? await APITestSetup.find(testSetupID, on: db))
             .map { BuiltInAchievements.disabled(in: $0) } ?? []

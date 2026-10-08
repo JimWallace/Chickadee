@@ -91,6 +91,28 @@ test('the harness re-creates the process contract test_runtime.m depends on', ()
   assert.match(setup, /clear\("-global", __ck_globals\{__ck_i\}\);/);
 });
 
+test('the harness puts back the environment variables a script changes', () => {
+  // #2384: Octave cannot list its environment, so the harness masks the three
+  // calls that change it, notes each name's earlier value while a script
+  // runs, and restores them when the script ends.
+  const setup = shared.SETUP_OCTAVE;
+  assert.match(setup, /function setenv\(varargin\)/);
+  assert.match(setup, /function putenv\(varargin\)/);
+  assert.match(setup, /function status = unsetenv\(name\)/);
+  assert.match(setup, /builtin\("setenv", varargin\{:\}\);/);
+  assert.match(setup, /status = builtin\("unsetenv", name\);/);
+  // Notes only inside __ck_run, so the session seed is never undone.
+  assert.match(setup, /if isobject\(__ck_env_saved\) && !isKey\(__ck_env_saved, name\)/);
+  assert.match(setup, /__ck_env_saved = containers\.Map\(\);/);
+  // The restore runs after the script and before the status line.
+  const restore = setup.indexOf('__ck_names = keys(__ck_env_saved);');
+  const statusLine = setup.indexOf('printf("\\n%s:status:%d\\n", nonce, status);');
+  assert.ok(restore > setup.indexOf('source(script_name);'));
+  assert.ok(restore > 0 && restore < statusLine);
+  assert.match(setup, /builtin\("unsetenv", __ck_names\{__ck_k\}\);/);
+  assert.match(setup, /builtin\("setenv", __ck_names\{__ck_k\}, __ck_before\);/);
+});
+
 test('script names and nonces are escaped rather than interpolated raw', () => {
   const wrapper = shared.runScriptOctave('odd"name\\.m', 'n0nce');
   assert.equal(wrapper, '__ck_run("odd\\"name\\\\.m", "n0nce");');
@@ -166,4 +188,11 @@ test('the inputs writer matches the server renderer byte for byte', async () => 
     shared.personalizationInputsSourceOctave({}),
     '% Auto-generated per-student grading inputs (issue #461). Do not edit.\n'
       + 'ck_input_names = {};\nck_input_values = {};\n');
+});
+
+// #2384: each native test is a fresh octave-cli process. The reset cell runs
+// before every browser script and puts the working directory back.
+test('the per-script reset changes back to the work directory', () => {
+  assert.equal(shared.resetCellOctave('/chickadee_work_1'), 'cd("/chickadee_work_1");');
+  assert.equal(shared.resetCellOctave('/a"b'), 'cd(' + shared.octaveStringLiteral('/a"b') + ');');
 });

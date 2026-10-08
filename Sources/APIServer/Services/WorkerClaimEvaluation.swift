@@ -197,6 +197,15 @@ func evaluateAndClaimCandidate(
     var blockedCandidate: BlockedCandidate?
 
     for (submission, setup, manifest) in candidates {
+        // A job that asks for another runner waits for it, up to the
+        // fallback time. It is not a blocked candidate: this runner could
+        // grade it, it only goes second.
+        guard
+            RunnerTargetGate.allows(
+                targetRunnerID: submission.targetRunnerID, queuedAt: submission.submittedAt,
+                runnerID: body.workerID, now: Date())
+        else { continue }
+
         let loadedRequirements = try await evaluator.assignmentRequirements.loadRequirement(
             for: submission, on: evaluator.db)
         let requirementSpec = loadedRequirements.requirement?.requirementSpec
@@ -208,43 +217,20 @@ func evaluateAndClaimCandidate(
             logger: evaluator.logger
         )
 
-        let capabilityResult = evaluator.compatibilityMatcher.evaluate(
-            runnerProfile: runnerProfile,
-            requirements: requirementSpec
-        )
-        // Fold the manifest's optional `minimumRunnerVersion` gate and the
-        // implicit language gate into the same verdict so either block rides
-        // the existing diagnostics / guard / blocked-candidate path.  Use
-        // the *merged* result below, not `capabilityResult`, or the
-        // diagnostics would report "compatible" while the job is actually
-        // blocked.
-        //
-        // The language gate needs no authoring step: the manifest already
-        // knows what language the assignment is in and the runner already
+        // One decision, shared with the unclaimable-jobs health rule
+        // (`claimCompatibility`): the capability requirements, the version
+        // gates (deployment floor and the manifest's `minimumRunnerVersion`),
+        // the implicit language gate and the class-activity gate. The
+        // language gate needs no authoring step: the manifest already knows
+        // what language the assignment is in and the runner already
         // advertises what it has, so a runner that cannot grade this
         // assignment leaves it for one that can instead of failing it.
-        let versionResult = RunnerVersionGate.combine(
-            RunnerVersionGate.evaluateDeploymentFloor(runnerVersion: body.runnerVersion),
-            RunnerVersionGate.evaluate(
-                runnerVersion: body.runnerVersion,
-                minimumRunnerVersion: manifest.minimumRunnerVersion
-            )
-        )
-        let languageResult = RunnerLanguageGate.evaluate(
+        let compatibilityResult = claimCompatibility(
+            runnerVersion: body.runnerVersion,
             runnerProfile: runnerProfile,
-            manifest: manifest
-        )
-        // A class-activity match needs a runner build that stages its
-        // opponent; the same implicit shape as the language gate.
-        let activityResult = RunnerActivityGate.evaluate(
-            runnerProfile: runnerProfile,
-            manifest: manifest
-        )
-        let compatibilityResult = RunnerVersionGate.combine(
-            RunnerVersionGate.combine(
-                RunnerVersionGate.combine(capabilityResult, versionResult),
-                languageResult),
-            activityResult
+            manifest: manifest,
+            requirements: requirementSpec,
+            matcher: evaluator.compatibilityMatcher
         )
         await evaluator.application.diagnostics.recordCompatibilityDecision(
             submission: submission,
@@ -273,6 +259,16 @@ func evaluateAndClaimCandidate(
             // Lost the claim race (or a malformed row) — the next
             // candidate may still be ours.
             continue
+        }
+
+        if RunnerTargetGate.isFallback(targetRunnerID: claimed.targetRunnerID, runnerID: body.workerID) {
+            evaluator.logger.info(
+                "targeted_job_fallback",
+                metadata: [
+                    "submission_id": .string(submissionID),
+                    "target_runner_id": .string(claimed.targetRunnerID ?? ""),
+                    "runner_id": .string(body.workerID),
+                ])
         }
 
         return ClaimedJob(

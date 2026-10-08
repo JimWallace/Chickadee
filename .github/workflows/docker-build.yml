@@ -17,6 +17,12 @@ on:
       - ".github/workflows/docker-build.yml"
       # It gives the toolchain key of the release cache.
       - ".github/actions/swift-test-setup/**"
+      # build-release runs it before the compile.
+      - ".github/actions/restore-git-mtimes/**"
+      # It decides what reaches the image build context.
+      - ".dockerignore"
+      # The container smoke test mounts it.
+      - "scripts/ci-runner-cgroup-probe.sh"
   push:
     branches: [main]
     tags: ["v*"]
@@ -365,6 +371,17 @@ jobs:
           fi
           echo "no path under /app is writable by the application user"
 
+          # A worker-graded R test can load the tidyverse core, as a
+          # browser-graded one can in the xeus-r kernel. Without a package in
+          # the image, such a test passes in the browser and fails on the worker.
+          echo "----- R packages -----"
+          docker run --rm --entrypoint Rscript "$IMAGE" -e '
+            for (p in c("dplyr", "tidyr", "readr", "stringr", "tibble", "purrr", "forcats")) {
+              suppressPackageStartupMessages(library(p, character.only = TRUE))
+              cat(p, format(packageVersion(p)), "\n")
+            }' \
+            || { echo "::error::Rscript cannot load the tidyverse core in the image. Keep the r-cran-* packages in the Dockerfile."; exit 1; }
+
           echo "Phase 1: cold boot against empty postgres (applies migrations) ..."
           run_server
           probe 240 || dump_and_fail
@@ -405,7 +422,17 @@ jobs:
           echo "----- the pre-step, with a probe as the command -----"
           docker compose run --rm --no-deps \
             -v "$PWD/scripts/ci-runner-cgroup-probe.sh:/probe.sh:ro" \
-            runner "exec /app/runner-entrypoint.sh /bin/sh /probe.sh"
+            runner "exec /bin/sh /probe.sh"
+
+          # Every command runs through the pre-step, so a command that an
+          # override or `compose run` sets also runs as uid 999. Before the
+          # pre-step became the entrypoint, an override that replaced the
+          # command started the runner as root.
+          echo "----- a replaced command runs as uid 999 -----"
+          run_uid="$(docker compose run --rm --no-deps runner "id -u" 2>/dev/null | tail -n 1)"
+          echo "uid: $run_uid"
+          [ "$run_uid" = "999" ] \
+            || { echo "::error::A replaced runner command runs as uid $run_uid, not 999."; exit 1; }
 
           echo "----- the runner itself -----"
           docker compose up -d --no-deps runner

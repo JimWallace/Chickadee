@@ -24,7 +24,7 @@ import FoundationNetworking
     @Test func returnsJob_on200() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
-            let manifest = TestProperties()
+            let manifest = TestProperties(language: nil)
             let job = Job(
                 submissionID: "sub_1",
                 testSetupID: "ts_1",
@@ -33,7 +33,7 @@ import FoundationNetworking
                 testSetupURL: testURL("https://server.test/ts.zip"),
                 manifest: manifest,
                 submissionFilename: "main.py",
-                assignmentSeed: "deadbeef"
+                assignmentSeed: "deadbeef", language: nil
             )
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601

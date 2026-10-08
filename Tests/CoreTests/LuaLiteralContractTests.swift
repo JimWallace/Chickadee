@@ -7,6 +7,7 @@
 //
 // The browser half is Tests/BrowserRunnerJSTests/lua-literal-contract.test.mjs.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -26,10 +27,9 @@ import Testing
     /// The fixture, found relative to this source file so the test does not
     /// depend on the working directory a runner happens to use.
     private static func loadContract() throws -> Contract {
-        let fixture = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // CoreTests
-            .deletingLastPathComponent()  // Tests
-            .appendingPathComponent("Fixtures/lua-literal-contract.json")
+        let fixture =
+            repositoryRoot
+            .appendingPathComponent("Tests/Fixtures/lua-literal-contract.json")
         let data = try Data(contentsOf: fixture)
         return try JSONDecoder().decode(Contract.self, from: data)
     }

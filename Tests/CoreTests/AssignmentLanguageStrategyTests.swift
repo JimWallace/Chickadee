@@ -66,7 +66,7 @@ import Testing
     /// has no `.R` script to sniff, so without a recorded language it would
     /// resolve to nothing on every save.
     @Test func recordedLanguageWinsOverSniffingAnEmptySuite() {
-        let sniffed = TestProperties(testSuites: [])
+        let sniffed = TestProperties(testSuites: [], language: nil)
         #expect(AssignmentLanguage.derivedDeclaration(manifest: sniffed) == nil)
 
         let recorded = TestProperties(testSuites: [], language: .r)
@@ -76,7 +76,7 @@ import Testing
     /// Nil means "written before the language was recorded" and must stay
     /// distinguishable from an explicit answer, so it emits no key at all.
     @Test func absentLanguageEmitsNoKeyAndRoundTrips() throws {
-        let manifest = TestProperties(testSuites: [])
+        let manifest = TestProperties(testSuites: [], language: nil)
         let encoded = try JSONEncoder().encode(manifest)
         let json = try #require(String(data: encoded, encoding: .utf8))
         #expect(!json.contains("\"language\""))
@@ -132,7 +132,7 @@ import Testing
     /// rejected it with a Python SyntaxError. The kernelspec is the only signal
     /// available at that point.
     @Test func emptySuiteResolvesFromTheNotebookKernel() throws {
-        let manifest = TestProperties(testSuites: [])
+        let manifest = TestProperties(testSuites: [], language: nil)
         let xrNotebook = try notebook(kernel: "xr", languageInfo: nil)
         let rInfoNotebook = try notebook(kernel: nil, languageInfo: "R")
         let pythonNotebook = try notebook(kernel: "python3", languageInfo: nil)
@@ -147,14 +147,14 @@ import Testing
     /// Absent or unparseable notebook bytes fall back to the manifest-only
     /// answer, so nothing regresses for an assignment without a notebook.
     @Test func unreadableNotebookFallsBackToTheManifest() {
-        let rSuite = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")])
+        let rSuite = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")], language: nil)
         #expect(AssignmentLanguage.derivedDeclaration(manifest: rSuite, notebookData: nil) == .r)
         #expect(
             AssignmentLanguage.derivedDeclaration(
                 manifest: rSuite, notebookData: Data("not json".utf8)) == .r)
         #expect(
             AssignmentLanguage.derivedDeclaration(
-                manifest: TestProperties(testSuites: []), notebookData: Data("not json".utf8))
+                manifest: TestProperties(testSuites: [], language: nil), notebookData: Data("not json".utf8))
                 == nil)
     }
 

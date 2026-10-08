@@ -166,24 +166,12 @@ func resolveContentItemForWrite(
     return item
 }
 
-/// Resolves a target section id for a content item within `courseID`: nil for
-/// empty / "none", a validated UUID otherwise. A non-empty id that doesn't
-/// resolve to a section in this course is rejected (typos surface as errors).
+/// A content item's target section id within `courseID`; see
+/// `resolveCourseSectionID`.
 func resolveContentItemSectionID(
     _ raw: String?, courseID: UUID, context: ToolContext
 ) async throws -> UUID? {
-    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let trimmed, !trimmed.isEmpty, trimmed.lowercased() != "none" else { return nil }
-    guard let uuid = UUID(uuidString: trimmed) else {
-        throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(trimmed)\" is not a valid id.")
-    }
-    guard let section = try await APICourseSection.find(uuid, on: context.db),
-        section.courseID == courseID
-    else {
-        throw MCPToolError.invalidArguments(
-            detail: "No course section with id \"\(trimmed)\" in this content item's course.")
-    }
-    return uuid
+    try await resolveCourseSectionID(raw, inCourse: courseID, owner: "content item", context: context)
 }
 
 /// Next sort order in the content-item lane of `(course, section)`.
@@ -296,12 +284,8 @@ private let attachmentsInputSchema: JSONValue = .object([
             + "students through the gated /content-files route. Appended to any existing attachments."),
 ])
 
-private let kindEnumSchema: JSONValue = .object([
-    "type": .string("string"),
-    "enum": .array(ContentItemKind.allCases.map { .string($0.rawValue) }),
-    "description": .string(
-        "Icon / label hint: link, notebook, document, slides, outline, or heading."),
-])
+private let kindEnumSchema = MCPEnumProse<ContentItemKind>.stringSchema(
+    "Icon / label hint: \(MCPEnumProse<ContentItemKind>.orList).")
 
 // MARK: - list_content_items
 
@@ -454,7 +438,9 @@ struct CreateContentItemTool: ContentTool {
         let course = try await resolveCourseForWrite(
             code: input.courseCode, context: context, atLeast: .ta)
         let courseID = try course.requireID()
-        let kind = ContentItemKind(rawValue: input.kind ?? "") ?? .link
+        // An absent kind is a link; an unknown one is refused, as update does,
+        // rather than stored as a link without a word (#2337).
+        let kind = try MCPEnumProse<ContentItemKind>.parseOptional(input.kind, field: "kind") ?? .link
         let links = try contentLinksFromInput(input.links ?? [])
         let sectionID = try await resolveContentItemSectionID(
             input.courseSectionID, courseID: courseID, context: context)
@@ -587,10 +573,7 @@ struct UpdateContentItemTool: ContentTool {
             item.title = trimmed
         }
         if let kind = input.kind {
-            guard let parsed = ContentItemKind(rawValue: kind) else {
-                throw MCPToolError.invalidArguments(detail: "kind \"\(kind)\" is not a recognised content-item kind.")
-            }
-            item.kind = parsed
+            item.kind = try MCPEnumProse<ContentItemKind>.parse(kind, field: "kind")
         }
         if let links = input.links {
             item.links = try contentLinksFromInput(links)
@@ -666,9 +649,13 @@ struct DeleteContentItemTool: ContentTool {
         guard let uuid = UUID(uuidString: raw) else {
             throw MCPToolError.invalidArguments(detail: "contentItemID \"\(raw)\" is not a valid id.")
         }
-        // Unknown id is an idempotent no-op, revealing nothing that distinguishes
-        // "doesn't exist" from "in a course you can't see".
-        guard let item = try await APICourseContentItem.find(uuid, on: context.db) else {
+        // An unknown id is an idempotent no-op, and so is an item in a course
+        // the account is not enrolled in, so the answer does not tell "does not
+        // exist" from "in a course you cannot see" (#2342). A visible course
+        // still refuses a role that is too low.
+        guard let item = try await APICourseContentItem.find(uuid, on: context.db),
+            try await context.subjectIsEnrolled(in: item.courseID)
+        else {
             return Output(contentItemID: raw, removed: false)
         }
         try await context.authorizeCourseWriteAccess(item.courseID, atLeast: .ta)

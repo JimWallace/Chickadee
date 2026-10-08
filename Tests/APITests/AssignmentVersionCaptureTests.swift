@@ -12,6 +12,7 @@
 // `.serialized`: these spawn zip/unzip subprocesses, which hit the Foundation
 // posix_spawn EFAULT race under within-suite parallelism.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -42,7 +43,7 @@ import VaporTesting
 
         let setupID = "vcap_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        try await writeZip(at: zipPath, entries: [(".placeholder", "x")] + scripts)
+        try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x")] + scripts)
 
         var entries: [ConfiguredSuiteEntry] = []
         for (index, (name, _)) in scripts.enumerated() {
@@ -51,7 +52,7 @@ import VaporTesting
                     script: name, tier: "public", order: index + 1,
                     dependsOn: [], points: 1, displayName: nil))
         }
-        let manifest = try makeWorkerManifestJSON(testSuites: entries, includeMakefile: false)
+        let manifest = try makeWorkerManifestJSON(testSuites: entries, includeMakefile: false, language: nil)
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
@@ -60,20 +61,6 @@ import VaporTesting
             deadlineOverrideActive: false, courseID: courseID)
         try await assignment.save(on: app.db)
         return (assignment.publicID, setupID)
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vcap-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            let url = root.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.data(using: .utf8)?.write(to: url)
-        }
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func versions(_ setupID: String) async throws -> [APIAssignmentVersion] {
@@ -240,7 +227,7 @@ import VaporTesting
                 ],"timeLimitSeconds":10}
                 """
             try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
-            try await writeZip(
+            try await writeZipFixture(
                 at: app.testSetupsDirectory + setupID + ".zip",
                 entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n")])
             let assignment = try await makeTestAssignment(
@@ -273,7 +260,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let (_, setupID) = try await makeAssignment()
             let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
-            let scope = MCPVersionCaptureScope()
+            let scope = AssignmentVersionCaptureScope()
 
             scope.register(setup)
             #expect(scope.drain().count == 1)
@@ -293,8 +280,7 @@ import VaporTesting
     /// would notice if the production registration were dropped — and dropped,
     /// it means a silent history hole for every browser edit.
     @Test func productionBootstrapRegistersTheCaptureMiddleware() throws {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }  // -> repo root
+        let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
                 "Sources/APIServer/Bootstrap/AppMiddleware.swift"),
@@ -305,8 +291,7 @@ import VaporTesting
     /// The web write seam must seed the baseline before a handler mutates
     /// anything — after the fact the pre-edit content is already gone.
     @Test func theWebWriteSeamSeedsTheBaseline() throws {
-        var url = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { url.deleteLastPathComponent() }
+        let url = repositoryRoot
         let source = try String(
             contentsOf: url.appendingPathComponent(
                 "Sources/APIServer/Routes/Web/AssignmentHelpers.swift"),

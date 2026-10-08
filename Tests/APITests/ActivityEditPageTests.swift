@@ -19,6 +19,7 @@ import VaporTesting
     private func activityManifest(visible: Bool = false) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .beatTheInstructor, leaderboardVisibility: visible ? .visible : .hidden))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
@@ -149,6 +150,7 @@ import VaporTesting
     private func opponentManifest(opponentFile: String? = nil) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .beatTheInstructor, opponentFile: opponentFile))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
@@ -192,6 +194,7 @@ import VaporTesting
             _ = metric
             let props = TestProperties(
                 testSuites: [TestSuiteEntry(tier: .pub, script: "t.sh")],
+                language: nil,
                 activity: ClassActivity(kind: .bestMetric))
             let setup = try #require(try await APITestSetup.find("setup_ae6", on: app.db))
             setup.manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))

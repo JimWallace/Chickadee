@@ -46,7 +46,7 @@ import Testing
             id: "perfect", name: "Perfect", scope: .individual,
             conditions: [AchievementCondition(signal: .grade, comparator: .atLeast, value: 100)],
             reward: AchievementReward(type: .badge, label: "Perfect", icon: "💯"))
-        let props = TestProperties(achievements: [perfect])
+        let props = TestProperties(language: nil, achievements: [perfect])
 
         let almost = gradePercent(from: collection(earned: 199, total: 200)) ?? 0
         #expect(earnedIndividualBadges(props: props, gradePercent: almost, outcomes: []).isEmpty)

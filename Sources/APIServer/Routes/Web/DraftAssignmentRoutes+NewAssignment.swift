@@ -485,7 +485,7 @@ extension DraftAssignmentRoutes {
             return validated.draftSetup?.manifest.data(using: .utf8).flatMap { data in
                 guard let props = decodeManifest(from: data) else { return nil }
                 let rows = props.testSuites.enumerated().map { index, entry in
-                    ReindexedSuiteConfigRow(
+                    SuiteConfigRow(
                         index: index,
                         isTest: entry.tier.rawValue != "support",
                         tier: entry.tier.rawValue,
@@ -495,8 +495,7 @@ extension DraftAssignmentRoutes {
                         displayName: entry.name
                     )
                 }
-                guard let encoded = try? JSONEncoder().encode(rows) else { return nil }
-                return String(data: encoded, encoding: .utf8)
+                return try? encodeSuiteConfigRows(rows)
             }
         }()
         // Merge 'existing' (name-based) config rows with files from the draft ZIP so
@@ -573,7 +572,7 @@ extension DraftAssignmentRoutes {
     /// Re-runs applyPatternFamilies so generated scripts survive the zip
     /// rebuild AND so each entry's `sectionID` is restored —
     /// `setupPackage.testSuites` loses sectionID through the
-    /// ReindexedSuiteConfigRow JSON round-trip, and the `authoredItems`
+    /// SuiteConfigRow JSON round-trip, and the `authoredItems`
     /// path is the only one that re-stamps it from the draft manifest.
     /// Run unconditionally when ANY of families/checks/sections exist;
     /// the previous gate (families-only) silently dropped sections +
@@ -702,7 +701,9 @@ extension DraftAssignmentRoutes {
             testSuites: [],
             includeMakefile: false,
             gradingMode: gradingMode,
-            starterNotebook: "assignment.ipynb"
+            starterNotebook: "assignment.ipynb",
+            // A new draft has no declaration until its author picks one.
+            language: nil
         )
         let setup = APITestSetup(
             id: setupID,

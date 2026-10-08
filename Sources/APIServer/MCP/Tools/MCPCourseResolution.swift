@@ -56,3 +56,45 @@ func resolveMCPCourse(
     }
     return chosen
 }
+
+/// Resolves a course code or key to its course and authorizes a READ of it
+/// (enrollment). Carries no archived block, so archived courses stay readable.
+/// Returns the course, not only its id, so a tool can report which offering a
+/// bare code resolved to (`courseKey`, `courseTerm`).
+func resolveCourse(code: String, context: ToolContext) async throws -> APICourse {
+    let course = try await resolveMCPCourse(key: code, context: context, forWrite: false)
+    try await context.authorizeCourseAccess(try course.requireID())
+    return course
+}
+
+/// Write variant of `resolveCourse`: resolves the course by code or key and
+/// authorizes a WRITE to it at the caller's role floor (`minimum`), with the
+/// archived block. Every course-scoped write tool goes through it.
+func resolveCourseForWrite(
+    code: String, context: ToolContext, atLeast minimum: CourseRole
+) async throws -> APICourse {
+    let course = try await resolveMCPCourse(key: code, context: context, forWrite: true)
+    try await context.authorizeCourseWriteAccess(try course.requireID(), atLeast: minimum)
+    return course
+}
+
+/// Resolves an optional course-section id for something in `courseID`
+/// (`owner` names it in the error, for example "assignment"): nil for absent,
+/// empty or "none", else the id. An id that is malformed or names a section
+/// in another course is refused, so a typo surfaces instead of ungrouping.
+func resolveCourseSectionID(
+    _ raw: String?, inCourse courseID: UUID, owner: String, context: ToolContext
+) async throws -> UUID? {
+    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let trimmed, !trimmed.isEmpty, trimmed.lowercased() != "none" else { return nil }
+    guard let uuid = UUID(uuidString: trimmed) else {
+        throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(trimmed)\" is not a valid id.")
+    }
+    guard let section = try await APICourseSection.find(uuid, on: context.db),
+        section.courseID == courseID
+    else {
+        throw MCPToolError.invalidArguments(
+            detail: "No course section with id \"\(trimmed)\" in this \(owner)'s course.")
+    }
+    return uuid
+}

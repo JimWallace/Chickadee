@@ -20,7 +20,7 @@ struct ToolContext {
     let actingClientName: String?
     /// Setups this call resolved for write, collected so the dispatcher can
     /// snapshot their content afterwards. See `MCPVersionCapture.swift`.
-    let versionCapture: MCPVersionCaptureScope
+    let versionCapture: AssignmentVersionCaptureScope
 
     init(
         request: Request,
@@ -28,7 +28,7 @@ struct ToolContext {
         grantedScopes: Set<ContentScope>,
         actingClientID: String? = nil,
         actingClientName: String? = nil,
-        versionCapture: MCPVersionCaptureScope = MCPVersionCaptureScope()
+        versionCapture: AssignmentVersionCaptureScope = AssignmentVersionCaptureScope()
     ) {
         self.request = request
         self.subject = subject
@@ -44,7 +44,7 @@ struct ToolContext {
     /// enforced by the DB role, not only the in-process boundary. Otherwise it
     /// falls back to the shared default pool.
     var db: any Database {
-        request.application.usesDedicatedMCPDatabase ? request.db(.mcp) : request.db
+        request.db(request.application.mcpDatabaseID)
     }
 
     /// True when the database `db` would resolve to is actually configured.
@@ -148,6 +148,14 @@ struct ToolContext {
         let user = try await requireEligibleSubject()
         try await requireEnrollment(of: user, in: courseID)
         return user
+    }
+
+    /// Whether the MCP account holds an enrollment row in `courseID`. The
+    /// idempotent deletes use it to answer a row in a course the account
+    /// cannot see exactly as they answer an unknown id (#2342).
+    func subjectIsEnrolled(in courseID: UUID) async throws -> Bool {
+        guard let userID = try await requireEligibleSubject().id else { return false }
+        return try await userIsEnrolled(userID: userID, inCourse: courseID, db: db)
     }
 
     /// Throws unless `user` holds an enrollment row in `courseID`.

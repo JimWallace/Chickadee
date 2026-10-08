@@ -20,6 +20,7 @@
 // appearing in a comment about it, which is the blindness recorded in CLAUDE.md
 // under the Leaf-comment finding.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -28,14 +29,9 @@ import Testing
 
 @Suite struct TestEditorCatalogCoverageTests {
 
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // APITests
-        .deletingLastPathComponent()  // Tests
-        .deletingLastPathComponent()  // repo root
-
     private static func modalSource() throws -> String {
         try String(
-            contentsOf: repoRoot.appendingPathComponent("Public/test-editor-modal.js"),
+            contentsOf: repositoryRoot.appendingPathComponent("Public/test-editor-modal.js"),
             encoding: .utf8)
     }
 
@@ -196,7 +192,7 @@ import Testing
     /// nobody reports because it reads as "not supported yet".
     @Test func theFamilyEditorOffersEveryPatternKind() throws {
         let template = try String(
-            contentsOf: Self.repoRoot.appendingPathComponent(
+            contentsOf: repositoryRoot.appendingPathComponent(
                 "Resources/Views/_family-editor-body.leaf"), encoding: .utf8)
         let pattern = try NSRegularExpression(pattern: #"<option value="([a-z_]+)">"#)
         let range = NSRange(template.startIndex..., in: template)

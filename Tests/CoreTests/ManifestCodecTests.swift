@@ -84,7 +84,7 @@ import Testing
     }
 
     @Test func emptyListsAndFalseFlagsAreOmitted() throws {
-        let bytes = try encode(TestProperties())
+        let bytes = try encode(TestProperties(language: nil))
         #expect(
             bytes
                 == #"{"gradingMode":"worker","requiredFiles":[],"schemaVersion":1,"#

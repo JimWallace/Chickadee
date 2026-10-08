@@ -60,6 +60,7 @@ import Testing
     @Test func testPropertiesCarriesAchievementsThroughRoundTrip() throws {
         let props = TestProperties(
             testSuites: [],
+            language: nil,
             achievements: [
                 Achievement(
                     id: "g1", name: "Goal", scope: .classWide,
@@ -75,6 +76,7 @@ import Testing
 
     @Test func runnerSanitizedStripsAchievements() throws {
         let props = TestProperties(
+            language: nil,
             achievements: [
                 Achievement(
                     id: "g1", name: "Goal", scope: .classWide,

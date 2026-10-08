@@ -31,14 +31,15 @@ struct MCPDispatcher: Sendable {
     }
 
     private func route(_ request: JSONRPCRequest, context: ToolContext?) async -> JSONRPCResponse? {
-        // Notifications (no id) never receive a response, whatever they carry.
-        guard let id = request.id else { return nil }
-
-        guard request.jsonrpc == "2.0" else {
-            return .failure(id: id, error: .invalidRequest("Unsupported \"jsonrpc\" version: \(request.jsonrpc)"))
-        }
-        guard let method = MCPMethod(rawValue: request.method) else {
-            return .failure(id: id, error: .methodNotFound(request.method))
+        let method: MCPMethod
+        let id: JSONRPCID
+        switch MCPRouting(request) {
+        case .notification:
+            return nil
+        case .refused(let response):
+            return response
+        case .method(let routed, let routedID):
+            (method, id) = (routed, routedID)
         }
 
         switch method {
@@ -53,9 +54,9 @@ struct MCPDispatcher: Sendable {
             // with an id, ack with an empty result rather than erroring.
             return .success(id: id, result: .object([:]))
         case .toolsList:
-            return toolsListResult(id: id, params: request.params, context: context)
+            return mcpToolsListResponse(id: id, params: request.params, tools: tools, context: context)
         case .toolsCall:
-            return await toolsCallResult(id: id, params: request.params, context: context)
+            return await mcpToolsCallResponse(id: id, params: request.params, tools: tools, context: context)
         case .resourcesList:
             return await resourcesListResult(id: id, params: request.params, context: context)
         case .resourcesRead:
@@ -83,7 +84,29 @@ struct MCPDispatcher: Sendable {
             }
             return mcpPaginatedListResponse(id: id, key: "resources", entries: entries, params: params)
         } catch {
-            return .failure(id: id, error: .internalError("Failed to list resources."))
+            return resourceFailure(error, id: id, context: context, fallback: "Failed to list resources.")
+        }
+    }
+
+    /// One mapping for both resource methods (#2340). A refusal the agent can
+    /// act on (an ineligible account, an unknown or inaccessible resource) is
+    /// `invalidParams` with its reason. Anything else is a server fault: it
+    /// stays opaque to the agent and reaches the log, as on the tools path, so a
+    /// database grant error on the `.mcp` role leaves a trace.
+    private func resourceFailure(
+        _ error: any Error, id: JSONRPCID, context: ToolContext, fallback: String
+    ) -> JSONRPCResponse {
+        switch error as? MCPToolError {
+        case .invalidArguments(let message), .notAuthorized(let message):
+            return .failure(id: id, error: .invalidParams(message))
+        case .unknownTool:
+            return .failure(id: id, error: .invalidParams("Unknown resource."))
+        case .executionFailed(let detail):
+            context.logger.error("MCP \(fallback) \(detail)")
+            return .failure(id: id, error: .internalError(detail))
+        case nil:
+            context.logger.error("MCP \(fallback) \(error)")
+            return .failure(id: id, error: .internalError(fallback))
         }
     }
 
@@ -108,163 +131,9 @@ struct MCPDispatcher: Sendable {
         }
         do {
             return .success(id: id, result: try await resources.read(uri: read.uri, context: context))
-        } catch let error as MCPToolError {
-            // Unknown/inaccessible resource → invalidParams; a genuine lookup
-            // failure → internalError. Mirrors the tool path's error mapping.
-            if case .executionFailed(let detail) = error {
-                return .failure(id: id, error: .internalError(detail))
-            }
-            let detail: String
-            switch error {
-            case .invalidArguments(let message), .notAuthorized(let message):
-                detail = message
-            default:
-                detail = "Unknown resource."
-            }
-            return .failure(id: id, error: .invalidParams(detail))
         } catch {
-            return .failure(id: id, error: .internalError("Failed to read resource."))
+            return resourceFailure(error, id: id, context: context, fallback: "Failed to read resource.")
         }
-    }
-
-    // MARK: - tools/list
-
-    /// Advertises only the tools the caller can actually invoke: a tool is
-    /// listed when the caller's granted scopes cover its `requiredScopes`.  In
-    /// read_only mode the bearer middleware has already clamped granted scopes
-    /// to {read}, so write tools drop out of the listing here rather than being
-    /// advertised only to fail with 403 on call.  When no context is available
-    /// (non-transport callers / tests), all tools are listed.
-    private func toolsListResult(id: JSONRPCID, params: JSONValue?, context: ToolContext?) -> JSONRPCResponse {
-        let visible =
-            context.map { ctx in
-                tools.all.filter { ctx.grantedScopes.isSuperset(of: $0.requiredScopes) }
-            } ?? tools.all
-        return mcpPaginatedListResponse(
-            id: id, key: "tools", entries: mcpToolsListEntries(visible), params: params)
-    }
-
-    // MARK: - tools/call
-
-    private struct ToolCallParams: Decodable {
-        let name: String
-        let arguments: JSONValue?
-    }
-
-    private func toolsCallResult(id: JSONRPCID, params: JSONValue?, context: ToolContext?) async -> JSONRPCResponse {
-        guard let context else {
-            return .failure(id: id, error: .internalError("Tool execution context is unavailable."))
-        }
-        let call: ToolCallParams
-        do {
-            call = try (params ?? .object([:])).decoded(as: ToolCallParams.self)
-        } catch {
-            return .failure(id: id, error: .invalidParams("tools/call requires a \"name\" and optional \"arguments\"."))
-        }
-        guard let tool = tools.tool(named: call.name) else {
-            return .failure(id: id, error: .invalidParams("Unknown tool: \(call.name)"))
-        }
-        // Per-tool scope enforcement, defence in depth on top of the bearer
-        // middleware's token-level scope gate: the caller's granted scopes must
-        // cover everything this tool declares.  The transport maps an
-        // insufficient-scope failure to HTTP 403.
-        guard context.grantedScopes.isSuperset(of: tool.requiredScopes) else {
-            let required = tool.requiredScopes.map(\.rawValue).sorted().joined(separator: " ")
-            return .failure(id: id, error: .insufficientScope(required))
-        }
-        // Resolve the target resource from the arguments up front so a failing
-        // call is still attributed to what it acted on. Only the identifier is
-        // captured here — never the argument values.
-        let target = MCPAuditTarget(arguments: call.arguments)
-
-        // Fail closed for writes: a state-changing tool must not run unless its
-        // audit record is durably persisted first. Read tools stay best-effort
-        // (a read that can't be audited still degrades to a logged marker, but
-        // is not blocked).
-        var writeAuditRow: APIAuditLogEntry?
-        if tool.requiredScopes.contains(.write) {
-            writeAuditRow = await recordToolCall(name: call.name, context: context, target: target)
-            guard writeAuditRow != nil else {
-                return .failure(
-                    id: id,
-                    error: .internalError(
-                        "Refusing to run \(call.name): its audit record could not be persisted."))
-            }
-        }
-
-        let response: JSONRPCResponse
-        let outcome: MCPToolOutcome
-        do {
-            let output = try await tool.invoke(call.arguments ?? .object([:]), context)
-            // Snapshot the content of any setup this call resolved for write,
-            // now that the edit has persisted. Only on success: a failed call
-            // changed nothing worth a version. Best-effort inside — history
-            // must never be the reason an instructor's edit fails.
-            await context.finishContentWrites(tool: call.name)
-            outcome = .success
-            response = .success(id: id, result: mcpToolSuccessResult(output))
-        } catch let error as MCPToolError {
-            // Tool-originated failures are reported inside the result with
-            // isError:true so the model can see and correct them.
-            outcome = MCPToolOutcome(error)
-            response = .success(id: id, result: mcpToolErrorResult(error, tool: call.name))
-        } catch {
-            // A non-MCPToolError throw is opaque to the agent (bare -32603), so
-            // the underlying error must at least reach the log ring buffer —
-            // this is how a Postgres permission-denied on the least-privilege
-            // MCP role surfaces (e.g. the missing result_collections grant).
-            context.logger.error("MCP tool \(call.name) failed: \(error)")
-            outcome = .failed
-            response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
-        }
-
-        if let writeAuditRow {
-            // Stamp the outcome onto the row already persisted before the write.
-            await AuditLogger.updateMetadata(
-                writeAuditRow, merging: ["outcome": outcome.rawValue], on: context.request)
-        } else {
-            // Read tool: one best-effort row carrying the outcome.
-            _ = await recordToolCall(
-                name: call.name, context: context, target: target, outcome: outcome)
-        }
-        return response
-    }
-
-    /// Records an `mcp.tool_called` audit entry and returns the persisted row
-    /// (nil if the write failed). The actor is the token subject suffixed with
-    /// `-MCP` (e.g. `jsmith-MCP`) so agent-made changes are tracked separately
-    /// from the human's own web actions in the admin audit log; the acting agent
-    /// is in `via_agent` when present. The target resource (assignment public ID
-    /// or course code) and, when known, the outcome are recorded. Never logs
-    /// tool arguments.
-    @discardableResult
-    func recordToolCall(
-        name: String, context: ToolContext,
-        target: MCPAuditTarget? = nil, outcome: MCPToolOutcome? = nil
-    ) async -> APIAuditLogEntry? {
-        var metadata = ["tool": name]
-        if let agent = context.actingClientName {
-            metadata["via_agent"] = agent
-        }
-        if let outcome {
-            metadata["outcome"] = outcome.rawValue
-        }
-        return await AuditLogger.recordReturning(
-            action: .mcpToolCalled,
-            targetType: target?.type,
-            targetID: target?.id,
-            metadata: metadata,
-            actorUsernameOverride: "\(context.subject)-MCP",
-            on: context.request)
-    }
-
-    /// Best-effort audit used by the streaming `validate_assignment` path (a read
-    /// tool, so no fail-closed): records the call without propagating failure.
-    func auditToolCall(
-        name: String, context: ToolContext,
-        target: MCPAuditTarget? = nil, outcome: MCPToolOutcome? = nil
-    ) async {
-        _ = await recordToolCall(name: name, context: context, target: target, outcome: outcome)
     }
 
     /// What this server advertises to the caller, shared by the legacy
@@ -286,7 +155,7 @@ struct MCPDispatcher: Sendable {
             capabilities: .v1,
             serverInfo: serverInfo,
             instructions: instructions,
-            logLabel: "MCP")
+            logLabel: ContentMCPSurface.logLabel)
     }
 
     private func initializeResponse(
@@ -296,26 +165,6 @@ struct MCPDispatcher: Sendable {
             id: id, params: params,
             surface: await surface(context: context),
             logger: context?.logger)
-    }
-}
-
-/// Classification of a tool call's outcome, recorded in the audit metadata so a
-/// reviewer can see whether a call succeeded or failed without the tool ever
-/// logging its arguments.
-enum MCPToolOutcome: String, Sendable {
-    case success
-    case invalidArguments = "invalid_arguments"
-    case notAuthorized = "not_authorized"
-    case executionFailed = "execution_failed"
-    case failed
-
-    init(_ error: MCPToolError) {
-        switch error {
-        case .unknownTool: self = .failed
-        case .invalidArguments: self = .invalidArguments
-        case .notAuthorized: self = .notAuthorized
-        case .executionFailed: self = .executionFailed
-        }
     }
 }
 

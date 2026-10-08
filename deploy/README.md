@@ -130,7 +130,7 @@ with the same namespaces a job uses. It mounts a tmpfs inside them, and prints
 `sandbox OK` when it works:
 
 ```bash
-docker compose run --rm --no-deps runner "exec /app/runner-entrypoint.sh unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
+docker compose run --rm --no-deps runner "unshare --fork --user --net --mount --map-root-user /bin/sh -c 'mount -t tmpfs tmpfs /mnt && echo sandbox OK'"
 ```
 
 The first line of the output tells you about the job cgroups (see "Job
@@ -205,14 +205,32 @@ before. The Compose file gives the container five capabilities for the
 pre-step: `SYS_ADMIN`, `CHOWN`, `SETUID`, `SETGID` and `SETPCAP`. The runner
 does not keep them.
 
+The pre-step is the service's `entrypoint`, so every `command` runs through it,
+including one that a `docker-compose.override.yml` sets. An override may
+replace the runner's `command` (for example its `--api-base-url` or
+`--worker-id`), but must not set `entrypoint` or `user`. A runner host with its
+own Compose file uses the same entrypoint:
+
+```yaml
+    entrypoint:
+      - /app/runner-entrypoint.sh
+      - /app/chickadee-runner
+```
+
 The runner log starts with one of these lines:
 
-- `[runner-entrypoint] job cgroups delegated at /sandbox/jobs`
+- `[runner-entrypoint] job cgroups delegated at /sandbox/jobs (memory pids cpu cpuset)`
 - `[runner-entrypoint] job cgroups unavailable: <reason>`
 
 The pre-step needs cgroup v2 (Docker on Ubuntu 22.04 and later uses it), with
 the `memory` and `pids` controllers available to the container. When it cannot
-delegate the cgroups, the runner still starts and grades. To read the line:
+delegate the cgroups, the runner still starts and grades. It also enables
+`cpu` and `cpuset` for the jobs when the container has them. They set no
+limit, but a JVM needs them: JDK 25 reads a cgroup only when `cpu`, `cpuset`
+and `memory` are all in its `cgroup.controllers`, and without them it sizes
+its heap from the whole host instead of from the job's memory limit. If the
+line lists only `memory pids`, Java jobs can exceed their memory limit and be
+stopped. To read the line:
 
 ```bash
 docker compose logs runner | grep runner-entrypoint
@@ -230,6 +248,11 @@ limits:
   kernel applies this limit even when the runner runs as root.
 - Lifetime: when the script ends, the runner stops every process that is left
   in the cgroup, and then removes the cgroup.
+
+The script runs in a cgroup namespace whose root is its job cgroup, with a
+read-only view of that cgroup at `/sys/fs/cgroup`. It reads its own limits
+there and cannot change them. A JVM reads its heap size and CPU count the same
+way, so a Java test sizes itself from the job's limit, not from the host.
 
 The limit is a ceiling, not a reservation: a job that uses 150 MB costs
 150 MB. If you set a memory limit on the runner container (`mem_limit`), it
@@ -524,6 +547,37 @@ Add this line, with the path to your clone:
 Cron sends mail only when the script prints a line, which is when it updates
 the runner or when it fails.
 
+On macOS with Docker Desktop, use the crontab of the user who runs Docker
+Desktop, not the root crontab, and write the log to a file that the user owns.
+The script needs no python3, flock or newer bash, and it finds `docker` in the
+directories where Docker Desktop and Homebrew install it:
+
+```
+*/10 * * * * /Users/NAME/Chickadee/deploy/chickadee-runner-update.sh --compose-dir DIR --service NAME >> /Users/NAME/Library/Logs/chickadee-runner-update.log 2>&1
+```
+
+Docker Desktop runs the containers in a Linux VM. A service's `cpus` and
+`memory` limits cannot be larger than the CPUs and memory that Settings →
+Resources gives that VM.
+
+An update does not stop a running job. On SIGTERM the runner claims no new
+job, finishes and reports the jobs it is running, and exits (cordon and
+drain). Docker sends SIGTERM when it replaces the container, and kills the
+container only after the service's `stop_grace_period`. The bundled Compose
+file sets 10 minutes; a runner host with its own Compose file must add the
+same line to its runner service, or Docker kills the runner after its default
+of 10 seconds:
+
+```yaml
+    stop_grace_period: 10m
+```
+
+While one runner drains, the other runners take new jobs. A job still running
+after 10 minutes is killed, and the server puts it back in the queue 10
+minutes after it was assigned. The update script holds a lock, so a drain that
+lasts longer than the 10 minutes between cron runs does not start a second
+update. The deployer on the server host replaces its runner the same way.
+
 ### Runner hosts: give each runner a stable ID
 
 Give each runner host a stable ID, for example `--worker-id Sparrow` or
@@ -535,6 +589,15 @@ It ignores the default `runner-<container id>` IDs, because those change each
 time the container is created again. The postmortem for the same failure on the server host is in
 [docs/zero-downtime-deploy.md](../docs/zero-downtime-deploy.md), in the section
 "The host's iptables state is a deploy dependency".
+
+Give the runner container a fixed hostname too, for example
+`hostname: sparrow-runner` in its Compose service. The server refuses a worker
+ID that a different hostname used in the last 90 seconds, because two runners
+with one ID would take each other's jobs. Without a fixed hostname, each new
+container has a new random hostname, so after every update the server refuses
+the new runner for 90 seconds and the log shows `duplicate_worker_id`. The
+bundled Compose file does not set a hostname, because `--scale runner=3` needs
+a different one for each replica.
 
 ### Observability and operations
 
@@ -686,7 +749,9 @@ The script:
 - dumps Postgres via `docker compose exec db pg_dump -Fc`,
 - archives the artifact paths from the `chickadee-data` volume,
 - writes `manifest.json` last (atomic-publish trick),
-- prunes `backups/snapshot-*` directories older than **7 days**.
+- prunes `backups/snapshot-*` directories older than **7 days**, and keeps
+  only the newest **3** `predeploy` snapshots. It prunes first, before it
+  needs the database, so a run on a full disk still frees space.
 
 The server keeps running. Postgres dumps are consistent at a single
 transaction snapshot.
@@ -742,8 +807,9 @@ production host:
 ```
 
 3am local time, label `scheduled` so they're easy to distinguish from
-on-demand snapshots. The 7-day prune inside `snapshot.sh` keeps `backups/`
-bounded.
+on-demand snapshots. The prune inside `snapshot.sh` keeps `backups/`
+bounded: 7 days of scheduled snapshots, and the newest 3 predeploy snapshots
+however many releases ship.
 
 #### Refreshing a staging server from prod
 

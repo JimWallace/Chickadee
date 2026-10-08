@@ -47,7 +47,7 @@ import Testing
             id: "s1", name: "Q1",
             expressions: [PersonalizationExpression(name: "shift", expression: "seed % 13")]
         )
-        let props = TestProperties(sections: [section])
+        let props = TestProperties(language: nil, sections: [section])
         let data = try JSONEncoder().encode(props)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
         #expect(decoded.sections.count == 1)
@@ -69,7 +69,7 @@ import Testing
             variables: [FamilyVariable(name: "lo", value: .int(1))],
             expressions: [PersonalizationExpression(name: "x", expression: "seed % 2")]
         )
-        let props = TestProperties(sections: [section])
+        let props = TestProperties(language: nil, sections: [section])
         let sanitized = props.runnerSanitized()
         #expect(sanitized.sections.count == 1)
         #expect(sanitized.sections[0].id == "s1")

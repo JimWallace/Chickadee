@@ -9,6 +9,674 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.590] - 2026-10-08
+
+### Changed
+
+- **The version-capture scope has one name.** `MCPVersionCaptureScope` was a second name for `AssignmentVersionCaptureScope`; the MCP tool context and its test now use the shared name (#2259).
+
+
+## [0.5.589] - 2026-10-08
+
+### Changed
+
+- **The notebook-check save refusal reads the same support table as the Add Test menu.** The R, Lua and Octave refusals encoded the table a second time, with the language name and the hand-written extension typed as literals. They now ask `notebookCheckKindIsSupported`, `displayName` and the hand-written extension rule. The refusal text is unchanged (#2259).
+
+
+## [0.5.588] - 2026-10-08
+
+### Changed
+
+- **The web and MCP version capture share one scope.** The web middleware and the MCP dispatcher each had a copy of the capture scope and of the loop that records a version. Both now use `AssignmentVersionCaptureScope` and its `begin` and `recordRegistered` steps, and keep only their own seam, origin label and database. Behaviour is unchanged (#2259).
+
+
+## [0.5.587] - 2026-10-08
+
+### Changed
+
+- **One request pushes a changed grade to both LMS integrations.** A new result, a grade override and a frozen class-goal bonus each called the BrightSpace and the LTI grade sync separately. They now call `requestGradePush`, and `GradePushCoverageTests` fails when a file outside it asks only one integration. Behaviour is unchanged (#2259).
+
+### Changed
+
+- **The worker and browser result routes build a result row through one step.** Both encoded the collection, built the result row and flagged it for grade sync, and the browser copy once skipped the flag. `ResultIngestEffects.prepareResult` now does the three steps, and each route saves the row inside its own transaction or retry. Behaviour is unchanged (#2259).
+
+
+## [0.5.586] - 2026-10-08
+
+### Fixed
+
+- **A web script or support-file edit re-validates the assignment on the server.** The page used to send a follow-up suite request after some edits, but not after a support-file delete, so that delete left a stale validation status while a test that imported the file failed for every student. The web script routes and the MCP tools now share one post-edit step, and `WebContentEditCoverageTests` classifies every web write handler (#2259).
+
+
+## [0.5.585] - 2026-10-08
+
+### Fixed
+
+- **A Lua pattern family refuses a reserved word as its function target.** The check used Python's rule for Lua, so a target such as `end` or `then` was saved and rendered a test that no submission could pass. The target now follows Lua's own identifier rule (#2259).
+
+
+## [0.5.584] - 2026-10-08
+
+### Added
+
+- **Abstraction survey (#2259).** `docs/abstraction-survey.md` lists the parallel code paths that do the same job, the drift found in each, and a do-now, wait or no-action recommendation. It changes no code.
+
+
+## [0.5.583] - 2026-10-08
+
+### Fixed
+
+- A retest result now recomputes the first-to-solve, fastest and fewest-attempts class records from each student submission's latest result. A worse retest result can take a record away, and after a retest-all, first to solve goes to the earliest submitter (#2468).
+
+
+## [0.5.582] - 2026-10-08
+
+### Fixed
+
+- The script editor highlights Lua, Octave, Racket, Java and C++ files in their own language. Before, it highlighted them as shell (#2460).
+
+
+## [0.5.581] - 2026-10-08
+
+### Fixed
+
+- **A browser-graded Octave test that calls `setenv` no longer changes the environment of later tests.** Native grading gives each test a fresh process. In the browser every script shares one kernel, and Octave has no call that lists the environment, so the reset could not restore it. The harness now masks `setenv`, `putenv` and `unsetenv`, records each variable a script changes, and puts it back when the script ends. The session seed is not affected. (#2456)
+
+### Fixed
+
+- **Three more process-wide singletons are created under the application lock.** The client-diagnostics rate limiter, the worker claim queue and the diagnostics service each spelled get-or-create by hand, so two first accesses at the same time could create two of them. They now use `lazyStored`, like every other store. (#2457)
+
+### Fixed
+
+- The LEARN page's org-unit field is a small popover form, not a field inside an actions menu (#2065).
+- Two field notes on the assignment edit page are one sentence each. The secret-test reveal detail is in `docs/solution-visibility.md` (#2078).
+- The course-role select is one partial for the instructor roster and the admin course page. Controls in a draggable row and roster rows that open on click show a pointer. Removed a repeated variant title, hover titles on hidden drag handles, a 17-word title and a dead stylesheet rule. The suite editor now says how to make one test depend on another (#2460).
+
+
+## [0.5.580] - 2026-10-08
+
+### Fixed
+
+- **A local HTTP server test no longer times `stop()` against the wall clock.** The one-second bound could not catch a `stop()` that waited for the server, and could fail when a loaded runner paused the test. The test still proves that each server stops and that its siblings keep serving. (#2453)
+
+### Fixed
+
+- **An MCP agent refused for permission now gets `notAuthorized`, not `invalidArguments`.** A 401 or 403 from a shared web path told the agent that its arguments were wrong, although no argument could make the call succeed. It now maps to the error the tools already throw for an enrolment refusal. Every other 4xx still maps to `invalidArguments`. (#2454)
+
+
+## [0.5.579] - 2026-10-08
+
+### Fixed
+
+- **The isolated-worker drift test now reads `grading-executors.js`.** #1965 moved the grading worker factory into that file, which the isolated notebook page loads, but the test still scanned only `browser-runner.js` and `notebook.js`. A literal worker spawn added there would have been refused by an isolated engine with no test failing. Two comments that still named `browser-runner.js` are corrected. (#2452)
+
+
+## [0.5.578] - 2026-10-08
+
+### Changed
+
+- **Claude Code asks only before an existing test changes.** A PreToolUse hook (`.claude/hooks/ask-before-test-edit.py`) asks for approval when a tool edits a file that already exists under `Tests/`. A new test file needs no approval. The hook replaces the `Edit(/Tests/**)` ask rule, which also stopped new test files. The `git diff` and `git status` allow rules now use the stricter prefix form.
+
+
+## [0.5.577] - 2026-10-07
+
+### Added
+
+- **Claude Code subagents and model routing.** The project settings select the `opusplan` model. Four report-only subagents run the tests (`test-runner`), the UI guards (`ui-guard`), the format-lint guards (`lint-guard`) and a review of the uncommitted diff (`diff-reviewer`). Permission rules allow the read-only check commands, ask before a test file changes, and deny edits to the release-managed and vendored files.
+
+
+## [0.5.576] - 2026-10-07
+
+### Security
+
+- **A course bundle can no longer copy a server file into the imported course.** The import joined each submission and test setup path from the bundle manifest onto the extract directory without a check, so a crafted bundle could name a path such as `../../.worker-secret`. The import now accepts only the `<directory>/<name>` form that the export writes, and refuses any other path. (#2451)
+
+
+## [0.5.575] - 2026-10-07
+
+### Changed
+
+- **CLAUDE.md is shorter: 890 lines and 6,705 words, from 1,227 and 9,693.** The JupyterLite section, the authoring-editor paragraphs and the testing conventions moved, word for word, to `docs/jupyterlite.md`, `docs/authoring-editors.md` and `docs/testing-conventions.md`. CLAUDE.md keeps one or two lines per rule with a pointer. The UI conventions keep one line per guard, because `docs/ui-design.md` already holds each rule in full. No rule was removed. (#1989)
+
+
+## [0.5.574] - 2026-10-07
+
+### Fixed
+
+- **No function defaults its language to nil.** `no-language-defaults.sh` caught `= .python` but not `= nil`, and seven functions took `language: AssignmentLanguage? = nil`, one of which then fell back to Python. The defaults are gone, every caller states the language or `nil`, and the guard and a new fixture catch a nil default. (#2429)
+
+
+## [0.5.573] - 2026-10-07
+
+### Fixed
+
+- **Every guard that CI runs now needs a fixture or a stated exemption.** The coverage check read only the `format-lint` job, so `verify-jupyterlite.sh`, `check-xeus-vendored.sh`, `check-env-vendored-sync.sh` and `check-security-headers.sh` ran with nothing to show that they could fail. It now reads every workflow and composite action. The three JupyterLite guards have fixtures, and each script that is not a check, or that needs the network or a running server, has an exemption with its reason. (#2428)
+
+
+## [0.5.572] - 2026-10-07
+
+### Fixed
+
+- **The browser grading smoke installs the committed lockfile and caches its browser.** It used `npm install`, which can resolve a version other than the lockfile, and each of its eight matrix legs downloaded Chromium again. It now uses `npm ci` and caches the Playwright download on the lockfile. Its header also names Octave, which the matrix already ran. (#2436)
+
+
+## [0.5.571] - 2026-10-07
+
+### Fixed
+
+- **A change to a bundle patch script now runs the kernel re-vendor check.** `build-jupyterlite.sh` runs the four `scripts/patch-*.py` scripts, but the re-vendor workflow did not list them, so a pull request that changed one did not prove that the bundle still builds. (#2437)
+
+
+## [0.5.570] - 2026-10-07
+
+### Fixed
+
+- **The Docker build now runs on a pull request that changes its other inputs.** The path filter omitted `.dockerignore`, the `restore-git-mtimes` action and `scripts/ci-runner-cgroup-probe.sh`, so a change to one of them reached `main` without the image build. (#2430)
+
+
+## [0.5.569] - 2026-10-07
+
+### Fixed
+
+- **CLAUDE.md no longer counts two kernels or six languages.** Seven passages still described the state before Lua, Octave, C++, Racket and Java were added. They now say "every" where the count follows the language list, and name the one extractor per language. (#2433)
+
+
+## [0.5.568] - 2026-10-07
+
+### Fixed
+
+- **CLAUDE.md names the import guard by its current name.** It said `PythonImportGuard`, which no longer exists. The authoring doors call `KernelImportGuard`. (#2432)
+
+
+## [0.5.567] - 2026-10-07
+
+### Fixed
+
+- **The xeus kernel runbook now records the Octave run.** Its opening note and its second-half status said that only Lua had been added and listed three languages. They now name Octave too and point to `AssignmentLanguage.allCases` for the list. (#2435)
+
+
+## [0.5.566] - 2026-10-07
+
+### Fixed
+
+- **The architecture document no longer states a stale MCP tool count.** It said 54 tools; the catalog has more. It now names `MCPToolCatalog.live` as the only source for the count. (#2434)
+
+
+## [0.5.565] - 2026-10-07
+
+### Fixed
+
+- **The JupyterLite workflow comment matches its check.** It said the waitAsync assertion was deliberately absent; `verify-jupyterlite.sh` makes that assertion. (#2431)
+
+
+## [0.5.564] - 2026-10-07
+
+### Fixed
+
+- **The editor smoke and the notebook probes run when the files they load change.** The editor-smoke change detector did not match `grading-executors.js`, `runner-support-sources.js` or `_notebook-body.leaf`, and the four notebook probes did not list the two templates that build the page they load. (#2427)
+
+
+## [0.5.563] - 2026-10-07
+
+### Fixed
+
+- **The editor smoke fails again when a Chromium check fails.** Three steps read the exit status after an `if` block, where it is always 0, so a Chromium failure of the selftest, the notebook-page test or the workbench test passed the required gate. The steps now take the status in the `else` branch. (#2426)
+
+
+## [0.5.562] - 2026-10-07
+
+### Removed
+
+- **The unused upload classifier in `suite-table.js`.** Since #1960 the server decides whether an uploaded file is a test, so the classifier decided nothing. It was a second list of script extensions that could drift. Its tests went with it. (#2389)
+
+
+## [0.5.561] - 2026-10-07
+
+### Fixed
+
+- **The streamed-body CSRF test no longer crashes the API test run under load.** Its socket gave up after 10 seconds. On a loaded CI runner the test then read an empty response and shut the app down while the request was still running, which crashed the whole test process. It now waits 60 seconds and fails with a clear message if the time runs out. (#2423)
+
+
+## [0.5.560] - 2026-10-07
+
+### Changed
+
+- **The visual and accessibility scan runs when web route code changes.** The route code builds each page's Leaf context, so a change there can change a page with no template edit. The workflow ran only for `Public/` and `Resources/Views/` changes. (#2409)
+
+
+## [0.5.559] - 2026-10-07
+
+### Fixed
+
+- **The JS styling ratchet counts writes, and all of them.** It counted a read in `jl-cell-perf-patch.js` and missed `el.style[prop] =`, `setAttribute('style', …)` and a `<style>` element built in JS. It now counts writes only, in every form. The true count is 10, so the baseline moves from 9 to 10 with no new code. (#2408)
+
+
+## [0.5.558] - 2026-10-07
+
+### Fixed
+
+- **The Leaf comment check catches function tags and CSS comments.** It caught only the interpolation and the structural tags inside an HTML comment. Leaf also runs a function tag with parameters there, and it reads a CSS comment in a page `<style>` block as plain text too. There were no such tags. (#2407)
+
+
+## [0.5.557] - 2026-10-07
+
+### Added
+
+- **Disk space alert.** A new health rule, "Disk nearly full" (`diskSpaceLow`), fires when less than 15% of the data disk is free. It reads no database, so it still answers when a full disk has stopped Postgres. `get_storage_usage` and `/admin/storage` show the free space too.
+- **The deployer holds a deploy on a nearly full disk.** Before it pulls a release image, the deploy daemon checks for 10 GiB free. If there is less, it removes unused images and old snapshots, and if that is not enough, it holds the deploy in state `disk_low`. The `deployerUnhealthy` rule pages on that state.
+
+### Fixed
+
+- **Health alerts can be turned on.** `docker-compose.yml` did not pass `ALERT_ENABLED` or `ALERT_WEBHOOK_URL` to the server, so a Compose or blue-green deploy ran with alerts off. The disk-full outage on 2026-10-07 sent no alert for that reason. Both now pass through, and alerts are on by default. Set the webhook on `/admin/alerts`.
+
+
+## [0.5.556] - 2026-10-07
+
+### Fixed
+
+- **The colour-token check catches CSS named colours.** It matched only hex, `rgb()` and `hsl()` values, so `color: white` on the primary button passed. That rule now uses a palette token. (#2406)
+
+
+## [0.5.555] - 2026-10-07
+
+### Fixed
+
+- **The inline event-handler check reads whole tags and JS-built HTML.** It read one line at a time and only double quotes, so a handler on a later line of a tag, in single quotes, or in an HTML string in `Public/*.js` passed. The CSP blocks each of these without an error. There were no such handlers. (#2405)
+
+
+## [0.5.554] - 2026-10-07
+
+### Fixed
+
+- **The inline custom-property check reads every property in a `style` attribute.** It read only the first one, and only in an attribute that started with `--`, so a component property in second place or after `display:none;` passed. (#2404)
+
+
+## [0.5.553] - 2026-10-07
+
+### Fixed
+
+- **The stylesheet checks read selectors inside one-line `@media` rules.** The catalog count and the page-against-global check cut each rule at its first `{`, so a class whose rule was `@media (...) { .x { ... } }` was invisible to both. The dead `.col-hide-tablet` rule hid this way and is deleted. (#2403)
+
+
+## [0.5.552] - 2026-10-07
+
+### Fixed
+
+- **The class-resolution check reads class names written against a Leaf tag.** A name such as `row#if(x): row-pending#endif` used to be dropped together with the tag, so it was never checked. Two roster hooks that had no rule now carry the `js-` prefix. (#2402)
+
+
+## [0.5.551] - 2026-10-07
+
+### Fixed
+
+- **Predeploy snapshots no longer fill the disk.** The deployer takes a full snapshot (database dump and every submission) before each release, and `snapshot.sh` deleted snapshots only after 7 days. With up to 25 releases a day, the copies filled the production disk, Postgres stopped, and login and both MCP surfaces failed. `snapshot.sh` now keeps only the newest 3 predeploy snapshots, and it prunes before it needs the database, so a run on a full disk still frees space. Old release images also stayed on the disk (22 of them, 29 GB): the deployer pulls each release by digest, so the image keeps a name, and `docker image prune -f` removes only images without one. The blue-green deploy and the deployer now run `docker image prune -a -f`, which removes every image that no container uses. The runner-host update script does the same, limited by label to Chickadee images, so a shared Mac keeps its other images.
+
+
+## [0.5.550] - 2026-10-07
+
+### Fixed
+
+- **Borders drawn with `--gray-300` are dark in dark mode.** The token had no dark value, so row menus, extension panels and closed-assignment strips showed near-white lines on a dark page. `scripts/check-css-vars.sh` now fails when a grey step has no value in either dark block. (#2401)
+
+
+## [0.5.549] - 2026-10-07
+
+### Fixed
+
+- **The confirm dialog is narrow again.** `.modal-card--confirm` came before `.modal-card` in the stylesheet, so the editor width won. A new check in `scripts/check-styles.sh` fails when a modifier rule comes before its base rule and sets the same property. (#2400)
+
+
+## [0.5.548] - 2026-10-07
+
+### Fixed
+
+- **The "Failed" count on a results page is red again, and only when a test failed.** The red rule came before the base rule in the stylesheet, so the base colour won. The count now takes the red style only when it is above zero, so a clean submission does not show a red 0. (#2399)
+
+
+## [0.5.547] - 2026-10-07
+
+### Fixed
+
+- **An R test's own `tryCatch(error =)` no longer swallows `passed()`.** In the browser, the condition that stands in for `quit()` was also an error, so a test that called `passed()` inside `tryCatch(..., error = )` reported an error there and a pass under Rscript. The condition is no longer an error, so the browser and the native runner give the same result. (#2386)
+
+
+## [0.5.546] - 2026-10-07
+
+### Fixed
+
+- **Browser-graded R, Octave and Lua tests start from a clean state.** Each native test runs in a new process, but in the browser all the tests of a submission share one kernel. A test that changed the working directory, an environment variable or `options()` in R, the working directory in Octave, or a standard Lua function changed it for every later test. The grader now puts these back before each script. Octave cannot list its environment variables, so an Octave `setenv` still carries over. (#2384)
+
+
+## [0.5.545] - 2026-10-07
+
+### Fixed
+
+- **A package install no longer counts against a browser test's time limit.** When a browser-graded script needed a package the kernel had not loaded, the install ran inside the test's time limit. A slow install timed the test out, and the next test then installed the package again in a new kernel. The clock now stops while a package installs. The script's own time, including the first attach of a package, still counts. (#2380)
+
+
+## [0.5.544] - 2026-10-07
+
+### Changed
+
+- **The browser grading router derives its interpreter table.** Which browser substrate a test's interpreter routes to was a hand-written table, so a new kernel language could get a grading worker and still route to "unsupported". `scripts/generate-js-constants.sh` now writes the table from each kernel language's generated test extension and the interpreter RunnerCore classifies it as, and fails when a kernel language has no such interpreter. (#2388)
+
+
+## [0.5.543] - 2026-10-07
+
+### Fixed
+
+- **A pattern-family string value stays a string.** When an author opened a family again, a string case value such as `"42"` or `"TRUE"` showed without quotes, and the next save stored it as a number or a boolean. The cell now shows such a string JSON-quoted, so it reads back as the same string. Ordinary text still shows without quotes. (#2381)
+
+
+## [0.5.542] - 2026-10-07
+
+### Fixed
+
+- **A notebook switch in the workbench no longer adds editor hooks.** Each switch added one more frame listener, one more 1.5 s poll and one more kernel watchdog, so the page ran its editor hooks once per switch and could send duplicate kernel-ready beacons. The listener and the poll are now bound once per page, and a new watchdog stops the previous one. (#2382)
+
+
+## [0.5.541] - 2026-10-07
+
+### Fixed
+
+- **The suite table shows every test in a dependency chain.** A test that depended on a test which itself depended on another had no row in the suite table, so an author could not edit or delete it, although it still graded. Every link of a chain now has a row. (#2385)
+
+
+## [0.5.540] - 2026-10-07
+
+### Fixed
+
+- **An auto-compute timeout stops only its own worker.** When a case ran past its time limit, the timer stopped whichever eval worker was current, which could be a newer worker that was loading the solution. It now stops the worker that ran the case, and the other cases on that worker fail at once with a message that names the cause, instead of each waiting to report a timeout of its own. (#2383)
+
+
+## [0.5.539] - 2026-10-07
+
+### Fixed
+
+- **Install breadcrumbs keep the package names.** When a browser grading worker installs a package on demand, the submit-phase telemetry now records which packages it installed, beside the timing. (#2387)
+
+
+## [0.5.538] - 2026-10-07
+
+### Tests
+
+- **One repository root for tests.** `ChickadeeTestSupport` now has `repositoryRoot`. About sixty sites that counted `deletingLastPathComponent` from their own file use it, and four sites that read the working directory now do not depend on it. (#2367)
+
+
+## [0.5.537] - 2026-10-07
+
+### Tests
+
+- **One test-setup builder.** `wrInsertSetup`, `arInsertSetup` and six private copies now call the shared `makeTestSetup`, which can skip the zip file. `WorkerRoutesTests` no longer hides the shared builder behind its own `makeTestSetup`. (#2365)
+
+
+## [0.5.536] - 2026-10-07
+
+### Changed
+
+- **Tests write fixture zips through one helper.** Thirteen suites carried a private `writeZip(at:entries:)`, and the shared `arMakeZip` and `ahMakeZip` were a fifteenth and sixteenth copy that called `zip` themselves. All of them now use `writeZipFixture(at:entries:)` in `ZipFixtureSupport.swift`, which also replaces an existing archive instead of adding to it. (#2363)
+
+
+## [0.5.535] - 2026-10-07
+
+### Changed
+
+- **Test course builders use the shared fixture.** Ten suites built and saved an `APICourse` by hand, and the three archived-course route suites each copied one course-and-assignment builder. They now call `makeTestCourse`, and the archived suites share `makeCourseWithAssignment` in `AssignmentRoutesHelpers.swift`. (#2366)
+
+
+## [0.5.534] - 2026-10-07
+
+### Changed
+
+- **Page tests GET through one shared helper.** Fifteen suites carried a private `get` or `pageHTML` that sent the same cookie-carrying GET. They now call `getResponse(_:cookie:on:)` beside `getHTML` in `TestPageHelpers.swift`, and the suites that pass a check closure call it from their one-line wrapper. (#2362)
+
+
+## [0.5.533] - 2026-10-07
+
+### Changed
+
+- **Tests sign in as a student or a course TA through shared helpers.** Twelve suites carried a private `loginAsStudent` and two carried the same `loginAsTA`, each with its own copy of the enrolment upsert. They now use `loginAsStudent(_:on:)` and `loginAsCourseTA(_:on:)` in `TestLogin.swift`, and `enrollAsTestInstructor` is one case of a new `enrollInTestCourse(role:)`. (#2364)
+
+
+## [0.5.532] - 2026-10-07
+
+### Changed
+
+- **The worker HMAC tests sign with the shared test signer.** `WorkerHMACAuthMiddlewareTests` kept a second copy of the signing code because the shared `workerHMACHeaders` could not take a fixed timestamp or nonce, which the clock-skew and replay tests need. The shared helper now takes both, and the copy is gone. (#2368)
+
+
+## [0.5.531] - 2026-10-07
+
+### Changed
+
+- **The CLAUDE.md testing section is current.** It no longer gives test-file counts that go stale, it names the shared host traits for every interpreter, and its example uses the shared `.requiresLua` instead of the suite-local form that #1946 removed. (#2369)
+
+
+## [0.5.530] - 2026-10-07
+
+### Fixed
+
+- **Twelve test helpers no longer leak a half-built app when their setup throws.** They built a bare `Application.make(.testing)` and then ran setup that can throw (a database, a route registration, a token authority, a loopback server). If that setup threw, the leaked app's `deinit` called the synchronous shutdown, which ends the whole test process with SIGILL on Linux. They now use `makeTestingApplication`, which tears the app down before it rethrows. That helper takes an `environment:` for the two mock identity providers that serve on a loopback port. (#2360)
+
+
+## [0.5.529] - 2026-10-07
+
+### Fixed
+
+- **Nine test suites that spawn python3 or bind a loopback server now have a time limit.** A stall now fails with a named test, not by holding the CI job to its 20-minute kill. The raw loopback exchange in `ExtensionCSRFTokenTests` sets a receive timeout, because a time limit cannot interrupt a blocking `recv`. The five tests that run a generated case under python3 now carry `.requiresPython3`, so a host without python3 skips them instead of failing. (#2361)
+
+
+## [0.5.528] - 2026-10-07
+
+### Changed
+
+- **One MCP tool protocol and one tools/call path for both surfaces.** The content and admin MCP surfaces had separate copies of the tool protocol, the type-erased tool, the routing, the tools/list and tools/call code and the POST handler, and the copies had begun to drift. Both surfaces now use one generic `MCPTool`, one `AnyMCPTool`, one tools/call implementation with surface hooks (the content write audit and content snapshot, and the admin role check), and one `MCPTransport.serve`. The distinct scope types still keep the surfaces apart at compile time. Behaviour does not change. (#2339)
+
+
+## [0.5.527] - 2026-10-07
+
+### Changed
+
+- **MCP bounded integer arguments state and declare their range once.** List limits, look-back windows and the validation wait each typed their default and maximum in code and again in served prose, and most schemas declared no range. One `MCPBoundedInt` now holds the default and the maximum, renders the property with `minimum` and `maximum`, and resolves the input. `query_logs` refuses an unknown `minLevel` and names the legal levels; before, `"warn"` returned every entry unfiltered. `set_time_limit` states its range from the shared constant. (#2336)
+
+
+## [0.5.526] - 2026-10-07
+
+### Changed
+
+- **MCP course and section resolution lives in one file.** `resolveCourse` and `resolveCourseForWrite` move beside `resolveMCPCourse`, with comments that match what they do (the role floor is a parameter). The "check a section id belongs to this course" step, written twice, is now one `resolveCourseSectionID`, and `list_assignments` uses `resolveCourse` instead of inlining it. (#2341)
+
+
+## [0.5.525] - 2026-10-07
+
+### Fixed
+
+- **The runner image has the tidyverse core.** The xeus-r browser kernel ships dplyr, tidyr, readr, stringr, tibble, purrr and forcats, but the runner image had only base R, so a worker-graded R test that loaded one of them failed on the worker after passing in the browser. The image now installs them as Debian binary packages (`r-cran-*`, so nothing compiles from CRAN), and the image build checks that `Rscript` can load each of them.
+
+
+## [0.5.524] - 2026-10-06
+
+### Removed
+
+- **The admin MCP tools no longer repeat the admin check.** The admin dispatcher runs the admin re-check once for every tool (#1943), but 18 tools still ran it again themselves, so each call checked the user twice. The per-tool lines and their 18 direct-execute tests are gone; `AdminMCPAdminRecheckTests` checks every tool through the dispatcher. (#2333)
+
+
+## [0.5.523] - 2026-10-06
+
+### Changed
+
+- **MCP prose comments are current, and the download limit is derived.** Comments in the MCP prose modules spoke of a future "seventh language" and "a ninth kind" after Java and the tenth pattern kind had shipped. The 8 MB support-file download limit in the served instructions and in `author_script` now comes from the constant the fetcher enforces. The glossed kind lists use the shared list rendering, without an Oxford comma. (#2343)
+
+
+## [0.5.522] - 2026-10-06
+
+### Fixed
+
+- **A JVM in a runner job now sees the job's memory limit.** The runner's pre-step enabled only the `memory` and `pids` controllers for the job cgroups. JDK 25 reads a cgroup only when `cpu`, `cpuset` and `memory` are all in its `cgroup.controllers`, so in every job it saw no container: it sized its default heap from the whole host (1986 MB on Starling, against a 1024 MB job limit) and its CPU count from the host. A Java job that used its heap could then reach the job's memory limit and be stopped. Two causes, both fixed. `deploy/runner-entrypoint.sh` now also enables `cpu` and `cpuset` for the jobs when the container has them (they set no limit), and its startup line lists the enabled controllers. And the sandbox no longer binds the job cgroup over `/sys/fs/cgroup`: the JVM joined its cgroup path to the container's own cgroup mount, a path the bind mount had covered. Each job now runs in a cgroup namespace whose root is its job cgroup, with a fresh read-only cgroup2 mount at `/sys/fs/cgroup`; the job still cannot change its limits. The runner's startup probe now expects the job at the root of its own cgroup namespace, and the image build's probe checks that a JVM in a job cgroup reports the job's memory limit. Found by a Java check in a staff test assignment, run on each runner with `run_validation`.
+
+
+## [0.5.521] - 2026-10-06
+
+### Fixed
+
+- **create_content_item refuses an unknown kind.** It stored an unknown `kind` as a link without a word, while `update_content_item` refused the same value. Both now refuse it and name the legal kinds; an absent kind is still a link. The last hand-typed MCP enum lists (achievement scope and comparator, section item type, content-item kinds in the served instructions) are now derived from their types, and the notebook-check and pattern-family kind errors name the legal values. (#2337)
+
+
+## [0.5.520] - 2026-10-06
+
+### Security
+
+- **The MCP deletes no longer reveal rows in another course.** `delete_content_item` and `delete_course_section` answered an unknown id with `removed: false` but an existing row in a course the account is not enrolled in with "not enrolled", so an agent could tell which ids exist elsewhere. Both now answer that row as if it did not exist, and leave it in place, as their comments already claimed. A course the account can see still refuses a role that is too low. (#2342)
+
+
+## [0.5.519] - 2026-10-06
+
+### Fixed
+
+- **One MCP error policy on both surfaces.** A refusal from a shared web helper (4xx) reaches the agent with its reason, and a server fault (5xx) stays opaque to the agent and is logged. Seven MCP tools converted a 5xx into a visible, unlogged tool error, and the admin surface mapped nothing, so a refusal there reached the agent as an opaque internal error. (#2338)
+
+
+## [0.5.518] - 2026-10-06
+
+### Fixed
+
+- **get_assignment_version no longer returns binary files as text.** It read capped content by dropping one byte at a time and decoding the whole prefix again, which was quadratic and returned the ASCII start of a binary file as truncated text. It now shares one capped UTF-8 reader and one byte cap with `get_support_files`, and refuses content that is not UTF-8. (#2334)
+
+
+## [0.5.517] - 2026-10-06
+
+### Fixed
+
+- **MCP resource errors carry their reason and reach the log.** `resources/list` answered every error, a refusal included, with an opaque "Failed to list resources.", and neither resource method logged a server fault. Both now map a refusal to an invalid-params error with its reason, as the tools path does, and log every other error. (#2340)
+
+
+## [0.5.516] - 2026-10-06
+
+### Security
+
+- **The validate_assignment progress stream reads on the MCP database pool.** The streamed `validate_assignment` call watched validation on the default database pool, so with a dedicated least-privilege MCP role configured, this one path went around the role wall that every other MCP read relies on. It now uses the same pool as `ToolContext.db`, and its audit row records the call's outcome. (#2335)
+
+
+## [0.5.515] - 2026-10-06
+
+### Added
+
+- **MCP `run_validation`: re-run validation, optionally on one runner.** It queues a fresh validation run of an assignment's reference solution against its current suite, without a content edit, and waits for the result. With `runnerID`, only that runner may claim the run for the first 5 minutes; after that any compatible runner may, so an offline runner delays the run and never strands it. The target is stored on the one queued job (`submissions.target_runner_id`, a new optional column), never in the manifest, and only this tool sets it, so student submissions are never pinned. The tool refuses a runner that has not polled in the last 120 seconds, and its output names the runner that claimed the run. It changes no content, so it neither closes an open assignment nor regrades student work.
+
+
+## [0.5.514] - 2026-10-06
+
+### Fixed
+
+- **Server boot no longer blocks a Swift concurrency thread.** `configure` and `bootstrapAppServices` are now `async`. The migrations and the stored BrightSpace credential are awaited, not resolved with `.wait()`. Before, boot blocked a thread of the cooperative pool while it waited for work that needed a thread of the same pool, so on a host with one core it could hang. (#2301)
+
+
+## [0.5.513] - 2026-10-06
+
+### Changed
+
+- **One typed JupyterLite contents model.** The contents routes build one `Encodable` `JupyterContentsModel` for files, notebooks and directories, in place of two `[String: Any]` dictionaries. A JSON file is checked to parse, then its own bytes go into the response, so a large notebook is no longer decoded and encoded again on each request. The keys and values the JupyterLite client reads do not change. (#2308)
+
+
+## [0.5.512] - 2026-10-06
+
+### Fixed
+
+- **A suite configuration that cannot be read is an error.** The suite config rows are now decoded once into one typed row. Before, they went through a `[String: Any]` round trip, and a config that did not parse fell back to the default suite without a word, which dropped the tiers, order and points. A row that names a file that is not found is now skipped alone, and no longer drops the rows around it. (#2305)
+
+
+## [0.5.511] - 2026-10-06
+
+### Fixed
+
+- **Concurrent first accesses to application storage keep every entry.** Vapor reads and writes the whole `Application.storage` struct under separate locks. Two first accesses to different `lazyStored` keys at the same time could each write back a struct without the other entry, so a sweep monitor could be lost and outlive shutdown. `lazyStored` now checks and stores under the application lock, and builds the value outside it. (#2298)
+
+
+## [0.5.510] - 2026-10-06
+
+### Fixed
+
+- **`deploy/chickadee-runner-update.sh` runs on macOS with Docker Desktop.** It used `mapfile` (bash 4), `flock` and `python3`, which a Mac does not have, so a cron job there would never update the runner. It now reads the JSON with `grep` and `sed`, takes its lock with `mkdir` (a lock whose owner is no longer alive is taken over), and adds the Docker Desktop and Homebrew directories to `PATH`. The deploy README gives the macOS cron line.
+
+
+## [0.5.509] - 2026-10-06
+
+### Changed
+
+- **One notebook cell-source reader.** Five private copies of the "join a cell's `source`" helper are gone. Every caller now uses `NotebookCellSources.cellSource`. (#2306)
+
+
+## [0.5.508] - 2026-10-06
+
+### Removed
+
+- **Unused thread-pool fields in two caches.** `ZipEntryListCache` and `NotebookBytesCache` no longer store a thread pool and an event-loop group that they never used, and their comments no longer describe the removed offload and zip lock. (#2304)
+
+
+## [0.5.507] - 2026-10-06
+
+### Changed
+
+- **Runner updates no longer stop running jobs (cordon and drain).** On SIGTERM the runner now claims no new job, finishes and reports the jobs it is running, and exits. Before this, the runner, as the container's first process, ignored SIGTERM, and every `docker stop` or runner update killed it after 10 seconds with its jobs, which the server then re-queued only 10 minutes later. The bundled Compose file sets `stop_grace_period: 10m` on the runner; a runner host with its own Compose file must add it. `deploy/chickadee-runner-update.sh` holds a lock, so a long drain does not start a second update. The runner logs `runner_draining` and ends with `runner_shutdown` status `drained`.
+
+### Fixed
+
+- **A Compose override can no longer start the runner as root.** The runner's pre-step (`/app/runner-entrypoint.sh`) is now the service's `entrypoint`, not part of its `command`. On the server host, a `docker-compose.override.yml` that set the runner's `command` replaced the pre-step, so v0.5.501's runner started as root with `SYS_ADMIN`; its sandbox check then failed and it refused to start, so it never graded. Every command, including an override's or `docker compose run`'s, now runs through the pre-step and as uid 999. The image build checks that a replaced command runs as uid 999.
+
+
+## [0.5.506] - 2026-10-06
+
+### Added
+
+- **Health alert: jobs no runner can grade (`unclaimableJobs`).** It fires when a job has waited 5 minutes and no runner that polled in the last 2 minutes may grade it, and names the reason, for example an assignment's `minimumRunnerVersion` above every online runner. It uses the claim walk's own decision (`claimCompatibility`, now shared by both), so the alert and the claim cannot disagree. With no runner online it stays quiet; the runner-offline rule covers that.
+
+### Changed
+
+- **The runner version skew alert waits 30 minutes, not 15.** Runners now update only after they drain, and a runner host's update job runs every 10 minutes, so a correct runner can be about 25 minutes behind the server. Its message now points at the runner's update job. `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` still overrides the default.
+
+
+## [0.5.505] - 2026-10-06
+
+### Changed
+
+- **One async semaphore.** `WorkerClaimQueue` is now a one-permit `AsyncCountingSemaphore`, and the semaphore has a `withPermit` method that releases its slot on every exit path. The personalization evaluator uses it instead of three hand-written releases. (#2303)
+
+
+## [0.5.504] - 2026-10-06
+
+### Fixed
+
+- **One key-set fetch per LTI platform at a time.** Concurrent launches that miss the platform key cache now join the fetch already in flight, and a launch that fails after another launch fetched again uses the new keys. Before, a class that opened a link together sent one JWKS request per student. (#2309)
+
+
+## [0.5.503] - 2026-10-06
+
+### Changed
+
+- **Runner hosts: give the runner container a fixed hostname.** `deploy/README.md` now says so. The server refuses a worker ID that another hostname used in the last 90 seconds, so a recreated runner with a new random hostname could not poll for 90 seconds after each update.
+
+
+## [0.5.502] - 2026-10-06
+
+### Fixed
+
+- **Facts panels on the LTI, GitHub and runner pages.** The `.detail-grid--cells` rules came before the base `.detail-grid` rules in the stylesheet, so the base rules won. The panel was capped at 480px with one wide column and one very narrow column, and on the LTI page the URLs in the narrow column wrapped every few characters. The cell rules now come after the base rules, so the facts form an even grid.
+
+
+## [0.5.501] - 2026-10-06
+
+### Fixed
+
+- **The OIDC retry cooldown uses one clock.** `resolve(app:now:)` compared the caller's `now` against a cooldown that it had set from the wall clock, so a caller that passed a time saw a cooldown it could not control. The cooldown now starts from the caller's `now`. A stale comment about the logout token revocation is also corrected. (#2310)
+
+
+## [0.5.500] - 2026-10-06
+
+### Fixed
+
+- **Stable row height in "Last active" columns.** The column was too narrow for a time such as "15 seconds ago", so the text wrapped. Because the time updates every few seconds, the rows on the admin runner table grew and shrank. The column is now wide enough for the longest relative time.
+
+
 ## [0.5.499] - 2026-10-06
 
 ### Security

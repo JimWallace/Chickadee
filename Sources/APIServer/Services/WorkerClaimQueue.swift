@@ -1,7 +1,7 @@
 // APIServer/Services/WorkerClaimQueue.swift
 //
 // Application-level claim serializer for runner job claims (split out of
-// WorkerJobRoutes.swift in the 0.5 cleanup). One actor per Application,
+// WorkerJobRoutes.swift in the 0.5 cleanup). One queue per Application,
 // seeded eagerly in bootstrapAppDirectories.
 
 import Vapor
@@ -14,24 +14,11 @@ import Vapor
 /// in-process polls don't thrash SQLite's write lock and burn busy-retries.
 /// The section it guards is one UPDATE + one SELECT (2026-07 audit —
 /// evaluation moved outside).
-///
-/// Implemented as a Swift actor — actor isolation replaces the previous
-/// NSLock + @unchecked Sendable approach, giving compile-time concurrency
-/// safety with no manual lock discipline.
-actor WorkerClaimQueue {
-    private var waiting: [CheckedContinuation<Void, Never>] = []
-    private var active = false
+struct WorkerClaimQueue: Sendable {
+    private let gate = AsyncCountingSemaphore(width: 1)
 
     func run<T>(_ work: () async throws -> T) async throws -> T {
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            if active { waiting.append(c) } else { active = true; c.resume() }
-        }
-        defer { advance() }
-        return try await work()
-    }
-
-    private func advance() {
-        if waiting.isEmpty { active = false } else { waiting.removeFirst().resume() }
+        try await gate.withPermit(work)
     }
 }
 
@@ -41,9 +28,6 @@ struct WorkerClaimQueueKey: StorageKey {
 
 extension Application {
     var workerClaimQueue: WorkerClaimQueue {
-        if let q = storage[WorkerClaimQueueKey.self] { return q }
-        let q = WorkerClaimQueue()
-        storage[WorkerClaimQueueKey.self] = q
-        return q
+        lazyStored(WorkerClaimQueueKey.self) { WorkerClaimQueue() }
     }
 }

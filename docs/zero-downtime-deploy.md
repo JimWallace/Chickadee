@@ -226,8 +226,11 @@ mechanism without moving any student traffic:
    registry's `:latest`, which can be older) so
    it grades in lockstep with the server instead of drifting on a stale build.
    The runner polls and has no inbound traffic, so a rolling restart is the right
-   model — no blue-green needed — and any job interrupted by the brief restart is
-   re-queued by the server's `StuckSubmissionReaperMonitor`. Best-effort: this
+   model — no blue-green needed. The restart drains the runner first (cordon and
+   drain): on SIGTERM it claims no new job and finishes the jobs it is running,
+   for up to its `stop_grace_period` of 10 minutes, while other runners take new
+   jobs. A job still running after that is killed and re-queued by the server's
+   `StuckSubmissionReaperMonitor`. Best-effort: this
    runs only after the server swap is already verified healthy, so a runner hiccup
    is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
    Disable with `CHICKADEE_REFRESH_RUNNER=0`. Because this step is best-effort, a
@@ -235,9 +238,13 @@ mechanism without moving any student traffic:
    `runnerVersionSkew` health alert is the backstop — it pages (severity
    `warning` since 2026-10-06, because a stale runner can lack a sandbox fix
    that the minimum-version gate does not cover) once a runner stays
-   behind the server past `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` (default 900s),
-   which is set generously so the *expected* transient skew during this very step
-   never fires.
+   behind the server past `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` (default
+   1800s), which is set generously so the *expected* skew during this step, a
+   drain, and a runner host's 10-minute update job never fires. The alert for a
+   real problem is `unclaimableJobs` ("Jobs no runner can grade"): it fires when a
+   job has waited 5 minutes and no online runner may grade it, by the same
+   decision the claim walk makes, and it names the reason, for example an
+   assignment's `minimumRunnerVersion`.
 10. **Failures back off.** A refused swap, a rollback and a failed required
     snapshot all count as failures of that version. The next attempt waits
     `POLL_INTERVAL_SECS`, then twice that, doubling up to one hour. Five in a
@@ -286,11 +293,23 @@ chickadee-deployer`.
 
 The server reads `status.json` from the read-only deploy state mount
 (`DeployerHealthRule.swift`). The rule pages (severity `warning`) when the
-daemon reports `stuck`, `error` or `certificate_invalid`, and when the daemon
+daemon reports `stuck`, `error`, `certificate_invalid` or `disk_low`, and when the daemon
 has not written its status for 30 minutes, which means it has stopped: it writes
 on every poll. A paused daemon does not fire, and neither does a deployment
 with no status file. Until this rule, those states showed only to someone who
 asked the admin MCP.
+
+### Free disk space before a deploy (`disk_low`)
+
+A deploy pulls a release image of about 5 GB, and the predeploy snapshot comes on
+top. On 2026-10-07 old images and snapshots filled the disk, Postgres stopped and
+the site went down. So before each deploy the daemon checks the free space on
+Docker's data root and on the clone (`backups/`), and uses the smaller. Below
+10 GiB it removes images that no container uses and old snapshots
+(`scripts/lib/snapshot-retention.sh`), then checks again. If there is still not
+enough, it holds the deploy: the state is `disk_low`, the history says why once
+per release, and the deploy runs on the first poll after space is freed. The
+server's `deployerUnhealthy` rule pages on `disk_low`.
 
 ### App ⇄ daemon IPC (files in `STATE_DIR`)
 
@@ -300,7 +319,7 @@ asked the admin MCP.
   `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
   says when the next one is), `stuck` (five failures in a row, or two hours
   waiting for an image) and `certificate_invalid` (deployed, but the public
-  certificate failed verification; step 8).
+  certificate failed verification; step 8) and `disk_low` (see below).
 - `history.jsonl` — append-only deploy log.
 - `deployed_version` — the daemon's source of truth for what is live.
 

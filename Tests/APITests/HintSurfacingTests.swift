@@ -37,6 +37,7 @@ import Testing
 
         let props = TestProperties(
             testSuites: [rawWithHint, rawNoHint],
+            language: nil,
             patternFamilies: [family],
             notebookChecks: [check])
 
@@ -66,7 +67,7 @@ import Testing
             cases: [
                 PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))
             ])
-        let props = TestProperties(patternFamilies: [family])
+        let props = TestProperties(language: nil, patternFamilies: [family])
         #expect(buildHintByFilename(props).isEmpty)
     }
 }

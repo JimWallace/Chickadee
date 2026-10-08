@@ -107,7 +107,7 @@ enum MCPServerInstructions {
     static let text = operationalGuide + "\n\n" + authoringVoice
 
     /// The languages an assignment can be authored in, as prose ("Python, R,
-    /// Lua, Octave, C++ or Racket"), DERIVED from `AssignmentLanguage.allCases`.
+    /// Lua, Octave, C++, Racket or Java"), DERIVED from `AssignmentLanguage.allCases`.
     ///
     /// Interpolated into the guide rather than typed into it. This prose is
     /// served to every connecting agent and no compiler or `allCases` test can
@@ -165,7 +165,7 @@ enum MCPServerInstructions {
         mix of assignments and content items renumbered together), or reorder_assignments / \
         reorder_content_items for a section that holds only that one type.
         - Course content item — ungraded reference material shown to students inside a course section \
-        alongside assignments: a link, notebook, document, slides, outline, or heading, each with a \
+        alongside assignments: a \(MCPEnumProse<ContentItemKind>.orList), each with a \
         title and one or more labelled links ({label, url}; http(s) or site-relative only). It owns no \
         test setup, so creating or editing one never validates, re-grades, or closes anything. List with \
         list_content_items, create with create_content_item (optionally into a course section via \
@@ -196,7 +196,7 @@ enum MCPServerInstructions {
         write one with author_script(tier:"support") — \
         passing the body inline as content, or, for a data file too large to inline faithfully (e.g. a \
         big CSV), passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
-        no private/loopback/metadata hosts, no redirects, 8 MB cap, UTF-8 body). \
+        no private/loopback/metadata hosts, no redirects, \(SupportFileURLFetcher.maxBytesText) cap, UTF-8 body). \
         Confirm a data file is bundled before authoring checks that load it. A support data file can \
         also be marked as a per-student DATASET with set_dataset: each student then receives a \
         deterministic per-seed sample of its rows under the same filename (the uploaded file becomes \
@@ -319,6 +319,8 @@ enum MCPServerInstructions {
         queued -> running -> done progress over an SSE connection), then re-open with \
         update_assignment(visibility:"open") — or visibility:"preview" to beta-test as staff first — \
         once it passes (opening and previewing are refused until it does). \
+        To re-run validation without an edit, or to see how one runner grades the suite, call \
+        run_validation (optionally with runnerID); it changes no content and closes nothing. \
         When validation fails, call get_validation_result for the per-test outcomes of your reference \
         solution's latest run — each check's status plus shortResult/longResult, across all tiers — so \
         you can see which check failed and why before fixing the suite or solution. It is \

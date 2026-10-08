@@ -24,7 +24,9 @@
 // So the wrapper re-creates the process contract inside one R session:
 //
 //   * `quit`/`q` are masked in the global environment with a function that
-//     signals a `chickadee_exit` condition carrying the status.  test_runtime.R
+//     signals a `chickadee_exit` condition carrying the status.  It is not an
+//     `error`, so a test's own `tryCatch(..., error = )` or `try()` does not
+//     catch it, just as neither catches a real `quit()` under Rscript (#2386).  test_runtime.R
 //     resolves `quit` through its enclosure (the global environment), so the
 //     mask is what its helpers call — no edit to test_runtime.R is needed, and
 //     the canonical copy stays byte-identical across both runners.
@@ -216,6 +218,47 @@
         return root.ChickadeeGradingShared.makeNonce();
     }
 
+    // Each native test is a fresh `Rscript` process; in the browser every
+    // script shares one kernel. `runScriptR` already empties the global
+    // environment per script. This cell, run before every script
+    // (`beforeEachScript`), puts back the process state outside it (#2384):
+    //
+    //   * the working directory, so a test that calls `setwd()` does not move
+    //     every later test;
+    //   * the environment variables, so a `Sys.setenv()` does not leak, and a
+    //     variable that a test added is removed again;
+    //   * `options()`, so `options(digits = 3)` does not change how every
+    //     later test prints numbers.
+    //
+    // The state is recorded the first time the cell runs, which is after the
+    // seed and before the first script. The record lives in an attached
+    // environment, which the per-script `rm(list = ls(globalenv()))` does not
+    // reach. Attached packages are kept on purpose: a re-attach is free, and
+    // an on-demand install relies on it.
+    function resetCellR(workDir) {
+        return `local({
+  if (!("chickadee:state" %in% search())) {
+    .ck_state <- attach(NULL, name = "chickadee:state")
+    assign("env", unclass(Sys.getenv()), envir = .ck_state)
+    assign("options", options(), envir = .ck_state)
+  }
+  setwd(${rStringLiteral(workDir)})
+  .ck_state <- as.environment("chickadee:state")
+  .ck_env <- get("env", envir = .ck_state)
+  .ck_now <- unclass(Sys.getenv())
+  .ck_added <- setdiff(names(.ck_now), names(.ck_env))
+  if (length(.ck_added) > 0) Sys.unsetenv(.ck_added)
+  .ck_changed <- names(.ck_env)[is.na(.ck_now[names(.ck_env)]) |
+                                  .ck_now[names(.ck_env)] != .ck_env]
+  if (length(.ck_changed) > 0) do.call(Sys.setenv, as.list(.ck_env[.ck_changed]))
+  .ck_options <- get("options", envir = .ck_state)
+  .ck_new <- setdiff(names(options()), names(.ck_options))
+  if (length(.ck_new) > 0) options(stats::setNames(vector("list", length(.ck_new)), .ck_new))
+  options(.ck_options)
+  invisible(NULL)
+})`;
+    }
+
     // The R source for grading ONE script.  See the header for why this is a
     // single `local({ ... })` and how it re-creates the Rscript contract.
     function runScriptR(scriptName, nonce) {
@@ -225,7 +268,7 @@
   .ck_g <- globalenv()
   rm(list = ls(.ck_g, all.names = TRUE), envir = .ck_g)
   assign("quit", function(save = "default", status = 0L, runLast = TRUE) {
-    stop(structure(class = c("chickadee_exit", "error", "condition"),
+    stop(structure(class = c("chickadee_exit", "condition"),
                    list(message = "chickadee_exit", call = NULL,
                         status = as.integer(status))))
   }, envir = .ck_g)
@@ -310,6 +353,7 @@
         assignmentSeedR: assignmentSeedR,
         makeNonce: makeNonce,
         runScriptR: runScriptR,
+        resetCellR: resetCellR,
         parseRunOutput: parseRunOutput,
         personalizationInputsSourceR: personalizationInputsSourceR,
     };

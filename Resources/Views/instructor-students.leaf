@@ -85,17 +85,7 @@ Students
                 #if(rosterReadOnly):
                 #(student.role)
                 #else:
-                <form method="post" action="/courses/#(currentUser.activeCourse.id)/role/#(student.id)" class="inline-form form-flush">
-                    #csrfFormField()
-                    <label class="visually-hidden" for="role-#(student.id)">Role for #(student.displayName)</label>
-                    <span class="state-select" data-state="#(student.role)">
-                        <select id="role-#(student.id)" name="role" class="form-input" data-ck-submit-on-change>
-                            <option value="student"#if(student.role == "student"): selected#endif>Student</option>
-                            <option value="ta"#if(student.role == "ta"): selected#endif>TA</option>
-                            <option value="instructor"#if(student.role == "instructor"): selected#endif>Instructor</option>
-                        </select>
-                    </span>
-                </form>
+                #extend("_role-select", student.roleSelect)
                 #endif
             </td>
             <td class="item-actions-td">

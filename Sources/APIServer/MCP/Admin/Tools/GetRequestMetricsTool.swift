@@ -50,11 +50,13 @@ struct GetRequestMetricsTool: DiagnosticTool {
     }
 
     static let name = "get_request_metrics"
+    static let windowBound = MCPBoundedInt(default: 24, max: 720)
+    static let limitBound = MCPBoundedInt(default: 15, max: 100)
     static let description =
         "HTTP request-timing aggregates over a window: total requests, counts by status class "
         + "(2xx/3xx/4xx/5xx), an overall duration summary (avg/p50/p95), and the slowest routes by "
-        + "P95 (with request count, error count, and max duration). Optional windowHours (default 24, "
-        + "max 720), pathPrefix filter, and limit. Captured for /api/*, /submissions/*, /testsetups/* "
+        + "P95 (with request count, error count, and max duration). Optional windowHours "
+        + "\(windowBound.rangeText), pathPrefix filter, and limit. Captured for /api/*, /submissions/*, /testsetups/* "
         + "(all paths under verbose timing). Read-only; id-like path segments are normalized to \":id\" "
         + "so only per-route shapes are reported — never a row-level identifier. The pathPrefix filter "
         + "is matched against the normalized route (a concrete id in the prefix collapses to :id), so "
@@ -62,27 +64,19 @@ struct GetRequestMetricsTool: DiagnosticTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "windowHours": .object([
-                "type": .string("integer"),
-                "description": .string("Look-back window in hours (default 24, max 720)."),
-            ]),
+            "windowHours": Self.windowBound.property("Look-back window in hours"),
             "pathPrefix": .object([
                 "type": .string("string"),
                 "description": .string("Optional path prefix filter, e.g. \"/api/\"."),
             ]),
-            "limit": .object([
-                "type": .string("integer"),
-                "description": .string("Max slowest-routes rows (default 15, max 100)."),
-            ]),
+            "limit": Self.limitBound.property("Max slowest-routes rows"),
         ]),
         "additionalProperties": .bool(false),
     ])
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        try await context.requireAdminSubject()
-
-        let windowHours = min(max(input.windowHours ?? 24, 1), 720)
-        let limit = min(max(input.limit ?? 15, 1), 100)
+        let windowHours = Self.windowBound.resolve(input.windowHours)
+        let limit = Self.limitBound.resolve(input.limit)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 
         var rows = try await APIRequestMetric.query(on: context.db)

@@ -33,6 +33,7 @@ import VaporTesting
     private func hillManifest(opponentFile: String? = nil) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .kingOfTheHill, opponentFile: opponentFile),
             achievements: [ActivityAuthoring.seededChampionRecord])
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
@@ -294,6 +295,7 @@ import VaporTesting
                 manifest: try {
                     let props = TestProperties(
                         testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+                        language: nil,
                         activity: ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py"))
                     return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
                 }())

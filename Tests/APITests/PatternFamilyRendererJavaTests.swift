@@ -47,8 +47,7 @@ import Testing
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let repoRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let runtime = repoRoot.appendingPathComponent("Tools/runner-support/test_runtime.java")
+        let runtime = repositoryRoot.appendingPathComponent("Tools/runner-support/test_runtime.java")
         try FileManager.default.copyItem(
             at: runtime, to: dir.appendingPathComponent("test_runtime.java"))
         try submission.write(

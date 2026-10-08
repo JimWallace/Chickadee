@@ -32,3 +32,7 @@ export {
 export { python } from "@codemirror/lang-python";
 export { shell } from "@codemirror/legacy-modes/mode/shell";
 export { r } from "@codemirror/legacy-modes/mode/r";
+export { lua } from "@codemirror/legacy-modes/mode/lua";
+export { octave } from "@codemirror/legacy-modes/mode/octave";
+export { scheme } from "@codemirror/legacy-modes/mode/scheme";
+export { java, cpp } from "@codemirror/legacy-modes/mode/clike";

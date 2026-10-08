@@ -51,7 +51,7 @@
             <label id="family-reference-label" class="field-stack" style="display:none">
                 Reference implementation
                 <span class="label-note">(required — define <code>ck_ref_&lt;function&gt;</code> taking the same arguments; each case&#39;s expected value is whatever it returns, so leave the Expected column blank)</span>
-                <textarea class="form-input editor-input family-reference-input" id="family-reference-implementation"
+                <textarea class="form-input editor-input" id="family-reference-implementation"
                           rows="8" spellcheck="false"
                           placeholder="def ck_ref_classify(bmi):&#10;    ..."></textarea>
             </label>

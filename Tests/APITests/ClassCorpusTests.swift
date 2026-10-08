@@ -64,6 +64,7 @@ import VaporTesting
             ] : []
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "test_corpus.sh")],
+            language: nil,
             achievements: goals)
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }

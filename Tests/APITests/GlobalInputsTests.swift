@@ -120,9 +120,11 @@ import Testing
     }
 
     @Test func prepender_applyForRawScript_skipsNonPython() {
-        let manifest = TestProperties(globalVariables: [
-            FamilyVariable(name: "x", value: .int(1))
-        ])
+        let manifest = TestProperties(
+            language: nil,
+            globalVariables: [
+                FamilyVariable(name: "x", value: .int(1))
+            ])
         let body = "echo hi"
         let result = TestScriptVariablePrepender.applyForRawScript(
             filename: "test.sh",
@@ -140,6 +142,7 @@ import Testing
         let entry = TestSuiteEntry(tier: .pub, script: "t.py", sectionID: "sec1")
         let manifest = TestProperties(
             testSuites: [entry],
+            language: nil,
             sections: [section],
             globalVariables: [FamilyVariable(name: "g", value: .int(7))]
         )
@@ -341,6 +344,7 @@ import Testing
 
     @Test func testProperties_globalVariablesRoundTrip() throws {
         let props = TestProperties(
+            language: nil,
             globalVariables: [
                 FamilyVariable(name: "quotes", value: .array([.string("hi"), .string("hi")])),
                 FamilyVariable(name: "n", value: .int(42)),
@@ -364,6 +368,7 @@ import Testing
 
     @Test func testProperties_runnerSanitizedPreservesGlobalVariables() {
         let props = TestProperties(
+            language: nil,
             globalVariables: [FamilyVariable(name: "x", value: .int(1))]
         )
         let sanitized = props.runnerSanitized()

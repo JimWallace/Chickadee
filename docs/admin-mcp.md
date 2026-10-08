@@ -234,9 +234,24 @@ differ):
     `AdminToolContext`) that shares only the dispatcher's JSON-RPC plumbing.
     More duplication, but zero risk to the shipped surface.
 
-  Lean **(b)** for v1 (isolation over DRY while the content surface is in
-  production), and revisit (a) as a later refactor if the duplication bites.
-  The exact factoring is an implementation detail to settle in the build phase.
+  v1 shipped **(b)**. The copies drifted: the two erasures mapped errors
+  differently (#2338), and the routing, the tools/list and tools/call code and
+  the POST handling were repeated. #2339 moved to **(a)**:
+
+  - One tool protocol, `MCPTool`, with an associated `Surface` that names the
+    scope type, the context type and the per-tool traits. `ContentTool` and
+    `DiagnosticTool` fix the surface.
+  - One erased type, `AnyMCPTool<Surface>`. `AnyContentTool` and
+    `AnyDiagnosticTool` are type aliases.
+  - One tools/call implementation (`mcpToolsCallResponse`), with surface hooks
+    (`MCPSurface`). `ContentMCPSurface` persists a write's audit row first and
+    snapshots the content the write changed. `AdminMCPSurface` checks the
+    admin role again.
+  - One POST handler (`MCPTransport.serve`).
+
+  The scope types stay distinct, so isolation still holds at compile time. A
+  content token cannot satisfy an admin tool's check, and a tool of one
+  surface cannot be registered on the other.
 
 ---
 

@@ -243,11 +243,12 @@ import Testing
     /// hunt's variants, so coverage would fill from tests the goal is
     /// deliberately scoped away from.
     @Test func sectionScopedItemNamesComeFromThatSectionOnly() {
-        let props = TestProperties(testSuites: [
-            TestSuiteEntry(tier: .pub, script: "publictest_variant_a.py", sectionID: "bughunt"),
-            TestSuiteEntry(tier: .pub, script: "publictest_variant_b.py", sectionID: "bughunt"),
-            TestSuiteEntry(tier: .pub, script: "publictest_wellformed.py", sectionID: "gate"),
-        ])
+        let props = TestProperties(
+            testSuites: [
+                TestSuiteEntry(tier: .pub, script: "publictest_variant_a.py", sectionID: "bughunt"),
+                TestSuiteEntry(tier: .pub, script: "publictest_variant_b.py", sectionID: "bughunt"),
+                TestSuiteEntry(tier: .pub, script: "publictest_wellformed.py", sectionID: "gate"),
+            ], language: nil)
         let scoped = props.coveredItemNames(
             inScopeOf: AchievementTarget(kind: .section, ref: "bughunt"))
         #expect(scoped == ["publictest_variant_a", "publictest_variant_b"])

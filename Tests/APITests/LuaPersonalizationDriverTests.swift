@@ -60,7 +60,8 @@ import Testing
     /// generated script does.
     static func testRuntimeLuaSource() throws -> String {
         try String(
-            contentsOf: LanguageConformanceMatrixTests.repoRoot
+            contentsOf:
+                repositoryRoot
                 .appendingPathComponent("Tools/runner-support/test_runtime.lua"),
             encoding: .utf8)
     }

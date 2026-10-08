@@ -227,3 +227,52 @@ test('the authoring editors take the amber-cue title from looseValueTitle', asyn
     assert.doesNotMatch(source, /bare string\. Wrap in quotes/, name + ' still carries the old two-sentence title');
   }
 });
+
+// #2381: a family case cell shows a string bare only when reading the bare
+// text back gives the same string. Before, `"42"` showed as 42 and saved as
+// the number 42, and R's `"TRUE"` saved as the boolean.
+for (const [label, seed] of [['Python', null], ['R', R_SEED]]) {
+  test(`stringCellText round-trips every string in ${label}`, () => {
+    const lang = loadWith(seed);
+    const strings = ['underweight', 'hello world', '42', '-3.5', 'true', 'TRUE', 'False',
+      'null', 'NULL', 'None', '[1, 2]', '{"a": 1}', '$name', 'line one\nline two',
+      'tab\there', '"already quoted"', "it's"];
+    for (const s of strings) {
+      const text = lang.stringCellText(s);
+      const back = lang.parseValue(text, { rewriteRepr: false });
+      assert.equal(back.ok, true, `${JSON.stringify(s)} shows as ${text}, which does not parse`);
+      assert.equal(back.value, s, `${JSON.stringify(s)} shows as ${text} and reads back as ${JSON.stringify(back.value)}`);
+      assert.doesNotMatch(text, /^\$\S+$/, `${JSON.stringify(s)} must not show as a $name reference`);
+    }
+  });
+}
+
+test('stringCellText shows an ordinary string without quotes', () => {
+  const lang = loadWith(R_SEED);
+  assert.equal(lang.stringCellText('underweight'), 'underweight');
+  assert.equal(lang.stringCellText('hello world'), 'hello world');
+  assert.equal(lang.stringCellText('42'), '"42"');
+  assert.equal(lang.stringCellText('TRUE'), '"TRUE"');
+  // The caller decides what an empty cell means, so an empty string stays empty.
+  assert.equal(lang.stringCellText(''), '');
+});
+
+test('scriptLanguageFor reads the seeded extension map, case-insensitively', () => {
+  const lang = loadWith({ ...R_SEED, languageByScriptExtension: { py: 'python', r: 'r', m: 'octave' } });
+  assert.equal(lang.scriptLanguageFor('helper.R'), 'r');
+  assert.equal(lang.scriptLanguageFor('test_a.py'), 'python');
+  assert.equal(lang.scriptLanguageFor('solution.m'), 'octave');
+  assert.equal(lang.scriptLanguageFor('test_a.sh'), null);
+  assert.equal(lang.scriptLanguageFor('Makefile'), null);
+  assert.equal(lang.scriptLanguageFor(''), null);
+});
+
+test('a language-less assignment still carries the extension map', () => {
+  const lang = loadWith({ name: null, languageByScriptExtension: { r: 'r' } });
+  assert.equal(lang.scriptLanguageFor('helper.R'), 'r');
+});
+
+test('a page with no seed knows no extension', () => {
+  const lang = loadWith(null);
+  assert.equal(lang.scriptLanguageFor('test_a.py'), null);
+});

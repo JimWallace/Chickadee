@@ -14,13 +14,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct LuaProgramIOTests {
 
-    private static var repoRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // APITests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
-    }
-
     private func grade(
         _ submission: String, stdin: String = "3\n4\n", expected: String = "7",
         comparison: ProgramIOComparison? = nil
@@ -36,7 +29,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let runtime = try String(
-            contentsOf: Self.repoRoot.appendingPathComponent("Tools/runner-support/test_runtime.lua"),
+            contentsOf: repositoryRoot.appendingPathComponent("Tools/runner-support/test_runtime.lua"),
             encoding: .utf8)
         try runtime.write(to: dir.appendingPathComponent("test_runtime.lua"), atomically: true, encoding: .utf8)
         try script.source.write(to: dir.appendingPathComponent(script.filename), atomically: true, encoding: .utf8)

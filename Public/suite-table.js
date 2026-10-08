@@ -44,73 +44,55 @@
         return document.getElementById('suite-sections');
     }
 
-    // ── Upload classification (folded in from the retired suite-list.js,
-    // #1126 — that file was ~90% dead; only this classification survived) ──
-    //
-    // NO LONGER DECIDES ANYTHING. The upload below sends no tier and no
-    // `isTest`, so the server decides with `isLikelyTestSuiteScript`, the rule
-    // its multipart upload already used. This list had gone stale and filed
-    // Lua, Octave, Racket and Java tests as support files (#1960). The helpers
-    // stay only because Tests/BrowserRunnerJSTests/suite-table.test.mjs tests
-    // them; deleting both is a test change that waits for the maintainer.
-
-    var SCRIPT_EXTS = ['sh','bash','zsh','py','r','rb','pl','js','php'];
-    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
-                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
-                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
-
-    function extensionOf(name) {
-        var base = String(name || '').split('/').pop();
-        var dot = base.lastIndexOf('.');
-        return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
-    }
-
-    function isLikelyScriptName(name) {
-        return SCRIPT_EXTS.indexOf(extensionOf(name)) >= 0;
-    }
-
-    function hasRecognizedScriptShebang(text) {
-        var firstLine = String(text || '').split(/\r?\n/, 1)[0].trim().toLowerCase();
-        if (firstLine.indexOf('#!') !== 0) return false;
-        return /(^#!\s*\/.*\/(ba|z)?sh\b)|(^#!\s*\/usr\/bin\/env\s+(ba|z)?sh\b)|(^#!.*\bpython[0-9.]*\b)/.test(firstLine);
-    }
-
-    function classify(name, content, size) {
-        var ext = extensionOf(name);
-        var hasExt = ext.length > 0;
-        var binary = BINARY_EXTS.indexOf(ext) >= 0;
-        var scriptShebang = !hasExt && hasRecognizedScriptShebang(content || '');
-        var isScript = isLikelyScriptName(name) || scriptShebang;
-        var errs = [];
-        if (binary) errs.push('Binary file — unlikely to work as a test script');
-        if (!hasExt && !scriptShebang) {
-            errs.push('No extension or recognized shebang; this file will be included as support unless marked as a test');
-        }
-        if (size === 0) errs.push('Empty file');
-        return {
-            isScript: isScript,
-            tier: isScript ? 'public' : 'support',
-            errors: errs
-        };
-    }
-
-    function classifyFile(file) {
-        if (!file) return Promise.resolve(classify('', '', 0));
-        var ext = extensionOf(file.name);
-        if (ext) return Promise.resolve(classify(file.name, '', file.size));
-        var reader = typeof file.text === 'function'
-            ? file.text()
-            : Promise.resolve('');
-        return reader
-            .then(function (text) { return classify(file.name, text, file.size); })
-            .catch(function () { return classify(file.name, '', file.size); });
-    }
-
     // Module-level, deliberately outside initSuiteTable: these gate listeners
     // that live on `document`/`window` rather than on the swapped subtree, so
     // they must survive re-initialisation rather than be reset by it.
     var boundDocumentDragover = false;
     var boundPageshow = false;
+
+    /// The rows of one section, in display order: each root, then every item
+    /// that depends on it, directly or through a chain. A chain still shows
+    /// one indent level, because the table has only one; the descendants keep
+    /// their order. Before #2385 only direct children were added, so a test
+    /// two levels down (C depends on B, B depends on A) had no row at all,
+    /// though it still graded. An item whose parents form a cycle, which the
+    /// server refuses, is shown as a root rather than hidden.
+    function visualOrder(sectionItems) {
+        var byID = {};
+        sectionItems.forEach(function (it) { byID[it.id] = it; });
+        var childMap = {};
+        sectionItems.forEach(function (it) {
+            if (it.dependsOn && it.dependsOn.length > 0) {
+                var p = it.dependsOn[0];
+                if (byID[p]) {
+                    childMap[p] = childMap[p] || [];
+                    childMap[p].push(it);
+                }
+            }
+        });
+        var result = [];
+        var placed = {};
+        function addDescendants(id) {
+            (childMap[id] || []).forEach(function (child) {
+                if (placed[child.id]) return;
+                placed[child.id] = true;
+                result.push({ item: child, depth: 1 });
+                addDescendants(child.id);
+            });
+        }
+        function addRoot(root) {
+            if (placed[root.id]) return;
+            placed[root.id] = true;
+            result.push({ item: root, depth: 0 });
+            addDescendants(root.id);
+        }
+        sectionItems.filter(function (it) {
+            if (!it.dependsOn || it.dependsOn.length === 0) return true;
+            return !byID[it.dependsOn[0]];
+        }).forEach(addRoot);
+        sectionItems.forEach(addRoot);
+        return result;
+    }
 
     // Which drop indicator belongs on a row the pointer is over.
     //
@@ -367,30 +349,7 @@
         /// indent — cross-section deps are allowed but don't render as
         /// visual parenting (the indent would span tables).
         function visualOrderForSection(sid) {
-            var sectionItems = itemsInSection(sid);
-            var byID = {};
-            sectionItems.forEach(function (it) { byID[it.id] = it; });
-            var childMap = {};
-            sectionItems.forEach(function (it) {
-                if (it.dependsOn && it.dependsOn.length > 0) {
-                    var p = it.dependsOn[0];
-                    if (byID[p]) {
-                        childMap[p] = childMap[p] || [];
-                        childMap[p].push(it);
-                    }
-                }
-            });
-            var result = [];
-            sectionItems.filter(function (it) {
-                if (!it.dependsOn || it.dependsOn.length === 0) return true;
-                return !byID[it.dependsOn[0]];
-            }).forEach(function (root) {
-                result.push({ item: root, depth: 0 });
-                (childMap[root.id] || []).forEach(function (child) {
-                    result.push({ item: child, depth: 1 });
-                });
-            });
-            return result;
+            return visualOrder(itemsInSection(sid));
         }
 
         function tierOptions(selected) {
@@ -415,7 +374,7 @@
             var nameVal   = escAttr(item.displayName || stemOf(item.script));
             return '<tr data-id="' + escAttr(item.id) + '" data-kind="script" data-source="existing">'
                 + '<td' + indent + '><div class="suite-name-cell">'
-                +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
+                +   '<span class="suite-drag-handle" draggable="true" aria-hidden="true">⋮⋮</span>'
                 +   connector
                 +   '<input type="text" class="form-input cell-input suite-name-input js-suite-display-name" value="' + nameVal + '">'
                 +   depBadgeHTML(item.dependsOn)
@@ -442,7 +401,7 @@
             var tier = defaults.tier || 'public';
             return '<tr data-id="' + escAttr(item.id) + '" data-kind="family" data-source="family" data-family-id="' + escAttr(family.id || '') + '">'
                 + '<td' + indent + '><div class="suite-name-cell">'
-                +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
+                +   '<span class="suite-drag-handle" draggable="true" aria-hidden="true">⋮⋮</span>'
                 +   connector
                 +   '<div class="cell-stack">'
                 +     '<strong class="cell-title">' + escHtml(family.name || family.id || '') + '</strong>'
@@ -473,7 +432,7 @@
             var points = Math.max(0, parseInt(check.points) || 0);
             return '<tr data-id="' + escAttr(item.id) + '" data-kind="check" data-source="check" data-check-id="' + escAttr(check.id || '') + '">'
                 + '<td' + indent + '><div class="suite-name-cell">'
-                +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder">⋮⋮</span>'
+                +   '<span class="suite-drag-handle" draggable="true" aria-hidden="true">⋮⋮</span>'
                 +   connector
                 +   '<div class="cell-stack">'
                 +     '<strong class="cell-title">' + escHtml(label) + '</strong>'
@@ -1816,15 +1775,12 @@
 
     global.initSuiteTable = initSuiteTable;
 
-    // Node export for the .mjs unit tests (the pure classification helpers
-    // only — everything else is DOM-bound).
+    // Node export for the .mjs unit tests (the pure helpers only — everything
+    // else is DOM-bound).
     if (typeof module === 'object' && module.exports) {
         module.exports = {
-            classify: classify,
             dropZoneFor: dropZoneFor,
-            classifyFile: classifyFile,
-            isLikelyScriptName: isLikelyScriptName,
-            hasRecognizedScriptShebang: hasRecognizedScriptShebang,
+            visualOrder: visualOrder,
             // Exported for the config-validation test only. Everything past
             // the urls check is DOM-bound and is not callable under node.
             initSuiteTable: initSuiteTable

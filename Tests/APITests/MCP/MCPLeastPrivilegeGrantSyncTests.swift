@@ -10,6 +10,7 @@
 // through `MCPStudentDataBoundary` (or its blob side table) is missing a
 // SELECT grant or its row-level-security policy.
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -19,9 +20,7 @@ import Testing
     /// `deploy/sql/mcp-least-privilege-role.sql`, resolved from this test
     /// file's location (same technique as MCPStudentDataWallTests).
     private static var grantsFile: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("deploy/sql/mcp-least-privilege-role.sql")
+        repositoryRoot.appendingPathComponent("deploy/sql/mcp-least-privilege-role.sql")
     }
 
     /// Student-data tables the MCP read path queries: the two the boundary

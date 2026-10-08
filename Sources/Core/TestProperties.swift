@@ -552,7 +552,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         timeLimitSeconds: Int = 10,
         makefile: MakefileConfig? = nil,
         starterNotebook: String? = nil,
-        language: AssignmentLanguage? = nil,
+        language: AssignmentLanguage?,
         languageDeclared: Bool? = nil,
         minimumRunnerVersion: String? = nil,
         activity: ClassActivity? = nil,

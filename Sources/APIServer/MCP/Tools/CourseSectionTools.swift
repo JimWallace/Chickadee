@@ -253,22 +253,8 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         // Resolve + validate the target section against this assignment's course.
         // A non-empty id that doesn't resolve is rejected rather than silently
         // ungrouping, so a typo'd id surfaces as an error to the agent.
-        let raw = input.courseSectionID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedSectionID: UUID?
-        if let raw, !raw.isEmpty, raw.lowercased() != "none" {
-            guard let uuid = UUID(uuidString: raw) else {
-                throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(raw)\" is not a valid id.")
-            }
-            guard let section = try await APICourseSection.find(uuid, on: context.db),
-                section.courseID == assignment.courseID
-            else {
-                throw MCPToolError.invalidArguments(
-                    detail: "No course section with id \"\(raw)\" in this assignment's course.")
-            }
-            resolvedSectionID = uuid
-        } else {
-            resolvedSectionID = nil
-        }
+        let resolvedSectionID = try await resolveCourseSectionID(
+            input.courseSectionID, inCourse: assignment.courseID, owner: "assignment", context: context)
 
         assignment.sectionID = resolvedSectionID
         // Append to the destination lane's shared (assignment + content) order so
@@ -460,9 +446,13 @@ struct DeleteCourseSectionTool: ContentTool {
         guard let uuid = UUID(uuidString: raw) else {
             throw MCPToolError.invalidArguments(detail: "courseSectionID \"\(raw)\" is not a valid id.")
         }
-        // Unknown id is an idempotent no-op (removed=false) — and reports nothing
-        // that distinguishes "doesn't exist" from "in a course you can't see".
-        guard let section = try await APICourseSection.find(uuid, on: context.db) else {
+        // An unknown id is an idempotent no-op (removed=false), and so is a
+        // section in a course the account is not enrolled in, so the answer
+        // does not tell "does not exist" from "in a course you cannot see"
+        // (#2342). A visible course still refuses a role that is too low.
+        guard let section = try await APICourseSection.find(uuid, on: context.db),
+            try await context.subjectIsEnrolled(in: section.courseID)
+        else {
             return Output(sectionID: raw, removed: false, ungroupedAssignmentCount: 0)
         }
         // Deleting a course section is instructor-level structure (#417); archived blocked too.
@@ -614,29 +604,3 @@ func resolveCourseSectionForEdit(
 // they are cross-surface utilities (also used by AuthorScriptTool,
 // SetGradingModeTool, and the web CourseAdminRoutes+Sections), not
 // course-section concerns.
-
-/// Resolves a course code or key to its course, enforcing that the acting
-/// account may act on it (read access).  Shared by the course-section tools,
-/// including the READ `list_course_sections` — so this must NOT carry the
-/// archived-write block.  Returns the course, not only its id, so a tool can
-/// report which offering a bare code resolved to (`courseKey`, `courseTerm`).
-func resolveCourse(code: String, context: ToolContext) async throws -> APICourse {
-    let course = try await resolveMCPCourse(key: code, context: context, forWrite: false)
-    try await context.authorizeCourseAccess(try course.requireID())
-    return course
-}
-
-/// Write variant of `resolveCourse`: resolves the course by code or key and
-/// authorizes a *write* to it (archived block).  Used by the course-section
-/// WRITE tools (create_course_section, reorder_course_sections, and
-/// reorder_assignments) so they can't mutate an archived course; the read
-/// `list_course_sections` stays on `resolveCourse` (#417 Slice D-MCP).
-func resolveCourseForWrite(
-    code: String, context: ToolContext, atLeast minimum: CourseRole
-) async throws -> APICourse {
-    let course = try await resolveMCPCourse(key: code, context: context, forWrite: true)
-    // Course-level structure edits (sections, assignment ordering, new
-    // assignments) are instructor-level (#417), matching the web.
-    try await context.authorizeCourseWriteAccess(try course.requireID(), atLeast: minimum)
-    return course
-}

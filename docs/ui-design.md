@@ -22,13 +22,14 @@ All tokens are CSS custom properties declared in the `:root` block of
 
 ### Colour
 
-- **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()` — may
-  only appear as the value of a `--token:` declaration in
-  `Public/styles.css`** — never in a rule body, and never in a page `<style>`
-  block.  Everything else uses `var(--x)`.  This is what makes dark mode
-  work: a hardcoded `#d4edda` success banner is invisible-text-on-dark
-  waiting to happen (that exact bug is why `--success-fg` / `--danger-fg`
-  exist).
+- **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()`, or a
+  CSS named colour such as `white` — may only appear as the value of a
+  `--token:` declaration in `Public/styles.css`** — never in a rule body, and
+  never in a page `<style>` block.  (`transparent` and `currentColor` are not
+  fixed colours and stay allowed.)  Everything else uses `var(--x)`.  This is
+  what makes dark mode work: a hardcoded `#d4edda` success banner is
+  invisible-text-on-dark waiting to happen (that exact bug is why
+  `--success-fg` / `--danger-fg` exist).
 - Prefer the **semantic** tokens (`--success-bg`/`--success-fg`,
   `--danger-bg`/`--danger-fg`, `--warning-bg`, `--open-bg`/`--open-fg`,
   `--accent-bg`/`--accent-fg`, `--muted`, `--text-secondary`, `--border`,
@@ -463,8 +464,9 @@ duplicate.
   control links to the panel's id and `:target` opens it.  A link from another
   page opens a panel the same way, so Cancel also sets `is-closed`, which wins
   over `:target`.
-- **`.section-items-seen`** — the Students list's last-seen track of a
-  `.section-items` list.
+- **`.section-items-seen`** — the last-seen (or last-active) track of a
+  `.section-items` list.  It is wide enough to hold the longest relative time
+  on one line, so a ticking time does not change the row height.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
   `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
   `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so
@@ -562,7 +564,9 @@ duplicate.
   `.suite-drag-handle` and `.suite-row-dragging`.  There the whole `<tr>` is
   the drag source (`section-items-dnd.js` sets `draggable` on the row, where
   the suite table sets it on the grip), so `tr[draggable="true"] td` carries
-  the grab cursor across the row and the grip is a signpost.
+  the grab cursor across the row and the grip is a signpost.  A control inside
+  such a row keeps `pointer`.  A row that navigates on click (`tr[data-href]`,
+  the instructor roster) shows `pointer` across the row.
 - **`.drop-zone`** (+ `.drag-over`, `.drop-filename`) — file-drop upload
   targets.  Unrelated to the reorder cues above despite the shared verb.
 - **`.card`**, `.notice-box`, `.error-box` — surfaces and callouts.
@@ -768,6 +772,14 @@ variants that exist nowhere and silently rendered as unstyled text.
   `chickadee-ui.js` scrapes out of fetch bodies) lives in the global sheet
   with a comment naming the contract — never in a page block where a rename
   looks safe.
+- **A modifier rule follows its base rule.** `.modal-card--confirm` and
+  `.modal-card` are both one class, so the later rule wins on each property
+  they share. A modifier placed above its base does nothing, and the page
+  still renders. Guard 4d in `scripts/check-styles.sh` fails CI when a rule
+  for `.x-mod` or `.x--mod` comes before a rule for `.x` that sets the same
+  property, and both names occur on one line of a template or a script.
+  Order decides only a tie: a more specific rule, such as
+  `textarea.form-input`, wins whatever the order.
 
 ## Page-local scripts
 
@@ -843,7 +855,7 @@ pattern above and is not counted (`workbench.js`'s `--wb-left-width` and
 
 A page `<style>` block is for styling that genuinely exists on one page only.
 
-- Class names are **role-named** (`.guide-textarea`, `.students-titlebar`), never
+- Class names are **role-named** (`.students-titlebar`), never
   utility-named (`.mt-1`, `.red-text`).
 - A page block may not re-define a selector from the global sheet
   (`.main` is the one allowlisted override).

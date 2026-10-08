@@ -18,6 +18,7 @@ import VaporTesting
     private func activityManifest(visible: Bool) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .bestMetric, leaderboardVisibility: visible ? .visible : .hidden))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
@@ -47,21 +48,12 @@ import VaporTesting
         return (viewer, classmate)
     }
 
-    private func get(_ path: String, cookie: String, on app: Application) async throws -> TestingHTTPResponse {
-        var captured: TestingHTTPResponse?
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in captured = res })
-        return try #require(captured)
-    }
-
     @Test func studentSeesHandlesAndRanksButNoRealNames() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let seeded = try await seedRankedClass(on: app, setupID: "lb_vis", visible: true)
 
-            let res = try await get("/testsetups/lb_vis/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_vis/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
             // Both rows appear under their handles, materialised on this view.
@@ -84,7 +76,7 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             _ = try await seedRankedClass(on: app, setupID: "lb_hid", visible: false)
-            let res = try await get("/testsetups/lb_hid/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_hid/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .notFound)
         }
     }
@@ -98,7 +90,7 @@ import VaporTesting
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
             try await wrEnrollUser(instructor, on: app)
 
-            let res = try await get("/testsetups/lb_staff/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_staff/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
             #expect(html.contains("Hidden from students"))
@@ -121,7 +113,7 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             _ = try await seedRankedClass(on: app, setupID: "setup_header", visible: true)
-            let res = try await get(
+            let res = try await getResponse(
                 "/testsetups/setup_header/leaderboard", cookie: cookie, on: app)
             // Strip HTML comments first: the question is not whether the
             // prose is in the bytes — a comment is — but whether any of it
@@ -158,7 +150,7 @@ import VaporTesting
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
             _ = try await wrInsertSetup(id: "lb_plain", on: app)
-            let res = try await get("/testsetups/lb_plain/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_plain/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .notFound)
         }
     }
@@ -167,7 +159,7 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             _ = try await seedRankedClass(on: app, setupID: "lb_van", visible: true)
-            let res = try await get("/cs101/race-lb-van/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/cs101/race-lb-van/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .seeOther)
             #expect(res.headers.first(name: .location) == "/testsetups/lb_van/leaderboard")
         }
@@ -188,9 +180,9 @@ import VaporTesting
             try await wrInsertResult(
                 submissionID: "sub_lb_hid", outcomes: [wrMakeOutcome(name: "m", status: .pass)], on: app)
 
-            let visible = try await get("/submissions/sub_lb_vis", cookie: cookie, on: app)
+            let visible = try await getResponse("/submissions/sub_lb_vis", cookie: cookie, on: app)
             #expect(visible.body.string.contains("/testsetups/lb_link_vis/leaderboard"))
-            let hidden = try await get("/submissions/sub_lb_hid", cookie: cookie, on: app)
+            let hidden = try await getResponse("/submissions/sub_lb_hid", cookie: cookie, on: app)
             #expect(!hidden.body.string.contains("/leaderboard"))
         }
     }
@@ -205,6 +197,7 @@ import VaporTesting
     private func hillManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .kingOfTheHill, leaderboardVisibility: .visible, opponentFile: "bot.py"))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
@@ -222,7 +215,7 @@ import VaporTesting
             let holder = try await makeTestUser(on: app, username: "lb_hill_holder", role: "student")
             try await wrEnrollUser(holder, on: app)
 
-            let empty = try await get("/testsetups/lb_hill/leaderboard", cookie: cookie, on: app)
+            let empty = try await getResponse("/testsetups/lb_hill/leaderboard", cookie: cookie, on: app)
             #expect(empty.status == .ok)
             #expect(empty.body.string.contains("No student holds the hill yet"))
 
@@ -230,7 +223,7 @@ import VaporTesting
                 testSetupID: "lb_hill", userID: try holder.requireID(), submissionID: "lb_hill_h",
                 crownedAt: Date(), defences: 3
             ).save(on: app.db)
-            let res = try await get("/testsetups/lb_hill/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_hill/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
             #expect(html.contains("Holds the hill"))
@@ -251,6 +244,7 @@ import VaporTesting
     private func robinManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .roundRobin, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
@@ -269,7 +263,7 @@ import VaporTesting
             let mate = try await makeTestUser(on: app, username: "lb_robin_mate", role: "student")
             try await wrEnrollUser(mate, on: app)
 
-            let empty = try await get("/testsetups/lb_robin/leaderboard", cookie: cookie, on: app)
+            let empty = try await getResponse("/testsetups/lb_robin/leaderboard", cookie: cookie, on: app)
             #expect(empty.status == .ok)
             #expect(empty.body.string.contains("No submission has played a match yet"))
             #expect(!empty.body.string.contains("ranking metric"))
@@ -282,7 +276,7 @@ import VaporTesting
                 testSetupID: "lb_robin", userID: try viewer.requireID(), submissionID: "lb_robin_v",
                 played: 4, wins: 1, draws: 0, losses: 3, scoreSum: 1, updatedAt: Date()
             ).save(on: app.db)
-            let res = try await get("/testsetups/lb_robin/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_robin/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
             #expect(html.contains("P 4 · W 3 · D 1 · L 0"))
@@ -311,6 +305,7 @@ import VaporTesting
     private func unionManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(
                 kind: .testsVersusImplementations, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
@@ -330,7 +325,7 @@ import VaporTesting
             let mate = try await makeTestUser(on: app, username: "lb_union_mate", role: "student")
             try await wrEnrollUser(mate, on: app)
 
-            let empty = try await get("/testsetups/lb_union/leaderboard", cookie: cookie, on: app)
+            let empty = try await getResponse("/testsetups/lb_union/leaderboard", cookie: cookie, on: app)
             #expect(empty.status == .ok)
             #expect(empty.body.string.contains("No student has submitted yet"))
 
@@ -354,7 +349,7 @@ import VaporTesting
             row.completedAt = Date()
             try await row.save(on: app.db)
 
-            let res = try await get("/testsetups/lb_union/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_union/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
             #expect(html.contains("1 of 2 submissions defeated so far."))
@@ -376,6 +371,7 @@ import VaporTesting
     private func tournamentManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .elimination, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }
@@ -396,7 +392,7 @@ import VaporTesting
             let third = try await makeTestUser(on: app, username: "lb_cup_third", role: "student")
             try await wrEnrollUser(third, on: app)
 
-            let empty = try await get("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
+            let empty = try await getResponse("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
             #expect(empty.status == .ok)
             #expect(empty.body.string.contains("No tournament has been run yet"))
 
@@ -419,7 +415,7 @@ import VaporTesting
                 matchSubmissionID: "lb_cup_match", completedAt: nil
             ).save(on: app.db)
 
-            let res = try await get("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
             #expect(html.contains("Round 1"))
@@ -438,7 +434,7 @@ import VaporTesting
             run.status = APITournamentRun.Status.complete
             run.winnerUserID = try mate.requireID()
             try await run.update(on: app.db)
-            let done = try await get("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
+            let done = try await getResponse("/testsetups/lb_cup/leaderboard", cookie: cookie, on: app)
             #expect(done.body.string.contains("Winner"))
             #expect(done.body.string.contains("complete after 2 rounds"))
         }

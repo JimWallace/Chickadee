@@ -195,9 +195,13 @@ while IFS= read -r line; do
   echo "  $line" >&2
 done <<< "$(grep -rn -- "$line_comment_opener" Resources/Views/ 2>/dev/null || true)"
 
-# The HTML-comment rule. The text between each comment opener and closer is
-# collected across lines, and a hit is reported at the line it is on. As with
-# the line-comment rule, the forbidden sequences are built, not written.
+# The comment rule. The text inside each HTML comment and each CSS comment
+# (a page <style> block is raw text to Leaf too) is collected across lines,
+# and a hit is reported at the line it is on. A hit is the interpolation
+# opener, a structural tag name, or any other tag name followed by an opening
+# parenthesis (#2407): Leaf runs a function tag such as the count or the CSRF
+# field there just as it does in the markup. As with the line-comment rule,
+# the forbidden sequences are built, not written.
 structural_tags="extend|endextend|export|endexport|import|if|elseif|else|endif|for|endfor|while|endwhile"
 comment_hits="$(
   awk -v ind="$tag_indicator" -v tags="$structural_tags" '
@@ -206,26 +210,28 @@ comment_hits="$(
       line = $0; text = ""
       while (length(line)) {
         if (incomment) {
-          p = index(line, "-->")
+          p = index(line, closer)
           if (p == 0) { text = text " " line; line = "" }
-          else { text = text " " substr(line, 1, p - 1); line = substr(line, p + 3); incomment = 0 }
+          else { text = text " " substr(line, 1, p - 1); line = substr(line, p + length(closer)); incomment = 0 }
         } else {
-          p = index(line, "<!--")
-          if (p == 0) { line = "" }
-          else { line = substr(line, p + 4); incomment = 1 }
+          ph = index(line, "<!--"); pc = index(line, "/*")
+          if (ph == 0 && pc == 0) { line = "" }
+          else if (pc == 0 || (ph > 0 && ph < pc)) { line = substr(line, ph + 4); closer = "-->"; incomment = 1 }
+          else { line = substr(line, pc + 2); closer = "*/"; incomment = 1 }
         }
       }
       if (text == "") next
       interp = ind "("
       structural = ind "(" tags ")([^A-Za-z0-9_]|$)"
-      if (index(text, interp) > 0 || text ~ structural) print FILENAME ":" FNR ":" $0
+      function_tag = ind "[A-Za-z][A-Za-z0-9_]*[(]"
+      if (index(text, interp) > 0 || text ~ structural || text ~ function_tag) print FILENAME ":" FNR ":" $0
     }
   ' "${leaf_files[@]}"
 )"
 if [ -n "$comment_hits" ]; then
   status=1
-  echo "check-leaf-semantics: Leaf tag syntax inside an HTML comment." >&2
-  echo "  Leaf does not know HTML comments, so a tag there runs as if it were" >&2
+  echo "check-leaf-semantics: Leaf tag syntax inside an HTML comment or a CSS comment." >&2
+  echo "  Leaf does not know HTML or CSS comments, so a tag there runs as if it were" >&2
   echo "  in the markup: a structural tag name is a 500 at render, and an" >&2
   echo "  interpolation prints the real value into the page. Describe the tag" >&2
   echo "  in words instead, for example \"the extend\"." >&2
@@ -234,7 +240,7 @@ if [ -n "$comment_hits" ]; then
 fi
 
 if [ $status -eq 0 ]; then
-  echo "check-leaf-semantics: OK (no Swift property access, line comments or tags in HTML comments in templates)"
+  echo "check-leaf-semantics: OK (no Swift property access, line comments or tags in comments in templates)"
 fi
 
 exit $status

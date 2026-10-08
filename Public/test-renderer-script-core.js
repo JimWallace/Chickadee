@@ -57,14 +57,14 @@
         return language ? language.scriptExtension() : 'py';
     }
 
-    /// The highlighting mode for a file. Python, R and shell are the three
-    /// modes the vendored CodeMirror bundle carries; `.lua`, `.m` and `.rkt`
-    /// fall back to shell, which is wrong but harmless.
-    function highlightModeFor(filename) {
-        var ext = (filename || '').split('.').pop().toLowerCase();
-        if (ext === 'py') return 'python';
-        if (ext === 'r') return 'r';
-        return 'shell';
+    /// What to highlight a file as: the language token its own extension
+    /// implies, or `'shell'` when it implies none. The file's
+    /// extension decides, not the assignment's language, because the extension
+    /// decides how the file runs. `language` is `window.ChickadeeLanguage`,
+    /// whose seed derives the extension map on the server.
+    function highlightModeFor(filename, language) {
+        var token = language && language.scriptLanguageFor ? language.scriptLanguageFor(filename) : null;
+        return token || 'shell';
     }
 
     /// The templates endpoint. The shell templates name a solution file and

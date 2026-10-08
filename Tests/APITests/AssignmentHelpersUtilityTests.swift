@@ -56,7 +56,7 @@ final class AssignmentHelpersUtilityTests {
     }
 
     @Test func defaultNotebookDataEmbedsAssignmentTitle() throws {
-        let data = try #require(defaultNotebookData(title: "Lab \"1\""))
+        let data = try #require(defaultNotebookData(title: "Lab \"1\"", language: nil))
         let json = try #require(String(data: data, encoding: .utf8))
         #expect(json.contains(#"# Lab \"1\""#))
         #expect(json.contains(#""nbformat": 4"#))

@@ -319,7 +319,7 @@ extension AchievementSignal {
 }
 
 /// How a condition compares its signal against `value`.
-public enum ConditionComparator: String, Codable, Sendable {
+public enum ConditionComparator: String, Codable, Sendable, CaseIterable {
     case atLeast  // >=
     case atMost  // <=
     case equals  // ==

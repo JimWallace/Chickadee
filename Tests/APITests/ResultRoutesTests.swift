@@ -6,7 +6,7 @@ import VaporTesting
 @testable import APIServer
 @testable import Core
 
-@Suite(.serialized) final class ResultRoutesTests {
+@Suite(.serialized, .timeLimit(.minutes(2))) final class ResultRoutesTests {
 
     let app: Application
 

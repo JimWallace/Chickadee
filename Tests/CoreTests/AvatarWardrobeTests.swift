@@ -4,6 +4,7 @@
 // customization chokepoint, and the headband that replaced the gradcap in the
 // first-use draw.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -120,8 +121,7 @@ import Testing
     // MARK: - The partial
 
     private static func contents(of path: String) throws -> String {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/CoreTests/<thisFile>
-        for _ in 0..<3 { url.deleteLastPathComponent() }
+        let url = repositoryRoot
         return try String(contentsOf: url.appendingPathComponent(path), encoding: .utf8)
     }
 

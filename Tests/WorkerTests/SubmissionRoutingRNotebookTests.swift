@@ -111,7 +111,7 @@ import Testing
             submissionNormalization(
                 manifest: try manifest(rOnlyManifest), submissionFilename: "solution.ipynb",
                 submissionDirectory: tmpDir) != .pythonModule)
-        try extractNotebooksToCode(in: tmpDir)
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: nil)
         #expect(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("solution.R").path))
         #expect(
             !FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("solution.py").path))

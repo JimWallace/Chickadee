@@ -34,11 +34,19 @@ test('a sh: template forces .sh; anything else takes the language extension', ()
   assert.equal(Core.extensionFor('blank', cpp), 'sh');
 });
 
-test('highlighting: python, r, and shell for everything else, case-insensitively', () => {
-  assert.equal(Core.highlightModeFor('test_a.py'), 'python');
-  assert.equal(Core.highlightModeFor('test_a.R'), 'r');
-  assert.equal(Core.highlightModeFor('test_a.lua'), 'shell');
-  assert.equal(Core.highlightModeFor(''), 'shell');
+test('highlighting: the language the file extension implies, and shell for everything else', () => {
+  const byExtension = { py: 'python', r: 'r', lua: 'lua', m: 'octave' };
+  const language = {
+    scriptLanguageFor: (name) => byExtension[(name.split('.').pop() || '').toLowerCase()] || null
+  };
+  assert.equal(Core.highlightModeFor('test_a.py', language), 'python');
+  assert.equal(Core.highlightModeFor('test_a.R', language), 'r');
+  assert.equal(Core.highlightModeFor('test_a.lua', language), 'lua');
+  assert.equal(Core.highlightModeFor('test_a.m', language), 'octave');
+  assert.equal(Core.highlightModeFor('test_a.sh', language), 'shell');
+  assert.equal(Core.highlightModeFor('', language), 'shell');
+  // No language reader on the page: everything is shell.
+  assert.equal(Core.highlightModeFor('test_a.py', undefined), 'shell');
 });
 
 test('the templates URL names the language when there is one', () => {

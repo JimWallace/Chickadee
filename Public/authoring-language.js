@@ -35,7 +35,8 @@
         // this file's, so a page without one computes on the server.
         autoComputeWorker: null,
         autoComputeRuntimeSource: null,
-        unsupportedCheckKinds: {}
+        unsupportedCheckKinds: {},
+        languageByScriptExtension: {}
     };
 
     var _cached = null;
@@ -55,7 +56,13 @@
         if (!el) { _cached = PYTHON_FALLBACK; return _cached; }
         var parsed;
         try { parsed = JSON.parse(el.textContent || '{}'); } catch (_) { parsed = null; }
-        if (!parsed || !parsed.name) { _cached = PYTHON_FALLBACK; return _cached; }
+        // The extension map covers every language, so a language-less
+        // assignment carries it too.
+        var byExtension = (parsed && parsed.languageByScriptExtension) || {};
+        if (!parsed || !parsed.name) {
+            _cached = Object.assign({}, PYTHON_FALLBACK, { languageByScriptExtension: byExtension });
+            return _cached;
+        }
         _cached = {
             name: parsed.name,
             displayName: parsed.displayName || null,
@@ -69,9 +76,22 @@
             expressionEvaluation: parsed.expressionEvaluation !== false,
             autoComputeWorker: parsed.autoComputeWorker || null,
             autoComputeRuntimeSource: parsed.autoComputeRuntimeSource || null,
-            unsupportedCheckKinds: parsed.unsupportedCheckKinds || {}
+            unsupportedCheckKinds: parsed.unsupportedCheckKinds || {},
+            languageByScriptExtension: byExtension
         };
         return _cached;
+    }
+
+    /// The language token a file's own extension implies (R for
+    /// `helper.R`), or null for an extension that implies none. Read from the
+    /// seed, which derives it from the same mapping the runner uses.
+    function scriptLanguageFor(filename) {
+        var name = filename || '';
+        var dot = name.lastIndexOf('.');
+        if (dot < 0) return null;
+        var map = facts().languageByScriptExtension || {};
+        var ext = name.slice(dot + 1).toLowerCase();
+        return Object.prototype.hasOwnProperty.call(map, ext) ? map[ext] : null;
     }
 
     /// "R" / "Lua" / …, or "" when the assignment declares no language.
@@ -178,6 +198,26 @@
         return { ok: true, value: text, kind: 'string', strict: false };
     }
 
+    /// The text a value cell shows for a STRING value, chosen so that reading
+    /// the cell back gives the same string (#2381).
+    ///
+    /// A plain string shows without quotes, so the common case reads
+    /// naturally. A string that the cell would read as something else shows
+    /// JSON-quoted: one that parses as a number, a boolean, null or JSON
+    /// (`"42"`, `"true"`), a string that looks like a `$name` reference, and a
+    /// string with a newline or tab, which a single-line input cannot hold.
+    /// An empty string stays empty; a caller whose empty cell means
+    /// "omitted" quotes it itself.
+    function stringCellText(s) {
+        var text = String(s);
+        if (text === '') return '';
+        if (/[\n\r\t]/.test(text) || /^\$\S+$/.test(text.trim())) {
+            return JSON.stringify(text);
+        }
+        var parsed = parseValue(text, { rewriteRepr: false });
+        return (parsed.ok && parsed.value === text) ? text : JSON.stringify(text);
+    }
+
     /// The title of a value cell that `parseValue` did not read exactly, or ''
     /// when it did. The editors give both loose readings the same amber cue,
     /// but they have different causes, so the title names which one (#1996):
@@ -265,10 +305,12 @@
         matchScalarToken: matchScalarToken,
         reprToJSON: reprToJSON,
         parseValue: parseValue,
+        stringCellText: stringCellText,
         looseValueTitle: looseValueTitle,
         scriptExtension: scriptExtension,
         canScanFunctions: canScanFunctions,
         canEvaluateExpressions: canEvaluateExpressions,
-        autoComputeWorker: autoComputeWorker
+        autoComputeWorker: autoComputeWorker,
+        scriptLanguageFor: scriptLanguageFor
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

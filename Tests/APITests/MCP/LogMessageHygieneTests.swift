@@ -10,6 +10,7 @@
 // cannot silently regress (compliance audit F-1; same source-scan technique
 // as MCPStudentDataWallTests).
 
+import ChickadeeTestSupport
 import Foundation
 import Testing
 
@@ -18,9 +19,7 @@ import Testing
 @Suite struct LogMessageHygieneTests {
     /// `Sources/APIServer`, resolved from this test file's location.
     private static var apiServerSources: URL {
-        var url = URL(fileURLWithPath: #filePath)  // .../Tests/APITests/MCP/<thisFile>
-        for _ in 0..<4 { url.deleteLastPathComponent() }  // -> repo root
-        return url.appendingPathComponent("Sources/APIServer")
+        repositoryRoot.appendingPathComponent("Sources/APIServer")
     }
 
     /// Interpolation fragments that would put an identifier into log MESSAGE

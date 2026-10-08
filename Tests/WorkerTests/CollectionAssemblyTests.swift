@@ -20,7 +20,7 @@ import Testing
         attemptNumber: 3,
         submissionURL: testURL("https://server.test/sub.zip"),
         testSetupURL: testURL("https://server.test/ts.zip"),
-        manifest: TestProperties()
+        manifest: TestProperties(language: nil), language: nil
     )
 
     private func outcome(

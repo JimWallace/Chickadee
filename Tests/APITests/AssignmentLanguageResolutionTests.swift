@@ -98,7 +98,8 @@ import Vapor
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
             #expect(AssignmentLanguage.resolve(manifest: manifest) == nil)
 
-            let rSuite = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")])
+            let rSuite = TestProperties(
+                testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")], language: nil)
             #expect(AssignmentLanguage.resolve(manifest: rSuite) == nil)
             #expect(AssignmentLanguage.derivedDeclaration(manifest: rSuite, notebookData: nil) == .r)
         }

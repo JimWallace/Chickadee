@@ -49,8 +49,7 @@ import Testing
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let repoRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let runtime = repoRoot.appendingPathComponent("Tools/runner-support/test_runtime.hpp")
+        let runtime = repositoryRoot.appendingPathComponent("Tools/runner-support/test_runtime.hpp")
         try FileManager.default.copyItem(
             at: runtime, to: dir.appendingPathComponent("test_runtime.hpp"))
         if let submission {

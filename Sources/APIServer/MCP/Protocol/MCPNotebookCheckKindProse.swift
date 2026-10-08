@@ -44,8 +44,7 @@ enum MCPNotebookCheckKindProse {
     /// `"data_frame_shape (…), data_frame_columns (…), and …"` — the glossed
     /// sentence form the `initialize` instructions use.
     static var glossedList: String {
-        let described = NotebookCheckKind.allCases.map { "\($0.rawValue) (\(gloss(for: $0)))" }
-        guard described.count > 1 else { return described.first ?? "" }
-        return described.dropLast().joined(separator: ", ") + ", and " + (described.last ?? "")
+        LanguageProse.list(
+            NotebookCheckKind.allCases.map { "\($0.rawValue) (\(gloss(for: $0)))" }, conjunction: "and")
     }
 }

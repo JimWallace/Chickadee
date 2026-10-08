@@ -37,17 +37,14 @@ struct ValidateAssignmentTool: ContentTool {
     static let description =
         "Watch an assignment's runner validation to completion and return the outcome, by assignment "
         + "public ID. Validation is queued automatically when you edit the suite or notebook; this tool "
-        + "waits (up to timeoutSeconds, default 30) for it to finish and returns validationStatus "
+        + "waits (up to timeoutSeconds, default \(timeoutBound.defaultValue)) for it to finish and returns validationStatus "
         + "(passed/failed/no-runner) — or timedOut:true if still pending. Over an SSE connection it also "
         + "streams live queued -> running -> done progress."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
             "assignmentPublicID": MCPSchema.assignmentPublicID,
-            "timeoutSeconds": .object([
-                "type": .string("integer"),
-                "description": .string("Max seconds to wait for a terminal result (1-120, default 30)."),
-            ]),
+            "timeoutSeconds": timeoutBound.property("Max seconds to wait for a terminal result"),
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -67,12 +64,11 @@ struct ValidateAssignmentTool: ContentTool {
         readOnlyHint: true, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.read]
 
-    /// Default / bounds for the bounded wait, shared with the streaming path.
-    static let defaultTimeoutSeconds = 30
-    static let maxTimeoutSeconds = 120
+    /// The bounded wait, shared with the streaming path and run_validation.
+    static let timeoutBound = MCPBoundedInt(default: 30, max: 120)
 
     static func clampTimeout(_ seconds: Int?) -> Int {
-        min(max(seconds ?? defaultTimeoutSeconds, 1), maxTimeoutSeconds)
+        timeoutBound.resolve(seconds)
     }
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

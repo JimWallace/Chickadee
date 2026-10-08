@@ -182,9 +182,7 @@ import VaporTesting
     )
         async throws
     {
-        try await app.asyncTest(
-            .GET, path, beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: check)
+        try check(try await getResponse(path, cookie: cookie, on: app))
     }
 
     /// POSTs with a CSRF token; returns the cookie the response set, if any.

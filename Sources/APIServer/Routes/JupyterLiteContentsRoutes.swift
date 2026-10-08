@@ -104,32 +104,32 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         // pool, not the request thread (#1156).
         let fileData = try await runBlocking(on: req) { try Data(contentsOf: targetURL) }
         let isNotebook = targetURL.pathExtension.lowercased() == "ipynb"
-        let (contentValue, format, mimetype): (Any, String, String) = {
+        let (content, format, mimetype): (JupyterContentsModel.Content, String, String) = {
             guard wantsContent else {
-                return (NSNull(), "json", isNotebook ? "application/x-ipynb+json" : "application/octet-stream")
+                return (.none, "json", isNotebook ? "application/x-ipynb+json" : "application/octet-stream")
             }
-            if let json = try? JSONSerialization.jsonObject(with: fileData) {
+            if let json = JupyterContentsModel.jsonContent(fileData) {
                 return (json, "json", isNotebook ? "application/x-ipynb+json" : "application/json")
             }
             if let text = String(data: fileData, encoding: .utf8) {
-                return (text, "text", "text/plain")
+                return (.text(text), "text", "text/plain")
             }
-            return (fileData.base64EncodedString(), "base64", "application/octet-stream")
+            return (.base64(fileData.base64EncodedString()), "base64", "application/octet-stream")
         }()
 
-        let model: [String: Any] = [
-            "name": targetURL.lastPathComponent,
-            "path": cleanRel,
-            "last_modified": isoDate(asDate(attributes[.modificationDate])),
-            "created": isoDate(asDate(attributes[.creationDate])),
-            "content": contentValue,
-            "format": format,
-            "mimetype": mimetype,
-            "size": fileData.count,
-            "writable": !isSymlink(url: targetURL),
-            "type": isNotebook ? "notebook" : "file",
-        ]
-        return try jsonResponse(model)
+        return try jsonResponse(
+            JupyterContentsModel(
+                name: targetURL.lastPathComponent,
+                path: cleanRel,
+                lastModified: isoDate(asDate(attributes[.modificationDate])),
+                created: isoDate(asDate(attributes[.creationDate])),
+                content: content,
+                format: format,
+                mimetype: mimetype,
+                size: fileData.count,
+                writable: !isSymlink(url: targetURL),
+                type: isNotebook ? "notebook" : "file"
+            ))
     }
 
     private func directoryResponse(
@@ -156,49 +156,48 @@ struct JupyterLiteContentsRoutes: RouteCollection {
                 $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
             })
 
-        let childModels: [[String: Any]] = children.map { child in
+        let childModels = children.map { child in
             let childAttributes = attributesForItem(url: child, fileManager: fileManager)
             let childPath = child.standardizedFileURL.path
                 .replacingOccurrences(of: baseURL.path, with: "")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             let isDir = isDirectory(url: child)
             let isNotebook = child.pathExtension.lowercased() == "ipynb"
-            return [
-                "name": child.lastPathComponent,
-                "path": childPath,
-                "last_modified": isoDate(asDate(childAttributes[.modificationDate])),
-                "created": isoDate(asDate(childAttributes[.creationDate])),
-                "content": NSNull(),
-                "format": "json",
-                "mimetype": isDir
+            return JupyterContentsModel(
+                name: child.lastPathComponent,
+                path: childPath,
+                lastModified: isoDate(asDate(childAttributes[.modificationDate])),
+                created: isoDate(asDate(childAttributes[.creationDate])),
+                content: .none,
+                format: "json",
+                mimetype: isDir
                     ? "application/json" : (isNotebook ? "application/x-ipynb+json" : "application/octet-stream"),
-                "size": isDir ? 0 : ((childAttributes[.size] as? NSNumber)?.intValue ?? 0),
-                "writable": isDir ? true : !isSymlink(url: child),
-                "type": isDir ? "directory" : (isNotebook ? "notebook" : "file"),
-            ]
+                size: isDir ? 0 : ((childAttributes[.size] as? NSNumber)?.intValue ?? 0),
+                writable: isDir ? true : !isSymlink(url: child),
+                type: isDir ? "directory" : (isNotebook ? "notebook" : "file")
+            )
         }
 
-        let model: [String: Any] = [
-            "name": cleanDir.isEmpty ? "" : directoryURL.lastPathComponent,
-            "path": cleanDir,
-            "last_modified": isoDate(asDate(attributes[.modificationDate])),
-            "created": isoDate(asDate(attributes[.creationDate])),
-            "content": includeContent ? childModels : NSNull(),
-            "format": "json",
-            "mimetype": "application/json",
-            "size": 0,
-            "writable": true,
-            "type": "directory",
-        ]
-        return try jsonResponse(model)
+        return try jsonResponse(
+            JupyterContentsModel(
+                name: cleanDir.isEmpty ? "" : directoryURL.lastPathComponent,
+                path: cleanDir,
+                lastModified: isoDate(asDate(attributes[.modificationDate])),
+                created: isoDate(asDate(attributes[.creationDate])),
+                content: includeContent ? .children(childModels) : .none,
+                format: "json",
+                mimetype: "application/json",
+                size: 0,
+                writable: true,
+                type: "directory"
+            ))
     }
 
-    private func jsonResponse(_ model: [String: Any]) throws -> Response {
-        let data = try JSONSerialization.data(withJSONObject: model)
-        return Response(
+    private func jsonResponse(_ model: JupyterContentsModel) throws -> Response {
+        Response(
             status: .ok,
             headers: ["Content-Type": "application/json"],
-            body: .init(data: data)
+            body: .init(data: try model.jsonData())
         )
     }
 

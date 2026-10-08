@@ -34,6 +34,9 @@ func evaluateHealthRules(
 
     // Also before the database check: it reads a file the deploy daemon writes.
     results[.deployerUnhealthy] = evaluateDeployerUnhealthy(on: application, now: now)
+    // Before the database check too: a full disk is what stops the database,
+    // and this is the rule that has to answer then.
+    results[.diskSpaceLow] = evaluateDiskSpaceLow(on: application)
 
     let dbResult = await evaluateDatabaseUnreachable(on: application)
     results[.databaseUnreachable] = dbResult
@@ -60,6 +63,7 @@ func evaluateHealthRules(
         configuration: configuration,
         now: now
     )
+    results[.unclaimableJobs] = (try? await evaluateUnclaimableJobs(on: application, now: now)) ?? .ok
     results[.queueBackedUp] = evaluateQueueBackedUp(
         pending: pendingState,
         depthThreshold: configuration.queueDepthThreshold,
@@ -235,7 +239,10 @@ private func evaluateRunnerOffline(
 ///
 /// The grace is the crux. A blue/green deploy flips the server before it
 /// refreshes the runner (`docs/zero-downtime-deploy.md` step 8), so immediately
-/// after every deploy the runner is briefly a release behind. Gating on server
+/// after every deploy the runner is briefly a release behind. A runner also
+/// updates only after it drains (cordon and drain), and a runner host's update
+/// job runs every 10 minutes, so a correct runner can be about 25 minutes
+/// behind; the default grace is 30 minutes. Gating on server
 /// uptime means that expected, transient skew never pages — the freshly-booted
 /// server's uptime is below the grace — while a runner that stays behind past
 /// the grace (a failed runner refresh, or an old runner rejoining the fleet)
@@ -272,7 +279,7 @@ func decideRunnerVersionSkew(
         isFiring: true,
         summary:
             "\(behind.count) runner(s) behind server v\(serverVersion) (oldest v\(oldest)) — "
-            + "grading against a stale test runtime; refresh the runner image",
+            + "past the update window; check that runner's update job and its log",
         details: [
             "server_version": serverVersion,
             "behind_count": String(behind.count),

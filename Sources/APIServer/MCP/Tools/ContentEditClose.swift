@@ -36,32 +36,6 @@ func closeOpenAssignmentForContentEdit(
     return true
 }
 
-/// MCP wrapper around `retestSubmissionsIfManifestChanged` (defined alongside
-/// `retestAllSubmissionsForSetup`): resolves the acting subject for attribution
-/// and runs best-effort — the edit has already persisted, so a retest failure is
-/// logged, never thrown. See that function for the gating/idempotency contract.
-///
-/// Call this only from tools whose edit can change an outcome (create/delete/edit
-/// of tests, families, checks, or script bodies/points) — not from pure
-/// placement edits like `move_suite_item`, which only reorder/re-tag and never
-/// change a grade. Returns the number of submissions re-queued.
-@discardableResult
-func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext) async -> Int {
-    do {
-        let actingUser = try await context.requireEligibleSubject()
-        // Re-queue runs on the privileged default pool, not the MCP pool: it
-        // reads and flips STUDENT submission rows (a system regrade, not
-        // agent-facing data access), so it must not depend on the MCP path's
-        // (optionally least-privilege) connection. With no dedicated MCP pool
-        // configured this is the same connection, so behaviour is unchanged.
-        return try await retestSubmissionsIfManifestChanged(
-            setup: setup, triggeredBy: actingUser.id, on: context.request.db)
-    } catch {
-        context.logger.warning("retestSubmissionsAfterContentEdit failed: \(error)")
-        return 0
-    }
-}
-
 /// Runs `applySuiteEdit` and maps web-layer failures (`WebAssignmentError`,
 /// `AbortError`) to `MCPToolError` so the agent sees a structured, actionable
 /// error rather than an opaque protocol-level internal error.
@@ -74,9 +48,7 @@ func applySuiteEditMapped(
     do {
         try await applySuiteEdit(
             setup: setup, body: body, kernelEnvironments: kernelEnvironments, on: db)
-    } catch let error as WebAssignmentError {
-        throw MCPToolError.from(error)
-    } catch let error as any AbortError {
+    } catch let error as any AbortError where error.isClientRefusal {
         throw MCPToolError.from(error)
     }
 }
@@ -96,24 +68,25 @@ func applySuiteEditMapped(
 /// changes the manifest, so the manifest-gated retest would be a no-op —
 /// matching the web save path (#1115). `MCPContentEditCoverageTests` pins the
 /// full classification. The close→retest→revalidate ordering is the invariant
-/// documented on `closeOpenAssignmentForContentEdit` /
-/// `retestSubmissionsAfterContentEdit`.
+/// documented on `closeOpenAssignmentForContentEdit`. The re-grade and the
+/// re-validation are `applyContentEditEffects`, which the web script routes
+/// call too.
 @discardableResult
 func finalizeContentEdit(
     assignment: APIAssignment, setup: APITestSetup, context: ToolContext, retest: Bool
 ) async throws -> ContentEditFinalizeResult {
     let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-    var requeued = 0
-    if retest {
-        requeued = await retestSubmissionsAfterContentEdit(setup: setup, context: context)
-    }
     // Pass the acting subject explicitly: an MCP request is bearer-authenticated
-    // with no session user, so the helper's `req.auth` fallback would throw
+    // with no session user, so the validation's `req.auth` fallback would throw
     // 401 inside its swallow-all catch and the re-validation would silently
     // never be enqueued (the assignment kept its stale validationStatus).
-    let submitterUserID = try? await context.requireEligibleSubject().id
-    await scheduleValidationAfterSuiteEdit(
-        req: context.request, assignment: assignment, submitterUserID: submitterUserID)
+    let actingUserID = try? await context.requireEligibleSubject().id
+    // A re-grade needs an acting subject to attribute it to; without one it is
+    // skipped, as it always was here, and only the re-validation runs.
+    let kind: ContentEditKind = retest && actingUserID != nil ? .gradeAffecting : .placementOnly
+    let requeued = await applyContentEditEffects(
+        kind,
+        assignment: assignment, setup: setup, actingUserID: actingUserID, req: context.request)
     return ContentEditFinalizeResult(assignmentClosed: closed, submissionsRequeued: requeued)
 }
 

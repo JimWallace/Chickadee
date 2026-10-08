@@ -25,7 +25,8 @@ import VaporTesting
         _ = try await createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
         let setup = APITestSetup(
             id: id,
-            manifest: try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "browser"),
+            manifest: try makeWorkerManifestJSON(
+                testSuites: [], includeMakefile: false, gradingMode: "browser", language: nil),
             zipPath: zipPath,
             courseID: courseID)
         try await setup.save(on: app.db)
@@ -115,7 +116,8 @@ import VaporTesting
     func theDraftRebuildFollowsTheDeclaredLanguage(language: AssignmentLanguage) throws {
         var draft = try #require(
             decodeManifest(
-                fromJSON: try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "browser")))
+                fromJSON: try makeWorkerManifestJSON(
+                    testSuites: [], includeMakefile: false, gradingMode: "browser", language: nil)))
         draft.language = language
         draft.languageDeclared = true
         if requiresUploadOnlySubmission(language) {

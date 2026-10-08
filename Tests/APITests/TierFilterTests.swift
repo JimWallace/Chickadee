@@ -148,14 +148,14 @@ import Testing
                 TestSuiteEntry(tier: .pub, script: "publictest_a.py"),
                 TestSuiteEntry(tier: .secret, script: "secrettest_b.py"),
             ],
-            timeLimitSeconds: 10)
+            timeLimitSeconds: 10, language: nil)
         #expect(hasSecretTierTests(withSecret))
 
         let withoutSecret = TestProperties(
             schemaVersion: 1,
             requiredFiles: [],
             testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.py")],
-            timeLimitSeconds: 10)
+            timeLimitSeconds: 10, language: nil)
         #expect(hasSecretTierTests(withoutSecret) == false)
 
         #expect(hasSecretTierTests(nil) == false)

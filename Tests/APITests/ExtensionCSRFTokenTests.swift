@@ -39,7 +39,7 @@ import VaporTesting
 import Glibc
 #endif
 
-@Suite struct ExtensionCSRFTokenTests {
+@Suite(.timeLimit(.minutes(2))) struct ExtensionCSRFTokenTests {
 
     /// Seeds an instructor session, an enrolled student, and a published
     /// assignment; returns the login cookie, the student, and the assignment.
@@ -191,6 +191,16 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
     let fd = socket(AF_INET, sockStream, 0)
     try #require(fd >= 0, "socket() failed: errno \(errno)")
     defer { close(fd) }
+    // A suite time limit cancels the task but cannot interrupt a blocking
+    // recv(), so the socket itself gives up (#2361). Sixty seconds stays under
+    // the suite's two-minute limit and above a loaded CI runner's answer time:
+    // ten seconds timed out there, and the test then tore the app down under a
+    // request still in flight, which crashed the whole process.
+    let receiveTimeoutSeconds = 60
+    var receiveTimeout = timeval(tv_sec: receiveTimeoutSeconds, tv_usec: 0)
+    let timeoutSet = setsockopt(
+        fd, SOL_SOCKET, SO_RCVTIMEO, &receiveTimeout, socklen_t(MemoryLayout<timeval>.size))
+    try #require(timeoutSet == 0, "setsockopt(SO_RCVTIMEO) failed: errno \(errno)")
 
     var addr = sockaddr_in()
     addr.sin_family = sa_family_t(AF_INET)
@@ -222,7 +232,9 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
         let n = chunk.withUnsafeMutableBytes { raw in
             recv(fd, raw.baseAddress, raw.count, 0)
         }
-        if n <= 0 { break }
+        if n == 0 { break }
+        // A timed-out recv() is a failure, not an empty response.
+        try #require(n > 0, "recv() failed (timeout \(receiveTimeoutSeconds) s): errno \(errno)")
         response.append(contentsOf: chunk[0..<n])
     }
     return try #require(

@@ -1,0 +1,10 @@
+# A class whose only rule is a one-line `@media (...) { .x { ... } }` used to
+# be invisible to the catalog, because the selector scan cut the line at its
+# first `{` (#2403).
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/styles.css"
+description="an undocumented class whose only rule is a one-line @media block"
+expect="the rulebook does not name"
+apply() {
+    printf '\n@media (max-width: 640px) { .ck-guard-fixture-media-only { display: none; } }\n' >> Public/styles.css
+}

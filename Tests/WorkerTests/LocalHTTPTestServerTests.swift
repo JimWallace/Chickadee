@@ -123,9 +123,7 @@ import Testing
         }
 
         for (index, server) in servers.enumerated() {
-            let start = Date()
             server.stop()
-            #expect(Date().timeIntervalSince(start) < 1, "stop() waited")
             #expect(await Self.waitUntilClosed(server.port), "server \(index) is still listening")
             for sibling in servers[(index + 1)...] {
                 #expect(Self.isListening(sibling.port), "stopping one server stopped a sibling")

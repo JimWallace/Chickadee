@@ -30,6 +30,7 @@ import VaporTesting
     private func unionManifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .testsVersusImplementations))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }

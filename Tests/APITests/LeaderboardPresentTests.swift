@@ -3,6 +3,7 @@
 // Present mode: the leaderboard for a projector. Staff only, never a name, dark
 // whatever the viewer prefers, and refreshed through its own fragment.
 
+import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
@@ -16,17 +17,9 @@ import VaporTesting
     private func manifest() throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+            language: nil,
             activity: ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
-    }
-
-    private func get(_ path: String, cookie: String, on app: Application) async throws -> TestingHTTPResponse {
-        var captured: TestingHTTPResponse?
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in captured = res })
-        return try #require(captured)
     }
 
     /// Twelve ranked students and a logged-in instructor enrolled as staff.
@@ -57,7 +50,7 @@ import VaporTesting
             _ = try await makeTestAssignment(
                 on: app, testSetupID: "lp_stu", courseID: setup.courseID, title: "Race")
             try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
-            let res = try await get(
+            let res = try await getResponse(
                 "/testsetups/lp_stu/leaderboard?present=1", cookie: studentCookie, on: app)
             #expect(res.status == .notFound)
         }
@@ -66,7 +59,7 @@ import VaporTesting
     @Test func staffGetADarkPodiumPageWithNoSiteChromeAndNoNames() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await seed(on: app, id: "lp_a")
-            let res = try await get("/testsetups/lp_a/leaderboard?present=1", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lp_a/leaderboard?present=1", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
             #expect(html.contains("data-theme=\"dark\""))
@@ -88,7 +81,7 @@ import VaporTesting
     @Test func presentModeLocksNoHandle() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await seed(on: app, id: "lp_lock")
-            _ = try await get("/testsetups/lp_lock/leaderboard?present=1", cookie: cookie, on: app)
+            _ = try await getResponse("/testsetups/lp_lock/leaderboard?present=1", cookie: cookie, on: app)
             let enrollments = try await APICourseEnrollment.query(on: app.db).all()
             #expect(enrollments.contains { $0.avatarHandle != nil })
             #expect(enrollments.allSatisfy { $0.avatarHandleLockedAt == nil })
@@ -102,6 +95,7 @@ import VaporTesting
             _ = try await wrLoginAsStudent(on: app)
             let props = TestProperties(
                 testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
+                language: nil,
                 activity: ClassActivity(kind: .kingOfTheHill, leaderboardVisibility: .visible))
             let manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
             let setup = try await wrInsertSetup(id: "lp_hill", manifest: manifest, on: app)
@@ -118,7 +112,7 @@ import VaporTesting
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
             try await wrEnrollUser(instructor, on: app)
 
-            let res = try await get("/testsetups/lp_hill/leaderboard?present=1", cookie: cookie, on: app)
+            let res = try await getResponse("/testsetups/lp_hill/leaderboard?present=1", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let enrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
@@ -147,7 +141,7 @@ import VaporTesting
     @Test func theRefreshFragmentIsTheBodyAloneAndAlsoNameless() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await seed(on: app, id: "lp_f")
-            let res = try await get(
+            let res = try await getResponse(
                 "/testsetups/lp_f/leaderboard?present=1&fragment=present", cookie: cookie, on: app)
             #expect(res.status == .ok)
             let html = res.body.string
@@ -160,15 +154,14 @@ import VaporTesting
     @Test func theStaffPageOffersPresentInANewTab() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await seed(on: app, id: "lp_b")
-            let html = try await get("/testsetups/lp_b/leaderboard", cookie: cookie, on: app).body.string
+            let html = try await getResponse("/testsetups/lp_b/leaderboard", cookie: cookie, on: app).body.string
             #expect(html.contains("href=\"/testsetups/lp_b/leaderboard?present=1\""))
             #expect(html.contains("target=\"_blank\""))
         }
     }
 
     @Test func theAttributeDarkBlockMatchesTheMediaQueryBlock() throws {
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<3 { root.deleteLastPathComponent() }
+        let root = repositoryRoot
         let css = try String(
             contentsOf: root.appendingPathComponent("Public/styles.css"), encoding: .utf8)
         func declarations(after marker: String) throws -> [String] {

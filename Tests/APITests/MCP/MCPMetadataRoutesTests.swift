@@ -15,14 +15,15 @@ import VaporTesting
     private func makeApp(
         advertisedScopes: [ContentScope] = MCPMode.readWrite.advertisedScopes
     ) async throws -> Application {
-        let app = try await Application.make(.testing)
         let authority = try await MCPTokenAuthority.make(
             privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "mcp-1")
-        app.mcpTokenAuthority = authority
-        try app.register(
-            collection: MCPMetadataRoutes(
-                endpoints: MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: issuer),
-                advertisedScopes: advertisedScopes))
+        let app = try await makeTestingApplication { app in
+            app.mcpTokenAuthority = authority
+            try app.register(
+                collection: MCPMetadataRoutes(
+                    endpoints: MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: issuer),
+                    advertisedScopes: advertisedScopes))
+        }
         return app
     }
 
@@ -105,11 +106,12 @@ import VaporTesting
     }
 
     @Test func jwksWithoutAuthorityReturnsEmptyKeySet() async throws {
-        let app = try await Application.make(.testing)
-        try app.register(
-            collection: MCPMetadataRoutes(
-                endpoints: MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: issuer),
-                advertisedScopes: MCPMode.readWrite.advertisedScopes))
+        let app = try await makeTestingApplication { app in
+            try app.register(
+                collection: MCPMetadataRoutes(
+                    endpoints: MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: issuer),
+                    advertisedScopes: MCPMode.readWrite.advertisedScopes))
+        }
         try await withApp(app) { app in
             try await app.testing().test(.GET, "/.well-known/jwks.json") { res async in
                 #expect(res.status == .ok)

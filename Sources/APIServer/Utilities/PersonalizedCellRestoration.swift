@@ -21,6 +21,7 @@
 // An assignment with no personalization has no tagged cells, so the whole thing
 // is one dictionary lookup and the input is returned untouched.
 
+import Core
 import Foundation
 
 enum PersonalizedCellRestoration {
@@ -129,7 +130,7 @@ enum PersonalizedCellRestoration {
         guard canonicalCells.indices.contains(index) else { return nil }
         let candidate = canonicalCells[index]
         guard (candidate["cell_type"] as? String) == "code" else { return nil }
-        let carried = Set(NotebookSubstitution.placeholderNames(inSource: cellSource(candidate)))
+        let carried = Set(NotebookSubstitution.placeholderNames(inSource: NotebookCellSources.cellSource(candidate)))
         guard carried.isSuperset(of: names) else { return nil }
         return candidate
     }
@@ -145,12 +146,5 @@ enum PersonalizedCellRestoration {
             restored["metadata"] = metadata
         }
         return restored
-    }
-
-    /// nbformat allows `source` to be a string or an array of strings.
-    private static func cellSource(_ cell: [String: Any]) -> String {
-        if let source = cell["source"] as? String { return source }
-        if let source = cell["source"] as? [String] { return source.joined() }
-        return ""
     }
 }

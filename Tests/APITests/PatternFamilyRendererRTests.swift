@@ -134,6 +134,7 @@ import Testing
     @Test func literalGlobalsInlineIntoRawScriptsPerLanguage() {
         let manifest = TestProperties(
             requiredFiles: [], testSuites: [], timeLimitSeconds: 10,
+            language: nil,
             globalVariables: [
                 FamilyVariable(name: "threshold", value: .double(18.5)),
                 FamilyVariable(name: "labels", value: .array([.string("lo"), .string("hi")])),
@@ -166,10 +167,7 @@ import Testing
     /// The canonical R runtime, read from the repo so the test exercises the
     /// same source the runner injects.
     private static func canonicalRuntime() throws -> String {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // APITests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
+        let root = repositoryRoot
         return try String(
             contentsOf: root.appendingPathComponent("Tools/runner-support/test_runtime.R"),
             encoding: .utf8)

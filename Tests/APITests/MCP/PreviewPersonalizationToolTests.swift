@@ -33,19 +33,6 @@ import Vapor
     }
 
     /// Writes a zip at `zipPath` containing the named entries (name -> contents).
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("preview-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            try content.data(using: .utf8)?
-                .write(to: root.appendingPathComponent(name))
-        }
-        try? FileManager.default.removeItem(atPath: zipPath)
-        try await writeZipFixture(of: root, to: zipPath)
-    }
-
     @Test func resolvesLiteralsAndExpressionsForExplicitSeed() async throws {
         let manifest = #"""
             {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}],"globalExpressions":[{"name":"offset","expression":"seed % 3"}]}
@@ -119,7 +106,7 @@ import Vapor
             let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
             try blobNotebook.write(
                 toFile: app.testSetupsDirectory + "setup_pv.ipynb", atomically: true, encoding: .utf8)
-            try await writeZip(
+            try await writeZipFixture(
                 at: app.testSetupsDirectory + "setup_pv.zip",
                 entries: [("starter.ipynb", zipNotebook)])
 
@@ -145,7 +132,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await enrolledFixture(
                 on: app, id: "setup_pv", manifest: manifest, withNotebook: false)
-            try await writeZip(
+            try await writeZipFixture(
                 at: app.testSetupsDirectory + "setup_pv.zip",
                 entries: [("starter.ipynb", notebook)])
 

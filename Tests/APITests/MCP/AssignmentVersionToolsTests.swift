@@ -51,28 +51,13 @@ import Vapor
         let setupID = "vt_setup"
         try await makeTestSetup(
             on: app, id: setupID, courseID: courseID, manifest: manifest(timeLimit: 10))
-        try await writeZip(
+        try await writeZipFixture(
             at: app.testSetupsDirectory + setupID + ".zip",
             entries: [(".placeholder", "x")] + scripts)
         let assignment = try await makeTestAssignment(
             on: app, testSetupID: setupID, courseID: courseID, title: "VT Lab")
         let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
         return (assignment, setup)
-    }
-
-    private func writeZip(at zipPath: String, entries: [(String, String)]) async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vt-zip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        for (name, content) in entries {
-            let url = root.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.data(using: .utf8)?.write(to: url)
-        }
-        try? FileManager.default.removeItem(atPath: zipPath)
-        try await writeZipFixture(of: root, to: zipPath)
     }
 
     private func record(
@@ -216,7 +201,7 @@ import Vapor
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
             // Break the script, and record that too.
-            try await writeZip(
+            try await writeZipFixture(
                 at: setup.zipPath,
                 entries: [(".placeholder", "x"), ("test_a.sh", "exit 1  # broken\n")])
             try await record(app, setup, origin: "mcp:author_script")
@@ -244,7 +229,7 @@ import Vapor
                 on: app, scripts: [("test_a.sh", "exit 0\n"), ("helper.py", "x = 1\n")])
             try await record(app, setup, origin: AssignmentVersionOrigin.baseline)
 
-            try await writeZip(
+            try await writeZipFixture(
                 at: setup.zipPath,
                 entries: [
                     (".placeholder", "x"), ("test_a.sh", "exit 1\n"), ("helper.py", "x = 1\n"),

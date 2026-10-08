@@ -23,6 +23,7 @@ import VaporTesting
 
             // Replace the default manifest with one carrying a class goal.
             let props = TestProperties(
+                language: nil,
                 achievements: [
                     Achievement(
                         id: "goalX", name: "Mastery Goal", scope: .classWide,

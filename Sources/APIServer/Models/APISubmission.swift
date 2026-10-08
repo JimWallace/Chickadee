@@ -117,6 +117,14 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "source_commit")
     var sourceCommit: String?
 
+    /// The runner that should grade this job, or nil for any runner. Only a
+    /// staff-requested validation run sets it (MCP `run_validation`), to see
+    /// how one runner grades a suite. It is a preference, not a pin: after
+    /// `RunnerTargetGate.fallbackSeconds` any compatible runner may claim the
+    /// job, so an offline or unknown target cannot leave it in the queue.
+    @OptionalField(key: "target_runner_id")
+    var targetRunnerID: String?
+
     init() {}
 
     init(

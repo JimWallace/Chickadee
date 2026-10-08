@@ -55,20 +55,12 @@ extension PublishedAssignmentRoutes {
             kernelEnvironments: req.application.kernelEnvironments, on: req.db)
 
         // Re-grade every existing student submission against the edited suite
-        // (gated on a real manifest change) — restoring the v0.4.93 auto-retest
-        // that was lost when suite editing moved off the Save button onto this
-        // live endpoint. Best-effort: the edit has already persisted, so a
-        // retest failure must not fail the save.
-        do {
-            try await retestSubmissionsIfManifestChanged(
-                setup: setup, triggeredBy: req.auth.get(APIUser.self)?.id, on: req.db)
-        } catch {
-            req.logger.warning("putSuite auto-retest failed: \(error)")
-        }
-
-        // Re-kick validation so the runner picks up the edited manifest.
-        // Debounced: a no-op when a pending validation already exists.
-        await scheduleValidationAfterSuiteEdit(req: req, assignment: assignment)
+        // (gated on a real manifest change) and re-kick validation, restoring
+        // the v0.4.93 auto-retest that was lost when suite editing moved off
+        // the Save button onto this live endpoint.
+        await applyContentEditEffects(
+            .gradeAffecting, assignment: assignment, setup: setup,
+            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
 
         let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)

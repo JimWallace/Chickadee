@@ -1,3 +1,4 @@
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -22,10 +23,8 @@ import Testing
 struct ZipProcessEnvironmentTests {
 
     private func zipSource(_ relative: String) throws -> String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()  // CoreTests
-            .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // repo root
+        let url =
+            repositoryRoot
             .appendingPathComponent(relative)
         return try String(contentsOf: url, encoding: .utf8)
     }

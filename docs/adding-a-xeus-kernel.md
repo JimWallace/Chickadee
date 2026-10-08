@@ -3,11 +3,12 @@
 How to teach Chickadee another in-browser language, and — more usefully — what
 that actually costs.
 
-> **This has now been done once, deliberately, with Lua.** Everything below was
-> written before; §"What the Lua run actually cost" at the end records what
-> held, what did not, and which of R's expensive lessons turned out not to
-> generalise. Read the two together — where they disagree, the Lua section is
-> the measurement and this text is the prediction.
+> **This has now been done twice, deliberately: Lua first, then Octave.**
+> Everything below was written before; §"What the Lua run actually cost" and
+> §"What the Octave run actually cost" at the end record what held, what did
+> not, and which of R's expensive lessons turned out not to generalise. Read
+> them together — where they disagree, those sections are the measurement and
+> this text is the prediction.
 
 ## Read this first: two halves, very different sizes
 
@@ -410,9 +411,10 @@ be **authored**. That gap is not a rough edge — it is most of the work, and
 Chickadee has now been on both sides of it. Lua reached the end of the first
 half in a day; the second half is an R-sized arc.
 
-> **Status: Lua has now finished the second half.** `AssignmentLanguage` is
-> `.python | .r | .lua`. Everything below is the runbook that produced it, and
-> the counts are what the compiler actually named. The section further down,
+> **Status: Lua finished the second half, and Octave followed.**
+> `AssignmentLanguage.allCases` is the current list. Everything below is the
+> runbook that produced them, and the counts are what the compiler named for
+> Lua. The section further down,
 > "What a half-supported language actually does", describes the state Lua was in
 > *before* this landed; it is kept because it is the measured argument for
 > finishing, not a description of current behaviour.
@@ -984,7 +986,8 @@ harness reading only stdout cannot tell a failure's message from an empty one.
 The section that exists to stop you working. A seventh language needs **zero
 JavaScript edits** for the authoring surface — no arm, no table, no branch — and
 the failure mode this section prevents is someone going to look for one and
-adding it.
+adding it. The one exception is a syntax-highlighting grammar, and only when the
+language needs a CodeMirror mode the bundle does not carry yet (see below).
 
 That was not true until v0.5.36. `Public/pattern-family-editor.js` contained the
 string "language" zero times: it validated Python identifiers, accepted `True` /
@@ -1002,7 +1005,7 @@ a value a generated test then compares.
 list in any of the authoring JS — verify with:
 
 ```
-grep -nE "'(r|lua|octave|cpp|racket)'" Public/authoring-language.js Public/inputs-editor-core.js Public/pattern-family-editor.js Public/auto-compute-client.js Public/test-editor-modal.js
+grep -nE "'(r|lua|octave|cpp|racket)'" Public/authoring-language.js Public/inputs-editor-core.js Public/pattern-family-editor.js Public/auto-compute-client.js Public/test-editor-modal.js Public/test-renderer-script-core.js
 ```
 
 An empty result is the invariant. A hit means someone re-added the table.
@@ -1026,6 +1029,16 @@ literal spellings were nearly generated into a JS table by
 shipped as hand-written bools in `AuthoringLanguageFacts` before being pointed at
 their real owners one commit later. `AuthoringLanguageFactsTests` asserts the
 derivation, so a second copy fails the suite.
+
+**Syntax highlighting is derived too, except for the grammar itself.** The
+script editor highlights a file by its own extension, not by the assignment's
+language, because the extension decides how the file runs. The extension map
+is seeded (`languageByScriptExtension`, from `AssignmentLanguage(scriptExtension:)`),
+so a new extension needs no JS edit. The one JS edit is a new CodeMirror
+grammar: re-export the mode from `Tools/vendor/codemirror-entry.js`, add it to
+`STREAM_MODES` in `Public/test-renderer-script.js`, and rebuild
+`Public/vendor/codemirror.js` with the esbuild step in `scripts/setup-vendor.sh`.
+A language whose grammar is not there is highlighted as shell. Nothing breaks.
 
 **What is still hand-written, and correctly so.** The per-language *renderers* —
 pattern families, notebook checks, the personalization driver, the grading
@@ -1109,7 +1122,7 @@ no per-language work at all:
 |---|---|
 | all 10 pattern-family kinds | the compiler names each renderer arm; there is no opt-out |
 | the Add Test menu, both renderings | `TestEditorCatalogCoverageTests` — the catalog is per-KIND, not per-language |
-| the authoring UI's literals, scan and eval flags | `AuthoringLanguageFacts`, all derived — **zero JavaScript edits** |
+| the authoring UI's literals, scan and eval flags | `AuthoringLanguageFacts`, all derived — **zero JavaScript edits** (a new highlighting grammar is the one exception) |
 | MCP tool descriptions, schemas, `get_server_info` | `MCPLanguageProse` / `MCPPatternKindProse` / `MCPLanguageCapability`, all from `allCases` |
 | the per-student inputs FILENAME in the browser | generated by `generate-js-constants.sh` |
 | the vendoring guard | derived from your descriptor's `kernelName` |

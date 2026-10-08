@@ -98,8 +98,7 @@ func applyGradeOverride(
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$userID == studentUserID)
         .delete()
-    try await flagOverrideOrResultsPendingSync(
-        override: row, testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+    try await requestGradePush(.student(studentUserID, override: row), testSetupID: testSetupID, on: db)
 }
 
 /// Clears any (setup, user) override and re-flags the student's results for
@@ -125,8 +124,7 @@ func clearGradeOverride(
     // submissions that re-flags their results; for a no-submission student
     // there is no runner grade — so if Chickadee previously pushed a grade for
     // them, queue a removal so the LEARN grade doesn't stay stale.
-    try await flagOverrideOrResultsPendingSync(
-        override: nil, testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+    try await requestGradePush(.student(studentUserID, override: nil), testSetupID: testSetupID, on: db)
     try await enqueueGradeClearIfOrphaned(
         testSetupID: testSetupID, studentUserID: studentUserID, on: db)
     return true
@@ -178,19 +176,18 @@ func enqueueGradeClearIfOrphaned(
 
 /// Marks every result on one student's submissions for a test setup as pending
 /// BrightSpace sync, so the debounced sweep re-pushes the grade after an
-/// override is set or cleared.  When the student has NO submissions there is no
+/// override is set or cleared. Call it through `requestGradePush`, which also
+/// queues the LTI push.  When the student has NO submissions there is no
 /// result row to flag, so the supplied override row carries the pending flag
 /// itself — the sweep scans both (see `sweepBrightSpaceGradeSync`).  `override`
 /// is nil on the clear path (the row was deleted), in which case a
 /// no-submission student is a no-op (nothing to push, nothing to revert).
-func flagOverrideOrResultsPendingSync(
+func flagStudentForBrightSpaceSync(
     override: APIGradeOverride?,
     testSetupID: String,
     studentUserID: UUID,
     on db: Database
 ) async throws {
-    // A course on AGS sends the new grade (or the clear) through its own queue.
-    try await LTIGradeSyncQueue.queue(userIDs: [studentUserID], testSetupID: testSetupID, on: db)
     let now = Date()
     let results = try await gradeResultsForStudent(
         testSetupID: testSetupID, studentUserID: studentUserID, on: db)
