@@ -9,6 +9,41 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.579] - 2026-10-08
+
+### Fixed
+
+- **The isolated-worker drift test now reads `grading-executors.js`.** #1965 moved the grading worker factory into that file, which the isolated notebook page loads, but the test still scanned only `browser-runner.js` and `notebook.js`. A literal worker spawn added there would have been refused by an isolated engine with no test failing. Two comments that still named `browser-runner.js` are corrected. (#2452)
+
+
+## [0.5.578] - 2026-10-08
+
+### Changed
+
+- **Claude Code asks only before an existing test changes.** A PreToolUse hook (`.claude/hooks/ask-before-test-edit.py`) asks for approval when a tool edits a file that already exists under `Tests/`. A new test file needs no approval. The hook replaces the `Edit(/Tests/**)` ask rule, which also stopped new test files. The `git diff` and `git status` allow rules now use the stricter prefix form.
+
+
+## [0.5.577] - 2026-10-07
+
+### Added
+
+- **Claude Code subagents and model routing.** The project settings select the `opusplan` model. Four report-only subagents run the tests (`test-runner`), the UI guards (`ui-guard`), the format-lint guards (`lint-guard`) and a review of the uncommitted diff (`diff-reviewer`). Permission rules allow the read-only check commands, ask before a test file changes, and deny edits to the release-managed and vendored files.
+
+
+## [0.5.576] - 2026-10-07
+
+### Security
+
+- **A course bundle can no longer copy a server file into the imported course.** The import joined each submission and test setup path from the bundle manifest onto the extract directory without a check, so a crafted bundle could name a path such as `../../.worker-secret`. The import now accepts only the `<directory>/<name>` form that the export writes, and refuses any other path. (#2451)
+
+
+## [0.5.575] - 2026-10-07
+
+### Changed
+
+- **CLAUDE.md is shorter: 890 lines and 6,705 words, from 1,227 and 9,693.** The JupyterLite section, the authoring-editor paragraphs and the testing conventions moved, word for word, to `docs/jupyterlite.md`, `docs/authoring-editors.md` and `docs/testing-conventions.md`. CLAUDE.md keeps one or two lines per rule with a pointer. The UI conventions keep one line per guard, because `docs/ui-design.md` already holds each rule in full. No rule was removed. (#1989)
+
+
 ## [0.5.574] - 2026-10-07
 
 ### Fixed

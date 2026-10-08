@@ -656,6 +656,15 @@ capture in the same PR.
 
 ---
 
+## Subagents
+
+The subagents are in `.claude/agents/`. Each one reports and does not edit.
+- After a code change, run `test-runner`. It reports only the failing tests.
+- After a change to a Leaf template, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
+- Before a commit, run `diff-reviewer` on the uncommitted diff. Before a push, run `lint-guard`.
+
+---
+
 ## Testing Conventions
 
 The reason for each rule is in

@@ -137,19 +137,25 @@ extension CourseBundleRoutes {
         manifest: CourseBundleManifest, extractDir: URL
     ) throws {
         for setup in manifest.testSetups {
-            let path = extractDir.appendingPathComponent(setup.zipFilename)
-            guard FileManager.default.fileExists(atPath: path.path) else {
+            guard
+                let path = bundleEntryURL(
+                    extractDir: extractDir, path: setup.zipFilename, directory: "testsetups"),
+                FileManager.default.fileExists(atPath: path.path)
+            else {
                 throw Abort(
                     .badRequest,
-                    reason: "Bundle is missing test setup file: \(setup.zipFilename)")
+                    reason: "Bundle is missing or has an invalid test setup file: \(setup.zipFilename)")
             }
         }
         for sub in manifest.submissions {
-            let path = extractDir.appendingPathComponent(sub.submissionFilename)
-            guard FileManager.default.fileExists(atPath: path.path) else {
+            guard
+                let path = bundleEntryURL(
+                    extractDir: extractDir, path: sub.submissionFilename, directory: "submissions"),
+                FileManager.default.fileExists(atPath: path.path)
+            else {
                 throw Abort(
                     .badRequest,
-                    reason: "Bundle is missing submission file: \(sub.submissionFilename)")
+                    reason: "Bundle is missing or has an invalid submission file: \(sub.submissionFilename)")
             }
         }
         for item in manifest.contentItems ?? [] {
@@ -489,7 +495,12 @@ private func importBundledTestSetups(
         // cooperative pool (#1382 item 9; app-scoped because this runs
         // inside the import transaction, whose closure cannot capture the
         // request).
-        let srcZip = extractDir.appendingPathComponent(bundledSetup.zipFilename)
+        guard
+            let srcZip = bundleEntryURL(
+                extractDir: extractDir, path: bundledSetup.zipFilename, directory: "testsetups")
+        else {
+            throw Abort(.badRequest, reason: "Invalid test setup file: \(bundledSetup.zipFilename)")
+        }
         tally.createdPaths.append(newZipPath)
         try await runBlocking(app: app) {
             try FileManager.default.copyItem(
@@ -714,7 +725,12 @@ private func importBundledSubmissions(
         guard let setupID = setupIDMap[bundledSub.testSetupBundleID] else { continue }
         let userID = userIDMap[bundledSub.userBundleID]
 
-        let srcFile = extractDir.appendingPathComponent(bundledSub.submissionFilename)
+        guard
+            let srcFile = bundleEntryURL(
+                extractDir: extractDir, path: bundledSub.submissionFilename, directory: "submissions")
+        else {
+            throw Abort(.badRequest, reason: "Invalid submission file: \(bundledSub.submissionFilename)")
+        }
         let copied = try copySubmissionFile(from: srcFile.path, into: subsDir)
         tally.createdPaths.append(copied.path)
 
@@ -820,4 +836,19 @@ private func bundledSectionGradingMode(_ section: BundledSection) throws -> Grad
             reason: "Bundle section \"\(section.name)\" has an unknown grading mode: \(section.defaultGradingMode)")
     }
     return mode
+}
+
+/// Resolves a test setup or submission path from a bundle manifest to a file
+/// under the extract directory, or nil (#2451). The export writes only
+/// `<directory>/<name>`, so the import accepts only that: one plain file
+/// name inside the expected directory. Anything else, such as `../x`, an
+/// absolute path or a nested path, would let a crafted bundle copy a server
+/// file into the imported course.
+func bundleEntryURL(extractDir: URL, path: String, directory: String) -> URL? {
+    let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+    guard parts.count == 2, parts[0] == directory else { return nil }
+    let name = String(parts[1])
+    guard !name.isEmpty, name != ".", name != "..", !name.contains("\\"), !name.contains("\0")
+    else { return nil }
+    return extractDir.appendingPathComponent(directory).appendingPathComponent(name)
 }
