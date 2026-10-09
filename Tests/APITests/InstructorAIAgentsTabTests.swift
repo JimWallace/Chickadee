@@ -94,7 +94,7 @@ import VaporTesting
             #expect(html.contains("/instructor/\(gated.publicID)/feedback"))
             #expect(html.contains("Reflect Lab"))
             #expect(!html.contains("Plain Lab"))
-            #expect(html.contains("<td>1</td>"))
+            #expect(html.contains("1 to review"))
             #expect(html.contains("/instructor/mcp/attestation"))
         }
     }

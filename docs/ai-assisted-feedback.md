@@ -209,8 +209,9 @@ feedback. It is at `/instructor/mcp`, and it has two sections.
 **Agent access.** What an agent that course staff connect can reach in the
 active course:
 
-- **Course content**: on while the MCP server is on.
-- **Feedback on written answers**: on while the admin course gate is on. The
+- **Feedback on written answers**: on while the admin course gate is on.
+  (Course content is reachable while the MCP server is on; the authoring-voice
+  section beside it shows that state.) The
   section then lists each assignment with its own gate on, with a link to its
   review page and the number of drafts that wait for a person.
 - A link to the connected-agents page, where a person revokes a grant. That

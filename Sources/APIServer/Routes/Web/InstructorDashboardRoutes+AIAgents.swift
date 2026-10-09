@@ -22,9 +22,8 @@ extension InstructorDashboardRoutes {
     func agentAccessFacts(
         course: APICourse?, viewer: APIUser, req: Request
     ) async throws -> AgentAccessFacts {
-        let contentOn = req.application.appConfig.mcp.mode.isMounted
         guard let course, let courseID = course.id, course.aiFeedbackEnabled == true else {
-            return AgentAccessFacts(contentOn: contentOn, feedbackOn: false)
+            return AgentAccessFacts(feedbackOn: false)
         }
         let assignments = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
@@ -46,7 +45,6 @@ extension InstructorDashboardRoutes {
         let enrollment = try await viewerEnrollment(viewer, courseID: courseID, on: req.db)
         let isStaff = (enrollment?.role ?? .student) >= .ta
         return AgentAccessFacts(
-            contentOn: contentOn,
             feedbackOn: true,
             feedbackAssignments: rows,
             canAttest: isStaff && !course.isArchived,
@@ -101,8 +99,6 @@ extension InstructorDashboardRoutes {
 
 /// The access section of the instructor AI agents tab.
 struct AgentAccessFacts: Encodable {
-    /// True when the MCP server is mounted, so an agent can author content.
-    let contentOn: Bool
     /// True when the admin turned AI-assisted feedback on for the course.
     let feedbackOn: Bool
     /// The course's assignments with their own gate on.

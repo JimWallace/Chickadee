@@ -7,7 +7,7 @@ AI agents
 
 #if(!hasActiveCourse):
 <section class="page-section">
-    <p class="empty">Select a course to manage its authoring voice.</p>
+    <p class="empty">Select a course to manage its AI agents.</p>
 </section>
 #else:
 
@@ -18,46 +18,53 @@ AI agents
     </div>
     <p class="section-intro">What an agent that course staff connect can reach in #(courseCode).</p>
     <dl class="detail-grid">
-        <dt>Course content</dt>
-        <dd>#if(agentAccess.contentOn):<span class="tier tier-open">On</span>#else:<span class="tier tier-closed">Off</span>#endif</dd>
         <dt>Feedback on written answers</dt>
         <dd>#if(agentAccess.feedbackOn):<span class="tier tier-open">On</span>#else:<span class="tier tier-closed">Off</span>#endif</dd>
+        #if(agentAccess.feedbackOn):
+        <dt>Your account attestation</dt>
+        <dd>
+            #if(agentAccess.attestedAtISO):
+            Recorded <code>#(agentAccess.attestedAtISO)</code>
+            <form method="post" action="/instructor/mcp/attestation" class="form-flush">
+                #csrfFormField()
+                <input type="hidden" name="action" value="withdraw">
+                <button class="btn action-btn" type="submit">Withdraw</button>
+            </form>
+            #elseif(agentAccess.canAttest):
+            <span class="tier tier-closed">Not recorded</span>
+            <form method="post" action="/instructor/mcp/attestation" class="form-flush">
+                #csrfFormField()
+                <input type="hidden" name="action" value="record">
+                <button class="btn btn-primary" type="submit">Record attestation</button>
+            </form>
+            #else:
+            <span class="tier tier-closed">Not recorded</span>
+            #endif
+        </dd>
+        #endif
     </dl>
+    #if(agentAccess.canAttest):
+    <p class="field-note">The attestation says you connect only your UW-licensed AI account for feedback. <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#the-ai-agents-tab" target="_blank" rel="noopener noreferrer">Why <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a></p>
+    #endif
     #if(agentAccess.feedbackOn):
     #if(count(agentAccess.feedbackAssignments) == 0):
     <p class="empty">No assignment has AI-assisted feedback on yet.</p>
+    <p class="section-note">An instructor turns it on in each assignment's Student Options.</p>
     #else:
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Assignment</th>
-                <th>Drafts to review</th>
-            </tr>
+    <table class="results-table section-items">
+        <thead class="visually-hidden">
+            <tr><th scope="col">Type</th><th scope="col">Assignment</th><th scope="col">Drafts to review</th></tr>
         </thead>
         <tbody>
         #for(row in agentAccess.feedbackAssignments):
             <tr>
-                <td><a href="#(row.reviewURL)">#(row.title)</a></td>
-                <td>#(row.draftCount)</td>
+                <td class="item-tile-cell"><span class="item-tile" data-kind="graded"><svg class="icon" aria-hidden="true"><use href="#i-calendar-check"/></svg></span></td>
+                <td class="item-main"><div class="item-title"><a href="#(row.reviewURL)">#(row.title)</a></div></td>
+                <td class="item-status"><span class="chip">#(row.draftCount) to review</span></td>
             </tr>
         #endfor
         </tbody>
     </table>
-    #endif
-    #if(agentAccess.attestedAtISO):
-    <form method="post" action="/instructor/mcp/attestation" class="form-stack">
-        #csrfFormField()
-        <input type="hidden" name="action" value="withdraw">
-        <p class="field-note">You recorded <span class="js-relative-time" data-iso="#(agentAccess.attestedAtISO)">#(agentAccess.attestedAtISO)</span> that you connect only your UW-licensed AI account for feedback.</p>
-        <div class="toolbar"><button class="btn action-btn" type="submit">Withdraw</button></div>
-    </form>
-    #elseif(agentAccess.canAttest):
-    <form method="post" action="/instructor/mcp/attestation" class="form-stack">
-        #csrfFormField()
-        <input type="hidden" name="action" value="record">
-        <p class="field-note">Connect only your UW-licensed AI account for feedback; a personal account is approved for public data only. <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#the-ai-agents-tab" target="_blank" rel="noopener noreferrer">Why <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a></p>
-        <div class="toolbar"><button class="btn btn-primary" type="submit">I connect only my UW-licensed AI account</button></div>
-    </form>
     #endif
     #endif
 </section>

@@ -7,9 +7,9 @@ Connected agents
     <h2 class="agents-heading">Connected agents</h2>
     <p class="section-intro">
         AI agents authorized to author course content on
-        #if(isAdmin):a user's#else:your#endif behalf over the Model Context Protocol; a grant with
-        <code>feedback:read</code> can also read students' written answers, without names, where AI-assisted feedback is on.
+        #if(isAdmin):a user's#else:your#endif behalf over the Model Context Protocol.
         Revoking stops the agent immediately; any access token it holds lapses within minutes.
+        <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md" target="_blank" rel="noopener noreferrer">What a feedback grant can read <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>
     </p>
     <div class="table-scroll"><table class="results-table">
         <thead>

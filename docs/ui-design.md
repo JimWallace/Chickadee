@@ -471,7 +471,7 @@ duplicate.
   submitted-count track, and a wider state track for the status select.  Rows
   stay `<tr>` in a `tbody[data-section-id]` and keep their `data-assignment-id`
   / `data-content-item-id`, because `section-items-dnd.js` reads them.
-- **`.editor-split`** — an editor (a form) beside a facts `.card`; one column on a phone. The MCP authoring-voice page.
+- **`.editor-split`** — an editor (a form) beside a facts `.card`; one column on a phone. The authoring-voice section of the instructor AI agents page.
 - **`.facts-actions`** — the buttons at the top right of a facts card (a `.detail-grid` in a `.card`): Test connection and a ⋯ on the LEARN page.
 - **`.section-items-combo`** (20rem) — the state track of a `.section-items` list whose control is a combobox plus its Save button.
 - **`.add-panel`** — a form that opens under a page or section header: the
@@ -635,7 +635,7 @@ copies, and the page-style ratchet fails CI on growth.
 ### Row anatomy for lists of things
 
 One shape serves the student dashboard, the instructor Overview, Students,
-Slip days, Activity, LEARN and the MCP page.  A row is a tile (content kind,
+Slip days, Activity, LEARN and the AI agents page.  A row is a tile (content kind,
 activity category or the person's avatar), a name, one details line, a fixed
 state track and a fixed right-aligned actions track.
 
