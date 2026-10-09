@@ -38,7 +38,8 @@ extension AdminRoutes {
                 courseForm: CourseFieldsContext(
                     idPrefix: "new-course", code: "", name: "", term: nil,
                     error: CourseFormError.message(forQuery: req.query[String.self, at: "error"]),
-                    autofocus: true)
+                    autofocus: true),
+                placeholderAllowed: req.application.staffPlaceholderAllowed
             ))
     }
 
@@ -51,10 +52,13 @@ extension AdminRoutes {
             var name: String
             var termYear: String?
             var termSeason: String?
+            /// Optional: the username of the course's first instructor.
+            var instructor: String?
         }
         let body = try req.content.decode(CourseBody.self)
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let instructor = (body.instructor ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, !name.isEmpty else {
             return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.fields.rawValue)")
         }
@@ -66,17 +70,87 @@ extension AdminRoutes {
         if try await activeCourseCodeIsTaken(code, term: term, excluding: nil, on: req.db) {
             return req.redirect(to: "/admin/courses/new?error=\(CourseFormError.codeTaken.rawValue)")
         }
-        let course = APICourse(code: code, name: name, term: term)
-        try await course.save(on: req.db)
-        let id = try course.requireID().uuidString
+        // The course and its instructor are one transaction: a refused
+        // instructor leaves no course without one.
+        let allowPlaceholder = req.application.staffPlaceholderAllowed
+        let created: (course: APICourse, staff: StaffProvisioningResult?)
+        do {
+            created = try await req.db.transaction { db in
+                let course = APICourse(code: code, name: name, term: term)
+                try await course.save(on: db)
+                guard !instructor.isEmpty else { return (course, nil) }
+                let staff = try await provisionStaffEnrollment(
+                    identifier: instructor, role: .instructor, courseID: try course.requireID(),
+                    allowPlaceholder: allowPlaceholder, on: db)
+                return (course, staff)
+            }
+        } catch let error as StaffProvisioningError {
+            let formError: CourseFormError =
+                switch error {
+                case .invalidIdentifier: .instructorInvalid
+                case .emailWithoutAccount: .instructorEmail
+                case .unknownUser: .instructorUnknown
+                }
+            return req.redirect(to: "/admin/courses/new?error=\(formError.rawValue)")
+        }
+        let courseID = try created.course.requireID()
+        let id = courseID.uuidString
+        var metadata = ["course_code": code, "course_name": name, "course_term": term.displayName]
+        if let staff = created.staff {
+            metadata["instructor"] = staff.username
+        }
         await AuditLogger.record(
             action: .courseCreated,
             targetType: .course,
             targetID: id,
-            metadata: ["course_code": code, "course_name": name, "course_term": term.displayName],
+            metadata: metadata,
             on: req
         )
+        if let staff = created.staff {
+            await recordStaffProvisioning(
+                staff, role: .instructor, courseID: courseID, source: "admin_course_create", on: req)
+        }
         return req.redirect(to: "/admin/courses/\(id)")
+    }
+
+    // MARK: - POST /admin/courses/:courseID/staff
+
+    /// Adds a co-instructor or TA to any course, enrolled or not. It is the
+    /// instructor roster's staff form (`instructorInviteStaff`) for an admin:
+    /// the person need not have logged in.
+    @Sendable
+    func adminAddStaff(req: Request) async throws -> Response {
+        struct Body: Content {
+            var identifier: String?
+            var role: String?
+        }
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let course = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+        // An archived course takes no new people (the roster hides the form).
+        guard !course.isArchived else { throw Abort(.conflict) }
+
+        let back = "/admin/courses/\(idString)"
+        let body = try? req.content.decode(Body.self)
+        let identifier = (body?.identifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let role = CourseRole(rawValue: body?.role ?? ""), role >= .ta else {
+            return req.redirect(to: "\(back)?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
+        }
+        let result: StaffProvisioningResult
+        do {
+            result = try await provisionStaffEnrollment(
+                identifier: identifier, role: role, courseID: courseID,
+                allowPlaceholder: req.application.staffPlaceholderAllowed, on: req.db)
+        } catch let error as StaffProvisioningError {
+            return req.redirect(to: "\(back)?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")
+        }
+        await recordStaffProvisioning(
+            result, role: role, courseID: courseID, source: "admin_staff_invite", on: req)
+        return req.redirect(to: "\(back)?staffAdded=1")
     }
 
     // MARK: - POST /admin/courses/:courseID/archive
@@ -531,7 +605,12 @@ extension AdminRoutes {
                 // course, never from today's date.
                 cloneForm: CourseFieldsContext(
                     idPrefix: "clone", code: course.code, name: course.name, term: course.term?.next,
-                    error: CourseCloneFormError.message(forQuery: errorCode))
+                    error: CourseCloneFormError.message(forQuery: errorCode)),
+                placeholderAllowed: req.application.staffPlaceholderAllowed,
+                staffForm: StaffFieldsContext(
+                    idPrefix: "add-staff", placeholderAllowed: req.application.staffPlaceholderAllowed,
+                    defaultRole: .instructor, errorQuery: req.query[String.self, at: "staffError"]),
+                flashSuccess: req.query[String.self, at: "staffAdded"] != nil ? "Staff member added." : nil
             ))
     }
 

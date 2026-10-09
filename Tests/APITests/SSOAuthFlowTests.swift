@@ -659,6 +659,75 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
         }
     }
 
+    @Test func sSOCallbackAdoptsAStaffPlaceholderAndKeepsItsInstructorRole() async throws {
+        // An admin set up a course for an instructor who has never logged in
+        // (`provisionStaffEnrollment`). Their first SSO login must adopt that
+        // placeholder, so they land in the course as its instructor.
+        let idToken = try await signedToken(
+            issuer: "http://127.0.0.1/issuer",
+            audience: ["test-client-id"],
+            subject: "subject-new-prof",
+            username: nil,
+            name: "New Prof",
+            email: "newprof@example.com",
+            extraClaims: ["winaccountname": "newprof"]
+        )
+        let provider = try await makeMockOIDCProvider(mode: .succeedImmediately(idToken: idToken))
+
+        let config = OIDCConfiguration(
+            clientID: "test-client-id",
+            clientSecret: "test-client-secret",
+            redirectURI: "http://localhost:8080/auth/sso/callback",
+            discovery: OIDCDiscovery(
+                issuer: "http://127.0.0.1/issuer",
+                authorizationEndpoint: "http://127.0.0.1:\(provider.port)/authorize",
+                tokenEndpoint: "http://127.0.0.1:\(provider.port)/token",
+                jwksURI: "http://127.0.0.1:\(provider.port)/keys",
+                revocationEndpoint: nil,
+                endSessionEndpoint: nil
+            ),
+            claimConfig: OIDCClaimConfig(usernameClaim: "winaccountname")
+        )
+
+        try await withApp(provider.app) { _ in
+            try await withApp(try await makeApp(oidcConfig: config)) { app in
+                await app.jwt.keys.add(hmac: mockIdentityProviderSigningKey, digestAlgorithm: .sha256)
+
+                let course = try await makeTestCourse(on: app, code: "PROV101")
+                let courseID = try course.requireID()
+                let staff = try await provisionStaffEnrollment(
+                    identifier: "newprof", role: .instructor, courseID: courseID,
+                    allowPlaceholder: true, on: app.db)
+                #expect(staff.createdPlaceholder)
+
+                let start = try await startSSOSession(on: app)
+                try await app.asyncTest(
+                    .GET,
+                    "/auth/sso/callback?code=code123&state=\(start.state)",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: start.cookie)
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .seeOther)
+                    }
+                )
+
+                let users = try await APIUser.query(on: app.db)
+                    .filter(\.$username == "newprof")
+                    .all()
+                #expect(users.count == 1, "the login adopts the placeholder, not a second account")
+                let user = try #require(users.first)
+                #expect(user.id == staff.userID)
+                #expect(user.externalSubject == "subject-new-prof")
+                let enrollment = try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$course.$id == courseID)
+                    .filter(\.$userID == staff.userID)
+                    .first()
+                #expect(enrollment?.role == .instructor)
+            }
+        }
+    }
+
     @Test func sSOCallbackPreservesExplicitUserIDClaimWhenRepairingUsername() async throws {
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",

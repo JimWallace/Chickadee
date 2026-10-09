@@ -134,6 +134,8 @@ struct InstructorStudentsContext: Encodable {
     /// `courseIsArchived || !canManageRoster` — folded so the Leaf template gates
     /// every mutating control on one flag (LeafKit 1.14.2 mis-parses `||`).
     let rosterReadOnly: Bool
+    /// The "Add staff member" panel's fields (`_staff-fields`).
+    let staffForm: StaffFieldsContext
     /// Flash banners after a staff-invite POST redirect.
     let flashSuccess: String?
     let flashError: String?

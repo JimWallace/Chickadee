@@ -14,6 +14,12 @@
     <form method="post" action="/admin/courses" class="form-stack">
         #csrfFormField()
         #extend("_course-fields", courseForm)
+        <div class="field-stack field-stack--narrow">
+            <label for="new-course-instructor">Instructor (optional)</label>
+            <input id="new-course-instructor" class="form-input" type="text" name="instructor"
+                   autocomplete="off" placeholder="e.g. jdoe" aria-describedby="new-course-instructor-note">
+            <p class="field-note" id="new-course-instructor-note">#if(placeholderAllowed):Need not have signed in yet.#else:Must already have an account.#endif</p>
+        </div>
         <div class="toolbar">
             <button class="btn btn-primary" type="submit">Create course</button>
         </div>
@@ -172,6 +178,7 @@
                 </span>
             </form>
             #if(!course.isArchived):
+            <a class="btn action-btn" href="#add-staff-panel" data-add-target="add-staff-panel">Add staff</a>
             <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
                   enctype="multipart/form-data" class="form-flush">
                 #csrfFormField()
@@ -184,6 +191,18 @@
             #endif
         </div>
     </div>
+    #if(!course.isArchived):
+    <div class="add-panel card#if(staffForm.error): is-open#endif" id="add-staff-panel">
+        <form method="post" action="/admin/courses/#(course.id)/staff" class="form-stack">
+            #csrfFormField()
+            #extend("_staff-fields", staffForm)
+            <div class="toolbar">
+                <button class="btn btn-primary" type="submit">Add</button>
+                <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
+            </div>
+        </form>
+    </div>
+    #endif
     #if(count(enrolledUsers) == 0):
     <p class="empty">No students enrolled yet.</p>
     #else:

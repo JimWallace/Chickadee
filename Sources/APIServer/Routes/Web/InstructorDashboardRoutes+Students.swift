@@ -82,11 +82,6 @@ extension InstructorDashboardRoutes {
                 userIDString: changed, courseID: activeCourseUUID, on: req.db)
         }
         let flashError: String? = {
-            switch req.query[String.self, at: "staffError"] {
-            case "role": return "Choose a staff role (TA or Instructor)."
-            case "identifier": return "Enter a valid username or email address."
-            default: break
-            }
             switch req.query[String.self, at: "handleError"] {
             case "exhausted": return "No unused class handle is left in this course."
             case "notEnrolled": return "That person is not enrolled in this course."
@@ -112,6 +107,9 @@ extension InstructorDashboardRoutes {
             brightspaceLinkAvailable: brightspaceLinkAvailable,
             canManageRoster: canManageRoster,
             rosterReadOnly: courseIsArchived || !canManageRoster,
+            staffForm: StaffFieldsContext(
+                idPrefix: "add-staff", placeholderAllowed: true, defaultRole: .ta,
+                errorQuery: req.query[String.self, at: "staffError"]),
             flashSuccess: flashSuccess,
             flashError: flashError
         )

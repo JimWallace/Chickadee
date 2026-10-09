@@ -1,0 +1,22 @@
+<!-- The fields of one staff form: the instructor roster and the admin course
+     page.  It renders under a sub-context (StaffFieldsContext), so each copy
+     has unique ids.  A refusal shows here, beside the form it belongs to. -->
+#if(error):
+<div class="form-error" role="alert">#(error)</div>
+#endif
+<div class="toolbar">
+    <div class="field-stack field-stack--grow">
+        <label for="#(idPrefix)-identifier">Username or email</label>
+        <input id="#(idPrefix)-identifier" class="form-input" type="text" name="identifier"
+               required autocomplete="off" aria-describedby="#(idPrefix)-note">
+    </div>
+    <div class="field-stack field-stack--narrow">
+        <label for="#(idPrefix)-role">Role</label>
+        <select id="#(idPrefix)-role" class="form-input" name="role">
+            #for(option in roleOptions):
+            <option value="#(option.value)" #if(option.selected):selected#endif>#(option.label)</option>
+            #endfor
+        </select>
+    </div>
+</div>
+<p class="field-note" id="#(idPrefix)-note">#(note)</p>

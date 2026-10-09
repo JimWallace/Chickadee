@@ -40,26 +40,15 @@ Students
 
 #if(currentUser.activeCourse):
 #if(!rosterReadOnly):
-<div class="add-panel card" id="add-staff-panel">
-            <form method="post" action="/courses/#(currentUser.activeCourse.id)/staff" class="form popup-form">
-                #csrfFormField()
-                <p class="section-note">Add a co-instructor or TA by username or email. If they have no account yet, a placeholder is created and adopted on their first login.</p>
-                <label class="form-label">
-                    Username or email
-                    <input class="form-input editor-input" type="text" name="identifier" required autocomplete="off">
-                </label>
-                <label class="form-label">
-                    Role
-                    <select class="form-input editor-input" name="role">
-                        <option value="ta">TA</option>
-                        <option value="instructor">Instructor</option>
-                    </select>
-                </label>
-                <div class="toolbar">
-                    <button class="btn btn-primary btn-compact" type="submit">Add</button>
-                    <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
-                </div>
-            </form>
+<div class="add-panel card#if(staffForm.error): is-open#endif" id="add-staff-panel">
+    <form method="post" action="/courses/#(currentUser.activeCourse.id)/staff" class="form-stack">
+        #csrfFormField()
+        #extend("_staff-fields", staffForm)
+        <div class="toolbar">
+            <button class="btn btn-primary" type="submit">Add</button>
+            <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
+        </div>
+    </form>
 </div>
 #endif
 #endif

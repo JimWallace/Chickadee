@@ -43,6 +43,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.post("courses", ":courseID", "role", ":userID", use: adminSetEnrollmentRole)
+        admin.post("courses", ":courseID", "staff", use: adminAddStaff)
         admin.get("users", ":userID", use: userDetail)
         admin.post("users", ":userID", "delete", use: deleteUser)
         admin.post("users", ":userID", "enroll", use: adminEnrollUser)

@@ -129,6 +129,49 @@ import VaporTesting
         }
     }
 
+    // MARK: - Email identifiers
+
+    @Test func inviteByEmailWithoutAccount_isRefused() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture(actorRole: .instructor)
+            let res = try await postStaff(fx, identifier: "nobody@example.com", role: "ta")
+            #expect(res.status == .seeOther)
+            #expect(res.location?.contains("staffError=email") == true)
+            // SSO adopts a placeholder by username only, so none is made for an email.
+            let count = try await APIUser.query(on: app.db)
+                .filter(\.$username == "nobody@example.com").count()
+            #expect(count == 0)
+        }
+    }
+
+    @Test func inviteByEmailOfExistingAccount_enrollsThatAccount() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture(actorRole: .instructor)
+            let existing = try await makeTestUser(on: app, username: "mailed_prof")
+            existing.email = "mailed@example.com"
+            try await existing.save(on: app.db)
+
+            let res = try await postStaff(fx, identifier: "mailed@example.com", role: "instructor")
+            #expect(res.location?.contains("staffAdded=1") == true)
+            let enr = try #require(try await enrollment(userID: existing.requireID(), courseID: fx.courseID))
+            #expect(enr.role == .instructor)
+        }
+    }
+
+    @Test func invitePlaceholder_isAudited() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture(actorRole: .instructor)
+            _ = try await postStaff(fx, identifier: "audited_ta", role: "ta")
+            let created = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "audited_ta").first())
+            let provisioned = try await APIAuditLogEntry.query(on: app.db)
+                .filter(\.$action == AuditAction.userProvisioned.rawValue)
+                .filter(\.$targetID == created.requireID().uuidString)
+                .count()
+            #expect(provisioned == 1)
+        }
+    }
+
     // MARK: - Guards
 
     @Test func taCannotInviteStaff() async throws {

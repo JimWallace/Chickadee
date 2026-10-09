@@ -69,12 +69,20 @@ enum CourseFormError: String, CaseIterable {
     case fields = "course_fields_required"
     case term = "course_term_required"
     case codeTaken = "code_taken"
+    /// The new-course form's optional instructor was refused
+    /// (`StaffProvisioningError`); no course was created.
+    case instructorInvalid = "instructor_invalid"
+    case instructorEmail = "instructor_email"
+    case instructorUnknown = "instructor_unknown"
 
     var message: String {
         switch self {
         case .fields: "Course code and name are required."
         case .term: "Enter a four-digit year and a term."
         case .codeTaken: "Another course already uses this code."
+        case .instructorInvalid: "Enter a valid username for the instructor."
+        case .instructorEmail: StaffProvisioningError.emailWithoutAccountMessage
+        case .instructorUnknown: StaffProvisioningError.unknownUserMessage
         }
     }
 
