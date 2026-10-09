@@ -1,17 +1,11 @@
 // APIServer/Routes/Web/MultipartHelpers.swift
 //
-// Multipart form parsing helpers and URL-encoding shared across the
-// instructor assignment routes.  Extracted from AssignmentHelpers.swift
+// Multipart form parsing helpers shared across the instructor assignment
+// routes. `urlEncode` is in Utilities/URLEncoding.swift.  Extracted from AssignmentHelpers.swift
 // (issue #442) — no behaviour changes.
 
 import Foundation
 import Vapor
-
-func urlEncode(_ s: String) -> String {
-    var allowed = CharacterSet.alphanumerics
-    allowed.insert(charactersIn: "-._~")
-    return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-}
 
 func multipartParts(from req: Request) throws -> [MultipartPart]? {
     guard let contentType = req.headers.contentType,

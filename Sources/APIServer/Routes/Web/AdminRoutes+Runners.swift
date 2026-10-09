@@ -105,7 +105,6 @@ extension AdminRoutes {
         else {
             throw Abort(.notFound)
         }
-        let iso = ISO8601DateFormatter()
         let processedCount = try await APISubmission.query(on: req.db)
             .filter(\.$workerID == runnerID)
             .filter(\.$status ~~ [SubmissionStatus.complete.rawValue, SubmissionStatus.failed.rawValue])
@@ -119,7 +118,7 @@ extension AdminRoutes {
             hostname: latestSnapshot.hostname ?? "",
             runnerVersion: latestSnapshot.runnerVersion ?? "",
             maxConcurrentJobs: latestSnapshot.maxJobs,
-            lastActive: iso.string(from: latestSnapshot.recordedAt),
+            lastActive: iso8601String(latestSnapshot.recordedAt),
             assignedJobs: 0,
             jobsProcessed: processedCount,
             avgExecutionMs: avg?.avgExecutionMs,
@@ -154,7 +153,7 @@ extension AdminRoutes {
         var limits: [String: Int] = [:]
         for setup in setups {
             guard let id = setup.id,
-                let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+                let props = decodeManifest(fromJSON: setup.manifest)
             else { continue }
             limits[id] = props.timeLimitSeconds
         }
@@ -290,7 +289,7 @@ extension AdminRoutes {
     /// How long a runner has been silent, for the offline notice; empty while it
     /// is online.
     static func offlineDuration(of worker: AdminWorkerRow, now: Date = Date()) -> String {
-        guard worker.isOffline, let last = ISO8601DateFormatter().date(from: worker.lastActive) else {
+        guard worker.isOffline, let last = iso8601Date(worker.lastActive) else {
             return ""
         }
         return formatMs(Int(now.timeIntervalSince(last) * 1000))

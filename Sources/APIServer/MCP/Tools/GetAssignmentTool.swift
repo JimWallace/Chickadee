@@ -245,7 +245,6 @@ struct GetAssignmentTool: ContentTool {
             sectionName = try await APICourseSection.find(sectionID, on: context.db)?.name
         }
 
-        let formatter = ISO8601DateFormatter()
         return Output(
             publicID: assignment.publicID,
             title: assignment.title,
@@ -255,8 +254,8 @@ struct GetAssignmentTool: ContentTool {
             courseTerm: course.term?.displayName,
             isOpen: assignment.isOpen,
             visibility: assignment.visibility.rawValue,
-            dueAt: assignment.dueAt.map { formatter.string(from: $0) },
-            startsAt: assignment.startsAt.map { formatter.string(from: $0) },
+            dueAt: assignment.dueAt.map { iso8601String($0) },
+            startsAt: assignment.startsAt.map { iso8601String($0) },
             validationStatus: assignment.validationStatus,
             deadlineOverrideActive: assignment.deadlineOverrideActive ?? false,
             gradingMode: gradingMode,

@@ -535,11 +535,10 @@ func dataExportJSONEncoder() -> JSONEncoder {
 /// The manifest at the root of the zip, explaining each file.  Plain
 /// Markdown, addressed to the account owner.
 func dataExportReadme(username: String, generatedAt: Date) -> String {
-    let formatter = ISO8601DateFormatter()
     return """
         # Your Chickadee data export
 
-        Generated for account **\(username)** on \(formatter.string(from: generatedAt)) \
+        Generated for account **\(username)** on \(iso8601String(generatedAt)) \
         by Chickadee v\(ChickadeeVersion.current).
 
         This archive contains a copy of the personal information Chickadee

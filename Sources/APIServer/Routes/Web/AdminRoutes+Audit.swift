@@ -6,6 +6,7 @@
 // most recent 200 matching entries stay legible even as high-volume events
 // (MCP tool calls, logins) accumulate.  Filters narrow by action and actor.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -45,7 +46,6 @@ extension AdminRoutes {
             .all()
 
         let timestampFormatter = waterlooDateTimeFormatter()
-        let isoFormatter = ISO8601DateFormatter()
         let clockFormatter = DateFormatter()
         clockFormatter.locale = Locale(identifier: "en_CA")
         clockFormatter.timeZone = DayGrouper.displayTimeZone
@@ -57,7 +57,7 @@ extension AdminRoutes {
             let occurredAt = entry.createdAt ?? .distantPast
             return AdminAuditRow(
                 timestamp: entry.createdAt.map { timestampFormatter.string(from: $0) } ?? "—",
-                timestampISO: entry.createdAt.map { isoFormatter.string(from: $0) } ?? "",
+                timestampISO: entry.createdAt.map { iso8601String($0) } ?? "",
                 actor: entry.actorUsername ?? "—",
                 category: display.category,
                 label: display.label,

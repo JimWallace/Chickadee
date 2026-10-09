@@ -17,6 +17,7 @@
 // chronological — "what happened to this course last Tuesday" — and two lists
 // would leave the reader correlating timestamps by eye.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -129,12 +130,11 @@ enum CourseTimelineService {
         clock.timeZone = formatter.timeZone
         clock.dateStyle = .none
         clock.timeStyle = .short
-        let iso = ISO8601DateFormatter()
         return merged.map { entry in
             let tile = TimelineCategoryTile.tile(forCategory: entry.category)
             return CourseTimelineRow(
                 timestamp: formatter.string(from: entry.sortKey),
-                timestampISO: iso.string(from: entry.sortKey),
+                timestampISO: iso8601String(entry.sortKey),
                 actor: entry.actor,
                 category: entry.category,
                 summary: entry.summary,

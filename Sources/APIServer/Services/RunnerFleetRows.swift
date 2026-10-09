@@ -24,7 +24,6 @@ private struct WorkerStatusCountRow: Decodable {
 }
 
 func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
-    let iso = ISO8601DateFormatter()
     let workers = await req.application.workerActivityStore.snapshotsSortedByRecent()
 
     // Grouped COUNT by (worker_id, status) rather than loading the entire
@@ -83,7 +82,7 @@ func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
             hostname: snapshot.hostname,
             runnerVersion: snapshot.runnerVersion,
             maxConcurrentJobs: snapshot.maxConcurrentJobs,
-            lastActive: iso.string(from: snapshot.lastActive),
+            lastActive: iso8601String(snapshot.lastActive),
             assignedJobs: assigned,
             jobsProcessed: processed,
             avgExecutionMs: avgExec,
@@ -196,10 +195,6 @@ func sum(_ values: [Int?]) -> Int? {
     let present = values.compactMap { $0 }
     guard !present.isEmpty else { return nil }
     return present.reduce(0, +)
-}
-
-func iso8601String(_ date: Date) -> String {
-    ISO8601DateFormatter().string(from: date)
 }
 
 struct AdminWorkerRow: Content {

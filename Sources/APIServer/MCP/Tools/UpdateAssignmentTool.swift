@@ -239,13 +239,12 @@ struct UpdateAssignmentTool: ContentTool {
         // versioning deliberately does not record, and an agent moving a
         // deadline or reopening an assignment is exactly what a lead instructor
         // wants to see in the course activity view.
-        let formatter = ISO8601DateFormatter()
         if previousDueAt != assignment.dueAt {
             await AuditLogger.recordAssignmentLifecycle(
                 .assignmentDueDateChanged, assignment: assignment,
                 metadata: [
-                    "previous": previousDueAt.map(formatter.string(from:)) ?? "none",
-                    "current": assignment.dueAt.map(formatter.string(from:)) ?? "none",
+                    "previous": previousDueAt.map(iso8601String) ?? "none",
+                    "current": assignment.dueAt.map(iso8601String) ?? "none",
                     "via": "mcp",
                 ], on: context.request)
         }
@@ -256,8 +255,8 @@ struct UpdateAssignmentTool: ContentTool {
             slug: assignment.slug,
             isOpen: assignment.isOpen,
             visibility: assignment.visibility.rawValue,
-            dueAt: assignment.dueAt.map { formatter.string(from: $0) },
-            startsAt: assignment.startsAt.map { formatter.string(from: $0) },
+            dueAt: assignment.dueAt.map { iso8601String($0) },
+            startsAt: assignment.startsAt.map { iso8601String($0) },
             validationStatus: assignment.validationStatus,
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             solutionVisibility: assignment.solutionVisibility.rawValue,
@@ -297,7 +296,7 @@ struct UpdateAssignmentTool: ContentTool {
     private static func resolveDueDate(_ raw: String?) throws -> DueDateUpdate {
         guard let raw else { return .unchanged }
         if raw.trimmingCharacters(in: .whitespaces).isEmpty { return .clear }
-        guard let date = ISO8601DateFormatter().date(from: raw) else {
+        guard let date = iso8601Date(raw) else {
             throw MCPToolError.invalidArguments(
                 detail: "dueAt must be an ISO 8601 datetime (e.g. \"2026-04-22T23:59:00Z\") "
                     + "or an empty string to clear it.")
@@ -310,7 +309,7 @@ struct UpdateAssignmentTool: ContentTool {
     private static func resolveStartDate(_ raw: String?) throws -> OpenDateUpdate {
         guard let raw else { return .unchanged }
         if raw.trimmingCharacters(in: .whitespaces).isEmpty { return .clear }
-        guard let date = ISO8601DateFormatter().date(from: raw) else {
+        guard let date = iso8601Date(raw) else {
             throw MCPToolError.invalidArguments(
                 detail: "startsAt must be an ISO 8601 datetime (e.g. \"2026-04-15T09:00:00Z\") "
                     + "or an empty string to clear it.")

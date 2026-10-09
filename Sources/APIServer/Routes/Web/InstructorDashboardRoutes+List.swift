@@ -87,8 +87,7 @@ extension InstructorDashboardRoutes {
         req: Request,
         activeCourseUUID: UUID,
         activeCourseKey: String,
-        fmt: DateFormatter,
-        isoFormatter: ISO8601DateFormatter
+        fmt: DateFormatter
     ) async throws -> CourseRosterData {
         let (enrolledUsers, rolesByUserID, _) = try await loadEnrolledUsersForRoster(
             req: req, activeCourseUUID: activeCourseUUID)
@@ -97,8 +96,7 @@ extension InstructorDashboardRoutes {
             rolesByUserID: rolesByUserID,
             activeCourseUUID: activeCourseUUID,
             activeCourseKey: activeCourseKey,
-            fmt: fmt,
-            isoFormatter: isoFormatter
+            fmt: fmt
         )
 
         // Pre-enrolled (pending) — bulk-CSV entries that haven't been
@@ -146,8 +144,7 @@ extension InstructorDashboardRoutes {
         req: Request,
         activeCourseUUID: UUID,
         activeCourseKey: String,
-        fmt: DateFormatter,
-        isoFormatter: ISO8601DateFormatter
+        fmt: DateFormatter
     ) async throws -> (rows: [EnrolledStudentRow], count: Int) {
         let (enrolledUsers, rolesByUserID, enrollmentsByUserID) = try await loadEnrolledUsersForRoster(
             req: req, activeCourseUUID: activeCourseUUID)
@@ -156,8 +153,7 @@ extension InstructorDashboardRoutes {
             rolesByUserID: rolesByUserID,
             activeCourseUUID: activeCourseUUID,
             activeCourseKey: activeCourseKey,
-            fmt: fmt,
-            isoFormatter: isoFormatter
+            fmt: fmt
         )
         // The Students tab draws each student's own bird and surfaces the LEARN
         // readiness the sweep already stored. The Overview's count-only roster
@@ -249,8 +245,7 @@ extension InstructorDashboardRoutes {
         rolesByUserID: [UUID: CourseRole],
         activeCourseUUID: UUID,
         activeCourseKey: String,
-        fmt: DateFormatter,
-        isoFormatter: ISO8601DateFormatter
+        fmt: DateFormatter
     ) -> [EnrolledStudentRow] {
         enrolledUsers.compactMap { u in
             guard let id = u.id else { return nil }
@@ -265,7 +260,7 @@ extension InstructorDashboardRoutes {
                 displayName: u.displayName ?? u.username,
                 role: (rolesByUserID[id] ?? .student).rawValue,
                 lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
-                lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
+                lastSeenAtISO: u.lastSeenAt.map { iso8601String($0) },
                 submissionsURL: studentSubmissionsURL(
                     courseCode: activeCourseKey,
                     urlToken: token

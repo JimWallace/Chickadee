@@ -27,8 +27,7 @@ import Vapor
 func parseDueDate(_ raw: String?) -> Date? {
     guard let raw, !raw.isEmpty else { return nil }
 
-    let iso = ISO8601DateFormatter()
-    if let d = iso.date(from: raw) { return d }
+    if let d = iso8601Date(raw) { return d }
 
     // Accept both `datetime-local` shapes (with and without seconds) — this
     // is the ONE parser for instructor-entered local datetimes; the

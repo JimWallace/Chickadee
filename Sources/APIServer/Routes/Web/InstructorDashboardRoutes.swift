@@ -129,7 +129,6 @@ struct InstructorDashboardRoutes: RouteCollection {
         )
 
         let fmt = waterlooDateTimeFormatter()
-        let isoFormatter = ISO8601DateFormatter()
         let allSetupIDs = allSetups.compactMap { $0.id }
         let setupIndexByID: [String: Int] = Dictionary(
             uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
@@ -141,8 +140,7 @@ struct InstructorDashboardRoutes: RouteCollection {
                 req: req,
                 activeCourseUUID: activeCourseUUID,
                 activeCourseKey: courseState.active?.urlKey ?? "",
-                fmt: fmt,
-                isoFormatter: isoFormatter
+                fmt: fmt
             )
         } else {
             roster = CourseRosterData(

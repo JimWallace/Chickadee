@@ -791,7 +791,7 @@ actor ServerHealthAlertMonitor {
 }
 
 private func formatAlertTimestamp(_ date: Date) -> String {
-    ISO8601DateFormatter().string(from: date)
+    iso8601String(date)
 }
 
 // MARK: - Webhook URL persistence

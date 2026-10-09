@@ -401,7 +401,7 @@ func buildChampionPresentation(
     return ChampionPresentation(
         handle: handle,
         name: includeNames ? staffFacingName(user) : "",
-        crownedAtISO: ISO8601DateFormatter().string(from: crownedAt),
+        crownedAtISO: iso8601String(crownedAt),
         crownedAtText: waterlooDateTimeFormatter().string(from: crownedAt),
         defencesText: champion.defences == 1 ? "1 defence" : "\(champion.defences) defences",
         isViewer: champion.userID == viewerID,
@@ -497,7 +497,7 @@ func buildLeaderboard(
                 hasTieNote: !tieNote.isEmpty,
                 submissionCountText: isStaff
                     ? "\(submissions) \(submissions == 1 ? "submission" : "submissions")" : "",
-                bestAtISO: isStaff ? entry.reachedAt.map(ISO8601DateFormatter().string(from:)) ?? "" : "",
+                bestAtISO: isStaff ? entry.reachedAt.map(iso8601String) ?? "" : "",
                 bestAtText: isStaff
                     ? entry.reachedAt.map(waterlooDateTimeFormatter().string(from:)) ?? "" : "",
                 bestSubmissionURL: isStaff ? "/submissions/\(entry.submissionID)" : ""))
@@ -632,7 +632,7 @@ extension ViewerStanding {
             rankHeadline: LeaderboardStandingText.headline(rank: row.rank, isTied: row.isTied),
             ofText: "of \(total)", bestLabel: best.label, bestText: best.text,
             hasBestAt: best.reachedAt != nil,
-            bestAtISO: best.reachedAt.map(ISO8601DateFormatter().string(from:)) ?? "",
+            bestAtISO: best.reachedAt.map(iso8601String) ?? "",
             bestAtText: best.reachedAt.map(waterlooDateTimeFormatter().string(from:)) ?? "",
             nextPlaceText: best.nextPlaceText, hasNextPlace: !best.nextPlaceText.isEmpty,
             privacyLine: identity.privacyLine, submitURL: identity.submitURL)

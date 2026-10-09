@@ -66,7 +66,7 @@ func datasetSpecRefusal(
 /// key means anyway.
 func datasetSpecs(inManifest manifest: String) -> [DatasetSpec] {
     guard let data = manifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        let props = decodeManifest(from: data)
     else { return [] }
     return props.datasets
 }

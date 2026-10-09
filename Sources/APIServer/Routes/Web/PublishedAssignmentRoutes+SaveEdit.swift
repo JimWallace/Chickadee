@@ -147,8 +147,8 @@ extension PublishedAssignmentRoutes {
             await AuditLogger.recordAssignmentLifecycle(
                 .assignmentDueDateChanged, assignment: assignment,
                 metadata: [
-                    "previous": previousDueAt.map(ISO8601DateFormatter().string(from:)) ?? "none",
-                    "current": due.map(ISO8601DateFormatter().string(from:)) ?? "none",
+                    "previous": previousDueAt.map(iso8601String) ?? "none",
+                    "current": due.map(iso8601String) ?? "none",
                 ], on: req)
         }
 

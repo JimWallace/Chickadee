@@ -192,7 +192,7 @@ struct GetValidationResultTool: ContentTool {
         return Output(
             assignmentPublicID: assignment.publicID,
             validationStatus: status,
-            ranAt: ISO8601DateFormatter().string(from: collection.timestamp),
+            ranAt: iso8601String(collection.timestamp),
             buildStatus: collection.buildStatus.rawValue,
             compilerOutput: collection.compilerOutput,
             warnings: collection.warnings + variantWarnings,
