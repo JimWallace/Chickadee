@@ -259,7 +259,7 @@ fetch dates are in `Tools/handle-review/data/README.md`.
 **Capacity.** The pool must be at least four times the largest expected course
 (`AvatarHandle.maxExpectedEnrollment`, 1,000), so that the last students in a
 large course still get a random handle and not the remainder. The three
-schemes give 32,442 handles. A scheme with no free handle is skipped, so a
+schemes give 32,299 handles. A scheme with no free handle is skipped, so a
 course runs out only when all three do.
 
 **Lists change between terms; a stored handle is kept.** A new draw uses the
@@ -734,7 +734,7 @@ Each slice is independently mergeable and independently useful.
 - **S0 — the model. Done.** `AvatarSpec`, the five slot enums, the seeded draw,
   `AvatarPresentation`, the drift guards against the sprite and the palette, and
   `AvatarHandle` with its curated word lists — 80 adjectives × 80 nouns = 6,400
-  handles at the time (three schemes and 32,442 handles since the Fall 2026
+  handles at the time (three schemes and 32,299 handles since the Fall 2026
   review), drawn
   without replacement within a course.
 - **S1 — persistence. Done.** `users.avatar_spec` and
