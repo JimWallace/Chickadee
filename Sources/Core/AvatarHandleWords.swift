@@ -62,10 +62,10 @@ extension AvatarHandle {
 
     /// The first part of a compound word, in title case.
     public static let compoundPrefixes: [String] = [
-        "Alpha", "Aqua", "Astro", "Atom", "Beta", "Bio", "Bit", "Byte", "Carbon", "Chrono", "Cipher", "Cloud",
+        "Alpha", "Aqua", "Astro", "Atom", "Beta", "Bio", "Bit", "Byte", "Chrono", "Cipher", "Cloud",
         "Cobalt", "Code", "Comet", "Cosmo", "Cryo", "Crystal", "Data", "Delta", "Eco", "Ember", "Flux", "Frost",
         "Fusion", "Gamma", "Geo", "Giga", "Glow", "Gyro", "Helix", "Hydro", "Ion", "Lambda", "Lumen", "Lunar",
-        "Magno", "Matrix", "Mega", "Micro", "Moon", "Nano", "Neon", "Nova", "Omega", "Orbit", "Photon", "Pixel",
+        "Magno", "Matrix", "Mega", "Micro", "Moon", "Nano", "Neon", "Omega", "Orbit", "Photon", "Pixel",
         "Plasma", "Prism", "Proton", "Pulse", "Pyro", "Quanta", "Quark", "Quartz", "Radix", "Rain", "Sigma", "Sky",
         "Solar", "Star", "Sun", "Terra", "Theta", "Vector", "Vertex", "Volt", "Wave", "Zeta",
     ]
@@ -74,7 +74,7 @@ extension AvatarHandle {
     /// "Ion" + "spark" = "Ionspark".
     public static let compoundSuffixes: [String] = [
         "beam", "bloom", "bolt", "burst", "core", "craft", "crest", "drift", "field", "fire", "flint", "flow",
-        "forge", "gleam", "glint", "keeper", "light", "line", "loop", "mark", "path", "port", "quest", "ridge",
+        "forge", "gleam", "glint", "light", "line", "loop", "mark", "path", "port", "quest", "ridge",
         "scope", "shift", "smith", "song", "spark", "spire", "stone", "stream", "thread", "ward", "weave", "wind",
         "works", "wright",
     ]

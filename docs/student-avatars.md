@@ -277,7 +277,7 @@ reason for each. Sources and fetch dates are in
 **Capacity.** The pool must be at least four times the largest expected course
 (`AvatarHandle.maxExpectedEnrollment`, 1,000), so that the last students in a
 large course still get a random handle and not the remainder. The three schemes
-give 57 × 436 + 108 × 46 + 70 × 38 = 32,480 handles (the adjective and noun
+give 57 × 436 + 108 × 46 + 68 × 37 = 32,336 handles (the adjective and noun
 lists before them gave 96 × 96 = 9,216). If a real course is larger, append
 words and run the review again.
 

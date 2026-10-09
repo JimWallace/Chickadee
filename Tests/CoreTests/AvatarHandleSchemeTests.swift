@@ -99,6 +99,18 @@ import Testing
         }
     }
 
+    /// A real name cannot change, but a name with a slang or testing reading
+    /// stays off the list.  Each word and each hyphenated part is checked.
+    @Test(arguments: ["slang.txt", "testing.txt"])
+    func noScientistNameHoldsAWordOnAReviewList(file: String) throws {
+        let listed = try Self.reviewList(file)
+        #expect(!listed.isEmpty, "\(file) is empty")
+        for scientist in AvatarHandle.scientists {
+            let parts = scientist.handle.lowercased().split { $0 == " " || $0 == "-" }.map(String.init)
+            #expect(!parts.contains(where: listed.contains), "\(scientist.handle) holds a word in \(file)")
+        }
+    }
+
     /// The parser drops a line it cannot read, so a broken line would vanish
     /// from the draw without a sound.  Every data line must parse.
     @Test func everyScientistEntryHasAllOfItsFields() {
