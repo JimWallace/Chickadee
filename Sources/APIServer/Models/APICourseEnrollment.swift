@@ -92,6 +92,13 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "slip_days_adjustment")
     var slipDaysAdjustment: Int?
 
+    /// When this staff member last recorded, on the instructor AI agents tab,
+    /// that they connect only a UW-licensed AI account for AI-assisted
+    /// feedback (docs/ai-assisted-feedback.md §"The AI agents tab"). Recorded
+    /// and audited; nothing enforces it. Nil when never recorded or withdrawn.
+    @OptionalField(key: "ai_feedback_attested_at")
+    var aiFeedbackAttestedAt: Date?
+
     init() {}
 
     init(id: UUID? = nil, userID: UUID, courseID: UUID, role: CourseRole = .student) {

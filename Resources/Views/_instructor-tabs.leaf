@@ -7,7 +7,7 @@
 #if(activeInstructorTab == "students"):Students#endif
 #if(activeInstructorTab == "slip-days"):Slip days#endif
 #if(activeInstructorTab == "brightspace"):LEARN#endif
-#if(activeInstructorTab == "mcp"):MCP#endif
+#if(activeInstructorTab == "mcp"):AI agents#endif
 #if(activeInstructorTab == "github"):GitHub#endif
 #if(activeInstructorTab == "new-term"):New term#endif
 </h1>
@@ -17,6 +17,6 @@
     <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
     <a class="instructor-tab" href="/instructor/slip-days"#if(activeInstructorTab == "slip-days"): aria-current="page"#endif>Slip days</a>
     <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
-    <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>MCP</a>
+    <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>AI agents</a>
     <a class="instructor-tab" href="/instructor/new-term"#if(activeInstructorTab == "new-term"): aria-current="page"#endif>New term</a>
 </nav>

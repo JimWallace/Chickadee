@@ -46,6 +46,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         // MCP tab: the active course's authoring guidance for connected agents.
         r.get("mcp", use: mcpPanelPage)
         r.post("mcp", use: saveMCPGuidance)
+        r.post("mcp", "attestation", use: saveAIFeedbackAttestation)
         // Slip days tab (#1228): course policy, roster ledger, adjustments,
         // refunds.
         r.get("slip-days", use: slipDaysPage)

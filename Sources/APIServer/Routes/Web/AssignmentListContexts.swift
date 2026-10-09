@@ -384,8 +384,9 @@ func passingLabel(bestGradePercent: Int?, threshold: Int?) -> String? {
     return grade >= threshold ? "passing" : "below threshold"
 }
 
-/// MCP tab (`GET /instructor/mcp`): the active course's authoring voice for
-/// connected agents, editable by the course's instructors.
+/// AI agents tab (`GET /instructor/mcp`): what a connected agent can reach in
+/// the active course, and the course's authoring voice for connected agents,
+/// editable by the course's instructors.
 struct InstructorMCPContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
@@ -419,6 +420,8 @@ struct InstructorMCPContext: Encodable {
     /// off/unresolvable) — the panel still saves, with a note that guidance
     /// takes effect once MCP is enabled.
     let mcpDisabled: Bool
+    /// The access section: content, AI-assisted feedback and the attestation.
+    let agentAccess: AgentAccessFacts
     /// Flash banners after the save POST redirect.
     let flashSuccess: String?
     let flashError: String?

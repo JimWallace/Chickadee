@@ -274,7 +274,9 @@ gate and an instructor turned on the assignment gate. **No MCP tool may set
 either gate** (`MCPAIFeedbackGateTests`). Student-submission access stays in
 `MCPStudentDataBoundary`, and the RLS policy in
 `deploy/sql/mcp-least-privilege-role.sql` checks both gates. Chickadee still
-calls no model API. See
+calls no model API. The instructor AI agents tab (`/instructor/mcp`) records
+each staff member's UW-licensed-account attestation; by decision, nothing
+enforces it. See
 [docs/ai-assisted-feedback.md](docs/ai-assisted-feedback.md).
 
 **The MCP surface holds no language names (#1290).** Every language list in
