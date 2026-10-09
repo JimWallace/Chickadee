@@ -21,19 +21,27 @@ actor LTIServiceClient {
         let accessTokenURL: String
         /// The token-request JWT audience; nil = `accessTokenURL`.
         var tokenAudience: String?
+        /// The hosts a call may reach (`LTIServiceHost`).
+        let serviceHosts: Set<String>
 
         /// The service facts of a stored registration.
         init(id: UUID, registration platform: APILTIPlatform) {
             self.init(
                 id: id, clientID: platform.clientID, accessTokenURL: platform.accessTokenURL,
-                tokenAudience: platform.tokenAudience)
+                tokenAudience: platform.tokenAudience, serviceHosts: platform.registeredHosts)
         }
 
-        init(id: UUID, clientID: String, accessTokenURL: String, tokenAudience: String? = nil) {
+        /// A platform whose calls may reach the token URL's host and the
+        /// hosts in `serviceHosts`.
+        init(
+            id: UUID, clientID: String, accessTokenURL: String, tokenAudience: String? = nil,
+            serviceHosts: Set<String> = []
+        ) {
             self.id = id
             self.clientID = clientID
             self.accessTokenURL = accessTokenURL
             self.tokenAudience = tokenAudience
+            self.serviceHosts = serviceHosts.union(LTIServiceHost.hosts(of: [accessTokenURL]))
         }
     }
 
@@ -187,6 +195,11 @@ actor LTIServiceClient {
     ) async throws
         -> ClientResponse
     {
+        // Every URL a call uses passes here, the ones the platform sent in a
+        // launch or a response included (docs/compliance/lti-audit-2026-10.md L-1).
+        guard LTIServiceHost.permits(request.url.string, hosts: platform.serviceHosts) else {
+            throw LTIServiceError.foreignHost(step)
+        }
         let response = try await send(request)
         guard (200..<300).contains(response.status.code) else {
             // A refused token may have been revoked early: fetch a new one next time.

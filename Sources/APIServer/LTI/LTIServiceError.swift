@@ -21,12 +21,16 @@ enum LTIServiceError: Error, Equatable, Sendable, CustomStringConvertible {
     case unreadableResponse(Step)
     /// The line item Chickadee had on file is gone from the LMS.
     case lineItemGone
+    /// A URL for one step names a host the admin did not register for the
+    /// platform, so Chickadee did not call it.
+    case foreignHost(Step)
 
     var description: String {
         switch self {
         case .rejected(let step, let status): "The LMS refused the \(step.rawValue) request (HTTP \(status))."
         case .unreadableResponse(let step): "The LMS sent an unreadable \(step.rawValue) response."
         case .lineItemGone: "The LMS grade item was deleted. Chickadee will find or create it again."
+        case .foreignHost(let step): "The \(step.rawValue) address is not on a host registered for this LMS."
         }
     }
 
@@ -36,6 +40,7 @@ enum LTIServiceError: Error, Equatable, Sendable, CustomStringConvertible {
         case .rejected(_, let status): [401, 408, 425, 429, 500, 502, 503, 504].contains(status)
         case .unreadableResponse: false
         case .lineItemGone: true
+        case .foreignHost: false
         }
     }
 }

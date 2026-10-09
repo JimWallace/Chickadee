@@ -117,7 +117,7 @@ struct LTIPlatformForm: Content, Sendable, Equatable {
             let scheme = url.scheme?.lowercased(),
             let host = url.host, !host.isEmpty
         else { throw .invalidURL(field) }
-        let loopback = ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host.lowercased())
+        let loopback = LTIServiceHost.loopbackHosts.contains(host.lowercased())
         guard scheme == "https" || (scheme == "http" && loopback) else { throw .insecureURL(field) }
         return trimmed
     }

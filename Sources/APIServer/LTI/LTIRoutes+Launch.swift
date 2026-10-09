@@ -245,7 +245,7 @@ extension LTIRoutes {
         let platformID = try platform.requireID()
         guard let context = launch.context else { throw LTILaunchFailure.missingLaunchParameters }
         guard
-            let course = try await LTICourseBinding.course(
+            let match = try await LTICourseBinding.course(
                 platformID: platformID, contextID: context.id, on: req.db)
         else {
             if let deepLink {
@@ -262,7 +262,14 @@ extension LTIRoutes {
             req.session.data[Self.pendingContextTitleKey] = context.title ?? context.label ?? context.id
             return req.redirect(to: "/lti/bind")
         }
+        let course = match.course
         let courseID = try course.requireID()
+        if match.boundByOrgUnit {
+            await AuditLogger.record(
+                action: .ltiCourseBound, targetType: .course, targetID: courseID.uuidString,
+                metadata: ["course": course.code, "context_id": context.id, "method": "org_unit"],
+                actorUsernameOverride: "lti", courseID: courseID, on: req)
+        }
         let userID = try user.requireID()
         let enrolled =
             try await APICourseEnrollment.query(on: req.db)
@@ -285,12 +292,19 @@ extension LTIRoutes {
     /// Keeps the course's AGS line-items URL and NRPS membership URL current
     /// from the launch, and, on a course that sends grades through AGS,
     /// queues again the pushes that waited for this student's first launch.
+    /// A URL on a host that the admin did not register for the course's
+    /// platform is ignored (docs/compliance/lti-audit-2026-10.md L-1).
     static func recordLaunchServices(
         launch: LTIValidatedLaunch, course: APICourse, userID: UUID, on db: Database
     ) async throws {
+        var hosts: Set<String> = []
+        if let platformID = course.ltiPlatformID, let platform = try await APILTIPlatform.find(platformID, on: db) {
+            hosts = platform.registeredHosts
+        }
         var changed = false
         if let url = launch.agsEndpoint?.usableLineItemsURL,
             let secure = try? LTIPlatformForm.secureURL(url, field: .lineItemsURL),
+            LTIServiceHost.permits(secure, hosts: hosts),
             course.ltiLineItemsURL != secure
         {
             course.ltiLineItemsURL = secure
@@ -298,6 +312,7 @@ extension LTIRoutes {
         }
         if let url = launch.nrpsEndpoint?.contextMembershipsURL,
             let secure = try? LTIPlatformForm.secureURL(url, field: .membershipsURL),
+            LTIServiceHost.permits(secure, hosts: hosts),
             course.ltiMembershipsURL != secure
         {
             course.ltiMembershipsURL = secure

@@ -227,9 +227,10 @@ person can sign in with DUO and also launch from the LMS. In order:
 3. Otherwise the subject gets its own account, `lti-` plus 16 hex digits of
    SHA-256(platform|subject): stable, and opaque.
 
-A launch never links to an admin or MCP account, and never gives one account a
-second subject on one platform. Either would let an LMS user take over an
-account that the LMS does not own. A `username` value that still starts with
+A launch never links to an admin or MCP account, never signs in to one through
+a link made earlier (an account can become admin after it was linked), and
+never gives one account a second subject on one platform. Each would let an LMS
+user take over an account that the LMS does not own. A `username` value that still starts with
 `$` (the platform did not substitute the variable) counts as absent.
 
 ### Courses
@@ -238,7 +239,10 @@ A context binds to one `APICourse` through two nullable columns,
 `lti_platform_id` and `lti_context_id`. An unbound context binds itself to the
 one unarchived course whose `brightspaceOrgUnitID` equals `context.id`, because
 D2L sends the org unit ID as `context.id` and the LEARN tab already made that
-link. Otherwise:
+link. This match runs only while exactly one platform is enabled: an org unit
+ID does not say which LMS sent it, so with two platforms a context from the
+other LMS could match a LEARN course. The binding is audited as
+`lti.course_bound` with `method: org_unit`. Otherwise:
 
 - an instructor launch goes to `/lti/bind`, which lists the unarchived, unbound
   courses the instructor teaches, and binds the chosen one (audited as
@@ -375,6 +379,12 @@ uses AGS.
 5. Post the score with `scoreGiven`, `scoreMaximum`, `activityProgress` =
    Completed and `gradingProgress` = FullyGraded.
 
+Every service call, the token request included, goes only to a host that the
+admin registered for the platform: the host of its issuer, login, token or key
+set URL. A launch that sends an AGS or NRPS URL on another host leaves the
+stored URL as it was, and a line item `id` or an NRPS `next` page on another
+host fails the call before the token is sent.
+
 A network error, 401, 408, 425, 429, a 5xx or a deleted line item keeps the row
 pending for the next sweep. Any other failure records the reason, which the
 page lists, and waits for a new push or "Sync now". A disabled platform keeps
@@ -449,6 +459,11 @@ Before a production registration:
   [compliance/trust-boundary.md](compliance/trust-boundary.md);
 - request the UW Information Risk Assessment through the Learning Environment
   team.
+
+The first two are done. The security audit for the IRA is
+[compliance/lti-audit-2026-10.md](compliance/lti-audit-2026-10.md). It lists
+open findings, and it recommends fixes for L-1, L-2 and L-3 before students use
+LTI in production.
 
 ## Slice plan
 
