@@ -11,8 +11,11 @@
 import Core
 import Vapor
 
-/// The tools exposed over MCP — read + write content-authoring tools only.
-/// Nothing here touches student data, grades, enrolment, or administration.
+/// The tools exposed over MCP — read + write content-authoring tools, plus the
+/// three gated AI-assisted feedback tools (docs/ai-assisted-feedback.md), which
+/// read students' written answers by pseudonymous handle only where both
+/// opt-in gates are on. Nothing here touches grades, enrolment, or
+/// administration.
 enum MCPToolCatalog {
     static var live: ToolRegistry {
         ToolRegistry([

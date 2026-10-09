@@ -110,7 +110,8 @@ extension MCPOAuthRoutes {
             notPermitted: !userPermitted,
             permittedRoleLabel: surface.permittedRoleLabel,
             purposeLabel: surface.purposeLabel,
-            requestToken: requestToken)
+            requestToken: requestToken,
+            readsStudentAnswers: scopes.contains(ContentScope.feedbackRead.rawValue))
         return try await renderConsent(req, context: context)
     }
 
@@ -336,4 +337,7 @@ private struct ConsentContext: Encodable {
     /// Single-use consent token embedded in the form; nil for the not-permitted
     /// view (no submittable form is shown).
     let requestToken: String?
+    /// True when the grant includes `feedback:read`: the consent note must not
+    /// say the agent cannot reach student data (docs/ai-assisted-feedback.md).
+    var readsStudentAnswers = false
 }
