@@ -450,6 +450,11 @@ Before a production registration:
 - request the UW Information Risk Assessment through the Learning Environment
   team.
 
+The first two are done. The security audit for the IRA is
+[compliance/lti-audit-2026-10.md](compliance/lti-audit-2026-10.md). It lists
+open findings, and it recommends fixes for L-1, L-2 and L-3 before students use
+LTI in production.
+
 ## Slice plan
 
 | Slice | Content | Behaviour change for a deployment with no platform |

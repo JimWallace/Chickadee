@@ -16,6 +16,7 @@ calls a model itself (verified in `docs/compliance/data-flow-inventory.md`).
 |-------------|---------|-----------|-----------|
 | OIDC IdP host (e.g. UW DUO `sso-*.sso.duosecurity.com`) | SSO discovery, JWKS, token, revocation | `OIDC_AUTH_SERVER` | when `AUTH_MODE` is `sso`/`dual` |
 | BrightSpace / D2L host (e.g. `d2l.uwaterloo.ca`) | Grade sync (Valence HMAC) | `BRIGHTSPACE_URL` | only if grade sync enabled |
+| Each registered LTI platform host (for LEARN, `learn.uwaterloo.ca` and the host of its token URL) | LTI 1.3: the platform's JWKS, OAuth token, AGS line items and scores, NRPS membership | the platform URLs on `/admin/lti`, and the AGS and NRPS URLs that each launch sends | only if an LTI platform is registered |
 | `uwaterloo.ca` | Academic-dates iCalendar feed (cached 24 h) | hard-coded | optional UI feature |
 | Alert webhook host | Health alerts | operator-configured webhook | optional |
 | Chickadee API server itself | Worker poll / report / artifact download | `WORKER_PUBLIC_BASE_URL` / internal | internal only |
@@ -27,6 +28,12 @@ that proxy; the allowlist can then be enforced at the proxy instead of per host.
 change adds an outbound call, update this file and
 `docs/compliance/data-flow-inventory.md` in the same change.
 
+For LTI, read the hosts from each platform's JWKS URL and token URL on
+`/admin/lti`. The AGS and NRPS URLs come from the platform in each launch, so
+check them on the platform's own documentation. Chickadee does not yet limit
+them to the platform's host (`docs/compliance/lti-audit-2026-10.md` L-1), so
+this allowlist is the only control on them today.
+
 ## Option A — Squid forward proxy allowlist
 
 Point the server at the proxy with `OUTBOUND_HTTP_PROXY=http://proxy-host:3128`
@@ -37,6 +44,7 @@ deployment's actual IdP / D2L hosts.
 # /etc/squid/conf.d/chickadee-egress.conf
 acl chickadee_allowed dstdomain sso-4ccc589b.sso.duosecurity.com
 acl chickadee_allowed dstdomain d2l.uwaterloo.ca
+# Add the host of each LTI platform token URL here.
 acl chickadee_allowed dstdomain .uwaterloo.ca
 # Add your alert webhook host here if you use one.
 

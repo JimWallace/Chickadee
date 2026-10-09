@@ -65,6 +65,8 @@ or key with it.
   LMS subject; Chickadee learns the launching user's name, email and roles,
   and, on a roster check, the membership in transit only.
 - **No model involvement.** No LTI flow reaches an agent or a model API.
+- **Audit.** The security review of these edges, and its open findings, is
+  [`lti-audit-2026-10.md`](lti-audit-2026-10.md).
 
 ## GitHub as a counterparty (2026-10)
 

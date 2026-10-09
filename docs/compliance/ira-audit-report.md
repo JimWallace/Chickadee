@@ -5,6 +5,12 @@
 > [`mcp-student-data-audit-2026-07.md`](mcp-student-data-audit-2026-07.md)
 > (51 content + 19 admin tools at v0.4.667). The body below is intentionally
 > unmodified.
+>
+> **LTI 1.3 is not in this snapshot.** It was built later. The same seven
+> controls are applied to it in [`lti-audit-2026-10.md`](lti-audit-2026-10.md)
+> (v0.5.602). Its outbound edges (each registered platform's JWKS, token, AGS
+> and NRPS URLs) extend the Control 5 table below; the current list is in
+> `deploy/egress-allowlist.md`.
 
 Prepared for the UW Information Risk Assessment (IRA) and Information Steward
 review. **Phase 1 (read-only) audit.** No code was modified; this report and the
