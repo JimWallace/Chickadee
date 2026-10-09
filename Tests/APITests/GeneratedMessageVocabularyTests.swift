@@ -109,9 +109,12 @@ import Testing
         let dir =
             repositoryRoot
             .appendingPathComponent("Sources/APIServer/Utilities")
-        let all = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        // Recursive: the renderers live in subfolders of Utilities (#2495).
+        guard let enumerator = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil) else {
+            throw IssueRecorded("Cannot list \(dir.path)")
+        }
         return
-            all
+            enumerator.compactMap { $0 as? URL }
             .filter { $0.pathExtension == "swift" }
             .filter { $0.lastPathComponent.contains("Renderer") || $0.lastPathComponent.contains("Template") }
             .filter { $0.lastPathComponent != "GeneratedMessageVocabulary.swift" }
