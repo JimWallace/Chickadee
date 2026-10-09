@@ -12,9 +12,10 @@
 // 3. Otherwise the subject gets its own account, named from a hash of the
 //    platform and subject, so it cannot collide with a real username.
 //
-// A launch never links to an admin or MCP account, and never gives one
-// account two subjects on one platform: either would let an LMS user take
-// over an account the LMS does not own.
+// A launch never links to an admin or MCP account, never signs in to one
+// through a link made earlier, and never gives one account two subjects on
+// one platform: each would let an LMS user take over an account the LMS
+// does not own.
 
 import Crypto
 import Fluent
@@ -22,7 +23,8 @@ import Foundation
 
 enum LTIIdentityResolver {
     enum Failure: Error, Equatable {
-        /// The trusted username names an account a launch may not claim.
+        /// The trusted username, or an existing link, names an account a
+        /// launch may not claim.
         case linkRefused(username: String)
     }
 
@@ -102,14 +104,20 @@ enum LTIIdentityResolver {
     }
 
     /// The account a known (platform, subject) link resolves to, or nil.
+    /// An admin or MCP account is refused here too, not only when the link
+    /// is made: an account can become one later, by a role change or when an
+    /// SSO admin adopts a stub that a trusted launch created
+    /// (docs/compliance/lti-audit-2026-10.md L-2).
     private static func linkedUser(platformID: UUID, subject: String, on db: Database) async throws -> APIUser? {
         guard
             let identity = try await APILTIIdentity.query(on: db)
                 .filter(\.$platformID == platformID)
                 .filter(\.$subject == subject)
-                .first()
+                .first(),
+            let user = try await APIUser.find(identity.userID, on: db)
         else { return nil }
-        return try await APIUser.find(identity.userID, on: db)
+        guard !user.isAdmin, !user.isMCPAgent else { throw Failure.linkRefused(username: user.username) }
+        return user
     }
 
     /// The platform's `username` custom parameter, trimmed and lowercased, or

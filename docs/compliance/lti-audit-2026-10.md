@@ -15,8 +15,9 @@ successor cover the MCP surfaces only. LTI was built after both.
   [`data-flow-inventory.md`](data-flow-inventory.md) §"LTI 1.3 flows". The
   counterparty note is in [`trust-boundary.md`](trust-boundary.md) §"The LMS as
   a counterparty". This audit does not repeat them.
-- Status: **read-only audit.** No code was changed. The findings below are
-  open.
+- Status: the audit itself changed no code. L-1, L-2 and L-3 are fixed in the
+  same pull request; each fix has a test (see the index). The other findings
+  are open.
 
 Paths below are relative to `Sources/APIServer/` unless they say otherwise.
 
@@ -39,13 +40,14 @@ material findings all have one shape: Chickadee accepts a URL, an identity link
 or a course binding from a platform, and does not limit it to what that
 platform owns. Each one needs a registered platform that is compromised,
 misconfigured, or one of several. None is reachable by a student or an
-instructor on their own.
+instructor on their own. These three (L-1, L-2, L-3) are fixed in the pull
+request that adds this audit.
 
 | # | Control area | Status |
 |---|--------------|--------|
 | 1 | Bounded capability surface | **Pass** |
-| 2 | Data flow and egress (minimisation) | **Gap** (L-1: service URLs are not bound to the platform host) |
-| 3 | Identity and account boundary | **Gap** (L-2: the admin refusal holds at link time only; L-3: binding by org unit crosses platforms) |
+| 2 | Data flow and egress (minimisation) | **Pass** (L-1 fixed: service URLs are bound to the platform's registered hosts) |
+| 3 | Identity and account boundary | **Pass** (L-2 and L-3 fixed) |
 | 4 | Authentication, authorization, audit | **Pass** for authentication and authorization; **Gap** on audit completeness (L-8) |
 | 5 | Network egress control | **Gap (deployment)**: LTI hosts were not in the allowlist. Fixed in this change. L-4: no timeout or size cap |
 | 6 | Secrets and keys | **Pass**, with L-7 (key written by an unauthenticated route) |
@@ -75,7 +77,7 @@ platform registered, `/lti/login` returns 403, `/lti/launch` returns 401,
 
 ---
 
-## Control 2 — Data flow and egress (minimisation) — **Gap**
+## Control 2 — Data flow and egress (minimisation) — **Pass (L-1 fixed)**
 
 What crosses, per flow, is in `data-flow-inventory.md`. The minimisation is
 good: Chickadee stores no grade on the sync row, discards the NRPS membership
@@ -110,9 +112,20 @@ bearer token attached. No SSRF guard applies: the guards in
 registered for the platform (the issuer, token or JWKS host, or an explicit
 list), at all three points. Refuse the loopback exception outside a test build.
 
+*Fixed.* `LTIServiceHost` (`LTI/LTIServiceHost.swift`) names the hosts of the
+four registered URLs: issuer, login, token and key set. `LTIServiceClient.call`
+refuses any other host before it sends a request, with the terminal error
+`LTIServiceError.foreignHost`. That covers the line-item `id` and the NRPS
+`next` links. `LTIRoutes.recordLaunchServices` does not store a launch URL on
+another host. Plain `http` stays accepted only on a loopback host that the
+admin registered, so it cannot reach a host the admin did not name. A Canvas
+registration serves its services from the institution's host, which is not
+among its registered URLs, so supporting Canvas needs an explicit host field.
+Tests: `LTIServiceHostTests`, `LTIPlatformScopeTests`.
+
 ---
 
-## Control 3 — Identity and account boundary — **Gap**
+## Control 3 — Identity and account boundary — **Pass (L-2, L-3 fixed)**
 
 `docs/lti-1-3.md` §"Identity" states: "A launch never links to an admin or MCP
 account". That holds when the link is made. It does not hold for a link that
@@ -139,6 +152,10 @@ account:
 when a link is made, and refuse the launch with the existing `linkRefused`
 failure. Correct the sentence in `docs/lti-1-3.md` in the same change.
 
+*Fixed.* `LTIIdentityResolver.linkedUser` refuses an admin or MCP account with
+`linkRefused`, so both paths end at the refusal. `docs/lti-1-3.md` §"Identity"
+states the rule. Tests: `LTIExistingLinkRefusalTests`.
+
 ### L-3 (Medium) — binding by org unit crosses platforms and is not audited
 
 An unbound context binds itself to the one course whose LEARN org unit ID equals
@@ -158,6 +175,13 @@ then becomes an instructor of the Chickadee course on first launch.
 *Remediation.* Limit binding by org unit to the platform whose host matches the
 course's Valence `BRIGHTSPACE_URL`, or to a platform flag the admin sets. Audit
 the binding as `lti.course_bound` with an actor of `lti`.
+
+*Fixed, by a simpler rule.* The match runs only while exactly one platform is
+enabled (`LTI/LTICourseBinding.swift`). A collision needs a second platform,
+and with one the org unit ID can only have come from that LMS. With two, each
+instructor links the course through `/lti/bind` or the deep-link picker. The
+launch audits the binding as `lti.course_bound` with actor `lti` and
+`method: org_unit`. Tests: `LTIPlatformScopeTests`.
 
 ### What passes
 
@@ -224,7 +248,7 @@ The nine `lti.*` actions record the actor, the address and the user agent
 
 - a change to a platform's **Trust username** flag (the edit records only the
   issuer and the client ID, `Routes/Web/AdminRoutes+LTI.swift:89-91`);
-- the binding by org unit (L-3);
+- the binding by org unit (L-3; now audited with the L-3 fix);
 - an enrollment that a launch creates;
 - a failed launch (it goes to the log only).
 
@@ -315,8 +339,9 @@ The repository cannot prove these. They need operator confirmation.
    AGS transport. `docs/lti-1-3.md` §"Compliance" asks
    for the IRA before a production registration. Confirm that the IRA request
    is filed, or that this registration is a test that students do not use.
-2. **Trust username.** Confirm whether the production platform has it on. L-2
-   path 2 needs it.
+2. **Trust username.** Confirm whether the production platform has it on. With
+   L-2 fixed it no longer opens an admin account, but it still lets the LMS
+   name any non-admin account.
 3. **Egress.** Add the platform's hosts to the deployment allowlist
    (`deploy/egress-allowlist.md`).
 
@@ -326,15 +351,15 @@ The repository cannot prove these. They need operator confirmation.
 
 | ID | Control | Finding | Severity | Status |
 |----|---------|---------|----------|--------|
-| L-1 | Egress | Service URLs from launches, line-item IDs and NRPS next links are not bound to the platform host; loopback `http` accepted | **Medium** | Open |
-| L-2 | Identity | Admin and MCP refusal holds at link time only; an existing link, or an SSO-adopted stub, signs in as an admin | **Medium** | Open |
-| L-3 | Identity | Binding by org unit ignores the platform and is not audited | **Medium** | Open |
+| L-1 | Egress | Service URLs from launches, line-item IDs and NRPS next links are not bound to the platform host; loopback `http` accepted | **Medium** | **Fixed** |
+| L-2 | Identity | Admin and MCP refusal holds at link time only; an existing link, or an SSO-adopted stub, signs in as an admin | **Medium** | **Fixed** |
+| L-3 | Identity | Binding by org unit ignores the platform and is not audited | **Medium** | **Fixed** |
 | L-4 | Egress | No timeout or response-size cap on platform calls | Low | Open |
 | L-5 | AuthN | No rate limit on the LTI routes | Low | Open |
 | L-6 | AuthN | Algorithm pinning untested; `iat` age and `nbf` not checked; `target_link_uri` not compared | Low | Open |
 | L-7 | Keys | `POST /lti/deep-link/bind` writes the tool key with no platform registered | Low | Open |
-| L-8 | Audit | Trust-username changes, binding by org unit, launch enrollments and failed launches not audited | Info | Open |
+| L-8 | Audit | Trust-username changes, launch enrollments and failed launches not audited (binding by org unit is audited since the L-3 fix) | Info | Open |
 | L-9 | Retention | `lti_grade_syncs` rows outlive their course and assignment | Info | Open |
 
-**Recommended before students use LTI in production:** L-1, L-2 and L-3. Fix
-L-3 before a second platform is registered.
+L-1, L-2 and L-3 were the findings recommended for a fix before students use
+LTI in production. They are fixed. The Low and Info findings remain open.
