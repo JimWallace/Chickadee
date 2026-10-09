@@ -39,7 +39,7 @@ extension AdminRoutes {
                     idPrefix: "new-course", code: "", name: "", term: nil,
                     error: CourseFormError.message(forQuery: req.query[String.self, at: "error"]),
                     autofocus: true),
-                placeholderAllowed: req.application.authMode != .local
+                placeholderAllowed: req.application.staffPlaceholderAllowed
             ))
     }
 
@@ -72,7 +72,7 @@ extension AdminRoutes {
         }
         // The course and its instructor are one transaction: a refused
         // instructor leaves no course without one.
-        let allowPlaceholder = req.application.authMode != .local
+        let allowPlaceholder = req.application.staffPlaceholderAllowed
         let created: (course: APICourse, staff: StaffProvisioningResult?)
         do {
             created = try await req.db.transaction { db in
@@ -144,7 +144,7 @@ extension AdminRoutes {
         do {
             result = try await provisionStaffEnrollment(
                 identifier: identifier, role: role, courseID: courseID,
-                allowPlaceholder: req.application.authMode != .local, on: req.db)
+                allowPlaceholder: req.application.staffPlaceholderAllowed, on: req.db)
         } catch let error as StaffProvisioningError {
             return req.redirect(to: "\(back)?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")
         }
@@ -606,7 +606,7 @@ extension AdminRoutes {
                 cloneForm: CourseFieldsContext(
                     idPrefix: "clone", code: course.code, name: course.name, term: course.term?.next,
                     error: CourseCloneFormError.message(forQuery: errorCode)),
-                placeholderAllowed: req.application.authMode != .local,
+                placeholderAllowed: req.application.staffPlaceholderAllowed,
                 flashSuccess: req.query[String.self, at: "staffAdded"] != nil ? "Staff member added." : nil,
                 flashError: StaffFormError.message(forQuery: req.query[String.self, at: "staffError"])
             ))

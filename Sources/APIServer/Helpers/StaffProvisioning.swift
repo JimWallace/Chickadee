@@ -24,6 +24,12 @@ enum StaffProvisioningError: Error, Equatable {
     case unknownUser
 }
 
+extension Application {
+    /// True when the admin staff forms may make a placeholder account: only an
+    /// SSO login can adopt one, so local sign-in alone refuses it.
+    var staffPlaceholderAllowed: Bool { authMode != .local }
+}
+
 /// The outcome of a successful `provisionStaffEnrollment` call.
 struct StaffProvisioningResult: Sendable {
     let userID: UUID
@@ -131,11 +137,11 @@ extension StaffProvisioningError {
     /// The flash for `.emailWithoutAccount`, shared by the instructor and
     /// admin forms.
     static let emailWithoutAccountMessage =
-        "No account has that email address. Enter the person's username instead."
+        "No account has that email address, so enter the person's username."
     /// The flash for `.unknownUser`. Only a local-sign-in deployment refuses
     /// a placeholder, because nothing could adopt it.
     static let unknownUserMessage =
-        "No account has that username. This server uses local sign-in, so the person must register first."
+        "No account has that username, and under local sign-in the person must register first."
 }
 
 /// Why the admin course page's staff form was refused. The raw value is the
