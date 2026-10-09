@@ -157,6 +157,25 @@ import VaporTesting
         }
     }
 
+    /// A chosen handle is stored in NFC form, whatever form the browser sent,
+    /// because the unique index compares bytes.
+    @Test func aChosenHandleIsStoredInNFC() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeTestCourse(on: app, code: "AVH9")
+            let user = try await makeTestStudent(on: app, username: "av_nfc")
+            let enrollment = try await makeTestEnrollment(
+                on: app, userID: try user.requireID(), courseID: try course.requireID())
+            let nfc = "Keen Ōmura"
+            let nfd = nfc.decomposedStringWithCanonicalMapping
+            #expect(!nfd.unicodeScalars.elementsEqual(nfc.unicodeScalars))
+
+            let choice = try await AvatarStore.chooseHandle(nfd, for: enrollment, taken: [], on: app.db)
+            #expect(choice == .chosen)
+            let stored = try #require(try await APICourseEnrollment.find(enrollment.id, on: app.db)?.avatarHandle)
+            #expect(stored.unicodeScalars.elementsEqual(nfc.unicodeScalars))
+        }
+    }
+
     /// The staff "Give new handle" action: a fresh draw from the current lists,
     /// never the old handle and never one already taken in the course.
     @Test func redrawGivesANewCurrentHandle() async throws {

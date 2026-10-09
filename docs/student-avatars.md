@@ -410,9 +410,9 @@ authoring time, by a human. The rules that fall out:
   accessory × backdrop — are a table of a few hundred, and that is where an
   unfortunate resemblance would come from. Review that table; the rest is
   independent.
-- **The handle word lists get the same pass, and need it more.** Adjective-noun
+- **The handle word lists get the same pass, and need it more.** Word
   generators reliably produce unfortunate pairs, accidental real-world
-  references, and words that collide with real names. Both lists want a
+  references, and words that collide with real names. Every list wants a
   deliberate review, and the pairing needs a blocklist rather than trust.
 
 The point of listing these is that they are cheap when the tables are being
@@ -734,7 +734,8 @@ Each slice is independently mergeable and independently useful.
 - **S0 — the model. Done.** `AvatarSpec`, the five slot enums, the seeded draw,
   `AvatarPresentation`, the drift guards against the sprite and the palette, and
   `AvatarHandle` with its curated word lists — 80 adjectives × 80 nouns = 6,400
-  handles at the time (96 × 96 = 9,216 since the Fall 2026 review), drawn
+  handles at the time (three schemes and 32,442 handles since the Fall 2026
+  review), drawn
   without replacement within a course.
 - **S1 — persistence. Done.** `users.avatar_spec` and
   `course_enrollments.avatar_handle` (`AddAvatarIdentity`, since folded into
