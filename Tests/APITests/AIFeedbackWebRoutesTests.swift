@@ -41,7 +41,8 @@ import VaporTesting
         course.aiFeedbackEnabled = courseGate
         try await course.save(on: app.db)
         try await wrInsertSetup(id: "setup_aif", on: app)
-        let assignment = try await wrInsertAssignment(testSetupID: "setup_aif", title: "Reflect Lab", isOpen: true, on: app)
+        let assignment = try await wrInsertAssignment(
+            testSetupID: "setup_aif", title: "Reflect Lab", isOpen: true, on: app)
         assignment.aiFeedbackEnabled = assignmentGate
         try await assignment.save(on: app.db)
         try await wrInsertSubmission(id: "sub_aif", testSetupID: "setup_aif", userID: student.requireID(), on: app)
@@ -196,7 +197,7 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let seed = try await seed(app: app, courseGate: true, assignmentGate: true)
             let html = try await getHTML("/testsetups/setup_aif/submit", cookie: seed.studentCookie, on: app)
-            #expect(html.contains("ai-assisted-feedback.md#for-students"))
+            #expect(html.contains("ai-assisted-feedback.md#information-for-students"))
         }
     }
 

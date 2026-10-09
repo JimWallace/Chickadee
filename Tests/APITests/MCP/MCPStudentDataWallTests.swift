@@ -1,8 +1,10 @@
 // Architectural guard for the MCP student-data wall.
 //
 // The MCP tool surface may touch the submissions/results tables ONLY through
-// `MCPStudentDataBoundary` (which hard-filters to validation runs), and must
-// never name any other student-data model. These tests scan the tool source
+// `MCPStudentDataBoundary` (which hard-filters to validation runs, except for
+// the gated AI-assisted feedback accessors, which reach students' written
+// answers only where both opt-in gates are on — docs/ai-assisted-feedback.md),
+// and must never name any other student-data model. These tests scan the tool source
 // files and fail the build if a handler references a forbidden model — so the
 // wall cannot regress when a new tool is added. Source scanning is the same
 // technique the repo already uses for `no-new-xctest` and the audit-action

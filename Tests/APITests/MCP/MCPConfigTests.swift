@@ -44,8 +44,8 @@ import Testing
 
     @Test func scopeCeilingMatchesMode() {
         #expect(MCPMode.off.scopeCeiling.isEmpty)
-        #expect(MCPMode.readOnly.scopeCeiling == [.read])
-        #expect(MCPMode.readWrite.scopeCeiling == [.read, .write])
+        #expect(MCPMode.readOnly.scopeCeiling == [.read, .feedbackRead])
+        #expect(MCPMode.readWrite.scopeCeiling == [.read, .write, .feedbackRead, .feedbackWrite])
         #expect(MCPMode.off.isMounted == false)
         #expect(MCPMode.readOnly.isMounted)
         #expect(MCPMode.readWrite.isMounted)
@@ -56,8 +56,8 @@ import Testing
     /// JSON output.
     @Test func advertisedScopesMatchMode() {
         #expect(MCPMode.off.advertisedScopes.isEmpty)
-        #expect(MCPMode.readOnly.advertisedScopes == [.read])
-        #expect(MCPMode.readWrite.advertisedScopes == [.read, .write])
+        #expect(MCPMode.readOnly.advertisedScopes == [.read, .feedbackRead])
+        #expect(MCPMode.readWrite.advertisedScopes == [.read, .write, .feedbackRead, .feedbackWrite])
     }
 
     /// `scopeCeiling` (the set used for per-request clamping) must always be the

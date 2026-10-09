@@ -66,7 +66,7 @@ import Testing
             #expect(!tool.requiredScopes.isEmpty, "\(tool.name) requires no scopes")
             let annotations = try #require(
                 tool.annotations, "\(tool.name) advertises no annotations")
-            let isReadOnly = tool.requiredScopes == [.read]
+            let isReadOnly = !tool.requiredScopes.contains(where: \.isWrite)
             #expect(
                 annotations.readOnlyHint == isReadOnly,
                 "\(tool.name) readOnlyHint must agree with its required scopes")

@@ -36,7 +36,7 @@ import Vapor
             let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), context(app))
             #expect(out.mcpMode == "read_write")
             #expect(out.writeEnabled)
-            #expect(out.advertisedScopes == ["content:read", "content:write"])
+            #expect(out.advertisedScopes == ["content:read", "content:write", "feedback:read", "feedback:write"])
         }
     }
 
@@ -46,7 +46,7 @@ import Vapor
             let out = try await GetServerInfoTool().execute(GetServerInfoTool.Input(), context(app))
             #expect(out.mcpMode == "read_only")
             #expect(!out.writeEnabled)
-            #expect(out.advertisedScopes == ["content:read"])
+            #expect(out.advertisedScopes == ["content:read", "feedback:read"])
         }
     }
 }

@@ -57,7 +57,9 @@ import Testing
     }
 
     @Test func aMissingCellHasNoResponse() {
-        let starter = notebook([markdown("Q1"), markdown("A1", tagged: true), markdown("Q2"), markdown("A2", tagged: true)])
+        let starter = notebook([
+            markdown("Q1"), markdown("A1", tagged: true), markdown("Q2"), markdown("A2", tagged: true),
+        ])
         let submission = notebook([markdown("Only one.", tagged: true)])
         #expect(
             ReflectionCells.pairs(starter: starter, submission: submission).map(\.response)

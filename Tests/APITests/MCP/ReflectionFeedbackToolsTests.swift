@@ -126,7 +126,7 @@ import Vapor
             #expect(FeedbackHandle.isWellFormed(entry.handle))
             #expect(entry.feedbackState == "none")
 
-            let json = String(decoding: try JSONEncoder().encode(out), as: UTF8.self)
+            let json = try #require(String(bytes: try JSONEncoder().encode(out), encoding: .utf8))
             #expect(!json.contains("alice"))
             let aliceID = try #require(try await APIUser.query(on: app.db).filter(\.$username == "alice").first()?.id)
             #expect(!json.contains(aliceID.uuidString))
@@ -153,7 +153,7 @@ import Vapor
                         index: 2, prompt: "Is the median a better summary here?",
                         response: "Yes, the data are skewed."),
                 ])
-            let json = String(decoding: try JSONEncoder().encode(out), as: UTF8.self)
+            let json = try #require(String(bytes: try JSONEncoder().encode(out), encoding: .utf8))
             #expect(!json.contains("secret_code"))
             #expect(!json.contains("alice"))
         }

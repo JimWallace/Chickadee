@@ -49,8 +49,9 @@ extension InstructorDashboardRoutes {
     // MARK: - GET /instructor/:assignmentID/feedback
 
     /// Lists every student who has submitted, with their feedback state. A
-    /// row that has feedback text also shows the student's written answers
-    /// and an editor, since that is the row a person must review.
+    /// row that has feedback text also has a disclosure with the student's
+    /// written answers and an editor; it opens by itself when the row still
+    /// needs a person (a draft, or feedback the student has resubmitted since).
     @Sendable
     func feedbackReviewPage(req: Request) async throws -> View {
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
@@ -69,9 +70,9 @@ extension InstructorDashboardRoutes {
             guard let userID = user.id, let row = rows[userID] else { continue }
             let submission = latest[userID]
             let state = ReflectionFeedbackService.displayState(of: row, latestSubmissionID: submission?.id)
-            let needsReview = row.draftText != nil && state != .discarded
+            let hasText = row.draftText != nil && state != .discarded
             let reflections =
-                needsReview
+                hasText
                 ? await ReflectionFeedbackService.reflections(setup: setup, submission: submission) : []
             reviewRows.append(
                 FeedbackReviewRow(
@@ -80,13 +81,16 @@ extension InstructorDashboardRoutes {
                     username: user.username,
                     state: state.rawValue,
                     stateLabel: Self.feedbackStateLabel(state),
-                    needsReview: needsReview,
+                    hasText: hasText,
+                    needsReview: state == .draft || state == .stale,
                     draftText: row.draftText ?? "",
                     draftedBy: row.draftedByClient,
-                    reflections: reflections.map {
-                        FeedbackReviewReflection(
-                            index: $0.index, prompt: $0.prompt, response: $0.response ?? "")
+                    answers: reflections.map {
+                        FeedbackReviewText(index: $0.index, paragraphs: ProseParagraphs.split($0.response ?? ""))
                     }))
+        }
+        let prompts = await ReflectionFeedbackService.reflections(setup: setup, submission: nil).map {
+            FeedbackReviewText(index: $0.index, paragraphs: ProseParagraphs.split($0.prompt))
         }
 
         return try await req.view.render(
@@ -96,6 +100,7 @@ extension InstructorDashboardRoutes {
                 assignmentID: assignment.publicID,
                 assignmentTitle: assignment.title,
                 gatesOpen: try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db),
+                prompts: prompts,
                 rows: reviewRows,
                 reviewCount: reviewRows.filter(\.needsReview).count,
                 maxDraftLength: ReflectionFeedbackService.maxDraftLength,
@@ -120,7 +125,8 @@ extension InstructorDashboardRoutes {
         let pageURL = "/instructor/\(assignment.publicID)/feedback"
         let body = try req.content.decode(ReviewBody.self)
         let handle = body.handle
-        guard let row = try await APIReflectionFeedback.query(on: req.db)
+        guard
+            let row = try await APIReflectionFeedback.query(on: req.db)
                 .filter(\.$assignmentID == assignment.requireID())
                 .filter(\.$handle == handle)
                 .first()
@@ -140,7 +146,8 @@ extension InstructorDashboardRoutes {
         case "save", "release":
             if let refusal = ReflectionFeedbackService.refusal(forDraft: text) {
                 return req.redirect(
-                    to: "\(pageURL)?error=\(refusal.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")")
+                    to: "\(pageURL)?error=\(refusal.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")"
+                )
             }
             row.draftText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             row.reviewedByUserID = caller.id
@@ -196,7 +203,10 @@ struct FeedbackReviewContext: Encodable {
     /// False when either gate is off: the agent cannot read or draft, but the
     /// page still lets staff review what is already there.
     let gatesOpen: Bool
+    /// The questions, once, from the starter notebook.
+    let prompts: [FeedbackReviewText]
     let rows: [FeedbackReviewRow]
+    /// Rows that still need a person: a draft, or a stale one.
     let reviewCount: Int
     let maxDraftLength: Int
     let flashError: String?
@@ -209,16 +219,18 @@ struct FeedbackReviewRow: Encodable {
     let username: String
     let state: String
     let stateLabel: String
-    /// True when the row has text a person must read: a draft, a release, or
-    /// a stale one.
+    /// True when the row has feedback text that is not discarded.
+    let hasText: Bool
+    /// True for a draft, or feedback written before a resubmission.
     let needsReview: Bool
     let draftText: String
     let draftedBy: String?
-    let reflections: [FeedbackReviewReflection]
+    let answers: [FeedbackReviewText]
 }
 
-struct FeedbackReviewReflection: Encodable {
+/// A prompt or an answer, split into paragraphs so the page renders prose
+/// without a preformatted block.
+struct FeedbackReviewText: Encodable {
     let index: Int
-    let prompt: String
-    let response: String
+    let paragraphs: [String]
 }

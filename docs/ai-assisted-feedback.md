@@ -199,7 +199,7 @@ Claude account is approved for public data only. "Use the UW-licensed account"
 is therefore an instructor attestation, not a technical control. The admin
 course gate is the place to collect that attestation.
 
-## For students
+## Information for students
 
 Some activities in a course can use AI-assisted feedback. If an activity uses
 it, the page where you submit says so.

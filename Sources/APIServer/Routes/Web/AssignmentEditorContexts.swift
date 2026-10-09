@@ -290,7 +290,7 @@ struct EditAssignmentContext: Encodable {
     /// The assignment gate for AI-assisted feedback
     /// (docs/ai-assisted-feedback.md). Nil while the course gate is off, so
     /// the "Student Options" control does not render at all.
-    var aiFeedback: AIFeedbackSetting? = nil
+    var aiFeedback: AIFeedbackSetting?
     /// Assignment-wide default per-test execution limit (seconds) from the
     /// manifest (`TestProperties.timeLimitSeconds`).  Renders the editable
     /// "Default time limit" input in the Test Suite header, saved live via

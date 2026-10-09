@@ -576,8 +576,9 @@ struct SubmissionContext: Encodable {
     /// The commit a GitHub submission was made from; nil for an upload.
     let sourceCommit: SubmissionSourceCommitView?
     /// Staff-released AI-assisted feedback on this submission's written
-    /// answers (docs/ai-assisted-feedback.md); nil when there is none.
-    var releasedFeedback: String? = nil
+    /// answers (docs/ai-assisted-feedback.md), as paragraphs; empty when
+    /// there is none.
+    var releasedFeedback: [String] = []
 }
 
 /// The repository and commit a GitHub submission came from

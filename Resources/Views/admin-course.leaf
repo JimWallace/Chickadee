@@ -40,6 +40,20 @@
                 <a class="row-menu-item" href="/admin/courses/#(course.id)/export" role="menuitem">
                     <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export course bundle
                 </a>
+                #if(course.aiFeedbackEnabled):
+                <form method="post" action="/admin/courses/#(course.id)/ai-feedback"
+                      data-confirm="Turn off AI-assisted feedback for #(course.code)? No agent can read answers or add drafts in any of its assignments. Feedback already released stays visible.">
+                    #csrfFormField()
+                    <button class="row-menu-item" type="submit" role="menuitem">Turn off AI-assisted feedback</button>
+                </form>
+                #else:
+                <form method="post" action="/admin/courses/#(course.id)/ai-feedback"
+                      data-confirm="Turn on AI-assisted feedback for #(course.code)? Do this only after the course has its AI-use approval (see docs/ai-assisted-feedback.md). Instructors can then let their own AI agent read students' written answers, without names, in the assignments they opt in.">
+                    #csrfFormField()
+                    <input type="hidden" name="enabled" value="on">
+                    <button class="row-menu-item" type="submit" role="menuitem">Turn on AI-assisted feedback</button>
+                </form>
+                #endif
                 #if(course.isArchived):
                 <form method="post" action="/admin/courses/#(course.id)/archive"
                       data-confirm="Unarchive #(course.code)? #(course.enrollmentCount) students regain access immediately, and the retention clock stops.">
@@ -103,24 +117,7 @@
         <dt>Submissions</dt>
         <dd>#(course.submissionCount)</dd>
         <dt>AI-assisted feedback</dt>
-        <dd>
-            #if(course.aiFeedbackEnabled):
-            <span class="tier tier-open">On</span>
-            <form method="post" action="/admin/courses/#(course.id)/ai-feedback" class="form-flush">
-                #csrfFormField()
-                <button class="btn action-btn" type="submit">Turn off</button>
-            </form>
-            #else:
-            <span class="tier tier-closed">Off</span>
-            <form method="post" action="/admin/courses/#(course.id)/ai-feedback" class="form-flush"
-                  data-confirm="Turn on AI-assisted feedback for #(course.code)? Do this only after the course has its AI-use approval. Instructors can then let their own AI agent read students' written answers, without names, in the assignments they opt in.">
-                #csrfFormField()
-                <input type="hidden" name="enabled" value="on">
-                <button class="btn action-btn" type="submit">Turn on</button>
-            </form>
-            #endif
-            <a class="card-meta" href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md">How it works</a>
-        </dd>
+        <dd>#if(course.aiFeedbackEnabled):<span class="tier tier-open">On</span>#else:<span class="tier tier-closed">Off</span>#endif</dd>
         #if(course.brightspaceSyncEnabled):
         <dt>LEARN org unit</dt>
         <dd>

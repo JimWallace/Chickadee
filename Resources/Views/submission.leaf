@@ -109,11 +109,11 @@ Submission #(submissionID)
 </div>
 #endif
 
-#if(releasedFeedback):
+#if(count(releasedFeedback) > 0):
 <section class="page-section">
     <h2>Feedback on your written answers</h2>
     <p class="card-meta">Drafted with AI assistance and reviewed by course staff.</p>
-    <pre class="test-output-pre">#(releasedFeedback)</pre>
+    #for(paragraph in releasedFeedback):<p>#(paragraph)</p>#endfor
 </section>
 #endif
 

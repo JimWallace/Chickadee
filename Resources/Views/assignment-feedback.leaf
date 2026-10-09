@@ -8,44 +8,26 @@
     <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions">Submissions</a>
 </div>
 <p class="page-subtitle">
-    Drafts from an AI agent. Students see only what you release.
-    <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md">How it works</a>
+    Students see only the feedback you release.
+    <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md" target="_blank" rel="noopener noreferrer">How it works <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>
 </p>
 #if(!gatesOpen):
-<p class="section-note">AI-assisted feedback is off for this assignment, so no agent can read answers or add drafts.</p>
+<div class="flash flash-warning" role="status">AI-assisted feedback is off for this assignment, so no agent can read answers or add drafts.</div>
+#endif
+
+#if(count(prompts) > 0):
+<section class="page-section">
+    <h2>Prompts</h2>
+    <ol>
+    #for(prompt in prompts):
+        <li>#for(paragraph in prompt.paragraphs):<p>#(paragraph)</p>#endfor</li>
+    #endfor
+    </ol>
+</section>
 #endif
 
 <section class="page-section">
-    <h2>To review (#(reviewCount))</h2>
-    #if(reviewCount == 0):
-    <p class="empty">No drafts yet.</p>
-    #endif
-    #for(row in rows):
-    #if(row.needsReview):
-    <h3>#(row.student) <span class="card-meta">#(row.handle)</span> <span class="chip">#(row.stateLabel)</span></h3>
-    #for(reflection in row.reflections):
-    <p class="card-meta">Prompt #(reflection.index)</p>
-    <pre class="test-output-pre">#(reflection.prompt)</pre>
-    <p class="card-meta">Answer</p>
-    <pre class="test-output-pre">#if(reflection.response != ""):#(reflection.response)#else:No answer#endif</pre>
-    #endfor
-    <form method="post" action="/instructor/#(assignmentID)/feedback" class="form-stack">
-        #csrfFormField()
-        <input type="hidden" name="handle" value="#(row.handle)">
-        <label for="feedback-#(row.handle)">Feedback#if(row.draftedBy): <span class="card-meta">drafted by #(row.draftedBy)</span>#endif</label>
-        <textarea id="feedback-#(row.handle)" name="feedback" class="form-input" rows="6" maxlength="#(maxDraftLength)">#(row.draftText)</textarea>
-        <div class="toolbar">
-            <button class="btn btn-primary" type="submit" name="action" value="release">Release</button>
-            <button class="btn action-btn" type="submit" name="action" value="save">Save draft</button>
-            <button class="btn action-btn action-danger" type="submit" name="action" value="discard">Discard</button>
-        </div>
-    </form>
-    #endif
-    #endfor
-</section>
-
-<section class="page-section">
-    <h2>All students (#count(rows))</h2>
+    <h2>Students (#(reviewCount) to review)</h2>
     #if(count(rows) == 0):
     <p class="empty">No submissions yet.</p>
     #else:
@@ -62,8 +44,44 @@
             <tr>
                 <td>#(row.student)</td>
                 <td><code>#(row.handle)</code></td>
-                <td>#(row.stateLabel)</td>
+                <td>
+                    #if(row.state == "released"):<span class="tier tier-open">#(row.stateLabel)</span>
+                    #elseif(row.state == "stale"):<span class="tier tier-danger">#(row.stateLabel)</span>
+                    #elseif(row.state == "draft"):<span class="tier">#(row.stateLabel)</span>
+                    #else:<span class="tier tier-closed">#(row.stateLabel)</span>#endif
+                </td>
             </tr>
+            #if(row.hasText):
+            <tr class="test-output-row">
+                <td colspan="3">
+                    <details class="test-output-details"#if(row.needsReview): open#endif>
+                        <summary>Answers and feedback</summary>
+                        #for(answer in row.answers):
+                        <p class="card-meta">Answer #(answer.index)</p>
+                        #if(count(answer.paragraphs) == 0):<p class="empty">No answer</p>#endif
+                        #for(paragraph in answer.paragraphs):<p>#(paragraph)</p>#endfor
+                        #endfor
+                        <form method="post" action="/instructor/#(assignmentID)/feedback" class="form-stack">
+                            #csrfFormField()
+                            <input type="hidden" name="handle" value="#(row.handle)">
+                            <label for="feedback-#(row.handle)">Feedback#if(row.draftedBy): <span class="card-meta">drafted by #(row.draftedBy)</span>#endif</label>
+                            <textarea id="feedback-#(row.handle)" name="feedback" class="form-input" rows="6" maxlength="#(maxDraftLength)">#(row.draftText)</textarea>
+                            <div class="toolbar">
+                                <button class="btn btn-primary" type="submit" name="action" value="release">Release</button>
+                                <button class="btn action-btn" type="submit" name="action" value="save">Save draft</button>
+                            </div>
+                        </form>
+                        <form method="post" action="/instructor/#(assignmentID)/feedback" class="form-flush"
+                              data-confirm="Discard the feedback for #(row.handle)? The student no longer sees it, and an agent can then write a new draft.">
+                            #csrfFormField()
+                            <input type="hidden" name="handle" value="#(row.handle)">
+                            <input type="hidden" name="action" value="discard">
+                            <button class="btn action-btn action-danger" type="submit">Discard</button>
+                        </form>
+                    </details>
+                </td>
+            </tr>
+            #endif
         #endfor
         </tbody>
     </table>
