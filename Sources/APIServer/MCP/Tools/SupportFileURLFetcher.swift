@@ -127,9 +127,9 @@ enum SupportFileURLFetcher {
         if BlockedIPClassifier.isIPLiteral(host) {
             addresses = [host]
         } else {
-            addresses = try await request.application.threadPool.runIfActive(eventLoop: request.eventLoop) {
+            addresses = try await runBlocking(on: request) {
                 try resolveHostAddresses(host)
-            }.get()
+            }
         }
         guard !addresses.isEmpty else { throw SupportFileFetchError.dnsFailed(host: host) }
         for ip in addresses where BlockedIPClassifier.isBlocked(ip) {

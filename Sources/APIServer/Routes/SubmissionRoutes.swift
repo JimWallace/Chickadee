@@ -103,9 +103,9 @@ struct SubmissionRoutes: RouteCollection {
             let instructorData = try? await req.application.notebookBytesCache.notebookData(
                 for: source)
             if let instructorData {
-                fileData = try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
+                fileData = try await runBlocking(on: req) {
                     mergeNotebook(student: studentBytes, instructor: instructorData)
-                }.get()
+                }
             } else {
                 fileData = studentBytes  // no instructor notebook → submit as-is
             }
