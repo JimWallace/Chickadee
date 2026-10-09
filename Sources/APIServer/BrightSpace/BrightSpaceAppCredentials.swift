@@ -50,9 +50,9 @@ struct BrightSpaceAppCredentials: Sendable {
     func valenceAuthURL(callback: String) -> String {
         let sig = brightSpaceHMACSHA256Base64URL(key: appKey, message: callback)
         return "\(baseURL)/d2l/auth/api/token"
-            + "?x_a=\(valenceEncoded(appID))"
-            + "&x_b=\(valenceEncoded(sig))"
-            + "&x_target=\(valenceEncoded(callback))"
+            + "?x_a=\(urlEncode(appID))"
+            + "&x_b=\(urlEncode(sig))"
+            + "&x_target=\(urlEncode(callback))"
     }
 }
 
@@ -158,15 +158,6 @@ func valenceServerTimeFromTimestampError(body: String) -> Int? {
     }
     let digits = body.drop(while: { !$0.isNumber }).prefix(while: { $0.isNumber })
     return Int(digits)
-}
-
-/// Percent-encodes a query-parameter value so reserved characters (`:` `/` `?`
-/// `=` `&`) in the callback don't leak into the surrounding query. Equivalent
-/// to Python's `urllib.parse.quote(value, safe='')`.
-private func valenceEncoded(_ value: String) -> String {
-    var allowed = CharacterSet.alphanumerics
-    allowed.insert(charactersIn: "-._~")
-    return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
 }
 
 // MARK: - Application storage

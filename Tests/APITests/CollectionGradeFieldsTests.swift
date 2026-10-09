@@ -75,8 +75,8 @@ import Testing
         let result = APIResult(id: "r", submissionID: "s")
         result.stampGradeFields(from: json)
         #expect(result.gradePercentValue == gradePercentFromCollectionJSON(json))
-        #expect(result.gradePointsValue == gradePointsFromCollectionJSON(json))
-        #expect(result.gradeTotalPointsValue == gradeTotalPointsFromCollectionJSON(json))
+        #expect(result.gradePointsValue == CollectionGradeFields(json: json)?.gradePoints)
+        #expect(result.gradeTotalPointsValue == CollectionGradeFields(json: json)?.gradeTotalPoints)
     }
 
     @Test func stampingFromABlobThatIsNotAnObjectLeavesTheColumnsAlone() {

@@ -23,16 +23,18 @@ import Core
 import Fluent
 import Vapor
 
-/// Closes `assignment` if it is currently open, persisting the change, and
-/// reports whether it did. A no-op returning `false` when not open, so a tool
-/// can surface "did this edit close the assignment" to the agent.
+/// Closes `assignment` if it is currently open, persisting the change and
+/// writing its audit row (#2489), and reports whether it did. A no-op
+/// returning `false` when not open, so a tool can surface "did this edit close
+/// the assignment" to the agent.
 @discardableResult
 func closeOpenAssignmentForContentEdit(
-    _ assignment: APIAssignment, on db: any Database
+    _ assignment: APIAssignment, context: ToolContext
 ) async throws -> Bool {
     guard assignment.visibility == .open else { return false }
     assignment.visibility = .closed
-    try await assignment.save(on: db)
+    try await assignment.save(on: context.db)
+    await VisibilityAudit.mcp(context, reason: "content-edit").recordChange(of: assignment, from: .open)
     return true
 }
 
@@ -75,7 +77,7 @@ func applySuiteEditMapped(
 func finalizeContentEdit(
     assignment: APIAssignment, setup: APITestSetup, context: ToolContext, retest: Bool
 ) async throws -> ContentEditFinalizeResult {
-    let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
+    let closed = try await closeOpenAssignmentForContentEdit(assignment, context: context)
     // Pass the acting subject explicitly: an MCP request is bearer-authenticated
     // with no session user, so the validation's `req.auth` fallback would throw
     // 401 inside its swallow-all catch and the re-validation would silently
@@ -86,7 +88,7 @@ func finalizeContentEdit(
     let kind: ContentEditKind = retest && actingUserID != nil ? .gradeAffecting : .placementOnly
     let requeued = await applyContentEditEffects(
         kind,
-        assignment: assignment, setup: setup, actingUserID: actingUserID, req: context.request)
+        assignment: assignment, setup: setup, actingUserID: actingUserID, context: context.request)
     return ContentEditFinalizeResult(assignmentClosed: closed, submissionsRequeued: requeued)
 }
 

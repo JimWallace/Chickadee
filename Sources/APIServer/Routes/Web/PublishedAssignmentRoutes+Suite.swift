@@ -60,7 +60,7 @@ extension PublishedAssignmentRoutes {
         // the Save button onto this live endpoint.
         await applyContentEditEffects(
             .gradeAffecting, assignment: assignment, setup: setup,
-            actingUserID: req.auth.get(APIUser.self)?.id, req: req)
+            actingUserID: req.auth.get(APIUser.self)?.id, context: req)
 
         let payload = await buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
@@ -101,134 +101,6 @@ extension PublishedAssignmentRoutes {
 }
 
 // MARK: - Reconstitution (file-scope so other routes can reuse it)
-
-/// Reads a persisted manifest and builds the author-facing view of the
-/// suite list, collapsing fully-expanded family filename sets back into
-/// `family:<id>` tokens so the editor sees intent, not plumbing.
-func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) async -> SuitePayload {
-    guard let props = decodeManifest(fromJSON: manifest)
-
-    else {
-        return SuitePayload(items: [], sections: [])
-    }
-
-    let familyByID = Dictionary(uniqueKeysWithValues: props.patternFamilies.map { ($0.id, $0) })
-    let checkByID = Dictionary(uniqueKeysWithValues: props.notebookChecks.map { ($0.id, $0) })
-    // The assignment's own language, not Python's. These filenames are matched
-    // against the `dependsOn` values already persisted in the manifest, and a
-    // persisted dep carries the language's real extension — so computing `.py`
-    // names here meant the superset test below never matched on an R, Lua,
-    // Octave, C++ or Racket assignment, and the editor showed a family's
-    // expanded filenames where every Python assignment showed one `family:<id>`
-    // row. No notebook is read: a persisted manifest records its language, and
-    // a suite with generated entries has scripts to resolve from either way.
-    let language = AssignmentLanguage.resolve(manifest: props) ?? .python
-    var familyFilenames: [String: Set<String>] = [:]
-    for f in props.patternFamilies {
-        familyFilenames[f.id] = Set(
-            f.cases
-                .filter(\.enabled)
-                .map { c in
-                    generatedScriptFilename(
-                        familyID: f.id,
-                        caseKey: c.key,
-                        tier: c.resolvedTier(defaults: f.defaults),
-                        language: language
-                    )
-                })
-    }
-
-    // Collapse expanded family-filename subsets back into family: tokens.
-    func collapseDeps(_ deps: [String]) async -> [String] {
-        var remaining = deps
-        var collapsed: [String] = []
-        for (fid, filenames) in familyFilenames {
-            if !filenames.isEmpty,
-                Set(remaining).isSuperset(of: filenames)
-            {
-                remaining.removeAll { filenames.contains($0) }
-                collapsed.append(familyDepToken(fid))
-            }
-        }
-        return remaining + collapsed
-    }
-
-    // Walk testSuites in order, emitting one item per script or, on the
-    // first generated entry for a family, one family row.  Family rows'
-    // `dependsOn` comes from the PatternFamily spec (already in author
-    // form) rather than from the expanded per-case entries.  Each row
-    // carries the underlying entry's `sectionID` so the client can
-    // rebuild its grouped view.
-    var items: [SuiteItemDTO] = []
-    var emittedFamilyIDs: Set<String> = []
-    var emittedCheckIDs: Set<String> = []
-    for entry in props.testSuites {
-        if let fid = entry.generatedBy {
-            guard !emittedFamilyIDs.contains(fid), let family = familyByID[fid] else { continue }
-            emittedFamilyIDs.insert(fid)
-            items.append(
-                SuiteItemDTO(
-                    kind: "family",
-                    script: nil,
-                    family: family,
-                    check: nil,
-                    dependsOn: family.dependsOn,
-                    sectionID: entry.sectionID
-                ))
-        } else if let cid = entry.generatedByCheck {
-            guard !emittedCheckIDs.contains(cid), let check = checkByID[cid] else { continue }
-            emittedCheckIDs.insert(cid)
-            items.append(
-                SuiteItemDTO(
-                    kind: "check",
-                    script: nil,
-                    family: nil,
-                    check: check,
-                    dependsOn: check.dependsOn,
-                    sectionID: entry.sectionID
-                ))
-        } else {
-            await items.append(
-                SuiteItemDTO(
-                    kind: "script",
-                    script: ScriptDTO(
-                        script: entry.script,
-                        tier: entry.tier,
-                        points: entry.points,
-                        displayName: entry.name,
-                        dependsOn: collapseDeps(entry.dependsOn),
-                        hint: entry.hint,
-                        timeLimitSeconds: entry.timeLimitSeconds,
-                        failureDetail: entry.failureDetail?.rawValue
-                    ),
-                    family: nil,
-                    check: nil,
-                    dependsOn: nil,
-                    sectionID: entry.sectionID
-                ))
-        }
-    }
-
-    // When a zip path is supplied, fill in each raw script's body so the
-    // payload carries the complete declarative state (the editor seed and
-    // `GET /suite` both want this; pure-manifest callers pass nil and get
-    // metadata-only script rows). Generated family/check files are derived
-    // from their specs, so only `kind == "script"` rows need a body.
-    if let zipPath {
-        for i in items.indices where items[i].kind == "script" {
-            if let name = items[i].script?.script,
-                let body = await readScriptFromZip(zipPath: zipPath, filename: name)
-            {
-                items[i].script?.content = body
-            }
-        }
-    }
-
-    let sections = props.sections.map {
-        TestSuiteSectionDTO(id: $0.id, name: $0.name)
-    }
-    return SuitePayload(items: items, sections: sections)
-}
 
 /// Convenience: full `GET /suite` payload as sorted-keys JSON string.
 /// Pass `zipPath` to embed raw-script bodies in the seed (the editor reads

@@ -260,7 +260,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         // Append to the destination lane's shared (assignment + content) order so
         // the moved assignment doesn't collide with an existing sort_order
         // (mirrors the web moveToSection under the unified-interleave model).
-        assignment.sortOrder = try await nextAssignmentSortOrder(
+        assignment.sortOrder = try await nextSectionItemSortOrder(
             courseID: assignment.courseID, sectionID: resolvedSectionID, db: context.db)
         try await assignment.save(on: context.db)
 
@@ -273,22 +273,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         {
             sectionName = section.name
             if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
-                // An upload-only assignment — or one marking grader-only
-                // files — keeps worker grading rather than adopting a browser
-                // default (which would be refused: no notebook page to grade
-                // in, or withheld files the browser path would deliver); the
-                // move itself still succeeds.
-                if section.defaultGradingMode == GradingMode.browser.rawValue,
-                    currentManifestSubmissionMode(setup.manifest)
-                        == SubmissionMode.uploadOnly.rawValue
-                        || !currentManifestGraderOnlyFiles(setup.manifest).isEmpty
-                        || currentManifestActivityStagesAnOpponent(setup.manifest)
-                {
-                    gradingMode = currentManifestGradingMode(setup.manifest)
-                } else {
-                    gradingMode = try await setManifestGradingMode(
-                        setup: setup, to: section.defaultGradingMode, on: context.db)
-                }
+                gradingMode = try await adoptSectionGradingMode(section, setup: setup, on: context.db)
             }
         } else if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
             gradingMode = currentManifestGradingMode(setup.manifest)

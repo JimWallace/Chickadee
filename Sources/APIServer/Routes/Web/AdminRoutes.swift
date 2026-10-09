@@ -88,7 +88,6 @@ struct AdminRoutes: RouteCollection {
             courseIDs: activeCourseIDs, on: req.db)
         let bsSyncEnabled = req.application.brightSpaceAppCredentials != nil
         // Archived courses move out of Overview and live on the Retention tab.
-        let iso = ISO8601DateFormatter()
         let courseRows = allCourses.sorted {
             $0.code.localizedStandardCompare($1.code) == .orderedAscending
         }.compactMap { course -> AdminCourseRow? in
@@ -102,7 +101,7 @@ struct AdminRoutes: RouteCollection {
                 enrollmentCount: enrollmentCounts[id] ?? 0,
                 assignmentCount: assignmentCounts[id] ?? 0,
                 submissionCount: submissionCounts[id] ?? 0,
-                createdAt: course.createdAt.map { iso.string(from: $0) } ?? "—",
+                createdAt: course.createdAt.map { iso8601String($0) } ?? "—",
                 brightspaceOrgUnitID: course.brightspaceOrgUnitID,
                 brightspaceSyncEnabled: bsSyncEnabled
             ).withTerm(course.term)
@@ -201,7 +200,6 @@ struct AdminRoutes: RouteCollection {
                 return lhsCreated < rhsCreated
             }
 
-        let iso = ISO8601DateFormatter()
         // This list belongs to no one course, so the staff ring means "teaches
         // somewhere", as on the account page (docs/student-wardrobe.md).
         let staff = try await AvatarStore.courseStaff(among: users.compactMap(\.id), on: db)
@@ -216,8 +214,8 @@ struct AdminRoutes: RouteCollection {
                 displayName: user.displayName,
                 username: user.username,
                 role: user.role,
-                createdAt: user.createdAt.map { iso.string(from: $0) } ?? "—",
-                lastSeenAt: user.lastSeenAt.map { iso.string(from: $0) },
+                createdAt: user.createdAt.map { iso8601String($0) } ?? "—",
+                lastSeenAt: user.lastSeenAt.map { iso8601String($0) },
                 isCurrentUser: user.id != nil && user.id == viewerID)
             if user.roleValue != .mcp {
                 row.avatar = try await AvatarStore.rosterAvatar(
@@ -233,7 +231,7 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func storagePage(req: Request) async throws -> View {
-        let storage = try await Self.makeStorageContext(req: req)
+        let storage = try await StorageUsage.context(app: req.application)
         let ctx = AdminStoragePageContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "storage",
@@ -242,140 +240,6 @@ struct AdminRoutes: RouteCollection {
                 from: storage.assignments, totalBytes: storage.totalBytes)
         )
         return try await req.view.render("admin-storage", ctx)
-    }
-
-    // MARK: - Storage breakdown
-
-    /// Measures the persistent-volume sinks (submission/test-setup uploads,
-    /// the results+logs dir, the static asset tree) and the database so an
-    /// admin can see where disk is going.
-    ///
-    /// `static` so the admin diagnostic MCP tool (`get_storage_usage`) can reuse
-    /// the exact same builder as the `/admin/storage` page — the context is
-    /// PII-free (assignment/course identifiers + byte counts only).
-    ///
-    /// Cached behind a single-flight TTL (#1382 item 5): the walks stat every
-    /// submission ever kept plus the whole static asset tree, so the page got
-    /// slowest exactly when there was the most disk to account for — and the
-    /// MCP tool made it pollable. The walks now run at most once per TTL.
-    static func makeStorageContext(req: Request) async throws -> AdminStorageContext {
-        let app = req.application
-        var context = try await app.storageUsageCache.context {
-            try await computeStorageContext(app: app)
-        }
-        // Live, not cached: free space is what an admin opens this page to see
-        // when the disk is filling.
-        context.disk = app.diskSpaceOfDataVolume
-        return context
-    }
-
-    /// The uncached breakdown build. Directory walks are blocking, so they
-    /// run on the thread pool off the event loop.
-    private static func computeStorageContext(app: Application) async throws -> AdminStorageContext {
-        let submissionsDir = app.submissionsDirectory
-        let testSetupsDir = app.testSetupsDirectory
-        let resultsDir = app.resultsDirectory
-        let publicDir = app.directory.publicDirectory
-
-        func dirSize(_ path: String) async throws -> Int {
-            try await runBlocking(app: app) { directorySizeBytes(at: path) }
-        }
-
-        // Per-id footprints feed both the aggregate cards and the per-assignment
-        // breakdown.  Submissions are stored flat (`<id>.<ext>`), so the
-        // top-level sum equals a full recursive walk — we reuse it for the
-        // "Submissions" card to avoid scanning that (potentially large) dir
-        // twice.  Test setups have `shared/`+`notebooks/` subtrees, so the
-        // card keeps an authoritative recursive walk.
-        async let submissionSizesFetch = runBlocking(app: app) {
-            topLevelFileSizesByID(inDirectory: submissionsDir)
-        }
-        async let setupSizesFetch = runBlocking(app: app) {
-            testSetupSizesByID(testSetupsDirectory: testSetupsDir)
-        }
-
-        async let testSetupsBytes = dirSize(testSetupsDir)
-        async let resultsBytes = dirSize(resultsDir)
-        async let publicBytes = dirSize(publicDir)
-        async let dbBytes = databaseSizeBytes(
-            on: app.db, settings: app.appConfig.database)
-
-        // Mapping rows for the per-assignment breakdown.  The (id → setup)
-        // projection is the minimal query byte attribution needs: sizes live
-        // only on disk, keyed by submission id, so each on-disk file's bytes
-        // can only reach its assignment through this map.
-        async let assignmentsFetch = APIAssignment.query(on: app.db).all()
-        async let coursesFetch = APICourse.query(on: app.db).all()
-        async let submissionLinksFetch = APISubmission.query(on: app.db)
-            .field(\.$id).field(\.$testSetupID).all()
-
-        let submissionSizesByID = try await submissionSizesFetch
-        let setupSizesByID = try await setupSizesFetch
-        let testSetups = try await testSetupsBytes
-        let results = try await resultsBytes
-        let publicAssets = try await publicBytes
-        let database = await dbBytes
-        let submissions = submissionSizesByID.values.reduce(0, +)
-
-        var rows = [
-            AdminStorageRow(label: "Submissions", formatted: humanReadableBytes(submissions)),
-            AdminStorageRow(label: "Test Setups", formatted: humanReadableBytes(testSetups)),
-            AdminStorageRow(label: "Results & Logs", formatted: humanReadableBytes(results)),
-            AdminStorageRow(label: "Static Assets", formatted: humanReadableBytes(publicAssets)),
-        ]
-        rows.append(
-            AdminStorageRow(
-                label: "Database",
-                formatted: database.map(humanReadableBytes) ?? "—"))
-
-        let total = submissions + testSetups + results + publicAssets + (database ?? 0)
-
-        let assignments = try await assignmentsFetch
-        let courses = try await coursesFetch
-        let submissionLinks = try await submissionLinksFetch
-
-        // Tally submission count + bytes per test setup.
-        var submissionCountBySetup: [String: Int] = [:]
-        var submissionBytesBySetup: [String: Int] = [:]
-        for link in submissionLinks {
-            submissionCountBySetup[link.testSetupID, default: 0] += 1
-            if let subID = link.id {
-                submissionBytesBySetup[link.testSetupID, default: 0] +=
-                    submissionSizesByID[subID] ?? 0
-            }
-        }
-        let codeByCourse = Dictionary(
-            courses.compactMap { course in course.id.map { ($0, course.code) } },
-            uniquingKeysWith: { first, _ in first })
-
-        let assignmentRows =
-            assignments
-            .map { assignment -> AdminAssignmentStorageRow in
-                let suiteBytes = setupSizesByID[assignment.testSetupID] ?? 0
-                let subBytes = submissionBytesBySetup[assignment.testSetupID] ?? 0
-                let count = submissionCountBySetup[assignment.testSetupID] ?? 0
-                let rowTotal = suiteBytes + subBytes
-                return AdminAssignmentStorageRow(
-                    assignmentTitle: assignment.title,
-                    courseCode: codeByCourse[assignment.courseID] ?? "—",
-                    testSuiteFormatted: humanReadableBytes(suiteBytes),
-                    submissionsFormatted: humanReadableBytes(subBytes),
-                    submissionCount: count,
-                    totalFormatted: humanReadableBytes(rowTotal),
-                    testSuiteBytes: suiteBytes,
-                    submissionsBytes: subBytes,
-                    totalBytes: rowTotal
-                )
-            }
-            .sorted { $0.totalBytes > $1.totalBytes }
-
-        return AdminStorageContext(
-            rows: rows,
-            totalFormatted: humanReadableBytes(total),
-            dbBackend: app.appConfig.database.backend.rawValue,
-            assignments: assignmentRows,
-            totalBytes: total
-        )
     }
 
     // MARK: - POST /admin/users/:id/role
@@ -467,14 +331,13 @@ struct AdminRoutes: RouteCollection {
         let states = await monitor.currentRuleStates()
         let recent = await monitor.recentFiringsSnapshot()
 
-        let iso = ISO8601DateFormatter()
         let ruleRows = HealthRule.allCases.map { rule -> AdminAlertsRuleRow in
             let state = states[rule] ?? .initial
             return AdminAlertsRuleRow(
                 rule: rule.rawValue,
                 humanReadable: rule.humanReadable,
                 isFiring: state.isFiring,
-                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) },
+                lastFiredAt: state.lastFiredAt.map { iso8601String($0) },
                 thresholdText: rule.thresholdText(configuration)
             )
         }
@@ -519,13 +382,15 @@ struct AdminRoutes: RouteCollection {
                 let scheme = parsed.scheme?.lowercased(),
                 scheme == "http" || scheme == "https"
             else {
-                return req.redirect(to: alertsRedirect(error: "Webhook URL must start with http:// or https://"))
+                return req.redirect(
+                    to: adminNoticeRedirect("/admin/alerts", error: "Webhook URL must start with http:// or https://"))
             }
         }
 
         await req.application.serverHealthAlertMonitor.setWebhookURL(trimmed)
         req.logger.info("Admin updated alerts webhook URL (\(trimmed.isEmpty ? "cleared" : "set"))")
-        return req.redirect(to: alertsRedirect(ok: trimmed.isEmpty ? "Webhook cleared." : "Webhook saved."))
+        return req.redirect(
+            to: adminNoticeRedirect("/admin/alerts", ok: trimmed.isEmpty ? "Webhook cleared." : "Webhook saved."))
     }
 
     // MARK: - POST /admin/alerts/test
@@ -536,14 +401,15 @@ struct AdminRoutes: RouteCollection {
         let effectiveURL = await monitor.effectiveWebhookURL() ?? ""
 
         if effectiveURL.isEmpty {
-            return req.redirect(to: alertsRedirect(error: "No webhook URL configured. Set one above first."))
+            return req.redirect(
+                to: adminNoticeRedirect("/admin/alerts", error: "No webhook URL configured. Set one above first."))
         }
 
         do {
             _ = try await monitor.dispatchTestAlert(application: req.application)
-            return req.redirect(to: alertsRedirect(ok: "Test alert dispatched to webhook."))
+            return req.redirect(to: adminNoticeRedirect("/admin/alerts", ok: "Test alert dispatched to webhook."))
         } catch {
-            return req.redirect(to: alertsRedirect(error: "Test alert failed: \(error)"))
+            return req.redirect(to: adminNoticeRedirect("/admin/alerts", error: "Test alert failed: \(error)"))
         }
     }
 
@@ -659,7 +525,9 @@ struct AdminRoutes: RouteCollection {
 
 }
 
-private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
+/// An admin page's path with its one-shot `ok` or `error` notice in the query
+/// (#2492: the alerts and retention pages each had a copy of this).
+func adminNoticeRedirect(_ path: String, ok: String? = nil, error: String? = nil) -> String {
     var pairs: [String] = []
     if let okValue = ok?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
         pairs.append("ok=\(okValue)")
@@ -667,7 +535,7 @@ private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
     if let errorValue = error?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
         pairs.append("error=\(errorValue)")
     }
-    return pairs.isEmpty ? "/admin/alerts" : "/admin/alerts?" + pairs.joined(separator: "&")
+    return pairs.isEmpty ? path : path + "?" + pairs.joined(separator: "&")
 }
 
 func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {

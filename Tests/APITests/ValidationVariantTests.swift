@@ -86,7 +86,7 @@ import VaporTesting
     private func enqueue(_ fx: Fixture) async throws -> String {
         let req = Request(application: app, on: app.eventLoopGroup.any())
         return try await enqueueRunnerValidationSubmission(
-            req: req,
+            context: req,
             setupID: fx.setupID,
             solutionNotebookData: Data(solutionNotebook.utf8),
             filename: "solution.ipynb",

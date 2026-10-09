@@ -40,7 +40,6 @@ extension AdminRoutes {
 
         let now = Date()
         let df = waterlooDateTimeFormatter()
-        let iso = ISO8601DateFormatter()
 
         // Build (course, status) pairs so we can sort by delete-eligibility
         // before mapping to the formatted row shape.
@@ -84,9 +83,9 @@ extension AdminRoutes {
                 name: entry.course.name,
                 termLabel: entry.course.term?.displayName,
                 archivedAt: entry.archivedAt.map { df.string(from: $0) } ?? "—",
-                archivedAtISO: entry.archivedAt.map { iso.string(from: $0) } ?? "",
+                archivedAtISO: entry.archivedAt.map { iso8601String($0) } ?? "",
                 purgeEligibleAt: entry.eligibleAt.map { df.string(from: $0) } ?? "—",
-                purgeEligibleAtISO: entry.eligibleAt.map { iso.string(from: $0) } ?? "",
+                purgeEligibleAtISO: entry.eligibleAt.map { iso8601String($0) } ?? "",
                 submissionCount: entry.count,
                 isDeletable: entry.isDeletable
             )
@@ -103,15 +102,4 @@ extension AdminRoutes {
         )
         return try await req.view.render("admin-retention", ctx)
     }
-}
-
-func retentionRedirect(ok: String? = nil, error: String? = nil) -> String {
-    var pairs: [String] = []
-    if let okValue = ok?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-        pairs.append("ok=\(okValue)")
-    }
-    if let errorValue = error?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-        pairs.append("error=\(errorValue)")
-    }
-    return pairs.isEmpty ? "/admin/retention" : "/admin/retention?" + pairs.joined(separator: "&")
 }

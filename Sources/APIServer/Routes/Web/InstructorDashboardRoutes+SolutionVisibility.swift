@@ -43,7 +43,7 @@ extension InstructorDashboardRoutes {
             }
         }
         try await AssignmentAuthoringService.updateMetadata(
-            assignment, solutionVisibility: afterDue ? .afterDue : .hidden, on: req.db)
+            assignment, solutionVisibility: afterDue ? .afterDue : .hidden, audit: .web(req), on: req.db)
         await AuditLogger.record(
             action: .solutionVisibilityChanged,
             targetType: .assignment,

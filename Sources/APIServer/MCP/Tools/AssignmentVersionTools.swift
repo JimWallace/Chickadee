@@ -138,11 +138,10 @@ struct ListAssignmentVersionsTool: ContentTool {
         let liveManifestHash = manifestHash(setup.manifest)
         let newest = rows.map(\.versionNumber).max()
 
-        let formatter = ISO8601DateFormatter()
         let entries = rows.map { row in
             Entry(
                 version: row.versionNumber,
-                createdAt: row.createdAt.map(formatter.string(from:)) ?? "",
+                createdAt: row.createdAt.map(iso8601String) ?? "",
                 actor: row.actorUsername,
                 origin: row.origin,
                 summary: row.summary,
@@ -277,7 +276,7 @@ struct GetAssignmentVersionTool: ContentTool {
         return Output(
             assignmentPublicID: input.assignmentPublicID,
             version: row.versionNumber,
-            createdAt: row.createdAt.map(ISO8601DateFormatter().string(from:)) ?? "",
+            createdAt: row.createdAt.map(iso8601String) ?? "",
             actor: row.actorUsername,
             origin: row.origin,
             summary: row.summary,

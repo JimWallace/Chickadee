@@ -97,8 +97,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             app.diskSpaceProbe = { _ in DiskSpace(freeBytes: 25 << 30, totalBytes: 100 << 30) }
-            let context = try await AdminRoutes.makeStorageContext(
-                req: Request(application: app, on: app.eventLoopGroup.any()))
+            let context = try await StorageUsage.context(app: app)
             #expect(context.disk == DiskSpace(freeBytes: 25 << 30, totalBytes: 100 << 30))
             #expect(context.diskText == "25.0 GB of 100.0 GB (25%)")
         }

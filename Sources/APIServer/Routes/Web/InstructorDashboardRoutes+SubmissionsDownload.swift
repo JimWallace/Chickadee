@@ -40,7 +40,6 @@ extension InstructorDashboardRoutes {
 
         // Reduce to primitives before the thread-pool hop: Fluent models are
         // not Sendable (#1158). Sorted by username so the index is stable.
-        let stamp = ISO8601DateFormatter()
         let entries: [StagedSubmission] = latest.compactMap { submission in
             guard let userID = submission.userID, let username = usernameByID[userID] else {
                 return nil
@@ -51,7 +50,7 @@ extension InstructorDashboardRoutes {
                 directory: sanitizedDownloadComponent(username),
                 submissionID: submission.id ?? "",
                 attemptNumber: submission.attemptNumber ?? 0,
-                submittedAt: submission.submittedAt.map(stamp.string(from:)) ?? "",
+                submittedAt: submission.submittedAt.map(iso8601String) ?? "",
                 sourcePath: submission.zipPath,
                 filename: sanitizedDownloadComponent(submission.filename ?? onDiskName))
         }.sorted { $0.username < $1.username }
@@ -65,7 +64,7 @@ extension InstructorDashboardRoutes {
         }
 
         let safeSlug = sanitizedDownloadComponent(assignment.slug)
-        let zipName = "chickadee-submissions-\(safeSlug)-\(stamp.string(from: Date()).prefix(10)).zip"
+        let zipName = "chickadee-submissions-\(safeSlug)-\(iso8601String(Date()).prefix(10)).zip"
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(UUID().uuidString)-\(zipName)").path
         try await createZipArchive(sourceDir: stagingDir, outputPath: zipPath)

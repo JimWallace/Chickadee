@@ -8,15 +8,18 @@
 // All methods swallow their own errors after logging — an audit-log write
 // failure must never block the primary action (e.g. a user-delete handler
 // is still allowed to delete the user even if the audit row can't be
-// persisted).  The error path is logged with `req.logger.error`.
+// persisted).  The error path is logged with the context's logger.
+//
+// The methods take an `AuditContext`, not a `Request` (#2497). A route passes
+// `req`, which conforms.
 
 import Fluent
 import Foundation
 import Vapor
 
 enum AuditLogger {
-    /// Records an audit entry against the current request.  The actor is
-    /// inferred from the session-authenticated user (nil for unauthenticated
+    /// Records an audit entry.  The actor is the context's user, which for a
+    /// request is the session-authenticated user (nil for unauthenticated
     /// events such as failed logins).
     static func record(
         action: AuditAction,
@@ -26,12 +29,12 @@ enum AuditLogger {
         actorOverride: APIUser? = nil,
         actorUsernameOverride: String? = nil,
         courseID: UUID? = nil,
-        on req: Request
+        on context: some AuditContext
     ) async {
         _ = await recordReturning(
             action: action, targetType: targetType, targetID: targetID, metadata: metadata,
             actorOverride: actorOverride, actorUsernameOverride: actorUsernameOverride,
-            courseID: courseID, on: req)
+            courseID: courseID, on: context)
     }
 
     /// Like `record`, but returns the persisted entry — or nil when the write
@@ -46,10 +49,9 @@ enum AuditLogger {
         actorOverride: APIUser? = nil,
         actorUsernameOverride: String? = nil,
         courseID: UUID? = nil,
-        on req: Request
+        on context: some AuditContext
     ) async -> APIAuditLogEntry? {
-        let actor = actorOverride ?? req.auth.get(APIUser.self)
-        let trust = req.application.securityConfiguration.trustForwardedProto
+        let actor = actorOverride ?? context.auditActor
 
         let entry = APIAuditLogEntry(
             actorUserID: actor?.id,
@@ -57,8 +59,8 @@ enum AuditLogger {
             action: action.rawValue,
             targetType: targetType?.rawValue,
             targetID: targetID,
-            remoteAddr: clientIPAddress(from: req, trustForwardedFor: trust),
-            userAgent: req.headers.first(name: "User-Agent"),
+            remoteAddr: context.auditRemoteAddress,
+            userAgent: context.auditUserAgent,
             metadata: metadata.flatMap(APIAuditLogEntry.encodeMetadata),
             // Fall back to the metadata key every course-scoped call site has
             // always set. That is what makes the existing enrollment/staff
@@ -68,10 +70,10 @@ enum AuditLogger {
             courseID: courseID ?? metadata.flatMap { $0["course_id"] }.flatMap(UUID.init(uuidString:))
         )
         do {
-            try await entry.save(on: req.db)
+            try await entry.save(on: context.db)
             return entry
         } catch {
-            req.logger.error(
+            context.logger.error(
                 "audit_log write failed for action=\(action.rawValue): \(error.localizedDescription)"
             )
             return nil
@@ -83,9 +85,9 @@ enum AuditLogger {
     /// written before the action ran.  A failure here is non-critical — the
     /// durable record already exists — so it is logged, not propagated.
     static func updateMetadata(
-        _ entry: APIAuditLogEntry, merging extra: [String: String], on req: Request
+        _ entry: APIAuditLogEntry, merging extra: [String: String], on context: some ServiceContext
     ) async {
-        await updateMetadata(entry, merging: extra, on: req.db, logger: req.logger)
+        await updateMetadata(entry, merging: extra, on: context.db, logger: context.logger)
     }
 
     /// The same, outside a request (the MCP progress stream outlives its
@@ -119,7 +121,7 @@ extension AuditLogger {
         _ action: AuditAction,
         assignment: APIAssignment,
         metadata: [String: String] = [:],
-        on req: Request
+        on context: some AuditContext
     ) async {
         var merged = metadata
         merged["assignment"] = assignment.publicID
@@ -130,6 +132,6 @@ extension AuditLogger {
             targetID: assignment.id?.uuidString,
             metadata: merged,
             courseID: assignment.courseID,
-            on: req)
+            on: context)
     }
 }

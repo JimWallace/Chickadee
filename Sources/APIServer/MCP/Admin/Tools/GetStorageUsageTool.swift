@@ -3,7 +3,7 @@
 // Read tool: on-disk footprint — total bytes by component (submissions /
 // test-setups / results+logs / static assets / database) plus a per-assignment
 // breakdown.  Wraps the same builder the admin /admin/storage page uses
-// (`AdminRoutes.makeStorageContext`).  Disk pressure directly causes job
+// (`StorageUsage.context`).  Disk pressure directly causes job
 // failures (free disk is tracked per job), so this is a first-class diagnostic.
 // PII-free: assignment title + course code are instructor content, submission
 // COUNT per assignment is an aggregate — no student identifiers.
@@ -30,6 +30,6 @@ struct GetStorageUsageTool: DiagnosticTool {
     static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        return try await AdminRoutes.makeStorageContext(req: context.request)
+        return try await StorageUsage.context(app: context.request.application)
     }
 }

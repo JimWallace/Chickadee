@@ -27,8 +27,7 @@ import Vapor
 func parseDueDate(_ raw: String?) -> Date? {
     guard let raw, !raw.isEmpty else { return nil }
 
-    let iso = ISO8601DateFormatter()
-    if let d = iso.date(from: raw) { return d }
+    if let d = iso8601Date(raw) { return d }
 
     // Accept both `datetime-local` shapes (with and without seconds) — this
     // is the ONE parser for instructor-entered local datetimes; the
@@ -123,47 +122,6 @@ func dueAtLocalInputString(_ date: Date?) -> String {
     fmt.timeZone = TimeZone(identifier: "America/Toronto")
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
     return fmt.string(from: date)
-}
-
-/// Next `sort_order` in the shared per-section item lane of `(course, section)`.
-/// Assignments and content items share one interleaved sequence, so the next
-/// order is the maximum across BOTH tables in this lane, plus one — a newly
-/// published assignment appends to its section rather than to a course-global
-/// maximum (mirrors `nextContentItemSortOrder`).
-func nextAssignmentSortOrder(
-    courseID: UUID, sectionID: UUID?, db: any Database
-) async throws -> Int {
-    let assignmentQuery = APIAssignment.query(on: db)
-        .filter(\.$courseID == courseID)
-        // MAX over the non-null rows only; an explicit filter + sort avoids the
-        // driver-dependent NULL ordering Postgres and SQLite disagree on.
-        .filter(\.$sortOrder != nil)
-    let contentQuery = APICourseContentItem.query(on: db)
-        .filter(\.$courseID == courseID)
-    if let sectionID {
-        assignmentQuery.filter(\.$sectionID == sectionID)
-        contentQuery.filter(\.$sectionID == sectionID)
-    } else {
-        assignmentQuery.filter(\.$sectionID == nil)
-        contentQuery.filter(\.$sectionID == nil)
-    }
-    let maxAssignment =
-        try await assignmentQuery.sort(\.$sortOrder, .descending).first()?.sortOrder ?? 0
-    let maxContent = try await contentQuery.max(\.$sortOrder) ?? 0
-    return Swift.max(maxAssignment, maxContent) + 1
-}
-
-/// The earned points recorded on a submission result, for LEARN-style CSV
-/// export: weighted points when present, else the pass count.
-func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
-    CollectionGradeFields(json: collectionJSON)?.gradePoints
-}
-
-/// The total possible points recorded on a submission result, used as the
-/// denominator when converting a percent grade override into BrightSpace
-/// points. Nil when the result predates weighted grading (no `totalPoints`).
-func gradeTotalPointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
-    CollectionGradeFields(json: collectionJSON)?.gradeTotalPoints
 }
 
 /// The grade percent recorded on a submission result: weighted when present,

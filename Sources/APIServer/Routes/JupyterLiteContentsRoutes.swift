@@ -5,6 +5,7 @@
 // (`/jupyterlite/lab`, `/jupyterlite/notebooks`, or root), so we expose aliases
 // for all expected URL shapes.
 
+import Core
 import Foundation
 import Vapor
 
@@ -219,7 +220,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
     }
 
     private func isoDate(_ date: Date) -> String {
-        ISO8601DateFormatter().string(from: date)
+        iso8601String(date)
     }
 
     private func userRootPath(for caller: APIUser, isStaff: Bool) throws -> String? {

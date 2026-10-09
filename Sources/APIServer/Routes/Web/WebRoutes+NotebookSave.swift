@@ -240,7 +240,7 @@ extension WebRoutes {
         }
         // Debounced + best-effort, exactly as after a live suite edit: a no-op
         // when a validation is already pending or no solution exists yet.
-        await scheduleValidationAfterSuiteEdit(req: req, assignment: assignment)
+        await scheduleValidationAfterSuiteEdit(context: req, assignment: assignment)
         return NotebookSaveOutcome(
             validationStatus: assignment.validationStatus,
             message: validationSuffixed("Starter notebook saved.", status: assignment.validationStatus))
@@ -271,7 +271,7 @@ extension WebRoutes {
         }
 
         let submissionID = try await enqueueRunnerValidationSubmission(
-            req: req,
+            context: req,
             setupID: assignment.testSetupID,
             solutionNotebookData: normalized,
             filename: "solution.ipynb",
@@ -285,7 +285,7 @@ extension WebRoutes {
         let requirementSpec = try await loadAssignmentRequirementSpec(
             assignment: assignment, on: req.db)
         let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
-            req: req, requirements: requirementSpec)
+            context: req, requirements: requirementSpec)
         assignment.validationStatus = hasEligibleRunner ? "pending" : "no-runner"
         try await assignment.save(on: req.db)
 
@@ -307,18 +307,4 @@ extension WebRoutes {
             return lead
         }
     }
-}
-
-/// Number of cells in `raw`, or nil when it is not notebook-shaped JSON (an
-/// object carrying a `cells` array).  The web mirror of the MCP tools'
-/// `validateNotebookShape` guard: the same rejection, one step earlier, so a
-/// stray POST can never overwrite a notebook with something that isn't one.
-func notebookCellCount(fromRaw raw: Data) -> Int? {
-    guard
-        let object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-        let cells = object["cells"] as? [Any]
-    else {
-        return nil
-    }
-    return cells.count
 }

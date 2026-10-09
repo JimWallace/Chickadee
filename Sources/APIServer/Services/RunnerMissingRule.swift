@@ -1,5 +1,6 @@
 // APIServer/Services/RunnerMissingRule.swift
 //
+import Core
 import Fluent
 import Foundation
 import Logging
@@ -57,8 +58,7 @@ func decideRunnersMissing(
     // that grows by exactly the cooldown on every page means the sender reads a
     // FIXED last-seen time, and only the absolute value can be compared against
     // what the live server's database says.
-    let formatter = ISO8601DateFormatter()
-    let lastSeen = missing.map { runnerID, lastSeen in "\(runnerID) \(formatter.string(from: lastSeen))" }
+    let lastSeen = missing.map { runnerID, lastSeen in "\(runnerID) \(iso8601String(lastSeen))" }
     return RuleEvaluation(
         isFiring: true,
         summary: summary,

@@ -254,7 +254,7 @@ enum AchievementsEditing {
     /// hasn't authored yet are merged in so they appear as editable rows; after
     /// seeding, the manifest is authoritative (a removed built-in stays removed).
     static func rows(fromManifest manifest: String) -> [AchievementRow] {
-        guard let props = try? JSONDecoder().decode(TestProperties.self, from: Data(manifest.utf8))
+        guard let props = decodeManifest(fromJSON: manifest)
         else { return BuiltInAchievements.all.map(row(from:)) }
         let authored = props.achievements
         guard !props.builtInAchievementsSeeded else {
@@ -302,7 +302,7 @@ enum AchievementsEditing {
         _ achievement: Achievement, againstManifest manifest: String
     ) -> Achievement {
         guard
-            let props = try? JSONDecoder().decode(TestProperties.self, from: Data(manifest.utf8)),
+            let props = decodeManifest(fromJSON: manifest),
             achievement.conditions.contains(where: { $0.signal == .itemsCovered })
         else { return achievement }
         let ids = Set(props.sections.map(\.id))

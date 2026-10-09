@@ -201,76 +201,28 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
     return DatasetsResponse(datasets: specs, diagnostics: diagnostics)
 }
 
-/// Reads the dataset specs off a setup's manifest.  An undecodable manifest
-/// reports no datasets rather than failing the read: the panel then shows every
-/// support file as unmarked, which is what a manifest carrying no `datasets`
-/// key means anyway.
-func datasetSpecs(inManifest manifest: String) -> [DatasetSpec] {
-    guard let data = manifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
-    else { return [] }
-    return props.datasets
-}
-
 /// Validates `datasets` against the setup's bundled files and writes the
 /// resulting array into the manifest, replacing whatever was there.
 ///
 /// This is a whole-array replace, not a patch — callers send the complete
 /// desired state.
 ///
-/// Rejects (`.badRequest`), in the order a caller is likely to hit them:
-///   - a `file` that is not a bare filename.  The value is joined onto
-///     directory paths at read time (`DatasetResolver`) and at delivery time on
-///     both the server and the worker, so a separator or traversal component
-///     would read outside the setup directory (#1104).
-///   - a `file` the setup zip does not bundle.  A dataset marks an existing
-///     support file as per-student; it never introduces one.
-///   - a non-positive `sampleSize`.
-///   - two specs for the same file, which is incoherent — the two would
-///     disagree about how many rows a student gets, and which one wins is a
-///     detail of whichever consumer happens to fold the array.
-///   - a stratified spec that does not fit its file (`DatasetSpecValidation`):
-///     no column named, a column the file does not have, or a sample too small
-///     to hold one row of every category. The materializer degrades quietly on
-///     all three at delivery time, which is only safe because this refuses them
-///     while an instructor is still holding the form.
+/// Each spec must pass `datasetSpecRefusal`, the check MCP `set_dataset` runs
+/// too (#2487). The array must also not name one file twice: two specs for one
+/// file would disagree about how many rows a student gets, and which one wins
+/// is a detail of whichever consumer happens to fold the array. A refusal is
+/// `.badRequest`.
 func applyDatasetsEdit(
     setup: APITestSetup, datasets: [DatasetSpec], on db: Database
 ) async throws {
-    let zipEntries = await Set(
-        listZipEntries(zipPath: setup.zipPath).map { entry in
-            entry.hasPrefix("./") ? String(entry.dropFirst(2)) : entry
-        })
+    let bundledFiles = await bundledFileNames(zipPath: setup.zipPath)
     var seenFiles: Set<String> = []
     for spec in datasets {
-        guard FilenameSafety.bareFilename(spec.file) != nil else {
-            throw Abort(
-                .badRequest,
-                reason: "Dataset file '\(spec.file)' must be a bare filename with no path components.")
-        }
-        guard zipEntries.contains(spec.file) else {
-            throw Abort(
-                .badRequest,
-                reason: "Dataset file '\(spec.file)' is not among this assignment's bundled files.")
-        }
-        if let n = spec.sampleSize, n <= 0 {
-            throw Abort(.badRequest, reason: "sampleSize for '\(spec.file)' must be positive.")
+        if let refusal = await datasetSpecRefusal(spec, setup: setup, bundledFiles: bundledFiles) {
+            throw Abort(.badRequest, reason: refusal)
         }
         guard seenFiles.insert(spec.file).inserted else {
             throw Abort(.badRequest, reason: "Dataset file '\(spec.file)' is listed more than once.")
-        }
-        // Reads the file only when a spec claims something CHECKABLE against it
-        // — a stratum column or a transform's columns. An ordinary row sample
-        // needs nothing from the bytes, and these files are course datasets, not
-        // small. The transform arm matters as much as the stratum one: a
-        // transform naming a column the file does not have is absorbed silently
-        // at delivery, so this is the only place it can be reported.
-        if spec.kind == .stratifiedSample || spec.stratumColumn != nil || !spec.transforms.isEmpty {
-            let text = await extractZipEntry(zipPath: setup.zipPath, entryName: spec.file)
-                .flatMap { String(data: $0, encoding: .utf8) }
-            if let issue = DatasetSpecValidation.issue(with: spec, sourceCSV: text) {
-                throw Abort(.badRequest, reason: issue)
-            }
         }
     }
 

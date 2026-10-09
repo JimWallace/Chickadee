@@ -10,6 +10,7 @@
 // in SQL so it works identically on SQLite (dev/tests) and Postgres (prod)
 // without dialect-specific date functions.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -105,19 +106,18 @@ enum UserActivityChartService {
             bucketUsers[index].insert(event.userID)
         }
 
-        let iso = ISO8601DateFormatter()
         let buckets = (0..<bucketCount).map { index -> ActivityBucket in
             let start = windowStart.addingTimeInterval(Double(index) * bucketSeconds)
             return ActivityBucket(
                 label: window.label(forBucketStart: start),
-                startISO: iso.string(from: start),
+                startISO: iso8601String(start),
                 count: bucketUsers[index].count
             )
         }
 
         return ActivityChartData(
             window: window.rawValue,
-            generatedAt: iso.string(from: now),
+            generatedAt: iso8601String(now),
             buckets: buckets
         )
     }

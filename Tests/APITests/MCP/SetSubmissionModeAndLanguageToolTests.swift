@@ -2,11 +2,11 @@
 // SetSubmissionModeTool (notebook vs uploadOnly) and SetAssignmentLanguageTool
 // (the declared language). Backed by a real test database.
 //
-// The pair carries an invariant neither half owns alone: cpp ⟺ uploadOnly. Each
-// tool refuses the incoherent combination from its own side, so the suite walks
-// BOTH directions — a C++ assignment cannot be flipped back to the notebook
-// workflow it has no kernel for, and C++ cannot be declared on an assignment
-// still in notebook mode.
+// The pair carries an invariant neither half owns alone: cpp ⟺ uploadOnly. The
+// suite walks BOTH directions. A C++ assignment cannot be flipped back to the
+// notebook workflow it has no kernel for. Declaring C++ on an assignment in
+// notebook mode switches it to upload-only and worker grading, the same rule
+// as the web Language select (#2486).
 
 import Core
 import Fluent
@@ -133,15 +133,60 @@ import Vapor
         }
     }
 
-    @Test func refusesCppWhileStillNotebookMode() async throws {
+    /// The web rule (#2486): an upload-only language switches the submission
+    /// and grading modes instead of refusing, even from browser grading.
+    @Test func cppOnANotebookAssignmentSwitchesToUploadOnlyAndWorker() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let assignment = try await fixture(on: app, manifest: workerManifest)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetAssignmentLanguageTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, language: "cpp"), context(app))
+            let assignment = try await fixture(on: app, manifest: browserManifest)
+            let out = try await SetAssignmentLanguageTool().execute(
+                .init(assignmentPublicID: assignment.publicID, language: "cpp"), context(app))
+            #expect(out.language == "cpp")
+            #expect(out.submissionMode == "uploadOnly")
+            #expect(out.gradingMode == "worker")
+
+            let props = try #require(try await manifest(of: assignment, on: app))
+            #expect(props.language == .cpp)
+            #expect(props.submissionMode == .uploadOnly)
+            #expect(props.gradingMode == .worker)
+        }
+    }
+
+    /// "none" is a declaration, as it is in the web Language select.
+    @Test func declaresNone() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let declared =
+                #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"language":"r"}"#
+            let assignment = try await fixture(on: app, manifest: declared)
+            let out = try await SetAssignmentLanguageTool().execute(
+                .init(assignmentPublicID: assignment.publicID, language: "none"), context(app))
+            #expect(out.language == "none")
+
+            let props = try #require(try await manifest(of: assignment, on: app))
+            #expect(props.language == nil)
+            #expect(props.languageDeclared == true)
+        }
+    }
+
+    /// The web door calls the same function, so it refuses the same change.
+    @Test func changeDeclaredLanguageRefusesOnceGeneratedTestsExist() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let generated = #"""
+                {"schemaVersion":1,"gradingMode":"worker","timeLimitSeconds":10,"language":"python",\
+                "testSuites":[{"tier":"public","script":"publictest_bmi_01.py","generatedBy":"bmi"}]}
+                """#
+                .replacingOccurrences(of: "\\\n", with: "")
+            let assignment = try await fixture(on: app, manifest: generated)
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+
+            await #expect(throws: AppError.self) {
+                try await changeDeclaredLanguage(setup: setup, to: nil, on: app.db)
             }
-            #expect(try await manifest(of: assignment, on: app)?.language == nil)
+            // The current language again is not a change.
+            try await changeDeclaredLanguage(setup: setup, to: .python, on: app.db)
+            #expect(try await manifest(of: assignment, on: app)?.language == .python)
         }
     }
 
@@ -211,7 +256,7 @@ import Vapor
             let assignment = try await fixture(on: app, manifest: workerManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentLanguageTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, language: "java"), context(app))
+                    .init(assignmentPublicID: assignment.publicID, language: "cobol"), context(app))
             }
         }
     }

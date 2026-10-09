@@ -83,7 +83,6 @@ struct ListAssignmentsTool: ContentTool {
             .filter(\.$courseID == courseID)
             .sort(\.$title)
             .all()
-        let formatter = ISO8601DateFormatter()
         let summaries = assignments.map { assignment in
             Output.Assignment(
                 publicID: assignment.publicID,
@@ -91,8 +90,8 @@ struct ListAssignmentsTool: ContentTool {
                 slug: assignment.slug,
                 isOpen: assignment.isOpen,
                 visibility: assignment.visibility.rawValue,
-                dueAt: assignment.dueAt.map { formatter.string(from: $0) },
-                startsAt: assignment.startsAt.map { formatter.string(from: $0) }
+                dueAt: assignment.dueAt.map { iso8601String($0) },
+                startsAt: assignment.startsAt.map { iso8601String($0) }
             )
         }
         return Output(

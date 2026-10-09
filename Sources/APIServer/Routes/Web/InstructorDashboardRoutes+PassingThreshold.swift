@@ -39,7 +39,7 @@ extension InstructorDashboardRoutes {
                     + "?error=Passing+threshold+must+be+a+whole+number+from+1+to+100")
         }
         try await AssignmentAuthoringService.updateMetadata(
-            assignment, passingThreshold: update, on: req.db)
+            assignment, passingThreshold: update, audit: .web(req), on: req.db)
         await AuditLogger.record(
             action: .passingThresholdChanged,
             targetType: .assignment,

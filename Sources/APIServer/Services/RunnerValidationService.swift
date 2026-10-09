@@ -15,7 +15,7 @@ import Foundation
 import Vapor
 
 func enqueueRunnerValidationSubmission(
-    req: Request,
+    context: some ServiceContext,
     setupID: String,
     solutionNotebookData: Data,
     filename: String = "solution.ipynb",
@@ -26,13 +26,13 @@ func enqueueRunnerValidationSubmission(
         uploadedName: filename,
         fallback: "solution.ipynb"
     )
-    let submissionsDir = req.application.submissionsDirectory
+    let submissionsDir = context.application.submissionsDirectory
     let subID = freshShortID(prefix: "sub")
     let ext = (sanitizedFilename as NSString).pathExtension
     let filePath = submissionsDir + "\(subID).\(ext)"
-    try await req.fileio.writeFile(.init(data: solutionNotebookData), at: filePath)
+    try solutionNotebookData.write(to: URL(fileURLWithPath: filePath))
 
-    let priorCount = try await APISubmission.query(on: req.db)
+    let priorCount = try await APISubmission.query(on: context.db)
         .filter(\.$testSetupID == setupID)
         .filter(\.$kind == APISubmission.Kind.validation)
         .count()
@@ -44,7 +44,8 @@ func enqueueRunnerValidationSubmission(
     if let submitterUserID {
         resolvedSubmitterID = submitterUserID
     } else {
-        resolvedSubmitterID = try req.auth.require(APIUser.self).id
+        guard let acting = context.actingUserID else { throw AppError.unauthenticated }
+        resolvedSubmitterID = acting
     }
     let submission = APISubmission(
         id: subID,
@@ -70,11 +71,11 @@ func enqueueRunnerValidationSubmission(
         submission: submission,
         setupID: setupID,
         templateNotebookData: solutionNotebookData,
-        testSetupsDirectory: req.application.testSetupsDirectory,
-        app: req.application,
-        on: req.db)
+        testSetupsDirectory: context.application.testSetupsDirectory,
+        app: context.application,
+        on: context.db)
 
-    try await materialized.saveClaimable(on: req.db)
+    try await materialized.saveClaimable(on: context.db)
 
     // The primary run above grades the enqueuing instructor's own seed — ONE
     // variant of a per-student assignment. When the manifest varies by seed,
@@ -83,7 +84,7 @@ func enqueueRunnerValidationSubmission(
     // instead of failing a student. Best-effort, after the primary is safely
     // claimable: variant trouble must not block the save.
     await enqueueValidationVariants(
-        req: req,
+        context: context,
         setupID: setupID,
         solution: ExistingSolution(data: solutionNotebookData, filename: sanitizedFilename),
         priorValidationCount: priorCount + 1,
@@ -99,14 +100,14 @@ func enqueueRunnerValidationSubmission(
     // download — mirroring how `solution.ipynb` is kept out of every
     // student-facing path. Best-effort: failure just leaves `import solution`
     // unavailable (the prior behaviour) and never blocks the save.
-    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+    let sharedDir = context.application.testSetupsDirectory + "shared/\(setupID)/"
     // In the assignment's OWN language. This wrote `solution.py` and only
     // `solution.py`, so an R, Lua, Octave or Racket expression could never call
     // the reference solution — `supportFileEntries` looked for helpers with that
     // language's extension and the solution was never among them. Python's bytes
     // are unchanged; `writeSolutionSource` delegates straight to
     // `writeSolutionPy` for it.
-    if let setup = try? await APITestSetup.find(setupID, on: req.db),
+    if let setup = try? await APITestSetup.find(setupID, on: context.db),
         let manifest = setup.decodedManifest(),
         let language = AssignmentLanguage.resolve(manifest: manifest)
     {
@@ -150,7 +151,7 @@ let validationVariantCount = 4
 /// logs and leaves at most a partial batch (rows are written per variant, so
 /// what did enqueue still reports), never blocking the instructor's save.
 private func enqueueValidationVariants(
-    req: Request,
+    context: some ServiceContext,
     setupID: String,
     solution: ExistingSolution,
     priorValidationCount: Int,
@@ -160,17 +161,17 @@ private func enqueueValidationVariants(
     let solutionNotebookData = solution.data
     let filename = solution.filename
     do {
-        try await ValidationVariant.query(on: req.db)
+        try await ValidationVariant.query(on: context.db)
             .filter(\.$testSetupID == setupID)
             .delete()
 
-        guard let setup = try await APITestSetup.find(setupID, on: req.db),
+        guard let setup = try await APITestSetup.find(setupID, on: context.db),
             let manifestData = setup.manifest.data(using: .utf8),
-            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
+            let manifest = decodeManifest(from: manifestData),
             manifest.variesPerStudent
         else { return }
 
-        let submissionsDir = req.application.submissionsDirectory
+        let submissionsDir = context.application.submissionsDirectory
         let ext = (filename as NSString).pathExtension
         for index in 0..<validationVariantCount {
             let seedHex = DatasetDiagnostics.preflightSeed(index)
@@ -179,7 +180,7 @@ private func enqueueValidationVariants(
             // is derived from the submission's `zipPath`, so a shared file
             // would make every variant's sidecar the same path.
             let filePath = submissionsDir + "\(subID).\(ext)"
-            try await req.fileio.writeFile(.init(data: solutionNotebookData), at: filePath)
+            try solutionNotebookData.write(to: URL(fileURLWithPath: filePath))
 
             let submission = APISubmission(
                 id: subID,
@@ -194,19 +195,19 @@ private func enqueueValidationVariants(
                 submission: submission,
                 setupID: setupID,
                 templateNotebookData: solutionNotebookData,
-                testSetupsDirectory: req.application.testSetupsDirectory,
-                app: req.application,
-                on: req.db,
+                testSetupsDirectory: context.application.testSetupsDirectory,
+                app: context.application,
+                on: context.db,
                 variantSeedHex: seedHex)
-            try await materialized.saveClaimable(on: req.db)
+            try await materialized.saveClaimable(on: context.db)
 
             try await ValidationVariant(
                 testSetupID: setupID, variantIndex: index, seedHex: seedHex,
                 submissionID: subID
-            ).save(on: req.db)
+            ).save(on: context.db)
         }
     } catch {
-        req.logger.warning("enqueueValidationVariants for \(setupID): \(error)")
+        context.logger.warning("enqueueValidationVariants for \(setupID): \(error)")
     }
 }
 
@@ -293,7 +294,7 @@ private func resolveAndCacheValidationMaterialization(
     do {
         guard let setup = try await APITestSetup.find(setupID, on: db),
             let manifestData = setup.manifest.data(using: .utf8),
-            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+            let manifest = decodeManifest(from: manifestData)
         else { return }
 
         let seedHex: String?
@@ -389,45 +390,45 @@ private func resolveAndCacheValidationMaterialization(
 /// endpoints and must not block the edit save.
 ///
 /// `submitterUserID` attributes the validation submission. Web callers omit it
-/// (the session user is resolved from `req.auth`); MCP callers MUST pass the
+/// (the session user is `context.actingUserID`); MCP callers MUST pass the
 /// acting subject's id — bearer-authenticated requests carry no session
-/// `APIUser`, so the `req.auth` fallback throws 401 and the validation is
+/// `APIUser`, so the `actingUserID` fallback throws 401 and the validation is
 /// silently never enqueued.
 func scheduleValidationAfterSuiteEdit(
-    req: Request,
+    context: some ServiceContext,
     assignment: APIAssignment,
     submitterUserID: UUID? = nil
 ) async {
     do {
-        let existingPending = try await APISubmission.query(on: req.db)
+        let existingPending = try await APISubmission.query(on: context.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.validation)
             .filter(\.$status == SubmissionStatus.pending.rawValue)
             .first()
         if existingPending != nil { return }
 
-        guard let solution = try await loadExistingSolution(req: req, assignment: assignment)
+        guard let solution = try await loadExistingSolution(assignment: assignment, on: context.db)
         else { return }
 
         let requirementSpec = try await loadAssignmentRequirementSpec(
             assignment: assignment,
-            on: req.db
+            on: context.db
         )
         let hasRunner = try await ensureCompatibleValidationRunnerAvailability(
-            req: req,
+            context: context,
             requirements: requirementSpec
         )
         guard hasRunner else {
-            req.logger.warning(
+            context.logger.warning(
                 "Validation pre-check found no compatible active runner; marking assignment \(assignment.publicID) no-runner"
             )
             assignment.validationStatus = "no-runner"
-            try await assignment.save(on: req.db)
+            try await assignment.save(on: context.db)
             return
         }
 
         let subID = try await enqueueRunnerValidationSubmission(
-            req: req,
+            context: context,
             setupID: assignment.testSetupID,
             solutionNotebookData: solution.data,
             filename: solution.filename,
@@ -435,9 +436,9 @@ func scheduleValidationAfterSuiteEdit(
         )
         assignment.validationSubmissionID = subID
         assignment.validationStatus = "pending"
-        try await assignment.save(on: req.db)
+        try await assignment.save(on: context.db)
     } catch {
-        req.logger.warning("scheduleValidationAfterSuiteEdit: \(error)")
+        context.logger.warning("scheduleValidationAfterSuiteEdit: \(error)")
     }
 }
 
@@ -456,16 +457,16 @@ enum ValidationRunError: Error, Equatable {
 ///
 /// Throws `ValidationRunError.noSolution` when there is nothing to validate.
 func requeueValidationRun(
-    req: Request,
+    context: some ServiceContext,
     assignment: APIAssignment,
     submitterUserID: UUID,
     targetRunnerID: String?
 ) async throws -> String {
-    guard let solution = try await loadExistingSolution(req: req, assignment: assignment) else {
+    guard let solution = try await loadExistingSolution(assignment: assignment, on: context.db) else {
         throw ValidationRunError.noSolution
     }
     let subID = try await enqueueRunnerValidationSubmission(
-        req: req,
+        context: context,
         setupID: assignment.testSetupID,
         solutionNotebookData: solution.data,
         filename: solution.filename,
@@ -474,7 +475,7 @@ func requeueValidationRun(
     )
     assignment.validationSubmissionID = subID
     assignment.validationStatus = "pending"
-    try await assignment.save(on: req.db)
+    try await assignment.save(on: context.db)
     return subID
 }
 
@@ -644,14 +645,14 @@ func flipSubmissionToPending(
     return true
 }
 
-func ensureValidationRunnerAvailability(req: Request) async {
-    let enabled = await req.application.localRunnerAutoStartStore.isEnabled()
+func ensureValidationRunnerAvailability(context: some ServiceContext) async {
+    let enabled = await context.application.localRunnerAutoStartStore.isEnabled()
     guard enabled else { return }
 
-    let hasRecentRunner = await req.application.workerActivityStore.hasRecentActivity(within: 20)
+    let hasRecentRunner = await context.application.workerActivityStore.hasRecentActivity(within: 20)
     guard !hasRecentRunner else { return }
 
-    await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+    await context.application.localRunnerManager.ensureRunning(app: context.application, logger: context.logger)
     try? await Task.sleep(nanoseconds: 1_000_000_000)
 }
 
@@ -674,16 +675,16 @@ let validationRunnerActiveWindowSeconds: TimeInterval =
     RunnerProfileService.lastSeenPersistInterval + 60
 
 func hasCompatibleValidationRunner(
-    req: Request,
+    context: some ServiceContext,
     requirements: AssignmentRequirementSpec?,
     activeWindowSeconds: TimeInterval = validationRunnerActiveWindowSeconds
 ) async throws -> Bool {
-    try await req.application.runnerProfiles.refreshActiveFlags(
+    try await context.application.runnerProfiles.refreshActiveFlags(
         activeWindowSeconds: activeWindowSeconds,
-        on: req.db
+        on: context.db
     )
 
-    let profiles = try await RunnerProfile.query(on: req.db)
+    let profiles = try await RunnerProfile.query(on: context.db)
         .filter(\.$isActive == true)
         .all()
     let matcher = CompatibilityMatcher()
@@ -697,28 +698,28 @@ func hasCompatibleValidationRunner(
 }
 
 func ensureCompatibleValidationRunnerAvailability(
-    req: Request,
+    context: some ServiceContext,
     requirements: AssignmentRequirementSpec?,
     activeWindowSeconds: TimeInterval = validationRunnerActiveWindowSeconds,
     attempts: Int = 3
 ) async throws -> Bool {
     if try await hasCompatibleValidationRunner(
-        req: req,
+        context: context,
         requirements: requirements,
         activeWindowSeconds: activeWindowSeconds
     ) {
         return true
     }
 
-    let enabled = await req.application.localRunnerAutoStartStore.isEnabled()
+    let enabled = await context.application.localRunnerAutoStartStore.isEnabled()
     guard enabled else { return false }
 
-    await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+    await context.application.localRunnerManager.ensureRunning(app: context.application, logger: context.logger)
 
     for attempt in 0..<attempts {
         try await Task.sleep(for: .seconds(1))
         if try await hasCompatibleValidationRunner(
-            req: req,
+            context: context,
             requirements: requirements,
             activeWindowSeconds: activeWindowSeconds
         ) {
@@ -726,7 +727,7 @@ func ensureCompatibleValidationRunnerAvailability(
         }
 
         if attempt + 1 < attempts {
-            await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+            await context.application.localRunnerManager.ensureRunning(app: context.application, logger: context.logger)
         }
     }
 

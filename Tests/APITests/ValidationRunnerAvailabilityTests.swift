@@ -66,7 +66,7 @@ import VaporTesting
 
             let req = Request(application: app, on: app.eventLoopGroup.next())
             let available = try await hasCompatibleValidationRunner(
-                req: req, requirements: nil)
+                context: req, requirements: nil)
             #expect(available == true)
 
             // The probe must not knock the live runner's profile inactive
@@ -91,7 +91,7 @@ import VaporTesting
 
             let req = Request(application: app, on: app.eventLoopGroup.next())
             let available = try await hasCompatibleValidationRunner(
-                req: req, requirements: nil)
+                context: req, requirements: nil)
             #expect(available == false)
         }
     }

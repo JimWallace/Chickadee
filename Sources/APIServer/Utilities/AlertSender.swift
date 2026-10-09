@@ -25,7 +25,7 @@ struct AlertSender: Sendable, Equatable {
         [
             "server_host": host,
             "server_version": version,
-            "server_started_at": ISO8601DateFormatter().string(from: startedAt),
+            "server_started_at": iso8601String(startedAt),
         ]
     }
 

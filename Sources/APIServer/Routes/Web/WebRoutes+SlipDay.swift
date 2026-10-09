@@ -108,7 +108,7 @@ extension WebRoutes {
             metadata: [
                 "assignment": resolution.assignment.publicID,
                 "course_id": resolution.course.id?.uuidString ?? "",
-                "extended_due_at": ISO8601DateFormatter().string(from: receipt.newDeadline),
+                "extended_due_at": iso8601String(receipt.newDeadline),
                 "stacked_count": String(receipt.spentOnAssignment),
             ],
             on: req)

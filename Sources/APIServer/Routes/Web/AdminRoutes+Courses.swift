@@ -235,13 +235,14 @@ extension AdminRoutes {
         let retentionDays = req.application.appConfig.diagnostics.submissionRetentionDays
         guard course.isArchived, let archivedAt = course.archivedAt else {
             return req.redirect(
-                to: retentionRedirect(error: "\(course.code) is not archived — cannot delete."))
+                to: adminNoticeRedirect("/admin/retention", error: "\(course.code) is not archived — cannot delete."))
         }
         let eligibleAt = SubmissionRetentionService.purgeEligibleDate(
             archivedAt: archivedAt, retentionDays: retentionDays)
         guard Date() >= eligibleAt else {
             return req.redirect(
-                to: retentionRedirect(
+                to: adminNoticeRedirect(
+                    "/admin/retention",
                     error: "\(course.code) is not yet past its retention window."))
         }
 
@@ -328,7 +329,7 @@ extension AdminRoutes {
             )
         }
         return req.redirect(
-            to: retentionRedirect(ok: "Deleted \(course.code) and all its data."))
+            to: adminNoticeRedirect("/admin/retention", ok: "Deleted \(course.code) and all its data."))
     }
 
     // MARK: - POST /admin/courses/:courseID/edit

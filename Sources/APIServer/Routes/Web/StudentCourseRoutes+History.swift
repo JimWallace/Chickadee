@@ -482,7 +482,7 @@ extension StudentCourseRoutes {
             metadata: [
                 "assignment": assignmentIDRaw,
                 "student_username": student.username,
-                "extended_due_at": ISO8601DateFormatter().string(from: newDueAt),
+                "extended_due_at": iso8601String(newDueAt),
             ],
             on: req
         )

@@ -23,28 +23,6 @@ struct AdminUserRow: Content {
     var isCurrentUser: Bool = false
 }
 
-struct AdminWorkerRow: Content {
-    let workerID: String
-    let hostname: String
-    let runnerVersion: String
-    let maxConcurrentJobs: Int
-    let lastActive: String
-    let assignedJobs: Int
-    let jobsProcessed: Int
-    let avgExecutionMs: Int?
-    let avgQueueWaitMs: Int?
-    /// Human-readable form of `avgExecutionMs` (e.g. "14s", "850ms"), or nil.
-    let avgExecutionFormatted: String?
-    /// Human-readable form of `avgQueueWaitMs` (e.g. "3s", "200ms"), or nil.
-    let avgQueueWaitFormatted: String?
-    /// True when the runner has not checked in within
-    /// `RunnerStaleness.offlineAfter`. Computed on the server so the first
-    /// render and every background refresh agree — the client-side copy this
-    /// replaced only ran during a poll, so a freshly loaded dashboard showed
-    /// no offline badges at all until the first tick.
-    let isOffline: Bool
-}
-
 /// One runner as the Overview table draws it: the facts of `AdminWorkerRow`
 /// plus the strings and pips the row shows, built once so the page and the poll
 /// fragment cannot disagree. The JSON feed keeps `AdminWorkerRow`.
@@ -197,58 +175,6 @@ struct AdminRunnerSnapshotRow: Encodable {
     let activeJobsLabel: String
     let utilizationPercent: Int
     let lastPollAt: String?
-}
-
-struct AdminStorageRow: Encodable, Sendable {
-    let label: String
-    let formatted: String
-}
-
-/// Per-assignment on-disk footprint: its test-suite (test setup) bytes plus
-/// the bytes of every submission graded against that setup.  Sorted largest-
-/// first so an admin can see where space is going.
-struct AdminAssignmentStorageRow: Encodable, Sendable {
-    let assignmentTitle: String
-    let courseCode: String
-    let testSuiteFormatted: String
-    let submissionsFormatted: String
-    let submissionCount: Int
-    let totalFormatted: String
-    /// Raw bytes behind the formatted columns — drive the server-side sort and
-    /// the client-side column sorting (so "1.4 GB" sorts above "320 MB").
-    let testSuiteBytes: Int
-    let submissionsBytes: Int
-    let totalBytes: Int
-}
-
-struct AdminStorageContext: Encodable, Sendable {
-    let rows: [AdminStorageRow]
-    let totalFormatted: String
-    let dbBackend: String
-    let assignments: [AdminAssignmentStorageRow]
-    /// Raw bytes behind `totalFormatted`, the denominator of each assignment's
-    /// share. Zero when a caller does not know it.
-    var totalBytes: Int = 0
-    /// Free and total space on the data disk, measured on each request rather
-    /// than cached with the totals above. Nil when the system does not report it.
-    var disk: DiskSpace?
-    /// `disk` as the page's "Disk free" tile shows it.
-    var diskText: String { disk?.freeOfTotalText ?? "unknown" }
-
-    private enum CodingKeys: String, CodingKey {
-        case rows, totalFormatted, dbBackend, assignments, totalBytes, disk, diskText
-    }
-
-    func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(rows, forKey: .rows)
-        try container.encode(totalFormatted, forKey: .totalFormatted)
-        try container.encode(dbBackend, forKey: .dbBackend)
-        try container.encode(assignments, forKey: .assignments)
-        try container.encode(totalBytes, forKey: .totalBytes)
-        try container.encodeIfPresent(disk, forKey: .disk)
-        try container.encode(diskText, forKey: .diskText)
-    }
 }
 
 /// One assignment as the Storage page draws it: its footprint as a share of the

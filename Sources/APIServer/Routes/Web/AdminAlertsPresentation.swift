@@ -3,6 +3,7 @@
 // What the Health alerts page says about a rule, a webhook and a firing,
 // worked out in Swift so the template holds no branching on rule names.
 
+import Core
 import Foundation
 
 extension HealthRule {
@@ -72,7 +73,7 @@ struct AdminAlertFiringRow: Encodable, Sendable {
         summary = record.summary
         firedAt = record.firedAt
         resolved = record.resolved
-        occurredAt = ISO8601DateFormatter().date(from: record.firedAt) ?? .distantPast
+        occurredAt = iso8601Date(record.firedAt) ?? .distantPast
         if !record.paged {
             deliveryText = "advisory, not paged"
             deliveryFailed = false

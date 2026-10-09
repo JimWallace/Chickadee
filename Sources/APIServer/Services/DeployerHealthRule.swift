@@ -7,6 +7,7 @@
 // failing, or a daemon that had died, showed only to someone who opened the
 // admin MCP: nothing paged, and prod could run an old release for hours.
 
+import Core
 import Foundation
 import Vapor
 
@@ -55,7 +56,7 @@ func decideDeployerUnhealthy(
     }
     guard status.paused != true, status.state != "paused" else { return .ok }
 
-    guard let updatedAt = status.updatedAt.flatMap({ ISO8601DateFormatter().date(from: $0) }) else {
+    guard let updatedAt = status.updatedAt.flatMap({ iso8601Date($0) }) else {
         return .ok
     }
     let age = now.timeIntervalSince(updatedAt)

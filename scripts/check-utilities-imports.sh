@@ -29,11 +29,12 @@ dir="Sources/APIServer/Utilities"
 forbidden='^[[:space:]]*(@[A-Za-z_]+[[:space:]]+)*import[[:space:]]+((struct|class|enum|protocol|func|var|let|typealias)[[:space:]]+)?(Vapor|Fluent[A-Za-z]*|SQLKit|SQLiteKit|PostgresKit)([^A-Za-z0-9_]|$)'
 
 violations=()
-for file in "$dir"/*.swift; do
+# Recursive: the renderers sit in subfolders of Utilities/ (#2495).
+while IFS= read -r file; do
   while IFS= read -r line; do
     violations+=("$file: $line")
   done < <(grep -E "$forbidden" "$file" || true)
-done
+done < <(find "$dir" -name '*.swift' | sort)
 
 if [ "${#violations[@]}" -gt 0 ]; then
   echo "ERROR: a file under $dir imports Vapor or a database module."
@@ -61,11 +62,12 @@ names_a_model() {
 }
 
 pure=()
-for file in "$helpers_dir"/*.swift; do
+# Recursive, as above: the Leaf tags sit in Helpers/LeafTags/ (#2495).
+while IFS= read -r file; do
   if grep -qE "$framework" "$file"; then continue; fi
   if names_a_model "$file"; then continue; fi
   pure+=("$file")
-done
+done < <(find "$helpers_dir" -name '*.swift' | sort)
 
 if [ "${#pure[@]}" -gt 0 ]; then
   echo "ERROR: a file under $helpers_dir imports no Vapor, Fluent or Leaf and names no model."

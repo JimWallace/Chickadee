@@ -82,14 +82,19 @@ enum AssignmentAuthoringService {
     /// immediately re-close the assignment. Closing simply clears `isOpen`.
     /// This is metadata-only: it never changes the manifest, so it does not
     /// trigger a regrade.
+    ///
+    /// A change of visibility writes an audit row (`audit`, #2489).
     static func setOpenState(
         _ assignment: APIAssignment,
         open: Bool,
+        audit: VisibilityAudit,
         on db: Database,
         now: Date = Date()
     ) async throws {
+        let previous = assignment.visibility
         try applyOpenState(assignment, open: open, now: now)
         try await assignment.save(on: db)
+        await audit.recordChange(of: assignment, from: previous)
     }
 
     /// Applies any combination of title / due-date / open-state /
@@ -98,7 +103,8 @@ enum AssignmentAuthoringService {
     /// `deadlineOverrideActive`, and opening re-derives it from the (possibly
     /// just-changed) due date. Metadata-only — never touches the manifest, so
     /// it does not trigger a regrade. Throws `validationNotPassed` if `open`
-    /// is true before validation has passed.
+    /// is true before validation has passed. A change of visibility writes an
+    /// audit row (`audit`, #2489).
     static func updateMetadata(
         _ assignment: APIAssignment,
         title: String? = nil,
@@ -108,9 +114,11 @@ enum AssignmentAuthoringService {
         secretRevealEnabled: Bool? = nil,
         solutionVisibility: SolutionVisibility? = nil,
         passingThreshold: PassingThresholdUpdate = .unchanged,
+        audit: VisibilityAudit,
         on db: Database,
         now: Date = Date()
     ) async throws {
+        let previousVisibility = assignment.visibility
         if let title {
             assignment.title = title
         }
@@ -154,6 +162,7 @@ enum AssignmentAuthoringService {
             try applyOpenState(assignment, open: open, now: now)
         }
         try await assignment.save(on: db)
+        await audit.recordChange(of: assignment, from: previousVisibility)
     }
 
     /// Duplicates an assignment into `targetCourseID` under `newTitle`. The
@@ -165,8 +174,8 @@ enum AssignmentAuthoringService {
     /// allocated with its own public id, course-unique slug and version v1.
     ///
     /// The clone always starts **closed and unvalidated**: no `isOpen`, no
-    /// `validationStatus`, no due date, no section, no sort order, solution
-    /// hidden. The instructor (or a follow-up tool call) re-validates and
+    /// `validationStatus`, no due date, no section, solution hidden. It sorts
+    /// after the ungrouped items of its course (#2490). The instructor (or a follow-up tool call) re-validates and
     /// opens it. Because it is a brand-new setup with no submissions, nothing
     /// is re-graded. Every live copy path (the course clone through
     /// `CourseCloneService`, the web clone route and MCP `clone_assignment`)
@@ -232,6 +241,10 @@ enum AssignmentAuthoringService {
                     title: newTitle,
                     courseID: targetCourseID,
                     visibility: .closed,
+                    // Ungrouped, after the items already there (#2490). The
+                    // course clone sets its own section and order next.
+                    sortOrder: try await nextSectionItemSortOrder(
+                        courseID: targetCourseID, sectionID: nil, db: db),
                     validationSubmissionID: clonedSolution?.id),
                 on: db)
             // The per-assignment policies travel with every clone (#1738).
@@ -377,7 +390,10 @@ enum AssignmentAuthoringService {
                 setup: setup, notebookData: notebookData, setupsDirectory: setupsDirectory, on: db)
             let assignment = try await createAssignmentWithUniquePublicID(
                 NewAssignmentFields(
-                    testSetupID: setupID, title: title, courseID: courseID, visibility: .closed),
+                    testSetupID: setupID, title: title, courseID: courseID, visibility: .closed,
+                    // Ungrouped, after the items already there (#2490).
+                    sortOrder: try await nextSectionItemSortOrder(
+                        courseID: courseID, sectionID: nil, db: db)),
                 on: db)
             await AssignmentVersionStore.seedInitialVersion(
                 setup: setup, origin: AssignmentVersionOrigin.create,
@@ -431,15 +447,19 @@ enum AssignmentAuthoringService {
     /// Sets an assignment's three-state visibility (closed / preview / open) and
     /// saves. Metadata-only — never touches the manifest, so it does not trigger
     /// a regrade. Only opening requires validation to have passed; switching to
-    /// preview or closed is unconditional.
+    /// preview or closed is unconditional. A change writes an audit row
+    /// (`audit`, #2489).
     static func setVisibility(
         _ assignment: APIAssignment,
         _ visibility: AssignmentVisibility,
+        audit: VisibilityAudit,
         on db: Database,
         now: Date = Date()
     ) async throws {
+        let previous = assignment.visibility
         try applyVisibility(assignment, visibility, now: now)
         try await assignment.save(on: db)
+        await audit.recordChange(of: assignment, from: previous)
     }
 
     /// Two-state convenience used by the metadata-update path (open/close).

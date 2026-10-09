@@ -161,7 +161,7 @@ extension AdminRoutes {
             return AdminMCPAccountRow(
                 id: id.uuidString,
                 username: user.username,
-                createdAt: user.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+                createdAt: user.createdAt.map { iso8601String($0) } ?? "—",
                 enrolledCourses: enrolled,
                 coursesText: enrolled.map(\.label).joined(separator: " · "),
                 enrollableCourses: allCourses.filter { !enrolledIDs.contains($0.id) })

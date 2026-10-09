@@ -58,7 +58,13 @@ struct GetSolutionTool: ContentTool {
         let assignment = try await context.authorizedAssignment(
             publicID: input.assignmentPublicID)
 
-        guard let solution = try await loadExistingSolution(assignment: assignment, on: context.db)
+        // The same sources the reveal page and the edit page count, the draft
+        // included, so this tool never reports "no solution" for an assignment
+        // whose solution the page shows (#2488).
+        guard
+            let solution = try await resolveSolution(
+                at: SolutionLocation(assignment), sources: SolutionSource.any, db: context.db,
+                testSetupsDirectory: context.request.application.testSetupsDirectory)
         else {
             throw MCPToolError.invalidArguments(
                 detail:
