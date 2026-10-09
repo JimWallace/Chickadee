@@ -140,7 +140,7 @@ import VaporTesting
     }
 
     /// A stored value of the wrong form (a hand-edited row) is redrawn.
-    @Test(arguments: ["sneaky cedar", "Sneaky", "Sneaky Cedar Grove", ""])
+    @Test(arguments: ["sneaky cedar", "Sneaky Cedar Grove Path", "Sneaky C3dar", ""])
     func malformedHandleIsRedrawn(stored: String) async throws {
         try await withApp(app) { _ in
             let course = try await makeTestCourse(on: app, code: "AVH6")
