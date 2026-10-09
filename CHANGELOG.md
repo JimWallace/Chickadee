@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.602] - 2026-10-09
+
+### Changed
+
+- **Small helpers are written once.** ISO 8601 dates use `iso8601String` and `iso8601Date` (in Core) instead of some fifty inline formatters; manifests decode through `decodeManifest`, never a plain `JSONDecoder`; the web redirects and the BrightSpace auth URL share `urlEncode`; the admin alerts and retention pages share `adminNoticeRedirect`; and both "does this zip carry a notebook" checks share one predicate (#2492).
+
+### Changed
+
+- **Clearer source folders.** The pattern-family renderers moved to `Utilities/PatternFamilyRenderers/`, the notebook-check renderers to `Utilities/NotebookCheckRenderers/` and the Leaf tags to `Helpers/LeafTags/`. No code changed. `check-utilities-imports.sh` and the generated-message vocabulary test now read these folders recursively, so the moved files stay checked (#2495).
+
+### Changed
+
+- **The MCP tools no longer depend on the web route layer.** The suite edit and its read-back, the suite DTOs, the runner-fleet rows and timing helpers, the runner staleness rule, the storage breakdown, the dataset-spec reader and the notebook cell count moved out of `Routes/Web` into `Services/` (and one helper into `Helpers/`). A new guard test fails when an MCP file uses a symbol that `Routes/Web` defines (#2496).
+
+
 ## [0.5.601] - 2026-10-09
 
 ### Fixed
