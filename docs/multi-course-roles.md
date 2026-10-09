@@ -43,7 +43,7 @@ cite them by letter:
 ### Adding staff who have not logged in
 
 Three forms add a person to a course at a staff role before their first login.
-All three call `provisionStaffEnrollment` (`Helpers/StaffProvisioning.swift`).
+All three call `provisionStaffEnrollment` (`Routes/Web/StaffProvisioning.swift`).
 
 | Form | Route | Who |
 |---|---|---|

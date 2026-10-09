@@ -4,6 +4,8 @@
 // staff form. The instructor roster and the admin course page render the same
 // partial, as the course forms share `_course-fields` (CourseFieldsContext).
 
+import Core
+
 struct StaffFieldsContext: Encodable {
     /// Makes each copy's element ids unique on the page.
     let idPrefix: String
