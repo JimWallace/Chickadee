@@ -124,7 +124,7 @@ import Testing
             #expect(!fields.contains(""), "\(scientist.handle) has an empty field")
             #expect(Self.isYear(scientist.born), "\(scientist.handle): born \(scientist.born)")
             #expect(diedIsAYear, "\(scientist.handle): died \(scientist.died ?? "")")
-            #expect(scientist.died != "", "\(scientist.handle): an empty year of death must be nil")
+            #expect(scientist.died?.isEmpty != true, "\(scientist.handle): an empty year of death must be nil")
             #expect((1...2).contains(scientist.handle.split(separator: " ").count), "\(scientist.handle)")
         }
     }
