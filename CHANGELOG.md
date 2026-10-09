@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.605] - 2026-10-09
+
+### Security
+
+- **LTI 1.3 security audit for the IRA.** `docs/compliance/lti-audit-2026-10.md` applies the Phase-1 audit controls to the LTI tool. The egress allowlist now lists the LTI platform hosts.
+- **LTI service calls reach only the platform's registered hosts.** An AGS or NRPS URL from a launch, a line item ID or an NRPS next page on another host is refused before the access token is sent (audit L-1).
+- **An LTI launch never signs in to an admin or MCP account through an existing link** (audit L-2).
+- **An LTI context binds to a course by LEARN org unit only while one platform is enabled**, and the binding is audited (audit L-3).
+
+### Changed
+
+- **Thread-pool use is behind `runBlocking` again (#1523).** The notebook merge in `SubmissionRoutes` and the DNS lookup in `SupportFileURLFetcher` called `threadPool.runIfActive` directly. They now call `runBlocking(on:)`, so `BlockingWork.swift` is the only file that touches the NIO thread pool. Behaviour does not change. A later Vapor 5 port changes one file, not three.
+
+
 ## [0.5.604] - 2026-10-09
 
 ### Changed
