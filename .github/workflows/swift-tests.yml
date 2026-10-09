@@ -72,8 +72,9 @@ jobs:
       - name: Snapshot retention behaviour tests
         run: scripts/test-snapshot-retention.sh
 
-  # The class-handle word lists (Sources/Core/AvatarHandle.swift) against the
-  # review data in Tools/handle-review/data. Node only, like the two jobs above
+  # The class-handle lists (Sources/Core/AvatarHandleWords.swift and
+  # AvatarHandleScientists.swift) against the review data in
+  # Tools/handle-review/data. Node only, like the two jobs above
   # need only python3: the runner image has it, and no Swift is involved.
   # Exits non-zero on any red flag. AvatarHandleTests reads the same data;
   # this job keeps the tool itself, which a person reads, from rotting.

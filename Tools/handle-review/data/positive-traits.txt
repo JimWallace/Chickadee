@@ -1,0 +1,12 @@
+# Positive words about character.  They may appear only as the first word of
+# the scientist scheme ("Curious Noether"), where they describe the scientist.
+# In any other position they read as a judgement of the student.  A word that
+# is about mood, the body, the mind or intelligence goes in traits.txt
+# instead.  Hand-curated; extend it.  One word per line, Title Case.
+Bold
+Brave
+Curious
+Gentle
+Humble
+Keen
+Kind

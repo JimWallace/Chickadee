@@ -23,7 +23,7 @@ import VaporTesting
     }
 
     /// A handle from the lists, so the store treats it as a real one.
-    private static let handle = "\(AvatarHandle.adjectives[0]) \(AvatarHandle.nouns[0])"
+    private static let handle = AvatarHandle.allHandles[0]
 
     private func enroll(_ username: String, in courseID: UUID) async throws -> APICourseEnrollment {
         let user = try await makeTestStudent(on: app, username: username)
@@ -70,10 +70,7 @@ import VaporTesting
             holder.avatarHandle = Self.handle
             try await holder.save(on: app.db)
 
-            var stale: Set<String> = []
-            for adjective in AvatarHandle.adjectives {
-                for noun in AvatarHandle.nouns { stale.insert("\(adjective) \(noun)") }
-            }
+            var stale = Set(AvatarHandle.allHandles)
             stale.remove(Self.handle)
 
             let loser = try await enroll("hix_loser", in: courseID)
@@ -88,10 +85,7 @@ import VaporTesting
     /// Every handle on the lists except `free`: a stale taken set whose only
     /// gap is a handle a classmate already holds.
     private static func everyHandle(except free: String) -> Set<String> {
-        var all: Set<String> = []
-        for adjective in AvatarHandle.adjectives {
-            for noun in AvatarHandle.nouns { all.insert("\(adjective) \(noun)") }
-        }
+        var all = Set(AvatarHandle.allHandles)
         all.remove(free)
         return all
     }

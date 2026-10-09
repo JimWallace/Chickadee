@@ -1,0 +1,43 @@
+# Strings that must not appear anywhere inside a compound handle
+# ("Ion" + "spark" = "Ionspark"), because a join can form them across the two
+# parts.  Crude, sexual, slur and drug words.  Hand-curated; extend it.  One
+# string per line, lower case.  Keep each string long enough that it does not
+# match an innocent word: "retard", not "tard", which is in "Stardrift".
+anal
+anus
+arse
+bitch
+boob
+butt
+cock
+crap
+cunt
+dick
+dildo
+dyke
+fag
+fart
+fuck
+homo
+jizz
+kkk
+kike
+nazi
+nigg
+penis
+piss
+porn
+pube
+rape
+retard
+semen
+sex
+shit
+slut
+spunk
+tits
+turd
+twat
+vagina
+wank
+whore

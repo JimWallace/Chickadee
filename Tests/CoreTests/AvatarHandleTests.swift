@@ -10,15 +10,18 @@ import Testing
 @Suite struct AvatarHandleTests {
 
     @Test func listsHaveNoDuplicates() {
-        #expect(Set(AvatarHandle.adjectives).count == AvatarHandle.adjectives.count)
-        #expect(Set(AvatarHandle.nouns).count == AvatarHandle.nouns.count)
+        for list in Self.wordLists + [AvatarHandle.scientists.map(\.handle)] {
+            #expect(Set(list).count == list.count)
+        }
     }
 
     /// One word, title case, letters only. A word with a space would produce a
     /// three-token handle that `isWellFormed` then rejects; a lowercase one
     /// would render as a typo beside its neighbours.
     @Test func everyWordIsASingleTitleCasedWord() {
-        for word in AvatarHandle.adjectives + AvatarHandle.nouns {
+        for word in AvatarHandle.dispositions + AvatarHandle.scienceNouns + AvatarHandle.agents
+            + AvatarHandle.compoundPrefixes
+        {
             // Computed before the expectation: #expect decomposes a function
             // call into a rethrows-typed helper, so `allSatisfy` inside one
             // fails to compile.
@@ -34,7 +37,7 @@ import Testing
 
     /// A word in both lists would let the generator produce "Cedar Cedar".
     @Test func noWordAppearsInBothLists() {
-        let overlap = Set(AvatarHandle.adjectives).intersection(AvatarHandle.nouns)
+        let overlap = Set(AvatarHandle.scienceNouns).intersection(AvatarHandle.agents)
         #expect(overlap.isEmpty, "in both lists: \(overlap.sorted())")
     }
 
@@ -43,13 +46,17 @@ import Testing
     /// otherwise the last students in a big course get whatever is left.
     @Test func theSpaceIsLargeEnoughForACourse() {
         #expect(AvatarHandle.combinationCount >= 4 * AvatarHandle.maxExpectedEnrollment)
-        #expect(AvatarHandle.combinationCount == AvatarHandle.adjectives.count * AvatarHandle.nouns.count)
+        #expect(
+            AvatarHandle.combinationCount
+                == AvatarHandle.dispositions.count * AvatarHandle.scientists.count
+                + AvatarHandle.scienceNouns.count * AvatarHandle.agents.count
+                + AvatarHandle.compoundPrefixes.count * AvatarHandle.compoundSuffixes.count)
     }
 
     @Test func generatesAWellFormedHandle() throws {
         let handle = try #require(AvatarHandle.make(fromSeed: 7))
         #expect(AvatarHandle.isWellFormed(handle))
-        #expect(handle.split(separator: " ").count == 2)
+        #expect((1...3).contains(handle.split(separator: " ").count))
     }
 
     @Test func neverReturnsATakenHandle() {
@@ -68,10 +75,7 @@ import Testing
     /// Exhaustion is a real state — a course bigger than the lists — and the
     /// answer is nil, not a duplicate and not a hang.
     @Test func returnsNilWhenTheSpaceIsExhausted() {
-        var all: Set<String> = []
-        for adjective in AvatarHandle.adjectives {
-            for noun in AvatarHandle.nouns { all.insert("\(adjective) \(noun)") }
-        }
+        let all = Set(AvatarHandle.allHandles)
         #expect(AvatarHandle.make(excluding: all) == nil)
     }
 
@@ -92,15 +96,16 @@ import Testing
     /// Alphabetised, so a reviewer can find a word and a diff shows a change
     /// in place rather than as an append.
     @Test func listsAreAlphabetised() {
-        #expect(AvatarHandle.adjectives == AvatarHandle.adjectives.sorted())
-        #expect(AvatarHandle.nouns == AvatarHandle.nouns.sorted())
+        for list in Self.wordLists + [AvatarHandle.scientists.map(\.handle)] {
+            #expect(list == list.sorted())
+        }
     }
 
     /// Short enough to say and to fit a leaderboard row, long enough to be a
     /// real word.
-    @Test func everyWordIsThreeToTenLetters() {
-        for word in AvatarHandle.adjectives + AvatarHandle.nouns {
-            #expect((3...10).contains(word.count), "\(word) has \(word.count) letters")
+    @Test func everyWordIsThreeToTwelveLetters() {
+        for word in Self.wordLists.joined() {
+            #expect((3...12).contains(word.count), "\(word) has \(word.count) letters")
         }
     }
 
@@ -113,7 +118,10 @@ import Testing
     func noWordIsOnAReviewList(file: String) throws {
         let listed = try Self.reviewList(file)
         #expect(!listed.isEmpty, "\(file) is empty")
-        for word in AvatarHandle.adjectives + AvatarHandle.nouns {
+        let words =
+            AvatarHandle.dispositions + AvatarHandle.scienceNouns + AvatarHandle.agents
+            + AvatarHandle.handles(in: .compound)
+        for word in words {
             #expect(!listed.contains(word.lowercased()), "\(word) is in \(file)")
         }
     }
@@ -122,17 +130,17 @@ import Testing
     @Test func noPairIsAKnownPhrase() throws {
         let phrases = try Self.reviewList("phrases.txt")
         #expect(!phrases.isEmpty)
-        for adjective in AvatarHandle.adjectives {
-            for noun in AvatarHandle.nouns {
-                let pair = "\(adjective) \(noun)".lowercased()
-                #expect(!phrases.contains(pair), "\(adjective) \(noun) is in phrases.txt")
+        for noun in AvatarHandle.scienceNouns {
+            for agent in AvatarHandle.agents {
+                let pair = "\(noun) \(agent)".lowercased()
+                #expect(!phrases.contains(pair), "\(noun) \(agent) is in phrases.txt")
             }
         }
     }
 
     /// The words left out on purpose stay out.
     @Test func excludedWordsAreInNeitherList() {
-        let words = Set(AvatarHandle.adjectives + AvatarHandle.nouns)
+        let words = Set(Self.wordLists.joined())
         let readmitted = words.intersection(AvatarHandle.excludedWords)
         #expect(readmitted.isEmpty, "excluded words are back: \(readmitted.sorted())")
     }
@@ -152,12 +160,19 @@ import Testing
         #expect(AvatarHandle.hasHandleShape("Quiet Cedar"))
         #expect(!AvatarHandle.isWellFormed("Quiet Cedar"))
         #expect(!AvatarHandle.hasHandleShape("quiet cedar"))
-        #expect(!AvatarHandle.hasHandleShape("Quiet"))
-        #expect(!AvatarHandle.hasHandleShape("Quiet Cedar Grove"))
+        #expect(AvatarHandle.hasHandleShape("Quiet"))
+        #expect(AvatarHandle.hasHandleShape("Quiet Cedar Grove"))
+        #expect(!AvatarHandle.hasHandleShape("Quiet Cedar Grove Path"))
         #expect(!AvatarHandle.hasHandleShape("Quiet  Cedar"))
         #expect(!AvatarHandle.hasHandleShape("Quiet C3dar"))
         #expect(!AvatarHandle.hasHandleShape(""))
     }
+
+    /// The five word lists.
+    private static let wordLists = [
+        AvatarHandle.dispositions, AvatarHandle.scienceNouns, AvatarHandle.agents, AvatarHandle.compoundPrefixes,
+        AvatarHandle.compoundSuffixes,
+    ]
 
     /// One review list from Tools/handle-review/data, lower-cased. Lines that
     /// start with `#` are comments.

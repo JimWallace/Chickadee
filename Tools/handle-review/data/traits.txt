@@ -1,18 +1,14 @@
-# Words that describe a person: a handle must never read as a judgement of
-# the student.  Hand-curated; extend it.  One word per line, Title Case.
+# Words that describe a person and that no handle may hold: a handle must
+# never read as a judgement of the student.  Mood, body, mind-state and
+# intelligence words belong here.  A positive word about character goes in
+# positive-traits.txt instead.  Hand-curated; extend it.  One word per line,
+# Title Case.
 Angry
-Bold
-Brave
 Clever
 Crazy
-Curious
 Dumb
-Gentle
 Grumpy
 Happy
-Humble
-Keen
-Kind
 Lazy
 Loud
 Mean
