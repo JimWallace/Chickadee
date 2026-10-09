@@ -354,6 +354,9 @@ extension CourseAdminRoutes {
     // first login by username) and enrolls it at the chosen staff role, so the
     // role sticks. Instructor-only: TAs are read-only on the roster, so this
     // uses the `.instructor` write floor rather than the `.ta` content floor.
+    // An email address finds only an existing account: a placeholder needs the
+    // username that SSO reports. The admin course pages share this path
+    // (`provisionStaffEnrollment`).
 
     @Sendable
     func instructorInviteStaff(req: Request) async throws -> Response {
@@ -378,63 +381,18 @@ extension CourseAdminRoutes {
 
         // Only staff roles may be added here; students enrol via CSV / self-serve.
         guard let role = CourseRole(rawValue: body?.role ?? ""), role >= .ta else {
-            return req.redirect(to: "/instructor/students?staffError=role")
+            return req.redirect(to: "/instructor/students?staffError=\(StaffFormError.role.rawValue)")
         }
-        guard isAcceptableUsernameForEnrollment(identifier) else {
-            return req.redirect(to: "/instructor/students?staffError=identifier")
+        let result: StaffProvisioningResult
+        do {
+            result = try await provisionStaffEnrollment(
+                identifier: identifier, role: role, courseID: courseID,
+                allowPlaceholder: true, on: req.db)
+        } catch let error as StaffProvisioningError {
+            return req.redirect(to: "/instructor/students?staffError=\(StaffFormError(error).rawValue)")
         }
-
-        // Reuse an existing account matched by username or email; otherwise mint
-        // an SSO-style placeholder (no local password) that the real login adopts
-        // by username — mirroring `instructorRegisterPreEnrollment`.
-        let existing = try await APIUser.query(on: req.db)
-            .group(.or) { or in
-                or.filter(\.$username == identifier)
-                or.filter(\.$email == identifier)
-            }
-            .first()
-
-        let user: APIUser
-        if let existing {
-            user = existing
-        } else {
-            let looksLikeEmail = identifier.contains("@")
-            user = APIUser(
-                username: identifier,
-                passwordHash: "",  // SSO users have no local password
-                role: UserRole.user.rawValue,  // deployment role is user; staff authority is per-course
-                authProvider: "duo-oidc",
-                email: looksLikeEmail ? identifier : nil
-            )
-            try await user.save(on: req.db)
-        }
-        let userID = try user.requireID()
-
-        // Enroll at the chosen staff role, or promote an existing enrollment to it.
-        if let enrollment = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .filter(\.$userID == userID)
-            .first()
-        {
-            enrollment.role = role
-            try await enrollment.save(on: req.db)
-        } else {
-            try await APICourseEnrollment(userID: userID, courseID: courseID, role: role)
-                .save(on: req.db)
-        }
-
-        await AuditLogger.record(
-            action: .enrollmentRoleChanged,
-            targetType: .enrollment,
-            targetID: userID.uuidString,
-            metadata: [
-                "course_id": courseIDString,
-                "subject_user_id": userID.uuidString,
-                "role": role.rawValue,
-                "source": "staff_invite",
-            ],
-            on: req
-        )
+        await recordStaffProvisioning(
+            result, role: role, courseID: courseID, source: "staff_invite", on: req)
         return req.redirect(to: "/instructor/students?staffAdded=1")
     }
 

@@ -43,7 +43,7 @@ Students
 <div class="add-panel card" id="add-staff-panel">
             <form method="post" action="/courses/#(currentUser.activeCourse.id)/staff" class="form popup-form">
                 #csrfFormField()
-                <p class="section-note">Add a co-instructor or TA by username or email. If they have no account yet, a placeholder is created and adopted on their first login.</p>
+                <p class="section-note">Add a co-instructor or TA by username, or by the email of an existing account. A username with no account yet gets a placeholder that their first login adopts.</p>
                 <label class="form-label">
                     Username or email
                     <input class="form-input editor-input" type="text" name="identifier" required autocomplete="off">

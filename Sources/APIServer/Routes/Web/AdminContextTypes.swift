@@ -355,6 +355,13 @@ struct AdminCourseDetailContext: Encodable {
     let courseForm: CourseFieldsContext
     /// The clone form; nil on the new-course page.
     var cloneForm: CourseFieldsContext?
+    /// True when a person with no account can be added as staff: SSO adopts
+    /// the placeholder on their first login. False under local sign-in only.
+    var placeholderAllowed = false
+    /// The staff form's one-shot result, from the `staffAdded` and
+    /// `staffError` queries. `_flash` in the base layout renders them.
+    var flashSuccess: String?
+    var flashError: String?
 }
 
 /// One snapshot drawn as a bar of the utilization chart.

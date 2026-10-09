@@ -34,9 +34,41 @@ cite them by letter:
 - **Slice E** — the `ta` rung on `CourseRole`; content/grading floors at
   `.ta`, lifecycle/structure floors at `.instructor`.
 - **Slice F** — self-serve staff invites; TAs read-only on the roster.
+  The admin course pages use the same path: see
+  [Adding staff who have not logged in](#adding-staff-who-have-not-logged-in).
 - **Slice G / G2** — per-course staff *view* gates (tier visibility, other
   students' submissions, solution files), then the deployment role collapsed
   to `user`/`admin` and "student-ness" made purely per-course.
+
+### Adding staff who have not logged in
+
+Three forms add a person to a course at a staff role before their first login.
+All three call `provisionStaffEnrollment` (`Helpers/StaffProvisioning.swift`).
+
+| Form | Route | Who |
+|---|---|---|
+| Instructor roster, "Add staff member" | `POST /courses/:courseID/staff` | the course's instructors |
+| Admin new-course form, "Instructor" | `POST /admin/courses` | admins |
+| Admin course page, "Add staff" | `POST /admin/courses/:courseID/staff` | admins, on any active course |
+
+The rules:
+
+- An existing account matches by username or by email. Its enrollment is made,
+  or promoted in place.
+- When no account matches, a username gets a placeholder account: provider
+  `duo-oidc`, no password, no external subject. The person's first SSO login
+  adopts it by username (`adoptManuallyRegisteredStub`), so the role stays.
+- An email address never names a placeholder. SSO adopts by username only
+  (`winaccountname` at UW), so a placeholder named by an email is never
+  adopted: the real login makes a second account and the role stays on the
+  orphan. The form refuses it and asks for the username.
+- Under `AUTH_MODE=local`, the admin forms make no placeholder, because
+  nothing can adopt one. The person must register first. (The instructor
+  roster form keeps its earlier behaviour.)
+- The new-course form creates the course and enrolls its instructor in one
+  transaction. A refused instructor leaves no course.
+- A placeholder is audited as `user.provisioned`, and each enrollment as
+  `enrollment.role_changed`. The `source` names the form.
 
 The owner's design decisions are recorded in [§6](#6-decisions) and are
 settled; they shape Phases 4–5 (the behaviour-changing ones). Theme 2

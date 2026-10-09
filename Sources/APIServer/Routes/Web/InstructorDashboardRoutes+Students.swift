@@ -82,10 +82,8 @@ extension InstructorDashboardRoutes {
                 userIDString: changed, courseID: activeCourseUUID, on: req.db)
         }
         let flashError: String? = {
-            switch req.query[String.self, at: "staffError"] {
-            case "role": return "Choose a staff role (TA or Instructor)."
-            case "identifier": return "Enter a valid username or email address."
-            default: break
+            if let staffError = StaffFormError.message(forQuery: req.query[String.self, at: "staffError"]) {
+                return staffError
             }
             switch req.query[String.self, at: "handleError"] {
             case "exhausted": return "No unused class handle is left in this course."
