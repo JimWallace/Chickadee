@@ -381,7 +381,7 @@ extension CourseAdminRoutes {
 
         // Only staff roles may be added here; students enrol via CSV / self-serve.
         guard let role = CourseRole(rawValue: body?.role ?? ""), role >= .ta else {
-            return req.redirect(to: "/instructor/students?staffError=\(StaffFormError.role.rawValue)")
+            return req.redirect(to: "/instructor/students?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
         }
         let result: StaffProvisioningResult
         do {
@@ -389,7 +389,7 @@ extension CourseAdminRoutes {
                 identifier: identifier, role: role, courseID: courseID,
                 allowPlaceholder: true, on: req.db)
         } catch let error as StaffProvisioningError {
-            return req.redirect(to: "/instructor/students?staffError=\(StaffFormError(error).rawValue)")
+            return req.redirect(to: "/instructor/students?staffError=\(StaffFormError(error).rawValue)#add-staff-panel")
         }
         await recordStaffProvisioning(
             result, role: role, courseID: courseID, source: "staff_invite", on: req)

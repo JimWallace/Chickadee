@@ -152,7 +152,7 @@ private func enrollmentRole(
             let cookie = try await loginAsAdmin("staff_admin", on: app)
             let html = try await getHTML("/admin/courses/new", cookie: cookie, on: app)
             #expect(html.contains(#"name="instructor""#))
-            #expect(html.contains("The person need not have signed in"))
+            #expect(html.contains("Need not have signed in yet."))
         }
     }
 
@@ -219,6 +219,9 @@ private func enrollmentRole(
             let html = try await getHTML(
                 "/admin/courses/\(courseID)?staffError=\(error.rawValue)", cookie: cookie, on: app)
             #expect(html.contains(error.message.replacingOccurrences(of: "'", with: "&#39;")))
+            #expect(
+                html.contains(#"<div class="add-panel card is-open" id="add-staff-panel">"#),
+                "the refusal opens the panel it belongs to")
         }
     }
 

@@ -607,8 +607,10 @@ extension AdminRoutes {
                     idPrefix: "clone", code: course.code, name: course.name, term: course.term?.next,
                     error: CourseCloneFormError.message(forQuery: errorCode)),
                 placeholderAllowed: req.application.staffPlaceholderAllowed,
-                flashSuccess: req.query[String.self, at: "staffAdded"] != nil ? "Staff member added." : nil,
-                flashError: StaffFormError.message(forQuery: req.query[String.self, at: "staffError"])
+                staffForm: StaffFieldsContext(
+                    idPrefix: "add-staff", placeholderAllowed: req.application.staffPlaceholderAllowed,
+                    defaultRole: .instructor, errorQuery: req.query[String.self, at: "staffError"]),
+                flashSuccess: req.query[String.self, at: "staffAdded"] != nil ? "Staff member added." : nil
             ))
     }
 

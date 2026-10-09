@@ -358,10 +358,11 @@ struct AdminCourseDetailContext: Encodable {
     /// True when a person with no account can be added as staff: SSO adopts
     /// the placeholder on their first login. False under local sign-in only.
     var placeholderAllowed = false
-    /// The staff form's one-shot result, from the `staffAdded` and
-    /// `staffError` queries. `_flash` in the base layout renders them.
+    /// The staff form; nil on the new-course page.
+    var staffForm: StaffFieldsContext?
+    /// "Staff member added." after the staff form succeeds; `_flash` in the
+    /// base layout renders it.
     var flashSuccess: String?
-    var flashError: String?
 }
 
 /// One snapshot drawn as a bar of the utilization chart.

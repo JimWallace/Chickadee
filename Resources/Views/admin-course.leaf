@@ -18,7 +18,7 @@
             <label for="new-course-instructor">Instructor (optional)</label>
             <input id="new-course-instructor" class="form-input" type="text" name="instructor"
                    autocomplete="off" placeholder="e.g. jdoe" aria-describedby="new-course-instructor-note">
-            <p class="field-note" id="new-course-instructor-note">#if(placeholderAllowed):A username. The person need not have signed in; their first sign-in adopts the account.#else:The username of an existing account.#endif</p>
+            <p class="field-note" id="new-course-instructor-note">#if(placeholderAllowed):Need not have signed in yet.#else:Must already have an account.#endif</p>
         </div>
         <div class="toolbar">
             <button class="btn btn-primary" type="submit">Create course</button>
@@ -192,24 +192,10 @@
         </div>
     </div>
     #if(!course.isArchived):
-    <div class="add-panel card#if(flashError): is-open#endif" id="add-staff-panel">
+    <div class="add-panel card#if(staffForm.error): is-open#endif" id="add-staff-panel">
         <form method="post" action="/admin/courses/#(course.id)/staff" class="form-stack">
             #csrfFormField()
-            <div class="toolbar">
-                <div class="field-stack field-stack--grow">
-                    <label for="add-staff-identifier">Username or email</label>
-                    <input id="add-staff-identifier" class="form-input" type="text" name="identifier"
-                           required autocomplete="off" aria-describedby="add-staff-note">
-                </div>
-                <div class="field-stack field-stack--narrow">
-                    <label for="add-staff-role">Role</label>
-                    <select id="add-staff-role" class="form-input" name="role">
-                        <option value="instructor">Instructor</option>
-                        <option value="ta">TA</option>
-                    </select>
-                </div>
-            </div>
-            <p class="field-note" id="add-staff-note">#if(placeholderAllowed):An email finds only an existing account. A username with no account gets one that the first sign-in adopts.#else:The username or email of an existing account.#endif</p>
+            #extend("_staff-fields", staffForm)
             <div class="toolbar">
                 <button class="btn btn-primary" type="submit">Add</button>
                 <button class="btn action-btn js-add-cancel" type="button">Cancel</button>
