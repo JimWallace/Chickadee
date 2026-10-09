@@ -203,6 +203,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case aiFeedbackAssignmentToggled = "ai_feedback.assignment_toggled"
     case aiFeedbackReleased = "ai_feedback.released"
     case aiFeedbackDiscarded = "ai_feedback.discarded"
+    case aiFeedbackAttestationChanged = "ai_feedback.attestation_changed"
 
     // Slip days (#1228)
     case slipDaySpent = "slip_day.spent"
@@ -305,7 +306,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .mcpAccountCreated, .mcpAccountDeleted, .mcpTokenMinted, .mcpToolCalled,
             .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled, .mcpClientRegistered,
             .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected,
-            .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
+            .mcpCourseInstructionsUpdated, .adminMcpToolCalled, .aiFeedbackAttestationChanged:
             return .mcp
         case .ltiPlatformRegistered, .ltiPlatformUpdated, .ltiPlatformDeleted, .ltiCourseBound,
             .ltiContentLinked, .ltiGradeTransportChanged, .ltiGradesPushAll,
@@ -342,7 +343,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .activityWindowChanged,
             .tournamentStarted, .passingThresholdChanged, .slipDaySpent, .slipDayRefunded,
             .aiFeedbackCourseToggled, .aiFeedbackAssignmentToggled, .aiFeedbackReleased,
-            .aiFeedbackDiscarded, .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
+            .aiFeedbackDiscarded, .aiFeedbackAttestationChanged, .slipDaySettingsChanged, .slipDayAdjustmentChanged,
+            .runnerSecretRotated,
             .runnerAutostartChanged, .brightspaceAdminAuthorized, .brightspaceAdminCleared,
             .brightspaceAccountConnected, .brightspaceAccountDisconnected,
             .brightspaceSyncIdentitySet, .brightspaceOrgUnitBound,
@@ -410,6 +412,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .aiFeedbackAssignmentToggled: return "AI-assisted feedback assignment setting changed"
         case .aiFeedbackReleased: return "AI-assisted feedback released"
         case .aiFeedbackDiscarded: return "AI-assisted feedback discarded"
+        case .aiFeedbackAttestationChanged: return "AI-assisted feedback account attestation changed"
         case .leaderboardVisibilityChanged: return "Leaderboard visibility changed"
         case .activityOpponentFileChanged: return "Activity opponent file changed"
         case .activityWindowChanged: return "Activity session window changed"

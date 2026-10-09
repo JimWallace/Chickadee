@@ -582,4 +582,6 @@ func registerMigrations(on app: Application) {
     // assignment opt-in gates, then the per-student feedback rows.
     app.migrations.add(AddAIFeedbackGates())
     app.migrations.add(CreateReflectionFeedback())
+    // The per-staff attestation recorded on the instructor AI agents tab.
+    app.migrations.add(AddAIFeedbackAttestation())
 }

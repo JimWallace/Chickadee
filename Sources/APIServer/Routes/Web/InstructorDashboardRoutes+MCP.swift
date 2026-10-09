@@ -1,8 +1,10 @@
 // APIServer/Routes/Web/InstructorDashboardRoutes+MCP.swift
 //
-// Instructor MCP panel: the active course's authoring voice for connected agents.
+// Instructor AI agents tab: what a connected agent can reach in the active
+// course (InstructorDashboardRoutes+AIAgents.swift), and the course's
+// authoring voice for connected agents.
 //
-//   GET  /instructor/mcp   → instructor-mcp.leaf (view / edit the course's voice guide)
+//   GET  /instructor/mcp   → instructor-mcp.leaf (access, attestation, voice guide)
 //   POST /instructor/mcp   → save or reset (per-course instructor only) → redirect with a flash
 //
 // One editable guide per course, seeded from Chickadee's house authoring-voice
@@ -51,6 +53,10 @@ extension InstructorDashboardRoutes {
                 return "Saved. Connected agents pick it up the next time they connect."
             case "reset":
                 return "Reset to the Chickadee default."
+            case "attested":
+                return "Recorded."
+            case "withdrawn":
+                return "Withdrawn."
             default:
                 return nil
             }
@@ -61,6 +67,8 @@ extension InstructorDashboardRoutes {
                 return "The guide is limited to \(Self.mcpGuidanceMaxLength) characters."
             case "course":
                 return "No active course."
+            case "enrollment":
+                return "Only course staff enrolled in this course can record this."
             default:
                 return nil
             }
@@ -84,6 +92,7 @@ extension InstructorDashboardRoutes {
             canEdit: canEdit,
             readOnlyNote: readOnlyNote,
             mcpDisabled: !req.application.appConfig.mcp.mode.isMounted,
+            agentAccess: try await agentAccessFacts(course: course, viewer: user, req: req),
             flashSuccess: flashSuccess,
             flashError: flashError)
         return try await req.view.render("instructor-mcp", ctx)

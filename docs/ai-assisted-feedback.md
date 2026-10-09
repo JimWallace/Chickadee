@@ -14,6 +14,7 @@ assignments, and it does not change a grade.
 |---|---|---|
 | 0 | This design note | shipped |
 | 1 | Opt-in flags (course: admin; assignment: instructor), the `feedback:*` scopes, the three MCP tools, the staff review page, the student view, the compliance updates | shipped |
+| 1b | The instructor AI agents tab: what an agent can reach, the drafts waiting, the recorded account attestation | shipped |
 | 2 | A stored rubric per assignment, served to the agent with the reflections | not started |
 | 3 | A student opt-out, if the Information Steward requires one | not started |
 
@@ -196,8 +197,47 @@ makes a narrow, gated exception. The controls are:
 Chickadee cannot verify **which** AI account the instructor connects. OAuth
 consent identifies the Chickadee user, not the agent's licence. A personal
 Claude account is approved for public data only. "Use the UW-licensed account"
-is therefore an instructor attestation, not a technical control. The admin
-course gate is the place to collect that attestation.
+is therefore an instructor attestation, not a technical control. The AI
+agents tab records that attestation (see below).
+
+## The AI agents tab
+
+The instructor tab that used to be called "MCP" is now **AI agents**, because
+staff can use an agent for two jobs: writing course content and drafting
+feedback. It is at `/instructor/mcp`, and it has two sections.
+
+**Agent access.** What an agent that course staff connect can reach in the
+active course:
+
+- **Feedback on written answers**: on while the admin course gate is on.
+  (Course content is reachable while the MCP server is on; the authoring-voice
+  section beside it shows that state.) The
+  section then lists each assignment with its own gate on, with a link to its
+  review page and the number of drafts that wait for a person.
+- A link to the connected-agents page, where a person revokes a grant. That
+  page says what a `feedback:read` grant can read.
+
+**The account attestation.** While the course gate is on, each member of the
+course staff can record on this tab that they connect only their UW-licensed
+AI account for feedback. The record is the time on their own enrollment row
+(`course_enrollments.ai_feedback_attested_at`), with an audit row
+(`ai_feedback.attestation_changed`) for each record and withdrawal.
+
+**Nothing enforces the attestation.** The feedback tools do not read it. This
+is a deliberate decision: Chickadee cannot see which account an agent uses, so
+a hard gate would add a step without adding a control. The record gives IST and
+the course a list of who has attested, and when.
+
+**Voice.** Feedback uses the course's authoring voice, the same text this tab
+edits. There is no separate feedback voice. A per-assignment rubric (slice 2)
+would set what to assess, not how to write.
+
+**Who starts the work.** Chickadee runs no schedule and calls no model, so the
+feedback tools run only when a connected agent calls them. That agent belongs
+to a member of the course staff (TA or instructor), but Chickadee cannot tell
+whether a person typed each request or the agent runs on a schedule. The
+guarantee is at the other end: no feedback reaches a student until a person on
+the course staff selects **Release**.
 
 ## Information for students
 

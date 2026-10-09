@@ -187,6 +187,9 @@ answers. Before an admin turns the course gate on in production:
 3. Confirm whether students must be able to opt out, and what the course
    outline must disclose.
 4. Record the instructor attestation that only a UW-licensed account connects.
+   Each staff member records it on the instructor AI agents tab; it is stored
+   per enrollment and audited, and deliberately not enforced
+   (`docs/ai-assisted-feedback.md` §"The AI agents tab").
 
 Add to the §5 revalidation triggers: turning on the course gate for a new
 course, and any change that widens what `get_reflections` returns.
