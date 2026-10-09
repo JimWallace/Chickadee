@@ -318,6 +318,9 @@ import VaporTesting
         "POST /instructor/:assignmentID/students/:studentID/grade-override": .ta,
         "POST /instructor/:assignmentID/students/:studentID/grade-override/delete": .ta,
         "POST /instructor/:assignmentID/students/:studentID/regrant-reveal-token": .ta,
+        // AI-assisted feedback review (docs/ai-assisted-feedback.md) is grading.
+        "GET /instructor/:assignmentID/feedback": .ta,
+        "POST /instructor/:assignmentID/feedback": .ta,
 
         // MARK: Assignment lifecycle — `.instructor`
         "POST /instructor/:assignmentID/open": .instructor,
@@ -329,6 +332,7 @@ import VaporTesting
         "POST /instructor/:assignmentID/solution-visibility": .instructor,
         "POST /instructor/:assignmentID/github-submission": .instructor,
         "POST /instructor/:assignmentID/passing-threshold": .instructor,
+        "POST /instructor/:assignmentID/ai-feedback": .instructor,
         "POST /instructor/:assignmentID/activity": .instructor,
         "POST /instructor/:assignmentID/activity/opponent": .instructor,
         "POST /instructor/:assignmentID/activity/window": .instructor,

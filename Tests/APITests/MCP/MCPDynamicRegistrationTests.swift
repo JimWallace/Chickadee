@@ -44,7 +44,7 @@ import VaporTesting
             let clientID = try #require(object?["client_id"] as? String)
             #expect(object?["token_endpoint_auth_method"] as? String == "none")
             // read_write grants the full advertised scope set.
-            #expect(object?["scope"] as? String == "content:read content:write")
+            #expect(object?["scope"] as? String == "content:read content:write feedback:read feedback:write")
 
             let client = try #require(
                 try await MCPOAuthClient.query(on: app.db).filter(\.$clientID == clientID).first())
@@ -62,7 +62,7 @@ import VaporTesting
             let res = try await register(
                 app, body: #"{"client_name":"RO Agent","redirect_uris":["\#(redirectURI)"]}"#)
             #expect(res.status == .created)
-            #expect(jsonObject(res)?["scope"] as? String == "content:read")
+            #expect(jsonObject(res)?["scope"] as? String == "content:read feedback:read")
         }
     }
 

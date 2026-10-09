@@ -512,7 +512,8 @@ extension WebRoutes {
             solutionURL: decorations.solutionURL,
             leaderboardURL: decorations.leaderboardURL,
             diffURL: decorations.diffURL,
-            sourceCommit: SubmissionSourceCommitView(submission: submission)
+            sourceCommit: SubmissionSourceCommitView(submission: submission),
+            releasedFeedback: decorations.releasedFeedback.map(ProseParagraphs.split) ?? []
         )
     }
 }
@@ -812,4 +813,6 @@ struct SubmissionDecorations {
     let leaderboardURL: String?
     /// Staff-only link to the starter-to-submission diff page.
     let diffURL: String?
+    /// Released AI-assisted feedback written against this submission.
+    var releasedFeedback: String?
 }

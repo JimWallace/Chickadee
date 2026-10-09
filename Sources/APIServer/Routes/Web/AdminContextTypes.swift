@@ -97,6 +97,9 @@ struct AdminCourseRow: Encodable {
     var brightspaceOrgUnitID: String?
     var brightspaceOrgUnitName: String?
     var brightspaceSyncEnabled: Bool
+    /// The course gate for AI-assisted feedback
+    /// (docs/ai-assisted-feedback.md). Only the course page fills it.
+    var aiFeedbackEnabled = false
     /// The offering's term (docs/course-terms.md); all nil when none is
     /// recorded. Set through `withTerm(_:)`.
     var termYear: Int?

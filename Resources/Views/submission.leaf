@@ -109,6 +109,14 @@ Submission #(submissionID)
 </div>
 #endif
 
+#if(count(releasedFeedback) > 0):
+<section class="page-section">
+    <h2>Feedback on your written answers</h2>
+    <p class="card-meta">Drafted with AI assistance and reviewed by course staff.</p>
+    #for(paragraph in releasedFeedback):<p>#(paragraph)</p>#endfor
+</section>
+#endif
+
 #if(solutionURL):
 <div class="notice-box">
     <strong>Solution available</strong> &mdash; <a href="#(solutionURL)">view the reference solution</a> for this assignment.

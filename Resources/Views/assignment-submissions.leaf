@@ -5,6 +5,9 @@
 #export("content"):
 <div class="page-titlebar">
     <h1>#(assignmentTitle)</h1>
+    #if(aiFeedbackOpen):
+    <a class="btn action-btn" href="/instructor/#(assignmentID)/feedback">AI feedback</a>
+    #endif
 </div>
 
 <section class="diagnostics-section">

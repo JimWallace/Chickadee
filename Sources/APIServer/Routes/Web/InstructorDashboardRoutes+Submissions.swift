@@ -130,6 +130,7 @@ extension InstructorDashboardRoutes {
                 flashSuccess: req.query[String.self, at: "notice"],
                 secretRevealEnabled: secretRevealEnabled,
                 passingThresholdPercent: assignment.passingThresholdPercent,
+                aiFeedbackOpen: try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db),
                 coverageRows: coverageRows,
                 hasCoverage: !coverageRows.isEmpty,
                 coverageSummary: assignmentCoverageSummary(coverageRows),

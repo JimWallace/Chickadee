@@ -198,6 +198,12 @@ enum AuditAction: String, Sendable, CaseIterable {
     // Advisory passing threshold
     case passingThresholdChanged = "passing_threshold.changed"
 
+    // AI-assisted feedback (docs/ai-assisted-feedback.md)
+    case aiFeedbackCourseToggled = "ai_feedback.course_toggled"
+    case aiFeedbackAssignmentToggled = "ai_feedback.assignment_toggled"
+    case aiFeedbackReleased = "ai_feedback.released"
+    case aiFeedbackDiscarded = "ai_feedback.discarded"
+
     // Slip days (#1228)
     case slipDaySpent = "slip_day.spent"
     case slipDayRefunded = "slip_day.refunded"
@@ -282,11 +288,12 @@ enum AuditAction: String, Sendable, CaseIterable {
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
             .activityWindowChanged, .tournamentStarted,
-            .passingThresholdChanged, .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
+            .passingThresholdChanged, .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged,
+            .aiFeedbackAssignmentToggled, .aiFeedbackReleased, .aiFeedbackDiscarded:
             return .grading
         // Course-wide slip-day policy is course configuration, not a grading
         // action on one student.
-        case .slipDaySettingsChanged:
+        case .slipDaySettingsChanged, .aiFeedbackCourseToggled:
             return .courses
         case .runnerSecretRotated, .runnerAutostartChanged:
             return .runner
@@ -334,7 +341,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
             .activityWindowChanged,
             .tournamentStarted, .passingThresholdChanged, .slipDaySpent, .slipDayRefunded,
-            .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
+            .aiFeedbackCourseToggled, .aiFeedbackAssignmentToggled, .aiFeedbackReleased,
+            .aiFeedbackDiscarded, .slipDaySettingsChanged, .slipDayAdjustmentChanged, .runnerSecretRotated,
             .runnerAutostartChanged, .brightspaceAdminAuthorized, .brightspaceAdminCleared,
             .brightspaceAccountConnected, .brightspaceAccountDisconnected,
             .brightspaceSyncIdentitySet, .brightspaceOrgUnitBound,
@@ -398,6 +406,10 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .secretRevealToggled: return "Reveal token setting changed"
         case .solutionVisibilityChanged: return "Solution visibility changed"
         case .passingThresholdChanged: return "Passing threshold changed"
+        case .aiFeedbackCourseToggled: return "AI-assisted feedback course setting changed"
+        case .aiFeedbackAssignmentToggled: return "AI-assisted feedback assignment setting changed"
+        case .aiFeedbackReleased: return "AI-assisted feedback released"
+        case .aiFeedbackDiscarded: return "AI-assisted feedback discarded"
         case .leaderboardVisibilityChanged: return "Leaderboard visibility changed"
         case .activityOpponentFileChanged: return "Activity opponent file changed"
         case .activityWindowChanged: return "Activity session window changed"

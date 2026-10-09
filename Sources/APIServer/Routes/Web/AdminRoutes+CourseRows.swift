@@ -21,7 +21,7 @@ extension AdminRoutes {
             .count()
         async let submissionCountFetch = SubmissionRetentionService.submissionCountsByCourse(
             courseIDs: [courseID], on: db)
-        return AdminCourseRow(
+        var row = AdminCourseRow(
             id: id,
             code: course.code,
             name: course.name,
@@ -35,6 +35,8 @@ extension AdminRoutes {
             brightspaceOrgUnitName: course.brightspaceOrgUnitName,
             brightspaceSyncEnabled: brightspaceSyncEnabled
         ).withTerm(course.term)
+        row.aiFeedbackEnabled = course.aiFeedbackEnabled == true
+        return row
     }
 
     /// The roster: every enrolled person, by username, with their per-course

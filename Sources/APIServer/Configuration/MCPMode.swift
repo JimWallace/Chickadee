@@ -5,8 +5,9 @@
 // endpoint for inspection without granting write access:
 //
 //   off         — not mounted at all (/mcp and /oauth/* 404, no token authority)
-//   read_only   — mounted and authenticated, but `content:write` is never honored
-//   read_write  — full content authoring (read + write)
+//   read_only   — mounted and authenticated, but no write scope is honored
+//   read_write  — full content authoring (read + write), plus the gated
+//                 feedback scopes (docs/ai-assisted-feedback.md)
 //
 // `read_only` is implemented as a server-wide ceiling on the OAuth scopes any
 // request may exercise (`scopeCeiling`), enforced once in the bearer middleware.
@@ -33,8 +34,8 @@ enum MCPMode: String, Sendable, CaseIterable {
     var advertisedScopes: [ContentScope] {
         switch self {
         case .off: return []
-        case .readOnly: return [.read]
-        case .readWrite: return [.read, .write]
+        case .readOnly: return [.read, .feedbackRead]
+        case .readWrite: return [.read, .write, .feedbackRead, .feedbackWrite]
         }
     }
 

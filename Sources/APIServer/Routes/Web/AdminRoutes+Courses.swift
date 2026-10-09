@@ -209,6 +209,36 @@ extension AdminRoutes {
         return req.redirect(to: "/admin/courses/\(idString)")
     }
 
+    // MARK: - POST /admin/courses/:courseID/ai-feedback
+
+    /// Sets the course gate for AI-assisted feedback
+    /// (docs/ai-assisted-feedback.md). Admin only, by design: this is the
+    /// unit-level approval switch, turned on once the course has its approval.
+    /// Turning it off closes the feature for every assignment in the course at
+    /// once; their own gates are kept, so turning it back on restores them.
+    @Sendable
+    func setCourseAIFeedback(req: Request) async throws -> Response {
+        struct Body: Content { var enabled: String? }
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let course = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+        let enabled = (try? req.content.decode(Body.self))?.enabled == "on"
+        course.aiFeedbackEnabled = enabled
+        try await course.save(on: req.db)
+        await AuditLogger.record(
+            action: .aiFeedbackCourseToggled,
+            targetType: .course,
+            targetID: idString,
+            metadata: ["course": course.code, "enabled": String(enabled)],
+            on: req
+        )
+        return req.redirect(to: "/admin/courses/\(idString)")
+    }
+
     // MARK: - POST /admin/courses/:courseID/copy
 
     /// One-click copy into the same term under a free `-COPY` code (a sandbox

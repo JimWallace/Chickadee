@@ -1,0 +1,91 @@
+#extend("base"):
+#export("title"):
+#(assignmentTitle) — Feedback
+#endexport
+#export("content"):
+<div class="page-titlebar">
+    <h1>#(assignmentTitle) — Feedback</h1>
+    <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions">Submissions</a>
+</div>
+<p class="page-subtitle">
+    Students see only the feedback you release.
+    <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md" target="_blank" rel="noopener noreferrer">How it works <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span class="visually-hidden">(opens in a new tab)</span></a>
+</p>
+#if(!gatesOpen):
+<div class="flash flash-warning" role="status">AI-assisted feedback is off for this assignment, so no agent can read answers or add drafts.</div>
+#endif
+
+#if(count(prompts) > 0):
+<section class="page-section">
+    <h2>Prompts</h2>
+    <ol>
+    #for(prompt in prompts):
+        <li>#for(paragraph in prompt.paragraphs):<p>#(paragraph)</p>#endfor</li>
+    #endfor
+    </ol>
+</section>
+#endif
+
+<section class="page-section">
+    <h2>Students (#(reviewCount) to review)</h2>
+    #if(count(rows) == 0):
+    <p class="empty">No submissions yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Handle</th>
+                <th>Feedback</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in rows):
+            <tr>
+                <td>#(row.student)</td>
+                <td><code>#(row.handle)</code></td>
+                <td>
+                    #if(row.state == "released"):<span class="tier tier-open">#(row.stateLabel)</span>
+                    #elseif(row.state == "stale"):<span class="tier tier-danger">#(row.stateLabel)</span>
+                    #elseif(row.state == "draft"):<span class="tier">#(row.stateLabel)</span>
+                    #else:<span class="tier tier-closed">#(row.stateLabel)</span>#endif
+                </td>
+            </tr>
+            #if(row.hasText):
+            <tr class="test-output-row">
+                <td colspan="3">
+                    <details class="test-output-details"#if(row.needsReview): open#endif>
+                        <summary>Answers and feedback</summary>
+                        #for(answer in row.answers):
+                        <p class="card-meta">Answer #(answer.index)</p>
+                        #if(count(answer.paragraphs) == 0):<p class="empty">No answer</p>#endif
+                        #for(paragraph in answer.paragraphs):<p>#(paragraph)</p>#endfor
+                        #endfor
+                        <form method="post" action="/instructor/#(assignmentID)/feedback" class="form-stack">
+                            #csrfFormField()
+                            <input type="hidden" name="handle" value="#(row.handle)">
+                            <label for="feedback-#(row.handle)">Feedback#if(row.draftedBy): <span class="card-meta">drafted by #(row.draftedBy)</span>#endif</label>
+                            <textarea id="feedback-#(row.handle)" name="feedback" class="form-input" rows="6" maxlength="#(maxDraftLength)">#(row.draftText)</textarea>
+                            <div class="toolbar">
+                                <button class="btn btn-primary" type="submit" name="action" value="release">Release</button>
+                                <button class="btn action-btn" type="submit" name="action" value="save">Save draft</button>
+                            </div>
+                        </form>
+                        <form method="post" action="/instructor/#(assignmentID)/feedback" class="form-flush"
+                              data-confirm="Discard the feedback for #(row.handle)? The student no longer sees it, and an agent can then write a new draft.">
+                            #csrfFormField()
+                            <input type="hidden" name="handle" value="#(row.handle)">
+                            <input type="hidden" name="action" value="discard">
+                            <button class="btn action-btn action-danger" type="submit">Discard</button>
+                        </form>
+                    </details>
+                </td>
+            </tr>
+            #endif
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+#endexport
+#endextend

@@ -312,6 +312,17 @@
         <p class="field-note field-note--muted">The reveal does not change grades, and a spent token stays spent until staff give it back.</p>
         <button class="btn action-btn" type="submit">Save reveal setting</button>
     </form>
+    #if(aiFeedback):
+    <form method="post" action="/instructor/#(assignmentID)/ai-feedback" data-ck-inplace>
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="enabled" #if(aiFeedback.enabled):checked#endif>
+            Allow course staff to draft feedback on written answers with an AI agent
+        </label>
+        <p class="field-note field-note--muted">The agent reads cells tagged <code>reflection</code>, without names, and staff review every draft on the <a href="/instructor/#(assignmentID)/feedback">feedback page</a> before students see it.</p>
+        <button class="btn action-btn" type="submit">Save feedback setting</button>
+    </form>
+    #endif
     <form method="post" action="/instructor/#(assignmentID)/solution-visibility" data-ck-inplace>
         #csrfFormField()
         <label class="form-label">

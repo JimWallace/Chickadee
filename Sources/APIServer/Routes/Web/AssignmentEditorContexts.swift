@@ -287,6 +287,10 @@ struct EditAssignmentContext: Encodable {
     /// The advisory passing threshold (1...100), or nil when the passing
     /// concept is off.  Renders the third "Student Options" control.
     let passingThresholdPercent: Int?
+    /// The assignment gate for AI-assisted feedback
+    /// (docs/ai-assisted-feedback.md). Nil while the course gate is off, so
+    /// the "Student Options" control does not render at all.
+    var aiFeedback: AIFeedbackSetting?
     /// Assignment-wide default per-test execution limit (seconds) from the
     /// manifest (`TestProperties.timeLimitSeconds`).  Renders the editable
     /// "Default time limit" input in the Test Suite header, saved live via
@@ -426,6 +430,12 @@ enum ActivityKindOption {
 }
 
 /// The GitHub submission checkbox's state.
+/// The assignment's AI-assisted feedback gate, shown only in a course whose
+/// admin gate is on.
+struct AIFeedbackSetting: Encodable {
+    let enabled: Bool
+}
+
 struct GitHubSubmissionSetting: Encodable {
     let enabled: Bool
     /// Commit statuses (slice 6).

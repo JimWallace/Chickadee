@@ -42,7 +42,8 @@ import VaporTesting
                 #expect(body.contains("\"resource\""))
                 #expect(body.contains("\"authorization_servers\""))
                 #expect(body.contains("chickadee.example"))
-                #expect(self.scopesSupported(res) == ["content:read", "content:write"])
+                #expect(
+                    self.scopesSupported(res) == ["content:read", "content:write", "feedback:read", "feedback:write"])
             }
         }
     }
@@ -54,7 +55,7 @@ import VaporTesting
         try await withApp(try await makeApp(advertisedScopes: MCPMode.readOnly.advertisedScopes)) { app in
             try await app.testing().test(.GET, "/.well-known/oauth-protected-resource") { res async in
                 #expect(res.status == .ok)
-                #expect(self.scopesSupported(res) == ["content:read"])
+                #expect(self.scopesSupported(res) == ["content:read", "feedback:read"])
             }
         }
     }
@@ -72,7 +73,10 @@ import VaporTesting
                 #expect((object?["token_endpoint"] as? String)?.hasSuffix("/oauth/token") == true)
                 #expect((object?["registration_endpoint"] as? String)?.hasSuffix("/oauth/register") == true)
                 #expect((object?["code_challenge_methods_supported"] as? [String])?.contains("S256") == true)
-                #expect((object?["scopes_supported"] as? [String]) == ["content:read", "content:write"])
+                #expect(
+                    (object?["scopes_supported"] as? [String]) == [
+                        "content:read", "content:write", "feedback:read", "feedback:write",
+                    ])
                 // RFC 9207 (SEP-2468): clients validate `iss` on authorization
                 // responses; the metadata must advertise that we emit it.
                 #expect((object?["authorization_response_iss_parameter_supported"] as? Bool) == true)
@@ -86,7 +90,7 @@ import VaporTesting
         try await withApp(try await makeApp(advertisedScopes: MCPMode.readOnly.advertisedScopes)) { app in
             try await app.testing().test(.GET, "/.well-known/oauth-authorization-server") { res async in
                 #expect(res.status == .ok)
-                #expect(self.scopesSupported(res) == ["content:read"])
+                #expect(self.scopesSupported(res) == ["content:read", "feedback:read"])
             }
         }
     }

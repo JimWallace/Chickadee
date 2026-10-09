@@ -155,3 +155,16 @@ Legend:
 | MCP makes no model-API call | no outbound HTTP under `Sources/APIServer/MCP/`; no model client in `Package.swift` |
 | Authoring vs student stores | model census in `data-flow-inventory.md` |
 | Wall is by-convention today | `ToolContext.db == request.db` (`ToolContext.swift:35`) — same connection as the rest of the app |
+
+## AI-assisted feedback (2026-10)
+
+The content surface gained a narrow, gated path to student work
+(`docs/ai-assisted-feedback.md`). It does not move the boundary: Chickadee
+still calls no model, and the agent is still the only party that talks to a
+model provider. What changes is control 3 above. The student-data wall now has
+one exception, which a person opens per course (an admin) and per assignment
+(an instructor), and which carries pseudonymous written answers only. The
+exception is held in code (`MCPStudentDataBoundary`), in the database (an RLS
+policy keyed on both gates) and in a build guard (`MCPAIFeedbackGateTests`).
+Feedback reaches a student only after a person on the course staff releases
+it.

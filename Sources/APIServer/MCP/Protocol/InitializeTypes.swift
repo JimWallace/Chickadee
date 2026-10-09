@@ -127,13 +127,15 @@ enum MCPServerInstructions {
     static let operationalGuide = """
         Chickadee is a course-content authoring and autograding platform. This server lets an \
         authorized agent author assignment content on an instructor's behalf: assignment metadata, \
-        test suites, starter notebooks, and reference solutions. It never exposes student data, \
-        grades, student submissions, or enrollment management.
+        test suites, starter notebooks, and reference solutions. It never exposes grades, student \
+        identity, or enrollment management. The one exception to "no student data" is AI-assisted \
+        feedback (below): written answers, by pseudonymous handle, in assignments a person opted in.
 
         Access scope: you may only act on courses the authenticated account is enrolled in — for \
         every role, admins included. Enrolling the account in a course widens this agent's reach; \
         unenrolling revokes it immediately. Students cannot use this interface. Read tools require \
-        the content:read scope; write tools require content:write.
+        the content:read scope; write tools require content:write. The AI-assisted feedback tools \
+        require feedback:read and feedback:write instead.
 
         Key concepts:
         - Course — one offering of a course in one term. Identified by a short code (e.g. \
@@ -391,6 +393,15 @@ enum MCPServerInstructions {
         CHICKADEE_ASSIGNMENT_SEED at call time. Use preview_personalization to confirm what a \
         placeholder resolves to. Full recipe: read the \
         chickadee://docs/personalization-solution-notebooks resource. \
+        - AI-assisted feedback — course staff can ask you to draft feedback on students' written \
+        reasoning: notebook cells the starter tags `reflection`. It works only in an assignment whose \
+        course a deployment admin opted in and whose instructor then opted the assignment in, on the \
+        web; no tool can opt anything in. list_reflections names each student by a pseudonymous \
+        handle (never a name) with their feedback state; get_reflections returns one student's \
+        prompt/response pairs; draft_feedback saves your draft. A draft is never shown to the \
+        student until course staff review and release it on the web, and it carries no score. Write \
+        it in the course's authoring voice, address the reasoning rather than the student, and do \
+        not guess who the student is.
         - Resources: each accessible assignment's raw test.properties.json manifest is also exposed \
         as an MCP resource (resources/list, then resources/read on \
         chickadee://assignment/<publicID>/manifest). get_suite is the structured view; the resource \

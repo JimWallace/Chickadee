@@ -103,6 +103,13 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_sync_excluded")
     var brightspaceSyncExcluded: Bool?
 
+    /// The assignment gate for AI-assisted feedback
+    /// (docs/ai-assisted-feedback.md). A course instructor sets it on the
+    /// assignment edit page, and only while the course gate is on. No MCP tool
+    /// can set it. The feedback tools need both gates; nil/false = off.
+    @OptionalField(key: "ai_feedback_enabled")
+    var aiFeedbackEnabled: Bool?
+
     /// The AGS line item this assignment's scores go to, once found or
     /// created on the LMS. Nil = not yet known; the AGS sweep finds it.
     @OptionalField(key: "lti_line_item_url")

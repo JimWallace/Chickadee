@@ -79,6 +79,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
+        r.post(":assignmentID", "ai-feedback", use: saveAIFeedbackSetting)
+        r.get(":assignmentID", "feedback", use: feedbackReviewPage)
+        r.post(":assignmentID", "feedback", use: saveFeedbackReview)
         r.post(":assignmentID", "solution-visibility", use: saveSolutionVisibilitySetting)
         r.post(":assignmentID", "github-submission", use: saveGitHubSubmissionSetting)
         r.post(":assignmentID", "passing-threshold", use: savePassingThresholdSetting)
@@ -653,6 +656,8 @@ struct InstructorDashboardRoutes: RouteCollection {
             secretRevealEnabled: assignment.secretRevealEnabled == true,
             solutionVisibilityAfterDue: assignment.solutionVisibility == .afterDue,
             passingThresholdPercent: assignment.passingThresholdPercent,
+            aiFeedback: try await APICourse.find(assignment.courseID, on: req.db)?.aiFeedbackEnabled == true
+                ? AIFeedbackSetting(enabled: assignment.aiFeedbackEnabled == true) : nil,
             timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,
             error: q?.error,

@@ -8,7 +8,9 @@
 // `result_collections` side table broke `get_validation_result` (the grants
 // file predated the table). This suite fails the build when a table read
 // through `MCPStudentDataBoundary` (or its blob side table) is missing a
-// SELECT grant or its row-level-security policy.
+// SELECT grant or its row-level-security policy. (The gated AI-assisted
+// feedback policy on `submissions` and the `reflection_feedback` grants are
+// documented in the SQL file itself; docs/ai-assisted-feedback.md.)
 
 import ChickadeeTestSupport
 import Foundation

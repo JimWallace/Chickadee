@@ -28,7 +28,7 @@ Authorize agent
     #endif
     <p class="consent-note">
         Actions taken by the agent are recorded as you, attributed to <strong>#(clientName)</strong>.
-        It cannot access student data, grades, enrolment, or submissions. You can revoke access later.
+        #if(readsStudentAnswers):It can read students' written answers, without names, only in assignments where AI-assisted feedback is on, and it cannot access grades or enrolment.#else:It cannot access student data, grades, enrolment, or submissions.#endif You can revoke access later.
     </p>
     <form class="form" method="post" action="/oauth/authorize">
         <input type="hidden" name="request_token" value="#(requestToken)">
