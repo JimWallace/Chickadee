@@ -1,0 +1,12 @@
+# Traits from traits.txt that may stand before a scientist's name, and only
+# there ("Curious Noether"). Each one names a positive part of character. No
+# mood, body, mind or intelligence words: Happy, Calm, Clever and Smart stay
+# out, because the second word names a real person. Hand-curated. One word
+# per line, Title Case.
+Bold
+Brave
+Curious
+Gentle
+Humble
+Keen
+Kind

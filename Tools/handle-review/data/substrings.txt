@@ -1,0 +1,44 @@
+# Letter sequences that must not appear anywhere in a compound handle
+# ("Ionspark"), because a compound can hide a word across the join. Matching
+# ignores case. Hand-curated; extend it. One sequence per line, lower case.
+anal
+anus
+ass
+boob
+butt
+chink
+cock
+coon
+crap
+cum
+cunt
+damn
+dead
+dick
+die
+fag
+fuck
+gay
+gook
+hell
+hoe
+homo
+isis
+jap
+kike
+kill
+nazi
+nig
+nude
+piss
+poo
+porn
+rape
+sex
+shit
+slut
+spic
+tit
+twat
+wank
+whore

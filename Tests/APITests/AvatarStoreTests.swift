@@ -140,7 +140,7 @@ import VaporTesting
     }
 
     /// A stored value of the wrong form (a hand-edited row) is redrawn.
-    @Test(arguments: ["sneaky cedar", "Sneaky", "Sneaky Cedar Grove", ""])
+    @Test(arguments: ["sneaky cedar", "Sneaky Cedar Grove Path", "Sneaky C3dar", ""])
     func malformedHandleIsRedrawn(stored: String) async throws {
         try await withApp(app) { _ in
             let course = try await makeTestCourse(on: app, code: "AVH6")
@@ -154,6 +154,25 @@ import VaporTesting
                 try await AvatarStore.ensureHandle(for: enrollment, on: app.db))
             #expect(handle != stored)
             #expect(AvatarHandle.isWellFormed(handle))
+        }
+    }
+
+    /// A chosen handle is stored in NFC form, whatever form the browser sent,
+    /// because the unique index compares bytes.
+    @Test func aChosenHandleIsStoredInNFC() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeTestCourse(on: app, code: "AVH9")
+            let user = try await makeTestStudent(on: app, username: "av_nfc")
+            let enrollment = try await makeTestEnrollment(
+                on: app, userID: try user.requireID(), courseID: try course.requireID())
+            let nfc = "Keen Ōmura"
+            let nfd = nfc.decomposedStringWithCanonicalMapping
+            #expect(!nfd.unicodeScalars.elementsEqual(nfc.unicodeScalars))
+
+            let choice = try await AvatarStore.chooseHandle(nfd, for: enrollment, taken: [], on: app.db)
+            #expect(choice == .chosen)
+            let stored = try #require(try await APICourseEnrollment.find(enrollment.id, on: app.db)?.avatarHandle)
+            #expect(stored.unicodeScalars.elementsEqual(nfc.unicodeScalars))
         }
     }
 

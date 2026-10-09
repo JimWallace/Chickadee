@@ -163,8 +163,8 @@ near-certain visible pair. Enforcing per-course
 distinctness would then make an avatar depend on the roster, so it would change
 when somebody drops. That is a bad trade for a cosmetic.
 
-Instead, every enrollment carries a **handle**: an adjective + forest-noun
-pair, "Hazy Cache", "Frosted Kernel", drawn from curated lists and enforced
+Instead, every enrollment carries a **handle**, such as "Curious Noether",
+"Photon Navigator" or "Ionspark", drawn from curated lists and enforced
 UNIQUE per course. The handle is the identity; the avatar is the glance. The
 leaderboard shows both, so a micro-collision costs nothing — the two rows still
 say different things.
@@ -175,7 +175,7 @@ The handle earns its place three more times over:
   text equivalent; a decorative `aria-hidden` image would leave a screen-reader
   user with an unlabelled row. The handle is that label, and it is real text
   rather than a generated alt string.
-- **Speech.** Students can say "I'm Hazy Cedar" out loud. A picture cannot be
+- **Speech.** Students can say "I'm Curious Noether" out loud. A picture cannot be
   said.
 - **Text contexts.** Anywhere a leaderboard is exported, sorted, or pasted into
   a discussion, the handle survives and the SVG does not.
@@ -187,50 +187,86 @@ courses' leaderboards by name. The avatar being global is what lets cosmetic
 unlocks follow a student between courses, which is the part that makes
 gamification feel like it accumulates.
 
-Curating the word lists is real work, not a lookup: adjective-noun generators
-produce unfortunate pairs, and both lists need a pass for words that collide
-with real names.
+Curating the lists is real work, not a lookup: word generators produce
+unfortunate pairs, and every list needs a pass for words that collide with
+real names.
 
-**The theme.** Adjectives are the sky over the chickadee: weather, light,
-season, moving air and water. They never describe the student, so there are no
-traits, and there are no plain colour words (red, black, white, brown, yellow).
-Nouns are places in the chickadee's forest, and many are also computing words:
-Cache (chickadees cache seed), Fork, Patch, Seed, Kernel, Stream, Node, Stack,
-Log, Shell, Delta, Port. A computing student sees the joke; everyone else sees
-a forest. There is no testing vocabulary (bug, crash, null, fail, error, kill):
-on a platform that grades code, those words read as a verdict.
+**Three schemes (Fall 2026 review).** A new handle comes from one of three
+schemes (`HandleScheme`), each with a chance of 1 in 3. The weights are one
+property, `HandleScheme.weight`, so they can change later.
 
-**What the first lists got wrong** (replaced in the Fall 2026 review). Ten
-adjectives and eleven nouns were first names (Hazel, Dawn, Ivy, Willow…), and
-eight nouns were common surnames, so "Hazel Marsh" read as a real person and
-could match a real classmate. Eleven adjectives described skin (Ivory, Olive,
-Copper, Sable…), which decision 6 bans for the avatar. Quiet and Muted were
-traits. Several words were too obscure to say (Gorse, Sedge, Yarrow).
+| Scheme | Example | Lists |
+|---|---|---|
+| Positive disposition + scientist | Curious Noether, Bold Wang Zhenyi | `dispositions` × `scientists` |
+| Science word + agent | Photon Navigator | `scienceWords` × `agents` |
+| Compound word | Ionspark | `compoundPrefixes` + `compoundSuffixes` |
+
+The lists are in `Sources/Core/AvatarHandle+Words.swift` and
+`Sources/Core/AvatarHandle+Scientists.swift`. The first handles were a sky
+adjective and a forest noun, "Hazy Cache". They named
+places, not people, and many pairs did not fit together ("Muggy Sandbox"), so
+the review replaced them. Handles that are already stored keep their old form.
+
+**The scientists.** A scientist handle names a real person, so the person must
+meet these rules:
+
+- Known mainly for the work, with no major scandal.
+- No longer alive, or alive with a major honour (for example a Nobel Prize,
+  Fields Medal, Abel Prize, Turing Award, Wolf Prize, Breakthrough Prize,
+  L'Oréal-UNESCO Award or MacArthur Fellowship). Check every living person
+  again before each term, and remove a name at once if there is a problem.
+- The name the person is known by, in one or two words, with diacritics and
+  real hyphens: "Schrödinger", "Wang Zhenyi", "Joliot-Curie". No apostrophes.
+- Balance: at least 40% women and at most 35% from Europe across the whole
+  list. To meet these targets, the review removed 109 men from Europe and North
+  America. `AvatarHandle.removedForBalance` lists them, and a test keeps them
+  out until a new balance review.
+
+The draw prefers a scientist that nobody in the course has yet. Thus a class
+does not get "Bold Noether" and "Kind Noether" while other names are unused.
+
+**The words.** Science words and agents are plain words from science and from
+what a person does. Agents are actions, never qualities. A compound word joins
+a short science prefix and a suffix in lower case; the review checks each one
+for a word hidden across the join. There is no testing vocabulary (bug, crash,
+null, fail, error, kill): on a platform that grades code, those words read as a
+verdict.
+
+**Positive dispositions are the one kind of trait allowed**, and only before a
+scientist's name: Curious, Bold, Keen. They name a part of character. Mood
+words (Cheerful), body or mind-state words (Steady, Calm) and intelligence
+words (Smart, Clever) stay out, because the second word names a real person,
+and some of these people were ill or were persecuted. For the same reason the
+review took out Radiant (beside Curie) and Patient (beside the physicians).
 
 **The review tool.** `node Tools/handle-review/review.mjs > /tmp/handles.html`
-reads both lists out of `AvatarHandle.swift` and checks every word against
-first names (US SSA and Ontario baby names), surnames (US Census 2010), and
-hand-curated lists of skin-tone words, traits, slang and testing words. It
-checks every pair for a first name followed by a surname, and against a
-hand-curated list of brands, titles, places and idioms. An exact match is red
-and fails the run; a pair one edit away from a phrase, or two words with the
-same stem ("Leafy Leaf"), is amber for a person to judge. The sheet ends with
-every pair in random order for a human skim. `AvatarHandleTests` reads the same
-data files, and `AvatarHandle.excludedWords` lists the words left out on
-purpose, with the reason for each. Sources and fetch dates are in
-`Tools/handle-review/data/README.md`.
+reads the lists out of the Swift sources. It checks every word and every
+compound against first names (US SSA and Ontario baby names), surnames (US
+Census 2010), and hand-curated lists of skin-tone words, traits, slang and
+testing words. A disposition may be a trait only if it is in
+`positive-traits.txt`. It checks every compound against `substrings.txt`, every
+scientist's name as one name ("Tan Yunxian" is a person; "Tan" alone is a
+skin-tone word), and every pair against a hand-curated list of brands, titles,
+places and idioms. An exact match is red and fails the run. Amber flags are for
+a person to judge: a pair one edit away from a phrase, two words with the same
+stem ("Curious Curie"), a scientist whose surname is common or whose two-word
+name can match a classmate, every living person, and a list that misses a
+balance target. The sheet ends with a sample of each scheme for a human skim.
+`AvatarHandleTests` reads the same data files, and `AvatarHandle.excludedWords`
+lists the words left out on purpose, with the reason for each. Sources and
+fetch dates are in `Tools/handle-review/data/README.md`.
 
 **Capacity.** The pool must be at least four times the largest expected course
 (`AvatarHandle.maxExpectedEnrollment`, 1,000), so that the last students in a
-large course still get a random handle and not the remainder. 96 × 96 = 9,216
-(the Fall 2026 review shipped 64 × 64 = 4,096; 32 words were appended to each
-list the same term, for headroom beyond the rule). If a real course is larger,
-append words and run the review again.
+large course still get a random handle and not the remainder. The three
+schemes give 32,442 handles. A scheme with no free handle is skipped, so a
+course runs out only when all three do.
 
 **Lists change between terms; a stored handle is kept.** A new draw uses the
 current lists only. A handle already stored is never checked against a list:
-`AvatarStore.ensureHandle` keeps any stored value of the right form (two
-title-cased words), so a list change renames nobody mid-term. A handle is per
+`AvatarStore.ensureHandle` keeps any stored value of the right form (one to
+three words, each a capital letter followed by letters, with real hyphens
+allowed), so a list change renames nobody mid-term. A handle is per
 (user, course) and each term's offering is a new course, so an old handle ages
 out on its own. When one handle must change (a student reports that it matches
 a real name), an instructor uses **Give new handle** in the Students tab row
@@ -262,31 +298,6 @@ the change.
   opening it to check it must not spend every student's one change. After the
   lock, the row reads "Your handle is set for this course." Staff **Give new
   handle** ignores the lock and does not set it.
-
-**Planned redesign: three schemes (Fall 2026 review, not live).** The current
-handles name places, not people ("Overcast Bough"), and many pairs do not fit
-together ("Muggy Sandbox"). The planned design draws each handle from one of
-three schemes, each with a chance of 1 in 3:
-
-| Scheme | Example |
-|---|---|
-| Positive disposition + scientist | Curious Noether, Bold Wang Zhenyi |
-| Science noun + agent | Photon Navigator |
-| Compound word | Ionspark |
-
-The scope and the rules above do not change: a handle is per (user, course),
-unique in its course, and a list change renames nobody. The draft lists are in
-`Tools/handle-review/drafts/`, and its `README.md` gives the selection rules
-and the work that remains. No code reads the drafts yet. Three rules change
-when the generator moves to these lists:
-
-- **Positive dispositions are allowed** (Curious, Bold). They
-  stand only before a scientist's name. Mood words, body or mind-state words
-  and intelligence words stay out, because the second word names a real person.
-- **Real names are allowed** for the scientist scheme: the name the person is
-  known by, in one or two words, with diacritics and real hyphens.
-- **The list has balance targets:** at least 40% women and at most 35% from
-  Europe.
 
 ### 4. Rendered as layered SVG `use`, recoloured through design tokens
 
@@ -399,9 +410,9 @@ authoring time, by a human. The rules that fall out:
   accessory × backdrop — are a table of a few hundred, and that is where an
   unfortunate resemblance would come from. Review that table; the rest is
   independent.
-- **The handle word lists get the same pass, and need it more.** Adjective-noun
+- **The handle word lists get the same pass, and need it more.** Word
   generators reliably produce unfortunate pairs, accidental real-world
-  references, and words that collide with real names. Both lists want a
+  references, and words that collide with real names. Every list wants a
   deliberate review, and the pairing needs a blocklist rather than trust.
 
 The point of listing these is that they are cheap when the tables are being
@@ -723,7 +734,8 @@ Each slice is independently mergeable and independently useful.
 - **S0 — the model. Done.** `AvatarSpec`, the five slot enums, the seeded draw,
   `AvatarPresentation`, the drift guards against the sprite and the palette, and
   `AvatarHandle` with its curated word lists — 80 adjectives × 80 nouns = 6,400
-  handles at the time (96 × 96 = 9,216 since the Fall 2026 review), drawn
+  handles at the time (three schemes and 32,442 handles since the Fall 2026
+  review), drawn
   without replacement within a course.
 - **S1 — persistence. Done.** `users.avatar_spec` and
   `course_enrollments.avatar_handle` (`AddAvatarIdentity`, since folded into

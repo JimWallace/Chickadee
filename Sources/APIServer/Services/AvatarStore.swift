@@ -214,6 +214,10 @@ enum AvatarStore {
         _ handle: String, for enrollment: APICourseEnrollment, taken: Set<String>, on db: Database
     ) async throws -> HandleChoice {
         guard enrollment.avatarHandleLockedAt == nil else { return .locked }
+        // Swift compares text by canonical equivalence, but the unique index
+        // compares bytes. Store the one form every generated handle has
+        // (NFC), so a posted handle in another form cannot pass the index.
+        let handle = handle.precomposedStringWithCanonicalMapping
         let courseID = enrollment.$course.id
         guard !taken.contains(handle) else { return .taken }
 
