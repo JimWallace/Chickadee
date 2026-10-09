@@ -107,6 +107,55 @@ CREATE POLICY mcp_validation_variant_rows ON validation_variants
         )
     );
 
+-- 4b. AI-assisted feedback (docs/ai-assisted-feedback.md) -- the one gated
+--     exception to "no student rows". A second, permissive SELECT policy on
+--     submissions admits a STUDENT row only when its assignment AND that
+--     assignment's course both have ai_feedback_enabled = true. Postgres ORs
+--     permissive policies, so validation rows stay visible as before, and every
+--     other student row stays invisible: a bug in the feedback tools still
+--     cannot reach a submission outside a gated assignment. Gates are set only
+--     by the web app (owner role); this role has no grant that can set them...
+--     except UPDATE on assignments/courses from section 2, which the MCP tools
+--     never use for these columns (MCPAIFeedbackGateTests pins that no MCP
+--     source writes aiFeedbackEnabled).
+--
+--     results and result_collections are NOT widened: the feedback tools read
+--     students' written answers from the submitted file, never a grade.
+--
+--     reflection_feedback holds the pseudonymous handles and the drafts. The
+--     tools create rows (a handle on first listing) and update drafts, never
+--     delete; its policy is the same two-gate check.
+DROP POLICY IF EXISTS mcp_ai_feedback_submissions ON submissions;
+CREATE POLICY mcp_ai_feedback_submissions ON submissions
+    FOR SELECT TO chickadee_mcp
+    USING (kind = 'student' AND EXISTS (
+        SELECT 1 FROM assignments a
+        JOIN courses c ON c.id = a.course_id
+        WHERE a.test_setup_id = submissions.test_setup_id
+          AND a.ai_feedback_enabled = true
+          AND c.ai_feedback_enabled = true
+    ));
+
+GRANT SELECT, INSERT, UPDATE ON reflection_feedback TO chickadee_mcp;
+ALTER TABLE reflection_feedback ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS mcp_ai_feedback_rows ON reflection_feedback;
+CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
+    FOR ALL TO chickadee_mcp
+    USING (EXISTS (
+        SELECT 1 FROM assignments a
+        JOIN courses c ON c.id = a.course_id
+        WHERE a.id = reflection_feedback.assignment_id
+          AND a.ai_feedback_enabled = true
+          AND c.ai_feedback_enabled = true
+    ))
+    WITH CHECK (EXISTS (
+        SELECT 1 FROM assignments a
+        JOIN courses c ON c.id = a.course_id
+        WHERE a.id = reflection_feedback.assignment_id
+          AND a.ai_feedback_enabled = true
+          AND c.ai_feedback_enabled = true
+    ));
+
 -- 5. Everything else is DENIED by omission — no GRANT is issued, so the role
 --    cannot touch any of these student-data tables:
 --      grade_overrides, client_diagnostics, submission_diagnostics,
@@ -129,7 +178,9 @@ CREATE POLICY mcp_validation_variant_rows ON validation_variants
 --    Leaving the grant in place would re-open the very table this wall denies.)
 
 -- 6. Verify (run as chickadee_mcp):
---      SELECT count(*) FROM submissions;            -- only validation rows
+--      SELECT count(*) FROM submissions;            -- only validation rows, plus
+--                                                   -- student rows of gated
+--                                                   -- AI-feedback assignments
 --      SELECT * FROM grade_overrides LIMIT 1;       -- must ERROR: permission denied
 --      SELECT * FROM users LIMIT 1;                 -- allowed (authz)
 --      SELECT * FROM assignment_personalization_seeds LIMIT 1;

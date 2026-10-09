@@ -90,6 +90,9 @@ The catalog:
 | `reorder_assignments` | `content:write` | Set the display order of a section's assignments (single-type section); no regrade/close |
 | `clone_assignment` | `content:write` | Duplicate an assignment (closed, unvalidated) |
 | `create_assignment` | `content:write` | New notebook-based assignment from scratch |
+| `list_reflections` | `feedback:read` | Pseudonymous handles and feedback states in an AI-feedback assignment ([ai-assisted-feedback.md](ai-assisted-feedback.md)) |
+| `get_reflections` | `feedback:read` | One handle's prompt/response pairs from `reflection`-tagged cells |
+| `draft_feedback` | `feedback:write` | Save a draft for staff review; never releases |
 
 Every content-edit write tool (suite/family/check/script/notebook/solution)
 re-runs validation and **closes** a currently-open assignment so students can't

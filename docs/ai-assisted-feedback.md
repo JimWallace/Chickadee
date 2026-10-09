@@ -12,8 +12,8 @@ assignments, and it does not change a grade.
 
 | slice | what | state |
 |---|---|---|
-| 0 | This design note | in review |
-| 1 | Opt-in flags (course: admin; assignment: instructor), the `feedback:*` scopes, the three MCP tools, the staff review page, the student view, the compliance updates | planned |
+| 0 | This design note | shipped |
+| 1 | Opt-in flags (course: admin; assignment: instructor), the `feedback:*` scopes, the three MCP tools, the staff review page, the student view, the compliance updates | shipped |
 | 2 | A stored rubric per assignment, served to the agent with the reflections | not started |
 | 3 | A student opt-out, if the Information Steward requires one | not started |
 
@@ -109,25 +109,33 @@ student for that assignment, and stores it on the `reflection_feedback` row.
 ### The MCP tools
 
 All three are on the content surface. Each one refuses an assignment whose
-two gates are not both on, with the same answer as an unknown assignment.
+two gates are not both on. The refusal says that a person turns the feature on
+from the web, so the agent does not keep trying.
 
 | Tool | Scope | Course role | Does |
 |---|---|---|---|
-| `list_reflections` | `feedback:read` | TA+ | Lists each student's handle, the submission time, whether the submission has tagged cells, and the feedback state (`none`, `draft`, `released`, `stale`). |
+| `list_reflections` | `feedback:read` | TA+ | Lists each student's handle and feedback state (`none`, `draft`, `released`, `discarded`, `stale`), and how many cells the starter tags. No submission time: the agent does not need it. |
 | `get_reflections` | `feedback:read` | TA+ | Returns the prompt and response pairs for one handle. |
 | `draft_feedback` | `feedback:write` | TA+ | Saves draft feedback text (at most 4,000 characters) for one handle. It never releases. It refuses to replace released feedback. |
 
 `feedback:read` and `feedback:write` are separate from `content:read` and
-`content:write`, so a grant shows the reach in its scope list. `MCP_MODE`
-applies the same ceiling: `read_only` grants `feedback:read` and never
-`feedback:write`.
+`content:write`, so a grant shows the reach in its scope list and on the
+consent screen. `MCP_MODE` applies the same ceiling: `read_only` grants
+`feedback:read` and never `feedback:write`. A `feedback:write` call gets the
+same fail-closed audit row as a `content:write` call.
+
+A client that asks for no scope at consent gets every scope the mode
+advertises, the feedback scopes included. That is safe, because the scopes
+reach nothing until a person turns on both gates.
 
 ### The person in the loop
 
 The staff review page, `/instructor/:assignmentID/feedback`, lists each draft
 with the student's name, their reflections and the draft text. A TA or
-instructor edits the text and then selects **Release** or **Discard**. Only a
-released row is visible to the student.
+instructor edits the text and then selects **Release**, **Save draft** or
+**Discard**. Only a released row is visible to the student. The submissions
+page links to the review page while both gates are on. The page stays open
+when a gate is turned off, so staff can still finish their review.
 
 If the student submits again after the draft was written, the row becomes
 `stale`. The page shows this, and the agent sees it in `list_reflections`.
@@ -138,9 +146,11 @@ If the student submits again after the draft was written, the row becomes
   shows one sentence: course staff can use an AI tool to help draft feedback
   on written answers, staff review all of it, and the student's name is not
   sent. It links to this document's student-facing summary.
-- **After release:** the results page shows the feedback under the heading
-  **Feedback on your written answers**, with the label "Drafted with AI
-  assistance and reviewed by course staff".
+- **After release:** the results page of the submission that the feedback
+  answers shows it under the heading **Feedback on your written answers**,
+  with the label "Drafted with AI assistance and reviewed by course staff".
+  Released feedback stays visible if a gate is turned off later: by then it
+  is staff-reviewed text.
 
 The feedback has no score field. It does not change `earnedPoints`, BrightSpace
 or LTI grade sync. An instructor who wants a mark for the reflection keeps
@@ -188,6 +198,23 @@ consent identifies the Chickadee user, not the agent's licence. A personal
 Claude account is approved for public data only. "Use the UW-licensed account"
 is therefore an instructor attestation, not a technical control. The admin
 course gate is the place to collect that attestation.
+
+## For students
+
+Some activities in a course can use AI-assisted feedback. If an activity uses
+it, the page where you submit says so.
+
+- Your instructor marks some notebook cells as written answers. Only the text
+  of those cells is sent to the AI agent of a member of the course staff.
+- Your name, username, student number, code, outputs and grade are not sent.
+  The agent sees a random code, such as `R-7Q2M4K`, in place of your name. The
+  code is different in each activity.
+- The agent writes a draft. A member of the course staff reads it, edits it
+  and decides whether to release it. You see only feedback that a person
+  released.
+- The feedback does not change your grade.
+
+If you have a question about this, ask your instructor.
 
 ## Open questions for IST and the Information Steward
 

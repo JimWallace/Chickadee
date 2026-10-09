@@ -267,6 +267,16 @@ so a code cannot be replayed. See `docs/architecture.md` §"MCP surfaces" and
 authoring-voice guide, and a course's instructors can replace it for their
 course (see "Voice and Register" below).
 
+**The MCP student-data wall has one gated exception: AI-assisted feedback.**
+The `feedback:*` tools read students' written answers (`reflection`-tagged
+cells) by pseudonymous handle, and only where an admin turned on the course
+gate and an instructor turned on the assignment gate. **No MCP tool may set
+either gate** (`MCPAIFeedbackGateTests`). Student-submission access stays in
+`MCPStudentDataBoundary`, and the RLS policy in
+`deploy/sql/mcp-least-privilege-role.sql` checks both gates. Chickadee still
+calls no model API. See
+[docs/ai-assisted-feedback.md](docs/ai-assisted-feedback.md).
+
 **The MCP surface holds no language names (#1290).** Every language list in
 agent-facing copy derives from `allCases` (`MCPLanguageProse`), and
 `get_server_info` reports a `languages` payload. `MCPLanguageCoverageTests`
@@ -780,7 +790,7 @@ Python, R, Lua, Octave, C++, Racket and Java assignments; browser (xeus/wasm)
 and native worker grading that share one RunnerCore; per-student
 personalization; pattern-generated test families (10 kinds) and notebook checks
 (10 kinds); achievements; student slip days; per-course roles; BrightSpace grade
-sync (awaiting UW IST prod credentials); an MCP authoring surface of 57 tools
+sync (awaiting UW IST prod credentials); an MCP authoring surface of 60 tools
 plus a read-only admin-diagnostics MCP of 19 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source of
 truth for the count); OIDC SSO; and zero-downtime auto-deploys. The 0.4 arc is
@@ -886,6 +896,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/solution-visibility.md` — the post-deadline solution reveal and its slip-day ceiling
 - `docs/datasets.md` — per-student datasets (#1083)
 - `docs/admin-mcp.md` — the read-only admin diagnostics MCP surface
+- `docs/ai-assisted-feedback.md` — an instructor's own AI agent drafts feedback on written reasoning through MCP, behind two opt-in gates and staff review
 - `docs/compliance/` — the UW approval package: student-data audits, tool and data-flow inventories
 - `docs/collaborative-class-assignments.md` — contribution assignments and class goals; opens with a Status table
 - `docs/class-activities.md` — leaderboards, bots, round robins, hills and brackets (#1508); opens with a Status table

@@ -31,7 +31,7 @@ enum ContentMCPSurface: MCPSurface {
         _ tool: AnyMCPTool<Self>, call: MCPToolCall, context: ToolContext
     ) async -> Result<Admission, JSONRPCError> {
         let target = MCPAuditTarget(arguments: call.arguments)
-        guard tool.requiredScopes.contains(.write) else {
+        guard tool.requiredScopes.contains(where: \.isWrite) else {
             return .success(Admission(target: target, writeRow: nil))
         }
         guard let row = await recordToolCall(name: call.name, context: context, target: target) else {

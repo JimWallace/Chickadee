@@ -577,4 +577,9 @@ func registerMigrations(on app: Application) {
     // The runner a staff-requested validation run asks for (MCP
     // `run_validation`). One optional column; existing rows keep NULL.
     app.migrations.add(AddSubmissionTargetRunner())
+
+    // AI-assisted feedback (docs/ai-assisted-feedback.md): the course and
+    // assignment opt-in gates, then the per-student feedback rows.
+    app.migrations.add(AddAIFeedbackGates())
+    app.migrations.add(CreateReflectionFeedback())
 }

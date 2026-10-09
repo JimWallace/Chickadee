@@ -251,6 +251,9 @@ struct AssignmentSubmissionsContext: Encodable {
     /// The assignment's advisory passing threshold, or nil when off.  Gates
     /// the passing badge column and the Passing metric card.
     let passingThresholdPercent: Int?
+    /// True when both AI-assisted feedback gates are on
+    /// (docs/ai-assisted-feedback.md); shows the link to the review page.
+    var aiFeedbackOpen = false
     /// One row per suite item on a CONTRIBUTION assignment: whether the class
     /// has collectively covered it, and who got there first.  Empty for every
     /// other assignment, which is what gates the section off the page — the

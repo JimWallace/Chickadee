@@ -553,3 +553,52 @@ the admin surface exposes aggregates and allowlisted infrastructure fields
 pinned by tests that seed student data and assert its absence; and the known
 free-text importers have been closed, with source-scan guards keeping them
 closed.*
+
+## Addendum (2026-10): the gated AI-assisted feedback exception
+
+AI-assisted feedback (`docs/ai-assisted-feedback.md`) adds three tools to the
+content surface: `list_reflections`, `get_reflections` and `draft_feedback`.
+They are the first content tools that reach student work. This addendum
+records what changes in the claims above, and the controls that bound it.
+
+**What crosses.** The text of the notebook cells that the starter tags
+`reflection`, from each student's latest submission, and the prompt before each
+cell, read from the starter. Each student is named by a random per-assignment
+handle (`R-XXXXXX`). Nothing else of the student's crosses: no name, username,
+user id, student number, code, output, result, grade or submission time.
+
+**When it crosses.** Only in an assignment whose course gate
+(`courses.ai_feedback_enabled`, set by a deployment admin) and assignment gate
+(`assignments.ai_feedback_enabled`, set by a course instructor) are both on.
+Both are set on the web only. `MCPAIFeedbackGateTests` fails the build if any
+MCP source assigns either gate.
+
+**Who can make it cross.** Course staff (TA+) of a course that is not archived,
+with a token that carries `feedback:read` (and `feedback:write` to draft).
+
+**Controls.**
+
+1. *Code chokepoint.* The accessors live in `MCPStudentDataBoundary.swift`, the
+   one file `MCPStudentDataWallTests` exempts. Every one checks both gates
+   first. The tool file itself names no student-data model, so the wall scan
+   still covers it.
+2. *Database chokepoint.* `deploy/sql/mcp-least-privilege-role.sql` adds
+   `mcp_ai_feedback_submissions`, a second permissive SELECT policy on
+   `submissions` that admits a `student` row only when both gates are on, and
+   an RLS policy on `reflection_feedback` with the same check. `results` and
+   `result_collections` are not widened.
+3. *A person in the loop.* No tool can release feedback. Staff release it on
+   the review page; only released text reaches the student.
+4. *Audit.* Every call writes the usual `mcp.tool_called` row; a
+   `draft_feedback` call is fail-closed like any write.
+5. *Payload tests.* `ReflectionFeedbackToolsTests` asserts that the outputs
+   carry no username, no user id and no untagged cell text.
+
+**Residual.** Chickadee cannot verify which AI account the connecting agent
+uses, so "a UW-licensed account" is an instructor attestation. A student who
+writes their own name into a reflection cell sends it; the handle cannot
+prevent self-identification in free text.
+
+**Effect on the executive summary.** "No student data, direct or inferred"
+remains true of every other tool, and of these three outside a gated
+assignment. Inside one, the claim becomes "pseudonymous written answers only".

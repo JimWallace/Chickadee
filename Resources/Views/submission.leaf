@@ -109,6 +109,14 @@ Submission #(submissionID)
 </div>
 #endif
 
+#if(releasedFeedback):
+<section class="page-section">
+    <h2>Feedback on your written answers</h2>
+    <p class="card-meta">Drafted with AI assistance and reviewed by course staff.</p>
+    <pre class="test-output-pre">#(releasedFeedback)</pre>
+</section>
+#endif
+
 #if(solutionURL):
 <div class="notice-box">
     <strong>Solution available</strong> &mdash; <a href="#(solutionURL)">view the reference solution</a> for this assignment.

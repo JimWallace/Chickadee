@@ -190,6 +190,8 @@ extension WebRoutes {
         }
         let requiredFiles = manifest?.requiredFiles ?? []
         let chips = try await SubmitChips.make(setupID: setupID, assignment: assignment, user: user, on: req.db)
+        let aiFeedbackNotice =
+            if let assignment { try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db) } else { false }
         return try await req.view.render(
             "submit",
             SubmitContext(
@@ -206,7 +208,8 @@ extension WebRoutes {
                 deadlineISO: chips.deadlineISO,
                 currentUser: req.currentUserContext,
                 githubSubmitURL: try await GitHubSubmissionOffer.isOffered(setup: setup, on: req.db)
-                    ? "/testsetups/\(setupID)/github" : nil
+                    ? "/testsetups/\(setupID)/github" : nil,
+                aiFeedbackNotice: aiFeedbackNotice
             )
         ).encodeResponse(for: req)
     }
@@ -479,7 +482,9 @@ extension WebRoutes {
                 diffURL: (isStaff && submission.kind == APISubmission.Kind.student)
                     ? submissionAssignment.map {
                         "/instructor/\($0.publicID)/submissions/\(subID)/diff"
-                    } : nil
+                    } : nil,
+                releasedFeedback: try await ReflectionFeedbackService.releasedFeedback(
+                    for: submission, assignment: submissionAssignment, on: req.db)
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )

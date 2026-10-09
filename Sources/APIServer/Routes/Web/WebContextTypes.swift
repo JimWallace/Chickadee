@@ -322,6 +322,9 @@ struct SubmitContext: Encodable {
     /// The GitHub submit page, when this assignment offers it
     /// (docs/github-submissions.md slice 3); nil hides the link.
     let githubSubmitURL: String?
+    /// True when both AI-assisted feedback gates are on
+    /// (docs/ai-assisted-feedback.md): the page says so before the upload.
+    var aiFeedbackNotice = false
 }
 
 // MARK: - Notebook page
@@ -392,6 +395,10 @@ struct NotebookContext: Encodable {
     /// page reads it to let the editor iframe fill the pane.  `nil` on every
     /// standalone render, which is what keeps the existing page byte-identical.
     let embedded: Bool?
+    /// True for a student on an assignment with both AI-assisted feedback
+    /// gates on (docs/ai-assisted-feedback.md): the header says so before
+    /// they submit.
+    var aiFeedbackNotice = false
 }
 
 // MARK: - Submission history page
@@ -568,6 +575,9 @@ struct SubmissionContext: Encodable {
     let diffURL: String?
     /// The commit a GitHub submission was made from; nil for an upload.
     let sourceCommit: SubmissionSourceCommitView?
+    /// Staff-released AI-assisted feedback on this submission's written
+    /// answers (docs/ai-assisted-feedback.md); nil when there is none.
+    var releasedFeedback: String? = nil
 }
 
 /// The repository and commit a GitHub submission came from

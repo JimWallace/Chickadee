@@ -40,6 +40,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "clone", use: cloneCourseForNewTerm)
         admin.post("courses", ":courseID", "delete", use: deleteCourse)
         admin.post("courses", ":courseID", "enrollment-mode", use: setEnrollmentMode)
+        admin.post("courses", ":courseID", "ai-feedback", use: setCourseAIFeedback)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.post("courses", ":courseID", "role", ":userID", use: adminSetEnrollmentRole)

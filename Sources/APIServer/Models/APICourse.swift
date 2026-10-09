@@ -73,6 +73,13 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "mcp_instructions")
     var mcpInstructions: String?
 
+    /// The course gate for AI-assisted feedback (docs/ai-assisted-feedback.md).
+    /// Only a deployment admin sets it, on the admin course page, once the
+    /// course has its unit-level approval. No MCP tool can set it. nil/false =
+    /// off: no assignment in the course can turn the feature on.
+    @OptionalField(key: "ai_feedback_enabled")
+    var aiFeedbackEnabled: Bool?
+
     /// When this course was archived. Set by `toggleCourseArchive` when a
     /// course is archived (and cleared when un-archived). Archiving is
     /// Chickadee's "end of term" signal, so this is the anchor for the

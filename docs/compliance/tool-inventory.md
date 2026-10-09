@@ -192,3 +192,14 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 
 Admin tool calls are themselves audited (`admin_mcp.tool_called`, with
 outcome).
+
+## Addendum (2026-10): AI-assisted feedback tools
+
+Three gated tools (`docs/ai-assisted-feedback.md`). Each needs course staff
+(TA+), a non-archived course, and both opt-in gates on.
+
+| Tool | Scope | Returns | PII posture |
+|------|-------|---------|-------------|
+| `list_reflections` | `feedback:read` | handle and feedback state per student; tagged-cell count | pseudonymous; PII-tested |
+| `get_reflections` | `feedback:read` | prompt/response pairs for one handle; state; draft | pseudonymous written answers; untagged cells and code never returned; PII-tested |
+| `draft_feedback` | `feedback:write` | handle and state | writes a draft only; cannot release |

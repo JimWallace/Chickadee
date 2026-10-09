@@ -73,6 +73,11 @@ enum MCPToolCatalog {
             ReorderSectionItemsTool().erased(),
             CloneAssignmentTool().erased(),
             CreateAssignmentTool().erased(),
+            // AI-assisted feedback (docs/ai-assisted-feedback.md): the gated
+            // feedback:* tools, which only reach assignments a person opted in.
+            ListReflectionsTool().erased(),
+            GetReflectionsTool().erased(),
+            DraftFeedbackTool().erased(),
         ])
     }
 }

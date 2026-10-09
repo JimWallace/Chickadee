@@ -177,3 +177,23 @@ tables the MCP surface *does* open — `submissions` and `results` — are reach
 only through `.filter(\.$kind == .validation)`; a future handler that omits
 that filter would reach student rows. That gap is the P0 item in
 `remediation-plan.md`.
+
+## Addendum (2026-10): AI-assisted feedback
+
+The gated feedback tools (`docs/ai-assisted-feedback.md`) touch three more
+things, only in an assignment with both gates on:
+
+- `submissions` (`kind == student`), read through `MCPStudentDataBoundary` to
+  find each student's latest submission, and the submitted notebook file on
+  disk, from which only `reflection`-tagged cell text is extracted
+  (`ReflectionCells`);
+- `reflection_feedback`, read and written: the handle, the state and the draft;
+- the starter notebook, for the prompts.
+
+Outbound to the agent: handles, states, prompt and response text, draft text.
+Never outbound: user ids (they stay in `reflection_feedback.user_id`), names,
+usernames, code, outputs, results, grades. Chickadee still calls no model API,
+and `deploy/egress-allowlist.md` is unchanged.
+
+The "Never touched by any tool" list above now has one gated exception:
+student `APISubmission` rows, for the three feedback tools only.

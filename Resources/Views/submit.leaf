@@ -10,6 +10,9 @@ Submit Code
     <span class="chip js-relative-time" data-iso="#(deadlineISO)">#(deadlineText)</span>
     #endif
 </div>
+#if(aiFeedbackNotice):
+<p class="fine-print">Course staff can use an AI agent, without your name, to help draft feedback on your written answers. <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#for-students">How it works</a></p>
+#endif
 #if(requiredFilesText):
 <p class="fine-print">This assignment expects the following files: <code>#(requiredFilesText)</code>. Upload a single file, or a .zip that contains all of them.</p>
 #endif

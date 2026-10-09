@@ -10,11 +10,10 @@ import Core
 protocol ContentTool: MCPTool where Surface == ContentMCPSurface {}
 
 extension ContentTool {
-    /// By default a tool is annotated read-only iff its only required scope is
-    /// `content:read`; write tools override this to add destructive/idempotent
-    /// hints.
+    /// By default a tool is annotated read-only iff it requires no write
+    /// scope; write tools override this to add destructive/idempotent hints.
     static var annotations: MCPToolAnnotations? {
-        MCPToolAnnotations(readOnlyHint: requiredScopes == [.read])
+        MCPToolAnnotations(readOnlyHint: !requiredScopes.contains(where: \.isWrite))
     }
     /// The content surface's hooks read no per-tool traits.
     static var traits: MCPNoToolTraits { MCPNoToolTraits() }

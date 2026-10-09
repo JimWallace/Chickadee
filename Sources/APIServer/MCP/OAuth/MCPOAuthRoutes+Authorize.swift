@@ -254,13 +254,19 @@ extension MCPOAuthRoutes {
 
     /// Display order for the consent screen's scope list.
     static let scopeDisplayOrder: [String] = [
-        ContentScope.read.rawValue, ContentScope.write.rawValue, DiagnosticScope.read.rawValue,
+        ContentScope.read.rawValue, ContentScope.write.rawValue,
+        ContentScope.feedbackRead.rawValue, ContentScope.feedbackWrite.rawValue,
+        DiagnosticScope.read.rawValue,
     ]
 
     private static func scopeLabel(_ scope: String) -> String {
         switch scope {
         case ContentScope.read.rawValue: return "Read course content (assignments, etc.)"
         case ContentScope.write.rawValue: return "Create and edit course content"
+        case ContentScope.feedbackRead.rawValue:
+            return "Read students' written answers, without names, where AI-assisted feedback is on"
+        case ContentScope.feedbackWrite.rawValue:
+            return "Draft feedback on those answers for course staff to review"
         case DiagnosticScope.read.rawValue: return "Read server diagnostics and operational status"
         default: return scope
         }

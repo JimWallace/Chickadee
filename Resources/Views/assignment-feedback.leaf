@@ -1,0 +1,73 @@
+#extend("base"):
+#export("title"):
+#(assignmentTitle) — Feedback
+#endexport
+#export("content"):
+<div class="page-titlebar">
+    <h1>#(assignmentTitle) — Feedback</h1>
+    <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions">Submissions</a>
+</div>
+<p class="page-subtitle">
+    Drafts from an AI agent. Students see only what you release.
+    <a href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md">How it works</a>
+</p>
+#if(!gatesOpen):
+<p class="section-note">AI-assisted feedback is off for this assignment, so no agent can read answers or add drafts.</p>
+#endif
+
+<section class="page-section">
+    <h2>To review (#(reviewCount))</h2>
+    #if(reviewCount == 0):
+    <p class="empty">No drafts yet.</p>
+    #endif
+    #for(row in rows):
+    #if(row.needsReview):
+    <h3>#(row.student) <span class="card-meta">#(row.handle)</span> <span class="chip">#(row.stateLabel)</span></h3>
+    #for(reflection in row.reflections):
+    <p class="card-meta">Prompt #(reflection.index)</p>
+    <pre class="test-output-pre">#(reflection.prompt)</pre>
+    <p class="card-meta">Answer</p>
+    <pre class="test-output-pre">#if(reflection.response != ""):#(reflection.response)#else:No answer#endif</pre>
+    #endfor
+    <form method="post" action="/instructor/#(assignmentID)/feedback" class="form-stack">
+        #csrfFormField()
+        <input type="hidden" name="handle" value="#(row.handle)">
+        <label for="feedback-#(row.handle)">Feedback#if(row.draftedBy): <span class="card-meta">drafted by #(row.draftedBy)</span>#endif</label>
+        <textarea id="feedback-#(row.handle)" name="feedback" class="form-input" rows="6" maxlength="#(maxDraftLength)">#(row.draftText)</textarea>
+        <div class="toolbar">
+            <button class="btn btn-primary" type="submit" name="action" value="release">Release</button>
+            <button class="btn action-btn" type="submit" name="action" value="save">Save draft</button>
+            <button class="btn action-btn action-danger" type="submit" name="action" value="discard">Discard</button>
+        </div>
+    </form>
+    #endif
+    #endfor
+</section>
+
+<section class="page-section">
+    <h2>All students (#count(rows))</h2>
+    #if(count(rows) == 0):
+    <p class="empty">No submissions yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Handle</th>
+                <th>Feedback</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in rows):
+            <tr>
+                <td>#(row.student)</td>
+                <td><code>#(row.handle)</code></td>
+                <td>#(row.stateLabel)</td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+#endexport
+#endextend

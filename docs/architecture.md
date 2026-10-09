@@ -754,7 +754,11 @@ pattern-family + notebook-check + script authoring, course sections and
 content items, personalization inputs, achievements, validation, and
 assignment version history/restore. The surface deliberately exposes **no
 student data, grades, enrollment, or submissions**, and agents are
-enrollment-scoped even when the authorizing human is an admin. Content edits
+enrollment-scoped even when the authorizing human is an admin. The one gated
+exception is AI-assisted feedback: three `feedback:*` tools read students'
+written answers by pseudonymous handle, only in an assignment whose course (an
+admin) and assignment (an instructor) a person opted in, and staff release
+every draft. See [`ai-assisted-feedback.md`](ai-assisted-feedback.md). Content edits
 close a currently-open assignment for re-validation and auto-regrade existing
 submissions when the graded suite actually changed.
 

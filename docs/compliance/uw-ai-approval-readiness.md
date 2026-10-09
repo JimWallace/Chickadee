@@ -168,3 +168,25 @@ the repo already has:
 
 Items 1–4 are repo/operator work and can land this week; item 5 is the
 institutional critical path and should start immediately in parallel.
+
+## Addendum (2026-10): AI-assisted feedback
+
+The 2026-10 IST page lists **Anthropic Claude (UW login)** as Approved for
+data up to and including Restricted, which answers the connector question in
+§0 for the UW-licensed account. A personal Claude account stays limited to
+public data.
+
+AI-assisted feedback (`docs/ai-assisted-feedback.md`) is a **data-handling
+change** under §5: it lets a connected agent read pseudonymous student written
+answers. Before an admin turns the course gate on in production:
+
+1. Confirm the Policy 46 class of student written answers with the Information
+   Steward (`policy46-classification.md` row 18).
+2. Confirm that the use (an instructor's UW-licensed Claude account, drafting
+   formative feedback that staff review) is covered, or get explicit approval.
+3. Confirm whether students must be able to opt out, and what the course
+   outline must disclose.
+4. Record the instructor attestation that only a UW-licensed account connects.
+
+Add to the §5 revalidation triggers: turning on the course gate for a new
+course, and any change that widens what `get_reflections` returns.

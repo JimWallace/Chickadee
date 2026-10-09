@@ -41,6 +41,9 @@
             #elseif(isTemplateView):
             <span class="nb-closed-notice">Editing the template &mdash; placeholders stand as written.</span>
             #elseif(showSubmit):
+            #if(aiFeedbackNotice):
+            <a class="card-meta" href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#for-students">AI-assisted feedback is on</a>
+            #endif
             <button class="btn btn-primary" type="button" id="nb-submit">Submit</button>
             #elseif(isReadOnly):
             <span class="nb-closed-notice">This assignment is closed &mdash; view only.</span>

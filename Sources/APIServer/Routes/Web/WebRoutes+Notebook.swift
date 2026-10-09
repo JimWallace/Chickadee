@@ -377,6 +377,10 @@ extension WebRoutes {
             canSwitchViews = false
         }
         let otherView: NotebookViewMode = viewMode == .template ? .personalized : .template
+        var aiFeedbackNotice = false
+        if !args.isStaff, fileKind == .assignment, let assignment {
+            aiFeedbackNotice = try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db)
+        }
         let viewToggleURL: String? =
             canSwitchViews
             ? "/testsetups/\(setupID)/notebook?file=\(fileKind.rawValue)&view=\(otherView.rawValue)"
@@ -403,7 +407,8 @@ extension WebRoutes {
             isStudentSolutionView: fileKind == .solution && !args.isStaff,
             workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
             currentUser: req.currentUserContext,
-            embedded: args.embedded
+            embedded: args.embedded,
+            aiFeedbackNotice: aiFeedbackNotice
         )
     }
 

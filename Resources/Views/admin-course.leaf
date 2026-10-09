@@ -102,6 +102,25 @@
         <dd>#if(course.termLabel):#(course.termLabel)#else:<span class="text-muted">None recorded</span>#endif</dd>
         <dt>Submissions</dt>
         <dd>#(course.submissionCount)</dd>
+        <dt>AI-assisted feedback</dt>
+        <dd>
+            #if(course.aiFeedbackEnabled):
+            <span class="tier tier-open">On</span>
+            <form method="post" action="/admin/courses/#(course.id)/ai-feedback" class="form-flush">
+                #csrfFormField()
+                <button class="btn action-btn" type="submit">Turn off</button>
+            </form>
+            #else:
+            <span class="tier tier-closed">Off</span>
+            <form method="post" action="/admin/courses/#(course.id)/ai-feedback" class="form-flush"
+                  data-confirm="Turn on AI-assisted feedback for #(course.code)? Do this only after the course has its AI-use approval. Instructors can then let their own AI agent read students' written answers, without names, in the assignments they opt in.">
+                #csrfFormField()
+                <input type="hidden" name="enabled" value="on">
+                <button class="btn action-btn" type="submit">Turn on</button>
+            </form>
+            #endif
+            <a class="card-meta" href="https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md">How it works</a>
+        </dd>
         #if(course.brightspaceSyncEnabled):
         <dt>LEARN org unit</dt>
         <dd>

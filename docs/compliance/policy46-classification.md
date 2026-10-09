@@ -65,3 +65,14 @@ these outbound data types. Consent for this surface requires the admin role.
 
 No admin-surface data type carries student personal information; row 17 is the
 only personal information at all (the authorizing staff member's username).
+
+## Addendum (2026-10): AI-assisted feedback data types
+
+`docs/ai-assisted-feedback.md`. Crosses only in an assignment whose course and
+assignment gates a person turned on.
+
+| # | Data type | Source / tool | Provisional class | Rationale |
+|---|-----------|---------------|-------------------|-----------|
+| 18 | **Student written answers** (text of `reflection`-tagged cells, by pseudonymous handle) | `get_reflections` | **Restricted** (Steward to confirm) | Student work is a student record. The handle removes direct identity, but free text can still identify its author. In a health course, a reflection on real patient data could be Highly Restricted; courses must use synthetic or public data. |
+| 19 | **Feedback handles and states** | `list_reflections`, `draft_feedback` | **Confidential** | Random per-assignment codes, no identity; a state says only whether feedback exists. |
+| 20 | **Draft feedback text** | `get_reflections`, `draft_feedback` | **Restricted** | Written about one student's work; staff review it before release. |
