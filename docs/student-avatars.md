@@ -263,6 +263,31 @@ the change.
   lock, the row reads "Your handle is set for this course." Staff **Give new
   handle** ignores the lock and does not set it.
 
+**Planned redesign: three schemes (Fall 2026 review, not live).** The current
+handles name places, not people ("Overcast Bough"), and many pairs do not fit
+together ("Muggy Sandbox"). The planned design draws each handle from one of
+three schemes, each with a chance of 1 in 3:
+
+| Scheme | Example |
+|---|---|
+| Positive disposition + scientist | Curious Noether, Bold Wang Zhenyi |
+| Science noun + agent | Photon Navigator |
+| Compound word | Ionspark |
+
+The scope and the rules above do not change: a handle is per (user, course),
+unique in its course, and a list change renames nobody. The draft lists are in
+`Tools/handle-review/drafts/`, and its `README.md` gives the selection rules
+and the work that remains. No code reads the drafts yet. Three rules change
+when the generator moves to these lists:
+
+- **Positive dispositions are allowed** (Curious, Bold). They
+  stand only before a scientist's name. Mood words, body or mind-state words
+  and intelligence words stay out, because the second word names a real person.
+- **Real names are allowed** for the scientist scheme: the name the person is
+  known by, in one or two words, with diacritics and real hyphens.
+- **The list has balance targets:** at least 40% women and at most 35% from
+  Europe.
+
 ### 4. Rendered as layered SVG `use`, recoloured through design tokens
 
 The repo's UI guards decide the mechanism here, and they decide it well.
