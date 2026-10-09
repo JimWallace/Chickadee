@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.601] - 2026-10-09
+
+### Fixed
+
+- **A web support-file delete clears the file's marks.** It used to remove only the suite entry, so a dataset spec could name a missing file and a stale grader-only mark could block browser grading. Both deletes now call one step that clears the grader-only mark and the dataset spec (#2487).
+- **The web dataset panel refuses what `set_dataset` refuses.** Both doors now run one check, so the web no longer accepts a graded script or a notebook as a dataset, or a spec with no sample size (#2487).
+
+### Fixed
+
+- **Every open and close by a person writes an audit row.** The web Open button, the Save close and the MCP content-edit close wrote none. The functions that change an assignment's visibility now write the row themselves, with the door the change came through (`via`) and, for a close caused by another action, the reason. The scheduled open and close are unchanged (#2489).
+
+### Fixed
+
+- **A new content item sorts after the assignments in its section.** The content-item paths took the next order from content items only, so a new item in a section of assignments got order 1 and sorted near the top. Every create and move path now uses one order over both tables, and MCP `create_assignment` and the clones no longer leave the order empty (#2490).
+- **A move into a section asks the manifest rules once.** The web move and MCP `set_assignment_course_section` each restated three of the rules that decide whether a section's browser default can be adopted. Both now ask `ManifestCoherence`, so a new rule reaches them too (#2490).
+
+### Changed
+
+- **Service functions no longer take a whole request.** The validation service, the content-edit effects and the audit logger take a `ServiceContext` or an `AuditContext`, which carry only the database, the logger, the application and the acting user. A request conforms, so the routes pass it as before, and a caller with no request can now call them (#2497).
+
+
 ## [0.5.600] - 2026-10-08
 
 ### Fixed
