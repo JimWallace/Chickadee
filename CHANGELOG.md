@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.607] - 2026-10-09
+
+### Fixed
+
+- **Five compound handles hid a crude or drug word.** "Carbongleam" and "Carbonglint" contained "bong", "Novagleam" and "Novaglint" contained "vag", and "Ecokeeper" contained "coke". The substring list now has these three strings, and the compound lists no longer have the prefixes Carbon and Nova or the suffix keeper. A handle that a student has now does not change. The pool has 32,299 handles.
+
+
 ## [0.5.606] - 2026-10-09
 
 ### Added
