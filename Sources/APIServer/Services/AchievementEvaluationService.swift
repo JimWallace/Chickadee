@@ -132,7 +132,7 @@ func evaluateClassGoalAchievements(
     // course, and this loop runs on a timer forever).
     let goalCarrying = assignments.compactMap { assignment -> GoalCarryingAssignment? in
         guard let setup = setupByID[assignment.testSetupID],
-            let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            let props = decodeManifest(fromJSON: setup.manifest)
         else { return nil }
         let goals = props.achievements.filter { $0.isClassGoal }
         guard !goals.isEmpty else { return nil }

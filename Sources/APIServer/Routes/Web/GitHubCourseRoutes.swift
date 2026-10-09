@@ -17,6 +17,7 @@
 // an instructor could bind another organization's installation of the App by
 // typing its name, and make repositories there.
 
+import Core
 import Fluent
 import Foundation
 import Vapor

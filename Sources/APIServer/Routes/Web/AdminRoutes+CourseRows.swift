@@ -30,7 +30,7 @@ extension AdminRoutes {
             enrollmentCount: try await enrollmentCountFetch,
             assignmentCount: try await assignmentCountFetch,
             submissionCount: (try await submissionCountFetch)[courseID] ?? 0,
-            createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+            createdAt: course.createdAt.map { iso8601String($0) } ?? "—",
             brightspaceOrgUnitID: course.brightspaceOrgUnitID,
             brightspaceOrgUnitName: course.brightspaceOrgUnitName,
             brightspaceSyncEnabled: brightspaceSyncEnabled

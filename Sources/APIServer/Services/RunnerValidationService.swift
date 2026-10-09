@@ -167,7 +167,7 @@ private func enqueueValidationVariants(
 
         guard let setup = try await APITestSetup.find(setupID, on: context.db),
             let manifestData = setup.manifest.data(using: .utf8),
-            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
+            let manifest = decodeManifest(from: manifestData),
             manifest.variesPerStudent
         else { return }
 
@@ -294,7 +294,7 @@ private func resolveAndCacheValidationMaterialization(
     do {
         guard let setup = try await APITestSetup.find(setupID, on: db),
             let manifestData = setup.manifest.data(using: .utf8),
-            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+            let manifest = decodeManifest(from: manifestData)
         else { return }
 
         let seedHex: String?

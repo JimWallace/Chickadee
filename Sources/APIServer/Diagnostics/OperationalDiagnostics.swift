@@ -295,7 +295,7 @@ func sumComponentMs(_ a: Int?, _ b: Int?) -> Int? {
 }
 
 func iso8601Metadata(_ date: Date) -> Logger.MetadataValue {
-    .string(ISO8601DateFormatter().string(from: date))
+    .string(iso8601String(date))
 }
 
 struct DiagnosticsConfigurationKey: StorageKey {

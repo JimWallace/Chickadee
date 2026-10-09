@@ -6,6 +6,7 @@
 // the grant's `revoked` flag — refresh stops immediately and the access token
 // lapses within its short TTL.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -51,7 +52,6 @@ struct MCPAgentsRoutes: RouteCollection {
                 owners.compactMap { owner in owner.id.map { ($0, owner.username) } },
                 uniquingKeysWith: { first, _ in first })
         }
-        let formatter = ISO8601DateFormatter()
         return grants.compactMap { grant -> AgentGrantRow? in
             guard let id = grant.id else { return nil }
             return AgentGrantRow(
@@ -59,9 +59,9 @@ struct MCPAgentsRoutes: RouteCollection {
                 agentName: clientNames[grant.clientID] ?? grant.clientID,
                 scope: grant.scope,
                 owner: includeOwner ? (ownerNames[grant.userID] ?? "—") : nil,
-                createdAt: grant.createdAt.map { formatter.string(from: $0) } ?? "—",
-                lastUsedAt: grant.lastUsedAt.map { formatter.string(from: $0) },
-                expiresAt: formatter.string(from: grant.expiresAt),
+                createdAt: grant.createdAt.map { iso8601String($0) } ?? "—",
+                lastUsedAt: grant.lastUsedAt.map { iso8601String($0) },
+                expiresAt: iso8601String(grant.expiresAt),
                 revoked: grant.revoked,
                 isExpired: grant.expiresAt < Date())
         }

@@ -88,7 +88,6 @@ struct AdminRoutes: RouteCollection {
             courseIDs: activeCourseIDs, on: req.db)
         let bsSyncEnabled = req.application.brightSpaceAppCredentials != nil
         // Archived courses move out of Overview and live on the Retention tab.
-        let iso = ISO8601DateFormatter()
         let courseRows = allCourses.sorted {
             $0.code.localizedStandardCompare($1.code) == .orderedAscending
         }.compactMap { course -> AdminCourseRow? in
@@ -102,7 +101,7 @@ struct AdminRoutes: RouteCollection {
                 enrollmentCount: enrollmentCounts[id] ?? 0,
                 assignmentCount: assignmentCounts[id] ?? 0,
                 submissionCount: submissionCounts[id] ?? 0,
-                createdAt: course.createdAt.map { iso.string(from: $0) } ?? "—",
+                createdAt: course.createdAt.map { iso8601String($0) } ?? "—",
                 brightspaceOrgUnitID: course.brightspaceOrgUnitID,
                 brightspaceSyncEnabled: bsSyncEnabled
             ).withTerm(course.term)
@@ -201,7 +200,6 @@ struct AdminRoutes: RouteCollection {
                 return lhsCreated < rhsCreated
             }
 
-        let iso = ISO8601DateFormatter()
         // This list belongs to no one course, so the staff ring means "teaches
         // somewhere", as on the account page (docs/student-wardrobe.md).
         let staff = try await AvatarStore.courseStaff(among: users.compactMap(\.id), on: db)
@@ -216,8 +214,8 @@ struct AdminRoutes: RouteCollection {
                 displayName: user.displayName,
                 username: user.username,
                 role: user.role,
-                createdAt: user.createdAt.map { iso.string(from: $0) } ?? "—",
-                lastSeenAt: user.lastSeenAt.map { iso.string(from: $0) },
+                createdAt: user.createdAt.map { iso8601String($0) } ?? "—",
+                lastSeenAt: user.lastSeenAt.map { iso8601String($0) },
                 isCurrentUser: user.id != nil && user.id == viewerID)
             if user.roleValue != .mcp {
                 row.avatar = try await AvatarStore.rosterAvatar(
@@ -333,14 +331,13 @@ struct AdminRoutes: RouteCollection {
         let states = await monitor.currentRuleStates()
         let recent = await monitor.recentFiringsSnapshot()
 
-        let iso = ISO8601DateFormatter()
         let ruleRows = HealthRule.allCases.map { rule -> AdminAlertsRuleRow in
             let state = states[rule] ?? .initial
             return AdminAlertsRuleRow(
                 rule: rule.rawValue,
                 humanReadable: rule.humanReadable,
                 isFiring: state.isFiring,
-                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) },
+                lastFiredAt: state.lastFiredAt.map { iso8601String($0) },
                 thresholdText: rule.thresholdText(configuration)
             )
         }
@@ -385,13 +382,15 @@ struct AdminRoutes: RouteCollection {
                 let scheme = parsed.scheme?.lowercased(),
                 scheme == "http" || scheme == "https"
             else {
-                return req.redirect(to: alertsRedirect(error: "Webhook URL must start with http:// or https://"))
+                return req.redirect(
+                    to: adminNoticeRedirect("/admin/alerts", error: "Webhook URL must start with http:// or https://"))
             }
         }
 
         await req.application.serverHealthAlertMonitor.setWebhookURL(trimmed)
         req.logger.info("Admin updated alerts webhook URL (\(trimmed.isEmpty ? "cleared" : "set"))")
-        return req.redirect(to: alertsRedirect(ok: trimmed.isEmpty ? "Webhook cleared." : "Webhook saved."))
+        return req.redirect(
+            to: adminNoticeRedirect("/admin/alerts", ok: trimmed.isEmpty ? "Webhook cleared." : "Webhook saved."))
     }
 
     // MARK: - POST /admin/alerts/test
@@ -402,14 +401,15 @@ struct AdminRoutes: RouteCollection {
         let effectiveURL = await monitor.effectiveWebhookURL() ?? ""
 
         if effectiveURL.isEmpty {
-            return req.redirect(to: alertsRedirect(error: "No webhook URL configured. Set one above first."))
+            return req.redirect(
+                to: adminNoticeRedirect("/admin/alerts", error: "No webhook URL configured. Set one above first."))
         }
 
         do {
             _ = try await monitor.dispatchTestAlert(application: req.application)
-            return req.redirect(to: alertsRedirect(ok: "Test alert dispatched to webhook."))
+            return req.redirect(to: adminNoticeRedirect("/admin/alerts", ok: "Test alert dispatched to webhook."))
         } catch {
-            return req.redirect(to: alertsRedirect(error: "Test alert failed: \(error)"))
+            return req.redirect(to: adminNoticeRedirect("/admin/alerts", error: "Test alert failed: \(error)"))
         }
     }
 
@@ -525,7 +525,9 @@ struct AdminRoutes: RouteCollection {
 
 }
 
-private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
+/// An admin page's path with its one-shot `ok` or `error` notice in the query
+/// (#2492: the alerts and retention pages each had a copy of this).
+func adminNoticeRedirect(_ path: String, ok: String? = nil, error: String? = nil) -> String {
     var pairs: [String] = []
     if let okValue = ok?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
         pairs.append("ok=\(okValue)")
@@ -533,7 +535,7 @@ private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
     if let errorValue = error?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
         pairs.append("error=\(errorValue)")
     }
-    return pairs.isEmpty ? "/admin/alerts" : "/admin/alerts?" + pairs.joined(separator: "&")
+    return pairs.isEmpty ? path : path + "?" + pairs.joined(separator: "&")
 }
 
 func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {

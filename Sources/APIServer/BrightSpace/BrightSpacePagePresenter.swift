@@ -219,7 +219,7 @@ enum BrightSpacePagePresenter {
                 && input.identity.connected,
             pushesAsText: pushesAs.text,
             pushesAsNote: pushesAs.note,
-            lastSyncISO: input.newestAttempt.map { ISO8601DateFormatter().string(from: $0) },
+            lastSyncISO: input.newestAttempt.map { iso8601String($0) },
             lastSyncText: input.newestAttempt.map { fmt.string(from: $0) } ?? "Never",
             canBindOrgUnit: !input.isArchived && (input.usesServiceAccount || input.accountConnected),
             readinessSummary:

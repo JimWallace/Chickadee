@@ -328,7 +328,14 @@ func zipContainsNotebook(_ zipData: Data) async -> Bool {
     defer { try? FileManager.default.removeItem(at: tmp) }
 
     guard (try? zipData.write(to: tmp)) != nil else { return false }
-    return await listZipEntries(zipPath: tmp.path).contains { $0.hasSuffix(".ipynb") }
+    return entriesContainNotebook(await listZipEntries(zipPath: tmp.path))
+}
+
+/// True when a zip's entry list holds at least one `.ipynb` entry. The one
+/// test for "this zip carries a notebook", shared by the bytes check above
+/// and the cached check in `ZipEntryListCache` (#2492).
+func entriesContainNotebook(_ entries: [String]) -> Bool {
+    entries.contains { $0.hasSuffix(".ipynb") }
 }
 
 /// Extracts `assignment.ipynb` from the zip at `zipPath` and returns its Data,

@@ -48,7 +48,6 @@ func buildAssignmentCoverageRows(
     }
     for item in covered.map(\.item) where !items.contains(item) { items.append(item) }
 
-    let iso = ISO8601DateFormatter()
     return items.map { item in
         guard let row = coverageByItem[item] else {
             return AssignmentCoverageRow(
@@ -59,7 +58,7 @@ func buildAssignmentCoverageRows(
             found: true,
             foundBy: usernameByID[row.userID] ?? "unknown",
             foundAt: row.coveredAt.map { formatter.string(from: $0) } ?? "",
-            foundAtISO: row.coveredAt.map { iso.string(from: $0) } ?? "")
+            foundAtISO: row.coveredAt.map { iso8601String($0) } ?? "")
     }
 }
 

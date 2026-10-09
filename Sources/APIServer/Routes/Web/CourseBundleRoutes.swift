@@ -97,7 +97,7 @@ struct CourseBundleRoutes: RouteCollection {
                 logger: logger)
         }
 
-        let dateStr = ISO8601DateFormatter().string(from: Date()).prefix(10)
+        let dateStr = iso8601String(Date()).prefix(10)
         let safeCourseCode = course.code.replacingOccurrences(of: "/", with: "-")
         let bundleName = "chickadee-bundle-\(safeCourseCode)-\(dateStr).zip"
         let bundleZipPath = FileManager.default.temporaryDirectory

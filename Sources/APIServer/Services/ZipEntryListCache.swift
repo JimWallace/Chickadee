@@ -79,7 +79,7 @@ actor ZipEntryListCache {
     /// True when the (cached) entry list contains at least one `.ipynb` entry.
     /// Returns false when the zip is missing or unreadable.
     func zipContainsNotebook(zipPath: String) async -> Bool {
-        await entries(zipPath: zipPath).contains { $0.hasSuffix(".ipynb") }
+        entriesContainNotebook(await entries(zipPath: zipPath))
     }
 }
 

@@ -4,6 +4,7 @@
 // slice 3) and the steps that fill it: the repositories the linked account
 // owns, the branches of the chosen one, and that branch's head commit.
 
+import Core
 import Fluent
 import Foundation
 import Vapor

@@ -40,7 +40,6 @@ extension InstructorDashboardRoutes {
         }
 
         let fmt = waterlooDateTimeFormatter()
-        let isoFormatter = ISO8601DateFormatter()
 
         var enrolledStudents: [EnrolledStudentRow] = []
         var enrolledStudentCount = 0
@@ -53,8 +52,7 @@ extension InstructorDashboardRoutes {
                 req: req,
                 activeCourseUUID: activeCourseUUID,
                 activeCourseKey: courseState.active?.urlKey ?? "",
-                fmt: fmt,
-                isoFormatter: isoFormatter
+                fmt: fmt
             )
             enrolledStudents = roster.rows
             enrolledStudentCount = roster.count
@@ -159,8 +157,7 @@ extension InstructorDashboardRoutes {
             req: req,
             activeCourseUUID: activeCourseUUID,
             activeCourseKey: courseState.active?.urlKey ?? "",
-            fmt: waterlooDateTimeFormatter(),
-            isoFormatter: ISO8601DateFormatter()
+            fmt: waterlooDateTimeFormatter()
         )
         guard wantsFragment else {
             return try await roster.rows.encodeResponse(for: req)
