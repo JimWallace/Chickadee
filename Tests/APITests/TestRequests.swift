@@ -91,14 +91,18 @@ extension Application {
 
 // MARK: - CSRF token extraction
 
-/// Parses the CSRF token from a rendered Leaf form page.
-/// Looks for the hidden input rendered by `#csrfFormField()`:
+/// Parses the CSRF token from a rendered form page.
+/// Looks for the hidden input rendered by Leaf's `#csrfFormField()`:
 ///   `<input type='hidden' name='_csrf' value='TOKEN'>`
+/// or by the Elementary `CSRFField`, which quotes with `"`.
 func extractCSRFToken(from html: String) -> String {
-    guard let range = html.range(of: "name='_csrf' value='") else { return "" }
-    let start = range.upperBound
-    guard let end = html[start...].firstIndex(of: "'") else { return "" }
-    return String(html[start..<end])
+    for quote in ["'", "\""] {
+        guard let range = html.range(of: "name=\(quote)_csrf\(quote) value=\(quote)") else { continue }
+        let start = range.upperBound
+        guard let end = html[start...].firstIndex(of: Character(quote)) else { return "" }
+        return String(html[start..<end])
+    }
+    return ""
 }
 
 /// GETs `path` and returns the CSRF token embedded in the rendered form HTML,
