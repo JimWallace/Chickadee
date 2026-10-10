@@ -640,8 +640,14 @@ in [docs/ui-design.md](docs/ui-design.md).
   links there. No native `alert()`.
 - The nginx maintenance page mirrors the palette by value
   (`check-maintenance-palette.sh`).
+- **Elementary views are guarded by a test, not by the shell scripts.** The
+  scripts read only `.leaf` files. `ElementaryPageGuardTests` renders every
+  page in `ElementaryPageFixtures` and applies most of the same rules (the
+  open ones are listed in the doc); a page type without a fixture fails it. Two SwiftLint rules forbid `.style(` and
+  `HTMLRaw(` in views. See `docs/elementary-spike.md` §"Guards".
 - **Run the `ui-review` agent on any change touching `Resources/Views/`,
-  `Public/styles.css`, or a page-wiring `Public/*.js`.** It reviews the layer
+  `Sources/APIServer/Views/`, `Public/styles.css`, or a page-wiring
+  `Public/*.js`.** It reviews the layer
   the guards structurally cannot: whether a construct duplicates the
   vocabulary, whether the idiom is the lightest that fits, and whether the
   copy is at house length. Green guards are necessary, not sufficient — every
@@ -672,7 +678,7 @@ capture in the same PR.
 
 The subagents are in `.claude/agents/`. Each one reports and does not edit.
 - After a code change, run `test-runner`. It reports only the failing tests.
-- After a change to a Leaf template, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
+- After a change to a Leaf template, an Elementary view, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
 - Before a commit, run `diff-reviewer` on the uncommitted diff. Before a push, run `lint-guard`.
 
 ---

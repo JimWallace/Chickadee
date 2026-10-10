@@ -1,10 +1,12 @@
 ---
 name: ui-guard
 description: >
-  Runs the mechanical UI guards (scripts/check-styles.sh and
-  scripts/check-ui-vocabulary.sh) and reports each violation with its file and
-  line. Use it after any change to a Leaf template in Resources/Views/, to
-  Public/styles.css or to a first-party Public/*.js file. It complements the
+  Runs the mechanical UI guards (scripts/check-styles.sh,
+  scripts/check-ui-vocabulary.sh and the ElementaryPageGuardTests suite) and
+  reports each violation with its file and line. Use it after any change to a
+  Leaf template in Resources/Views/, an Elementary view in
+  Sources/APIServer/Views/, Public/styles.css or a first-party Public/*.js
+  file. It complements the
   ui-review agent, which reviews what these guards cannot see. Read-only: it
   reports, it does not fix.
 model: haiku
@@ -18,6 +20,9 @@ You run the Chickadee UI guard scripts and report what they find.
 1. From the repository root, run each script:
    - `scripts/check-styles.sh`
    - `scripts/check-ui-vocabulary.sh`
+   - `swift test --filter ElementaryPageGuardTests`. The shell guards read only
+     `.leaf` files; this suite holds every Elementary page to the same rules.
+     A failing test names the page and the rule in its message.
 2. Record the exit code and the output of each script.
 3. Note: `scripts/check-styles.sh` also calls `scripts/check-ui-vocabulary.sh`
    (and the other token, class and Leaf guards). When the same violation

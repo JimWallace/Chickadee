@@ -156,30 +156,39 @@ still pass. They fail open: they check fewer files and say nothing. Only
 `Public/*.js`) also does not match `Sources/APIServer/Views/`.
 
 A migration must replace each guard before it removes the template the guard
-reads. The options per rule:
+reads.
 
-| Rule | In Swift |
-|---|---|
-| No inline `style=""` | A SwiftLint custom rule on `.style(` under `Views/`. |
-| Every class resolves to a rule | Render each page in a test and run the existing resolver on the HTML. Or move class names to a closed enum. |
-| Component vocabulary, affordance registry | Closed enums or small component types (`Icon`, `CSRFField` are the start). |
-| Page `<style>` ratchet | Count `style {` blocks under `Views/Pages/`. |
-| Archetype exemplars | `PageArchetypeTests` must read the Swift exemplar, or a rendered page. |
-| Leaf semantics (`check-leaf-semantics.sh`) | Not needed. The compiler enforces it. |
+### What guards the Elementary views now
 
-A rendered-HTML guard is the most direct port, because the existing scanners
-already parse markup. It needs a fixture per page, so it costs more than a
-file scan.
+`ElementaryPageGuardTests` renders every page in `ElementaryPageFixtures`
+(one render per branch worth checking) and applies the rules in
+`RenderedMarkupRules` to the HTML. It fails when a page type under
+`Views/Pages/` has no fixture, and each rule has a test that proves it fires.
+Two SwiftLint custom rules (`elementary_no_inline_style`,
+`elementary_raw_html`) catch the same mistakes in source, including branches
+no fixture reaches.
 
-Two more gaps from the review:
+| Rule | Leaf guard | Elementary guard | Status |
+|---|---|---|---|
+| No inline `style=""` except `display:none` or a custom property | `check-styles.sh` rule 2 | rendered-page test; SwiftLint `.style(` ban | Done |
+| No inline script, no `on*=` handler | `check-styles.sh` rules 3b to 3b-3 | rendered-page test | Done |
+| Every assigned class resolves | `check-class-resolution.sh` | rendered-page test, same stylesheet and allowlist | Done |
+| Every `var(--x)` resolves, no hardcoded fallback | `check-css-vars.sh` (hex fallbacks only) | rendered-page test, page blocks and `style` attributes; any hardcoded fallback | Done, stricter |
+| Hover text at most 20 words | `check-ui-vocabulary.sh` rule 3 (skips interpolated titles) | rendered-page test, every title | Done, stricter |
+| Heading levels form a spine | `PageArchetypeTests` | rendered-page test | Done |
+| Archetype shape | `PageArchetypeTests` | the same rules, applied to the rendered `<main>` | Done for the titlebar archetype; the tabbed and shim rules read Leaf partials and need adapting first |
+| Raw HTML only where escaping is handled | none | SwiftLint `HTMLRaw(` ban outside `BaseLayout` and `PageStyle` (checked by hand: a planted use fails lint) | Done |
+| `ui-review` runs on a view change | workflow path filter | `Sources/APIServer/Views/**` added | Done |
+| Design tokens in page CSS | `check-design-tokens.sh` | none yet | Open |
+| Page `<style>` total ratchet | `check-styles.sh` rule 4 | none yet; `PageStyle` is the one place to count | Open |
+| Flash and tab bars only through their partial | `PageArchetypeTests`, `check-ui-vocabulary.sh` | none yet; types can make it structural | Open |
+| Component vocabulary, affordance registry in page CSS | `check-ui-vocabulary.sh` | none yet | Open |
+| `base.leaf` and `BaseLayout` stay in step | none | none yet; a parity test while both exist | Open |
+| Leaf semantics | `check-leaf-semantics.sh` | not needed: the compiler enforces it | n/a |
 
-- The CI `ui-review` workflow would not run on a change to a Swift view.
-  Its path filter, and the CLAUDE.md rule it copies, must add
-  `Sources/APIServer/Views/**`.
-- While both stacks exist, `base.leaf` and `BaseLayout` can drift: a new
-  head script or nav entry added to one does not reach the other. A CI test
-  that renders both for one fixture and compares the normalised markup would
-  catch this. The spike ran that comparison once, by hand.
+The open rows must close before the first page whose Leaf template carries
+that kind of content is deleted. `admin-user.leaf` stays until then, and
+`PageArchetypeTests` still reads it as the titlebar exemplar.
 
 ## A bug the port carried over, now fixed
 
