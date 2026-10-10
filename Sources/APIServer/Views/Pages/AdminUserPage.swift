@@ -28,12 +28,12 @@ struct AdminUserPage: HTML {
             p(.class("page-subtitle")) { "@\(username) · \(role)" }
             enrolledSection
             addSection
-            style {
+            PageStyle(
                 """
                 .user-enroll-form { max-width: 500px; }
                 .user-enroll-select { flex: 1; }
                 """
-            }
+            )
         }
     }
 

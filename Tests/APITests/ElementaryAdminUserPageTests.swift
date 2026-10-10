@@ -97,4 +97,13 @@ import Testing
             html == "<div class=\"flash flash-success\" role=\"status\">Saved</div>"
                 + "<div class=\"flash flash-error\" role=\"alert\">Oops</div>")
     }
+
+    @Test func theEditorsNoticeRendersAsASuccessBanner() {
+        let html = FlashBanners(flash: FlashMessages(success: nil, notice: "Saved draft", error: nil)).render()
+        #expect(html == "<div class=\"flash flash-success\" role=\"status\">Saved draft</div>")
+    }
+
+    @Test func aPageStyleKeepsCSSCombinatorsIntact() {
+        #expect(PageStyle(".a > .b { color: red; }").render() == "<style>.a > .b { color: red; }</style>")
+    }
 }

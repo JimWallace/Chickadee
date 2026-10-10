@@ -30,7 +30,7 @@ decide the migration.
 
 ### Output parity
 
-A scratch test rendered the page through Leaf and through Elementary for the
+A scratch test (not committed) rendered the page through Leaf and through Elementary for the
 same data: an admin enrolled in two courses (so the nav menu and the course
 tabs render) and a subject with one enrollment, one available course and a
 course name that contains `<&>`. After normalisation (comments removed,
@@ -94,6 +94,8 @@ two: the doctype and the icon sprite.
 2. **The tests build the app without `AppMiddleware`.** The icon sprite was
    first loaded there, so every test page rendered with no icons and no
    error. `Application.iconSprite` now reads the file when nothing loaded it.
+   A failed read still yields an empty sprite with no error. A migration
+   should make the sprite a Swift value, so that nothing is read at run time.
    The general rule: anything a view needs from startup must have a fallback
    or must fail loudly.
 3. **The CSRF scraper in the tests matched Leaf's quote style.**
@@ -109,7 +111,13 @@ two: the doctype and the icon sprite.
    Chickadee adds the ARIA helpers. The others use `.custom(name:value:)`.
    The type system rejected `.type(...)` on `<link>`. That is the intended
    behaviour, but each gap costs a small extension.
-6. **Opaque helpers.** A `private func row(...) -> some HTML` used inside a
+6. **Text inside `<style>` is escaped.** Elementary escapes the content of
+   every element. A browser does not decode entities inside `<style>`, so a
+   child selector `a > b` would arrive as `a &gt; b` and stop matching with
+   no error. `PageStyle` emits the CSS raw, and takes a `StaticString` so that
+   no data can be interpolated into it. The same applies to an inline
+   `<script>`, which the CSP already forbids.
+7. **Opaque helpers.** A `private func row(...) -> some HTML` used inside a
    `for` in a builder did not infer under the module-emitting build. A small
    `HTML` struct (`EnrolledCourseRow`) did. Prefer structs for repeated parts.
 
@@ -139,6 +147,23 @@ reads. The options per rule:
 A rendered-HTML guard is the most direct port, because the existing scanners
 already parse markup. It needs a fixture per page, so it costs more than a
 file scan.
+
+Two more gaps from the review:
+
+- The CI `ui-review` workflow would not run on a change to a Swift view.
+  Its path filter, and the CLAUDE.md rule it copies, must add
+  `Sources/APIServer/Views/**`.
+- While both stacks exist, `base.leaf` and `BaseLayout` can drift: a new
+  head script or nav entry added to one does not reach the other. A CI test
+  that renders both for one fixture and compares the normalised markup would
+  catch this. The spike ran that comparison once, by hand.
+
+## A bug the port carried over
+
+`POST /admin/users/:id/enroll` redirects to `/admin/users/:id?error=invalid_course`
+on a bad course ID, but the page never had a flash field, so the error never
+shows. This is true of the Leaf page too. With `BaseLayout(flash:)` typed, the
+fix is one argument. The spike keeps the behaviour unchanged.
 
 ## What gets better
 

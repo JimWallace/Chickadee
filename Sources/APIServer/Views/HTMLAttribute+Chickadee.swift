@@ -1,7 +1,7 @@
 // APIServer/Views/HTMLAttribute+Chickadee.swift
 //
 // The attributes and elements Chickadee markup uses that Elementary does not
-// ship: ARIA attributes, and the SVG `use` element for the icon sprite.
+// ship: ARIA attributes, a valueless data flag, and the SVG `use` element.
 
 import Elementary
 
@@ -42,27 +42,3 @@ extension HTMLTag {
 extension HTMLTag.SVGUse: HTMLTrait.Attributes.href {}
 
 typealias SVGUse<Content: HTML> = HTMLElement<HTMLTag.SVGUse, Content>
-
-/// One icon from the sprite, as `<svg class="icon" aria-hidden="true">`.
-struct Icon: HTML {
-    let symbol: String
-
-    init(_ symbol: String) {
-        self.symbol = symbol
-    }
-
-    var body: some HTML {
-        svg(.class("icon"), .ariaHidden) {
-            SVGUse(.href("#\(symbol)")) {}
-        }
-    }
-}
-
-/// The hidden CSRF form field (`#csrfFormField()` in Leaf).
-struct CSRFField: HTML {
-    let token: String
-
-    var body: some HTML {
-        input(.type(.hidden), .name("_csrf"), .value(token))
-    }
-}
