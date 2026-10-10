@@ -457,6 +457,8 @@ struct AdminRoutes: RouteCollection {
         return HTMLResponse {
             AdminUserPage(
                 page: PageRequestContext(request: req),
+                flash: FlashMessages(
+                    error: req.query[String.self, at: "error"].flatMap(AdminEnrollError.init(rawValue:))?.message),
                 targetUserID: idString,
                 displayName: user.displayName,
                 username: user.username,

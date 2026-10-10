@@ -8,6 +8,7 @@ import Elementary
 
 struct AdminUserPage: HTML {
     let page: PageRequestContext
+    var flash = FlashMessages()
     let targetUserID: String
     let displayName: String?
     let username: String
@@ -21,7 +22,7 @@ struct AdminUserPage: HTML {
     }
 
     var body: some HTML {
-        BaseLayout(title: "Courses — \(heading)", page: page) {
+        BaseLayout(title: "Courses — \(heading)", page: page, flash: flash) {
             div(.class("page-titlebar")) {
                 h1 { "\(heading) — Courses" }
             }

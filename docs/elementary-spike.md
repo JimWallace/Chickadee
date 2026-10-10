@@ -158,12 +158,15 @@ Two more gaps from the review:
   that renders both for one fixture and compares the normalised markup would
   catch this. The spike ran that comparison once, by hand.
 
-## A bug the port carried over
+## A bug the port carried over, now fixed
 
 `POST /admin/users/:id/enroll` redirects to `/admin/users/:id?error=invalid_course`
-on a bad course ID, but the page never had a flash field, so the error never
-shows. This is true of the Leaf page too. With `BaseLayout(flash:)` typed, the
-fix is one argument. The spike keeps the behaviour unchanged.
+when the course ID is bad or the course is archived, but the Leaf page had no
+flash field, so the error never showed. `AdminUserEnrollErrorTests` reproduced
+it (the redirect was right, the page was silent), and the fix is one argument:
+the route maps the code through `AdminEnrollError` to a fixed message and
+passes it as `BaseLayout(flash:)`. An unknown code shows nothing, so no query
+text reaches the page.
 
 ## What gets better
 
@@ -177,19 +180,24 @@ fix is one argument. The spike keeps the behaviour unchanged.
   a database-backed app.
 - The Leaf custom tags become plain properties on `PageRequestContext`.
 
-## Open points for the decision
+## Decisions
 
-1. **The edit loop.** A template edit becomes a 30 to 40 s rebuild. Is that
-   acceptable to the people who edit copy?
-2. **Guards first.** The guard replacements above are the larger part of the
-   work. They must land before the first template is deleted.
-3. **Streaming.** `HTMLResponse` renders to one `String`. Elementary can
+1. **The edit loop is accepted.** Only administrators and developers edit
+   templates. Everything else on a page is generated at run time, so a 30 to
+   40 s rebuild for a template edit is acceptable.
+2. **Guards first.** Each guard gets its Swift replacement, and the
+   replacement lands, before the first template it reads is deleted. The
+   `ui-review` path filter is part of this.
+
+## Open points
+
+1. **Streaming.** `HTMLResponse` renders to one `String`. Elementary can
    stream with back-pressure; the spike does not need it.
-4. **Environment values.** The spike passes `PageRequestContext` and the
+2. **Environment values.** The spike passes `PageRequestContext` and the
    CSRF token explicitly. Elementary's `@Environment` reads a `TaskLocal`, and
    its `requiring:` form calls `fatalError` when the value is not set. Explicit
    parameters are safer.
-5. **Order with Vapor 5.** Elementary does not depend on Vapor. If the views
+3. **Order with Vapor 5.** Elementary does not depend on Vapor. If the views
    move first, the Vapor 5 move touches only `HTMLResponse` and
    `PageRequestContext`.
 
