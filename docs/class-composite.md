@@ -78,7 +78,7 @@ session `window`, materialization at ingest, the leaderboard page with its
 polled refresh and its present mode, and the kind lock at the first student
 submission.
 
-## Design decisions (proposed)
+## Design decisions
 
 1. **An activity kind, not a content type.** The same reason as every other
    activity (`class-activities.md`, decision 1): a composite needs grading, the
@@ -103,8 +103,8 @@ submission.
    one, and a failed contribution stays visible. They go in a new table.
 6. **A failed contribution is shown, with a mark.** A wrong tile in the image is
    the "dead pixel" that the class finds and discusses. This is part of the
-   lesson. The instructor can hide failed contributions (see **Open
-   decisions**).
+   lesson. This is the default. The instructor can hide failed contributions
+   with `showFailed: false`.
 7. **The composition runs in the browser.** The server never decodes or
    composes an image. Each compositor is a pure function in
    `Public/class-composite.js`, tested with `node --test`.
@@ -412,18 +412,17 @@ adds, and keeps every existing assignment on the code path it uses now.
   renders and spare slots (slice 6) handle a small class. Until slice 6, a
   small class sees holes.
 
-## Open decisions
+## Decisions
 
-Decided: **the composite is for the projector, and each student sees only their
-own contribution** (see **Student view**).
+All open decisions are settled.
 
-Open:
-
-1. **Failed contributions.** Show them with a mark by default
-   (`showFailed: true`), or hide them by default?
-2. **Spare slots.** Ship them in slice 6 with the reference renders, or wait
-   until a session shows that holes are a problem?
-3. **`emptySlots` default.** `blank` (proposed), or `reference`?
+1. **The composite is for the projector.** Each student sees only their own
+   contribution (see **Student view**).
+2. **Failed contributions show with a mark by default** (`showFailed: true`).
+   The dead pixel is part of the lesson.
+3. **Spare slots ship in slice 6**, with the reference renders.
+4. **`emptySlots` defaults to `blank`.** A reference render is a visible answer
+   on a shared projector.
 
 ## Activities this enables
 
