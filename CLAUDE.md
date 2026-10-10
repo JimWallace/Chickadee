@@ -902,6 +902,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/compliance/` — the UW approval package: student-data audits, tool and data-flow inventories
 - `docs/collaborative-class-assignments.md` — contribution assignments and class goals; opens with a Status table
 - `docs/class-activities.md` — leaderboards, bots, round robins, hills and brackets (#1508); opens with a Status table
+- `docs/class-composite.md` — proposed: each student renders one slot of a shared image, composed live on the projector; opens with a Status table
 - `docs/unlockable-labs.md` — assignment prerequisites and sticky per-student unlocks
 - `docs/student-wardrobe.md` — cosmetic choices for the avatar, kept apart from earned status
 - `docs/student-avatars.md` — generated avatars and the per-course pseudonymous handle
