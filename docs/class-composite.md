@@ -17,11 +17,11 @@ of all parts together.
 |---|---|---|
 | 0 | This design note | proposed |
 | 1 | Output contract: the `composite` footer field in `RunnerCore` | planned |
-| 2 | The `classComposite` kind, the `composite` block, authoring and `set_activity` | planned |
+| 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | planned |
 | 3 | Slot dealing, and the slot as a per-student input | planned |
 | 4 | Ingest: the `composite_contributions` table and the coverage row | planned |
 | 5 | The composite view on the leaderboard page | planned |
-| 6 | Reference fill, spare slots, and the `sum` and `gallery` compositors | planned |
+| 6 | Reference renders and `emptySlots: reference`, spare slots, and the `sum` and `gallery` compositors | planned |
 
 Slice 5 is the first slice that a class can use. Slices 1 to 4 only supply data
 to it. Run one session with TAs after slice 5, before slice 6.
@@ -250,6 +250,81 @@ the slot states and makes no other styling decision. The body uses the
 component vocabulary in `docs/ui-design.md`. The change needs a
 visual-regression baseline and a `ui-review` pass.
 
+## Source data and slot count
+
+### Source data
+
+The instructor does not upload a separate "base image". The data that the
+students and the grader work on is one of these, and both already exist:
+
+- **A file in the test setup.** For example, a scene description, a CT phantom
+  volume, or an X-ray that the class filters tile by tile. Support files and
+  datasets already carry this. The student's notebook reads the file, and the
+  test script reads the same file.
+- **The reference solution.** The complete target image is the output of the
+  reference solution for every slot. A staff action, "Prepare reference"
+  (slice 6), runs it once before the session and stores one reference render
+  for each slot.
+
+**Empty slots: blank or reference.** One display setting, `emptySlots`, decides
+what the projector shows in a slot that has no passing contribution:
+
+- `blank` (the default): the empty grid outline.
+- `reference`: the stored reference render for that slot, dimmed. The class
+  sees the target from the start, and their own work replaces it. This also
+  fills the holes that a small class leaves.
+
+There is one source of reference renders and one setting that shows them, so
+"fill" and "backdrop" are the same thing, not two features. `blank` is the
+default for two reasons. A reference render is a visible answer on a projector
+that the whole class shares, and a wrong tile is harder to see next to correct
+reference tiles than on an empty grid.
+
+`reference` is refused at save for `sum`. In a `sum` composite, a slot is one
+projection angle, and an empty angle is not a hole: it makes the
+reconstruction blurrier, which is the lesson. Filling it with the reference
+angle would hide that lesson.
+
+### Slot count
+
+**The instructor sets the slot count at authoring.** It is `cols × rows` for
+`tile` and `gallery`, and `count` for `sequence` and `sum`. The count does not
+come from the roster or from attendance.
+
+**The layout locks at the first deal or the first student submission,
+whichever comes first.** Slots are dealt when a student opens the page, which
+can be before any submission, so a lock at the first submission would come too
+late: a smaller layout would leave dealt slots outside the grid. Each student's
+slot and the size of each contribution depend on the layout, and the grader
+checks that size.
+
+`layout`, `contribution` and `dealOrder` lock together. This is a new check in
+`ActivityAuthoring`, with its own refusal message that names the layout. The
+kind lock does not cover it: that check compares only the kind, and its message
+says that the kind is locked.
+
+**Size the layout for the expected attendance, not for the roster.** The
+authoring control shows the ratio, for example "Roster: 62. Slots: 48 (77%)."
+Second-round dealing handles a larger attendance. For a smaller attendance,
+`emptySlots: reference` shows the reference in the holes, and spare slots let
+students who finish fill the holes with their own work.
+
+The effect of too few students depends on the compositor:
+
+| Compositor | Slot count is | When fewer students attend |
+|---|---|---|
+| `tile` | The grid | The image has holes |
+| `sequence` | The number of frames | Frames are missing |
+| `sum` | The number of projection angles | The reconstruction is complete but blurrier |
+| `gallery` | The number of panels | Panels are empty |
+
+For `sum`, a small class degrades naturally, and the blur itself shows how the
+number of angles controls the quality of a CT image.
+
+**For `tile`, more slots do not give a larger image.** The full image is
+`cols × w` by `rows × h` pixels. To add slots at the same image size, make each
+contribution smaller.
+
 ## The manifest
 
 ```json
@@ -262,7 +337,8 @@ visual-regression baseline and a `ui-review` pass.
     "contribution": { "w": 8, "h": 8, "frames": 30, "format": "rgb8" },
     "dealOrder": "centreOut",
     "frameRate": 12,
-    "showFailed": true
+    "showFailed": true,
+    "emptySlots": "blank"
   }
 }
 ```
@@ -275,6 +351,7 @@ visual-regression baseline and a `ui-review` pass.
 | `dealOrder` | `rowMajor`, `centreOut` or `random` |
 | `frameRate` | Frames per second for playback |
 | `showFailed` | Show failed contributions with a mark (`true`), or show the slot as empty (`false`) |
+| `emptySlots` | `blank` (default) or `reference`: what a slot with no passing contribution shows. `reference` needs the reference renders, and is refused for `sum`. |
 
 `ActivityAuthoring` refuses a block at save when a field is missing or out of
 range, or when the total payload for all slots is more than 4 MB.
@@ -284,6 +361,7 @@ range, or when the total payload for all slots is more than 4 MB.
 | Seam | Rule |
 |---|---|
 | Suite rebuilds | `makeWorkerManifestJSON(preserving:)` already keeps the `activity` block. `AssignmentHelpersManifestTests` gains a composite round trip. |
+| Layout lock | `layout`, `contribution` and `dealOrder` lock at the first deal or the first student submission, whichever comes first. This is a new check with its own message, separate from the kind lock. `frameRate`, `showFailed` and `emptySlots` are display settings and stay editable. |
 | Surgical edits | A `withComposite` rebuild, like `withWindow`, so no edit drops another field. |
 | Old runners | An old `RunnerCore` drops the unknown footer field, so the contribution is lost with no error. A new capability token, `activity-composite`, keeps a composite job away from a runner that does not advertise it. The browser wasm ships with the server, so it is always current. |
 | Browser grading | Permitted. A composite stages no opponent. |
@@ -301,21 +379,24 @@ adds, and keeps every existing assignment on the code path it uses now.
 1. **Output contract.** The `composite` footer field, the optional
    `TestOutcome` field, and the new contract rows. Nothing reads the field yet.
 2. **Kind and authoring.** `ActivityKind.classComposite`, the `composite`
-   aggregation, the `composite` block, the save-time checks, the edit-page
-   control and `set_activity`.
+   aggregation, the `composite` block, the save-time checks, the layout lock,
+   the edit-page control with the roster ratio, and `set_activity`.
 3. **Slots.** `composite_slots`, dealing in the three orders, the slot in
-   `gradingInputs`, and the `activity-composite` capability token.
+   `gradingInputs`, the `activity-composite` capability token, and the
+   extension of the layout lock to the first deal (slice 2 can lock only at
+   the first submission, because no slot is dealt before slice 3).
 4. **Ingest.** `composite_contributions`, the payload checks, the coverage row,
    and `deleteCourse`.
 5. **The composite view.** The JSON endpoint, `class-composite.js` with the
    `tile` and `sequence` compositors, the four slot states, playback, present
    mode, the student's own-contribution panel on the result page, the node
    tests, the visual-regression baseline and `ui-review`.
-6. **Reference fill, spare slots, `sum` and `gallery`.** Reference fill is a
-   staff action that renders the reference solution for each empty slot and
-   shows those slots dimmed. It is a server-initiated job that waits behind
-   every student submission, with the claim-order rule of the corpus run. A
-   spare slot is a second slot that a student who finished can ask for.
+6. **Reference renders, spare slots, `sum` and `gallery`.** "Prepare
+   reference" is a staff action that renders the reference solution for every
+   slot and stores the results. It is a server-initiated job that waits behind
+   every student submission, with the claim-order rule of the corpus run. The
+   slice also enables `emptySlots: reference`. A spare slot is a second slot
+   that a student who finished can ask for, to fill a hole.
 
 ## Risks
 
@@ -327,8 +408,9 @@ adds, and keeps every existing assignment on the code path it uses now.
   contribution and the 4 MB limit at save keep this small.
 - **Test time.** A test renders only the student's slot, not the full image,
   so it stays well below the 10-second limit.
-- **Attendance.** Dealing at arrival handles absent students. Reference fill
-  (slice 6) handles a small class. Until slice 6, a small class sees holes.
+- **Attendance.** Dealing at arrival handles absent students. Reference
+  renders and spare slots (slice 6) handle a small class. Until slice 6, a
+  small class sees holes.
 
 ## Open decisions
 
@@ -339,7 +421,9 @@ Open:
 
 1. **Failed contributions.** Show them with a mark by default
    (`showFailed: true`), or hide them by default?
-2. **Empty slots.** Reference fill, spare slots, or both?
+2. **Spare slots.** Ship them in slice 6 with the reference renders, or wait
+   until a session shows that holes are a problem?
+3. **`emptySlots` default.** `blank` (proposed), or `reference`?
 
 ## Activities this enables
 
