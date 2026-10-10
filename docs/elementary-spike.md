@@ -1,9 +1,9 @@
 # Elementary spike
 
-Status: **spike, for a decision.** This document records what one page cost to
-port from Leaf to [Elementary](https://github.com/elementary-swift/elementary),
-what the port found, and what a full migration would need. It does not
-decide the migration.
+Status: **decided: migrate (2026-10-10).** This document records what one page
+cost to port from Leaf to [Elementary](https://github.com/elementary-swift/elementary),
+what the port found, and what the migration needs. The decision and its order
+are in "Decisions".
 
 ## What the spike does
 
@@ -205,6 +205,10 @@ text reaches the page.
 
 ## Decisions
 
+0. **Migrate from Leaf to compiled Elementary views.** The compiler check on
+   every template change is the reason: the Leaf bugs listed in "What gets
+   better" were silent at render time, and a compile error is not. Pages move
+   one archetype at a time, after the guards below.
 1. **The edit loop is accepted.** Only administrators and developers edit
    templates. Everything else on a page is generated at run time, so a 30 to
    40 s rebuild for a template edit is acceptable.
