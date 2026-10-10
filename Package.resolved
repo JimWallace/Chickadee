@@ -1,5 +1,5 @@
 {
-  "originHash" : "ba558db843c1defe9444dad2fb241ab16db3821542bb5981323ed05fb4ef0258",
+  "originHash" : "e2b6ab262b7e173ae8116d53c995edb06cc9656c75b06e7ffdb4746466d3a350",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/elementary-swift/elementary.git",
       "state" : {
-        "revision" : "ca09461308fbd568a95523544d97119ba7aea2a1",
-        "version" : "0.6.4"
+        "revision" : "9a66ebc5f8a2586f2a94893fc6e22d833c8e2ae5",
+        "version" : "0.8.2"
       }
     },
     {

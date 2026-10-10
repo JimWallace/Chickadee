@@ -13,8 +13,8 @@ struct Icon: HTML {
     }
 
     var body: some HTML {
-        svg(.class("icon"), .ariaHidden) {
-            SVGUse(.href("#\(symbol)")) {}
+        SVG.svg(.class("icon"), .ariaHidden) {
+            SVG.use(.href("#\(symbol)")) {}
         }
     }
 }

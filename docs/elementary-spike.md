@@ -7,7 +7,7 @@ decide the migration.
 
 ## What the spike does
 
-- It adds Elementary 0.6 (pinned to the minor, because the package is pre-1.0)
+- It adds Elementary 0.8 (pinned to the minor, because the package is pre-1.0)
   to `APIServer`.
 - It ports `base.leaf`, `_flash.leaf` and the titlebar exemplar
   `admin-user.leaf` to Swift under `Sources/APIServer/Views/`.
@@ -23,7 +23,7 @@ decide the migration.
 | `Views/HTMLResponse.swift` | The Vapor glue: about 15 lines. Owned here, not taken from `vapor-community/vapor-elementary` (8 commits, no release). |
 | `Views/PageRequestContext.swift` | The request-scoped values that the Leaf custom tags read at render time: CSRF token, version, idle timeouts, icon sprite. |
 | `Views/BaseLayout.swift`, `Views/SiteNav.swift` | `base.leaf` and `_flash.leaf`. |
-| `Views/HTMLAttribute+Chickadee.swift` | ARIA attributes, the SVG `use` element, `Icon` and `CSRFField`. Elementary ships none of these. |
+| `Views/MarkupAttribute+Chickadee.swift`, `Views/Icon.swift`, `Views/CSRFField.swift`, `Views/PageStyle.swift` | ARIA attributes, the icon, the CSRF input and the raw page CSS. Elementary ships none of these. |
 | `Views/Pages/AdminUserPage.swift` | `admin-user.leaf`. |
 
 ## Results
@@ -34,13 +34,14 @@ A scratch test (not committed) rendered the page through Leaf and through Elemen
 same data: an admin enrolled in two courses (so the nav menu and the course
 tabs render) and a subject with one enrollment, one available course and a
 course name that contains `<&>`. After normalisation (comments removed,
-whitespace collapsed, quotes unified), 315 lines matched and three differed.
-None of the three is visible:
+whitespace collapsed, quotes unified), 315 lines matched and three differed
+on 0.6. None of the three is visible, and 0.8 removed the third:
 
 - Leaf leaves a trailing space in `class="nav-dropdown-item "` and
   `class="course-tab "` when the active-class branch is false. Elementary
   merges classes and leaves none.
-- Elementary writes `<use href="#i-trash"></use>`. Leaf writes `<use .../>`.
+- On 0.6, Elementary wrote `<use href="#i-trash"></use>`, where Leaf writes
+  `<use .../>`. On 0.8, SVG elements render self-closing, as Leaf does.
 
 The existing route tests (`AdminCourseTermLabelTests`,
 `LeafEmptyStateRenderTests`, `AdminRoutesTests`) pass on the Elementary page
@@ -84,6 +85,27 @@ escape `&` and `"`. That is enough to keep a value inside its attribute.
 Raw output is `HTMLRaw`, and `grep HTMLRaw` finds every site. The spike has
 two: the doctype and the icon sprite.
 
+## Upgrade cost: 0.6.4 to 0.8.2
+
+The spike was written on 0.6.4 and then moved to 0.8.2. Both 0.7 and 0.8 are
+marked as breaking releases. For one page, a layout and five components, the
+move cost:
+
+- **One compile error.** `svg` became `SVG.svg`, a deprecation that strict
+  warnings turn into an error.
+- **One moved constraint.** Shared attributes now live on
+  `MarkupAttribute where Tag: MarkupTrait.AllowsAttributes`, so the ARIA
+  helpers moved there. They now apply to SVG elements too.
+- **Less code.** 0.8 has an `SVG` namespace with `use`, so the hand-made
+  `SVGUse` tag was deleted.
+- **One changed byte sequence.** Empty SVG elements now render self-closing.
+  One expectation in `ElementaryAdminUserPageTests` changed. The existing
+  route tests did not.
+
+The lockfile changed for Elementary only. For a full migration the cost grows
+with the number of views that use a changed API, but each change was mechanical
+and the compiler found every site.
+
 ## Traps found
 
 1. **A stored property named `content` replaces the view.** Elementary's
@@ -103,9 +125,10 @@ two: the doctype and the icon sprite.
    Leaf tag writes single quotes, and Elementary writes double quotes. The
    helper now accepts both. This is the one change to existing test code.
 4. **SwiftLint `type_name` rejects lower-case element types.** Elementary
-   names elements in lower case (`div`, `svg`). An element Chickadee adds in
-   its own module must be upper case (`SVGUse`), or each one needs a
-   suppression.
+   names elements in lower case (`div`). An element Chickadee adds in its
+   own module must be upper case, or each one needs a suppression. On 0.6
+   the spike added `SVGUse` this way. On 0.8 Elementary ships the SVG
+   elements, so the spike adds none.
 5. **Elementary models only some attributes.** There are no ARIA helpers,
    no predefined `role` values, and no `type` or `sizes` on `<link>`.
    Chickadee adds the ARIA helpers. The others use `.custom(name:value:)`.

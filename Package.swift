@@ -21,7 +21,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/leaf.git", from: "4.5.1"),
         // Spike (docs/elementary-spike.md): type-safe HTML views as Swift.
         // Pre-1.0, so pinned to the minor.
-        .package(url: "https://github.com/elementary-swift/elementary.git", .upToNextMinor(from: "0.6.0")),
+        .package(url: "https://github.com/elementary-swift/elementary.git", .upToNextMinor(from: "0.8.2")),
         .package(url: "https://github.com/vapor/jwt.git", from: "5.1.2"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.0"),
