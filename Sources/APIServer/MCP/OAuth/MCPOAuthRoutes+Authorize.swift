@@ -101,8 +101,8 @@ extension MCPOAuthRoutes {
         }
 
         let ordered = Self.scopeDisplayOrder.filter { scopes.contains($0) }
-        let context = ConsentContext(
-            currentUser: req.currentUserContext,
+        let consent = OAuthConsentPage(
+            page: PageRequestContext(request: req),
             clientName: client.name,
             scopeLabels: ordered.map(Self.scopeLabel),
             redirectHost: URLComponents(string: query.redirectURI)?.host ?? query.redirectURI,
@@ -112,7 +112,7 @@ extension MCPOAuthRoutes {
             purposeLabel: surface.purposeLabel,
             requestToken: requestToken,
             readsStudentAnswers: scopes.contains(ContentScope.feedbackRead.rawValue))
-        return try await renderConsent(req, context: context)
+        return try await renderConsent(req, consent: consent)
     }
 
     /// How long a rendered consent screen stays submittable.
@@ -231,9 +231,8 @@ extension MCPOAuthRoutes {
 
     // MARK: - Consent-flow helpers
 
-    private func renderConsent(_ req: Request, context: ConsentContext) async throws -> Response {
-        let view = try await req.view.render("oauth-consent", context)
-        let response = try await view.encodeResponse(for: req)
+    private func renderConsent(_ req: Request, consent: OAuthConsentPage) async throws -> Response {
+        let response = try await HTMLResponse { consent }.encodeResponse(for: req)
         // The consent page embeds the single-use consent token; keep it out of
         // any shared/proxy cache.
         response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
@@ -303,7 +302,7 @@ extension MCPOAuthRoutes {
     }
 }
 
-// MARK: - Consent form / view context
+// MARK: - Consent form
 
 private struct ConsentForm: Content {
     /// The single-use consent token from the rendered form; everything else
@@ -316,28 +315,4 @@ private struct ConsentForm: Content {
         case requestToken = "request_token"
         case decision
     }
-}
-
-private struct ConsentContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let clientName: String
-    let scopeLabels: [String]
-    /// Host portion of the redirect URI, shown prominently so the human can spot
-    /// an unexpected destination (DCR client names are self-asserted).
-    let redirectHost: String
-    /// True when the user has never approved this client — drives a warning.
-    let firstTimeApproval: Bool
-    let notPermitted: Bool
-    /// Role label for the not-permitted message ("instructors and admins" for the
-    /// content surface, "admins" for admin diagnostics).
-    let permittedRoleLabel: String
-    /// What the agent would be authorized to do, for the not-permitted message
-    /// ("author course content" vs "read server diagnostics").
-    let purposeLabel: String
-    /// Single-use consent token embedded in the form; nil for the not-permitted
-    /// view (no submittable form is shown).
-    let requestToken: String?
-    /// True when the grant includes `feedback:read`: the consent note must not
-    /// say the agent cannot reach student data (docs/ai-assisted-feedback.md).
-    var readsStudentAnswers = false
 }

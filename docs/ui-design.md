@@ -122,7 +122,7 @@ them is the answer.
 | **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
 | **Plain student page** | `<h1>` → content | `account.leaf` | index, submit, enroll |
-| **Auth box** | `.auth-box` centred card | `register.leaf` | oauth-consent |
+| **Auth box** | `.auth-box` centred card | `register.leaf` | — |
 | **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
 | **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
 
