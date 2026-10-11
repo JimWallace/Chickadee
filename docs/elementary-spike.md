@@ -176,7 +176,7 @@ no fixture reaches.
 | Every `var(--x)` resolves, no hardcoded fallback | `check-css-vars.sh` (hex fallbacks only) | rendered-page test, page blocks and `style` attributes; any hardcoded fallback | Done, stricter |
 | Hover text at most 20 words | `check-ui-vocabulary.sh` rule 3 (skips interpolated titles) | rendered-page test, every title | Done, stricter |
 | Heading levels form a spine | `PageArchetypeTests` | rendered-page test | Done |
-| Archetype shape | `PageArchetypeTests` | the same rules, applied to the rendered `<main>` | Done for the titlebar archetype; the tabbed and shim rules read Leaf partials and need adapting first |
+| Archetype shape | `PageArchetypeTests` | the same rules, applied to the rendered `<main>` | Done for the titlebar and auth-box exemplars; the tabbed and shim rules read Leaf partials and need adapting first |
 | Raw HTML only where escaping is handled | none | SwiftLint `HTMLRaw(` ban outside `BaseLayout` and `PageStyle` (checked by hand: a planted use fails lint) | Done |
 | `ui-review` runs on a view change | workflow path filter | `Sources/APIServer/Views/**` added | Done |
 | Design tokens in page CSS | `check-design-tokens.sh` | the same script reads `PageStyle` blocks (`scripts/lib/css.sh`) | Done |
@@ -187,14 +187,17 @@ no fixture reaches.
 | `base.leaf` and `BaseLayout` stay in step | none | `BaseLayoutParityTests` (scripts, stylesheets, links, meta names) | Done, until `base.leaf` goes |
 | Leaf semantics | `check-leaf-semantics.sh` | not needed: the compiler enforces it | n/a |
 
-The open row must close before the first tabbed page moves. A ported
+The archetype check reads only fixtures marked `isExemplar`, as
+`PageArchetypeTests` reads only exemplars. The open row must close before the
+first tabbed page moves. A ported
 template that `PageArchetypeTests` still reads as an exemplar stays in the
 tree, unserved, and `retired_exemplar_templates` in `scripts/lib/css.sh`
 keeps its page CSS from being counted twice.
 
 The open rows must close before the first page whose Leaf template carries
-that kind of content is deleted. `admin-user.leaf` stays until then, and
-`PageArchetypeTests` still reads it as the titlebar exemplar.
+that kind of content is deleted. `admin-user.leaf` and `register.leaf` stay
+until then, and `PageArchetypeTests` still reads them as the titlebar and
+auth-box exemplars.
 
 ### Leaf hardening while the migration runs
 

@@ -139,7 +139,20 @@ also the least copyable file here, which is the honest reading of an
 archetype with one member.
 
 The pages in the **Also** column are the archetype too; they are just not
-the reference.  `Tests/APITests/PageArchetypeTests.swift` reads this table —
+the reference.
+
+During the Elementary migration (`docs/elementary-spike.md`), the column
+names only Leaf templates. `PageArchetypeTests` resolves each name to a
+`.leaf` file. These ported pages also follow an archetype:
+
+- Auth box: `LoginPage`, `OAuthConsentPage`.
+- Plain student page: `SubmitPage`, `EnrollPage`.
+
+The routes for `admin-user.leaf` and `register.leaf` now render
+`AdminUserPage` and `RegisterPage`. The two templates are not served. They
+stay only because the test reads them as exemplars.
+
+`Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
 exemplar against its own row on every run.  It checks the exemplars and
 nothing else: no page fails for not being one.  It does hold them to

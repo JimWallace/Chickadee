@@ -28,6 +28,15 @@ extension PageRequestContext {
         self.init(request: req, csrfToken: CSRF.createToken(from: req))
     }
 
+    /// The context for a page that shows the course tabs. The course-aware
+    /// user is resolved and cached on the request first, so `currentUser`
+    /// carries the enrolled courses. A route behind
+    /// `NavCourseContextMiddleware` already has it cached.
+    static func courseAware(_ req: Request) async throws -> PageRequestContext {
+        _ = try await req.courseAwareUserContext()
+        return PageRequestContext(request: req)
+    }
+
     /// The error page's context. An error can be thrown before
     /// SessionsMiddleware has run, and reading the session then traps in a
     /// debug build, so the token is minted only when a session exists. With

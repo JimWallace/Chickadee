@@ -52,12 +52,10 @@ extension WebRoutes {
                     TimeInterval(offer.spentOnAssignment * resolution.policy.extensionHours) * 3600)
                 : dueAt
         }
-        // Resolves the course tabs once; PageRequestContext reads the cached
-        // context from the request.
-        _ = try await req.courseAwareUserContext()
+        let page = try await PageRequestContext.courseAware(req)
         return try await HTMLResponse {
             SlipDayConfirmPage(
-                page: PageRequestContext(request: req),
+                page: page,
                 testSetupID: resolution.assignment.testSetupID,
                 assignmentTitle: resolution.assignment.title,
                 courseCode: resolution.course.code,
