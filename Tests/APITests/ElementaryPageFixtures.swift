@@ -21,7 +21,7 @@ struct ElementaryPageFixture {
 enum ElementaryPageFixtures {
 
     static var all: [ElementaryPageFixture] {
-        [adminUserPage, loginPage, registerPage] + historyPages
+        [adminUserPage, loginPage, registerPage] + historyPages + mcpLtiPages
     }
 
     // MARK: - Shared values

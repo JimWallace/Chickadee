@@ -18,7 +18,7 @@ struct MCPAgentsRoutes: RouteCollection {
     }
 
     @Sendable
-    func list(req: Request) async throws -> View {
+    func list(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let isAdmin = user.isAdmin
 
@@ -28,9 +28,9 @@ struct MCPAgentsRoutes: RouteCollection {
         }
         let grants = try await builder.all()
         let rows = try await Self.grantRows(grants, includeOwner: isAdmin, on: req.db)
-        let context = ConnectedAgentsContext(
-            currentUser: req.currentUserContext, isAdmin: isAdmin, rows: rows)
-        return try await req.view.render("connected-agents", context)
+        return try await HTMLResponse {
+            ConnectedAgentsPage(page: PageRequestContext(request: req), isAdmin: isAdmin, rows: rows)
+        }.encodeResponse(for: req)
     }
 
     /// Builds display rows for the given grants — resolving client (agent)
@@ -127,10 +127,4 @@ struct AgentGrantRow: Encodable {
         try c.encode(statusLabel, forKey: .statusLabel)
         try c.encode(canRevoke, forKey: .canRevoke)
     }
-}
-
-struct ConnectedAgentsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let isAdmin: Bool
-    let rows: [AgentGrantRow]
 }
