@@ -403,13 +403,6 @@ struct NotebookContext: Encodable {
 
 // MARK: - Submission history page
 
-struct SubmissionHistoryContext: Encodable {
-    let testSetupID: String
-    let assignmentTitle: String
-    let rows: [SubmissionHistoryRow]
-    let currentUser: CurrentUserContext?
-}
-
 /// One row of the student's own history page: the row the two staff history
 /// pages show, plus the notebook link only the student's page offers.
 struct SubmissionHistoryRow: Encodable {

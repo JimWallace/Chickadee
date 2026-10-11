@@ -1670,7 +1670,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .test-output-pre-wide { margin-top: .35rem; }
 
 /* ── Diff listing ─────────────────────────────────────
-   The starter-to-submission diff page (submission-diff.leaf): a unified
+   The starter-to-submission diff page (SubmissionDiffPage): a unified
    listing, one row per line, two gutters (old / new line number) and the
    text. A row is added, removed, unchanged context, or a fold standing in
    for a run of unchanged lines. .diff-marker is the notebook cell boundary. */

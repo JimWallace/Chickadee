@@ -290,7 +290,7 @@ extension WebRoutes {
     // MARK: - GET /testsetups/:id/history
 
     @Sendable
-    func submissionHistoryPage(req: Request) async throws -> View {
+    func submissionHistoryPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
         guard
@@ -336,14 +336,9 @@ extension WebRoutes {
             )
         }
 
-        return try await req.view.render(
-            "submission-history",
-            SubmissionHistoryContext(
-                testSetupID: setupID,
-                assignmentTitle: title,
-                rows: rows,
-                currentUser: req.currentUserContext
-            ))
+        return try await HTMLResponse {
+            SubmissionHistoryPage(page: PageRequestContext(request: req), assignmentTitle: title, rows: rows)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - GET /submissions/:id
