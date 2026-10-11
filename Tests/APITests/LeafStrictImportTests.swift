@@ -36,9 +36,14 @@ import VaporTesting
     @Test func aPageThatForgetsASlotFailsLoudly() async throws {
         let page = #"#extend("layout"):#export("content"):C#endexport#endextend"#
         try await withViews(["layout": Self.layout, "page": page]) { app in
-            await #expect(throws: (any Error).self) {
+            let error = await #expect(throws: (any Error).self) {
                 _ = try await app.view.render("page")
             }
+            // LeafKit's error for an import nothing exported, not some other
+            // render failure.
+            let description = String(describing: try #require(error))
+            #expect(description.contains("import"), "\(description)")
+            #expect(description.contains("should have been resolved BEFORE serialization"), "\(description)")
         }
     }
 }
