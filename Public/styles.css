@@ -2442,7 +2442,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
    names instead of inline style="" attributes.  Page-unique styling still
    lives in each page; these are only the patterns that recurred widely. */
 
-/* Body copy on the error page (error.leaf).  GLOBAL rather than page-local
+/* Body copy on the error page (ErrorPage).  GLOBAL rather than page-local
    because the class NAME is a cross-page contract:
    ChickadeeUI.extractErrorMessage (Public/chickadee-ui.js, loaded on every
    page) scrapes failed fetch bodies for class="error-message".  A page-local

@@ -28,23 +28,15 @@ import Vapor
 
 extension WebRoutes {
 
-    /// Leaf context for `editor-reset.leaf` (confirm + done states).
-    struct EditorResetContext: Encodable {
-        let done: Bool
-        let next: String
-        let currentUser: CurrentUserContext?
-    }
-
     // MARK: - GET /reset-editor
 
     @Sendable
     func editorResetPage(req: Request) async throws -> Response {
         struct ResetQuery: Content { var next: String? }
         let next = safeEditorResetReturnPath((try? req.query.decode(ResetQuery.self))?.next)
-        return try await req.view.render(
-            "editor-reset",
-            EditorResetContext(done: false, next: next, currentUser: req.currentUserContext)
-        ).encodeResponse(for: req)
+        return try await HTMLResponse {
+            EditorResetPage(page: PageRequestContext(request: req), done: false, next: next)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /reset-editor
@@ -53,10 +45,9 @@ extension WebRoutes {
     func performEditorReset(req: Request) async throws -> Response {
         struct ResetForm: Content { var next: String? }
         let next = safeEditorResetReturnPath((try? req.content.decode(ResetForm.self))?.next)
-        let response = try await req.view.render(
-            "editor-reset",
-            EditorResetContext(done: true, next: next, currentUser: req.currentUserContext)
-        ).encodeResponse(for: req)
+        let response = try await HTMLResponse {
+            EditorResetPage(page: PageRequestContext(request: req), done: true, next: next)
+        }.encodeResponse(for: req)
         // Clear cached editor assets, the IndexedDB-backed JupyterLite Drive, and
         // any stale service-worker registration for this origin so the next load
         // boots the kernel clean.  Deliberately omit "cookies": the session must

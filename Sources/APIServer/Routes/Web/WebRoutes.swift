@@ -5,7 +5,7 @@
 // in routes.swift).
 //
 //   GET  /                          → index.leaf      (assignments)
-//   GET  /testsetups/:id/submit     → submit.leaf     (student submission form)
+//   GET  /testsetups/:id/submit     → SubmitPage      (student submission form)
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
 //   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
 //   GET  /testsetups/:id/leaderboard → leaderboard.leaf (class activity ranking)
