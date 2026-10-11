@@ -54,8 +54,8 @@ import VaporTesting
         #expect(decoded.runnerSanitized().githubStarterRepository == nil)
         let bytes = try ManifestCodec.stableEncoder.encode(decoded)
         #expect(try ManifestCodec.decoder.decode(TestProperties.self, from: bytes) == decoded)
-        let unset = String(
-            decoding: try ManifestCodec.stableEncoder.encode(TestProperties(language: nil)), as: UTF8.self)
+        let unset = try #require(
+            String(bytes: try ManifestCodec.stableEncoder.encode(TestProperties(language: nil)), encoding: .utf8))
         #expect(!unset.contains("githubStarterRepository"))
     }
 
@@ -298,8 +298,8 @@ import VaporTesting
         try await withApp(app) { _ in
             try await registerApp()
             let (cookie, path, editPath) = try await instructorAssignment()
-            try await post(path, form: ["enabled": "on", "starterRepository": "not a repository"], cookie: cookie) {
-                res in
+            let form = ["enabled": "on", "starterRepository": "not a repository"]
+            try await post(path, form: form, cookie: cookie) { res in
                 #expect(res.headers.first(name: .location)?.hasPrefix(editPath + "?error=") == true)
             }
             let manifest = try await APITestSetup.find("gh_starter_edit", on: app.db)?.decodedManifest()

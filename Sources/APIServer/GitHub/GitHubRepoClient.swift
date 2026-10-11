@@ -166,20 +166,13 @@ extension GitHubRepoClient {
 
     private struct RepositoryBody: Decodable {
         struct Owner: Decodable { let id: Int64 }
-        struct Template: Decodable {
-            let fullName: String
-
-            enum CodingKeys: String, CodingKey {
-                case fullName = "full_name"
-            }
-        }
         let id: Int64
         let fullName: String
         let owner: Owner
         let defaultBranch: String
         let isTemplate: Bool?
         let isPrivate: Bool?
-        let templateRepository: Template?
+        let templateRepository: TemplateBody?
 
         enum CodingKeys: String, CodingKey {
             case id, owner
@@ -194,6 +187,15 @@ extension GitHubRepoClient {
             GitHubRepository(
                 id: id, fullName: fullName, ownerID: owner.id, defaultBranch: defaultBranch,
                 isPrivate: isPrivate == true, templateFullName: templateRepository?.fullName)
+        }
+    }
+
+    /// The template a repository was made from.
+    private struct TemplateBody: Decodable {
+        let fullName: String
+
+        enum CodingKeys: String, CodingKey {
+            case fullName = "full_name"
         }
     }
 
