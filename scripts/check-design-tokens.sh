@@ -51,6 +51,10 @@ SPACING_STEPS=" -.25rem -.75rem .1rem .15rem .2rem .25rem .3rem .35rem .4rem .45
 # prose mentioning a hex value don't false-positive.
 # shellcheck source=lib/css.sh
 . "scripts/lib/css.sh"
+# Page CSS: served templates plus Elementary PageStyle literals.
+views=()
+while IFS= read -r f; do views+=("$f"); done < <(served_style_templates)
+while IFS= read -r f; do views+=("$f"); done < <(swift_page_style_files)
 
 # Emit "<label>:<text>" for each declaration of the given property found in
 # comment-stripped CSS on stdin.

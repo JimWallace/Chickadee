@@ -1,0 +1,10 @@
+# A var() in an Elementary view resolves to nothing when undeclared, as it
+# does in a template.
+guard="scripts/check-css-vars.sh"
+files="Sources/APIServer/Views/Pages/AdminUserPage.swift"
+description="an undeclared custom property in an Elementary PageStyle block"
+expect="undefined"
+apply() {
+    sed -i.bak 's/\.user-enroll-select { flex: 1; }/.user-enroll-select { flex: 1; }\n                .ck-guard-fixture-swift { color: var(--ck-guard-fixture-swift-never-declared); }/' Sources/APIServer/Views/Pages/AdminUserPage.swift
+    rm -f Sources/APIServer/Views/Pages/AdminUserPage.swift.bak
+}

@@ -48,6 +48,9 @@ defined="$(
   {
     cat Public/*.css
     page_style_blocks "${views[@]}"
+    # Elementary page CSS; the classes those views assign are checked on the
+    # rendered HTML by ElementaryPageGuardTests.
+    page_style_blocks $(swift_page_style_files)
   } \
     | strip_css_comments \
     | grep -oE '\.[a-z][a-z0-9-]*' \

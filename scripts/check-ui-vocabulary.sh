@@ -246,6 +246,8 @@ none:strip an underline the browser added"
 
 style_sources=("$sheet")
 while IFS= read -r f; do style_sources+=("$f"); done < <(ls Resources/Views/*.leaf 2>/dev/null || true)
+# Elementary views with page CSS (scripts/lib/css.sh).
+while IFS= read -r f; do style_sources+=("$f"); done < <(swift_page_style_files)
 
 check_affordance() {
   local prop="$1" registry="$2" label="$3" hint="$4"
