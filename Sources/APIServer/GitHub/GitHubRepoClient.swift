@@ -36,6 +36,9 @@ struct GitHubRepository: Sendable, Equatable {
     /// Whether only granted people can see the repository. False by default,
     /// so a value nobody read never lets a result reach a public repository.
     var isPrivate = false
+    /// `owner/name` of the template the repository was made from, or nil.
+    /// GitHub reports it when one repository is read by its ID.
+    var templateFullName: String?
 }
 
 /// A commit status (slice 6).
@@ -163,12 +166,20 @@ extension GitHubRepoClient {
 
     private struct RepositoryBody: Decodable {
         struct Owner: Decodable { let id: Int64 }
+        struct Template: Decodable {
+            let fullName: String
+
+            enum CodingKeys: String, CodingKey {
+                case fullName = "full_name"
+            }
+        }
         let id: Int64
         let fullName: String
         let owner: Owner
         let defaultBranch: String
         let isTemplate: Bool?
         let isPrivate: Bool?
+        let templateRepository: Template?
 
         enum CodingKeys: String, CodingKey {
             case id, owner
@@ -176,12 +187,13 @@ extension GitHubRepoClient {
             case defaultBranch = "default_branch"
             case isTemplate = "is_template"
             case isPrivate = "private"
+            case templateRepository = "template_repository"
         }
 
         var repository: GitHubRepository {
             GitHubRepository(
                 id: id, fullName: fullName, ownerID: owner.id, defaultBranch: defaultBranch,
-                isPrivate: isPrivate == true)
+                isPrivate: isPrivate == true, templateFullName: templateRepository?.fullName)
         }
     }
 

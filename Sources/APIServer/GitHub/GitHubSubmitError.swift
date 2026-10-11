@@ -38,6 +38,9 @@ enum GitHubSubmitError: String, Error, Equatable {
     case repositoryNameTaken
     /// The assignment uses course repositories and this student has none yet.
     case noCourseRepository
+    /// The repository is public. A public repository shows the student's
+    /// solution to everyone, so it cannot be submitted.
+    case notPrivate
 
     var message: String {
         switch self {
@@ -72,6 +75,9 @@ enum GitHubSubmitError: String, Error, Equatable {
             "The course organization already has a repository with that name. Ask course staff."
         case .noCourseRepository:
             "Make your course repository first."
+        case .notPrivate:
+            "This repository is public, so anyone can read your solution. "
+                + "Make it private on GitHub, then try again."
         }
     }
 }

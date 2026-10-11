@@ -345,6 +345,11 @@
             Post commit status
         </label>
         <p class="field-note field-note--muted">Posts only the public-test count to a private repository, and needs GitHub submission on and a GitHub App with commit statuses.</p>
+        <label class="form-label">
+            Starter repository
+            <input class="form-input" type="text" name="starterRepository" value="#(githubSubmission.starterRepository)" placeholder="owner/name">
+        </label>
+        <p class="field-note field-note--muted">A public template repository. Students copy it into a private repository of their own. Not used with a course repository.</p>
         <button class="btn action-btn" type="submit">Save GitHub setting</button>
     </form>
     #endif
