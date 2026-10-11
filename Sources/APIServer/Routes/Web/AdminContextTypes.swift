@@ -338,16 +338,6 @@ struct AdminStoragePageContext: Encodable {
     let assignmentRows: [AdminStorageShareRow]
 }
 
-struct AdminUserDetailContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let targetUserID: String
-    let displayName: String?
-    let username: String
-    let role: String
-    let enrolledCourses: [AdminCourseRef]
-    let availableCourses: [AdminCourseRef]
-}
-
 struct AdminCourseDetailContext: Encodable {
     let currentUser: CurrentUserContext?
     let course: AdminCourseRow

@@ -664,7 +664,7 @@ extension AdminRoutes {
             let course = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
-            return req.redirect(to: "/admin/users/\(idString)?error=invalid_course")
+            return req.redirect(to: "/admin/users/\(idString)?error=\(AdminEnrollError.invalidCourse.rawValue)")
         }
 
         try await ensureSeededEnrollment(userID: userID, courseID: courseID, on: req.db)

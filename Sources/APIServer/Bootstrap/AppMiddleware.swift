@@ -202,6 +202,8 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
     app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
     app.leaf.tags["rawJSON"] = RawJSONTag()
+    // The Elementary pages embed the same sprite (docs/elementary-spike.md).
+    app.loadIconSprite()
     // FileMiddleware short-circuits the responder chain (it returns without
     // calling next), so middleware registered AFTER it only runs for dynamic
     // Leaf-rendered pages — which is why COEPMiddleware (after it) covers the

@@ -418,7 +418,7 @@ struct AdminRoutes: RouteCollection {
     // MARK: - GET /admin/users/:userID
 
     @Sendable
-    func userDetail(req: Request) async throws -> View {
+    func userDetail(req: Request) async throws -> HTMLResponse<AdminUserPage> {
         guard
             let idString = req.parameters.get("userID"),
             let userID = UUID(uuidString: idString),
@@ -454,17 +454,19 @@ struct AdminRoutes: RouteCollection {
             return AdminCourseRef(id: id.uuidString, code: c.code, name: c.name, termLabel: c.term?.displayName)
         }
 
-        return try await req.view.render(
-            "admin-user",
-            AdminUserDetailContext(
-                currentUser: req.currentUserContext,
+        return HTMLResponse {
+            AdminUserPage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(
+                    error: req.query[String.self, at: "error"].flatMap(AdminEnrollError.init(rawValue:))?.message),
                 targetUserID: idString,
                 displayName: user.displayName,
                 username: user.username,
                 role: user.role,
                 enrolledCourses: enrolledRows,
                 availableCourses: availableRows
-            ))
+            )
+        }
     }
 
     // MARK: - POST /admin/users/:userID/delete
