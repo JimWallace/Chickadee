@@ -2,9 +2,9 @@
 # the palette or the scales. Only display:none and custom-prop assignments
 # are allowed.
 guard="scripts/check-styles.sh"
-files="Resources/Views/login.leaf"
+files="Resources/Views/base.leaf"
 description="an inline style attribute in a template"
 expect="disallowed inline style"
 apply() {
-    printf '<p style="margin-top: 3px">guard fixture</p>\n' >> Resources/Views/login.leaf
+    printf '<p style="margin-top: 3px">guard fixture</p>\n' >> Resources/Views/base.leaf
 }

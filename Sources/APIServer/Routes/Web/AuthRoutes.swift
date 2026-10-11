@@ -7,9 +7,9 @@
 // This prevents form resubmission on refresh and avoids Leaf rendering
 // inside the POST handler (which simplifies testing).
 //
-//   GET  /login      → login.leaf (local form and/or SSO button by AUTH_MODE)
+//   GET  /login      → LoginPage (local form and/or SSO button by AUTH_MODE)
 //   POST /login      → verify local credentials, set session, redirect to / (local/dual only)
-//   GET  /register   → register.leaf (local/dual only)
+//   GET  /register   → RegisterPage (local/dual only)
 //   POST /register   → create account (first user becomes admin), redirect to / (local/dual only)
 //   POST /logout     → clear session, redirect to /login
 
@@ -66,16 +66,16 @@ struct AuthRoutes: RouteCollection {
         // means logout visibly takes effect; the button still runs the full
         // SSO flow (with `prompt=login` after a logout).
 
-        return try await req.view.render(
-            "login",
-            LoginContext(
+        return try await HTMLResponse {
+            LoginPage(
+                page: PageRequestContext(request: req),
                 error: error,
                 loggedOut: loggedOut,
                 showLocalLogin: authMode != .sso,
                 showRegisterLink: authMode != .sso,
                 showSSOLogin: authMode != .local
             )
-        ).encodeResponse(for: req)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /login
@@ -179,10 +179,9 @@ struct AuthRoutes: RouteCollection {
             return req.redirect(to: "/")
         }
         let error = req.query[String.self, at: "error"]
-        return try await req.view.render(
-            "register",
-            RegisterContext(error: error)
-        ).encodeResponse(for: req)
+        return try await HTMLResponse {
+            RegisterPage(page: PageRequestContext(request: req), error: error)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /register
@@ -460,33 +459,4 @@ private struct LoginBody: Content {
 private struct RegisterBody: Content {
     var username: String
     var password: String
-}
-
-// MARK: - View context types
-
-private struct LoginContext: Encodable {
-    var error: String?
-    var loggedOut: Bool
-    var showLocalLogin: Bool
-    var showRegisterLink: Bool
-    var showSSOLogin: Bool
-
-    init(
-        error: String? = nil,
-        loggedOut: Bool = false,
-        showLocalLogin: Bool,
-        showRegisterLink: Bool,
-        showSSOLogin: Bool
-    ) {
-        self.error = error
-        self.loggedOut = loggedOut
-        self.showLocalLogin = showLocalLogin
-        self.showRegisterLink = showRegisterLink
-        self.showSSOLogin = showSSOLogin
-    }
-}
-
-private struct RegisterContext: Encodable {
-    var error: String?
-    init(error: String? = nil) { self.error = error }
 }

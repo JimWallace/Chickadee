@@ -21,7 +21,7 @@ struct ElementaryPageFixture {
 enum ElementaryPageFixtures {
 
     static var all: [ElementaryPageFixture] {
-        [adminUserPage]
+        [adminUserPage, loginPage, registerPage]
     }
 
     // MARK: - Shared values
@@ -53,6 +53,35 @@ enum ElementaryPageFixtures {
     }
 
     // MARK: - Pages
+
+    static var loginPage: ElementaryPageFixture {
+        func render(error: String?, loggedOut: Bool, local: Bool, sso: Bool) -> String {
+            LoginPage(
+                page: page(), error: error, loggedOut: loggedOut, showLocalLogin: local, showRegisterLink: local,
+                showSSOLogin: sso
+            ).render()
+        }
+        return ElementaryPageFixture(
+            typeName: "LoginPage",
+            archetype: .authBox,
+            renders: [
+                render(error: nil, loggedOut: true, local: true, sso: true),
+                render(error: "invalid", loggedOut: false, local: true, sso: false),
+                render(error: "sso_failed", loggedOut: false, local: false, sso: true),
+            ]
+        )
+    }
+
+    static var registerPage: ElementaryPageFixture {
+        ElementaryPageFixture(
+            typeName: "RegisterPage",
+            archetype: .authBox,
+            renders: [
+                RegisterPage(page: page(), error: nil).render(),
+                RegisterPage(page: page(), error: "taken").render(),
+            ]
+        )
+    }
 
     static var adminUserPage: ElementaryPageFixture {
         let fall = AdminCourseRef(id: "c1", code: "CS135", name: "Design", termLabel: "Fall 2026")
