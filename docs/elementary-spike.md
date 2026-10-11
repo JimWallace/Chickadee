@@ -235,7 +235,64 @@ text reaches the page.
    parameters are safer.
 3. **Order with Vapor 5.** Elementary does not depend on Vapor. If the views
    move first, the Vapor 5 move touches only `HTMLResponse` and
-   `PageRequestContext`.
+   `PageRequestContext`. See "Vapor 5 and Leaf: status (October 2026)".
+
+## Vapor 5 and Leaf: status (October 2026)
+
+Checked on 2026-10-10. Recheck before the Vapor 5 move.
+
+**Vapor 5 is in beta.** 5.0.0-alpha.1 shipped on 11 June 2026, beta.1 on
+15 September and beta.3 on 1 October. The beta announcement calls it
+"essentially a full rewrite": no `EventLoopFuture`, `Request` and `Response`
+are structs on Swift HTTP Types, body decoding is async, middleware is
+"still in progress", configuration moves to Swift Configuration, and the
+testing library is new. There is no release date; the team says it depends
+partly on the ecosystem packages. It requires Swift 6.4 and **macOS 26**.
+`Package.swift` targets macOS 15, so the platform minimum must rise for the
+move.
+
+**Leaf does not support Vapor 5 yet.** The beta announcement says only
+"Leaf integration will be available soon"; Fluent, JWT and Queues are also
+listed as coming later.
+
+- `vapor/leaf` (the Vapor integration) has no Vapor 5 branch. Its releases
+  are Vapor 4 maintenance.
+- `vapor/leaf-kit` (the engine) has a draft pull request, "LeafKit V2"
+  (#137), on a `v5` branch. It holds four commits: removing futures and moving
+  to Swift Testing (April 2025), then a merge from `main` and an import fix
+  (April 2026). No review has been requested.
+- The 5.0 documentation has no Leaf section and no migration guide yet.
+
+**Vapor 5 keeps a renderer-neutral `View`.** Vapor pull request #3551 ("New
+View Type", merged 9 September 2026) backs `View` with in-memory `Data`, and
+its discussion decided against streaming templates. `HTMLResponse` already
+renders one in-memory `String`, so the Vapor 5 port of the views is that type
+and `PageRequestContext`, against the new `Response` and dependency
+injection.
+
+**What this means here.**
+
+1. Staying on Leaf would hold the Vapor 5 move until a Leaf release for it
+   exists. The only evidence of one is a draft with four commits.
+2. With the views on Elementary, the Vapor 5 move for the view layer does not
+   wait on Leaf.
+3. Vapor 5 itself is not ready to adopt: it is a beta, its middleware is
+   unfinished, and the community packages in use (`CSRF`, from
+   vapor-community) need their own ports. The order stays: views to
+   Elementary on Vapor 4 now, Vapor 5 after its final release.
+4. The decision point for Leaf is the release of a Vapor 5 Leaf. If pages are
+   still on Leaf then, choose between porting those pages to the new Leaf and
+   finishing the Elementary migration first. A finished migration makes the
+   Leaf release irrelevant.
+
+Sources: [Vapor 5 Beta](https://blog.vapor.codes/posts/vapor-5-beta/),
+[What's New in Vapor 5 Beta](https://blog.vapor.codes/posts/whats-new-in-vapor-5-beta/),
+[Vapor releases](https://github.com/vapor/vapor/releases),
+[vapor/vapor#3551](https://github.com/vapor/vapor/pull/3551),
+[Vapor 5.0 docs](https://docs.vapor.codes/5.0/),
+[vapor/leaf releases](https://github.com/vapor/leaf/releases),
+[vapor/leaf-kit#137](https://github.com/vapor/leaf-kit/pull/137),
+[vapor/leaf-kit releases](https://github.com/vapor/leaf-kit/releases).
 
 ## To remove the spike
 
