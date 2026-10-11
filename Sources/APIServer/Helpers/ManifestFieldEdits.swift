@@ -486,6 +486,16 @@ func setManifestGitHubStatusChecks(setup: APITestSetup, enabled: Bool, on db: an
     }
 }
 
+/// Sets (or clears, with nil) the starter repository, as `owner/name`. Nil
+/// omits the key, matching `TestProperties.encode`.
+func setManifestGitHubStarterRepository(
+    setup: APITestSetup, to repository: GitHubRepositoryName?, on db: any Database
+) async throws {
+    try await mutateManifest(setup: setup, on: db) { props in
+        props.githubStarterRepository = repository?.value
+    }
+}
+
 /// Reads the `activity` block of a manifest JSON string — nil when the field
 /// is absent, or the manifest can't be decoded (which includes an activity
 /// kind this build does not know).

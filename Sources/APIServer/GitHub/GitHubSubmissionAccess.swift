@@ -136,6 +136,14 @@ struct GitHubSubmissionAccess: Sendable {
         return repository
     }
 
+    /// One repository that may be submitted: `ownedRepository(id:req:)`, and
+    /// private. A public repository shows the student's solution to everyone.
+    func submittableRepository(id: Int64, req: Request) async throws -> GitHubRepository {
+        let repository = try await ownedRepository(id: id, req: req)
+        guard repository.isPrivate else { throw GitHubSubmitError.notPrivate }
+        return repository
+    }
+
     func branches(of repository: GitHubRepository, req: Request) async throws -> [String] {
         try await call(req) { token in try await client.branches(token, repository.fullName).sorted() }
     }
