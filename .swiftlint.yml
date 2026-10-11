@@ -151,3 +151,22 @@ large_tuple:
 
 nesting:
   type_level: 2
+
+# Elementary views (docs/elementary-spike.md, "Guards"). The shell style guards
+# read only Resources/Views/*.leaf; ElementaryPageGuardTests checks rendered
+# pages, and these two rules catch the same mistakes in source, including
+# branches no fixture reaches.
+custom_rules:
+  elementary_no_inline_style:
+    name: "No inline style in a view"
+    included: "Sources/APIServer/Views/.*\\.swift"
+    regex: "\\.style\\("
+    message: "Put styling in Public/styles.css or a PageStyle block, not a style attribute (docs/ui-design.md)."
+    severity: error
+  elementary_raw_html:
+    name: "Raw HTML only where escaping is handled"
+    included: "Sources/APIServer/Views/.*\\.swift"
+    excluded: "Sources/APIServer/Views/(BaseLayout|PageStyle)\\.swift"
+    regex: "HTMLRaw\\("
+    message: "HTMLRaw skips escaping. Raw output lives in BaseLayout (doctype, icon sprite) and PageStyle (author CSS) only."
+    severity: error

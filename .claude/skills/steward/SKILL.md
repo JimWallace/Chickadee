@@ -66,6 +66,7 @@ mechanical. At minimum, for the layers you touched:
 |---|---|
 | Swift | `scripts/format.sh` then `scripts/lint.sh`, `scripts/swiftlint.sh` |
 | `Resources/Views/`, `Public/styles.css`, page JS | `scripts/check-styles.sh` |
+| `Sources/APIServer/Views/` | `swift test --filter ElementaryPageGuardTests`, `scripts/swiftlint.sh` |
 | a guard script itself | `scripts/check-guards.sh` |
 | `docker-compose.yml`, `Dockerfile`, `deploy/` | `scripts/check-docker-build-context.sh`, `scripts/ci-compose-env.sh --check` |
 | Leaf templates | `scripts/check-leaf-semantics.sh` |
@@ -76,7 +77,8 @@ friction, raise it in `.swiftlint.yml` rather than dropping `--strict`.
 
 ## The UI review is not optional
 
-Any change touching `Resources/Views/`, `Public/styles.css`, or a page-wiring
+Any change touching `Resources/Views/`, `Sources/APIServer/Views/`,
+`Public/styles.css`, or a page-wiring
 `Public/*.js` gets the **`ui-review` agent**, unconditionally and without
 asking. The guards prove a value is on the palette and a class has a rule;
 they cannot see a component that duplicates the vocabulary under a new name,

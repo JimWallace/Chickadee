@@ -1,0 +1,10 @@
+# A function call inside a condition is looked up the same way: an unknown
+# name resolves to nothing and the branch silently never fires. The tag
+# indicator is built, not written, so this file is not a hit for a scanner.
+guard="scripts/check-leaf-semantics.sh"
+files="Resources/Views/login.leaf"
+description="a misspelled function inside a condition"
+expect="unknown Leaf tag"
+apply() {
+    printf '%sif(cuont(rows) > 0):<p>x</p>%sendif\n' "#" "#" >> Resources/Views/login.leaf
+}

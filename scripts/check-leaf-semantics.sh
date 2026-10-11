@@ -76,6 +76,16 @@ set -uo pipefail
 # records the full table. An unknown `#word` (a CSS id in prose) is inert, so
 # only the interpolation opener and the structural tag names are rejected.
 #
+# A FOURTH: a tag name Leaf does not know. `ParameterResolver` looks a tag up
+# by name and, when nothing is registered under it, resolves the call to nil:
+# a misspelled CSRF field tag renders as an empty string, and the form it sat
+# in is refused with a 403 only when someone submits it. The same holds for a
+# function called inside a condition. Every tag name used in a template, at the
+# start of a tag or as a call inside a tag's parameter list, must be a
+# structural tag, a LeafKit built-in (`defaultTags` in LeafKit's LeafTag.swift)
+# or a tag the server registers (`app.leaf.tags["..."]`, read from the source
+# so the list cannot drift).
+#
 # The rule covers `isEmpty` and `count` and stops there. Those are the two a
 # Swift author reaches for on a collection, and both fail silently. Adding
 # speculative names (`first`, `uppercased`, …) would buy no evidence-backed
@@ -239,8 +249,46 @@ if [ -n "$comment_hits" ]; then
   printf '%s\n' "$comment_hits" | sed 's/^/  /' >&2
 fi
 
+# The tag-name rule. The registered names are derived from the source; a
+# derivation that finds none is broken, not clean, and fails.
+leafkit_builtin_tags="unsafeHTML lowercased uppercased capitalized contains isEmpty date count comment dumpContext"
+registered_tags="$(
+  grep -rhoE 'app\.leaf\.tags\["[A-Za-z][A-Za-z0-9_]*"\]' Sources/APIServer \
+    | sed -E 's/.*\["([A-Za-z0-9_]+)"\]/\1/' | LC_ALL=C sort -u
+)"
+if [ -z "$registered_tags" ]; then
+  status=1
+  echo "check-leaf-semantics: found no registered Leaf tags in Sources/APIServer; the scan is broken." >&2
+fi
+known_tags=" $(printf '%s' "$structural_tags" | tr '|' ' ') $leafkit_builtin_tags $(printf '%s' "$registered_tags" | tr '\n' ' ') "
+
+unknown_tag_hits=""
+# Tag openers anywhere in a template.
+while IFS= read -r hit; do
+  [ -n "$hit" ] || continue
+  name="${hit##*"$tag_indicator"}"; name="${name%(}"
+  case "$known_tags" in *" $name "*) ;; *) unknown_tag_hits+="  ${hit%"$tag_indicator"*}  ${name}"$'\n' ;; esac
+done <<< "$(grep -rnoE "${tag_indicator}[A-Za-z][A-Za-z0-9_]*[(]" "${leaf_files[@]}" || true)"
+# Calls inside a tag's parameter list, with string literals removed first.
+while IFS= read -r hit; do
+  [ -n "$hit" ] || continue
+  file="${hit%%:*}"; rest="${hit#*:}"; lineno="${rest%%:*}"; params="${rest#*:}"
+  for name in $(printf '%s' "$params" | sed -E 's/"[^"]*"//g' | grep -oE '[A-Za-z][A-Za-z0-9_]*[(]' | tr -d '('); do
+    case "$known_tags" in *" $name "*) ;; *) unknown_tag_hits+="  ${file}:${lineno}:  ${name}"$'\n' ;; esac
+  done
+done <<< "$tag_parameters"
+if [ -n "$unknown_tag_hits" ]; then
+  status=1
+  echo "check-leaf-semantics: unknown Leaf tag." >&2
+  echo "  Leaf resolves a tag it does not know to nothing, with no error: a" >&2
+  echo "  misspelled CSRF field renders as an empty string. Use a structural tag," >&2
+  echo "  a LeafKit built-in, or a tag registered in app.leaf.tags." >&2
+  echo "" >&2
+  printf '%s' "$unknown_tag_hits" >&2
+fi
+
 if [ $status -eq 0 ]; then
-  echo "check-leaf-semantics: OK (no Swift property access, line comments or tags in comments in templates)"
+  echo "check-leaf-semantics: OK (no Swift property access, line comments, tags in comments or unknown tags in templates)"
 fi
 
 exit $status

@@ -194,6 +194,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
 
     // MARK: - Views + static files
 
+    app.leaf.useChickadeeConfiguration(rootDirectory: app.directory.viewsDirectory)
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
     app.leaf.tags["csrfToken"] = CSRFTokenTag()
