@@ -63,7 +63,7 @@ extension CourseAdminRoutes {
     // MARK: - POST /courses/:courseID/enroll-csv
 
     @Sendable
-    func instructorBulkEnrollCSV(req: Request) async throws -> View {
+    func instructorBulkEnrollCSV(req: Request) async throws -> Response {
         // Both inputs are optional: the instructor can upload a CSV, type
         // user IDs into the textarea, or both.  Usernames from both sources
         // are merged (and deduplicated by `enrollUsernamesInCourse`).
@@ -105,7 +105,8 @@ extension CourseAdminRoutes {
                     courseCode: course.code,
                     courseName: course.name,
                     error: "Upload a CSV file or type at least one user ID to enrol."
-                ))
+                )
+            ).encodeResponse(for: req)
         }
 
         let result = try await enrollUsernamesInCourse(
@@ -114,18 +115,15 @@ extension CourseAdminRoutes {
             on: req.db
         )
 
-        return try await req.view.render(
-            "admin-enroll-csv-result",
-            EnrollCSVResultContext(
-                currentUser: req.currentUserContext,
+        return try await HTMLResponse {
+            AdminEnrollCSVResultPage(
+                page: PageRequestContext(request: req),
                 courseCode: course.code,
                 courseName: course.name,
-                enrolledCount: result.enrolledCount,
-                preEnrolledCount: result.preEnrolledCount,
-                alreadyEnrolledCount: result.alreadyEnrolledCount,
-                rejectedUsernames: result.rejectedUsernames,
+                result: result,
                 returnURL: "/instructor"
-            ))
+            )
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /courses/:courseID/unenroll/:userID

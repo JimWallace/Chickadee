@@ -703,7 +703,7 @@ extension AdminRoutes {
     // MARK: - POST /admin/courses/:courseID/enroll-csv
 
     @Sendable
-    func adminBulkEnrollCSV(req: Request) async throws -> View {
+    func adminBulkEnrollCSV(req: Request) async throws -> Response {
         struct BulkEnrollForm: Content {
             var file: Data
         }
@@ -738,18 +738,15 @@ extension AdminRoutes {
             ],
             on: req
         )
-        return try await req.view.render(
-            "admin-enroll-csv-result",
-            EnrollCSVResultContext(
-                currentUser: req.currentUserContext,
+        return try await HTMLResponse {
+            AdminEnrollCSVResultPage(
+                page: PageRequestContext(request: req),
                 courseCode: course.code,
                 courseName: course.name,
-                enrolledCount: result.enrolledCount,
-                preEnrolledCount: result.preEnrolledCount,
-                alreadyEnrolledCount: result.alreadyEnrolledCount,
-                rejectedUsernames: result.rejectedUsernames,
+                result: result,
                 returnURL: "/admin/courses/\(idString)"
-            ))
+            )
+        }.encodeResponse(for: req)
     }
 
 }
