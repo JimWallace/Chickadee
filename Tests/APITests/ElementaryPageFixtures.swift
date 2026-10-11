@@ -13,9 +13,16 @@ import Foundation
 struct ElementaryPageFixture {
     /// The page's Swift type name, as declared in `Views/Pages/`.
     let typeName: String
+    /// The page's archetype, or the nearest one when the page predates the
+    /// rulebook and fits none exactly.
     let archetype: PageArchetypeTests.Archetype
     /// One render per branch worth checking.
     let renders: [String]
+    /// True for the page an archetype names as its exemplar in
+    /// docs/ui-design.md. Only exemplars are held to the archetype's rules:
+    /// "It checks the exemplars and nothing else: no page fails for not being
+    /// one."
+    var isExemplar = false
 }
 
 enum ElementaryPageFixtures {
@@ -79,7 +86,8 @@ enum ElementaryPageFixtures {
             renders: [
                 RegisterPage(page: page(), error: nil).render(),
                 RegisterPage(page: page(), error: "taken").render(),
-            ]
+            ],
+            isExemplar: true
         )
     }
 
@@ -104,7 +112,8 @@ enum ElementaryPageFixtures {
                 render(
                     signedInAdmin, enrolled: [fall, untermed], available: [],
                     flash: FlashMessages(error: AdminEnrollError.invalidCourse.message)),
-            ]
+            ],
+            isExemplar: true
         )
     }
 }
