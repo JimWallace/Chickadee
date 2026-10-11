@@ -121,7 +121,7 @@ them is the answer.
 | **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | admin, admin-users |
 | **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
-| **Plain student page** | `<h1>` → content | `account.leaf` | index, submit, enroll |
+| **Plain student page** | `<h1>` → content | `account.leaf` | index |
 | **Auth box** | `.auth-box` centred card | `register.leaf` | oauth-consent |
 | **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
 | **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |

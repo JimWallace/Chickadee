@@ -2,7 +2,7 @@
 //
 // Course enrollment routes (any authenticated user).
 //
-//   GET  /enroll                        → enroll.leaf  (pick courses to join)
+//   GET  /enroll                        → EnrollPage  (pick courses to join)
 //   POST /enroll                        → save selections → redirect to /
 //   POST /courses/:courseID/activate    → switch active course tab → redirect back
 
@@ -20,7 +20,7 @@ struct EnrollmentRoutes: RouteCollection {
     // MARK: - GET /enroll
 
     @Sendable
-    func enrollPage(req: Request) async throws -> View {
+    func enrollPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.internalServerError) }
 
@@ -48,12 +48,11 @@ struct EnrollmentRoutes: RouteCollection {
             )
         }
 
-        return try await req.view.render(
-            "enroll",
-            EnrollContext(
-                currentUser: req.currentUserContext,
-                courses: rows
-            ))
+        // The Leaf context never carried `?error=`, so the none-selected
+        // message has never shown; the port keeps that until it is fixed.
+        return try await HTMLResponse {
+            EnrollPage(page: PageRequestContext(request: req), error: nil, courses: rows)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /enroll
@@ -154,21 +153,4 @@ struct EnrollmentRoutes: RouteCollection {
         guard let path, path.hasPrefix("/"), !path.hasPrefix("//") else { return nil }
         return path
     }
-}
-
-// MARK: - View context types
-
-private struct EnrollContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let courses: [EnrollCourseRow]
-    var error: String?
-}
-
-private struct EnrollCourseRow: Encodable {
-    let id: String
-    let code: String
-    let name: String
-    /// "Fall 2026", or nil when the course records no term.
-    let termLabel: String?
-    let isEnrolled: Bool
 }

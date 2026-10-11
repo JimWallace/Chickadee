@@ -2,7 +2,7 @@
 //
 // Student "spend a slip day" endpoints (#1228).
 //
-//   GET  /testsetups/:testSetupID/slip-day   → slip-day-confirm.leaf
+//   GET  /testsetups/:testSetupID/slip-day   → SlipDayConfirmPage
 //   POST /testsetups/:testSetupID/slip-day   → spend, redirect to /
 //
 // The GET is an explicit confirmation page — it names the assignment, the
@@ -52,22 +52,24 @@ extension WebRoutes {
                     TimeInterval(offer.spentOnAssignment * resolution.policy.extensionHours) * 3600)
                 : dueAt
         }
-        let context = SlipDayConfirmContext(
-            currentUser: try await req.courseAwareUserContext(),
-            testSetupID: resolution.assignment.testSetupID,
-            assignmentTitle: resolution.assignment.title,
-            courseCode: resolution.course.code,
-            isStacked: offer.isStacked,
-            heldDeadlineText: heldDeadline.map { fmt.string(from: $0) } ?? "—",
-            newDeadlineText: fmt.string(from: offer.newDeadline),
-            balance: resolution.balance,
-            totalBudget: resolution.totalBudget,
-            remainingAfter: resolution.balance - 1,
-            extensionHours: resolution.policy.extensionHours,
-            confirmLabel: offer.isStacked ? "Use another slip day" : "Use a slip day"
-        )
-        return try await req.view.render("slip-day-confirm", context)
-            .encodeResponse(for: req)
+        // Resolves the course tabs once; PageRequestContext reads the cached
+        // context from the request.
+        _ = try await req.courseAwareUserContext()
+        return try await HTMLResponse {
+            SlipDayConfirmPage(
+                page: PageRequestContext(request: req),
+                testSetupID: resolution.assignment.testSetupID,
+                assignmentTitle: resolution.assignment.title,
+                courseCode: resolution.course.code,
+                isStacked: offer.isStacked,
+                heldDeadlineText: heldDeadline.map { fmt.string(from: $0) } ?? "—",
+                newDeadlineText: fmt.string(from: offer.newDeadline),
+                balance: resolution.balance,
+                totalBudget: resolution.totalBudget,
+                remainingAfter: resolution.balance - 1,
+                extensionHours: resolution.policy.extensionHours
+            )
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /testsetups/:testSetupID/slip-day
@@ -195,26 +197,4 @@ extension WebRoutes {
             totalBudget: totalBudget
         )
     }
-}
-
-// MARK: - View context
-
-private struct SlipDayConfirmContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let testSetupID: String
-    let assignmentTitle: String
-    let courseCode: String
-    /// True when this claim stacks on an existing slip-day extension.
-    let isStacked: Bool
-    /// The deadline the student currently holds: the original due date for a
-    /// first claim, the current slip-day extension for a stacked one.
-    let heldDeadlineText: String
-    let newDeadlineText: String
-    let balance: Int
-    let totalBudget: Int
-    let remainingAfter: Int
-    let extensionHours: Int
-    /// "Use a slip day" / "Use another slip day" — precomputed (LeafKit can't
-    /// evaluate compound conditions reliably).
-    let confirmLabel: String
 }

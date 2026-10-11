@@ -11,7 +11,7 @@
 //
 // This does not close that by guarding every page. A guard that failed a page
 // for not matching a skeleton would be a new way to be wrong, and the shapes
-// have honest variation — `submit.leaf` is a perfectly good plain student page
+// have honest variation — `SubmitPage` is a perfectly good plain student page
 // with no sections in it at all. It guards the ONE page per archetype the
 // rulebook now names as the thing to copy. That is deliberately weaker, and it
 // is the whole value of naming an exemplar: "copy `alerts.leaf`" is worth
