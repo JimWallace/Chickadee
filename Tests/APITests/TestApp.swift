@@ -332,11 +332,12 @@ func configureLeaf(_ app: Application) {
     // (e.g. ".claude"). When running from a git worktree under .claude, create a
     // symlink from a clean temp path so the string-level path checks pass.
     let viewsDir = app.directory.viewsDirectory
+    app.leaf.useChickadeeConfiguration(rootDirectory: viewsDir)
     if viewsDir.contains("/.") {
         let cleanPath = NSTemporaryDirectory() + "chickadee-leaf-\(UUID().uuidString)"
         try? FileManager.default.removeItem(atPath: cleanPath)
         try? FileManager.default.createSymbolicLink(atPath: cleanPath, withDestinationPath: viewsDir)
-        app.leaf.configuration = LeafConfiguration(rootDirectory: cleanPath + "/")
+        app.leaf.useChickadeeConfiguration(rootDirectory: cleanPath + "/")
         // Recorded so tearDownTestApp removes the symlink — one per app adds
         // up across a worktree session (#1298's leak class, in miniature).
         app.storage[LeafViewsSymlinkKey.self] = cleanPath

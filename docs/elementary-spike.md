@@ -190,6 +190,27 @@ The open rows must close before the first page whose Leaf template carries
 that kind of content is deleted. `admin-user.leaf` stays until then, and
 `PageArchetypeTests` still reads it as the titlebar exemplar.
 
+### Leaf hardening while the migration runs
+
+The Leaf pages stay in service for the length of the migration, so two Leaf
+traps found in LeafKit's source are closed now:
+
+- **A missing slot throws.** LeafKit's default (`ignoreUnfoundImports: true`)
+  renders nothing for an `#import` that no template exports. The server and
+  the test app now share `Application.Leaf.useChickadeeConfiguration`, which
+  turns that off. All 53 pages that extend `base` export both of its slots.
+  `LeafStrictImportTests` proves a page without one fails.
+- **An unknown tag name fails the guard.** LeafKit resolves a tag it does not
+  know to nothing (`ParameterResolver`), so a misspelled CSRF field renders
+  as an empty string. `check-leaf-semantics.sh` now checks every tag name, at
+  the start of a tag and as a call inside a condition, against the structural
+  tags, LeafKit's built-ins and the tags `app.leaf.tags` registers.
+
+LeafKit has no strict mode for a missing key: an unresolved key path is nil
+wherever it appears. A checker that matches each template's key paths
+against its Swift context type would close most of that gap, but it is a
+parser to build and maintain, so it is not planned while the migration runs.
+
 ## A bug the port carried over, now fixed
 
 `POST /admin/users/:id/enroll` redirects to `/admin/users/:id?error=invalid_course`

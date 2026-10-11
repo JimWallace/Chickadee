@@ -1,0 +1,9 @@
+# Leaf resolves a tag it does not know to nothing, so a misspelled CSRF field
+# renders as an empty string and the form is refused only on submit.
+guard="scripts/check-leaf-semantics.sh"
+files="Resources/Views/login.leaf"
+description="a misspelled tag name at the start of a tag"
+expect="csrfFormFeild"
+apply() {
+    printf '<form method="post">#csrfFormFeild()</form>\n' >> Resources/Views/login.leaf
+}
