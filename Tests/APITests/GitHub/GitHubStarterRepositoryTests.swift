@@ -173,7 +173,7 @@ import VaporTesting
 
     /// A repository read by its ID carries the template it was made from.
     @Test func theLiveClientReadsTheTemplateARepositoryWasMadeFrom() async throws {
-        try await withApp(app) { app in
+        try await withApp(app) { app throws in
             let github = app.useScriptedGitHub()
             let url = "GET https://api.github.com/repositories/100"
             let body = { (template: String) in

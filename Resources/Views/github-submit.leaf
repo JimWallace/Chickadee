@@ -18,7 +18,7 @@ Submit from GitHub
 #if(!state.courseRepositoryMode):
 <section class="page-section">
     <h2>Starter repository</h2>
-    <p>Open <a href="#(state.starter.url)">#(state.starter.name)</a> on GitHub, click <strong>Use this template</strong>, and make a private repository in your own account. Then submit from that repository.</p>
+    <p class="section-intro">Make a private copy of <a href="#(state.starter.url)">#(state.starter.name)</a> with <strong>Use this template</strong>, then submit from it.</p>
 </section>
 #endif
 #endif
