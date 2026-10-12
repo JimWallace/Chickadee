@@ -2,9 +2,9 @@
 //
 // The UI rules of docs/ui-design.md, applied to rendered HTML instead of to
 // template files. The shell guards (check-styles.sh, check-class-resolution.sh,
-// check-css-vars.sh, check-ui-vocabulary.sh) read Resources/Views/*.leaf and
-// cannot see a Swift view at all; ElementaryPageGuardTests feeds every
-// Elementary page through these instead (docs/elementary-spike.md, "Guards").
+// check-css-vars.sh, check-ui-vocabulary.sh) read template files and cannot
+// see a Swift view at all; ElementaryPageGuardTests feeds every Elementary
+// page through these instead (docs/elementary-spike.md, "Guards").
 //
 // Each rule returns one line per violation; empty means the page holds.
 
@@ -93,13 +93,12 @@ enum RenderedMarkupRules {
         }
     }
 
-    // MARK: - Admin tabbed pages (PageArchetypeTests, the _admin-tabs partial)
+    // MARK: - Admin tabbed pages (PageArchetypeTests, the AdminTabs component)
 
     /// The floor every admin tabbed page stands on, read from `<main>`: the
     /// version banner, then the one hidden h1, then the one tab bar, all from
-    /// `AdminTabs`, before any section. PageArchetypeTests checks that a Leaf
-    /// page extends the partial; a Swift page has no partials to read, so this
-    /// checks what the component renders.
+    /// `AdminTabs`, before any section. A page has no partials to read, so
+    /// this checks what the component renders.
     static func adminTabbedViolations(in main: String) -> [String] {
         var broken: [String] = []
         let banners = main.ranges(of: #"<p class="admin-version-banner">"#)

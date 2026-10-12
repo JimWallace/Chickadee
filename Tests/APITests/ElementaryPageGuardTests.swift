@@ -1,9 +1,9 @@
 // Tests/APITests/ElementaryPageGuardTests.swift
 //
-// The UI guards for Elementary views. The shell guards read only
-// Resources/Views/*.leaf, so a page rendered from Swift is invisible to them
-// (docs/elementary-spike.md, "Guards"). This suite renders every page in
-// ElementaryPageFixtures and holds the HTML to the same rules.
+// The UI guards for Elementary views. The shell guards read template files,
+// so a page rendered from Swift is invisible to them (docs/elementary-spike.md,
+// "Guards"). This suite renders every page in ElementaryPageFixtures and holds
+// the HTML to the same rules.
 
 import ChickadeeTestSupport
 import Foundation
@@ -102,7 +102,7 @@ import Testing
     @Test func headingLevelsFormASpine() throws {
         for (page, html) in Self.renders {
             let main = try #require(RenderedMarkupRules.mainContent(of: html))
-            let levels = LeafMarkupScanner.headingLevels(in: main)
+            let levels = MarkupScanner.headingLevels(in: main)
             if let first = levels.first {
                 #expect(first <= 2, "\(page) starts at h\(first)")
             }
@@ -112,23 +112,20 @@ import Testing
         }
     }
 
-    /// The per-archetype rules from `PageArchetypeTests`, applied to `<main>`.
-    /// Its universal rules are not applied: they read the Leaf source (the
-    /// base extend, the export slots, the flash partial). The heading spine is
-    /// checked above; the flash rule is still open (docs/elementary-spike.md).
-    /// The tabbed and shim archetypes read Leaf partials too, and need their
-    /// rules adapted before a page of that shape moves to Swift.
+    /// The per-archetype rules from `PageArchetypeTests`, applied to every
+    /// render of every exemplar. The exemplars must cover all seven
+    /// archetypes, so no shape goes unchecked.
     ///
     /// Only exemplars are checked, as `PageArchetypeTests` checks only the
-    /// exemplar templates: a page that predates the rulebook may fit no
-    /// archetype exactly, and the port keeps its markup unchanged.
+    /// exemplars: a page that predates the rulebook may fit no archetype
+    /// exactly, and the port keeps its markup unchanged.
     @Test func everyExemplarMatchesItsArchetype() throws {
         let exemplars = Self.fixtures.filter(\.isExemplar)
-        #expect(!exemplars.isEmpty, "no fixture is marked as an exemplar, so this test checks nothing")
+        #expect(
+            Set(exemplars.map(\.archetype)) == Set(PageArchetypeTests.Archetype.allCases),
+            "the fixtures marked as exemplars do not cover every archetype")
         for fixture in exemplars {
-            for html in fixture.renders {
-                let main = try #require(RenderedMarkupRules.mainContent(of: html))
-                let page = PageArchetypeTests.Page(file: fixture.typeName, markup: main, source: "")
+            for page in PageArchetypeTests.pages(of: fixture) {
                 let broken = PageArchetypeTests.violations(of: fixture.archetype, in: page)
                 #expect(broken.isEmpty, "\(fixture.typeName): \(broken)")
             }

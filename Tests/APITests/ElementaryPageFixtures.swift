@@ -3,7 +3,8 @@
 // Every Elementary page, rendered with fixture data that reaches each of its
 // branches. ElementaryPageGuardTests runs the UI rules over these renders, and
 // fails when a page type under Sources/APIServer/Views/Pages/ has no entry
-// here, so a new page cannot ship unguarded.
+// here, so a new page cannot ship unguarded. PageArchetypeTests reads the
+// renders of the fixtures marked `isExemplar`.
 
 import Core
 import Foundation
@@ -23,6 +24,11 @@ struct ElementaryPageFixture {
     /// "It checks the exemplars and nothing else: no page fails for not being
     /// one."
     var isExemplar = false
+    /// Per render, the shared body views the page embeds, each rendered on
+    /// its own with the same values (`AssignmentEditBody`, `NotebookBody`).
+    /// `PageArchetypeTests` subtracts them from `<main>` to find the markup
+    /// the page itself owns. Empty for a page that embeds none.
+    var bodies: [[String]] = []
 }
 
 enum ElementaryPageFixtures {

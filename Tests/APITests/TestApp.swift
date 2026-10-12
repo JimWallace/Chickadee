@@ -3,11 +3,8 @@
 // Builds the standard test application, runs a test body against it, and
 // tears it down with every piece of temp state it made.
 
-import CSRF
 import ChickadeeTestSupport
 import Foundation
-import Leaf
-import LeafKit
 import SQLKit
 import VaporTesting
 
@@ -90,10 +87,6 @@ private struct TestDataDirectoryKey: StorageKey {
     typealias Value = String
 }
 
-private struct LeafViewsSymlinkKey: StorageKey {
-    typealias Value = String
-}
-
 extension Application {
     /// Filesystem directory created for this app's results/testsetups/
     /// submissions trees; `tearDownTestApp` removes it. `makeTestApp` sets it;
@@ -168,14 +161,13 @@ extension Application {
     /// Tears the app down completely: drops the per-test Postgres schema (if
     /// any), shuts the app down, and removes every piece of temp state created
     /// on its behalf — the `makeTestApp` directory tree, sqlite-kit's
-    /// fake-memory database files, and the Leaf views symlink. Every step is a
+    /// fake-memory database files. Every step is a
     /// no-op when there is nothing to clean, so this is safe for any test app
     /// however it was built. `withApp` calls this; use it directly only for
     /// apps whose lifecycle `withApp` doesn't own.
     func tearDownTestApp() async throws {
         // Collect everything that needs a live app before shutting down.
         let dir = storage[TestDataDirectoryKey.self]
-        let leafSymlink = storage[LeafViewsSymlinkKey.self]
         let sqliteFiles = await sqliteFakeMemoryDatabaseFiles()
         let templateCopy = storage[TestSQLiteDatabaseFileKey.self]
         let pooledSchema = storage[PooledPostgresSchemaKey.self]
@@ -222,17 +214,14 @@ extension Application {
                 try? FileManager.default.removeItem(atPath: path)
             }
         }
-        if let leafSymlink {
-            try? FileManager.default.removeItem(atPath: leafSymlink)
-        }
         if let firstError { throw firstError }
     }
 }
 
 /// Builds a `.testing` Vapor application with the standard test wiring:
 /// per-app temp directories for results/testsetups/submissions,
-/// in-memory sessions, the production migration list, Leaf views, and
-/// the full route tree mounted.
+/// in-memory sessions, the production migration list, and the full route
+/// tree mounted.
 ///
 /// Caller owns the lifecycle — wrap the test body in `withApp(app) { ... }`
 /// (which tears the app down, temp state included) or pair the call with
@@ -316,43 +305,6 @@ func makeTestApp(
         app.kernelEnvironments = KernelEnvironments.load(
             publicDirectory: app.directory.publicDirectory)
 
-        configureLeaf(app)
         try routes(app)
     }
-}
-
-// MARK: - Leaf / CSRF setup
-
-/// Call in test setUp — after session middleware, before routes() — to enable
-/// Leaf rendering. Required so that GET requests to form pages produce HTML
-/// containing the `#csrfFormField()` hidden input, which is how tests obtain
-/// a valid session-bound CSRF token.
-func configureLeaf(_ app: Application) {
-    // LeafKit's sandbox rejects any path that contains a hidden directory component
-    // (e.g. ".claude"). When running from a git worktree under .claude, create a
-    // symlink from a clean temp path so the string-level path checks pass.
-    let viewsDir = app.directory.viewsDirectory
-    app.leaf.useChickadeeConfiguration(rootDirectory: viewsDir)
-    if viewsDir.contains("/.") {
-        let cleanPath = NSTemporaryDirectory() + "chickadee-leaf-\(UUID().uuidString)"
-        try? FileManager.default.removeItem(atPath: cleanPath)
-        try? FileManager.default.createSymbolicLink(atPath: cleanPath, withDestinationPath: viewsDir)
-        app.leaf.useChickadeeConfiguration(rootDirectory: cleanPath + "/")
-        // Recorded so tearDownTestApp removes the symlink — one per app adds
-        // up across a worktree session (#1298's leak class, in miniature).
-        app.storage[LeafViewsSymlinkKey.self] = cleanPath
-    }
-    app.views.use(.leaf)
-    app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
-    // rawJSON is safe to register in tests (pure string passthrough).
-    // csrfToken / appVersion are intentionally NOT registered here — they
-    // trigger CSRF.createToken / version lookups that assume a more complete
-    // middleware stack than the minimal test app.  Pages that embed
-    // `#csrfToken()` or `#appVersion()` will render those tokens verbatim;
-    // no existing test asserts on that markup.
-    app.leaf.tags["rawJSON"] = RawJSONTag()
-    // Safe in the minimal test app: reads only securityConfiguration, which
-    // falls back to `.default` (30 min) when unset.
-    app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
-    app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
 }

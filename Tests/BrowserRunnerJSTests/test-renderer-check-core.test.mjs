@@ -125,7 +125,7 @@ test('mergeChecks upserts when editing and refuses a taken id when creating', ()
 });
 
 test('both authoring pages load the core before the renderer', async () => {
-  for (const file of ['Resources/Views/_assignment-edit-body.leaf', 'Sources/APIServer/Views/Pages/AssignmentNewPage.swift']) {
+  for (const file of ['Sources/APIServer/Views/AssignmentEditBody.swift', 'Sources/APIServer/Views/Pages/AssignmentNewPage.swift']) {
     const src = await fs.readFile(path.resolve(file), 'utf8');
     const core = src.indexOf('/test-renderer-check-core.js');
     const wiring = src.indexOf('/test-renderer-check.js');

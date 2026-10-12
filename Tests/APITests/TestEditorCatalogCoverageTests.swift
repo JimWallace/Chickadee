@@ -191,9 +191,7 @@ import Testing
     /// cannot be switched to on an existing family, which is the sort of gap
     /// nobody reports because it reads as "not supported yet".
     @Test func theFamilyEditorOffersEveryPatternKind() throws {
-        let template = try String(
-            contentsOf: repositoryRoot.appendingPathComponent(
-                "Resources/Views/_family-editor-body.leaf"), encoding: .utf8)
+        let template = FamilyEditorBody().render()
         let pattern = try NSRegularExpression(pattern: #"<option value="([a-z_]+)">"#)
         let range = NSRange(template.startIndex..., in: template)
         let offered = Set(
@@ -201,12 +199,12 @@ import Testing
                 guard let value = Range(match.range(at: 1), in: template) else { return nil }
                 return String(template[value])
             })
-        #expect(!offered.isEmpty, "no <option> values parsed — has the template changed shape?")
+        #expect(!offered.isEmpty, "no <option> values parsed — has FamilyEditorBody changed shape?")
         for kind in PatternKind.allCases {
             #expect(
                 offered.contains(kind.rawValue),
                 """
-                Resources/Views/_family-editor-body.leaf has no <option> for \
+                FamilyEditorBody renders no <option> for \
                 PatternKind.\(kind.rawValue), so an author cannot switch an existing family to it.
                 """)
         }

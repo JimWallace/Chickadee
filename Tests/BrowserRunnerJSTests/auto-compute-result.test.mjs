@@ -164,9 +164,12 @@ test('a server-route result that is not a solution error has its own title', () 
 });
 
 test('the note under the cases table links a heading that docs/auto-compute.md has', async () => {
-  const template = await fs.readFile(path.resolve('Resources/Views/_family-editor-body.leaf'), 'utf8');
+  // The view writes the URL as two string literals joined with `+`, so join
+  // them before reading the link.
+  const view = (await fs.readFile(path.resolve('Sources/APIServer/Views/FamilyEditorBody.swift'), 'utf8'))
+    .replace(/"\s*\+\s*"/g, '');
   const doc = await fs.readFile(path.resolve('docs/auto-compute.md'), 'utf8');
-  const link = /docs\/auto-compute\.md#([a-z0-9-]+)/.exec(template);
+  const link = /docs\/auto-compute\.md#([a-z0-9-]+)/.exec(view);
   assert.ok(link, 'the note must link a section of docs/auto-compute.md');
   // GitHub's anchor for a heading: lower case, punctuation dropped, spaces to hyphens.
   const anchors = [...doc.matchAll(/^#+ (.+)$/gm)].map((m) =>

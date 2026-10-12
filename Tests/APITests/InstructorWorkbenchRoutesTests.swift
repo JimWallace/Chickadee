@@ -6,8 +6,8 @@
 // What these tests are really pinning is that the shell *reuses* rather than
 // reimplements.  The left pane is the ordinary edit page rendered from the same
 // context builder, so the risk is not that it looks wrong — it is that it
-// silently stops rendering (the LeafKit multi-`#extend` failure this page's
-// design exists to avoid) or that the chrome suppression leaks into the
+// silently stops rendering (the template multi-include failure this page's
+// design was built to avoid) or that the chrome suppression leaks into the
 // standalone page.
 //
 // The isolation headers these routes also need live in COEPMiddlewareTests.

@@ -64,12 +64,9 @@ import VaporTesting
         return app
     }
 
-    private func makeLeafErrorApp(configureViews: Bool) async throws -> Application {
+    private func makeErrorPageApp() async throws -> Application {
         let app = try await Application.make(.testing)
-        app.middleware.use(LeafErrorMiddleware())
-        if configureViews {
-            configureLeaf(app)
-        }
+        app.middleware.use(ErrorPageMiddleware())
         app.get("api", "boom") { _ async throws -> Response in
             throw Abort(.badRequest, reason: "api exploded")
         }
@@ -311,8 +308,8 @@ import VaporTesting
         #expect(SecurityHeadersMiddleware.cspOrigin(of: "mailto:nobody@example.com") == nil)
     }
 
-    @Test func leafErrorMiddlewareReturnsJSONForAPIRoutes() async throws {
-        try await withApp(try await makeLeafErrorApp(configureViews: false)) { app in
+    @Test func errorPageMiddlewareReturnsJSONForAPIRoutes() async throws {
+        try await withApp(try await makeErrorPageApp()) { app in
             try await app.asyncTest(.GET, "/api/boom") { res in
                 #expect(res.status == .badRequest)
                 #expect(res.headers.contentType?.description == "application/json; charset=utf-8")
@@ -324,8 +321,8 @@ import VaporTesting
         }
     }
 
-    @Test func leafErrorMiddlewareRendersHTMLForBrowserRoutes() async throws {
-        try await withApp(try await makeLeafErrorApp(configureViews: true)) { app in
+    @Test func errorPageMiddlewareRendersHTMLForBrowserRoutes() async throws {
+        try await withApp(try await makeErrorPageApp()) { app in
             try await app.asyncTest(.GET, "/boom") { res in
                 #expect(res.status == .notFound)
                 #expect(res.headers.contentType == .html)
@@ -342,12 +339,12 @@ import VaporTesting
         }
     }
 
-    @Test func leafErrorMiddlewareRendersRecoverableMessageForCSRFFailures() async throws {
+    @Test func errorPageMiddlewareRendersRecoverableMessageForCSRFFailures() async throws {
         // A CSRF rejection means the page's token no longer matches the live
         // session (a stale page after a session change). The bare "Invalid CSRF
         // token." 403 is a confusing dead-end, so browser users get an
         // actionable, recoverable message — and never the raw library reason.
-        try await withApp(try await makeLeafErrorApp(configureViews: true)) { app in
+        try await withApp(try await makeErrorPageApp()) { app in
             try await app.asyncTest(.GET, "/csrf-fail") { res in
                 #expect(res.status == .forbidden)
                 #expect(
@@ -362,11 +359,11 @@ import VaporTesting
         }
     }
 
-    @Test func leafErrorMiddlewareSubstitutesFriendlyDefaultsForBareAborts() async throws {
-        // `#(message)` in the Leaf template HTML-escapes the apostrophe in
-        // "couldn't" / "don't" to `&#39;`, so the assertions look for the
+    @Test func errorPageMiddlewareSubstitutesFriendlyDefaultsForBareAborts() async throws {
+        // The error page may HTML-escape the apostrophe in
+        // "couldn't" / "don't" (as `&#39;`), so the assertions look for the
         // apostrophe-free portion of each canonical message.
-        try await withApp(try await makeLeafErrorApp(configureViews: true)) { app in
+        try await withApp(try await makeErrorPageApp()) { app in
             try await app.asyncTest(.GET, "/bare-404") { res in
                 #expect(res.status == .notFound)
                 #expect(
@@ -391,8 +388,8 @@ import VaporTesting
         }
     }
 
-    @Test func leafErrorMiddlewareJSONEnvelopeIncludesFriendlyDefaultForBareAbort() async throws {
-        try await withApp(try await makeLeafErrorApp(configureViews: false)) { app in
+    @Test func errorPageMiddlewareJSONEnvelopeIncludesFriendlyDefaultForBareAbort() async throws {
+        try await withApp(try await makeErrorPageApp()) { app in
             try await app.asyncTest(.GET, "/api/bare-500") { res in
                 #expect(res.status == .internalServerError)
                 #expect(res.body.string.contains(#""status":500"#))

@@ -10,7 +10,7 @@ import VaporTesting
 
     @Test func anErrorBeforeTheSessionMiddlewareRendersThePageWithNoToken() async throws {
         let app = try await Application.make(.testing)
-        app.middleware.use(LeafErrorMiddleware())
+        app.middleware.use(ErrorPageMiddleware())
         app.get("missing") { _ -> String in throw Abort(.notFound) }
         try await withApp(app) { app in
             try await app.testing().test(.GET, "missing") { res in

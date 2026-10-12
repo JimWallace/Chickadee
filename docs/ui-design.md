@@ -103,9 +103,9 @@ is black in both schemes).
 
 ## Page archetypes
 
-Every page extends `base.leaf` (nav, colour bar, course tabs, `main.main`)
-and then follows ONE of these skeletons.  Don't invent an eighth shape —
-pick the archetype, and reuse its components.
+Every page renders inside `BaseLayout` (nav, colour bar, course tabs,
+`main.main`) and then follows ONE of these skeletons.  Don't invent an
+eighth shape — pick the archetype, and reuse its components.
 
 **Start a new page by copying its archetype's exemplar.**  The component
 vocabulary and the idiom table below tell you what to *reach for*; this is
@@ -118,71 +118,52 @@ them is the answer.
 
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
-| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | — |
-| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | — |
-| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | — |
-| **Plain student page** | `<h1>` → content | `account.leaf` | — |
-| **Auth box** | `.auth-box` centred card | `register.leaf` | — |
-| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | — |
-| **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
+| **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
+| **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorGitHubPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
+| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage` |
+| **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage` |
+| **Auth box** | `.auth-box` centred card | `RegisterPage` | `LoginPage`, `OAuthConsentPage` |
+| **Body-partial shim** | `BaseLayout` around one shared body view, no markup of its own | `AssignmentEditPage` | `NotebookPage` |
+| **Full-bleed app** | `BaseLayout(fullBleed: true)`; owns the viewport | `WorkbenchPage` | `LeaderboardPresentPage` |
 
-Why each exemplar won its row: `alerts.leaf` carries no page script and the
+Why each exemplar won its row: `AlertsPage` carries no page script and the
 least page CSS of any admin page while still showing the whole skeleton;
-`instructor-mcp.leaf` uses no page-private class name at all;
-`admin-user.leaf` is the only page in its row that demonstrates the optional
-`.page-subtitle`; `account.leaf` is the only plain student page that groups
-its content in sections at all; `register.leaf` ties `login` on page CSS and
-private names and wins on having nothing auth-provider-specific to strip out;
-`assignment-edit.leaf` *is* its archetype in eight lines.  `workbench.leaf`
-is the sole full-bleed page and therefore its exemplar by default — it is
-also the least copyable file here, which is the honest reading of an
-archetype with one member.
+`InstructorMCPPage` uses no page-private class name at all;
+`AdminUserPage` is the only page in its row that demonstrates the optional
+`.page-subtitle`; `AccountPage` is the only plain student page that groups
+its content in sections at all; `RegisterPage` ties `LoginPage` on page CSS
+and private names and wins on having nothing auth-provider-specific to strip
+out; `AssignmentEditPage` *is* its archetype: `BaseLayout` around
+`AssignmentEditBody`.  `WorkbenchPage` is the sole page that uses the
+`fullBleed` flag and therefore its exemplar by default — it is also the least
+copyable page here, which is the honest reading of an archetype with one
+member.
 
 The pages in the **Also** column are the archetype too; they are just not
-the reference.
-
-During the Elementary migration (`docs/elementary-spike.md`), the column
-names only Leaf templates. `PageArchetypeTests` resolves each name to a
-`.leaf` file. These ported pages also follow an archetype:
-
-- Admin tabbed: `AlertsPage` and every `Admin*Page` that opens with `AdminTabs`.
-- Instructor tabbed: `AssignmentsPage` and every `Instructor*Page` that opens
-  with `InstructorTabs`.
-- Titlebar page: `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`,
-  `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`,
-  and, as the nearest fit, `AssignmentNewPage` (its `.editor-titlebar` holds
-  the name input, not an `<h1>` in a `.page-titlebar`).
-- Auth box: `LoginPage`, `OAuthConsentPage`.
-- Plain student page: `SubmitPage`, `EnrollPage`, `IndexPage`, `AccountPage`,
-  `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`.
-- Full-bleed app: `WorkbenchPage` (`BaseLayout` with `fullBleed`, around
-  `AssignmentEditBody` and `NotebookBody`), and, as the nearest fit,
-  `LeaderboardPresentPage` (it owns the viewport through its own
-  `PresentLayout`, not the `fullBleed` flag).
-- Body-partial shim: `NotebookPage` (`BaseLayout` plus `NotebookBody`) and
-  `AssignmentEditPage` (`BaseLayout` plus `AssignmentEditBody`).
-
-The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
-`instructor-mcp.leaf`, `account.leaf`, `assignment-edit.leaf` and
-`workbench.leaf` now render `AdminUserPage`, `RegisterPage`, `AlertsPage`,
-`InstructorMCPPage`, `AccountPage`, `AssignmentEditPage` and `WorkbenchPage`.
-The seven templates are not served. They stay only because the test reads them
-as exemplars. Five partials are not served either. They stay because the
-exemplars extend them: `_assignment-edit-body.leaf`, `_notebook-body.leaf`,
-and through the first, `_family-editor-body.leaf`, `_suite-sections.leaf` and
-`_value-cue-note.leaf`.
+the reference.  Two of them are the nearest fit rather than an exact one:
+`AssignmentNewPage`'s `.editor-titlebar` holds the name input, not an `<h1>`
+in a `.page-titlebar`, and `LeaderboardPresentPage` owns the viewport through
+its own `PresentLayout`, not the `fullBleed` flag.  The shim's body view is
+the page's whole content: `NotebookPage` is `BaseLayout` around `NotebookBody`,
+and the workbench renders `AssignmentEditBody` and `NotebookBody` in its two
+panes.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
-exemplar against its own row on every run.  It checks the exemplars and
-nothing else: no page fails for not being one.  It does hold them to
+exemplar against its own row on every run.  It reads each exemplar's renders
+in `ElementaryPageFixtures`, where the exemplar fixtures are marked
+`isExemplar`, and it fails when the flags and the table disagree.  A rule
+that names a page's own markup subtracts the shared body views the page
+embeds, so the shim and the workbench are judged on what they write, not on
+what `AssignmentEditBody` and `NotebookBody` write.  It checks the exemplars
+and nothing else: no page fails for not being one.  It does hold them to
 slightly more than the skeleton column asks of the archetype at large —
-`account.leaf` must keep grouping its content in `.page-section` blocks,
-though a one-form page like `submit` is a perfectly good plain student page
-without them.  That asymmetry is the point.  The archetype is the floor; the
-exemplar is the reference, and a reference that has quietly stopped
+`AccountPage` must keep grouping its content in `.page-section` blocks,
+though a one-form page like `SubmitPage` is a perfectly good plain student
+page without them.  That asymmetry is the point.  The archetype is the floor;
+the exemplar is the reference, and a reference that has quietly stopped
 demonstrating the full shape is worse than no reference, because it is still
-the file everyone copies.
+the page everyone copies.
 
 Anatomy rules that hold across archetypes:
 

@@ -1,6 +1,6 @@
-// The amber cue on an input value (#1996). Every value editor includes one
-// note partial that links the explanation in docs/inputs.md, and the value
-// cell's title names its cause in one phrase.
+// The amber cue on an input value (#1996). Every value editor renders one
+// note view (ValueCueNote) that links the explanation in docs/inputs.md, and
+// the value cell's title names its cause in one phrase.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,18 +16,18 @@ const Core = require('../../Public/inputs-editor-core.js');
 
 const read = (file) => fs.readFile(path.resolve(file), 'utf8');
 
-test('every value editor includes the one note partial and holds no copy of its own', async () => {
-  for (const file of ['_assignment-edit-body.leaf', '_family-editor-body.leaf', '_suite-sections.leaf']) {
-    const source = await read('Resources/Views/' + file);
-    assert.match(source, /#extend\("_value-cue-note"\)/, file + ' must include the note partial');
+test('every value editor renders the one note view and holds no copy of its own', async () => {
+  for (const file of ['AssignmentEditBody.swift', 'FamilyEditorBody.swift', 'SuiteSections.swift']) {
+    const source = await read('Sources/APIServer/Views/' + file);
+    assert.match(source, /\bValueCueNote\(\)/, file + ' must render ValueCueNote');
     assert.doesNotMatch(source, /amber border/, file + ' holds its own copy of the note');
   }
-  // The create page reaches the section inputs through _suite-sections.
+  // The create page reaches the section inputs through SuiteSections.
   assert.doesNotMatch(await read('Sources/APIServer/Views/Pages/AssignmentNewPage.swift'), /amber border/);
 });
 
 test('the note links a heading that docs/inputs.md has', async () => {
-  const note = await read('Resources/Views/_value-cue-note.leaf');
+  const note = await read('Sources/APIServer/Views/ValueCueNote.swift');
   const doc = await read('docs/inputs.md');
   const link = /docs\/inputs\.md#([a-z0-9-]+)/.exec(note);
   assert.ok(link, 'the note must link a section of docs/inputs.md');
@@ -38,15 +38,20 @@ test('the note links a heading that docs/inputs.md has', async () => {
 });
 
 test('every value input is named "Value", so its title is only a description', async () => {
-  const templates = [
-    ['_assignment-edit-body.leaf', 'js-global-input-value'],
-    ['_suite-sections.leaf', 'js-section-var-value'],
+  const views = [
+    ['AssignmentEditBody.swift', 'js-global-input-value'],
+    ['SuiteSections.swift', 'js-section-var-value'],
   ];
-  for (const [file, hook] of templates) {
-    const source = await read('Resources/Views/' + file);
-    const tag = new RegExp('<input[^>]*' + hook + '[^>]*>').exec(source);
-    assert.ok(tag, file + ' has no value input');
-    assert.match(tag[0], /aria-label="Value"/, file);
+  for (const [file, hook] of views) {
+    const source = await read('Sources/APIServer/Views/' + file);
+    // The `input(...)` call that carries the hook: from the nearest `input(`
+    // before it to the line that closes its table cell.
+    const hookAt = source.indexOf(hook);
+    assert.ok(hookAt >= 0, file + ' has no value input');
+    const start = source.lastIndexOf('input(', hookAt);
+    const call = /input\(([\s\S]*?)\n\s*\}/.exec(source.slice(start));
+    assert.ok(call && call[0].includes(hook), file + ' has no value input');
+    assert.match(call[0], /\.ariaLabel\("Value"\)/, file);
   }
   // The rows the scripts build.
   assert.match(await read('Public/inputs-editor-core.js'), /classes\.value \+ '" aria-label="Value"/);

@@ -47,23 +47,38 @@ import Testing
         }
     }
 
-    /// The editor template renders the select from the context, and the JS
+    /// The editor view renders the select from the context, and the JS
     /// reads labels off that select — neither holds a dimension name.
     @Test func editorAndJSHoldNoHandTypedDimensionList() throws {
         let root = repositoryRoot
-        let template = try String(
-            contentsOf: root.appendingPathComponent("Resources/Views/_assignment-edit-body.leaf"),
+        let view = try String(
+            contentsOf: root.appendingPathComponent("Sources/APIServer/Views/AssignmentEditBody.swift"),
             encoding: .utf8)
         let js = try String(
             contentsOf: root.appendingPathComponent("Public/achievements-editor.js"), encoding: .utf8)
-        #expect(template.contains("#for(dim in recordDimensionOptions)"))
+        #expect(view.contains("for dimension in recordDimensionOptions"))
         for dimension in RecordDimension.allCases {
             #expect(
-                !template.contains("value=\"\(dimension.rawValue)\""),
-                "the edit template hand-types the \(dimension.rawValue) option")
+                !view.contains(".value(\"\(dimension.rawValue)\")"),
+                "AssignmentEditBody hand-types the \(dimension.rawValue) option")
             #expect(
                 !js.contains("\(dimension.rawValue):"),
                 "achievements-editor.js hand-types a \(dimension.rawValue) label")
         }
+    }
+
+    /// The rendered "Ranked by" select offers one option per presented
+    /// dimension, in order.
+    @Test func editorRendersOneOptionPerDimension() throws {
+        let edit = EditorSamples.edit(rich: true, embedded: nil)
+        let html = AssignmentEditBody(edit: edit, csrfToken: "t", appVersion: "0").render()
+        let start = try #require(html.range(of: #"id="am-recordDimension""#), "the editor has no Ranked by select")
+        let end = try #require(
+            html.range(of: "</select>", range: start.upperBound..<html.endIndex), "the Ranked by select is never closed"
+        )
+        let values = html[start.upperBound..<end.lowerBound]
+            .matches(of: /<option value="([^"]*)">/)
+            .map { String($0.1) }
+        #expect(values == RecordDimensionPresentation.all.map(\.value))
     }
 }

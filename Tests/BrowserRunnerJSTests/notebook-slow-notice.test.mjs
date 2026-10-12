@@ -15,7 +15,8 @@ import vm from 'node:vm';
 
 const coreSource = await fs.readFile(path.resolve('Public/notebook-preflight-core.js'), 'utf8');
 const wiringSource = await fs.readFile(path.resolve('Public/notebook-preflight.js'), 'utf8');
-const template = await fs.readFile(path.resolve('Resources/Views/_notebook-body.leaf'), 'utf8');
+const view = await fs.readFile(path.resolve('Sources/APIServer/Views/NotebookBody.swift'), 'utf8');
+const layoutSource = await fs.readFile(path.resolve('Sources/APIServer/Views/BaseLayout.swift'), 'utf8');
 const notebookSource = await fs.readFile(path.resolve('Public/notebook.js'), 'utf8');
 
 /// A stub element with what notebook-preflight.js touches. `inner` lists the
@@ -132,14 +133,17 @@ test('a failure moves focus out of the banner it hides', () => {
 });
 
 test('the status line can take focus, and both help links say they open a new tab', () => {
-  assert.match(template, /<span class="nb-status" id="nb-status"[^>]*tabindex="-1"/);
-  const links = [...template.matchAll(/<a href="[^"]*notebook-editor-help\.md[^"]*"[^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0]);
+  // Read from NotebookBody.swift, in its Swift spelling.
+  assert.match(view, /span\(\s*\.class\("nb-status"\),\s*\.id\("nb-status"\)[^{]*\.tabindex\(-1\)/);
+  // Both links go through helpLink, and nothing else links the help page.
+  const links = [...view.matchAll(/helpLink\(\s*"[^"]*notebook-editor-help\.md[^"]*"/g)];
   assert.equal(links.length, 2);
-  for (const link of links) {
-    assert.match(link, /target="_blank"/);
-    assert.match(link, /<use href="#i-external"\/>/);
-    assert.match(link, /<span class="visually-hidden">\(opens in a new tab\)<\/span>/);
-  }
+  assert.equal([...view.matchAll(/"[^"]*notebook-editor-help\.md[^"]*"/g)].length, 2);
+  const helper = /private func helpLink\([\s\S]*?\n {4}\}/.exec(view);
+  assert.ok(helper, 'NotebookBody has no helpLink');
+  assert.match(helper[0], /\.target\(\.blank\)/);
+  assert.match(helper[0], /Icon\("i-external"\)/);
+  assert.match(helper[0], /span\(\.class\("visually-hidden"\)\) \{ "\(opens in a new tab\)" \}/);
 });
 
 test('the fallback copy is one sentence per text', () => {
@@ -151,15 +155,18 @@ test('the fallback copy is one sentence per text', () => {
 });
 
 test('the slow-boot banner is a status warning with its own upload input', () => {
-  // Read the banner's open tag, not the document: a comment may name it.
-  const open = /<div id="nb-slow-notice"[^>]*>/.exec(template);
-  assert.ok(open, 'the banner must exist');
-  assert.match(open[0], /class="flash flash-warning"/);
-  assert.match(open[0], /role="status"/);
-  assert.match(open[0], /\shidden[\s>]/);
-  const start = template.indexOf(open[0]);
-  const banner = template.slice(start, template.indexOf('</div>\n</div>', start));
-  assert.match(banner, /<input type="file" id="nb-slow-upload-file"/);
+  // Read from NotebookBody.swift: the banner is the FlashBanner block that
+  // ends in the attributes giving it its id. Read the code, not a comment.
+  const tail = view.indexOf('.attributes(.id("nb-slow-notice"), .hidden)');
+  assert.ok(tail >= 0, 'the banner must exist, hidden');
+  const start = view.lastIndexOf('FlashBanner(', tail);
+  const banner = view.slice(start, tail);
+  // A warning banner, with the default role, which BaseLayout sets to status.
+  assert.match(banner, /^FlashBanner\(\.warning\) \{/);
+  assert.match(layoutSource, /case warning = "flash flash-warning"/);
+  assert.match(layoutSource, /role: MarkupAttributeValue\.Role = "status"/);
+  assert.match(banner, /uploadInput\(id: "nb-slow-upload-file"\)/);
+  assert.match(view, /private func uploadInput\(id: String\)[\s\S]*?input\(\s*\.type\(\.file\), \.id\(id\)/);
   // notebook.js gives both inputs the one upload handler.
   assert.match(notebookSource, /'nb-upload-file', 'nb-slow-upload-file'/);
 });

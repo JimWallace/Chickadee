@@ -34,8 +34,17 @@ test('notebook formatting uses human-readable labels and traceback-only details'
   assert.equal(displayMap.get('test_q1_bmi.py'), 'Q1: BMI Calculation');
 });
 
+/// The notebook view's page scripts, in load order: the `scripts` list in
+/// NotebookBody.swift, so a comment that names a script cannot answer.
+async function notebookScriptList() {
+  const src = await fs.readFile(path.resolve('Sources/APIServer/Views/NotebookBody.swift'), 'utf8');
+  const list = /private static let scripts = \[([\s\S]*?)\]/.exec(src);
+  assert.ok(list, 'NotebookBody.swift has no scripts list');
+  return list[1];
+}
+
 test('the notebook page loads the core before notebook.js', async () => {
-  const src = await fs.readFile(path.resolve('Resources/Views/_notebook-body.leaf'), 'utf8');
+  const src = await notebookScriptList();
   const core = src.indexOf('/notebook-core.js');
   const wiring = src.indexOf('/notebook.js');
   assert.ok(core >= 0 && wiring >= 0 && core < wiring, 'core must be loaded before notebook.js');

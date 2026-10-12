@@ -4,8 +4,9 @@
 // rows, so the dataset mark has to survive every step between the manifest and
 // the template: both row builders (edit page and create page), the create
 // page's URL rewrite, and `EditableSuiteRow`'s hand-written `encode(to:)` —
-// which is where a new field silently fails to reach Leaf, because a row that
-// encodes without it renders as an unmarked control rather than as an error.
+// which is where a new field silently fails to reach the encoded row, because
+// a row that encodes without it renders as an unmarked control rather than as
+// an error.
 //
 // The marks themselves come from `TestProperties.datasetSpecsByFile`, the one
 // lookup `get_support_files` reads, so the UI and the MCP listing cannot report
@@ -101,9 +102,9 @@ import Testing
         }
     }
 
-    // MARK: - What Leaf actually receives
+    // MARK: - What the encoded row carries
 
-    @Test func encodedRowExposesTheDatasetFieldsToLeaf() throws {
+    @Test func encodedRowExposesTheDatasetFields() throws {
         let row = EditableSuiteRow(
             name: "cases.csv", url: "#", isTest: false, tier: "support", order: 1,
             dependsOn: [], points: 1, displayName: nil,
@@ -167,7 +168,7 @@ import Testing
         #expect(twoSteps.datasetBlankPercentText.isEmpty)
     }
 
-    @Test func theDerivationFieldsReachLeaf() throws {
+    @Test func theDerivationFieldsReachTheEncodedRow() throws {
         let encoded = try JSONSerialization.jsonObject(
             with: try JSONEncoder().encode(
                 row([DatasetTransform(kind: .missingValues, columns: ["systolic"], rate: 0.1)])))

@@ -4,12 +4,11 @@ import VaporTesting
 
 @testable import APIServer
 
-/// `HTMLResponse` must look like a Leaf `View` to the middleware: the same
-/// content type, which SecurityHeadersMiddleware keys its no-store and
-/// no-compression rules on.
+/// `HTMLResponse` must serve the HTML content type, which
+/// SecurityHeadersMiddleware keys its no-store and no-compression rules on.
 @Suite(.timeLimit(.minutes(1))) struct HTMLResponseTests {
 
-    @Test func itServesHTMLWithTheLeafContentType() async throws {
+    @Test func itServesHTMLWithTheHTMLContentType() async throws {
         let app = try await Application.make(.testing)
         app.get("page") { _ in HTMLResponse { p { "Hi & bye" } } }
         app.get("gone") { _ in HTMLResponse(status: .notFound) { p { "Gone" } } }
