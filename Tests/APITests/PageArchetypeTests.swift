@@ -14,15 +14,22 @@
 // have honest variation — `SubmitPage` is a perfectly good plain student page
 // with no sections in it at all. It guards the ONE page per archetype the
 // rulebook now names as the thing to copy. That is deliberately weaker, and it
-// is the whole value of naming an exemplar: "copy `alerts.leaf`" is worth
-// saying only for as long as `alerts.leaf` is worth copying.
+// is the whole value of naming an exemplar: "copy `AlertsPage`" is worth
+// saying only for as long as `AlertsPage` is worth copying.
+//
+// Every page is an Elementary view, so the rules read what a page RENDERS:
+// each exemplar's renders in `ElementaryPageFixtures`, cut down to `<main>`.
+// The layout chrome around `<main>` is `BaseLayout`'s, and the rules that
+// concern the layout read the whole document.
 //
 // Three properties this suite holds itself to, each learned the hard way here:
 //
 //   * DERIVE THE LIST, DO NOT RESTATE IT. The exemplars are read out of the
 //     rulebook table, so the documentation and the guard cannot disagree. A
 //     second hand-typed list would be a second source of truth, and a
-//     documented shape that nothing checks is the problem being fixed.
+//     documented shape that nothing checks is the problem being fixed. The
+//     fixtures' `isExemplar` flags are checked against the table in both
+//     directions for the same reason.
 //
 //   * A DERIVATION MUST ASSERT ITS OWN COMPLETENESS. #1330's lesson: a parser
 //     that silently finds nothing, or six rows of seven, makes every assertion
@@ -35,13 +42,16 @@
 //     functions from a page to the list of ways it breaks them, so they can be
 //     run against pages that SHOULD break them. `theArchetypeRulesTellTheSeven
 //     ShapesApart` runs all forty-two off-diagonal pairs — every archetype's
-//     rules against every other archetype's exemplar — and fails if any pair
-//     comes back clean. A rule refactored into a no-op turns that test red
-//     rather than turning this whole file into decoration.
+//     rules against every render of every other archetype's exemplar — and
+//     fails if any pair comes back clean. A rule refactored into a no-op turns
+//     that test red rather than turning this whole file into decoration.
 
 import ChickadeeTestSupport
+import Elementary
 import Foundation
 import Testing
+
+@testable import APIServer
 
 @Suite struct PageArchetypeTests {
 
@@ -65,22 +75,63 @@ import Testing
         let alsoColumn: String
     }
 
-    /// One page, read both ways.
+    /// One render of a page, read three ways.
     ///
-    /// `markup` has HTML comments stripped and answers questions about the
-    /// page's shape; `source` is verbatim and answers questions about Leaf,
-    /// whose lexer does not know what an HTML comment is.
+    /// `document` is the whole render, for the rules about the layout around
+    /// the page. `main` is the contents of `<main>` with HTML comments
+    /// stripped, for the rules about the page's content. `markup` is what the
+    /// page itself owns: `main` without the layout's flash-banner slot and
+    /// without the shared body views it embeds (`bodies`, rendered on their
+    /// own by the fixture). A Leaf page's own markup was its template file,
+    /// and a partial's markup lived in the partial; `markup` is the same cut,
+    /// made on the render.
     struct Page {
         let file: String
-        let markup: String
-        let source: String
+        let document: String
+        let main: String
+        let bodies: [String]
 
-        var partials: [String] { LeafMarkupScanner.extendedPartials(in: source) }
-        var topHeadings: [LeafMarkupScanner.OpenTag] { LeafMarkupScanner.openTags("h1", in: markup) }
+        init(file: String, document: String, bodies: [String] = []) {
+            self.file = file
+            self.document = document
+            self.main = MarkupScanner.strippingHTMLComments(RenderedMarkupRules.mainContent(of: document) ?? "")
+            self.bodies = bodies.map(MarkupScanner.strippingHTMLComments)
+        }
+
+        /// `main` after the flash banners `BaseLayout` renders at its top.
+        var mainAfterFlashSlot: String {
+            main.replacing(PageArchetypeTests.layoutFlashSlot, with: "")
+        }
+
+        /// The bodies this render was said to embed but does not contain.
+        var missingBodies: [String] {
+            bodies.filter { !main.contains($0) }
+        }
+
+        /// What the page owns: `main` without the flash slot and the bodies.
+        var markup: String {
+            bodies.reduce(mainAfterFlashSlot) { rest, body in
+                guard let range = rest.range(of: body) else { return rest }
+                return rest.replacingCharacters(in: range, with: "")
+            }
+        }
+
+        /// The `<main>` open tag `BaseLayout` writes, or nil.
+        var mainTag: String? {
+            MarkupScanner.openTags("main", in: document).first?.text
+        }
+
+        var topHeadings: [MarkupScanner.OpenTag] { MarkupScanner.openTags("h1", in: markup) }
 
         func declares(_ className: String) -> Bool {
-            LeafMarkupScanner.declaresClass(className, in: markup)
+            MarkupScanner.declaresClass(className, in: markup)
         }
+    }
+
+    /// The banners `BaseLayout` renders at the top of `<main>` from its
+    /// `FlashMessages`. The text inside a banner is escaped, so it holds no `<`.
+    static var layoutFlashSlot: Regex<Substring> {
+        /^\s*(?:<div class="flash flash-(?:success|error)" role="(?:status|alert)">[^<]*<\/div>\s*)+/
     }
 
     // MARK: - Reading the rulebook
@@ -132,19 +183,32 @@ import Testing
         return rows
     }
 
-    static func page(_ file: String) throws -> Page {
-        Page(
-            file: file,
-            markup: try LeafMarkupScanner.markup(of: file),
-            source: try LeafMarkupScanner.source(of: file)
-        )
+    /// The names in a row's Also column.
+    static func alsoNames(in row: Row) -> [String] {
+        row.alsoColumn
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "`", with: "") }
+            .filter { !$0.isEmpty && $0 != "—" }
     }
 
-    /// The exemplar page of every archetype the rulebook names.
-    static func exemplars() throws -> [(archetype: Archetype, page: Page)] {
-        try archetypeRows().compactMap { row in
-            guard let archetype = Archetype(rawValue: row.archetypeName) else { return nil }
-            return (archetype, try page(row.exemplar))
+    /// Every render of a fixture, as pages.
+    static func pages(of fixture: ElementaryPageFixture) -> [Page] {
+        fixture.renders.enumerated().map { index, html in
+            Page(
+                file: fixture.typeName, document: html,
+                bodies: index < fixture.bodies.count ? fixture.bodies[index] : [])
+        }
+    }
+
+    /// The exemplar of every archetype the rulebook names, with every render
+    /// its fixture holds.
+    static func exemplars() throws -> [(archetype: Archetype, pages: [Page])] {
+        let fixtures = ElementaryPageFixtures.all
+        return try archetypeRows().compactMap { row in
+            guard let archetype = Archetype(rawValue: row.archetypeName),
+                let fixture = fixtures.first(where: { $0.typeName == row.exemplar })
+            else { return nil }
+            return (archetype, pages(of: fixture))
         }
     }
 
@@ -155,24 +219,34 @@ import Testing
     static func universalViolations(in page: Page) -> [String] {
         var broken: [String] = []
 
-        if page.partials.first != "base" {
-            broken.append("a page extends base.leaf first — that is where the nav and the flash banners live")
+        let isLayout =
+            page.document.hasPrefix("<!DOCTYPE html>")
+            && page.mainTag.map { MarkupScanner.tagCarriesClass("main", in: $0) && $0.contains(#"id="main-content""#) }
+                == true
+        if !isLayout {
+            broken.append("a page renders inside BaseLayout — that is where the nav and the flash banners live")
         }
-        for slot in ["title", "content"] where !page.source.contains("#export(\"\(slot)\")") {
-            broken.append("base.leaf imports \(slot); a page that does not export it renders an empty one")
+        let titled = page.document.firstMatch(of: /<title>(.*) — Chickadee<\/title>/).map { !$0.1.isEmpty } == true
+        if !titled {
+            broken.append("BaseLayout titles the document from the page; this one has no title of its own")
+        }
+        if page.mainAfterFlashSlot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            broken.append("its <main> is empty, so the page renders no content")
         }
 
-        // base.leaf renders the _flash partial once for every page, so writing
-        // those classes in a page is a second copy of something already on
-        // screen. The static-state variants (.flash-neutral / .flash-warning)
-        // are a different control and stay allowed.
-        for banner in ["flash-success", "flash-error"] where page.declares(banner) {
-            broken.append(".\(banner) belongs to the _flash partial that base.leaf already renders")
+        // BaseLayout renders the flash banners once for every page, at the top
+        // of <main>, so those classes anywhere else are a second copy of
+        // something already on screen. The static-state variants
+        // (.flash-neutral / .flash-warning) are a different control and stay
+        // allowed.
+        for banner in ["flash-success", "flash-error"]
+        where MarkupScanner.declaresClass(banner, in: page.mainAfterFlashSlot) {
+            broken.append(".\(banner) belongs to the flash banners BaseLayout already renders")
         }
 
         // "Don't restyle a heading to fake a different level" only means
         // something if the levels are a real spine.
-        let levels = LeafMarkupScanner.headingLevels(in: page.markup)
+        let levels = MarkupScanner.headingLevels(in: page.main)
         if let first = levels.first, first > 2 {
             broken.append("the first heading is an h\(first) — a page starts at h1, or at h2 when it is tabbed")
         }
@@ -193,7 +267,7 @@ import Testing
         func require(_ held: Bool, _ complaint: @autoclosure () -> String) {
             if !held { broken.append(complaint()) }
         }
-        // Each complaint completes the sentence "<file> is the <archetype>
+        // Each complaint completes the sentence "<page> is the <archetype>
         // exemplar, but …", so they are written as clauses about the page
         // rather than as restatements of the rule.
         func requireSoleTopHeading(inside container: String) {
@@ -202,9 +276,9 @@ import Testing
                 broken.append("it declares \(headings.count) h1s where this archetype has exactly one")
                 return
             }
-            let enclosing = LeafMarkupScanner.enclosingOpenTag(before: heading.index, in: page.markup) ?? "nothing"
+            let enclosing = MarkupScanner.enclosingOpenTag(before: heading.index, in: page.markup) ?? "nothing"
             require(
-                LeafMarkupScanner.tagCarriesClass(container, in: enclosing),
+                MarkupScanner.tagCarriesClass(container, in: enclosing),
                 "its h1 sits in \(enclosing), not in the .\(container) this archetype puts it in"
             )
         }
@@ -220,14 +294,13 @@ import Testing
 
         switch archetype {
         case .adminTabbed:
-            require(page.declares("admin-version-banner"), "it does not open with the .admin-version-banner")
-            require(page.partials.contains("_admin-tabs"), "its tab bar is not the _admin-tabs partial")
-            requireNoTopHeading("the tab partial already emits this page's — a second is two page titles")
+            // The banner, the hidden h1 and the tab bar, all from AdminTabs.
+            broken += RenderedMarkupRules.adminTabbedViolations(in: page.markup)
             requireSections()
 
         case .instructorTabbed:
-            require(page.partials.contains("_instructor-tabs"), "its tab bar is not the _instructor-tabs partial")
-            requireNoTopHeading("the tab partial already emits this page's — a second is two page titles")
+            // The hidden h1 and the tab bar, both from InstructorTabs.
+            broken += RenderedMarkupRules.instructorTabbedViolations(in: page.markup)
             requireSections()
 
         case .titlebarPage:
@@ -246,7 +319,7 @@ import Testing
             )
             require(!page.declares("page-titlebar"), "it declares a .page-titlebar, which is a different archetype")
             require(
-                !page.partials.contains("_admin-tabs") && !page.partials.contains("_instructor-tabs"),
+                !page.declares("admin-tabs") && !page.declares("instructor-tabs"),
                 "it carries a tab bar, which is a different archetype"
             )
             requireSections()
@@ -257,16 +330,23 @@ import Testing
             requireNoSections("the box is the whole page — there is nothing beside it to wrap")
 
         case .bodyPartialShim:
+            // A shim is BaseLayout around exactly one shared body view: its
+            // <main>, less the layout's flash banners, is that body's own
+            // render and nothing else.
             require(
-                page.partials.count == 2 && page.partials.last?.hasPrefix("_") == true,
-                "it does not extend base plus exactly one body partial, which is all a shim is"
+                page.bodies.count == 1 && page.missingBodies.isEmpty,
+                "it does not render BaseLayout around exactly one body view, which is all a shim is"
             )
             require(
                 !page.markup.contains("<"),
-                "it owns markup — anything a shim grows belongs in the body partial it extends"
+                "it owns markup — anything a shim grows belongs in the body view it wraps"
             )
 
         case .fullBleedApp:
+            require(
+                page.mainTag.map { MarkupScanner.tagCarriesClass("main-fullbleed", in: $0) } == true,
+                "BaseLayout does not give it the viewport-owning .main-fullbleed main element"
+            )
             requireNoTopHeading("a page that owns the viewport has no page frame to title")
             require(
                 !page.declares("page-titlebar"),
@@ -304,23 +384,35 @@ import Testing
         #expect(rows.count == Archetype.allCases.count, "the archetype table has a duplicate row")
     }
 
-    @Test func everyExemplarIsARealDistinctTemplate() throws {
+    /// Each exemplar is a page type with a fixture. `ElementaryPageGuardTests`
+    /// holds the fixtures equal to the files under `Views/Pages/`, so a body
+    /// view such as `AssignmentEditBody` cannot be named: an exemplar is a page
+    /// to copy, not a part of one.
+    @Test func everyExemplarIsARealDistinctPage() throws {
         let rows = try Self.archetypeRows()
-        let templates = Set(try LeafMarkupScanner.templateNames())
+        let fixtures = ElementaryPageFixtures.all
 
         for row in rows {
+            let fixture = fixtures.first { $0.typeName == row.exemplar }
             #expect(
-                templates.contains(row.exemplar),
-                "\(row.archetypeName): the exemplar \(row.exemplar) is not a template in Resources/Views"
+                fixture != nil,
+                "\(row.archetypeName): the exemplar \(row.exemplar) is not a page type in ElementaryPageFixtures"
             )
-            #expect(
-                !row.exemplar.hasPrefix("_"),
-                "\(row.archetypeName): \(row.exemplar) is a partial, not a page — an exemplar is a page to copy"
-            )
+            if let fixture {
+                #expect(
+                    fixture.archetype.rawValue == row.archetypeName,
+                    "\(row.exemplar) is the \(row.archetypeName) exemplar, but its fixture says \(fixture.archetype.rawValue)"
+                )
+            }
         }
         #expect(
             Set(rows.map(\.exemplar)).count == rows.count,
             "two archetypes name the same exemplar; each shape needs its own reference"
+        )
+        // The flag the guard suite reads, and the table, name the same pages.
+        #expect(
+            Set(fixtures.filter(\.isExemplar).map(\.typeName)) == Set(rows.map(\.exemplar)),
+            "the fixtures marked isExemplar are not the pages docs/ui-design.md names as exemplars"
         )
     }
 
@@ -328,17 +420,12 @@ import Testing
     /// answer their question, so a name that no longer exists sends them
     /// nowhere.
     @Test func everyPageNamedBesideAnExemplarStillExists() throws {
-        let templates = Set(try LeafMarkupScanner.templateNames())
+        let pageTypes = Set(ElementaryPageFixtures.all.map(\.typeName))
         for row in try Self.archetypeRows() {
-            let names = row.alsoColumn
-                .split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "`", with: "") }
-                .filter { !$0.isEmpty && $0 != "—" }
-            for name in names {
-                let file = name.hasSuffix(".leaf") ? name : name + ".leaf"
+            for name in Self.alsoNames(in: row) {
                 #expect(
-                    templates.contains(file),
-                    "\(row.archetypeName): the Also column names \(name), which is not a template"
+                    pageTypes.contains(name),
+                    "\(row.archetypeName): the Also column names \(name), which is not a page type"
                 )
             }
         }
@@ -347,50 +434,55 @@ import Testing
     // MARK: - The exemplars themselves
 
     @Test func everyExemplarObeysTheRulesThatHoldAcrossArchetypes() throws {
-        for (_, page) in try Self.exemplars() {
-            let complaints = Self.universalViolations(in: page)
-            #expect(complaints.isEmpty, "\(page.file): \(complaints.joined(separator: "; and "))")
+        for (_, pages) in try Self.exemplars() {
+            for page in pages {
+                let complaints = Self.universalViolations(in: page)
+                #expect(complaints.isEmpty, "\(page.file): \(complaints.joined(separator: "; and "))")
+            }
         }
     }
 
     @Test func everyExemplarStillMatchesItsOwnArchetype() throws {
-        for (archetype, page) in try Self.exemplars() {
-            let complaints = Self.violations(of: archetype, in: page)
-            #expect(
-                complaints.isEmpty,
-                """
-                \(page.file) is the \(archetype.rawValue) exemplar, but \(complaints.joined(separator: "; and ")).
-                Either restore the shape, or name a different page as this archetype's exemplar in \
-                docs/ui-design.md — the reference is the file everyone copies, so it going quietly \
-                off-shape is how the next new page inherits the drift.
-                """
-            )
+        for (archetype, pages) in try Self.exemplars() {
+            for page in pages {
+                let complaints = Self.violations(of: archetype, in: page)
+                #expect(
+                    complaints.isEmpty,
+                    """
+                    \(page.file) is the \(archetype.rawValue) exemplar, but \(complaints.joined(separator: "; and ")).
+                    Either restore the shape, or name a different page as this archetype's exemplar in \
+                    docs/ui-design.md — the reference is the page everyone copies, so it going quietly \
+                    off-shape is how the next new page inherits the drift.
+                    """
+                )
+            }
         }
     }
 
-    /// The full-bleed archetype is named for a mechanism in `base.leaf` rather
-    /// than for anything visible in the page, so the page alone cannot show
-    /// that the mechanism still exists.
-    /// Each half is asked of the reading that can answer it: `fullBleed` is a
-    /// Leaf conditional, which runs even inside an HTML comment, while
-    /// `main-fullbleed` is a class on an element — and a commented-out
-    /// `<main>` is not an element. Asking both of the raw source would let
-    /// commenting the layout out leave this green.
-    @Test func theFullBleedMechanismStillExistsInTheBaseLayout() throws {
+    /// The full-bleed archetype is named for a mechanism in `BaseLayout`
+    /// rather than for anything the page writes. The full-bleed rule reads the
+    /// mechanism's output on the exemplar; this shows that the flag, and only
+    /// the flag, produces it.
+    @Test func theFullBleedMechanismStillExistsInTheBaseLayout() {
+        let page = ElementaryPageFixtures.page()
+        let fullBleed = Page(
+            file: "full-bleed", document: BaseLayout(title: "T", page: page, fullBleed: true) { div {} }.render())
+        let framed = Page(file: "framed", document: BaseLayout(title: "T", page: page) { div {} }.render())
         #expect(
-            try LeafMarkupScanner.source(of: "base.leaf").contains("fullBleed"),
-            "base.leaf no longer branches on fullBleed — the full-bleed archetype's mechanism is gone"
+            fullBleed.mainTag.map { MarkupScanner.tagCarriesClass("main-fullbleed", in: $0) } == true,
+            "BaseLayout no longer gives a full-bleed page the viewport-owning main element"
         )
         #expect(
-            try LeafMarkupScanner.markup(of: "base.leaf").contains("main-fullbleed"),
-            "base.leaf no longer gives a full-bleed page the viewport-owning main element"
+            framed.mainTag.map { MarkupScanner.tagCarriesClass("main-fullbleed", in: $0) } == false,
+            "BaseLayout gives every page the full-bleed main element, so the flag no longer means anything"
         )
     }
 
     // MARK: - The rules, seen to fail
 
-    /// Every archetype's rules against every other archetype's exemplar. Each
-    /// of the forty-two pairs must produce at least one complaint.
+    /// Every archetype's rules against every render of every other archetype's
+    /// exemplar. Each of the forty-two pairs must produce at least one
+    /// complaint on each render.
     ///
     /// This is what stands between the suite and quiet decoration. Every
     /// assertion above is of the form "this list is empty", which an emptied-out
@@ -401,15 +493,18 @@ import Testing
         #expect(exemplars.count == Archetype.allCases.count, "not every archetype resolved to an exemplar page")
 
         for (archetype, _) in exemplars {
-            for (otherArchetype, otherPage) in exemplars where otherArchetype != archetype {
-                #expect(
-                    !Self.violations(of: archetype, in: otherPage).isEmpty,
-                    """
-                    the \(archetype.rawValue) rules accept \(otherPage.file), which is the \
-                    \(otherArchetype.rawValue) exemplar. Two archetypes this guard cannot tell apart \
-                    means one of them is no longer checking anything that distinguishes it.
-                    """
-                )
+            for (otherArchetype, otherPages) in exemplars where otherArchetype != archetype {
+                #expect(!otherPages.isEmpty, "the \(otherArchetype.rawValue) exemplar has no renders")
+                for otherPage in otherPages {
+                    #expect(
+                        !Self.violations(of: archetype, in: otherPage).isEmpty,
+                        """
+                        the \(archetype.rawValue) rules accept \(otherPage.file), which is the \
+                        \(otherArchetype.rawValue) exemplar. Two archetypes this guard cannot tell apart \
+                        means one of them is no longer checking anything that distinguishes it.
+                        """
+                    )
+                }
             }
         }
     }
@@ -417,31 +512,39 @@ import Testing
     /// The same demonstration for the rules that are not per-archetype: a page
     /// breaking each of them must be caught.
     @Test func theSharedRulesRejectAPageThatBreaksThem() {
-        func synthetic(source: String, markup: String? = nil) -> Page {
-            Page(file: "synthetic.leaf", markup: markup ?? source, source: source)
+        func layout(flash: FlashMessages = FlashMessages(), @HTMLBuilder _ content: () -> some HTML) -> Page {
+            Page(
+                file: "synthetic",
+                document: BaseLayout(title: "T", page: ElementaryPageFixtures.page(), flash: flash, content: content)
+                    .render())
         }
-        let wellFormed = "#extend(\"base\"):\n#export(\"title\"):\nT\n#endexport\n#export(\"content\"):\n"
 
         let cases: [(String, Page)] = [
             (
-                "a page that does not extend the base layout",
-                synthetic(source: "#export(\"title\"):\nT\n#endexport\n#export(\"content\"):\n<h1>Hi</h1>\n")
+                "a page that does not render inside the base layout",
+                Page(file: "synthetic", document: "<!DOCTYPE html><html><body><main><h1>Hi</h1></main></body></html>")
             ),
             (
-                "a page that exports no content",
-                synthetic(source: "#extend(\"base\"):\n#export(\"title\"):\nT\n#endexport\n")
+                "a page that renders no content",
+                layout { EmptyHTML() }
             ),
             (
-                "a page hand-rolling the flash banner base.leaf already renders",
-                synthetic(source: wellFormed + "<div class=\"flash flash-error\">boom</div>\n")
+                "a page hand-rolling the flash banner BaseLayout already renders",
+                layout {
+                    h1 { "Title" }
+                    div(.class("flash flash-error"), .role("alert")) { "boom" }
+                }
             ),
             (
                 "a page skipping a heading level",
-                synthetic(source: wellFormed + "<h1>Title</h1>\n<h3>Buried</h3>\n")
+                layout {
+                    h1 { "Title" }
+                    h3 { "Buried" }
+                }
             ),
             (
                 "a page whose first heading is below h2",
-                synthetic(source: wellFormed + "<h4>Sideways</h4>\n")
+                layout { h4 { "Sideways" } }
             ),
         ]
 
@@ -452,11 +555,18 @@ import Testing
             )
         }
 
-        // …and accept a page that breaks none of them, so the demonstration
-        // above is not just "these rules reject everything".
-        #expect(
-            Self.universalViolations(in: synthetic(source: wellFormed + "<h1>Title</h1>\n<h2>Part</h2>\n")).isEmpty,
-            "the shared rules reject a page that breaks none of them"
-        )
+        // …and accept a page that breaks none of them, with and without the
+        // layout's own banners, so the demonstration above is not just "these
+        // rules reject everything".
+        for flash in [FlashMessages(), FlashMessages(success: "Saved.", error: "But not that.")] {
+            let wellFormed = layout(flash: flash) {
+                h1 { "Title" }
+                h2 { "Part" }
+            }
+            #expect(
+                Self.universalViolations(in: wellFormed).isEmpty,
+                "the shared rules reject a page that breaks none of them: \(Self.universalViolations(in: wellFormed))"
+            )
+        }
     }
 }

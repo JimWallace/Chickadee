@@ -92,9 +92,9 @@ extension Application {
 // MARK: - CSRF token extraction
 
 /// Parses the CSRF token from a rendered form page.
-/// Looks for the hidden input rendered by Leaf's `#csrfFormField()`:
-///   `<input type='hidden' name='_csrf' value='TOKEN'>`
-/// or by the Elementary `CSRFField`, which quotes with `"`.
+/// Looks for the hidden input rendered by the Elementary `CSRFField`
+/// (`<input type="hidden" name="_csrf" value="TOKEN">`), and also accepts the
+/// single-quoted spelling.
 func extractCSRFToken(from html: String) -> String {
     for quote in ["'", "\""] {
         guard let range = html.range(of: "name=\(quote)_csrf\(quote) value=\(quote)") else { continue }

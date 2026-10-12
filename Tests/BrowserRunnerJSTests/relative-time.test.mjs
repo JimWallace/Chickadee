@@ -1,5 +1,5 @@
 // Unit tests for Public/relative-time.js — the one relative-timestamp
-// renderer, loaded on every page from base.leaf.
+// renderer, loaded on every page from BaseLayout.
 //
 // It had no tests, which is how it kept applying exactly ONCE per page load.
 // That made a timestamp live only where something else repainted it — the

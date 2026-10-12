@@ -91,8 +91,17 @@ test('the fallback copy exists for the two non-generic variants and speaks to th
   }
 });
 
+/// The notebook view's page scripts, in load order: the `scripts` list in
+/// NotebookBody.swift, so a comment that names a script cannot answer.
+async function notebookScriptList() {
+  const src = await fs.readFile(path.resolve('Sources/APIServer/Views/NotebookBody.swift'), 'utf8');
+  const list = /private static let scripts = \[([\s\S]*?)\]/.exec(src);
+  assert.ok(list, 'NotebookBody.swift has no scripts list');
+  return list[1];
+}
+
 test('the notebook page loads the core before the preflight', async () => {
-  const src = await fs.readFile(path.resolve('Resources/Views/_notebook-body.leaf'), 'utf8');
+  const src = await notebookScriptList();
   const core = src.indexOf('/notebook-preflight-core.js');
   const wiring = src.indexOf('/notebook-preflight.js');
   assert.ok(core >= 0 && wiring >= 0 && core < wiring, 'core must be loaded before notebook-preflight.js');

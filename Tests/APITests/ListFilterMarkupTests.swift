@@ -16,12 +16,12 @@
 // containment itself is checked here by walking the tag structure: for each
 // `.filter-input`, the nearest enclosing open tag must carry `filter-group`.
 //
-// The walk itself lives in `LeafMarkupScanner`, shared with the other
-// markup-contract guard rather than copied into it — the duplicate spelling of
-// a shared thing being the exact failure the UI vocabulary work is about.
+// The walk itself lives in `MarkupScanner`, shared with the other
+// markup-contract guards rather than copied into them — the duplicate spelling
+// of a shared thing being the exact failure the UI vocabulary work is about.
 //
-// A page ported to Elementary has no template. Its fixture renders
-// (`ElementaryPageFixtures`) are read instead, under the Swift type name.
+// Every page is an Elementary view, so the rules read each page's fixture
+// renders (`ElementaryPageFixtures`), under the Swift type name.
 
 import Foundation
 import Testing
@@ -36,29 +36,24 @@ import Testing
         let enclosingTag: String?
     }
 
-    /// Every page the rules read: each template with its markup and source,
-    /// and each render of an Elementary page, whose markup is its source.
-    private static func pages() throws -> [(file: String, markup: String, source: String)] {
-        let templates = try LeafMarkupScanner.templateNames().map { file in
-            (file: file, markup: try LeafMarkupScanner.markup(of: file), source: try LeafMarkupScanner.source(of: file))
+    /// Every page the rules read: each render of every Elementary page.
+    private static func pages() -> [(file: String, html: String)] {
+        ElementaryPageFixtures.all.flatMap { fixture in
+            fixture.renders.map { (file: fixture.typeName, html: $0) }
         }
-        let swiftPages = ElementaryPageFixtures.all.flatMap { fixture in
-            fixture.renders.map { (file: fixture.typeName, markup: $0, source: $0) }
-        }
-        return templates + swiftPages
     }
 
     /// Every `.filter-input` on every page, with the tag that encloses it.
-    private static func filterInputs() throws -> [FilterInput] {
+    private static func filterInputs() -> [FilterInput] {
         var found: [FilterInput] = []
-        for (file, html, _) in try pages() {
-            for tag in LeafMarkupScanner.openTags("input", in: html) {
+        for (file, html) in pages() {
+            for tag in MarkupScanner.openTags("input", in: html) {
                 guard tag.text.contains("filter-input") else { continue }
                 found.append(
                     FilterInput(
                         file: file,
                         tag: tag.text,
-                        enclosingTag: LeafMarkupScanner.enclosingOpenTag(before: tag.index, in: html)
+                        enclosingTag: MarkupScanner.enclosingOpenTag(before: tag.index, in: html)
                     )
                 )
             }
@@ -71,7 +66,7 @@ import Testing
     /// The extractor asserts its own completeness: a parser that silently found
     /// nothing would make every assertion below pass vacuously (#1330's lesson).
     @Test func everyKnownFilterIsFound() throws {
-        let inputs = try Self.filterInputs()
+        let inputs = Self.filterInputs()
         let files = Set(inputs.map(\.file))
         #expect(
             files == [
@@ -97,7 +92,7 @@ import Testing
     /// script owns and one stale string it does not update. The design brief
     /// draws label + input only, so this pins that the markup stays that way.
     @Test func noPageDeclaresItsOwnFilterResultCount() throws {
-        for (file, html, _) in try Self.pages() {
+        for (file, html) in Self.pages() {
             guard html.contains("filter-input") else { continue }
             #expect(
                 !html.contains("filter-status"),
@@ -112,7 +107,7 @@ import Testing
     /// `.filter-input`. It is not a per-page dial: five boxes once came in
     /// three sizes, which is the whole reason the token exists.
     @Test func noFilterInputCarriesItsOwnWidth() throws {
-        for input in try Self.filterInputs() {
+        for input in Self.filterInputs() {
             #expect(
                 !input.tag.contains("width"),
                 "\(input.file): filter width comes from --filter-width, never from the tag"
@@ -123,10 +118,10 @@ import Testing
     /// A page that DECLARES the behaviour must LOAD the script that provides it.
     ///
     /// Every assertion in this suite reads markup, so all of them passed on the
-    /// student dashboard while its filter did nothing at all: `index.leaf`
+    /// student dashboard while its filter did nothing at all: the dashboard
     /// declared `data-list-filter`, four `data-sort-key` columns,
     /// `data-sort-initial="due:asc"` and a tiebreak, and loaded neither
-    /// `list-filter.js` nor `sortable-table.js` (base.leaf loads neither, and
+    /// `list-filter.js` nor `sortable-table.js` (the layout loads neither, and
     /// every other page includes them itself). The filter box accepted typing
     /// and filtered nothing, no result count was ever announced, the headers
     /// were inert buttons, and assignments rendered in server order rather than
@@ -141,10 +136,10 @@ import Testing
             (declaration: "data-list-filter=", script: "list-filter.js"),
             (declaration: "sortable-table\"", script: "sortable-table.js"),
         ]
-        for (file, _, source) in try Self.pages() {
-            for contract in contracts where source.contains(contract.declaration) {
+        for (file, html) in Self.pages() {
+            for contract in contracts where html.contains(contract.declaration) {
                 #expect(
-                    source.contains(contract.script),
+                    html.contains(contract.script),
                     "\(file): declares \(contract.declaration) but never loads \(contract.script) — the behaviour is dead"
                 )
             }
@@ -152,7 +147,7 @@ import Testing
     }
 
     @Test func everyFilterInputSitsInAFilterGroup() throws {
-        for input in try Self.filterInputs() {
+        for input in Self.filterInputs() {
             let enclosing = input.enclosingTag ?? "<nothing>"
             #expect(
                 enclosing.contains("filter-group"),
@@ -168,17 +163,17 @@ import Testing
     /// keyboard semantics) and the shared `.form-input` look. Both were once
     /// per-page choices.
     @Test func everyFilterInputIsASearchFieldOnTheSharedLook() throws {
-        for input in try Self.filterInputs() {
+        for input in Self.filterInputs() {
             #expect(input.tag.contains("type=\"search\""), "\(input.file): a filter must be type=search")
             #expect(input.tag.contains("form-input"), "\(input.file): a filter must carry .form-input")
         }
     }
 
     /// Autofill suppression is the component's job for every filter, live or
-    /// GET-form. A template carrying `autocomplete` is the split that left the
+    /// GET-form. A page carrying `autocomplete` is the split that left the
     /// two server-side filters with the weaker half of the suppression.
     @Test func noFilterInputDeclaresAutocompleteInMarkup() throws {
-        for input in try Self.filterInputs() {
+        for input in Self.filterInputs() {
             #expect(
                 !input.tag.contains("autocomplete"),
                 "\(input.file): list-filter.js owns autofill suppression — drop the autocomplete attribute"
@@ -193,7 +188,7 @@ import Testing
             "AdminPage", "AdminUsersPage", "AssignmentSubmissionsPage", "IndexPage",
             "InstructorSlipDaysPage", "InstructorStudentsPage", "LeaderboardPage",
         ]
-        for input in try Self.filterInputs() {
+        for input in Self.filterInputs() {
             let isLive = input.tag.contains("data-list-filter=")
             #expect(
                 isLive == liveFilters.contains(input.file),

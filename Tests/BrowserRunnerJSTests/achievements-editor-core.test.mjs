@@ -137,7 +137,7 @@ test('a failed PUT is worded from the server reason, the raw text, or the status
 });
 
 test('the edit page loads the core before the editor', async () => {
-  const src = await fs.readFile(path.resolve('Resources/Views/_assignment-edit-body.leaf'), 'utf8');
+  const src = await fs.readFile(path.resolve('Sources/APIServer/Views/AssignmentEditBody.swift'), 'utf8');
   const core = src.indexOf('/achievements-editor-core.js');
   const wiring = src.indexOf('/achievements-editor.js');
   assert.ok(core >= 0 && wiring >= 0 && core < wiring, 'core must be loaded before achievements-editor.js');

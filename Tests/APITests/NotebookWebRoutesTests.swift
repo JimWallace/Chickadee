@@ -65,7 +65,6 @@ import VaporTesting
             app.kernelEnvironments = KernelEnvironments.load(
                 publicDirectory: app.directory.publicDirectory)
 
-            configureLeaf(app)
             try routes(app)
         }
 

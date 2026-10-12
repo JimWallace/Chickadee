@@ -1,42 +1,28 @@
-// Tests/APITests/LeafMarkupScanner.swift
+// Tests/APITests/MarkupScanner.swift
 //
-// Reading Leaf templates as STRUCTURE, for the markup-contract guards.
+// Reading rendered HTML as STRUCTURE, for the markup-contract guards.
 //
-// Two of those guards exist so far — `ListFilterMarkupTests` (the list-filter
-// control's shape) and `PageArchetypeTests` (the page archetypes' shape) — and
-// both need the same two things a `grep` cannot give them.
+// Three guards use it — `ListFilterMarkupTests` (the list-filter control's
+// shape), `RowMenuMarkupTests` (the row menu's shape) and `PageArchetypeTests`
+// (the page archetypes' shape). Each reads the renders in
+// `ElementaryPageFixtures`, and each needs the same two things a `grep`
+// cannot give it.
 //
 // 1. CONTAINMENT. "Is this `<h1>` inside the `.page-titlebar`" is a question
 //    about the tag tree, and the answer is found by walking BACKWARDS from the
 //    match to the first unclosed open tag. Walking back rather than building a
-//    whole-file tag stack keeps the answer local, so a template's conditional
-//    markup earlier in the file cannot throw it off — which matters here, where
-//    every file is full of `#if` branches that open a tag in one arm and close
-//    it in another.
+//    whole-document tag stack keeps the answer local, so markup earlier in the
+//    page cannot throw it off.
 //
 // 2. PROSE IS NOT MARKUP. A scanner cannot tell a tag from a sentence about a
 //    tag, and this codebase has been bitten by that repeatedly — twice by drift
 //    guards that matched their own documentation. Comments are stripped before
-//    anything else looks at the source, so a template that *describes* the
-//    markup it must not contain still passes.
-//
-// Note the deliberate asymmetry with Leaf itself: Leaf's lexer has no notion of
-// an HTML comment, so a Leaf TAG inside one still executes (docs/ui-design.md
-// and the CLAUDE.md note on the `extend only supports one or two parameters`
-// failure). That is a rule about what to write in a template. This is a tool
-// for reading the HTML a template declares, and for that job commented-out
-// markup is not markup.
+//    anything else looks at the markup, so a page that *describes* the markup
+//    it must not contain still passes.
 
-import ChickadeeTestSupport
 import Foundation
 
-enum LeafMarkupScanner {
-
-    /// `Resources/Views`, resolved from this file rather than the working
-    /// directory so the suites run the same from any launcher.
-    static var viewsDirectory: URL {
-        repositoryRoot.appendingPathComponent("Resources/Views")
-    }
+enum MarkupScanner {
 
     /// Elements that never enclose anything, so they are never the answer to
     /// "which tag encloses this one".
@@ -44,36 +30,8 @@ enum LeafMarkupScanner {
         "input", "br", "img", "meta", "link", "hr", "use", "source", "col", "area",
     ]
 
-    // MARK: - Loading
-
-    /// Every `.leaf` file in `Resources/Views`, sorted by name.
-    static func templateNames() throws -> [String] {
-        try FileManager.default
-            .contentsOfDirectory(at: viewsDirectory, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "leaf" }
-            .map(\.lastPathComponent)
-            .sorted()
-    }
-
-    /// One template's markup, with HTML comments removed. Ask for this when the
-    /// question is about the HTML a page declares — a browser does not render
-    /// commented-out markup, so neither should a guard reading the shape.
-    static func markup(of templateName: String) throws -> String {
-        strippingHTMLComments(try source(of: templateName))
-    }
-
-    /// One template verbatim. Ask for this when the question is about LEAF, and
-    /// note that the two answers differ on purpose: Leaf's lexer has no notion
-    /// of an HTML comment, so a commented-out `extend` still resolves its
-    /// partial. Reading Leaf tags out of the stripped text would report a page
-    /// as not including something it does in fact include.
-    static func source(of templateName: String) throws -> String {
-        let url = viewsDirectory.appendingPathComponent(templateName)
-        return try String(contentsOf: url, encoding: .utf8)
-    }
-
     /// Removes `<!-- … -->` spans, including multi-line ones. An unterminated
-    /// comment swallows the rest of the file, which is what a browser does too.
+    /// comment swallows the rest of the text, which is what a browser does too.
     static func strippingHTMLComments(_ source: String) -> String {
         var out = ""
         var cursor = source.startIndex
@@ -171,7 +129,7 @@ enum LeafMarkupScanner {
             .map(\.level)
     }
 
-    /// Whether the template declares an element carrying `className`.
+    /// Whether the markup declares an element carrying `className`.
     ///
     /// Matches the class as a whole word inside a `class="…"` attribute, so
     /// `.page-section` is not answered by `.page-section-header`.
@@ -195,30 +153,12 @@ enum LeafMarkupScanner {
     }
 
     /// Whether one open tag's `class` attribute carries `className` as a whole
-    /// word. Leaf interpolation inside the attribute is left alone — it is a
-    /// value, not a class name, and treating it as one is how a scanner starts
-    /// answering questions about strings instead of about markup.
+    /// word.
     static func tagCarriesClass(_ className: String, in openTag: String) -> Bool {
         guard let attr = openTag.range(of: "class=\"") else { return false }
         guard let end = openTag[attr.upperBound...].firstIndex(of: "\"") else { return false }
         return openTag[attr.upperBound..<end]
             .split(whereSeparator: { $0.isWhitespace })
             .contains { $0 == className }
-    }
-
-    /// The partials a template pulls in, by name, in document order.
-    ///
-    /// Reads the `extend` calls a template makes. The sub-context form takes a
-    /// second argument, so the name is read up to the closing quote rather than
-    /// to the closing paren.
-    static func extendedPartials(in leafSource: String) -> [String] {
-        var found: [String] = []
-        var search = leafSource.startIndex
-        while let hit = leafSource.range(of: "#extend(\"", range: search..<leafSource.endIndex) {
-            search = hit.upperBound
-            guard let end = leafSource[hit.upperBound...].firstIndex(of: "\"") else { continue }
-            found.append(String(leafSource[hit.upperBound..<end]))
-        }
-        return found
     }
 }

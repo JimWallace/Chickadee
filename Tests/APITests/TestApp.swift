@@ -3,7 +3,6 @@
 // Builds the standard test application, runs a test body against it, and
 // tears it down with every piece of temp state it made.
 
-import CSRF
 import ChickadeeTestSupport
 import Foundation
 import SQLKit
@@ -88,10 +87,6 @@ private struct TestDataDirectoryKey: StorageKey {
     typealias Value = String
 }
 
-private struct LeafViewsSymlinkKey: StorageKey {
-    typealias Value = String
-}
-
 extension Application {
     /// Filesystem directory created for this app's results/testsetups/
     /// submissions trees; `tearDownTestApp` removes it. `makeTestApp` sets it;
@@ -166,14 +161,13 @@ extension Application {
     /// Tears the app down completely: drops the per-test Postgres schema (if
     /// any), shuts the app down, and removes every piece of temp state created
     /// on its behalf — the `makeTestApp` directory tree, sqlite-kit's
-    /// fake-memory database files, and the Leaf views symlink. Every step is a
+    /// fake-memory database files. Every step is a
     /// no-op when there is nothing to clean, so this is safe for any test app
     /// however it was built. `withApp` calls this; use it directly only for
     /// apps whose lifecycle `withApp` doesn't own.
     func tearDownTestApp() async throws {
         // Collect everything that needs a live app before shutting down.
         let dir = storage[TestDataDirectoryKey.self]
-        let leafSymlink = storage[LeafViewsSymlinkKey.self]
         let sqliteFiles = await sqliteFakeMemoryDatabaseFiles()
         let templateCopy = storage[TestSQLiteDatabaseFileKey.self]
         let pooledSchema = storage[PooledPostgresSchemaKey.self]
@@ -220,17 +214,14 @@ extension Application {
                 try? FileManager.default.removeItem(atPath: path)
             }
         }
-        if let leafSymlink {
-            try? FileManager.default.removeItem(atPath: leafSymlink)
-        }
         if let firstError { throw firstError }
     }
 }
 
 /// Builds a `.testing` Vapor application with the standard test wiring:
 /// per-app temp directories for results/testsetups/submissions,
-/// in-memory sessions, the production migration list, Leaf views, and
-/// the full route tree mounted.
+/// in-memory sessions, the production migration list, and the full route
+/// tree mounted.
 ///
 /// Caller owns the lifecycle — wrap the test body in `withApp(app) { ... }`
 /// (which tears the app down, temp state included) or pair the call with
@@ -314,13 +305,6 @@ func makeTestApp(
         app.kernelEnvironments = KernelEnvironments.load(
             publicDirectory: app.directory.publicDirectory)
 
-        configureLeaf(app)
         try routes(app)
     }
 }
-
-// MARK: - Leaf / CSRF setup
-
-/// A no-op since the server stopped rendering Leaf. Kept only so the existing
-/// call sites build; the test-harness change removes it.
-func configureLeaf(_ app: Application) {}

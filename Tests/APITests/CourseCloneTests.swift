@@ -224,8 +224,8 @@ import VaporTesting
             #expect(cloneForm.contains("value=\"2027\""))
             #expect(cloneForm.contains("<option value=\"winter\" selected"))
 
-            // The courses table links to the form. The fragment follows a Leaf
-            // interpolation, so check that it renders as literal text.
+            // The courses table links to the form. The fragment follows an
+            // interpolated value, so check that it renders as literal text.
             var admin = ""
             try await app.asyncTest(
                 .GET, "/admin",

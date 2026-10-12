@@ -16,12 +16,12 @@ const require = createRequire(import.meta.url);
 const ChickadeeUI = require('../../Public/chickadee-ui.js');
 
 // The three surfaces that used to carry their own inline copy.  Each
-// template's wiring now lives in a Public/*.js page file (the inline-script
-// conversion), so the call site to verify is the wiring file; the template
+// page's wiring now lives in a Public/*.js page file (the inline-script
+// conversion), so the call site to verify is the wiring file; the view
 // itself must stay free of any checkUWDates code.
 const FORMERLY_INLINED = [
   { template: 'Sources/APIServer/Views/Pages/AssignmentNewPage.swift', wiring: 'Public/assignment-new-page.js' },
-  { template: 'Resources/Views/_assignment-edit-body.leaf', wiring: 'Public/assignment-edit-page.js' },
+  { template: 'Sources/APIServer/Views/AssignmentEditBody.swift', wiring: 'Public/assignment-edit-page.js' },
   { template: 'Sources/APIServer/Views/Pages/AssignmentsPage.swift', wiring: 'Public/assignments.js' },
 ];
 

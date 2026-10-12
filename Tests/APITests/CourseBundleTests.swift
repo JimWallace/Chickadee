@@ -528,7 +528,7 @@ import VaporTesting
 
             let zipData = try await makeMinimalBundleZip(courseCode: "ARCHIVED_IMP")
             let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-            // 500 expected (Leaf not configured), but NOT a 4xx rejection
+            // Whatever the page does, NOT a 4xx rejection
             #expect(status != .conflict)
             #expect(status != .forbidden)
             #expect(status != .badRequest)

@@ -16,16 +16,17 @@ extension ElementaryPageFixtures {
     }
 
     static var assignmentEditPage: ElementaryPageFixture {
-        ElementaryPageFixture(
+        let cases: [(PageRequestContext, EditAssignmentContext)] = [
+            (page(), EditorSamples.edit(rich: false, embedded: nil)),
+            (page(currentUser: signedInAdmin), EditorSamples.edit(rich: true, embedded: nil)),
+            (page(), EditorSamples.edit(rich: true, embedded: true)),
+        ]
+        return ElementaryPageFixture(
             typeName: "AssignmentEditPage",
             archetype: .bodyPartialShim,
-            renders: [
-                AssignmentEditPage(page: page(), edit: EditorSamples.edit(rich: false, embedded: nil)).render(),
-                AssignmentEditPage(
-                    page: page(currentUser: signedInAdmin), edit: EditorSamples.edit(rich: true, embedded: nil)
-                ).render(),
-                AssignmentEditPage(page: page(), edit: EditorSamples.edit(rich: true, embedded: true)).render(),
-            ]
+            renders: cases.map { AssignmentEditPage(page: $0.0, edit: $0.1).render() },
+            isExemplar: true,
+            bodies: cases.map { [EditorSamples.body($0.1, page: $0.0)] }
         )
     }
 
@@ -42,6 +43,12 @@ extension ElementaryPageFixtures {
 }
 
 enum EditorSamples {
+    /// The edit body on its own, as `AssignmentEditPage` and the workbench
+    /// render it for `page`.
+    static func body(_ edit: EditAssignmentContext, page: PageRequestContext) -> String {
+        AssignmentEditBody(edit: edit, csrfToken: page.csrfToken, appVersion: page.appVersion).render()
+    }
+
     static let languageOptions = AssignmentLanguageOption.options(recorded: "python")
 
     static func supportFile(dataset: Bool, editable: Bool) -> EditableSuiteRow {

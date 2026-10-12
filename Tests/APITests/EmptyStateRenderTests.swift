@@ -1,25 +1,18 @@
-// Tests/APITests/LeafEmptyStateRenderTests.swift
+// Tests/APITests/EmptyStateRenderTests.swift
 //
 // Empty states must actually render when the collection behind them is empty.
 //
-// This pins a defect class that every other kind of coverage is blind to.
-// LeafKit walks a keypath by requiring each intermediate to be a dictionary
-// (`Dictionary+LeafData.swift`), so `rows.isEmpty` on an ARRAY resolves to nil
-// rather than erroring — LeafKit has no property resolution at all. Nil then
-// reads as success in both directions: `LeafSerializer`'s conditional guard is
-// `(evaluated.bool ?? false) || (!evaluated.isNil && …)`, so `#if(rows.isEmpty)`
-// never fires, while `ParameterResolver`'s `.not` is `rhs.bool ?? !rhs.isNil`,
-// so `#if(!rows.isEmpty)` always fires.
+// This pins a defect class that every other kind of coverage is blind to. When
+// the pages were Leaf templates, `#if(rows.isEmpty)` on an array resolved to
+// nil, so the empty branch never fired and its negation always did. Thirty-three
+// sites across 22 templates shipped that way. A render test could not see any
+// of them: the page returns 200 and simply shows the wrong branch — a
+// header-only table promising rows and listing none.
 //
-// Thirty-three sites across 22 templates shipped that way. A render test could
-// not see any of them: the template resolves, returns 200, and simply shows the
-// wrong branch — a header-only table promising rows and listing none. So
-// asserting a page renders proves nothing here; the assertion has to be that
-// the empty COPY is present and the table chrome is not.
-//
-// `scripts/check-leaf-semantics.sh` blocks the idiom statically. This is the
-// behavioural half: it fails if the working `count()` form is ever swapped back
-// for something that silently resolves to nil.
+// The pages are Swift views now, and the compiler checks the condition, but
+// the failure it would produce is the same silent wrong branch. So asserting a
+// page renders proves nothing here; the assertion has to be that the empty
+// COPY is present and the table chrome is not.
 
 import Core
 import Fluent
@@ -29,12 +22,12 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized, .timeLimit(.minutes(5))) final class LeafEmptyStateRenderTests {
+@Suite(.serialized, .timeLimit(.minutes(5))) final class EmptyStateRenderTests {
 
     let app: Application
 
     init() async throws {
-        self.app = try await makeTestApp(prefix: "chickadee-leaf-empty")
+        self.app = try await makeTestApp(prefix: "chickadee-empty-state")
     }
 
     /// With no courses open for enrollment, the student must be told so — not
@@ -81,12 +74,12 @@ import VaporTesting
         }
     }
 
-    /// A COMPUTED property is the same nil, reached a different way. Swift's
+    /// A COMPUTED property was the same nil, reached a different way. Swift's
     /// synthesized `Encodable` conformance encodes stored properties only, so
-    /// `var assignmentCount: Int { assignments.count }` never reached the Leaf
-    /// context and `#(assignmentCount)` rendered as the empty string — the new
-    /// course page read "Assignments ()" directly above a working
-    /// "Enrolled students (0)". It renders through `count()` now.
+    /// `var assignmentCount: Int { assignments.count }` never reached the
+    /// template context and rendered as the empty string — the new course page
+    /// read "Assignments ()" directly above a working "Enrolled students (0)".
+    /// This pins that the count renders.
     @Test func assignmentHeadingCountRendersRatherThanVanishing() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginUser(

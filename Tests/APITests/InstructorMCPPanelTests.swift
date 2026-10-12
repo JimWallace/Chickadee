@@ -65,7 +65,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    // Leaf escapes the apostrophe in "course's", so match an
+                    // The page may escape the apostrophe in "course's", so match an
                     // apostrophe-free slice of the read-only note.
                     #expect(html.contains("instructors can edit its authoring voice"))
                     // No save/reset controls at all for a TA; the box renders

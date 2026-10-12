@@ -489,7 +489,7 @@ async function loadRunnerHarness(options = {}) {
   // ChickadeeOctaveGradingShared, which the runner destructures at IIFE
   // start), then the generated ChickadeeRunnerSupportSources, which the runner
   // also reads at IIFE start, then the runner — same order as
-  // _notebook-body.leaf loads them.
+  // NotebookBody loads them.
   const vmContext = vm.createContext(context);
   vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
   vm.runInContext(rSharedSource, vmContext, { filename: 'r-grading-shared.js' });

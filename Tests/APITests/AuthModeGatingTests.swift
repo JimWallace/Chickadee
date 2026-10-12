@@ -121,8 +121,8 @@ import VaporTesting
                 .GET, "/login?loggedout=1",
                 afterResponse: { res in
                     // Must NOT bounce back into SSO; renders the login form
-                    // instead (status 200, or 500 if this bare harness has no
-                    // Leaf views — either way, no /auth/sso/start redirect).
+                    // instead (whatever status this bare harness gives it,
+                    // no /auth/sso/start redirect).
                     #expect(res.headers.first(name: .location) != "/auth/sso/start")
                 })
         }

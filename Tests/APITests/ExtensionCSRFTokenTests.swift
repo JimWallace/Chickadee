@@ -13,7 +13,7 @@
 // closing the gap where the older tests pulled a token from /instructor).
 // The recoverable error page for the stale-token case is covered against the
 // production error middleware in SecurityAndHealthTests
-// (`leafErrorMiddlewareRendersRecoverableMessageForCSRFFailures`); the test
+// (`errorPageMiddlewareRendersRecoverableMessageForCSRFFailures`); the test
 // harness here doesn't install ErrorPageMiddleware.
 //
 // `extensionSaveWithStreamedBodyPassesCSRF` pins the *actual* root cause of
