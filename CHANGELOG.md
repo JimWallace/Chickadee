@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.613] - 2026-10-12
+
+### Added
+
+- **The style guards read Elementary page CSS.** `check-styles.sh`, `check-design-tokens.sh`, `check-class-resolution.sh`, `check-css-vars.sh` and `check-ui-vocabulary.sh` now read the CSS in Swift `PageStyle` blocks as well as template `<style>` blocks. A SwiftLint rule keeps flash banners in the layout, and `BaseLayoutParityTests` keeps `base.leaf` and `BaseLayout` loading the same assets while both are served.
+
+
 ## [0.5.612] - 2026-10-11
 
 ### Added
