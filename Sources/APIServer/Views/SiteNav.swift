@@ -10,7 +10,9 @@ struct SiteNav: HTML {
     var body: some HTML {
         nav(.class("nav")) {
             a(.class("nav-brand"), .href("/")) {
+                // The spaces match base.leaf. The flex gap sets the visible spacing.
                 img(.class("nav-brand-logo"), .src(page.asset("/images/chickadee-icon-alt.png")), .alt(""))
+                " "
                 span { "Chickadee" }
             }
             if let user = page.currentUser {
@@ -42,6 +44,7 @@ struct SiteNav: HTML {
                     .ariaHasPopup(true), .ariaExpanded(false)
                 ) {
                     span { "Instructor" }
+                    " "
                     span(.class("nav-dropdown-caret"), .ariaHidden) { "▾" }
                 }
                 div(.class("nav-dropdown-menu"), .role("menu")) {
@@ -67,6 +70,7 @@ struct SiteNav: HTML {
                 .ariaHasPopup(true), .ariaExpanded(false), .ariaLabel("Account menu")
             ) {
                 span { user.preferredName ?? user.displayName ?? user.username }
+                " "
                 span(.class("nav-dropdown-caret"), .ariaHidden) { "▾" }
             }
             div(.class("nav-dropdown-menu"), .role("menu")) {
