@@ -20,7 +20,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/retention
 
     @Sendable
-    func retentionPage(req: Request) async throws -> View {
+    func retentionPage(req: Request) async throws -> HTMLResponse<AdminRetentionPage> {
         struct FlashQuery: Content {
             var ok: String?
             var error: String?
@@ -91,15 +91,12 @@ extension AdminRoutes {
             )
         }
 
-        let ctx = AdminRetentionContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "retention",
-            retentionDays: retentionDays,
-            rows: rows,
-            deletableCount: rows.filter { $0.isDeletable }.count,
-            flashSuccess: flash.ok,
-            flashError: flash.error
-        )
-        return try await req.view.render("admin-retention", ctx)
+        return HTMLResponse {
+            AdminRetentionPage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(success: flash.ok, error: flash.error),
+                retentionDays: retentionDays,
+                rows: rows)
+        }
     }
 }

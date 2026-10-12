@@ -240,13 +240,6 @@ struct AdminMCPAccountRow: Encodable {
     let enrollableCourses: [AdminCourseRef]
 }
 
-struct AdminStoragePageContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let storage: AdminStorageContext
-    let assignmentRows: [AdminStorageShareRow]
-}
-
 struct AdminCourseDetailContext: Encodable {
     let currentUser: CurrentUserContext?
     let course: AdminCourseRow
@@ -377,22 +370,6 @@ enum AuditCategoryTile {
     }
 }
 
-struct AdminAuditContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let rows: [AdminAuditRow]
-    /// The same rows under day headings, newest first.
-    let days: [DayGroup<AdminAuditRow>]
-    /// Available action filters (grouped label shown to the admin).
-    let actionOptions: [SelectOption]
-    /// The actor substring currently filtered on (echoed back into the input).
-    let filterActor: String
-    /// True when any filter is active — drives the "Clear filters" affordance.
-    let filtered: Bool
-    /// Total entries matching the current filter (may exceed the 200 shown).
-    let matchCount: Int
-}
-
 /// One archived course on the retention report.
 struct AdminRetentionRow: Encodable {
     let id: String
@@ -413,18 +390,6 @@ struct AdminRetentionRow: Encodable {
     /// rendered (and the server only honours a delete) when this is true.
     /// Restore (unarchive) is offered regardless of this flag.
     let isDeletable: Bool
-}
-
-struct AdminRetentionContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let retentionDays: Int
-    let rows: [AdminRetentionRow]
-    /// How many of `rows` are currently past the retention window and eligible
-    /// for permanent deletion (drives the summary line).
-    let deletableCount: Int
-    let flashSuccess: String?
-    let flashError: String?
 }
 
 // MARK: - LTI (docs/lti-1-3.md slice 1b)

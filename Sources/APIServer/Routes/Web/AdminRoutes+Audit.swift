@@ -15,7 +15,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/audit
 
     @Sendable
-    func auditPage(req: Request) async throws -> View {
+    func auditPage(req: Request) async throws -> HTMLResponse<AdminAuditPage> {
         struct AuditFilterQuery: Content {
             var action: String?
             var actor: String?
@@ -88,17 +88,14 @@ extension AdminRoutes {
             }
             .sorted { $0.label < $1.label }
 
-        return try await req.view.render(
-            "admin-audit",
-            AdminAuditContext(
-                currentUser: req.currentUserContext,
-                activeAdminTab: "audit",
-                rows: rows,
+        return HTMLResponse {
+            AdminAuditPage(
+                page: PageRequestContext(request: req),
                 days: DayGrouper.group(rows, occurredAt: \.occurredAt),
                 actionOptions: actionOptions,
                 filterActor: filterActor ?? "",
                 filtered: filterAction != nil || filterActor != nil,
                 matchCount: matchCount)
-        )
+        }
     }
 }
