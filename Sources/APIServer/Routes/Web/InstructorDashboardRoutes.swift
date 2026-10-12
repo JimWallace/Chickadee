@@ -3,7 +3,7 @@
 // Instructor-facing assignment management routes.
 // Requires instructor or admin role (enforced by routes.swift).
 //
-//   GET  /instructor                               → assignments.leaf (all setups + status)
+//   GET  /instructor                               → AssignmentsPage (all setups + status)
 //   GET  /instructor/new                           → assignment-new.leaf
 //   POST /instructor/new/save                      → save draft assignment, redirect to /instructor
 //   POST /instructor                               → create draft assignment → redirect to edit
@@ -111,11 +111,6 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         // Resolve active course for tab strip and scoped queries.
         let courseState = try await req.resolveActiveCourse(for: user)
-        let userContext = CurrentUserContext(
-            user: user,
-            activeCourse: courseState.active,
-            enrolledCourses: courseState.all
-        )
 
         // If multiple courses exist but user has no enrollments → redirect to /enroll.
         if courseState.active == nil {
@@ -194,17 +189,17 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         let hasSections = !allSections.isEmpty
         let hasUngrouped = !ungroupedItems.isEmpty
-        let ctx = AssignmentsContext(
-            currentUser: userContext,
-            activeInstructorTab: "overview",
-            sections: sectionContexts,
-            ungroupedItems: ungroupedItems,
-            hasSections: hasSections,
-            showUngroupedBlock: hasUngrouped || !hasSections,
-            showEmptyMessage: !hasSections && !hasUngrouped,
-            enrolledStudentCount: roster.enrolledStudentCount
-        )
-        return try await req.view.render("assignments", ctx).encodeResponse(for: req)
+        let page = try await PageRequestContext.courseAware(req)
+        return try await HTMLResponse {
+            AssignmentsPage(
+                page: page,
+                sections: sectionContexts,
+                ungroupedItems: ungroupedItems,
+                hasSections: hasSections,
+                showUngroupedBlock: hasUngrouped || !hasSections,
+                showEmptyMessage: !hasSections && !hasUngrouped,
+                enrolledStudentCount: roster.enrolledStudentCount)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/:assignmentID/open

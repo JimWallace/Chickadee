@@ -16,7 +16,7 @@
     the caller so it can scope styling via its own section class
     (`assignment-diagnostics`).
 
-    The instructor dashboard (`assignments.leaf`) and admin dashboard
+    The instructor dashboard (`AssignmentsPage.swift`) and admin dashboard
     (`AdminPage`) keep their own card markup — their sparklines poll a
     `/metrics/cards` endpoint, rather than rendering windows server-side.
 -->

@@ -76,31 +76,6 @@ struct CourseSectionRow: Encodable {
     let items: [InstructorSectionItem]
 }
 
-/// Overview tab (`GET /instructor`): dashboard metrics + the assignment /
-/// section listing.  The enrolled-students roster and BrightSpace export
-/// moved to their own tabs (`/instructor/students`, `/instructor/brightspace`)
-/// in the v0.4 instructor-view rework, so this context no longer carries the
-/// roster — only `enrolledStudentCount`, which the per-assignment "X / Y"
-/// submitted badge still needs.
-struct AssignmentsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    let sections: [CourseSectionRow]  // sections with their interleaved items
-    /// Assignments + content items not in any section, interleaved and sorted.
-    let ungroupedItems: [InstructorSectionItem]
-    let hasSections: Bool
-    /// Whether to render the trailing "Ungrouped" block — true when there are
-    /// ungrouped items, or no sections at all (flat-table mode). Precomputed so
-    /// the template branches on a flat bool (LeafKit 1.14.2 mis-parses chained
-    /// `||`).
-    let showUngroupedBlock: Bool
-    /// Whether to render the "No assignments yet" empty message — true only when
-    /// the course has nothing to list in any lane. Precomputed for the same
-    /// reason.
-    let showEmptyMessage: Bool
-    let enrolledStudentCount: Int
-}
-
 /// Students tab (`GET /instructor/students`): the enrolled-students roster
 /// plus enrollment-mode controls.  The table self-updates by polling
 /// `GET /instructor/students-data`, which returns `[EnrolledStudentRow]`.
@@ -382,47 +357,4 @@ struct AssignmentStudentRow: Encodable {
 func passingLabel(bestGradePercent: Int?, threshold: Int?) -> String? {
     guard let threshold, let grade = bestGradePercent else { return nil }
     return grade >= threshold ? "passing" : "below threshold"
-}
-
-/// AI agents tab (`GET /instructor/mcp`): what a connected agent can reach in
-/// the active course, and the course's authoring voice for connected agents,
-/// editable by the course's instructors.
-struct InstructorMCPContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    let hasActiveCourse: Bool
-    let courseCode: String
-    /// The course's effective voice guide — its own text when customized, else
-    /// Chickadee's default — as the textarea's value. The default is seeded
-    /// into the box so the instructor edits a real starting point rather than
-    /// composing an addendum against an invisible baseline.
-    let guidanceText: String
-    /// Character count of `guidanceText`, shown against `maxLength`.
-    let guidanceLength: Int
-    /// True when `guidanceText` is course-authored rather than the default.
-    let isCustomized: Bool
-    /// `canEdit && isCustomized` — folded so the template gates the Reset
-    /// button on one flag (LeafKit 1.14.2 mis-parses `&&`).
-    let showResetButton: Bool
-    /// A noun phrase that names where the current text comes from.  It is
-    /// chrome in a definition list, so it is not a sentence.
-    let sourceNote: String
-    let maxLength: Int
-    /// True when the viewer may save: a per-course instructor or an admin, and
-    /// the course is not archived. TAs pass the `/instructor` gate but see the
-    /// panel read-only, matching the Students tab (#417 Slice F).
-    let canEdit: Bool
-    /// Why the panel is read-only (nil when `canEdit`) — precomputed so the
-    /// template renders one flat string instead of branching (LeafKit 1.14.2
-    /// mis-parses compound conditions).
-    let readOnlyNote: String?
-    /// True when the MCP server is not mounted on this deployment (`MCP_MODE`
-    /// off/unresolvable) — the panel still saves, with a note that guidance
-    /// takes effect once MCP is enabled.
-    let mcpDisabled: Bool
-    /// The access section: content, AI-assisted feedback and the attestation.
-    let agentAccess: AgentAccessFacts
-    /// Flash banners after the save POST redirect.
-    let flashSuccess: String?
-    let flashError: String?
 }

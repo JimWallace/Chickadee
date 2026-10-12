@@ -119,7 +119,7 @@ them is the answer.
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
 | **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | — |
-| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
+| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | instructor-students |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
 | **Plain student page** | `<h1>` → content | `account.leaf` | index |
 | **Auth box** | `.auth-box` centred card | `register.leaf` | — |
