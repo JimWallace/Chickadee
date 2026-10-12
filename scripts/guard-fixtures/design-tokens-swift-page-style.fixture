@@ -1,0 +1,10 @@
+# Elementary page CSS lives in a PageStyle literal in Swift, not a template
+# <style> block. The token guard must read it too.
+guard="scripts/check-design-tokens.sh"
+files="Sources/APIServer/Views/Pages/AdminUserPage.swift"
+description="a raw hex colour in an Elementary PageStyle block"
+expect="raw colour literal"
+apply() {
+    sed -i.bak 's/\.user-enroll-select { flex: 1; }/.user-enroll-select { flex: 1; }\n                .ck-guard-fixture-swift { color: #123456; }/' Sources/APIServer/Views/Pages/AdminUserPage.swift
+    rm -f Sources/APIServer/Views/Pages/AdminUserPage.swift.bak
+}

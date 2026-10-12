@@ -25,6 +25,11 @@ cd "$repo_root"
 . "scripts/lib/css.sh"
 
 views=(Resources/Views/*.leaf)
+# Page CSS lives in template <style> blocks and in Elementary PageStyle
+# literals; the page-CSS rules (4, 4b) read both.
+style_views=()
+while IFS= read -r f; do style_views+=("$f"); done < <(served_style_templates)
+while IFS= read -r f; do style_views+=("$f"); done < <(swift_page_style_files)
 status=0
 
 # ── 1. CSS custom-property guard ────────────────────────────────────────────
@@ -326,7 +331,7 @@ global_sel="$(extract_selectors < Public/styles.css | sort -u)"
 
 # Build "selector<TAB>file" pairs from every page <style> block.
 pairs="$(
-  for f in "${views[@]}"; do
+  for f in "${style_views[@]}"; do
     base="$(basename "$f")"
     page_style_blocks "$f" | extract_selectors \
       | while IFS= read -r sel; do [ -n "$sel" ] && printf '%s\t%s\n' "$sel" "$base"; done
@@ -457,13 +462,12 @@ fi
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
 PAGE_STYLE_BASELINE=269
 page_style_count="$(
-  awk '
-    FNR==1 { inblock = 0 }
+  for f in "${style_views[@]}"; do page_style_blocks "$f"; done | awk '
     /<style>/ { inblock = 1; next }
     /<\/style>/ { inblock = 0; next }
     inblock && NF > 0 { n++ }
     END { print n + 0 }
-  ' "${views[@]}"
+  '
 )"
 if [ "$page_style_count" -gt "$PAGE_STYLE_BASELINE" ]; then
   status=1

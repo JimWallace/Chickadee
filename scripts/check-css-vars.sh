@@ -23,6 +23,8 @@ cd "$repo_root"
 
 css_files=(Public/*.css)
 usage_files=(Resources/Views/*.leaf Public/*.css Public/*.js)
+# Elementary views: a var() can appear in a PageStyle block or a style value.
+while IFS= read -r f; do usage_files+=("$f"); done < <(find Sources/APIServer/Views -name '*.swift' | LC_ALL=C sort)
 
 # Declared properties: `--name:` only ever appears as a declaration — var()
 # usages have no colon after the name — so this captures declarations alone.
