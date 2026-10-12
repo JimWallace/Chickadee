@@ -1,10 +1,9 @@
 // APIServer/Routes/Web/SlipDayContexts.swift
 //
-// The view contexts behind the instructor Slip days tab
-// (`instructor-slip-days.leaf`): the page context, one row per student with
-// its ledger entries, the pip strip the roster also draws, and the
-// class-wide totals. Built by `InstructorDashboardRoutes+SlipDays.swift`
-// (#1716).
+// The row types behind the instructor Slip days tab
+// (`InstructorSlipDaysPage`): one row per student with its ledger entries,
+// the pip strip the roster also draws, and the class-wide totals. Built by
+// `InstructorDashboardRoutes+SlipDays.swift` (#1716).
 
 import Core
 import Fluent
@@ -70,39 +69,6 @@ extension SlipDayPip {
             return SlipDayPip(state: index >= total - extras ? "extra" : "left")
         }
     }
-}
-
-struct InstructorSlipDaysContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    let hasActiveCourse: Bool
-    let courseCode: String
-    let enabled: Bool
-    let daysPerStudent: Int
-    let extensionHours: Int
-    /// Whether release output waits out the claim window
-    /// (`SlipDayPolicy.releaseRevealHold`) — the third settings checkbox.
-    let releaseRevealHold: Bool
-    /// Per-course instructor (or admin), non-archived — gates the policy form.
-    let canEditSettings: Bool
-    /// Non-archived — gates the ±1 and Refund buttons (TA floor is already
-    /// guaranteed by the /instructor area middleware).
-    let canManageLedger: Bool
-    let settingsReadOnlyNote: String?
-    /// Precomputed `!students.isEmpty` (Leaf's `array.isEmpty` is unreliable).
-    let hasStudents: Bool
-    let students: [SlipDayStudentRow]
-    /// The facts card: "3 days", "24 hours", the release-hold wording, and the
-    /// class-wide "11 of 93 spent" with its "8 students" note.
-    let perStudentText: String
-    let eachDayText: String
-    let releaseHoldText: String
-    let inUseText: String
-    let inUseNote: String
-    /// Whether the ledger has enough rows to earn a Filter box.
-    let showFilter: Bool
-    let flashSuccess: String?
-    let flashError: String?
 }
 
 /// The class-wide totals behind the "In use" fact.

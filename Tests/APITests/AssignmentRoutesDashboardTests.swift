@@ -408,7 +408,7 @@ import VaporTesting
                     // Full row markup, not a reduced copy: the row-link hook,
                     // the per-course role form, and its CSRF field.
                     #expect(html.contains("js-student-row-link"))
-                    #expect(html.contains("name='_csrf'"))
+                    #expect(html.contains("name=\"_csrf\""))
                 })
         }
     }
@@ -574,7 +574,7 @@ import VaporTesting
                         )
                         let formSegment = html[actionRange.upperBound..<formEnd.lowerBound]
                         #expect(
-                            formSegment.contains("name='_csrf'"),
+                            formSegment.contains("name=\"_csrf\""),
                             "Delete form for \(assignment.publicID) must include the CSRF hidden field"
                         )
                     }

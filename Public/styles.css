@@ -519,7 +519,7 @@ h2 { font-size: var(--text-md);   margin-bottom: .4rem; }
 /* The `+ Section` popup inherits `.card`'s surface, and adds the
    shadow/padding/size specifics that make it feel like a floating menu
    rather than a page-level card.  Shared between the instructor
-   dashboard (`assignments.leaf`) and the suite editor
+   dashboard (`AssignmentsPage`) and the suite editor
    (`assignment-edit.leaf`). */
 .add-section-popup {
     background: var(--surface);
@@ -1474,7 +1474,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
     margin-bottom: .75rem;
 }
 
-/* ── Inline "+ Section" popup (assignments.leaf + assignment-edit.leaf) ──
+/* ── Inline "+ Section" popup (AssignmentsPage + assignment-edit.leaf) ──
    Identical rules formerly duplicated in both views' embedded <style>
    blocks; consolidated here (v0.4.x UI audit). */
 .add-section-details { margin: 0; padding: 0; }
@@ -1495,7 +1495,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 @media (max-width: 640px) { .ext-details form { min-width: 0; } }
 /* Inline set/clear panel shared by the grade-override control
    (assignment-submissions.leaf) and the register-pending-student control
-   (instructor-students.leaf) — hoisted from a page block so both pages render
+   (InstructorStudentsPage) — hoisted from a page block so both pages render
    identically. */
 .form-flush { margin: 0; }
 .ext-panel {
@@ -2589,7 +2589,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* ── Clickable diagnostic cards with sparklines ─────────
    Shared by the admin dashboard (AdminPage) and the instructor dashboard
-   (assignments.leaf); both poll a /metrics/cards endpoint and cycle the
+   (AssignmentsPage); both poll a /metrics/cards endpoint and cycle the
    window on click. */
 .diagnostic-card-cyclable {
     cursor: pointer;
@@ -3053,7 +3053,7 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
 .pf-var-section-row.is-shadowed td.pf-var-locked-value { text-decoration: line-through; }
 .pf-var-shadow-note { font-size: var(--text-2xs); color: var(--amber); margin-left: .4rem; }
 
-/* Instructor dashboard (assignments.leaf): section toolbar + per-section bits. */
+/* Instructor dashboard (AssignmentsPage): section toolbar + per-section bits. */
 .section-toolbar { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.5rem; }
 /* + Add Section closes the list of sections: a full-width dashed button, where
    the new section will appear. */

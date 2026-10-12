@@ -22,7 +22,7 @@ const ChickadeeUI = require('../../Public/chickadee-ui.js');
 const FORMERLY_INLINED = [
   { template: 'Resources/Views/assignment-new.leaf', wiring: 'Public/assignment-new-page.js' },
   { template: 'Resources/Views/_assignment-edit-body.leaf', wiring: 'Public/assignment-edit-page.js' },
-  { template: 'Resources/Views/assignments.leaf', wiring: 'Public/assignments.js' },
+  { template: 'Sources/APIServer/Views/Pages/AssignmentsPage.swift', wiring: 'Public/assignments.js' },
 ];
 
 function fakeEl() {

@@ -3,7 +3,7 @@
 // Drag-and-drop for the instructor dashboard's unified section item list.
 // Assignments and ungraded content items interleave in one drag-orderable
 // sequence per section, so a reading can sit between two labs. Extracted from
-// the inline assignments.leaf <script> (net inline-JS shrink) and generalised
+// the inline <script> of the old assignments template (net inline-JS shrink) and generalised
 // from assignment-only to both row types.
 //
 // Each draggable row is either an assignment (`data-assignment-id`) or a

@@ -4,7 +4,7 @@
 // the roster ledger (who spent what, with the resulting deadlines), and the
 // staff levers — per-student budget adjustments and refunds.
 //
-//   GET  /instructor/slip-days           → instructor-slip-days.leaf
+//   GET  /instructor/slip-days           → InstructorSlipDaysPage
 //   POST /instructor/slip-days/settings  → save policy (per-course instructor) → flash redirect
 //   POST /instructor/slip-days/adjust    → ±1 a student's budget (TA+)        → flash redirect
 //   POST /instructor/slip-days/refund    → refund one spend (TA+)             → flash redirect
@@ -32,7 +32,7 @@ extension InstructorDashboardRoutes {
     // MARK: - GET /instructor/slip-days
 
     @Sendable
-    func slipDaysPage(req: Request) async throws -> View {
+    func slipDaysPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
 
@@ -66,31 +66,31 @@ extension InstructorDashboardRoutes {
         }
 
         let totals = SlipDayTotals(rows: students)
-        let ctx = InstructorSlipDaysContext(
-            currentUser: try await req.courseAwareUserContext(),
-            activeInstructorTab: "slip-days",
-            hasActiveCourse: course != nil,
-            courseCode: course?.code ?? "",
-            enabled: policy.enabled,
-            daysPerStudent: policy.daysPerStudent,
-            extensionHours: policy.extensionHours,
-            releaseRevealHold: policy.releaseRevealHold,
-            canEditSettings: canEditSettings,
-            canManageLedger: canManageLedger,
-            settingsReadOnlyNote: settingsReadOnlyNote,
-            hasStudents: !students.isEmpty,
-            students: students,
-            perStudentText: policy.daysPerStudent == 1 ? "1 day" : "\(policy.daysPerStudent) days",
-            eachDayText: policy.extensionHours == 1 ? "1 hour" : "\(policy.extensionHours) hours",
-            releaseHoldText: policy.releaseRevealHold
-                ? "Held until claims lapse" : "Shown at each deadline",
-            inUseText: "\(totals.spent) of \(totals.budget) spent",
-            inUseNote: totals.studentsWithSpends == 1
-                ? "1 student" : "\(totals.studentsWithSpends) students",
-            showFilter: ListFilterPolicy.showsFilter(rowCount: students.count),
-            flashSuccess: Self.slipDayFlashSuccess(req),
-            flashError: Self.slipDayFlashError(req))
-        return try await req.view.render("instructor-slip-days", ctx)
+        let page = try await PageRequestContext.courseAware(req)
+        let flash = FlashMessages(success: Self.slipDayFlashSuccess(req), error: Self.slipDayFlashError(req))
+        return try await HTMLResponse {
+            InstructorSlipDaysPage(
+                page: page,
+                flash: flash,
+                hasActiveCourse: course != nil,
+                courseCode: course?.code ?? "",
+                enabled: policy.enabled,
+                daysPerStudent: policy.daysPerStudent,
+                extensionHours: policy.extensionHours,
+                releaseRevealHold: policy.releaseRevealHold,
+                canEditSettings: canEditSettings,
+                canManageLedger: canManageLedger,
+                settingsReadOnlyNote: settingsReadOnlyNote,
+                students: students,
+                perStudentText: policy.daysPerStudent == 1 ? "1 day" : "\(policy.daysPerStudent) days",
+                eachDayText: policy.extensionHours == 1 ? "1 hour" : "\(policy.extensionHours) hours",
+                releaseHoldText: policy.releaseRevealHold
+                    ? "Held until claims lapse" : "Shown at each deadline",
+                inUseText: "\(totals.spent) of \(totals.budget) spent",
+                inUseNote: totals.studentsWithSpends == 1
+                    ? "1 student" : "\(totals.studentsWithSpends) students",
+                showFilter: ListFilterPolicy.showsFilter(rowCount: students.count))
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/slip-days/settings

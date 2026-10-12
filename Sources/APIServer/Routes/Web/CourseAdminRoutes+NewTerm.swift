@@ -3,7 +3,7 @@
 // Instructor "New term" tab: clone the active course into a new offering
 // (docs/course-terms.md slice 5).
 //
-//   GET  /instructor/new-term → instructor-new-term.leaf (the clone form)
+//   GET  /instructor/new-term → InstructorNewTermPage (the clone form)
 //   POST /instructor/new-term → clone, enroll the caller as instructor of the
 //                               new course, switch to it, redirect with a flash
 //
@@ -18,7 +18,7 @@ import Vapor
 
 extension CourseAdminRoutes {
     @Sendable
-    func newTermPage(req: Request) async throws -> View {
+    func newTermPage(req: Request) async throws -> HTMLResponse<InstructorNewTermPage> {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
 
@@ -34,21 +34,25 @@ extension CourseAdminRoutes {
         let flashError =
             errorCode == "course" ? "No active course." : CourseCloneFormError.message(forQuery: errorCode)
 
-        let ctx = InstructorNewTermContext(
-            currentUser: try await req.courseAwareUserContext(),
-            activeInstructorTab: "new-term",
-            hasActiveCourse: course != nil,
-            courseCode: course?.code ?? "",
-            courseName: course?.name ?? "",
-            termLabel: course?.term?.displayName,
-            canClone: canClone,
-            justCloned: justCloned,
-            cloneForm: CourseFieldsContext(
-                idPrefix: "new-term", code: course?.code ?? "", name: course?.name ?? "", term: next),
-            flashSuccess: justCloned
-                ? "Cloned with enrollment closed; set the new course's dates before opening its assignments." : nil,
-            flashError: flashError)
-        return try await req.view.render("instructor-new-term", ctx)
+        let page = try await PageRequestContext.courseAware(req)
+        return HTMLResponse {
+            InstructorNewTermPage(
+                page: page,
+                flash: FlashMessages(
+                    success: justCloned
+                        ? "Cloned with enrollment closed; set the new course's dates before opening its assignments."
+                        : nil,
+                    error: flashError),
+                hasActiveCourse: course != nil,
+                courseCode: course?.code ?? "",
+                courseName: course?.name ?? "",
+                termLabel: course?.term?.displayName,
+                canClone: canClone,
+                justCloned: justCloned,
+                cloneForm: CourseFieldsContext(
+                    idPrefix: "new-term", code: course?.code ?? "", name: course?.name ?? "", term: next)
+            )
+        }
     }
 
     @Sendable
@@ -114,26 +118,4 @@ extension CourseAdminRoutes {
         req.session.data["activeCourseID"] = newID
         return req.redirect(to: "/instructor/new-term?cloned=1")
     }
-}
-
-private struct InstructorNewTermContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    let hasActiveCourse: Bool
-    let courseCode: String
-    let courseName: String
-    /// "Fall 2026", or nil when the active course records no term.
-    let termLabel: String?
-    /// True for a per-course instructor or an admin. A TA sees the tab but
-    /// not the form: creating a course is a lifecycle act.
-    let canClone: Bool
-    /// True on the page shown right after a clone: the active course is now
-    /// the new one, so the page points to its assignments, not to a second
-    /// clone.
-    let justCloned: Bool
-    /// The form, with the term after the active course's selected. Its error
-    /// stays nil: the page shows a refusal as a flash banner.
-    let cloneForm: CourseFieldsContext
-    let flashSuccess: String?
-    let flashError: String?
 }

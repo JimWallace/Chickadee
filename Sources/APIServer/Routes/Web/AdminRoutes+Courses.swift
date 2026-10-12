@@ -12,7 +12,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/courses/new
 
     @Sendable
-    func newCourseForm(req: Request) async throws -> View {
+    func newCourseForm(req: Request) async throws -> HTMLResponse<AdminCoursePage> {
         let emptyCourse = AdminCourseRow(
             id: "",
             code: "",
@@ -27,10 +27,9 @@ extension AdminRoutes {
             brightspaceOrgUnitName: nil,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil
         )
-        return try await req.view.render(
-            "admin-course",
-            AdminCourseDetailContext(
-                currentUser: req.currentUserContext,
+        return HTMLResponse {
+            AdminCoursePage(
+                page: PageRequestContext(request: req),
                 course: emptyCourse,
                 enrolledUsers: [],
                 assignments: [],
@@ -40,7 +39,8 @@ extension AdminRoutes {
                     error: CourseFormError.message(forQuery: req.query[String.self, at: "error"]),
                     autofocus: true),
                 placeholderAllowed: req.application.staffPlaceholderAllowed
-            ))
+            )
+        }
     }
 
     // MARK: - POST /admin/courses
@@ -597,7 +597,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/courses/:courseID
 
     @Sendable
-    func courseDetail(req: Request) async throws -> View {
+    func courseDetail(req: Request) async throws -> HTMLResponse<AdminCoursePage> {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
@@ -619,10 +619,11 @@ extension AdminRoutes {
         // shows only the codes it owns.
         let errorCode = req.query[String.self, at: "error"]
 
-        return try await req.view.render(
-            "admin-course",
-            AdminCourseDetailContext(
-                currentUser: req.currentUserContext,
+        return HTMLResponse {
+            AdminCoursePage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(
+                    success: req.query[String.self, at: "staffAdded"] != nil ? "Staff member added." : nil),
                 course: courseRow,
                 enrolledUsers: enrolledUsers,
                 assignments: assignments,
@@ -639,9 +640,9 @@ extension AdminRoutes {
                 placeholderAllowed: req.application.staffPlaceholderAllowed,
                 staffForm: StaffFieldsContext(
                     idPrefix: "add-staff", placeholderAllowed: req.application.staffPlaceholderAllowed,
-                    defaultRole: .instructor, errorQuery: req.query[String.self, at: "staffError"]),
-                flashSuccess: req.query[String.self, at: "staffAdded"] != nil ? "Staff member added." : nil
-            ))
+                    defaultRole: .instructor, errorQuery: req.query[String.self, at: "staffError"])
+            )
+        }
     }
 
     // MARK: - POST /admin/users/:userID/enroll

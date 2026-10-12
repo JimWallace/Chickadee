@@ -73,8 +73,6 @@ enum BrightSpacePagePresenter {
         on db: Database,
         application: Application
     ) async throws -> InstructorBrightspaceContext {
-        let userContext = CurrentUserContext(
-            user: user, activeCourse: courseState.active, enrolledCourses: courseState.all)
         // "Enabled" = configured at the app level (URL/App ID/App Key); a user
         // key may still be awaited via per-instructor connect.
         let syncEnabled = application.brightSpaceAppCredentials != nil
@@ -96,7 +94,7 @@ enum BrightSpacePagePresenter {
             let course = try await APICourse.find(courseUUID, on: db)
         else {
             return noCourseContext(
-                userContext: userContext, hasActiveCourse: courseState.active != nil,
+                hasActiveCourse: courseState.active != nil,
                 syncEnabled: syncEnabled, account: account, flashes: flashes)
         }
 
@@ -135,7 +133,6 @@ enum BrightSpacePagePresenter {
             fmt: fmt)
 
         return InstructorBrightspaceContext(
-            currentUser: userContext, activeInstructorTab: "brightspace",
             hasActiveCourse: true, courseIsArchived: course.isArchived,
             brightspaceSyncEnabled: syncEnabled, courseLinked: courseLinked,
             orgUnitDisplay: orgUnitDisplay, orgUnitFieldValue: orgUnitID ?? "",
@@ -166,14 +163,12 @@ enum BrightSpacePagePresenter {
     /// per-instructor account and the flashes still render, but everything
     /// course-scoped is empty.
     private static func noCourseContext(
-        userContext: CurrentUserContext,
         hasActiveCourse: Bool,
         syncEnabled: Bool,
         account: InstructorBrightspaceContext.AccountPanel,
         flashes: Flashes
     ) -> InstructorBrightspaceContext {
         InstructorBrightspaceContext(
-            currentUser: userContext, activeInstructorTab: "brightspace",
             hasActiveCourse: hasActiveCourse, courseIsArchived: false,
             brightspaceSyncEnabled: syncEnabled, courseLinked: false,
             orgUnitDisplay: nil, orgUnitFieldValue: "",

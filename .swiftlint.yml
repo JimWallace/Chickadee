@@ -173,9 +173,9 @@ custom_rules:
   elementary_tabs_only_in_component:
     name: "Tab bars come from their component"
     included: "Sources/APIServer/Views/.*\\.swift"
-    excluded: "Sources/APIServer/Views/AdminTabs\\.swift"
-    regex: "\\badmin-(tabs?|version-banner)\\b"
-    message: "Open an admin page with AdminTabs; no other view writes the tab bar or the version banner (docs/ui-design.md, Page archetypes)."
+    excluded: "Sources/APIServer/Views/(AdminTabs|InstructorTabs)\\.swift"
+    regex: "\\b(admin-(tabs?|version-banner)|instructor-tabs?)\\b"
+    message: "Open an admin page with AdminTabs and an instructor page with InstructorTabs; no other view writes a tab bar or the admin version banner (docs/ui-design.md, Page archetypes)."
     severity: error
   elementary_flash_only_in_layout:
     name: "Banners come from FlashBanner"

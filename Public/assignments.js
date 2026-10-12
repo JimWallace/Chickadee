@@ -1,4 +1,4 @@
-// Page wiring for the instructor assignments dashboard (assignments.leaf):
+// Page wiring for the instructor assignments dashboard (Views/Pages/AssignmentsPage.swift):
 // the diagnostic cards, section drag-reorder, section header edit mode,
 // section delete, per-row copy-student-link buttons, and the publish form's
 // UW-date warning.  Extracted from the template's inline script block so it

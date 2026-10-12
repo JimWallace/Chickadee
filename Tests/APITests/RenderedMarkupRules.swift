@@ -119,6 +119,23 @@ enum RenderedMarkupRules {
         return broken
     }
 
+    /// The floor every instructor tabbed page stands on, read from `<main>`:
+    /// the one hidden h1, then the one tab bar, both from `InstructorTabs`,
+    /// before any section.
+    static func instructorTabbedViolations(in main: String) -> [String] {
+        var broken: [String] = []
+        let navs = main.ranges(of: #"<nav class="instructor-tabs""#)
+        let headings = openTags(named: "h1", in: main)
+        if navs.count != 1 { broken.append("\(navs.count) instructor tab bars where InstructorTabs renders one") }
+        if headings != [#"<h1 class="visually-hidden">"#] {
+            broken.append("its h1s are \(headings); the only h1 is the hidden one InstructorTabs renders")
+        }
+        if let nav = navs.first, let section = main.range(of: "<section"), section.lowerBound < nav.lowerBound {
+            broken.append("a section comes before the tab bar")
+        }
+        return broken
+    }
+
     // MARK: - Reading markup
 
     /// The contents of `<main>`: the part of the page an archetype describes.

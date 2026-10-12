@@ -2,7 +2,7 @@
 //
 // Two UI-pass changes that a render test can see:
 //
-//   * The course-role select is one partial (`_role-select.leaf`) fed by a
+//   * The course-role select is one view (`RoleSelect`) fed by a
 //     `RoleSelectCell`. The instructor roster (students and staff) and the
 //     admin course page each used to carry their own copy of it.
 //   * The LEARN page's org-unit field is a `.popup-anchor` dialog, not a field
@@ -51,7 +51,7 @@ import VaporTesting
                 #expect(form.contains("Role for \(user.username)"))
                 #expect(form.contains("data-state=\"\(role)\""))
                 #expect(form.contains("<option value=\"\(role)\" selected>"))
-                #expect(form.contains("name='_csrf'"))
+                #expect(form.contains("name=\"_csrf\""))
             }
         }
     }
