@@ -19,9 +19,14 @@
 // The walk itself lives in `LeafMarkupScanner`, shared with the other
 // markup-contract guard rather than copied into it — the duplicate spelling of
 // a shared thing being the exact failure the UI vocabulary work is about.
+//
+// A page ported to Elementary has no template. Its fixture renders
+// (`ElementaryPageFixtures`) are read instead, under the Swift type name.
 
 import Foundation
 import Testing
+
+@testable import APIServer
 
 @Suite struct ListFilterMarkupTests {
 
@@ -31,11 +36,22 @@ import Testing
         let enclosingTag: String?
     }
 
-    /// Every `.filter-input` in every template, with the tag that encloses it.
+    /// Every page the rules read: each template with its markup and source,
+    /// and each render of an Elementary page, whose markup is its source.
+    private static func pages() throws -> [(file: String, markup: String, source: String)] {
+        let templates = try LeafMarkupScanner.templateNames().map { file in
+            (file: file, markup: try LeafMarkupScanner.markup(of: file), source: try LeafMarkupScanner.source(of: file))
+        }
+        let swiftPages = ElementaryPageFixtures.all.flatMap { fixture in
+            fixture.renders.map { (file: fixture.typeName, markup: $0, source: $0) }
+        }
+        return templates + swiftPages
+    }
+
+    /// Every `.filter-input` on every page, with the tag that encloses it.
     private static func filterInputs() throws -> [FilterInput] {
         var found: [FilterInput] = []
-        for file in try LeafMarkupScanner.templateNames() {
-            let html = try LeafMarkupScanner.markup(of: file)
+        for (file, html, _) in try pages() {
             for tag in LeafMarkupScanner.openTags("input", in: html) {
                 guard tag.text.contains("filter-input") else { continue }
                 found.append(
@@ -60,8 +76,8 @@ import Testing
         #expect(
             files == [
                 "admin-audit.leaf",
-                "admin.leaf",
-                "admin-users.leaf",
+                "AdminPage",
+                "AdminUsersPage",
                 "assignment-submissions.leaf",
                 "index.leaf",
                 "instructor-slip-days.leaf",
@@ -81,8 +97,7 @@ import Testing
     /// script owns and one stale string it does not update. The design brief
     /// draws label + input only, so this pins that the markup stays that way.
     @Test func noPageDeclaresItsOwnFilterResultCount() throws {
-        for file in try LeafMarkupScanner.templateNames() {
-            let html = try LeafMarkupScanner.markup(of: file)
+        for (file, html, _) in try Self.pages() {
             guard html.contains("filter-input") else { continue }
             #expect(
                 !html.contains("filter-status"),
@@ -126,8 +141,7 @@ import Testing
             (declaration: "data-list-filter=", script: "list-filter.js"),
             (declaration: "sortable-table\"", script: "sortable-table.js"),
         ]
-        for file in try LeafMarkupScanner.templateNames() {
-            let source = try LeafMarkupScanner.source(of: file)
+        for (file, _, source) in try Self.pages() {
             for contract in contracts where source.contains(contract.declaration) {
                 #expect(
                     source.contains(contract.script),
@@ -176,7 +190,7 @@ import Testing
     /// the server. Nothing else is a valid filter.
     @Test func everyFilterIsEitherLiveOrInAGetForm() throws {
         let liveFilters = [
-            "admin.leaf", "admin-users.leaf", "assignment-submissions.leaf", "index.leaf",
+            "AdminPage", "AdminUsersPage", "assignment-submissions.leaf", "index.leaf",
             "instructor-slip-days.leaf", "instructor-students.leaf", "leaderboard.leaf",
         ]
         for input in try Self.filterInputs() {

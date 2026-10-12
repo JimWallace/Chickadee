@@ -4,7 +4,7 @@
 // Assignment publishing/open/close/delete have moved to AssignmentRoutes (instructor+).
 // All routes here require admin role (enforced in routes.swift).
 //
-//   GET  /admin                              → admin.leaf  (user management dashboard)
+//   GET  /admin                              → AdminPage  (the admin Overview)
 //   POST /admin/users/:id/role               → change a user's role
 //   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
@@ -74,7 +74,7 @@ struct AdminRoutes: RouteCollection {
     // MARK: - GET /admin
 
     @Sendable
-    func dashboard(req: Request) async throws -> View {
+    func dashboard(req: Request) async throws -> HTMLResponse<AdminPage> {
         let workerRows = try await makeWorkerRows(req: req)
 
         // Course management data — all three queries are independent so run in parallel.
@@ -114,15 +114,14 @@ struct AdminRoutes: RouteCollection {
         let activityChart = try await UserActivityChartService.chartData(
             window: .day, on: req.db)
 
-        let ctx = AdminContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "overview",
-            workers: workerRows.map(AdminRunnerRow.init),
-            courses: courseRows,
-            version: ChickadeeVersion.current,
-            activityChart: activityChart
-        )
-        return try await req.view.render("admin", ctx)
+        return HTMLResponse {
+            AdminPage(
+                page: PageRequestContext(request: req),
+                workers: workerRows.map(AdminRunnerRow.init),
+                courses: courseRows,
+                activityChart: activityChart
+            )
+        }
     }
 
     // MARK: - GET /admin/activity
@@ -142,16 +141,16 @@ struct AdminRoutes: RouteCollection {
     // MARK: - GET /admin/users
 
     @Sendable
-    func usersPage(req: Request) async throws -> View {
+    func usersPage(req: Request) async throws -> HTMLResponse<AdminUsersPage> {
         let userRows = try await fetchUserRows(on: req.db, viewerID: req.auth.get(APIUser.self)?.id)
-        let ctx = AdminUsersContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "users",
-            users: userRows,
-            userCount: userRows.count,
-            adminCount: userRows.filter { $0.role == UserRole.admin.rawValue }.count
-        )
-        return try await req.view.render("admin-users", ctx)
+        return HTMLResponse {
+            AdminUsersPage(
+                page: PageRequestContext(request: req),
+                users: userRows,
+                userCount: userRows.count,
+                adminCount: userRows.filter { $0.role == UserRole.admin.rawValue }.count
+            )
+        }
     }
 
     // MARK: - GET /admin/users-data
@@ -161,18 +160,18 @@ struct AdminRoutes: RouteCollection {
     // Polls send the `X-Background-Refresh` header so they don't count as
     // session activity (see UserActivityMiddleware).
 
-    /// Two representations, one query: `?fragment=rows` renders
-    /// `_user-rows.leaf` — the SAME partial the page renders, so the poll
-    /// cannot drift from the page — and anything else keeps the JSON array
-    /// unchanged for other consumers.
+    /// Two representations, one query: `?fragment=rows` renders `UserRows`
+    /// — the SAME view the page renders, so the poll cannot drift from the
+    /// page — and anything else keeps the JSON array unchanged for other
+    /// consumers.
     @Sendable
     func usersData(req: Request) async throws -> Response {
         let rows = try await fetchUserRows(on: req.db, viewerID: req.auth.get(APIUser.self)?.id)
         guard req.query[String.self, at: "fragment"] == "rows" else {
             return try await rows.encodeResponse(for: req)
         }
-        return try await req.view.render("_user-rows", UserRowsFragmentContext(users: rows))
-            .encodePollFragment(for: req)
+        let html = UserRows(users: rows, csrfToken: PageRequestContext(request: req).csrfToken).render()
+        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
     }
 
     /// Loads every user, ordered most-recently-seen first (NULL last_seen
@@ -319,7 +318,7 @@ struct AdminRoutes: RouteCollection {
     // MARK: - GET /admin/alerts
 
     @Sendable
-    func alertsPage(req: Request) async throws -> View {
+    func alertsPage(req: Request) async throws -> HTMLResponse<AlertsPage> {
         struct FlashQuery: Content {
             var ok: String?
             var error: String?
@@ -346,29 +345,21 @@ struct AdminRoutes: RouteCollection {
 
         let firingRows = recent.map(AdminAlertFiringRow.init)
         let lastDelivery = AdminAlertsPresentation.lastDelivery(firingRows, records: recent)
-        let ctx = AdminAlertsContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "alerts",
-            enabled: configuration.enabled,
-            webhookURL: effectiveURL,
-            webhookURLFromEnvironment: !envURL.isEmpty,
-            checkIntervalSeconds: Int(configuration.checkIntervalSeconds),
-            cooldownSeconds: Int(configuration.cooldownSeconds),
-            runnerOfflineSeconds: Int(configuration.runnerOfflineSeconds),
-            queueDepthThreshold: configuration.queueDepthThreshold,
-            oldestPendingSeconds: Int(configuration.oldestPendingSeconds),
-            errorRatePercent: Int((configuration.errorRateThreshold * 100).rounded()),
-            rules: ruleRows,
-            webhookDisplay: AdminAlertsPresentation.webhookDisplay(effectiveURL),
-            hasLastDelivery: lastDelivery != nil,
-            lastDeliveryISO: lastDelivery?.iso ?? "",
-            lastDeliveryResult: lastDelivery?.result ?? "",
-            firingDays: DayGrouper.group(firingRows, occurredAt: \.occurredAt),
-            firingCount: firingRows.count,
-            flashSuccess: query.ok,
-            flashError: query.error
-        )
-        return try await req.view.render("alerts", ctx)
+        return HTMLResponse {
+            AlertsPage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(
+                    success: query.ok.flatMap { $0.isEmpty ? nil : $0 },
+                    error: query.error.flatMap { $0.isEmpty ? nil : $0 }),
+                enabled: configuration.enabled,
+                webhookURL: effectiveURL,
+                webhookURLFromEnvironment: !envURL.isEmpty,
+                rules: ruleRows,
+                webhookDisplay: AdminAlertsPresentation.webhookDisplay(effectiveURL),
+                lastDelivery: lastDelivery,
+                firingDays: DayGrouper.group(firingRows, occurredAt: \.occurredAt)
+            )
+        }
     }
 
     // MARK: - POST /admin/alerts/config
