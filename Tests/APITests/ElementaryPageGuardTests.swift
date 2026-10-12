@@ -159,6 +159,30 @@ import Testing
         #expect(RenderedMarkupRules.adminTabbedViolations(in: section + tabs).count == 1)
     }
 
+    /// Every instructor tabbed page, exemplar or not, opens with
+    /// `InstructorTabs`: the instructor half of "tab bars only through their
+    /// component".
+    @Test func everyInstructorTabbedPageOpensWithInstructorTabs() throws {
+        for fixture in Self.fixtures where fixture.archetype == .instructorTabbed {
+            for html in fixture.renders {
+                let main = try #require(RenderedMarkupRules.mainContent(of: html))
+                let broken = RenderedMarkupRules.instructorTabbedViolations(in: main)
+                #expect(broken.isEmpty, "\(fixture.typeName): \(broken)")
+            }
+        }
+    }
+
+    /// The instructor tabbed rule holds for the component and fails when the
+    /// page drops it, adds a second h1, or puts a section above the tab bar.
+    @Test func theInstructorTabbedRuleRejectsAPageThatBreaksIt() {
+        let tabs = InstructorTabs(active: .students).render()
+        let section = #"<section class="page-section"><h2>A</h2></section>"#
+        #expect(RenderedMarkupRules.instructorTabbedViolations(in: tabs + section).isEmpty)
+        #expect(RenderedMarkupRules.instructorTabbedViolations(in: section).count == 2)
+        #expect(RenderedMarkupRules.instructorTabbedViolations(in: tabs + "<h1>Students</h1>" + section).count == 1)
+        #expect(RenderedMarkupRules.instructorTabbedViolations(in: section + tabs).count == 1)
+    }
+
     // MARK: - The rules fire
 
     /// A guard that never fires is indistinguishable from a page that holds.
