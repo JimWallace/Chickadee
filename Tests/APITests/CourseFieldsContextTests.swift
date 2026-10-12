@@ -1,6 +1,6 @@
 // Tests/APITests/CourseFieldsContextTests.swift
 //
-// The values behind `_course-fields.leaf` and the refusals its forms show
+// The values behind `CourseFields` and the refusals its forms show
 // (#1974). The page-level behaviour is in AdminCoursePageTests.
 
 import Core

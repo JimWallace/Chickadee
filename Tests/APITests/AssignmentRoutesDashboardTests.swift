@@ -408,7 +408,7 @@ import VaporTesting
                     // Full row markup, not a reduced copy: the row-link hook,
                     // the per-course role form, and its CSRF field.
                     #expect(html.contains("js-student-row-link"))
-                    #expect(html.contains("name='_csrf'"))
+                    #expect(html.contains("name=\"_csrf\""))
                 })
         }
     }

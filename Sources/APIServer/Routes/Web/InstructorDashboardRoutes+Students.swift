@@ -7,7 +7,7 @@
 // instructor-view rework so each panel can render — and, for the roster,
 // self-update — independently.
 //
-//   GET /instructor/students       → instructor-students.leaf
+//   GET /instructor/students       → InstructorStudentsPage
 //   GET /instructor/students-data  → [EnrolledStudentRow] JSON (5s poll)
 //   GET /instructor/brightspace    → instructor-brightspace.leaf
 
@@ -24,11 +24,6 @@ extension InstructorDashboardRoutes {
     func studentsPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
-        let userContext = CurrentUserContext(
-            user: user,
-            activeCourse: courseState.active,
-            enrolledCourses: courseState.all
-        )
 
         // Match `list`: a user with no active course but existing courses
         // belongs on the enrol page, not an empty roster.
@@ -42,10 +37,8 @@ extension InstructorDashboardRoutes {
         let fmt = waterlooDateTimeFormatter()
 
         var enrolledStudents: [EnrolledStudentRow] = []
-        var enrolledStudentCount = 0
         var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
         var courseIsArchived = false
-        var brightspaceLinkAvailable = false
 
         if let activeCourseUUID = courseState.activeCourseUUID {
             let roster = try await loadEnrolledStudentRows(
@@ -55,15 +48,9 @@ extension InstructorDashboardRoutes {
                 fmt: fmt
             )
             enrolledStudents = roster.rows
-            enrolledStudentCount = roster.count
             if let course = try await APICourse.find(activeCourseUUID, on: req.db) {
                 courseEnrollmentMode = course.enrollmentMode.rawValue
                 courseIsArchived = course.isArchived
-                brightspaceLinkAvailable =
-                    (req.application.brightSpaceAppCredentials != nil
-                        && !((course.brightspaceOrgUnitID ?? "").isEmpty))
-                    || Self.rosterCheckUsesLTI(
-                        course: course, valenceConfigured: req.application.brightSpaceAppCredentials != nil)
             }
         }
 
@@ -91,29 +78,25 @@ extension InstructorDashboardRoutes {
 
         let (staffRows, studentRows) = Self.splitRoster(enrolledStudents)
         let pendingCount = studentRows.filter(\.isPending).count
-        let ctx = InstructorStudentsContext(
-            currentUser: userContext,
-            activeInstructorTab: "students",
-            enrolledStudents: studentRows,
-            staffRows: staffRows,
-            hasStaff: !staffRows.isEmpty,
-            hasEnrolledStudents: !studentRows.isEmpty,
-            enrolledStudentCount: enrolledStudentCount,
-            activeStudentCount: studentRows.count - pendingCount,
-            pendingCount: pendingCount,
-            showStudentFilter: ListFilterPolicy.showsFilter(rowCount: studentRows.count),
-            courseEnrollmentMode: courseEnrollmentMode,
-            courseIsArchived: courseIsArchived,
-            brightspaceLinkAvailable: brightspaceLinkAvailable,
-            canManageRoster: canManageRoster,
-            rosterReadOnly: courseIsArchived || !canManageRoster,
-            staffForm: StaffFieldsContext(
-                idPrefix: "add-staff", placeholderAllowed: true, defaultRole: .ta,
-                errorQuery: req.query[String.self, at: "staffError"]),
-            flashSuccess: flashSuccess,
-            flashError: flashError
-        )
-        return try await req.view.render("instructor-students", ctx).encodeResponse(for: req)
+        let page = try await PageRequestContext.courseAware(req)
+        return try await HTMLResponse {
+            InstructorStudentsPage(
+                page: page,
+                flash: FlashMessages(success: flashSuccess, error: flashError),
+                activeCourseID: courseState.active?.id,
+                students: studentRows,
+                staffRows: staffRows,
+                activeStudentCount: studentRows.count - pendingCount,
+                pendingCount: pendingCount,
+                showStudentFilter: ListFilterPolicy.showsFilter(rowCount: studentRows.count),
+                courseEnrollmentMode: courseEnrollmentMode,
+                rosterReadOnly: courseIsArchived || !canManageRoster,
+                staffForm: StaffFieldsContext(
+                    idPrefix: "add-staff", placeholderAllowed: true, defaultRole: .ta,
+                    errorQuery: req.query[String.self, at: "staffError"])
+            )
+        }
+        .encodeResponse(for: req)
     }
 
     /// Instructor and TA rows on one side, student rows and pending
@@ -135,8 +118,8 @@ extension InstructorDashboardRoutes {
     /// active (the table simply clears).
     ///
     /// Two representations, one query:
-    ///   * `?fragment=rows` renders `_student-rows.leaf` — the SAME partial the
-    ///     page renders, so the poll cannot drift from the page (it used to
+    ///   * `?fragment=rows` renders `StudentRows` — the SAME view the page
+    ///     renders, so the poll cannot drift from the page (it used to
     ///     rebuild every row as a JS string, including a whole register-student
     ///     popover, and the two copies diverged by construction);
     ///   * anything else keeps the JSON array, unchanged, for other consumers.
@@ -164,16 +147,12 @@ extension InstructorDashboardRoutes {
         let canManageRoster =
             user.isAdmin || (courseState.active?.role ?? .student) >= .instructor
         let courseIsArchived = try await APICourse.find(activeCourseUUID, on: req.db)?.isArchived ?? false
-        let ctx = StudentRowsFragmentContext(
-            currentUser: CurrentUserContext(
-                user: user,
-                activeCourse: courseState.active,
-                enrolledCourses: courseState.all
-            ),
-            enrolledStudents: Self.splitRoster(roster.rows).students,
-            rosterReadOnly: courseIsArchived || !canManageRoster
-        )
-        return try await req.view.render("_student-rows", ctx).encodePollFragment(for: req)
+        let html = StudentRows(
+            students: Self.splitRoster(roster.rows).students,
+            rosterReadOnly: courseIsArchived || !canManageRoster,
+            csrfToken: PageRequestContext(request: req).csrfToken
+        ).render()
+        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
     }
 }
 
@@ -194,15 +173,6 @@ extension InstructorDashboardRoutes {
         else { return nil }
         return "@\(user.username) now has the class handle \(handle)."
     }
-}
-
-/// Context for the rows-only fragment of the roster table.  Carries exactly
-/// what `_student-rows.leaf` reads — no more, so the fragment cannot start
-/// depending on page-level state the poll does not compute.
-private struct StudentRowsFragmentContext: Encodable {
-    let currentUser: CurrentUserContext
-    let enrolledStudents: [EnrolledStudentRow]
-    let rosterReadOnly: Bool
 }
 
 extension InstructorDashboardRoutes {
