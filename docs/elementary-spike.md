@@ -182,22 +182,22 @@ no fixture reaches.
 | Design tokens in page CSS | `check-design-tokens.sh` | the same script reads `PageStyle` blocks (`scripts/lib/css.sh`) | Done |
 | Page `<style>` total ratchet, duplicate and shadowed selectors | `check-styles.sh` rules 4 and 4b | the same rules count `PageStyle` blocks | Done |
 | Flash banners only through the layout | `PageArchetypeTests` | SwiftLint `elementary_flash_only_in_layout` | Done |
-| Tab bars only through their component | `PageArchetypeTests`, `check-ui-vocabulary.sh` | admin: SwiftLint `elementary_tabs_only_in_component` keeps the classes in `AdminTabs`, and `everyAdminTabbedPageOpensWithAdminTabs` holds every admin tabbed page to the banner, one hidden h1 and one tab bar. Instructor: arrives with `InstructorTabs` | Done for admin pages; open for instructor pages |
+| Tab bars only through their component | `PageArchetypeTests`, `check-ui-vocabulary.sh` | SwiftLint `elementary_tabs_only_in_component` keeps the tab classes in `AdminTabs` and `InstructorTabs`; `everyAdminTabbedPageOpensWithAdminTabs` and `everyInstructorTabbedPageOpensWithInstructorTabs` hold every tabbed page to one hidden h1 and one tab bar | Done |
 | Component vocabulary, affordance registry in page CSS | `check-ui-vocabulary.sh` | the same script reads Swift views with a `PageStyle` block | Done |
 | `base.leaf` and `BaseLayout` stay in step | none | `BaseLayoutParityTests` (scripts, stylesheets, links, meta names) | Done, until `base.leaf` goes |
 | Leaf semantics | `check-leaf-semantics.sh` | not needed: the compiler enforces it | n/a |
 
 The archetype check reads only fixtures marked `isExemplar`, as
-`PageArchetypeTests` reads only exemplars. The instructor half of the tab-bar
-row must close before the first instructor tabbed page moves. A ported
+`PageArchetypeTests` reads only exemplars. A ported
 template that `PageArchetypeTests` still reads as an exemplar stays in the
 tree, unserved, and `retired_exemplar_templates` in `scripts/lib/css.sh`
 keeps its page CSS from being counted twice.
 
 The open rows must close before the first page whose Leaf template carries
-that kind of content is deleted. `admin-user.leaf`, `register.leaf` and
-`alerts.leaf` stay until then, and `PageArchetypeTests` still reads them as
-the titlebar, auth-box and admin tabbed exemplars.
+that kind of content is deleted. `admin-user.leaf`, `register.leaf`,
+`alerts.leaf` and `instructor-mcp.leaf` stay until then, and
+`PageArchetypeTests` still reads them as the titlebar, auth-box, admin tabbed
+and instructor tabbed exemplars.
 
 ### Leaf hardening while the migration runs
 
