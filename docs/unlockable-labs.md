@@ -157,8 +157,8 @@ A pure, unit-testable evaluator plus a store:
   page (403), naming the prerequisites — never a bare error.
 - Styling per house rules: design tokens only, reason conveyed in text (never
   colour alone, per the AODA pass), dark-mode via existing palette vars;
-  `scripts/check-styles.sh` guards apply. If `index.leaf` needs decomposition,
-  remember the one-inline-`#extend`-per-template LeafKit limitation.
+  `scripts/check-styles.sh` guards apply. The dashboard is the Swift view
+  `IndexPage`; split it into smaller views as needed.
 
 ## Instructor authoring UX
 

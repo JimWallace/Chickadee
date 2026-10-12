@@ -831,7 +831,7 @@ textarea.form-input {
 
 /* Section grouping for results tables — one block (optional heading + table)
    per test-suite section.  Shared by the server-rendered submission view
-   (submission.leaf) and the browser runner's inline results (notebook.js,
+   (SubmissionPage) and the browser runner's inline results (notebook.js,
    assignment-validate.js) so both group identically.  The heading alone is
    the sub-heading over any grouped results table inside a section — the
    leaderboard's bracket uses it per round. */
@@ -1523,8 +1523,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
     z-index: 10;
 }
 
-/* ── Submission view (submission.leaf) ───────────────── */
-/* Migrated out of submission.leaf's embedded <style> block (v0.4.x UI audit)
+/* ── Submission view (SubmissionPage) ───────────────── */
+/* Migrated out of the old submission template's embedded <style> block (v0.4.x UI audit)
    so the page-level CSS lives in one cacheable sheet.  The base
    .achievement-badge / .achievement-badges rules are NOT redefined here —
    they're the global ones above; only the "full" size modifier is page-local. */
@@ -1748,7 +1748,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .grade-override-active { border-color: var(--gray-500); background: var(--gray-100); }
 
-/* ── Student dashboard (index.leaf) ────────────────────────────────── */
+/* ── Student dashboard (IndexPage) ────────────────────────────────── */
 
 .assignment-section-heading {
     font-size: var(--text-lg);

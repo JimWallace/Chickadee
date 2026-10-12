@@ -447,7 +447,7 @@ branches.
 
 ### Student: the submission page
 
-The "Class goals" block in `submission.leaf` already renders name, reward,
+The "Class goals" block in `SubmissionPage` already renders name, reward,
 a `<progress>` bar, and a status line, and it is the right shape unchanged. One
 word in it is wrong for a union goal:
 

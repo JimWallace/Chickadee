@@ -20,7 +20,7 @@ struct PresentLayout<Content: HTML>: HTML {
     }
 
     var body: some HTML {
-        HTMLRaw("<!DOCTYPE html>")
+        Doctype()
         html(.lang("en"), .data("theme", value: "dark")) {
             head {
                 meta(.charset(.utf8))
