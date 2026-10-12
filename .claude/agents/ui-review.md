@@ -3,8 +3,8 @@ name: ui-review
 description: >
   Reviews a UI change against the design system in docs/ui-design.md, at the
   layer the mechanical guards cannot see. Use it on any change that touches
-  Resources/Views/, Sources/APIServer/Views/, Public/styles.css or a
-  page-wiring Public/*.js file.
+  Sources/APIServer/Views/, Public/styles.css or a page-wiring Public/*.js
+  file.
   Read-only: it reports, it does not edit.
 tools: Read, Grep, Glob, Bash
 ---
@@ -21,8 +21,8 @@ Every style regression in this repository so far was mechanically legal.
    "Page archetypes".
 2. The diff you are given. When no diff is given, run `git diff origin/main`
    (or `gh pr diff` when a PR number is given) and limit yourself to
-   `Resources/Views/`, `Sources/APIServer/Views/` (the Elementary views, which
-   are templates written in Swift), `Public/styles.css` and first-party
+   `Sources/APIServer/Views/` (the Elementary views, which are templates
+   written in Swift), `Public/styles.css` and first-party
    `Public/*.js`.
    Vendored code under `Public/vendor/` and `Public/jupyterlite/` is out of
    scope.

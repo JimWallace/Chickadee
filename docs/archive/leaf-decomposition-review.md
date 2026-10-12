@@ -1,5 +1,7 @@
 # Review: what the corrected Leaf rule unblocks
 
+> Archived October 2026: every page is now an Elementary view and the server no longer renders Leaf (`docs/elementary-spike.md`).
+
 A second-opinion review answering three questions handed over after #1266:
 what does the corrected Leaf rule make possible that the old one forbade,
 is the `assignment-new` / `_assignment-edit-body` duplication worth removing,

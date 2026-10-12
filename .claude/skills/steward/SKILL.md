@@ -65,11 +65,10 @@ mechanical. At minimum, for the layers you touched:
 | Touched | Run |
 |---|---|
 | Swift | `scripts/format.sh` then `scripts/lint.sh`, `scripts/swiftlint.sh` |
-| `Resources/Views/`, `Public/styles.css`, page JS | `scripts/check-styles.sh` |
+| `Public/styles.css`, page JS | `scripts/check-styles.sh` |
 | `Sources/APIServer/Views/` | `swift test --filter ElementaryPageGuardTests`, `scripts/swiftlint.sh` |
 | a guard script itself | `scripts/check-guards.sh` |
 | `docker-compose.yml`, `Dockerfile`, `deploy/` | `scripts/check-docker-build-context.sh`, `scripts/ci-compose-env.sh --check` |
-| Leaf templates | `scripts/check-leaf-semantics.sh` |
 
 `scripts/swiftlint.sh` passes `--strict`: every warning fails the build. If a
 structural threshold (say `function_body_length`) starts causing legitimate
@@ -77,7 +76,7 @@ friction, raise it in `.swiftlint.yml` rather than dropping `--strict`.
 
 ## The UI review is not optional
 
-Any change touching `Resources/Views/`, `Sources/APIServer/Views/`,
+Any change touching `Sources/APIServer/Views/`,
 `Public/styles.css`, or a page-wiring
 `Public/*.js` gets the **`ui-review` agent**, unconditionally and without
 asking. The guards prove a value is on the palette and a class has a rule;
@@ -129,15 +128,9 @@ second-person emotional narration. It is duplicated verbatim in
 Repository prose, including PR bodies and commit messages, is written in
 ASD-STE100 English: short sentences, one idea each, plain vocabulary.
 
-Two mechanical traps in templates, both of which fail silently:
-
-- **Never write Leaf tag syntax in template prose or comments.** Leaf's lexer
-  has no notion of an HTML comment. A bare structural tag name in a comment is
-  a 500 at render; `#(field)` in a comment is *interpolated into the served
-  HTML*. Say "the extend" or "an `extend(...)` include".
-- **Leaf resolves no Swift properties.** `#if(rows.isEmpty)` on an array is nil,
-  which never fires, and `#if(!rows.isEmpty)` always fires. Use the `count` tag:
-  `#if(count(rows) == 0)`. `scripts/check-leaf-semantics.sh` enforces it.
+Every page is an Elementary view; nothing renders Leaf. A new page type needs
+a fixture in `ElementaryPageFixtures`, or `ElementaryPageGuardTests` fails.
+The view traps are in `docs/elementary-spike.md` §"Traps found".
 
 ## Shell snippets
 

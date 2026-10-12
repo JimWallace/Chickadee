@@ -1,11 +1,28 @@
-# Elementary spike
+# Elementary views
 
-Status: **decided: migrate (2026-10-10).** This document records what one page
-cost to port from Leaf to [Elementary](https://github.com/elementary-swift/elementary),
-what the port found, and what the migration needs. The decision and its order
-are in "Decisions".
+Status: **migration done (October 2026).** Every page is an Elementary view
+under `Sources/APIServer/Views/`, and the server no longer links Leaf or
+renders a template. This document began as the record of a one-page spike
+that ported a page from Leaf to
+[Elementary](https://github.com/elementary-swift/elementary). It keeps what
+the spike measured and found, the guards that replaced the Leaf-era scripts,
+and what remains. The decision and its order are in "Decisions".
 
-## What the spike does
+## Where things are now
+
+- Pages: `Sources/APIServer/Views/Pages/`, one `HTML` type per page. Shared
+  parts (the layout, the nav, the tab bars, the editor bodies) sit beside
+  them in `Sources/APIServer/Views/`.
+- Glue: `HTMLResponse` (the Vapor response) and `PageRequestContext` (CSRF
+  token, version, idle timeouts, sprites).
+- Sprites: `Resources/Sprites/icons.svg` and
+  `Resources/Sprites/avatar-sprite.svg`, read once at startup by
+  `Application.loadSprites()` and inlined by `BaseLayout` and `AvatarSprite`.
+- Errors: `ErrorPageMiddleware` renders `ErrorPage` for browser routes.
+- Leaf is gone from `Package.swift`. See "Known remainder" for why
+  `Package.resolved` still lists it.
+
+## What the spike did
 
 - It adds Elementary 0.8 (pinned to the minor, because the package is pre-1.0)
   to `APIServer`.
@@ -21,7 +38,7 @@ are in "Decisions".
 | File | Role |
 |---|---|
 | `Views/HTMLResponse.swift` | The Vapor glue: about 15 lines. Owned here, not taken from `vapor-community/vapor-elementary` (8 commits, no release). |
-| `Views/PageRequestContext.swift` | The request-scoped values that the Leaf custom tags read at render time: CSRF token, version, idle timeouts, icon sprite. |
+| `Views/PageRequestContext.swift` | The request-scoped values that the Leaf custom tags read at render time: CSRF token, version, idle timeouts, icon sprite. These tags are now deleted. |
 | `Views/BaseLayout.swift`, `Views/SiteNav.swift` | `base.leaf` and `_flash.leaf`. |
 | `Views/MarkupAttribute+Chickadee.swift`, `Views/Icon.swift`, `Views/CSRFField.swift`, `Views/PageStyle.swift` | ARIA attributes, the icon, the CSRF input and the raw page CSS. Elementary ships none of these. |
 | `Views/Pages/AdminUserPage.swift` | `admin-user.leaf`. |
@@ -115,7 +132,8 @@ and the compiler found every site.
    `pageContent`.
 2. **The tests build the app without `AppMiddleware`.** The icon sprite was
    first loaded there, so every test page rendered with no icons and no
-   error. `Application.iconSprite` now reads the file when nothing loaded it.
+   error. `Application.sprite(_:)` now reads the file
+   (`Resources/Sprites/`) when nothing loaded it.
    A failed read still yields an empty sprite with no error. A migration
    should make the sprite a Swift value, so that nothing is read at run time.
    The general rule: anything a view needs from startup must have a fallback
@@ -146,19 +164,13 @@ and the compiler found every site.
 
 ## Guards
 
-The UI guards read `Resources/Views/*.leaf` and nothing else. When
-`admin-user.leaf` is deleted, all of `check-styles.sh`,
-`check-class-resolution.sh`, `check-ui-vocabulary.sh`,
-`check-leaf-semantics.sh`, `check-design-tokens.sh` and `check-css-vars.sh`
-still pass. They fail open: they check fewer files and say nothing. Only
-`PageArchetypeTests` fails, because it opens the exemplar by name. The
-`ui-review` path filter (`Resources/Views/`, `Public/styles.css`,
-`Public/*.js`) also does not match `Sources/APIServer/Views/`.
+During the migration the shell guards read `Resources/Views/*.leaf` and
+nothing else, and they fail open: with a template deleted they check fewer
+files and say nothing. So each guard got its Swift replacement before the
+template it read was deleted. The table records the pairing. The Leaf-era
+column is history; the Elementary column is what is in force.
 
-A migration must replace each guard before it removes the template the guard
-reads.
-
-### What guards the Elementary views now
+### What guards the Elementary views
 
 `ElementaryPageGuardTests` renders every page in `ElementaryPageFixtures`
 (one render per branch worth checking) and applies the rules in
@@ -168,7 +180,7 @@ Two SwiftLint custom rules (`elementary_no_inline_style`,
 `elementary_raw_html`) catch the same mistakes in source, including branches
 no fixture reaches.
 
-| Rule | Leaf guard | Elementary guard | Status |
+| Rule | Leaf-era guard | Elementary guard | Status |
 |---|---|---|---|
 | No inline `style=""` except `display:none` or a custom property | `check-styles.sh` rule 2 | rendered-page test; SwiftLint `.style(` ban | Done |
 | No inline script, no `on*=` handler | `check-styles.sh` rules 3b to 3b-3 | rendered-page test | Done |
@@ -176,7 +188,7 @@ no fixture reaches.
 | Every `var(--x)` resolves, no hardcoded fallback | `check-css-vars.sh` (hex fallbacks only) | rendered-page test, page blocks and `style` attributes; any hardcoded fallback | Done, stricter |
 | Hover text at most 20 words | `check-ui-vocabulary.sh` rule 3 (skips interpolated titles) | rendered-page test, every title | Done, stricter |
 | Heading levels form a spine | `PageArchetypeTests` | rendered-page test | Done |
-| Archetype shape | `PageArchetypeTests` | the same rules, applied to the rendered `<main>` | Done for the titlebar and auth-box exemplars; the tabbed and shim rules read Leaf partials and need adapting first |
+| Archetype shape | `PageArchetypeTests` | the same rules, applied to the rendered `<main>` of each exemplar fixture | Done |
 | Raw HTML only where escaping is handled | none | SwiftLint `HTMLRaw(` ban outside `BaseLayout` (with `Doctype`), `AvatarSprite`, `JSONIsland` and `PageStyle` (checked by hand: a planted use fails lint) | Done |
 | `ui-review` runs on a view change | workflow path filter | `Sources/APIServer/Views/**` added | Done |
 | Design tokens in page CSS | `check-design-tokens.sh` | the same script reads `PageStyle` blocks (`scripts/lib/css.sh`) | Done |
@@ -184,41 +196,18 @@ no fixture reaches.
 | Flash banners only through the layout | `PageArchetypeTests` | SwiftLint `elementary_flash_only_in_layout` | Done |
 | Tab bars only through their component | `PageArchetypeTests`, `check-ui-vocabulary.sh` | SwiftLint `elementary_tabs_only_in_component` keeps the tab classes in `AdminTabs` and `InstructorTabs`; `everyAdminTabbedPageOpensWithAdminTabs` and `everyInstructorTabbedPageOpensWithInstructorTabs` hold every tabbed page to one hidden h1 and one tab bar | Done |
 | Component vocabulary, affordance registry in page CSS | `check-ui-vocabulary.sh` | the same script reads Swift views with a `PageStyle` block | Done |
-| `base.leaf` and `BaseLayout` stay in step | none | `BaseLayoutParityTests` (scripts, stylesheets, links, meta names) | Done, until `base.leaf` goes |
-| Leaf semantics | `check-leaf-semantics.sh` | not needed: the compiler enforces it | n/a |
+| `base.leaf` and `BaseLayout` stay in step | none | `BaseLayoutParityTests` while both existed | Retired with `base.leaf` |
+| Leaf semantics | `check-leaf-semantics.sh` | not needed: the compiler enforces it | Retired |
 
-The archetype check reads only fixtures marked `isExemplar`, as
-`PageArchetypeTests` reads only exemplars. A ported
-template that `PageArchetypeTests` still reads as an exemplar stays in the
-tree, unserved, and `retired_exemplar_templates` in `scripts/lib/css.sh`
-keeps its page CSS from being counted twice.
+The archetype check reads only fixtures marked `isExemplar`.
 
-The open rows must close before the first page whose Leaf template carries
-that kind of content is deleted. `admin-user.leaf`, `register.leaf`,
-`alerts.leaf` and `instructor-mcp.leaf` stay until then, and
-`PageArchetypeTests` still reads them as the titlebar, auth-box, admin tabbed
-and instructor tabbed exemplars.
+### Leaf hardening (retired)
 
-### Leaf hardening while the migration runs
-
-The Leaf pages stay in service for the length of the migration, so two Leaf
-traps found in LeafKit's source are closed now:
-
-- **A missing slot throws.** LeafKit's default (`ignoreUnfoundImports: true`)
-  renders nothing for an `#import` that no template exports. The server and
-  the test app now share `Application.Leaf.useChickadeeConfiguration`, which
-  turns that off. All 53 pages that extend `base` export both of its slots.
-  `LeafStrictImportTests` proves a page without one fails.
-- **An unknown tag name fails the guard.** LeafKit resolves a tag it does not
-  know to nothing (`ParameterResolver`), so a misspelled CSRF field renders
-  as an empty string. `check-leaf-semantics.sh` now checks every tag name, at
-  the start of a tag and as a call inside a condition, against the structural
-  tags, LeafKit's built-ins and the tags `app.leaf.tags` registers.
-
-LeafKit has no strict mode for a missing key: an unresolved key path is nil
-wherever it appears. A checker that matches each template's key paths
-against its Swift context type would close most of that gap, but it is a
-parser to build and maintain, so it is not planned while the migration runs.
+While Leaf pages were in service, two LeafKit traps were closed: a shared
+`useChickadeeConfiguration` made a missing `#import` slot throw
+(`LeafStrictImportTests`), and `check-leaf-semantics.sh` checked every tag
+name against the registered tags. Both went with Leaf. The compiler now
+rejects what they caught.
 
 ## A bug the port carried over, now fixed
 
@@ -232,7 +221,8 @@ text reaches the page.
 
 ## What gets better
 
-- The traps in CLAUDE.md "Leaf templates: rules that fail silently" cannot
+- The Leaf traps that CLAUDE.md used to list ("rules that fail silently";
+  the evidence is in `docs/archive/leaf-decomposition-review.md`) cannot
   occur. A missing field, a wrong property, `.isEmpty` and a commented-out
   tag are compile errors or plain Swift.
 - The view takes typed values. `AdminUserDetailContext` is gone, and the
@@ -240,7 +230,7 @@ text reaches the page.
 - A view renders as a value, with no app, no database and no request.
   `ElementaryAdminUserPageTests` runs in 7 ms. The existing render tests need
   a database-backed app.
-- The Leaf custom tags become plain properties on `PageRequestContext`.
+- The Leaf custom tags became plain properties on `PageRequestContext`.
 
 ## Decisions
 
@@ -254,6 +244,9 @@ text reaches the page.
 2. **Guards first.** Each guard gets its Swift replacement, and the
    replacement lands, before the first template it reads is deleted. The
    `ui-review` path filter is part of this.
+3. **Done.** The last page moved in October 2026. Leaf, its configuration
+   and its custom tags are removed from the server; the error middleware is
+   `ErrorPageMiddleware`.
 
 ## Open points
 
@@ -269,7 +262,9 @@ text reaches the page.
 
 ## Vapor 5 and Leaf: status (October 2026)
 
-Checked on 2026-10-10. Recheck before the Vapor 5 move.
+Checked on 2026-10-10. Recheck before the Vapor 5 move. Since then the
+migration finished, so point 4 below is settled: no page waits on a Vapor 5
+Leaf. Only the transitive dependency in "Known remainder" does.
 
 **Vapor 5 is in beta.** 5.0.0-alpha.1 shipped on 11 June 2026, beta.1 on
 15 September and beta.3 on 1 October. The beta announcement calls it
@@ -324,9 +319,20 @@ Sources: [Vapor 5 Beta](https://blog.vapor.codes/posts/vapor-5-beta/),
 [vapor/leaf-kit#137](https://github.com/vapor/leaf-kit/pull/137),
 [vapor/leaf-kit releases](https://github.com/vapor/leaf-kit/releases).
 
-## To remove the spike
+## Known remainder
 
-Revert the route in `AdminRoutes.swift` to `req.view.render("admin-user", ...)`,
-restore `AdminUserDetailContext`, delete `Sources/APIServer/Views/`, the two
-test files and the `loadIconSprite()` call, and remove the package from
-`Package.swift`. `extractCSRFToken` can keep accepting both quote styles.
+- **Leaf is still in `Package.resolved`.** `vapor-community/CSRF` depends on
+  `vapor/leaf` for its own `CSRFFormFieldTag`, so `leaf` and `leaf-kit` stay
+  in the resolved graph and are compiled as part of CSRF. Chickadee imports
+  neither. Dropping them needs a CSRF release without the Leaf tag, or
+  Chickadee's own CSRF middleware. The same package needs a Vapor 5 port
+  anyway (see above).
+- **Leaf-shaped view contexts.** Several context types still carry flat
+  `Bool` flags and pre-rendered strings that existed only because Leaf could
+  not evaluate compound conditions, `.isEmpty` or optionals (for example
+  `hasAvatar`, `hasSpends`, `canRefund`, the BrightSpace panel gates and
+  `AvatarPresentation.isLabelled`). Their comments say "kept from the Leaf
+  templates". A view could compute these directly; that is a follow-up.
+- **The sprite headers.** The comment at the top of each sprite file still
+  mentions where the Leaf layout included it. The bytes were kept identical
+  in the move.

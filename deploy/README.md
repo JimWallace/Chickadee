@@ -900,7 +900,7 @@ rsync -av \
 ```
 
 The `Public/` directory contains JupyterLite and other static assets.
-The `Resources/` directory contains Leaf templates, wordlists, and other server assets.
+The `Resources/` directory contains the SVG sprites, wordlists, and other server assets.
 
 ---
 
