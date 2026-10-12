@@ -14,7 +14,6 @@
 import Core
 import Fluent
 import Foundation
-import Leaf
 import Vapor
 
 struct WebRoutes: RouteCollection {

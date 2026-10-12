@@ -1,11 +1,11 @@
 // APIServer/Helpers/CurrentUserContext.swift
 //
-// The authenticated user as a Leaf view context.
+// The authenticated user as a view context.
 
 import Core
 import Foundation
 
-/// Encodable snapshot of the authenticated user, safe to embed in any Leaf context.
+/// Encodable snapshot of the authenticated user, safe to embed in any view context.
 struct CurrentUserContext: Encodable {
     let username: String
     let preferredName: String?

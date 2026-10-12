@@ -48,8 +48,8 @@ struct EnrollmentRoutes: RouteCollection {
             )
         }
 
-        // The Leaf context never carried `?error=`, so the none-selected
-        // message has never shown; the port keeps that until it is fixed.
+        // The page never carried `?error=`, so the none-selected message has
+        // never shown. Kept that way until it is fixed.
         return try await HTMLResponse {
             EnrollPage(page: PageRequestContext(request: req), error: nil, courses: rows)
         }.encodeResponse(for: req)

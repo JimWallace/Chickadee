@@ -2,10 +2,8 @@
 //
 // GET /account: the signed-in user's identity, their chickadee's backdrop and
 // border, the GitHub link, their courses and the courses open to join, and
-// the personal-data export (#557).
-//
-// `account.leaf` stays in the tree as the plain student page exemplar
-// (docs/ui-design.md); this page is what the route serves.
+// the personal-data export (#557). The plain student page exemplar
+// (docs/ui-design.md).
 
 import Core
 import Elementary

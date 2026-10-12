@@ -1,6 +1,6 @@
 // APIServer/Views/AdminTabs.swift
 //
-// The admin-area chrome from `_admin-tabs.leaf`: the version banner, the
+// The admin-area chrome: the version banner, the
 // page's hidden h1 and the tab bar. Every admin tabbed page opens with
 // `AdminTabs`, and no other view writes the `admin-tab` classes (SwiftLint
 // `elementary_tabs_only_in_component`).
@@ -13,8 +13,7 @@
 
 import Elementary
 
-/// One admin page. The raw value is the `activeAdminTab` value the Leaf pages
-/// set, so a Leaf page and a Swift page name a tab the same way.
+/// One admin page. The raw value is the tab's name in the markup.
 enum AdminTab: String, CaseIterable, Sendable {
     case overview, alerts, users, storage, retention, audit, brightspace, mcp, lti, github
 

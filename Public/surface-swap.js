@@ -19,7 +19,7 @@
 //
 // `ChickadeeUI` re-exports both under their existing names, so no call site
 // changed when this moved. Unlike the other two splits, this one is reached
-// from a module base.leaf already loads on every page — inplace-forms.js calls
+// from a module the layout already loads on every page — inplace-forms.js calls
 // refreshEditSurface() after every successful in-place save — so it is loaded
 // there beside chickadee-ui.js rather than on the two workbench pages.
 //

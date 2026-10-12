@@ -4,9 +4,6 @@
 // fixture (CSV, JSON, ...) bundled with the assignment, with its per-student
 // dataset control (docs/datasets.md). The create page and the edit body render
 // the same markup, and Public/support-files.js drives both.
-//
-// Keep in step with the support-file rows in `_assignment-edit-body.leaf`
-// while both exist.
 
 import Elementary
 

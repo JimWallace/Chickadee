@@ -1,6 +1,6 @@
 // APIServer/Routes/Web/AssignmentListContexts.swift
 //
-// Leaf view-context types for the instructor dashboard listing and the
+// View-context types for the instructor dashboard listing and the
 // per-assignment submissions drilldown.  Split from the original
 // `AssignmentContextTypes.swift` so each `Encodable` synthesis lives in
 // its own translation unit and only gets re-checked when the relevant
@@ -24,8 +24,7 @@ struct AssignmentRow: Encodable {
     /// Multi-variant validation rollup for the validation cell: "none" (the
     /// assignment does not vary by student, or no batch has run yet) |
     /// "pending" | "failed" | "passed".  A flat discriminator plus
-    /// pre-rendered text, because LeafKit 1.14.2 mis-parses compound
-    /// conditions and cannot do the arithmetic.
+    /// pre-rendered text, a shape kept from the Leaf templates.
     let variantState: String
     let variantSummaryText: String  // e.g. "1 of 4 variants failed"; "" when none
     /// The lowest-index failed variant's submission id, for the results link.
@@ -151,8 +150,8 @@ struct EnrolledStudentRow: Content {
     /// Filled by the Students-tab loaders only; the Overview's count-only
     /// roster never draws one.
     var avatar: AvatarPresentation?
-    /// Explicit flag for the template: a bare optional in a Leaf conditional is
-    /// unreliable, so the partial gates on this instead of on `avatar`.
+    /// Explicit flag the view gates on instead of `avatar` (kept from the Leaf
+    /// templates).
     var hasAvatar: Bool = false
     /// The badge when LEARN cannot receive this student's grade ("Not on
     /// LEARN"), read from the readiness sweep's stored status.  Nil when the

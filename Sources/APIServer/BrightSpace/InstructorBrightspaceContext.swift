@@ -19,8 +19,7 @@ struct InstructorBrightspaceContext: Encodable {
         /// The connected LEARN identity (whoami display), when connected.
         let identity: String?
         /// Pre-rendered " (since …)" suffix (empty when nil) so the template
-        /// interpolates it directly — avoids an inline `#if` in the middle of
-        /// a sentence, which LeafKit 1.14.2 mis-parses.
+        /// interpolates it directly (a shape kept from the Leaf template).
         let since: String?
     }
 
@@ -38,8 +37,8 @@ struct InstructorBrightspaceContext: Encodable {
         let connected: Bool
         /// True when there's a designated identity but it's disconnected (the
         /// "needs reconnect" / grades-paused state). Pre-computed so the
-        /// template can branch with flat sibling conditionals (LeafKit 1.14.2
-        /// mis-parses `#if` nested inside an `#if/#else`).
+        /// view can branch with flat sibling conditionals (kept from the Leaf
+        /// template).
         let needsReconnect: Bool
 
         static let empty = SyncIdentityPanel(
@@ -59,8 +58,8 @@ struct InstructorBrightspaceContext: Encodable {
     let orgUnitFieldValue: String
     let account: AccountPanel
     let syncIdentity: SyncIdentityPanel
-    /// Gates for the Connection panel's forms, precomputed flat (LeafKit
-    /// 1.14.2 mis-parses `&&` / nested `#if`): connect form when configured
+    /// Gates for the Connection panel's forms, precomputed flat (kept from the
+    /// Leaf template): connect form when configured
     /// but not yet connected; identity actions (test / take-over / disconnect
     /// / link) when connected with a non-archived active course; take-over
     /// only when someone else is (or nobody is) the designated identity.
@@ -70,8 +69,8 @@ struct InstructorBrightspaceContext: Encodable {
     let flashSuccess: String?
     let flashError: String?
     /// True when BrightSpace is configured and the active course isn't archived —
-    /// gates the top-bar "Sync now" button. Precomputed so the template branches
-    /// on a flat bool (LeafKit 1.14.2 mis-parses `&&` / nested `#if`).
+    /// gates the top-bar "Sync now" button. Precomputed so the view branches
+    /// on a flat bool (kept from the Leaf template).
     let canSyncNow: Bool
     /// The reserved value the grade-item dropdown submits for the "Do not sync"
     /// option (`BrightspaceSync.doNotSyncToken`), surfaced so the page JS uses
@@ -80,8 +79,8 @@ struct InstructorBrightspaceContext: Encodable {
     let assignmentRows: [BrightspaceAssignmentRow]
     let hasAssignments: Bool
     /// True when the course is linked to a LEARN org unit and not archived —
-    /// gates the "Reconcile now" button. Precomputed so the template branches on
-    /// a flat bool (LeafKit 1.14.2 mis-parses `&&` / nested `#if`).
+    /// gates the "Reconcile now" button. Precomputed so the view branches on
+    /// a flat bool (kept from the Leaf template).
     let canReconcile: Bool
     /// Students we can't currently deliver a grade to (not on the LEARN
     /// classlist, or no key to match) — the authoritative replacement for the
@@ -146,8 +145,8 @@ struct BrightspaceAssignmentRow: Encodable {
     let syncedCount: Int
     let pendingCount: Int
     let erroredCount: Int
-    /// Precomputed visibility flags — Leaf can't reliably coerce an Int to a
-    /// bool for `#if`, so the rollup chips gate on these instead of `> 0`.
+    /// Precomputed visibility flags the rollup chips gate on instead of `> 0`
+    /// (kept from the Leaf template).
     let hasSyncActivity: Bool
     let hasPending: Bool
     let hasErrored: Bool

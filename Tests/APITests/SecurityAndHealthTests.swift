@@ -66,7 +66,7 @@ import VaporTesting
 
     private func makeLeafErrorApp(configureViews: Bool) async throws -> Application {
         let app = try await Application.make(.testing)
-        app.middleware.use(LeafErrorMiddleware())
+        app.middleware.use(ErrorPageMiddleware())
         if configureViews {
             configureLeaf(app)
         }

@@ -1,6 +1,6 @@
 // APIServer/Routes/Web/SuiteRowContexts.swift
 //
-// Per-row Leaf view-context types shared by the new-assignment and
+// Per-row view-context types shared by the new-assignment and
 // edit-assignment pages.  Split from the original
 // `AssignmentContextTypes.swift`.
 
@@ -17,7 +17,7 @@ struct SuiteSectionShellRow: Encodable {
     let isUngrouped: Bool
     /// Section-level variables as pre-serialised JSON strings so the
     /// template can emit them into hidden inputs / editable rows without
-    /// re-encoding in Leaf (which doesn't handle JSONValue well).  One
+    /// re-encoding in the view.  One
     /// `{name, valueJSON}` entry per variable.
     let variables: [SuiteSectionVariableShellRow]
     /// Empty-state flag so the template can hide the "Variables" block
@@ -62,7 +62,7 @@ struct EditableSuiteRow: Encodable {
     /// overwrite it.
     let datasetTransforms: [DatasetTransform]
 
-    /// Empty string when displayName is nil — Leaf doesn't support `??` in templates.
+    /// Empty string when displayName is nil.
     var displayNameOrEmpty: String { displayName ?? "" }
 
     /// The sample size as an input-ready string — empty when there is none, so
@@ -142,7 +142,7 @@ struct EditableSuiteRow: Encodable {
         return stem.isEmpty ? name : stem
     }
 
-    /// JSON-encoded `dependsOn` array for use as an HTML data attribute in Leaf templates.
+    /// JSON-encoded `dependsOn` array for use as an HTML data attribute.
     var dependsOnJSON: String {
         let data = (try? JSONEncoder().encode(dependsOn)) ?? Data("[]".utf8)
         return String(data: data, encoding: .utf8) ?? "[]"
@@ -165,7 +165,7 @@ struct EditableSuiteRow: Encodable {
         case datasetSampleSizeText
         case datasetStratumColumnOrEmpty
         // The derivation fields the panel renders. `datasetTransforms` itself is
-        // deliberately NOT encoded — Leaf has no use for the array, and the
+        // deliberately NOT encoded — the view has no use for the array, and the
         // three derived strings are exactly what the control's inputs need.
         case datasetTransformsEditable
         case datasetBlankColumnsOrEmpty
@@ -209,7 +209,7 @@ struct FamilySuiteRow: Encodable {
     let caseCount: Int
     let totalPoints: Int  // sum of per-case resolved points
 
-    /// Leaf-friendly formatted case count suffix: "1 case" or "N cases".
+    /// Formatted case count suffix: "1 case" or "N cases".
     var caseCountText: String { caseCount == 1 ? "1 case" : "\(caseCount) cases" }
 
     enum CodingKeys: String, CodingKey {
@@ -218,7 +218,7 @@ struct FamilySuiteRow: Encodable {
 
     func encode(to encoder: Encoder) throws {
         // Synthesized Encodable would skip `caseCountText` because it's a
-        // computed property; Leaf needs it to render the row subtitle, so
+        // computed property; the encoded row carries the subtitle, so
         // we emit it explicitly here.
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)

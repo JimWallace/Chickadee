@@ -6,8 +6,6 @@
 import CSRF
 import ChickadeeTestSupport
 import Foundation
-import Leaf
-import LeafKit
 import SQLKit
 import VaporTesting
 
@@ -323,36 +321,6 @@ func makeTestApp(
 
 // MARK: - Leaf / CSRF setup
 
-/// Call in test setUp — after session middleware, before routes() — to enable
-/// Leaf rendering. Required so that GET requests to form pages produce HTML
-/// containing the `#csrfFormField()` hidden input, which is how tests obtain
-/// a valid session-bound CSRF token.
-func configureLeaf(_ app: Application) {
-    // LeafKit's sandbox rejects any path that contains a hidden directory component
-    // (e.g. ".claude"). When running from a git worktree under .claude, create a
-    // symlink from a clean temp path so the string-level path checks pass.
-    let viewsDir = app.directory.viewsDirectory
-    app.leaf.useChickadeeConfiguration(rootDirectory: viewsDir)
-    if viewsDir.contains("/.") {
-        let cleanPath = NSTemporaryDirectory() + "chickadee-leaf-\(UUID().uuidString)"
-        try? FileManager.default.removeItem(atPath: cleanPath)
-        try? FileManager.default.createSymbolicLink(atPath: cleanPath, withDestinationPath: viewsDir)
-        app.leaf.useChickadeeConfiguration(rootDirectory: cleanPath + "/")
-        // Recorded so tearDownTestApp removes the symlink — one per app adds
-        // up across a worktree session (#1298's leak class, in miniature).
-        app.storage[LeafViewsSymlinkKey.self] = cleanPath
-    }
-    app.views.use(.leaf)
-    app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
-    // rawJSON is safe to register in tests (pure string passthrough).
-    // csrfToken / appVersion are intentionally NOT registered here — they
-    // trigger CSRF.createToken / version lookups that assume a more complete
-    // middleware stack than the minimal test app.  Pages that embed
-    // `#csrfToken()` or `#appVersion()` will render those tokens verbatim;
-    // no existing test asserts on that markup.
-    app.leaf.tags["rawJSON"] = RawJSONTag()
-    // Safe in the minimal test app: reads only securityConfiguration, which
-    // falls back to `.default` (30 min) when unset.
-    app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
-    app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
-}
+/// A no-op since the server stopped rendering Leaf. Kept only so the existing
+/// call sites build; the test-harness change removes it.
+func configureLeaf(_ app: Application) {}

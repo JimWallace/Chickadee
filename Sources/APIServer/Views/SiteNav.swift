@@ -1,6 +1,6 @@
 // APIServer/Views/SiteNav.swift
 //
-// The site nav and the course tab strip from `base.leaf`.
+// The site nav and the course tab strip.
 
 import Elementary
 
@@ -10,7 +10,7 @@ struct SiteNav: HTML {
     var body: some HTML {
         nav(.class("nav")) {
             a(.class("nav-brand"), .href("/")) {
-                // The spaces match base.leaf. The flex gap sets the visible spacing.
+                // The flex gap, not these spaces, sets the visible spacing.
                 img(.class("nav-brand-logo"), .src(page.asset("/images/chickadee-icon-alt.png")), .alt(""))
                 " "
                 span { "Chickadee" }

@@ -12,8 +12,8 @@
 // and surfaced a 404 for handlers that render a result view directly
 // (admin / instructor bulk-enroll, etc.).  v0.4.119+.
 //
-// Lived inline at the foot of base.leaf until #1516 took 'unsafe-inline' out
-// of the CSP script-src.  It carries no Leaf interpolation, so moving it to a
+// Lived inline at the foot of the old base template until #1516 took 'unsafe-inline' out
+// of the CSP script-src.  It carries no template interpolation, so moving it to a
 // file is a byte-for-byte lift.  A nonce would have been the wrong answer
 // here in any case: this script hands the document to `document.write`, and a
 // written document inherits the CSP of the response that wrote it, not a

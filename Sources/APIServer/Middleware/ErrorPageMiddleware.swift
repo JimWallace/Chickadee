@@ -1,4 +1,4 @@
-// APIServer/Middleware/LeafErrorMiddleware.swift
+// APIServer/Middleware/ErrorPageMiddleware.swift
 //
 // Catches all errors thrown by route handlers or downstream middleware and
 // renders the branded HTML error page (ErrorPage) for browser requests.  API and worker
@@ -14,7 +14,7 @@
 
 import Vapor
 
-struct LeafErrorMiddleware: AsyncMiddleware {
+struct ErrorPageMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
         do {
             return try await next.respond(to: request)

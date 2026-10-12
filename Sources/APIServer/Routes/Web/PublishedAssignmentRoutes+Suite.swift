@@ -121,7 +121,7 @@ func suiteStateJSON(fromManifest manifest: String, zipPath: String? = nil) async
 /// or no sections are defined at all.  The trailing block renders
 /// Renders the unified Global Inputs editor rows: both literal
 /// `globalVariables` (Slice 1) and `globalExpressions` (Slice 2),
-/// pre-serialised so the Leaf template can stuff each value cell into
+/// pre-serialised so the editor can stuff each value cell into
 /// an `<input value="">`.  Literals appear first (in declared order),
 /// expressions follow (each pre-fixed with `=` so the editor JS
 /// classifies them on load).

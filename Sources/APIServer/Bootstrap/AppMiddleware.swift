@@ -6,10 +6,10 @@
 //   SecurityHeadersMiddleware — outermost so it adds CSP / nosniff /
 //                               Permissions-Policy to EVERY response,
 //                               including 404s rendered by
-//                               LeafErrorMiddleware, static assets served
+//                               ErrorPageMiddleware, static assets served
 //                               by FileMiddleware, and 301s from
 //                               HTTPSRedirectMiddleware
-//   LeafErrorMiddleware     — catches every downstream error
+//   ErrorPageMiddleware     — catches every downstream error
 //   HTTPSRedirectMiddleware — only when enforceHTTPS, before sessions
 //   EditorAssetFastPathMiddleware — serves the vendored editor asset trees
 //                               (/jupyterlite/build, /jupyterlite/extensions,
@@ -46,8 +46,6 @@
 //
 // Extracted from configure(_:) in #496.
 
-import CSRF
-import Leaf
 import Vapor
 
 func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
@@ -85,7 +83,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
 
     // Security headers run *outermost* so that CSP, X-Content-Type-Options,
     // Permissions-Policy, etc. land on every response — including 404s
-    // produced by LeafErrorMiddleware, static-asset responses served by
+    // produced by ErrorPageMiddleware, static-asset responses served by
     // FileMiddleware, and 301s issued by HTTPSRedirectMiddleware.  Each of
     // those middlewares either short-circuits the chain or builds its own
     // response, so middleware registered *after* them never sees the
@@ -121,7 +119,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
 
     // Error page middleware sits beneath SecurityHeadersMiddleware so it
     // catches errors from all subsequent middleware and route handlers.
-    app.middleware.use(LeafErrorMiddleware())
+    app.middleware.use(ErrorPageMiddleware())
     if securityConfiguration.enforceHTTPS {
         app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
     }
@@ -194,20 +192,12 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
 
     // MARK: - Views + static files
 
-    app.leaf.useChickadeeConfiguration(rootDirectory: app.directory.viewsDirectory)
-    app.views.use(.leaf)
-    app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
-    app.leaf.tags["csrfToken"] = CSRFTokenTag()
-    app.leaf.tags["appVersion"] = AppVersionTag()
-    app.leaf.tags["mcpEnabled"] = MCPEnabledTag()
-    app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
-    app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
-    app.leaf.tags["rawJSON"] = RawJSONTag()
-    // The Elementary pages embed the same sprites (docs/elementary-spike.md).
+    // Every page is an Elementary view. The two static SVG sprites they inline
+    // are read once here (Resources/Sprites/, docs/elementary-spike.md).
     app.loadSprites()
     // FileMiddleware short-circuits the responder chain (it returns without
     // calling next), so middleware registered AFTER it only runs for dynamic
-    // Leaf-rendered pages — which is why COEPMiddleware (after it) covers the
+    // pages — which is why COEPMiddleware (after it) covers the
     // dynamic notebook page, while NotebookAssetIsolationMiddleware (before it)
     // is needed to decorate the static /jupyterlite/* responses. Cross-origin
     // isolation for the editor — which gives the Pyodide kernel SharedArrayBuffer

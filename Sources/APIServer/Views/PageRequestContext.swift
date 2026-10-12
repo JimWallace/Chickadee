@@ -1,8 +1,8 @@
 // APIServer/Views/PageRequestContext.swift
 //
 // The request-scoped values every Elementary page needs, resolved once per
-// request. These are what the Leaf custom tags (`csrfToken`, `appVersion`,
-// `sessionIdleTimeoutSeconds`, ...) read from the request at render time.
+// request: the CSRF token, the app version, the idle-timeout settings and the
+// static sprites.
 
 import CSRF
 import Core
@@ -14,12 +14,12 @@ struct PageRequestContext: Sendable {
     let appVersion: String
     let sessionIdleTimeoutSeconds: Int
     let sessionIdleWarningSeconds: Int
-    /// The inline icon sprite (`_icons.leaf`), loaded once at startup.
+    /// The inline icon sprite (`Resources/Sprites/icons.svg`), loaded once at startup.
     let iconSprite: String
     /// True when the content-authoring MCP endpoint is mounted. The admin tab
     /// bar shows its MCP item only then.
     var mcpEnabled = false
-    /// The avatar sprite (`_avatar-sprite.leaf`). Only pages that show an
+    /// The avatar sprite (`Resources/Sprites/avatar-sprite.svg`). Only pages that show an
     /// avatar render it, through `AvatarSprite`.
     var avatarSprite = ""
 
@@ -70,13 +70,13 @@ private struct SpriteStorageKey: StorageKey {
     typealias Value = [StaticSprite: String]
 }
 
-/// A static SVG sprite in the views directory. Neither file holds Leaf tags,
-/// so its bytes are the rendered markup.
+/// A static SVG sprite in `Resources/Sprites/`. Its bytes are the rendered
+/// markup.
 enum StaticSprite: String, CaseIterable, Sendable {
     /// The Feather icons, inlined on every page by the layout.
-    case icons = "_icons.leaf"
+    case icons = "icons.svg"
     /// The avatar parts, inlined once by each page that shows an avatar.
-    case avatars = "_avatar-sprite.leaf"
+    case avatars = "avatar-sprite.svg"
 }
 
 extension Application {
@@ -96,6 +96,7 @@ extension Application {
     }
 
     private func readSprite(_ sprite: StaticSprite) -> String {
-        (try? String(contentsOfFile: directory.viewsDirectory + sprite.rawValue, encoding: .utf8)) ?? ""
+        let path = directory.resourcesDirectory + "Sprites/" + sprite.rawValue
+        return (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
     }
 }

@@ -19,8 +19,8 @@ struct SlipDayLedgerSpendRow: Encodable {
     let extensionDueAtText: String
     let isRefunded: Bool
     let refundedAtText: String
-    /// Precomputed `!isRefunded && canManageLedger` (LeafKit can't evaluate
-    /// compound conditions).
+    /// Precomputed `!isRefunded && canManageLedger` (kept from the Leaf
+    /// templates, which could not evaluate compound conditions).
     let canRefund: Bool
 }
 
@@ -35,7 +35,7 @@ struct SlipDayStudentRow: Encodable {
     let remaining: Int
     let total: Int
     let adjustment: Int
-    /// Precomputed `!spends.isEmpty` (Leaf's `array.isEmpty` is unreliable).
+    /// Precomputed `!spends.isEmpty` (kept from the Leaf templates).
     let hasSpends: Bool
     let spends: [SlipDayLedgerSpendRow]
     /// The student's own seeded avatar, at the roster size.

@@ -2,7 +2,7 @@
 //
 // Resolves the course-aware nav context once per authenticated web request and
 // caches it on the request, so the shared nav bar (the Instructor link and the
-// course-tab strips, rendered by base.leaf) appears on *every* page.
+// course-tab strips, rendered by BaseLayout) appears on *every* page.
 //
 // Without this, pages whose handlers build only a `req.currentUserContext` —
 // the admin panel, the account page, the enrol page, and many others — render

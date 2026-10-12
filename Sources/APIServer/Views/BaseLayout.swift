@@ -1,11 +1,10 @@
 // APIServer/Views/BaseLayout.swift
 //
-// The Elementary port of `base.leaf`: the document shell, the site chrome and
-// the flash banners. The two must render the same markup while both exist.
+// The document shell, the site chrome and the flash banners.
 
 import Elementary
 
-/// The flash banners (`_flash.leaf`): the post-redirect one-shots and the
+/// The flash banners: the post-redirect one-shots and the
 /// assignment editors' pre-redirect notice.
 /// The one-shot messages the layout shows above the page. An empty string
 /// counts as no message, so a bare `?ok=` in a redirect draws no empty banner.

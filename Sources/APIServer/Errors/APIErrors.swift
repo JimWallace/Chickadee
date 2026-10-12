@@ -90,7 +90,7 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
 /// Adopted incrementally — sites with explicit `reason:` strings on
 /// `Abort(...)` convert one-to-one; sites that throw a bare
 /// `Abort(.X)` with no `reason:` may stay bare and rely on
-/// `LeafErrorMiddleware.friendlyReason` for the user-facing default,
+/// `ErrorPageMiddleware.friendlyReason` for the user-facing default,
 /// or convert to the typed case if they have meaningful context to
 /// add at the site.
 enum AppError: AbortError, CustomStringConvertible {

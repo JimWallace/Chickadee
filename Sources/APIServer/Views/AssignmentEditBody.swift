@@ -16,8 +16,6 @@
 // Several forms live outside the multipart Save & Validate form on purpose:
 // a browser strips a nested form, and each of them persists through its own
 // endpoint, so it neither closes nor re-validates the assignment.
-//
-// Keep in step with `_assignment-edit-body.leaf` while both exist.
 
 import Elementary
 

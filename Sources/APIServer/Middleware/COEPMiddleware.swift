@@ -1,7 +1,7 @@
 // APIServer/Middleware/COEPMiddleware.swift
 //
 // Adds Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers
-// to dynamic (Leaf-rendered) pages that require cross-origin isolation.
+// to dynamic (server-rendered) pages that require cross-origin isolation.
 //
 // Cross-origin isolation (COOP same-origin + COEP require-corp) is what makes
 // `SharedArrayBuffer` available, which the kernel needs to run synchronous code

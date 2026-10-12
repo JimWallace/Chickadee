@@ -37,7 +37,7 @@
 //
 // Ceilings come from <meta name="session-idle-timeout-seconds"> and
 // <meta name="session-idle-warning-seconds">, kept in sync with the server via
-// the #sessionIdleTimeoutSeconds() / #sessionIdleWarningSeconds() Leaf tags. A
+// the layout, which writes both from the security configuration. A
 // timeout of 0 leaves the watchdog dormant.
 
 (function () {

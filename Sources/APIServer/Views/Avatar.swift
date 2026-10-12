@@ -1,7 +1,6 @@
 // APIServer/Views/Avatar.swift
 //
-// One generated student chickadee, the Elementary port of `_avatar.leaf`. It
-// draws from an `AvatarPresentation` (Core/AvatarMarkup.swift), which carries
+// One generated student chickadee. It draws from an `AvatarPresentation` (Core/AvatarMarkup.swift), which carries
 // palette token names and symbol references, never colours or path data.
 //
 // The symbols live in the avatar sprite. A page that shows a bird must also
@@ -10,7 +9,7 @@
 // The style attribute holds custom-property assignments and nothing else, the
 // one inline style the UI rules allow. The labelled bird announces whose it
 // is; the decorative one is hidden, because the text beside it names the
-// person. Keep this in step with `_avatar.leaf` while both exist.
+// person.
 
 import Core
 import Elementary

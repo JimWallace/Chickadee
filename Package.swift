@@ -18,8 +18,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
         .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.12.0"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.9.0"),
-        .package(url: "https://github.com/vapor/leaf.git", from: "4.5.1"),
-        // Spike (docs/elementary-spike.md): type-safe HTML views as Swift.
+        // Every web page is an Elementary view (docs/elementary-spike.md).
         // Pre-1.0, so pinned to the minor.
         .package(url: "https://github.com/elementary-swift/elementary.git", .upToNextMinor(from: "0.8.2")),
         .package(url: "https://github.com/vapor/jwt.git", from: "5.1.2"),
@@ -102,7 +101,6 @@ let package = Package(
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
-                .product(name: "Leaf", package: "leaf"),
                 .product(name: "Elementary", package: "elementary"),
                 .product(name: "JWT", package: "jwt"),
                 // RSA key generation for the LTI 1.3 tool key; JWTKit can
@@ -225,7 +223,6 @@ let package = Package(
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "CSRF", package: "CSRF"),
-                .product(name: "Leaf", package: "leaf"),
                 .product(name: "Elementary", package: "elementary"),
             ],
             path: "Tests/APITests",

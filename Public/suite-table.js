@@ -1407,13 +1407,13 @@
         // Flush any pending suite-state push AND any pending
         // section-vars auto-saves before letting the multipart form
         // submit.  v0.4.101: also awaits `window.chickadeeFlushSectionVars`
-        // (wired by assignment-edit.leaf's section-vars IIFE) so the
+        // (wired by the assignment editor's section-vars script) so the
         // main "Save & Validate" button also persists any shared-inputs
         // edits the instructor had in progress.
         //
         // v0.4.133: re-submit via `form.requestSubmit()` (NOT
         // `form.submit()`).  `form.submit()` deliberately bypasses
-        // submit-event listeners — including base.leaf's multipart-CSRF
+        // submit-event listeners — including multipart-forms.js's multipart-CSRF
         // intercept that adds `x-csrf-token` to the request headers.
         // Without that header, the multipart body's `_csrf` field is
         // unreachable to the CSRF middleware (the body isn't buffered
@@ -1426,7 +1426,7 @@
                 if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
 
                 // Second pass: the flushes are done and we requested a
-                // re-submit.  Skip our handler so base.leaf's listener
+                // re-submit.  Skip our handler so multipart-forms.js's listener
                 // can intercept the (now-clean) multipart submit.
                 if (form.__chickadeeFlushed) {
                     form.__chickadeeFlushed = false;
@@ -1447,7 +1447,7 @@
                     } else {
                         // Fallback for ancient browsers without
                         // requestSubmit — dispatch a synthesized submit
-                        // event so base.leaf's listener still fires.
+                        // event so multipart-forms.js's listener still fires.
                         form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
                     }
                 }

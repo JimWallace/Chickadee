@@ -1,6 +1,6 @@
 // APIServer/Routes/Web/AdminContextTypes.swift
 //
-// Leaf template context types for the admin dashboard and its sub-pages.
+// View-context types for the admin dashboard and its sub-pages.
 // Separated from AdminRoutes.swift to keep route handlers readable.
 
 import Core
@@ -15,7 +15,7 @@ struct AdminUserRow: Content {
     let lastSeenAt: String?
     /// The user's own seeded avatar, at the roster size; nil on the JSON feed's
     /// decode path for rows that predate it. `hasAvatar` is the flat flag the
-    /// template branches on (a bare optional in a Leaf conditional is unreliable).
+    /// view branches on (kept from the Leaf templates).
     var avatar: AvatarPresentation?
     var hasAvatar: Bool = false
     /// True for the row of the admin viewing the list. Its role menu is
@@ -256,8 +256,7 @@ struct AdminCourseEnrolledUserRow: Encodable {
     let displayName: String?
     let role: String
     /// The person's own seeded avatar, at the roster size. `hasAvatar` is the
-    /// flat flag the template branches on (a bare optional in a Leaf
-    /// conditional is unreliable).
+    /// flat flag the view branches on (kept from the Leaf templates).
     var avatar: AvatarPresentation?
     var hasAvatar: Bool = false
     var roleSelect: RoleSelectCell?

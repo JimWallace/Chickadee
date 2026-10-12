@@ -1,6 +1,6 @@
 // APIServer/Views/Icon.swift
 //
-// One icon from the inline sprite (`_icons.leaf`).
+// One icon from the inline sprite (`Resources/Sprites/icons.svg`).
 
 import Elementary
 

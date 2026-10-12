@@ -211,7 +211,7 @@
     });
 
     // ── UWaterloo important-date proximity warning ────────────────────────────
-    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    // Shared implementation (Public/chickadee-ui.js, loaded by the layout).
     // The compact publish form keeps its shorter label.
     document.querySelectorAll('.js-publish-due-date').forEach(function (input) {
         var warning = input.closest('form')?.querySelector('.publish-uw-warning');

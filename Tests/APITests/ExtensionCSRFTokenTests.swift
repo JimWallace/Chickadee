@@ -14,7 +14,7 @@
 // The recoverable error page for the stale-token case is covered against the
 // production error middleware in SecurityAndHealthTests
 // (`leafErrorMiddlewareRendersRecoverableMessageForCSRFFailures`); the test
-// harness here doesn't install LeafErrorMiddleware.
+// harness here doesn't install ErrorPageMiddleware.
 //
 // `extensionSaveWithStreamedBodyPassesCSRF` pins the *actual* root cause of
 // the production report: Vapor dispatches a request whose body did not arrive

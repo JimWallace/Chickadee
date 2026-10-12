@@ -5,7 +5,6 @@ import ConsoleKit
 import Core
 import Fluent
 import Foundation
-import Leaf
 import Logging
 import Vapor
 
