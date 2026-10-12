@@ -6,7 +6,7 @@
 // and go to `.github-app-secrets`, so nobody copies a key by hand and nothing
 // needs an environment variable.
 //
-//   GET  /admin/github           → admin-github.leaf (the manifest form, or the App)
+//   GET  /admin/github           → AdminGitHubPage (the manifest form, or the App)
 //   GET  /admin/github/callback  → GitHub returns here with the code to exchange
 //   POST /admin/github/delete    → remove the registration and the secrets file
 //
@@ -37,7 +37,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/github
 
     @Sendable
-    func githubPage(req: Request) async throws -> View {
+    func githubPage(req: Request) async throws -> Response {
         let notice = req.query[String.self, at: "ok"].flatMap(GitHubAdminNotice.init(rawValue:))
         let error = req.query[String.self, at: "error"].flatMap(GitHubAppRegistrationError.init(rawValue:))
         return try await renderGitHubPage(
@@ -134,7 +134,7 @@ extension AdminRoutes {
 
     private func renderGitHubPage(
         req: Request, options: GitHubAppOptions, flashSuccess: String?, flashError: String?
-    ) async throws -> View {
+    ) async throws -> Response {
         let organizationText = options.organizationText
         let registration = try await GitHubAppRegistration.state(req: req)
         let registered = registration.app
@@ -167,26 +167,25 @@ extension AdminRoutes {
         if case .registered(let app, let secrets) = registration {
             grants = await GitHubAppGrants.ofApp(app, secrets: secrets, req: req)
         }
-        let ctx = AdminGitHubContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "github",
-            baseURLConfigured: baseURL != nil,
-            app: registered.map(AdminGitHubAppDetails.init(app:)),
-            secretsUnavailable: registration.problem != nil,
-            secretsMissing: registration.problem?.isMissing ?? false,
-            secretsPath: registration.problem?.path ?? "",
-            capabilities: grants.map(GitHubCapabilityRow.rows(for:)) ?? [],
-            capabilitiesIncomplete: grants.map { !$0.missing.isEmpty } ?? false,
-            capabilitiesUnknown: registration.problem == nil && registered != nil && grants == nil,
-            creation: creation,
-            organization: organizationText,
-            organizationOpen: options.anySet,
-            courseRepositories: options.courseRepositories,
-            pushEvents: options.pushEvents,
-            commitStatuses: options.commitStatuses,
-            flashSuccess: flashSuccess,
-            flashError: flashError)
-        return try await req.view.render("admin-github", ctx)
+        return try await HTMLResponse {
+            AdminGitHubPage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(success: flashSuccess, error: flashError),
+                baseURLConfigured: baseURL != nil,
+                app: registered.map(AdminGitHubAppDetails.init(app:)),
+                secretsUnavailable: registration.problem != nil,
+                secretsMissing: registration.problem?.isMissing ?? false,
+                secretsPath: registration.problem?.path ?? "",
+                capabilities: grants.map(GitHubCapabilityRow.rows(for:)) ?? [],
+                capabilitiesIncomplete: grants.map { !$0.missing.isEmpty } ?? false,
+                capabilitiesUnknown: registration.problem == nil && registered != nil && grants == nil,
+                creation: creation,
+                organization: organizationText,
+                organizationOpen: options.anySet,
+                courseRepositories: options.courseRepositories,
+                pushEvents: options.pushEvents,
+                commitStatuses: options.commitStatuses)
+        }.encodeResponse(for: req)
     }
 }
 

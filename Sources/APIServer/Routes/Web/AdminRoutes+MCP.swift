@@ -19,7 +19,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/mcp
 
     @Sendable
-    func mcpPage(req: Request) async throws -> View {
+    func mcpPage(req: Request) async throws -> Response {
         try await renderMCPPage(
             req: req, mintedToken: nil, mintedFor: nil, mintedScopes: nil,
             error: req.query[String.self, at: "error"])
@@ -53,7 +53,7 @@ extension AdminRoutes {
     // MARK: - POST /admin/mcp/accounts/:userID/token
 
     @Sendable
-    func mintMCPToken(req: Request) async throws -> View {
+    func mintMCPToken(req: Request) async throws -> Response {
         struct Body: Content { var scope: String? }
         let user = try await findMCPAccount(req)
         let mcp = req.application.appConfig.mcp
@@ -125,7 +125,7 @@ extension AdminRoutes {
         mintedFor: String?,
         mintedScopes: String?,
         error: String?
-    ) async throws -> View {
+    ) async throws -> Response {
         let mcp = req.application.appConfig.mcp
         let endpoints = MCPEndpoints.resolve(mcp: mcp, security: req.application.appConfig.security)
         let enabled = mcp.mode.isMounted && req.application.mcpTokenAuthority != nil && endpoints != nil
@@ -171,25 +171,24 @@ extension AdminRoutes {
         let allGrants = try await MCPGrant.query(on: req.db).sort(\.$createdAt, .descending).all()
         let grantRows = try await MCPAgentsRoutes.grantRows(allGrants, includeOwner: true, on: req.db)
 
-        let ctx = AdminMCPContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "mcp",
-            enabled: enabled,
-            writeAllowed: mcp.mode.scopeCeiling.contains(.write),
-            issuer: endpoints?.issuer,
-            resource: endpoints?.resource,
-            tokenTTLSeconds: mcp.tokenTTLSeconds,
-            showServiceAccounts: req.application.appConfig.auth.mode == .local,
-            accounts: accounts,
-            allCourses: allCourses,
-            grants: grantRows,
-            mintedToken: mintedToken,
-            mintedFor: mintedFor,
-            mintedScopes: mintedScopes,
-            error: error,
-            modeLabel: enabled ? (mcp.mode.scopeCeiling.contains(.write) ? "Read/write" : "Read-only") : "Inactive",
-            tokenLifetimeText: Self.lifetimeText(seconds: mcp.tokenTTLSeconds))
-        return try await req.view.render("admin-mcp", ctx)
+        return try await HTMLResponse {
+            AdminMCPPage(
+                page: PageRequestContext(request: req),
+                enabled: enabled,
+                writeAllowed: mcp.mode.scopeCeiling.contains(.write),
+                issuer: endpoints?.issuer,
+                resource: endpoints?.resource,
+                tokenTTLSeconds: mcp.tokenTTLSeconds,
+                showServiceAccounts: req.application.appConfig.auth.mode == .local,
+                accounts: accounts,
+                grants: grantRows,
+                mintedToken: mintedToken,
+                mintedFor: mintedFor,
+                mintedScopes: mintedScopes,
+                error: error,
+                modeLabel: enabled ? (mcp.mode.scopeCeiling.contains(.write) ? "Read/write" : "Read-only") : "Inactive",
+                tokenLifetimeText: Self.lifetimeText(seconds: mcp.tokenTTLSeconds))
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /admin/mcp/accounts/:userID/enroll

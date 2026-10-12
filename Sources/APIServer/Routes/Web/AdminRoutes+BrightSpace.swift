@@ -30,7 +30,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/brightspace
 
     @Sendable
-    func brightspacePage(req: Request) async throws -> View {
+    func brightspacePage(req: Request) async throws -> Response {
         let appCreds = req.application.brightSpaceAppCredentials
         let authorized = req.application.brightSpaceClient != nil
         let stored = try await BrightSpaceCredentialStore.loadGlobal(on: req.db)
@@ -61,21 +61,17 @@ extension AdminRoutes {
             SecurityHeadersMiddleware.allowFormAction(lmsOrigin(appCreds.baseURL), on: req)
         }
 
-        let ctx = AdminBrightspaceContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "brightspace",
-            configured: appCreds != nil,
-            authorized: authorized,
-            baseURL: appCreds?.baseURL,
-            identityName: stored?.identityName,
-            keySource: keySource,
-            callbackURL: brightspaceCallbackURL(req),
-            publicBaseURLSet: req.application.securityConfiguration.publicBaseURL != nil,
-            capturedAt: capturedAt,
-            flashSuccess: flashSuccess,
-            flashError: flashError
-        )
-        return try await req.view.render("admin-brightspace", ctx)
+        return try await HTMLResponse {
+            AdminBrightspacePage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(success: flashSuccess, error: flashError),
+                configured: appCreds != nil,
+                authorized: authorized,
+                baseURL: appCreds?.baseURL,
+                identityName: stored?.identityName,
+                keySource: keySource,
+                capturedAt: capturedAt)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /admin/brightspace/authorize
@@ -303,21 +299,4 @@ extension AdminRoutes {
         let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
         return trimmed + "/admin/brightspace/valence-callback"
     }
-}
-
-/// Render context for `admin-brightspace.leaf`.
-private struct AdminBrightspaceContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let configured: Bool
-    let authorized: Bool
-    let baseURL: String?
-    let identityName: String?
-    /// "authorized" (stored key), "env" (BRIGHTSPACE_USER_KEY), or "none".
-    let keySource: String
-    let callbackURL: String?
-    let publicBaseURLSet: Bool
-    let capturedAt: String?
-    let flashSuccess: String?
-    let flashError: String?
 }
