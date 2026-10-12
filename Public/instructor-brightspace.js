@@ -1,4 +1,4 @@
-// Page wiring for the instructor BrightSpace page (instructor-brightspace.leaf):
+// Page wiring for the instructor BrightSpace page (InstructorBrightspacePage):
 // the connection test button and the grade-item pickers.  Extracted from the
 // template's inline script block so it is linted and testable; the reserved
 // do-not-sync token rides on the datalist's data-do-not-sync-token attribute
