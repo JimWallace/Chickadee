@@ -61,11 +61,12 @@ page_style_blocks() {
 # view now, so the page-CSS rules skip the template copy rather than count the
 # same rules twice. The list shrinks to nothing when the exemplars move to
 # Swift (docs/elementary-spike.md); never add a template that is still served.
-# Exceptions: body partials that `workbench.leaf` still extends after their
-# bodies moved to Swift (`_notebook-body.leaf` as `NotebookBody`,
-# `_assignment-edit-body.leaf` as `AssignmentEditBody`). Their CSS is the same
-# rules as the Swift copies, so it is counted once, from the Swift.
-retired_exemplar_templates="Resources/Views/admin-user.leaf Resources/Views/register.leaf Resources/Views/alerts.leaf Resources/Views/instructor-mcp.leaf Resources/Views/account.leaf Resources/Views/assignment-edit.leaf Resources/Views/_notebook-body.leaf Resources/Views/_assignment-edit-body.leaf"
+# Exceptions: the body partials that the exemplars `assignment-edit.leaf` and
+# `workbench.leaf` extend (`_notebook-body.leaf` as `NotebookBody`,
+# `_assignment-edit-body.leaf` as `AssignmentEditBody`). They are not served
+# either; they stay because the test resolves an exemplar's partials. Their CSS
+# is the same rules as the Swift copies, so it is counted once, from the Swift.
+retired_exemplar_templates="Resources/Views/admin-user.leaf Resources/Views/register.leaf Resources/Views/alerts.leaf Resources/Views/instructor-mcp.leaf Resources/Views/account.leaf Resources/Views/assignment-edit.leaf Resources/Views/_notebook-body.leaf Resources/Views/_assignment-edit-body.leaf Resources/Views/workbench.leaf"
 
 # Prints the templates whose page CSS the style guards read: every template
 # except the retired exemplars above.

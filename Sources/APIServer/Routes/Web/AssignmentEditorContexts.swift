@@ -4,9 +4,8 @@
 // Split from the original `AssignmentContextTypes.swift` so each `Encodable`
 // synthesis lives in its own translation unit.
 //
-// `EditAssignmentContext` feeds both `AssignmentEditBody` (the standalone
-// edit page) and `_assignment-edit-body.leaf` (the workbench's left pane), so
-// it stays a flat Leaf context while the workbench is a Leaf page.
+// `EditAssignmentContext` feeds `AssignmentEditBody`, which both the
+// standalone edit page and the workbench's left pane render.
 
 import Core
 import Fluent
@@ -16,76 +15,6 @@ import Foundation
 struct NewAssignmentNotebookContext: Encodable {
     let name: String
     let editURL: String
-}
-
-/// The assignment workbench shell (`workbench.leaf`).  Deliberately thin: the
-/// shell renders no assignment content, only the frame around iframes that
-/// each load an existing page.  Everything here is either an identifier the
-/// page JS keys on or a URL for one of those iframes.
-struct AssignmentWorkbenchContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let testSetupID: String
-    let assignmentTitle: String
-    /// The left pane's content, rendered inline by
-    /// `#extend("_assignment-edit-body", edit)`.
-    ///
-    /// Nested rather than flattened so the *same* partial serves the
-    /// standalone `/edit` page, where it resolves against a bare
-    /// `EditAssignmentContext`. LeafKit binds a partial against a sub-object
-    /// when it is passed as the extend's second parameter, so one copy of the
-    /// markup answers to both — and `embedded`, which means different things
-    /// to the two halves, stays unambiguous because each half reads its own.
-    let edit: EditAssignmentContext
-    /// The right pane's content, rendered inline by
-    /// `#extend("_notebook-body", notebook)`. Built by
-    /// `WebRoutes.workbenchNotebookContext`, the same builder the standalone
-    /// notebook page uses.
-    ///
-    /// **Optional, and that is load-bearing.** Building it reads a notebook off
-    /// disk, which throws `.notFound` for an assignment that has none yet — a
-    /// real state, since an assignment can be created and its metadata and
-    /// suite edited before any notebook is uploaded. When the workbench
-    /// composed the notebook as an iframe, a missing notebook failed *inside*
-    /// the frame and left the edit half usable; inlining it would have made
-    /// that failure 404 the whole authoring page. So the pane degrades to a
-    /// placeholder instead and the edit half stays reachable.
-    let notebook: NotebookContext?
-    /// `{"<file>:<view>": "<url>"}` for every combination that exists, as a
-    /// JSON object the page embeds and the tab handlers look up.  A lookup
-    /// table rather than one iframe per entry: there is only ever one notebook
-    /// document alive, so these are destinations, not panes.
-    ///
-    /// `view=` is always explicit in each URL — `resolveNotebookViewMode`
-    /// defaults staff to the template on a notebook that carries placeholders,
-    /// so omitting it would make "Assignment" mean the template on a
-    /// personalized lab and the rendering on every other one.
-    let notebookPaneURLsJSON: String
-    /// True when the assignment has a reference solution.  `false` omits the
-    /// Solution tab rather than disabling it — matching how the edit page
-    /// omits `solutionNotebookEditURL`.
-    let hasSolution: Bool
-    /// Per-file: whether the stored notebook still carries `{{name}}`, i.e.
-    /// whether its template and rendered views actually differ.  When they do
-    /// not, the two panes would be byte-identical and the view control is
-    /// noise, so it is not rendered.
-    let assignmentHasTemplateView: Bool
-    let solutionHasTemplateView: Bool
-    /// Escape hatch back to the full-width single-page editor.
-    let standaloneEditURL: String
-    /// Drops `.main`'s reading-column cap and gutters — the workbench sizes
-    /// itself to the viewport and scrolls inside its panes.
-    let fullBleed: Bool = true
-    /// Loads `inplace-forms.js`, which fetches this page's form POSTs instead
-    /// of letting them navigate.
-    ///
-    /// Load-bearing, not cosmetic. The edit half's writes — save, secret
-    /// reveal, create-solution, suite-section add/rename/delete, support-file
-    /// upload/delete — all answer with a redirect. In one document a
-    /// navigation would tear down the Pyodide kernel in the other half, which
-    /// is the whole failure this page was merged to avoid. When the halves
-    /// were iframes the frame absorbed it; now nothing does.
-    let inPlaceForms: Bool = true
 }
 
 struct EditAssignmentContext: Encodable {

@@ -4,8 +4,8 @@
 // editor on the right, a draggable splitter between them.
 //
 // **One document** since #1266.  Both halves are rendered inline by
-// `workbench.leaf` (`_assignment-edit-body` and `_notebook-body`, each bound to
-// its own sub-context), so this file owns layout and coordination, not
+// `WorkbenchPage` (`AssignmentEditBody` and `NotebookBody`, each built from
+// its own context), so this file owns layout and coordination, not
 // composition.  The cross-frame protocol it used to carry — postMessage, origin
 // checks, an activity forwarder — is gone with the frames.
 //
@@ -39,10 +39,10 @@
     var NOTEBOOK_MIN = 720;
     var EDIT_MIN = 380;
     // Splitter column width (.5rem) — kept in sync with .wb-splitter in
-    // workbench.leaf.  Only used for arithmetic, never for styling.
+    // WorkbenchPage.swift.  Only used for arithmetic, never for styling.
     var SPLITTER_PX = 8;
     // Below this the split is not honest: 720 + 380 + splitter.  Matches the
-    // media query in workbench.leaf.
+    // media query in WorkbenchPage.swift.
     var SINGLE_PANE_MAX = 1140;
     var KEY_STEP_PX = 24;
 

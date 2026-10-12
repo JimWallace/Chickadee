@@ -2,11 +2,11 @@
 //
 // The notebook editor's body: the toolbar, the dismissible notices, the
 // failure panel, the JupyterLite iframe and the page scripts. `NotebookPage`
-// renders it as the whole page. It takes plain values and no request, so the
-// workbench can render it in its right-hand pane once that page is ported.
+// renders it as the whole page, and `WorkbenchPage` renders it in its
+// right-hand pane. It takes plain values and no request.
 //
-// Keep in step with `_notebook-body.leaf` while both exist: `workbench.leaf`
-// still extends the partial.
+// `_notebook-body.leaf` is no longer served. It stays only because the
+// exemplar `workbench.leaf` extends it.
 //
 // Every id, data attribute, iframe attribute and script tag here is read by
 // `Public/notebook*.js`, `Public/browser-runner.js` and the isolation
