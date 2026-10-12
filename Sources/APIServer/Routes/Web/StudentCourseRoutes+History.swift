@@ -22,7 +22,7 @@ extension StudentCourseRoutes {
     // MARK: - GET /:courseCode/students/:urlToken/submissions
 
     @Sendable
-    func courseStudentSubmissionsPage(req: Request) async throws -> View {
+    func courseStudentSubmissionsPage(req: Request) async throws -> Response {
         let viewer = try req.auth.require(APIUser.self)
         let (course, student) = try await resolveCourseAndStudent(req: req)
         guard let courseID = course.id else {
@@ -135,22 +135,18 @@ extension StudentCourseRoutes {
             allSections: allSections
         )
 
-        return try await req.view.render(
-            "course-student-submissions",
-            CourseStudentSubmissionsContext(
-                currentUser: req.currentUserContext,
+        return try await HTMLResponse {
+            CourseStudentSubmissionsPage(
+                page: PageRequestContext(request: req),
                 studentName: student.displayName ?? student.username,
                 studentUsername: student.username,
-                courseCode: course.code,
                 courseName: "\(course.code) — \(course.name)",
                 backURL: "/instructor",
                 sections: sectionContexts,
                 ungroupedRows: ungroupedRows,
-                hasSections: !allSections.isEmpty,
-                hasUngrouped: !ungroupedRows.isEmpty,
-                ungroupedRowsContext: StudentAssignmentRowsContext(rows: ungroupedRows)
+                hasSections: !allSections.isEmpty
             )
-        )
+        }.encodeResponse(for: req)
     }
 
     // MARK: - courseStudentSubmissionsPage helpers

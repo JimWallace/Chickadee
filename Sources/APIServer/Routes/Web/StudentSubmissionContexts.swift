@@ -2,7 +2,8 @@
 //
 // View types for the per-student submission views: the history row that
 // `StudentAssignmentHistoryPage` and `SubmissionHistoryPage` show, and the
-// Leaf contexts of the course-scoped grouped view.  Split from the original
+// sections and rows of the course-scoped grouped view
+// (`CourseStudentSubmissionsPage`).  Split from the original
 // `AssignmentContextTypes.swift`.
 
 import Foundation
@@ -15,39 +16,10 @@ struct AssignmentSubmissionHistoryRow: Encodable {
     let gradeText: String
 }
 
-/// View context for the per-student, grouped-by-assignment view at
-/// `/:courseCode/students/:urlToken/submissions`.  Each `StudentAssignmentRow`
-/// mirrors `TestSetupRow` from the student dashboard so the same per-row
-/// chrome (status / due / grade / latest submission / badges) renders the
-/// same way, with an extra Actions column carrying instructor-only
-/// affordances (Retest, inline extension form).
-struct CourseStudentSubmissionsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let studentName: String
-    let studentUsername: String
-    let courseCode: String
-    let courseName: String
-    let backURL: String
-    let sections: [StudentAssignmentSectionContext]
-    let ungroupedRows: [StudentAssignmentRow]
-    let hasSections: Bool
-    let hasUngrouped: Bool
-
-    /// The ungrouped rows in the same shape a section has, so the rows partial
-    /// can be rendered from one definition for both cases (it reads `rows`).
-    /// STORED, not computed: a synthesized `Encodable` only encodes stored
-    /// properties, so a computed one is simply absent from the render context
-    /// and Leaf fails with "expressions should resolve to a single dictionary
-    /// value".
-    let ungroupedRowsContext: StudentAssignmentRowsContext
-}
-
-/// The one thing `_student-assignment-rows.leaf` needs. A section already
-/// satisfies this shape, so it is passed directly.
-struct StudentAssignmentRowsContext: Encodable {
-    let rows: [StudentAssignmentRow]
-}
-
+/// One course section of the per-student, grouped-by-assignment view at
+/// `/:courseCode/students/:urlToken/submissions` (`CourseStudentSubmissionsPage`).
+/// Each `StudentAssignmentRow` mirrors `TestSetupRow` from the student
+/// dashboard, with the staff-only actions added.
 struct StudentAssignmentSectionContext: Encodable {
     let sectionID: String
     let name: String

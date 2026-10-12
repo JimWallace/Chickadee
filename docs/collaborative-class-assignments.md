@@ -481,7 +481,7 @@ metadata change to the starter, not a UI feature.
 
 "Which bugs has the class found, and who found each one" has no home today. It
 belongs on the per-assignment instructor page that already carries submission
-analytics (`assignment-submissions.leaf`) rather than a new tab.
+analytics (`AssignmentSubmissionsPage`) rather than a new tab.
 
 It assembles from existing vocabulary with **zero new classes**: a
 `.page-section` holding a `.results-table`, with `.chip-ok` / `.chip-err` for the
@@ -618,7 +618,7 @@ term every five minutes would undo that.
 final state; asserting the number never decreases mid-stream.
 
 **4. The instructor coverage view.** *Small.* The table described above on
-`assignment-submissions.leaf`. Ships on slice 3 alone and makes the aggregate
+`AssignmentSubmissionsPage`. Ships on slice 3 alone and makes the aggregate
 auditable before anything grades on it.
 *Proven by:* a render test plus the `ui-review` agent.
 

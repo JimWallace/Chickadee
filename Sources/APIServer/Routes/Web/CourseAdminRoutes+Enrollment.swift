@@ -18,7 +18,7 @@ extension CourseAdminRoutes {
     // MARK: - GET /instructor/enroll-csv
 
     @Sendable
-    func enrollCSVForm(req: Request) async throws -> View {
+    func enrollCSVForm(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: caller)
         guard let courseContext = courseState.active,
@@ -29,15 +29,15 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.noActiveCourse(action: "managing enrollments")
         }
 
-        return try await req.view.render(
-            "instructor-enroll-csv",
-            EnrollCSVFormContext(
-                currentUser: req.currentUserContext,
+        return try await HTMLResponse {
+            InstructorEnrollCSVPage(
+                page: PageRequestContext(request: req),
                 courseID: courseID.uuidString,
                 courseCode: courseContext.code,
                 courseName: courseContext.name,
                 error: req.query[String.self, at: "error"]
-            ))
+            )
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /courses/:courseID/enrollment-mode
@@ -97,16 +97,15 @@ extension CourseAdminRoutes {
         }
 
         guard !rawUsernames.isEmpty else {
-            return try await req.view.render(
-                "instructor-enroll-csv",
-                EnrollCSVFormContext(
-                    currentUser: req.currentUserContext,
+            return try await HTMLResponse {
+                InstructorEnrollCSVPage(
+                    page: PageRequestContext(request: req),
                     courseID: idString,
                     courseCode: course.code,
                     courseName: course.name,
                     error: "Upload a CSV file or type at least one user ID to enrol."
                 )
-            ).encodeResponse(for: req)
+            }.encodeResponse(for: req)
         }
 
         let result = try await enrollUsernamesInCourse(

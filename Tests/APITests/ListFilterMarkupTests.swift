@@ -78,7 +78,7 @@ import Testing
                 "AdminAuditPage",
                 "AdminPage",
                 "AdminUsersPage",
-                "assignment-submissions.leaf",
+                "AssignmentSubmissionsPage",
                 "index.leaf",
                 "InstructorSlipDaysPage",
                 "InstructorStudentsPage",
@@ -190,7 +190,7 @@ import Testing
     /// the server. Nothing else is a valid filter.
     @Test func everyFilterIsEitherLiveOrInAGetForm() throws {
         let liveFilters = [
-            "AdminPage", "AdminUsersPage", "assignment-submissions.leaf", "index.leaf",
+            "AdminPage", "AdminUsersPage", "AssignmentSubmissionsPage", "index.leaf",
             "InstructorSlipDaysPage", "InstructorStudentsPage", "leaderboard.leaf",
         ]
         for input in try Self.filterInputs() {

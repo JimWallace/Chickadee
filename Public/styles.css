@@ -1484,8 +1484,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .add-section-details[open] .add-section-popup { display: block; }
 .section-block.section-dragging { opacity: .55; }
 
-/* ── Inline extension/override <details> (assignment-submissions.leaf +
-   course-student-submissions.leaf) — render the <summary> as a clean icon
+/* ── Inline extension/override <details> (AssignmentSubmissionsPage +
+   StudentAssignmentTable) — render the <summary> as a clean icon
    button aligned with the Retest/Reset buttons.  Consolidated from two
    identical embedded blocks (v0.4.x UI audit). */
 .ext-summary { margin-top: 0; list-style: none; }
@@ -1494,7 +1494,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .ext-details form { min-width: 14rem; }
 @media (max-width: 640px) { .ext-details form { min-width: 0; } }
 /* Inline set/clear panel shared by the grade-override control
-   (assignment-submissions.leaf) and the register-pending-student control
+   (GradeOverrideMenu) and the register-pending-student control
    (InstructorStudentsPage) — hoisted from a page block so both pages render
    identically. */
 .form-flush { margin: 0; }
@@ -3270,7 +3270,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    forms). Absolutely positioned under its summary button, promoted to fixed
    by app.js when open so it escapes the table's overflow clip; on a phone the
    media query drops it into static flow, where it cannot overflow. Was a page
-   block on course-student-submissions, which also had to restyle the global
+   block on the course's per-student submissions page, which also had to restyle the global
    .ext-details to position it (UI audit S7). */
 .ext-details { position: relative; }
 .popover-panel {

@@ -18,7 +18,7 @@ extension InstructorDashboardRoutes {
     // MARK: - GET /instructor/:assignmentID/submissions
 
     @Sendable
-    func assignmentSubmissionsPage(req: Request) async throws -> View {
+    func assignmentSubmissionsPage(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForStaffRead(req)
         let assignmentIDRaw = assignment.publicID
 
@@ -118,25 +118,23 @@ extension InstructorDashboardRoutes {
             formatter: fmt,
             on: req.db)
 
-        return try await req.view.render(
-            "assignment-submissions",
-            AssignmentSubmissionsContext(
-                currentUser: req.currentUserContext,
+        let aiFeedbackOpen = try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db)
+        return try await HTMLResponse {
+            AssignmentSubmissionsPage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(
+                    success: req.query[String.self, at: "notice"], error: req.query[String.self, at: "error"]),
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 metrics: metrics,
                 rows: rows,
-                flashError: req.query[String.self, at: "error"],
-                flashSuccess: req.query[String.self, at: "notice"],
                 secretRevealEnabled: secretRevealEnabled,
-                passingThresholdPercent: assignment.passingThresholdPercent,
-                aiFeedbackOpen: try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db),
+                aiFeedbackOpen: aiFeedbackOpen,
                 coverageRows: coverageRows,
-                hasCoverage: !coverageRows.isEmpty,
                 coverageSummary: assignmentCoverageSummary(coverageRows),
                 tournament: tournament
             )
-        )
+        }.encodeResponse(for: req)
     }
 
     // MARK: - assignmentSubmissionsPage helpers
