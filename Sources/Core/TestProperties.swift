@@ -278,6 +278,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// the commit as a status (docs/github-submissions.md slice 6). Only with
     /// `githubSubmission`; server-side only, like it, and encoded only when true.
     public var githubStatusChecks: Bool
+    /// The public template repository that students copy into a private
+    /// repository of their own, as `owner/name` (docs/github-submissions.md
+    /// "Starter repositories"). The submit page links to it. Server-side only,
+    /// like `githubSubmission`, and encoded only when set.
+    public var githubStarterRepository: String?
     public var requiredFiles: [String]
     public var testSuites: [TestSuiteEntry]
     public var timeLimitSeconds: Int
@@ -547,6 +552,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         submissionMode: SubmissionMode = .notebook,
         githubSubmission: Bool = false,
         githubStatusChecks: Bool = false,
+        githubStarterRepository: String? = nil,
         requiredFiles: [String] = [],
         testSuites: [TestSuiteEntry] = [],
         timeLimitSeconds: Int = 10,
@@ -573,6 +579,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.submissionMode = submissionMode
         self.githubSubmission = githubSubmission
         self.githubStatusChecks = githubStatusChecks
+        self.githubStarterRepository = githubStarterRepository
         self.requiredFiles = requiredFiles
         self.testSuites = testSuites
         self.timeLimitSeconds = timeLimitSeconds
@@ -609,6 +616,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
             try c.decodeIfPresent(SubmissionMode.self, forKey: .submissionMode) ?? .notebook
         githubSubmission = try c.decodeIfPresent(Bool.self, forKey: .githubSubmission) ?? false
         githubStatusChecks = try c.decodeIfPresent(Bool.self, forKey: .githubStatusChecks) ?? false
+        githubStarterRepository = try c.decodeIfPresent(String.self, forKey: .githubStarterRepository)
         requiredFiles = try c.decodeIfPresent([String].self, forKey: .requiredFiles) ?? []
         testSuites = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites) ?? []
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
@@ -659,6 +667,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case submissionMode
         case githubSubmission
         case githubStatusChecks
+        case githubStarterRepository
         case requiredFiles
         case testSuites
         case timeLimitSeconds
@@ -692,6 +701,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         if githubStatusChecks {
             try c.encode(githubStatusChecks, forKey: .githubStatusChecks)
         }
+        try c.encodeIfPresent(githubStarterRepository, forKey: .githubStarterRepository)
         try c.encode(requiredFiles, forKey: .requiredFiles)
         try c.encode(testSuites, forKey: .testSuites)
         try c.encode(timeLimitSeconds, forKey: .timeLimitSeconds)

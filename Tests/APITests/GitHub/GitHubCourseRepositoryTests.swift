@@ -26,7 +26,7 @@ import VaporTesting
     static let template = GitHubRepository(
         id: 300, fullName: "cs101-org/lab-template", ownerID: orgID, defaultBranch: "main")
     static let made = GitHubRepository(
-        id: 400, fullName: "cs101-org/lab-1-octo-student", ownerID: orgID, defaultBranch: "main")
+        id: 400, fullName: "cs101-org/lab-1-octo-student", ownerID: orgID, defaultBranch: "main", isPrivate: true)
     static let studentOwned = GitHubRepository(
         id: 100, fullName: "octo-student/lab1", ownerID: studentGitHubID, defaultBranch: "main")
     static let manifest = """
