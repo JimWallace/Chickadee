@@ -59,7 +59,6 @@ import Testing
         let files = Set(inputs.map(\.file))
         #expect(
             files == [
-                "admin-audit.leaf",
                 "admin.leaf",
                 "admin-users.leaf",
                 "assignment-submissions.leaf",

@@ -232,16 +232,15 @@ struct AdminRoutes: RouteCollection {
     // MARK: - GET /admin/storage
 
     @Sendable
-    func storagePage(req: Request) async throws -> View {
+    func storagePage(req: Request) async throws -> HTMLResponse<AdminStoragePage> {
         let storage = try await StorageUsage.context(app: req.application)
-        let ctx = AdminStoragePageContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "storage",
-            storage: storage,
-            assignmentRows: AdminStorageShareRow.rows(
-                from: storage.assignments, totalBytes: storage.totalBytes)
-        )
-        return try await req.view.render("admin-storage", ctx)
+        return HTMLResponse {
+            AdminStoragePage(
+                page: PageRequestContext(request: req),
+                storage: storage,
+                assignmentRows: AdminStorageShareRow.rows(
+                    from: storage.assignments, totalBytes: storage.totalBytes))
+        }
     }
 
     // MARK: - POST /admin/users/:id/role
