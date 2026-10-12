@@ -259,9 +259,7 @@ enum ListFilterPolicy {
 /// renders no heading.  Each group carries one ordered `items` list that
 /// interleaves the section's assignments and content items by their shared
 /// `sort_order` (the two stacked lanes were merged in the unified-interleave
-/// pass).  The row markup is inlined in `index.leaf` (rather than a shared
-/// `#extend`'d partial) because LeafKit 1.x raises a false "cyclically
-/// referenced" error if the same partial is extended from more than one site.
+/// pass).  `IndexPage` renders it.
 struct IndexDisplayGroup: Encodable {
     /// A filter box is noise on a short list.  Shown only on named sections with
     /// at least this many rows; the ungrouped bucket never gets one.
@@ -276,16 +274,6 @@ struct IndexDisplayGroup: Encodable {
         self.items = items
         self.showFilter = name != nil && ListFilterPolicy.showsFilter(rowCount: items.count)
     }
-}
-
-struct IndexContext: Encodable {
-    let displayGroups: [IndexDisplayGroup]  // sections (named) then the ungrouped bucket
-    let hasAny: Bool  // true if any group has visible items
-    let currentUser: CurrentUserContext?
-    /// "Slip days: 1 of 2 remaining." under the course heading; nil hides the
-    /// line (policy off, staff viewer, or no active course).  Precomputed as
-    /// one string so the template stays a plain nil-check (#1228).
-    let slipDaySummary: String?
 }
 
 // MARK: - Notebook page
@@ -500,7 +488,6 @@ struct SubmissionContext: Encodable {
     /// E.g. "↑ fixed 2 tests · ↓ broke 1 test since attempt 3"; nil on first attempt.
     let deltaHeaderText: String?
     let badges: [AchievementBadge]
-    let currentUser: CurrentUserContext?
     /// Class-wide goals for this assignment with their current progress, shown
     /// as an "Achievements" section.  Empty when the assignment has no class
     /// goals (or the sweep hasn't produced a snapshot yet).

@@ -1,4 +1,4 @@
-// Submissions stat card (assignment-submissions.leaf): cycle the pre-rendered
+// Submissions stat card (AssignmentSubmissionsPage): cycle the pre-rendered
 // 24h/7d/30d sparklines on click/Enter/Space. Each window's bars are
 // server-rendered (the 24h view is the only one visible without JS); this
 // just swaps which one shows and updates the window chip + headline count to

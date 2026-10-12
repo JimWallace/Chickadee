@@ -1679,7 +1679,7 @@ test('omits _ck_inputs.py when the seed endpoint returns no personalizedInputs',
 // ── Section grouping (results displayed per test-suite section) ──────────────
 // The browser-graded results views (notebook.js, assignment-validate.js) group
 // outcomes into one table per section, matching the server-rendered submission
-// view (submission.leaf).  The runner supplies the data — the ordered section
+// view (SubmissionPage).  The runner supplies the data — the ordered section
 // list plus a sectionID parallel to the outcomes — and the shared
 // BrowserRunner.groupBySection buckets them, mirroring the server's
 // groupOutcomesBySection (Tests/APITests/SectionsTests.swift).

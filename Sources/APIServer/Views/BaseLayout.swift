@@ -55,7 +55,7 @@ struct BaseLayout<Content: HTML>: HTML {
     }
 
     var body: some HTML {
-        HTMLRaw("<!DOCTYPE html>")
+        Doctype()
         html(.lang("en")) {
             documentHead
             Elementary.body {
@@ -170,7 +170,17 @@ struct FlashBanner<Content: HTML>: HTML {
         self.content = content()
     }
 
-    var body: some HTML {
+    /// A `div`, so a page can add an `id` or `hidden` for a banner its
+    /// script toggles.
+    var body: some HTML<HTMLTag.div> {
         div(.class(kind.rawValue), .role(role)) { content }
+    }
+}
+
+/// The HTML5 doctype. Elementary has no element for it, so it is the one raw
+/// string every document starts with; `BaseLayout` and `PresentLayout` share it.
+struct Doctype: HTML {
+    var body: some HTML {
+        HTMLRaw("<!DOCTYPE html>")
     }
 }

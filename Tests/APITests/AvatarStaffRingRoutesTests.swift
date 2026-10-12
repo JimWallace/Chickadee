@@ -73,7 +73,7 @@ import VaporTesting
                 username: ta.username, password: "testpassword", role: "user", on: app)
 
             let html = try await getHTML("/account", cookie: cookie, on: app)
-            #expect(html.contains("<use href=\"#av-ring-staff\" data-av-ring/>"))
+            #expect(html.contains("<use href=\"#av-ring-staff\" data-av-ring />"))
             #expect(html.contains("Course staff wear the staff ring."))
             #expect(!html.contains("name=\"border\""))
             #expect(!html.contains("Locked rings will be earned"))
@@ -114,7 +114,7 @@ import VaporTesting
             #expect(try await storedSpec(pupil, on: app).border == .rainbow)
 
             let html = try await getHTML("/account", cookie: cookie, on: app)
-            #expect(html.contains("<use href=\"#av-ring-rainbow\" data-av-ring/>"))
+            #expect(html.contains("<use href=\"#av-ring-rainbow\" data-av-ring />"))
         }
     }
 

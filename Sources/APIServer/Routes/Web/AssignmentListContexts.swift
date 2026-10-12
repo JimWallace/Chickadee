@@ -77,8 +77,8 @@ struct CourseSectionRow: Encodable {
 }
 
 /// One bar of a server-rendered sparkline.  `heightPercent` is already
-/// normalized to 0–100 against the series maximum, so the Leaf template needs
-/// no arithmetic and the chart renders without JavaScript.  Populated buckets
+/// normalized to 0–100 against the series maximum, so the view (`DiagnosticCards`)
+/// needs no arithmetic and the chart renders without JavaScript.  Populated buckets
 /// are floored to a clearly visible height so a lone student/submission isn't a
 /// 2px sliver indistinguishable from an empty bin; `isEmpty` marks a zero-count
 /// bucket, which renders as a faint baseline tick (`.spark-fill-empty`) so "no
@@ -166,44 +166,6 @@ struct EnrolledStudentRow: Content {
     var learnFlagAdvice: String?
     /// For a pending row: "Awaiting first login · added from CSV Sep 3".
     var pendingNote: String = ""
-}
-
-struct AssignmentSubmissionsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let assignmentTitle: String
-    let metrics: [AssignmentStatCard]
-    let rows: [AssignmentStudentRow]
-    /// One-shot error banner from a redirect back to this page (`?error=`),
-    /// rendered by the `_flash` partial in `base.leaf`.
-    let flashError: String?
-    /// One-shot success banner (`?notice=`), the same partial.
-    let flashSuccess: String?
-    /// The assignment's secret-reveal toggle.  Gates the whole reveal-token
-    /// affordance on this page (spent tag + re-grant action) — when off the
-    /// page renders identically to the pre-feature layout.
-    let secretRevealEnabled: Bool
-    /// The assignment's advisory passing threshold, or nil when off.  Gates
-    /// the passing badge column and the Passing metric card.
-    let passingThresholdPercent: Int?
-    /// True when both AI-assisted feedback gates are on
-    /// (docs/ai-assisted-feedback.md); shows the link to the review page.
-    var aiFeedbackOpen = false
-    /// One row per suite item on a CONTRIBUTION assignment: whether the class
-    /// has collectively covered it, and who got there first.  Empty for every
-    /// other assignment, which is what gates the section off the page — the
-    /// accumulator only writes rows for assignments declaring contribution
-    /// slots, so "has rows" IS "is a contribution assignment".
-    let coverageRows: [AssignmentCoverageRow]
-    /// True iff `coverageRows` is non-empty.  The template gates on this rather
-    /// than on `!coverageRows.isEmpty`, which Leaf cannot express — the same
-    /// shape `hasClassGoals` uses on the submission page.
-    let hasCoverage: Bool
-    /// "9 / 15 items found", for the section's summary chip.
-    let coverageSummary: String
-    /// The Tournament section's facts (docs/class-activities.md); its
-    /// `isTournamentKind` gates the section off every other page.
-    let tournament: TournamentControlFacts
 }
 
 /// The submissions page's Tournament section: the run control and where
@@ -306,8 +268,8 @@ struct AssignmentStudentRow: Encodable {
     /// threshold"` when the assignment sets a threshold and the student has a
     /// grade, else nil (no badge). Never a grade change — a label only.
     let passingLabel: String?
-    /// True iff `passingLabel == "passing"`; the template picks the badge
-    /// colour from this rather than comparing strings in Leaf.
+    /// True iff `passingLabel == "passing"`; the page picks the badge
+    /// colour from this rather than comparing strings.
     let isPassing: Bool
 }
 

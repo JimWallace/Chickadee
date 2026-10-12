@@ -1,17 +1,21 @@
 // APIServer/Routes/Web/LeaderboardContexts.swift
 //
-// The view contexts behind the leaderboard pages: the page context, the
+// The values behind the leaderboard pages: the page's presentation, the
 // three boards (metric, standings, tournament), the live-session and union
 // presentations, and the rows inside them. Built by
 // `WebRoutes+Leaderboard.swift` and `WebRoutes+LeaderboardPresent.swift`;
-// read by `leaderboard.leaf`, its partials and the Present page (#1716).
+// read by `LeaderboardPage`, `LeaderboardBody` and its components, and the
+// Present page (#1716).
 
 import Core
 import Fluent
 import Foundation
 import Vapor
 
-struct LeaderboardContext: Encodable {
+/// Everything the leaderboard page shows. `LeaderboardPage` draws the fixed
+/// chrome from it, and `LeaderboardBody` the part that moves, inline and again
+/// as the `?fragment=body` refresh.
+struct LeaderboardPresentation {
     let testSetupID: String
     let assignmentTitle: String
     /// The course above the title, as its course tab names it: the code and
@@ -101,7 +105,6 @@ struct LeaderboardContext: Encodable {
     /// and nobody closed the tab. An open-ended session has none, and then
     /// polls while the tab is open, as the three dashboards already do.
     let pollUntilISO: String
-    let currentUser: CurrentUserContext?
 }
 
 /// The live-session line above the results, and what the page needs to keep
@@ -177,7 +180,7 @@ struct UnionYouCard: Encodable, Sendable {
 }
 
 /// One student's tests, by what they defeated.
-struct UnionKillRow: Encodable, Sendable {
+struct UnionKillRow: LeaderboardListRow {
     let rank: Int
     let rankText: String
     let isTied: Bool
@@ -261,7 +264,7 @@ struct TournamentEntrantPresentation: Encodable {
 }
 
 /// One row of a round robin's standings.
-struct StandingRow: Encodable, Sendable {
+struct StandingRow: LeaderboardListRow {
     /// Competition ranking on the standings order; equal keys share a rank.
     let rank: Int
     let rankText: String
@@ -332,12 +335,23 @@ struct LeaderboardWindowItem<Row: Encodable & Sendable>: Encodable, Sendable {
     let row: Row?
 }
 
-/// What the shared list partial (`_leaderboard-list.leaf`) needs: the lines,
-/// the heading over the value column, and the two facts the partial cannot
-/// read once it is given a sub-context as its root. Every row type it renders
-/// carries `rankText`, `rankTier`, `handle`, `name`, `detailsText`,
-/// `valueText`, `isViewer` and `avatar`.
-struct LeaderboardListContext<Row: Encodable & Sendable>: Encodable, Sendable {
+/// A row the shared ranked list (`LeaderboardList`) can draw: a round robin's
+/// standing or a tests-and-code activity's tests.
+protocol LeaderboardListRow: Encodable, Sendable {
+    var rankText: String { get }
+    var rankTier: String { get }
+    var handle: String { get }
+    /// Staff only; empty for a student viewer.
+    var name: String { get }
+    var detailsText: String { get }
+    var valueText: String { get }
+    var isViewer: Bool { get }
+    var avatar: AvatarPresentation { get }
+}
+
+/// What the shared ranked list (`LeaderboardList`) needs: the lines, the
+/// heading over the value column, and the two facts it reads from no page.
+struct LeaderboardListContext<Row: LeaderboardListRow>: Encodable, Sendable {
     let items: [LeaderboardWindowItem<Row>]
     /// "Average" or "Faults": what the value column counts.
     let valueLabel: String

@@ -30,7 +30,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/runners/:runnerID
 
     @Sendable
-    func runnerDetail(req: Request) async throws -> View {
+    func runnerDetail(req: Request) async throws -> HTMLResponse<AdminRunnerPage> {
         guard let runnerID = req.parameters.get("runnerID"), !runnerID.isEmpty else {
             throw Abort(.notFound)
         }
@@ -69,10 +69,9 @@ extension AdminRoutes {
         let summary = makeRunnerSummary(worker: worker, recentJobs: recentJobs, statusCounts: statusCounts)
         let tags = makeRunnerTags(profile: runnerProfile)
 
-        return try await req.view.render(
-            "admin-runner",
-            AdminRunnerDetailContext(
-                currentUser: req.currentUserContext,
+        return HTMLResponse {
+            AdminRunnerPage(
+                page: PageRequestContext(request: req),
                 runner: worker,
                 tags: tags,
                 summary: summary,
@@ -82,7 +81,8 @@ extension AdminRoutes {
                 chartBars: chart.bars,
                 chartLabels: chart.labels,
                 offlineForText: Self.offlineDuration(of: worker)
-            ))
+            )
+        }
     }
 
     // MARK: - runnerDetail helpers

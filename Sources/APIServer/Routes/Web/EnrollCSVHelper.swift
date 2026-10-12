@@ -138,16 +138,6 @@ func parseUsernamesFromText(_ text: String) -> [String] {
         .filter { !$0.isEmpty }
 }
 
-/// Context for the `instructor-enroll-csv` upload form (GET render + the
-/// "nothing supplied" re-render of the POST handler).
-struct EnrollCSVFormContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let courseID: String
-    let courseCode: String
-    let courseName: String
-    let error: String?
-}
-
 // MARK: - Bulk-enroll execution
 
 /// Validates that a parsed username is safe to record as a pending

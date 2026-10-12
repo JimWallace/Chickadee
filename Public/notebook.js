@@ -2032,7 +2032,7 @@
         const error   = outcomes.filter(o => o.status === 'error').length;
         const total   = outcomes.length;
 
-        // Score band, structurally identical to submission.leaf's: the headline
+        // Score band, structurally identical to SubmissionPage's: the headline
         // figure at display size with the four outcome states as tiles beneath.
         //
         // CSS reaches both renderings for free; MARKUP does not, which is why
@@ -2066,7 +2066,7 @@
         resultsEl.appendChild(summaryEl);
 
         // One table per section, mirroring the server-rendered submission view
-        // (submission.leaf).  Unlabelled groups (no sections defined) render as
+        // (SubmissionPage).  Unlabelled groups (no sections defined) render as
         // a single bare table, identical to the pre-sections layout.
         for (const group of groupOutcomesForDisplay(outcomes, sections, sectionIDs)) {
             const block = document.createElement('section');
@@ -2110,7 +2110,7 @@
     }
 
     // Build one 4-column results table (Test / Tier / Output / Mark) for the
-    // given outcomes — the structure matches submission.leaf.
+    // given outcomes — the structure matches SubmissionPage.
     function buildResultsTable(outcomes, displayNameMap) {
         const table = document.createElement('table');
         table.className = 'results-table';

@@ -168,7 +168,7 @@ custom_rules:
     included: "Sources/APIServer/Views/.*\\.swift"
     excluded: "Sources/APIServer/Views/(BaseLayout|PageStyle|AvatarSprite)\\.swift"
     regex: "HTMLRaw\\("
-    message: "HTMLRaw skips escaping. Raw output lives in BaseLayout (doctype, icon sprite), AvatarSprite (avatar sprite) and PageStyle (author CSS) only."
+    message: "HTMLRaw skips escaping. Raw output lives in BaseLayout (Doctype, icon sprite), AvatarSprite (avatar sprite) and PageStyle (author CSS) only."
     severity: error
   elementary_tabs_only_in_component:
     name: "Tab bars come from their component"

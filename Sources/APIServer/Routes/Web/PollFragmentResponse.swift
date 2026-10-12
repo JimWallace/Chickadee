@@ -28,18 +28,6 @@ import Crypto
 import Foundation
 import Vapor
 
-extension View {
-    /// Encode a rendered row fragment as a conditional response: an `ETag` over
-    /// the bytes, and `304 Not Modified` when the client already has them.
-    ///
-    /// The ETag is weak (`W/`) because these fragments are equivalent-for-
-    /// display, not byte-identical resources — nothing does range requests
-    /// against them.
-    func encodePollFragment(for req: Request) -> Response {
-        Response.pollFragment(html: data, for: req)
-    }
-}
-
 extension Response {
     /// The empty-body case (no active course) takes the same path, so a client
     /// polling an empty table also settles into 304s instead of re-clearing it.
