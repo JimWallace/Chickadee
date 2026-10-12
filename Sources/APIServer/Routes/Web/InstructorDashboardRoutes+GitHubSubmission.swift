@@ -4,9 +4,9 @@
 //
 // Turns GitHub commit submission on or off for one assignment
 // (docs/github-submissions.md slice 3), and with it the commit statuses of
-// slice 6, which need submission on. Its own endpoint, like the other
-// Student Options, so a mid-term change does not close or re-validate the
-// assignment.
+// slice 6 and the starter repository, which need submission on. Its own
+// endpoint, like the other Student Options, so a mid-term change does not
+// close or re-validate the assignment.
 
 import Vapor
 
@@ -21,12 +21,21 @@ extension InstructorDashboardRoutes {
             // A checkbox is absent from the body when it is not checked.
             var enabled: String?
             var statusChecks: String?
+            var starterRepository: String?
         }
         let body = try? req.content.decode(ToggleBody.self)
         let enabled = body?.enabled != nil
         let statusChecks = enabled && body?.statusChecks != nil
+        let editURL = "/instructor/\(assignment.publicID)/edit"
+        let starterText = body?.starterRepository?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let starter = GitHubRepositoryName(starterText)
+        if enabled, !starterText.isEmpty, starter == nil {
+            return req.redirect(
+                to: editURL + "?error=Write+the+starter+repository+as+owner%2Fname+or+as+its+GitHub+URL")
+        }
         try await setManifestGitHubSubmission(setup: setup, enabled: enabled, on: req.db)
         try await setManifestGitHubStatusChecks(setup: setup, enabled: statusChecks, on: req.db)
+        try await setManifestGitHubStarterRepository(setup: setup, to: enabled ? starter : nil, on: req.db)
         await AuditLogger.record(
             action: .githubSubmissionToggled,
             targetType: .assignment,
@@ -34,9 +43,10 @@ extension InstructorDashboardRoutes {
             metadata: [
                 "assignment": assignment.publicID, "enabled": String(enabled),
                 "status_checks": String(statusChecks),
+                "starter_repository": (enabled ? starter?.value : nil) ?? "",
             ],
             on: req
         )
-        return req.redirect(to: "/instructor/\(assignment.publicID)/edit?notice=GitHub+setting+saved")
+        return req.redirect(to: editURL + "?notice=GitHub+setting+saved")
     }
 }
