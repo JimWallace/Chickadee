@@ -310,7 +310,7 @@ fi
 #      sheet (e.g. the submission page shadowing the global .achievement-badge);
 #   B. the same selector is defined in more than one page block (cross-page
 #      duplication that should be hoisted to styles.css).
-# `.main` is an allowlisted intentional global override (notebook.leaf narrows
+# `.main` is an allowlisted intentional global override (NotebookBody narrows
 # the page container).  Heuristic extractor: selector = text before each `{`
 # (one selector per line, as authored here), skipping at-rules and comments —
 # errs toward false negatives, never false positives. A one-line
@@ -460,7 +460,7 @@ fi
 # in Public/styles.css as a named component, where review sees it next to
 # the component it would duplicate. When you shrink a block, lower the
 # baseline in the same PR (same contract as INLINE_SCRIPT_BASELINE).
-PAGE_STYLE_BASELINE=269
+PAGE_STYLE_BASELINE=267
 page_style_count="$(
   for f in "${style_views[@]}"; do page_style_blocks "$f"; done | awk '
     /<style>/ { inblock = 1; next }

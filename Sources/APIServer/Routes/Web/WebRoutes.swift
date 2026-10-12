@@ -7,7 +7,7 @@
 //   GET  /                          → IndexPage       (assignments)
 //   GET  /testsetups/:id/submit     → SubmitPage      (student submission form)
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
-//   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
+//   GET  /testsetups/:id/notebook   → NotebookPage    (JupyterLite in-browser editor)
 //   GET  /testsetups/:id/leaderboard → LeaderboardPage (class activity ranking)
 //   GET  /submissions/:id           → SubmissionPage  (live results)
 

@@ -123,7 +123,7 @@ them is the answer.
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | — |
 | **Plain student page** | `<h1>` → content | `account.leaf` | — |
 | **Auth box** | `.auth-box` centred card | `register.leaf` | — |
-| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
+| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | — |
 | **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
 
 Why each exemplar won its row: `alerts.leaf` carries no page script and the
@@ -155,6 +155,7 @@ names only Leaf templates. `PageArchetypeTests` resolves each name to a
   `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`.
 - Full-bleed app (nearest; it owns the viewport through its own
   `PresentLayout`, not the `fullBleed` flag): `LeaderboardPresentPage`.
+- Body-partial shim: `NotebookPage` (`BaseLayout` plus `NotebookBody`).
 
 The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
 `instructor-mcp.leaf` and `account.leaf` now render `AdminUserPage`,

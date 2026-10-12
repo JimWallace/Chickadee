@@ -35,7 +35,9 @@ strip_css_comments() {
 # Prints every <style> ... </style> block of the named templates, in order.
 # An Elementary view (a .swift file) holds its page CSS in a
 # PageStyle("""...""") literal instead; its body is printed between <style>
-# and </style> lines, so every caller reads both kinds the same way.
+# and </style> lines, so every caller reads both kinds the same way. A literal
+# that closes with `""",` is followed by another literal of the same call
+# (PageStyle's several-part form), so that one is read too.
 page_style_blocks() {
   local f
   for f in "$@"; do
@@ -44,7 +46,7 @@ page_style_blocks() {
         awk '
           /PageStyle\(/ { pending = 1 }
           pending && !inblock && /"""/ { inblock = 1; pending = 0; print "<style>"; next }
-          inblock && /"""/ { inblock = 0; print "</style>"; next }
+          inblock && /"""/ { inblock = 0; print "</style>"; if ($0 ~ /""",[[:space:]]*$/) pending = 1; next }
           inblock { print }
         ' "$f"
         ;;
@@ -59,7 +61,10 @@ page_style_blocks() {
 # view now, so the page-CSS rules skip the template copy rather than count the
 # same rules twice. The list shrinks to nothing when the exemplars move to
 # Swift (docs/elementary-spike.md); never add a template that is still served.
-retired_exemplar_templates="Resources/Views/admin-user.leaf Resources/Views/register.leaf Resources/Views/alerts.leaf Resources/Views/instructor-mcp.leaf Resources/Views/account.leaf"
+# One exception: a body partial that `workbench.leaf` still extends after its
+# body moved to Swift (`_notebook-body.leaf`, ported as `NotebookBody`). Its CSS
+# is the same rules as the Swift copy, so it is counted once, from the Swift.
+retired_exemplar_templates="Resources/Views/admin-user.leaf Resources/Views/register.leaf Resources/Views/alerts.leaf Resources/Views/instructor-mcp.leaf Resources/Views/account.leaf Resources/Views/_notebook-body.leaf"
 
 # Prints the templates whose page CSS the style guards read: every template
 # except the retired exemplars above.

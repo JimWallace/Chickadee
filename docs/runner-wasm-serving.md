@@ -67,7 +67,7 @@ GET /runner-wasm/runner-core.js
 - The **loader** (`runner-core.js`) keeps a stable name and embeds the current
   hash, so it's `no-cache` (revalidate-before-use → cheap 304 via FileMiddleware's
   ETag) and always resolves to the current wasm. `browser-runner.js` itself is
-  already busted per-release by `?v=#appVersion()` in `notebook.leaf`.
+  already busted per-release by the `?v=` version query on the script tags in `NotebookBody`.
 - `application/wasm` is required for `WebAssembly.instantiateStreaming`; the
   middleware forces it so a future MIME-map change can't silently disable
   streaming.

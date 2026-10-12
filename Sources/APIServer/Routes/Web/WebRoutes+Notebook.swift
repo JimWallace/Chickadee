@@ -208,7 +208,7 @@ extension WebRoutes {
         req: Request,
         args: NotebookPageRenderArgs,
         submissionID requestedSubmissionID: String
-    ) async throws -> View {
+    ) async throws -> HTMLResponse<NotebookPage> {
         let setup = args.setup
         let setupID = args.setupID
         let userID = args.userID
@@ -239,9 +239,9 @@ extension WebRoutes {
         let submissionViewAbsPath =
             req.application.directory.publicDirectory
             + "jupyterlite/files/" + submissionRelativePath
-        return try await req.view.render(
-            "notebook",
-            NotebookContext(
+        return notebookPageResponse(
+            req: req,
+            context: NotebookContext(
                 testSetupID: setupID,
                 assignmentTitle: args.assignmentTitle,
                 notebookURL: notebookURL,
@@ -276,10 +276,19 @@ extension WebRoutes {
         req: Request,
         args: NotebookPageRenderArgs,
         fileKind: NotebookFileKind
-    ) async throws -> View {
-        try await req.view.render(
-            "notebook",
-            makeAssignmentNotebookContext(req: req, args: args, fileKind: fileKind))
+    ) async throws -> HTMLResponse<NotebookPage> {
+        notebookPageResponse(
+            req: req,
+            context: try await makeAssignmentNotebookContext(req: req, args: args, fileKind: fileKind))
+    }
+
+    /// The notebook page for `context`. Both branches of `notebookPage` render
+    /// through here.
+    private func notebookPageResponse(req: Request, context: NotebookContext) -> HTMLResponse<NotebookPage> {
+        let page = PageRequestContext(request: req)
+        return HTMLResponse {
+            NotebookPage(page: page, notebook: NotebookBody(context, appVersion: page.appVersion))
+        }
     }
 
     /// The `NotebookContext` for the assignment / solution branch — everything
