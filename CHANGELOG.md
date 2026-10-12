@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.616] - 2026-10-12
+
+### Changed
+
+- **Simple pages render with Elementary.** The login, register, submission history, submission diff, student assignment history, admin import and CSV-enrolment result, OAuth consent, connected agents, LTI bind and deep-link, error, enroll, submit, editor-reset and slip-day confirmation pages are now type-checked Swift views. Each port was compared with its Leaf output and the markup is unchanged. The Leaf templates for these pages are removed.
+
+### Fixed
+
+- **LTI frames no longer set a session cookie.** The LTI deep-link pages rendered a CSRF token through the base layout, which created an unauthenticated session cookie inside the LMS frame. The Swift pages render no token there.
+
+### Changed
+
+- **The instructor pages render with Elementary.** Overview, Activity, Students, Slip days, LEARN, LMS grades, AI agents, GitHub and New term, and the admin course page, are now type-checked Swift views. One `InstructorTabs` component renders the tab bar for all of them, and the polled student rows are one `StudentRows` view shared by the page and the poll. Each port was compared with its Leaf output, and the markup is the same apart from attribute escaping. The Leaf templates for these pages and their partials are removed, except `instructor-mcp.leaf`, which stays unserved as the instructor tabbed exemplar that `PageArchetypeTests` reads.
+
+
 ## [0.5.615] - 2026-10-12
 
 ### Changed
