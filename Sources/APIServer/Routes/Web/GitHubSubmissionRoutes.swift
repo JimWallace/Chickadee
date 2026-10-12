@@ -48,6 +48,9 @@ struct GitHubSubmissionRoutes: RouteCollection {
         var state = GitHubSubmitState(
             errorText: [.notLinked, .notInstalled, .noCourseRepository].contains(queryError)
                 ? nil : queryError?.message)
+        state.starter = setup.decodedManifest()?.githubStarterRepository
+            .flatMap(GitHubRepositoryName.init)
+            .map { GitHubStarterView(name: $0.value, url: $0.url) }
         if req.query[String.self, at: "ok"] == "repository" {
             state.noticeText = "Your course repository is ready. Accept the invitation on GitHub."
         }
@@ -110,7 +113,7 @@ struct GitHubSubmissionRoutes: RouteCollection {
             guard GitHubCommitSHA.isWellFormed(sha) else { throw GitHubSubmitError.commitNotFound }
             var ignored = GitHubSubmitState()
             let access = try await Self.access(userID: userID, setup: setup, state: &ignored, req: req)
-            let repository = try await access.ownedRepository(id: body.repositoryID, req: req)
+            let repository = try await access.submittableRepository(id: body.repositoryID, req: req)
             let tarball = try await access.tarball(of: repository, sha: sha, req: req)
             let subID = freshShortID(prefix: "sub")
             let zipPath = req.application.submissionsDirectory + "\(subID).zip"

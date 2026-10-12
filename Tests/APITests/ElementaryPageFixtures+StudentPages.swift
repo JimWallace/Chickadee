@@ -261,8 +261,13 @@ extension ElementaryPageFixtures {
             name: "org/lab1-ada", url: "https://github.com/org/lab1-ada", invited: true)
         var noBranches = emptyOwn
         noBranches.repositories = full.repositories
+        // A starter repository, and a chosen repository not made from it.
+        var fromStarter = full
+        fromStarter.starter = GitHubStarterView(name: "org/lab1-<starter>", url: "https://github.com/org/lab1-starter")
+        fromStarter.notFromStarter = true
         return [
             GitHubSubmitState(), needsLink, install, courseMake, courseLoaded, emptyOwn, full, courseFull, noBranches,
+            fromStarter,
         ]
     }
 

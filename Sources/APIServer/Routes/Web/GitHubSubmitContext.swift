@@ -53,6 +53,13 @@ struct GitHubSubmitCommitView: Encodable, Equatable {
     let commitURL: String
 }
 
+/// The assignment's starter repository, which the student copies into a
+/// private repository of their own.
+struct GitHubStarterView: Encodable, Equatable {
+    let name: String
+    let url: String
+}
+
 /// The student's course repository (slice 4).
 struct GitHubCourseRepositoryView: Encodable, Equatable {
     let name: String
@@ -85,6 +92,11 @@ struct GitHubSubmitState: Encodable {
     var repositories: [SelectOption] = []
     var branches: [SelectOption] = []
     var commit: GitHubSubmitCommitView?
+    /// The assignment names a starter repository. Not shown in
+    /// course-repository mode, where Chickadee makes the copy.
+    var starter: GitHubStarterView?
+    /// The chosen repository was not made from the starter repository.
+    var notFromStarter = false
 
     /// Fills the lists. A repository is selected when the query names one of
     /// the student's own, or when there is only one. The branch is the one the
@@ -103,6 +115,12 @@ struct GitHubSubmitState: Encodable {
             SelectOption(value: String($0.id), label: $0.fullName, selected: $0.id == selected?.id)
         }
         guard let selected else { return }
+        // Read once more by ID: the list does not carry the template the
+        // repository was made from, and the submit refuses a public one.
+        let checked = try await access.submittableRepository(id: selected.id, req: req)
+        if !courseRepositoryMode, let starter {
+            notFromStarter = checked.templateFullName?.lowercased() != starter.name.lowercased()
+        }
 
         let names = try await access.branches(of: selected, req: req)
         let branch =
