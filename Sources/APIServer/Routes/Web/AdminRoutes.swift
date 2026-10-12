@@ -347,9 +347,7 @@ struct AdminRoutes: RouteCollection {
         return HTMLResponse {
             AlertsPage(
                 page: PageRequestContext(request: req),
-                flash: FlashMessages(
-                    success: query.ok.flatMap { $0.isEmpty ? nil : $0 },
-                    error: query.error.flatMap { $0.isEmpty ? nil : $0 }),
+                flash: FlashMessages(success: query.ok, error: query.error),
                 enabled: configuration.enabled,
                 webhookURL: effectiveURL,
                 webhookURLFromEnvironment: !envURL.isEmpty,

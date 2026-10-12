@@ -7,10 +7,18 @@ import Elementary
 
 /// The flash banners (`_flash.leaf`): the post-redirect one-shots and the
 /// assignment editors' pre-redirect notice.
+/// The one-shot messages the layout shows above the page. An empty string
+/// counts as no message, so a bare `?ok=` in a redirect draws no empty banner.
 struct FlashMessages: Sendable {
     var success: String?
     var notice: String?
     var error: String?
+
+    init(success: String? = nil, notice: String? = nil, error: String? = nil) {
+        self.success = success.flatMap { $0.isEmpty ? nil : $0 }
+        self.notice = notice.flatMap { $0.isEmpty ? nil : $0 }
+        self.error = error.flatMap { $0.isEmpty ? nil : $0 }
+    }
 }
 
 struct BaseLayout<Content: HTML>: HTML {
@@ -136,15 +144,20 @@ struct FlashBanners: HTML {
     }
 }
 
-/// One success or error banner. The layout renders the one-shot flash
-/// messages with it. A page uses it only for a banner that shows the page's
-/// state on every load, or that carries more than text (the minted MCP token).
+/// One banner. The layout renders the one-shot flash messages with it. A page
+/// uses it for a static state banner (`.warning`, `.neutral`), or for a
+/// success or error banner that shows on every load or carries more than text
+/// (the minted MCP token).
 /// The flash classes are written here and nowhere else
 /// (SwiftLint `elementary_flash_only_in_layout`).
 struct FlashBanner<Content: HTML>: HTML {
     enum Kind: String {
         case success = "flash flash-success"
         case error = "flash flash-error"
+        /// A static state banner: something about the page is off.
+        case warning = "flash flash-warning"
+        /// A static state banner with nothing wrong.
+        case neutral = "flash flash-neutral"
     }
 
     let kind: Kind

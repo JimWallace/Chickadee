@@ -116,7 +116,7 @@ struct AdminAuditPage: HTML {
 }
 
 /// One audit entry: a disclosure whose summary is the row.
-struct AdminAuditEntryRow: HTML {
+private struct AdminAuditEntryRow: HTML {
     let row: AdminAuditRow
 
     var body: some HTML {

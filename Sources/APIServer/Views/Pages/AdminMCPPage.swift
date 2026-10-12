@@ -92,7 +92,7 @@ struct AdminMCPPage: HTML {
                     ", then restart."
                 }
             } else if !writeAllowed {
-                div(.class("flash flash-warning"), .role("status")) {
+                FlashBanner(.warning) {
                     strong { "Read-only mode." }
                     " Agents can read course content but not edit it; tokens carry "
                     code { "content:read" }

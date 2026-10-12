@@ -70,7 +70,7 @@ struct AdminGitHubPage: HTML {
     @HTMLBuilder private func registered(_ app: AdminGitHubAppDetails) -> some HTML {
         p(.class("section-intro")) { "Chickadee reads student repositories through this App." }
         if secretsUnavailable {
-            div(.class("flash flash-warning"), .role("status")) {
+            FlashBanner(.warning) {
                 strong { "Secrets file \(secretsMissing ? "missing" : "unreadable")." }
                 " GitHub submission and webhooks are off until "
                 code { secretsPath }
@@ -112,7 +112,7 @@ struct AdminGitHubPage: HTML {
             "GitHub submission is off until an App is registered, which must wait for the privacy review."
         }
         if !baseURLConfigured {
-            div(.class("flash flash-warning"), .role("status")) {
+            FlashBanner(.warning) {
                 code { "PUBLIC_BASE_URL" }
                 " is not set, so GitHub cannot return to this server. Set it and restart the server."
             }

@@ -68,7 +68,7 @@ struct AdminStoragePage: HTML {
 }
 
 /// One storage figure as a diagnostic card.
-struct StorageCard: HTML {
+private struct StorageCard: HTML {
     let label: String
     let value: String
 
@@ -81,7 +81,7 @@ struct StorageCard: HTML {
 }
 
 /// One assignment's footprint, with its share bar.
-struct StorageAssignmentRow: HTML {
+private struct StorageAssignmentRow: HTML {
     let row: AdminStorageShareRow
 
     var body: some HTML {

@@ -44,7 +44,7 @@ struct AdminLTIPage: HTML {
                 "Give these values to the LMS administrator who registers Chickadee as an LTI 1.3 tool."
             }
             if !baseURLConfigured {
-                div(.class("flash flash-warning"), .role("status")) {
+                FlashBanner(.warning) {
                     strong {
                         code { "PUBLIC_BASE_URL" }
                         " is not set,"

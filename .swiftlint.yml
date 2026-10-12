@@ -178,9 +178,9 @@ custom_rules:
     message: "Open an admin page with AdminTabs; no other view writes the tab bar or the version banner (docs/ui-design.md, Page archetypes)."
     severity: error
   elementary_flash_only_in_layout:
-    name: "Flash banners come from the layout"
+    name: "Banners come from FlashBanner"
     included: "Sources/APIServer/Views/.*\\.swift"
     excluded: "Sources/APIServer/Views/BaseLayout\\.swift"
-    regex: "flash-(success|error)"
-    message: "BaseLayout renders the flash banners once for every page; pass FlashMessages to the layout instead (docs/ui-design.md, Flash banners)."
+    regex: "\\bflash-(success|error|warning|neutral)\\b"
+    message: "BaseLayout renders the flash banners; pass FlashMessages to the layout, or use FlashBanner for a state banner (docs/ui-design.md, Flash banners)."
     severity: error

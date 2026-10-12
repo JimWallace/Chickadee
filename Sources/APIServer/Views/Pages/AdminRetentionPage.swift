@@ -62,7 +62,7 @@ struct AdminRetentionPage: HTML {
 }
 
 /// One archived course, with its restore, export and delete actions.
-struct AdminRetentionCourseRow: HTML {
+private struct AdminRetentionCourseRow: HTML {
     let row: AdminRetentionRow
     let csrfToken: String
 

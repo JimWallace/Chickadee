@@ -48,7 +48,7 @@ struct AlertsPage: HTML {
                 }
             }
             if !enabled {
-                div(.class("flash flash-warning"), .role("status")) {
+                FlashBanner(.warning) {
                     strong { "Alerting is off." }
                     " Set "
                     code { "ALERT_ENABLED=1" }

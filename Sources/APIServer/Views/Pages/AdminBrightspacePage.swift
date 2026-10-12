@@ -41,7 +41,7 @@ struct AdminBrightspacePage: HTML {
                     "Grade sync for every course runs as one D2L service account. App credentials come from the server environment."
                 }
                 if !configured {
-                    div(.class("flash flash-warning"), .role("status")) {
+                    FlashBanner(.warning) {
                         strong { "Not configured." }
                         " Set "
                         code { "BRIGHTSPACE_URL" }
@@ -117,6 +117,7 @@ struct AdminBrightspacePage: HTML {
                 dd {
                     AuthorizationPill(authorized: authorized)
                     if authorized {
+                        " "
                         span(.class("card-meta")) {
                             if storedKey {
                                 "Key set on this page · overrides "
