@@ -23,7 +23,7 @@ import VaporTesting
     static let githubUserID: Int64 = 9_001
     static let sha = "0123abc" + String(repeating: "d", count: 33)
     static let owned = GitHubRepository(
-        id: 100, fullName: "octo-student/lab1", ownerID: githubUserID, defaultBranch: "main")
+        id: 100, fullName: "octo-student/lab1", ownerID: githubUserID, defaultBranch: "main", isPrivate: true)
     static let classmates = GitHubRepository(
         id: 200, fullName: "classmate/lab1", ownerID: 555, defaultBranch: "main")
     static let manifest = """
