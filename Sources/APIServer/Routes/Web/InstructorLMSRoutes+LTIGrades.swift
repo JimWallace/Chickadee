@@ -5,7 +5,7 @@
 // instead of the Valence sync, and where course staff see what the AGS sweep
 // sent and what failed.
 //
-//   GET  /instructor/lti-grades            → instructor-lti-grades.leaf
+//   GET  /instructor/lti-grades            → InstructorLTIGradesPage
 //   POST /instructor/lti-grades/transport  → choose Valence or AGS (instructor)
 //   POST /instructor/lti-grades/push-all   → "Sync now": queue every student's grade (TA+)
 //   POST /instructor/lti-grades/link-students → link students to the LMS by
@@ -22,38 +22,11 @@ enum LTIGradeTransport: String, Sendable {
     case ags
 }
 
-private struct InstructorLTIGradesContext: Encodable {
-    struct Failure: Encodable {
-        let student: String
-        let assignment: String
-        let reason: String
-    }
-
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    let hasActiveCourse: Bool
-    let courseCode: String
-    /// The LMS the course is linked to; nil = not linked.
-    let platformName: String?
-    let isLinked: Bool
-    /// True once a launch sent the course's line-items URL.
-    let hasGradeService: Bool
-    let usesAGS: Bool
-    /// Instructor, course not archived, and the grade service is known.
-    let canChooseTransport: Bool
-    /// Course staff on a course that uses AGS and is not archived.
-    let canPushAll: Bool
-    /// An instructor on a course that uses AGS, is not archived, and has an
-    /// NRPS membership URL.
-    let canLinkStudents: Bool
-    let sentCount: Int
-    let waitingCount: Int
-    let failedCount: Int
-    /// The first `ltiFailureListLimit` failures; `failedCount` counts them all.
-    let failures: [Failure]
-    let failuresTruncated: Bool
-    let flashSuccess: String?
-    let flashError: String?
+/// One failed AGS push, as the LMS grades page lists it.
+struct LTIGradeFailureRow: Sendable {
+    let student: String
+    let assignment: String
+    let reason: String
 }
 
 extension InstructorLMSRoutes {
@@ -63,7 +36,7 @@ extension InstructorLMSRoutes {
     // MARK: - GET /instructor/lti-grades
 
     @Sendable
-    func ltiGradesPage(req: Request) async throws -> View {
+    func ltiGradesPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         var course: APICourse?
@@ -78,27 +51,31 @@ extension InstructorLMSRoutes {
         if let course { rows = try await ltiGradeSyncRows(course: course, on: req.db) }
 
         let failedCount = rows.filter { !$0.pending && $0.error != nil }.count
-        let ctx = InstructorLTIGradesContext(
-            currentUser: try await req.courseAwareUserContext(),
-            activeInstructorTab: "brightspace",
-            hasActiveCourse: course != nil,
-            courseCode: course?.code ?? "",
-            platformName: platform?.displayName,
-            isLinked: platform != nil,
-            hasGradeService: hasGradeService,
-            usesAGS: usesAGS,
-            canChooseTransport: isInstructor && writable && platform != nil && hasGradeService,
-            canPushAll: writable && usesAGS,
-            canLinkStudents: isInstructor && writable && usesAGS && course?.ltiMembershipsURL != nil,
-            sentCount: rows.filter { !$0.pending && $0.error == nil && $0.syncedAt != nil }.count,
-            waitingCount: rows.filter(\.pending).count,
-            failedCount: failedCount,
-            failures: try await ltiFailures(rows: rows, on: req.db),
-            failuresTruncated: failedCount > Self.ltiFailureListLimit,
-            flashSuccess: Self.ltiGradesNotice(
+        let page = try await PageRequestContext.courseAware(req)
+        let flash = FlashMessages(
+            success: Self.ltiGradesNotice(
                 req.query[String.self, at: "done"], linked: req.query[Int.self, at: "linked"]),
-            flashError: Self.ltiGradesProblem(req.query[String.self, at: "error"]))
-        return try await req.view.render("instructor-lti-grades", ctx)
+            error: Self.ltiGradesProblem(req.query[String.self, at: "error"]))
+        let failures = try await ltiFailures(rows: rows, on: req.db)
+        return try await HTMLResponse {
+            InstructorLTIGradesPage(
+                page: page,
+                flash: flash,
+                hasActiveCourse: course != nil,
+                courseCode: course?.code ?? "",
+                platformName: platform?.displayName,
+                isLinked: platform != nil,
+                hasGradeService: hasGradeService,
+                usesAGS: usesAGS,
+                canChooseTransport: isInstructor && writable && platform != nil && hasGradeService,
+                canPushAll: writable && usesAGS,
+                canLinkStudents: isInstructor && writable && usesAGS && course?.ltiMembershipsURL != nil,
+                sentCount: rows.filter { !$0.pending && $0.error == nil && $0.syncedAt != nil }.count,
+                waitingCount: rows.filter(\.pending).count,
+                failedCount: failedCount,
+                failures: failures,
+                failuresTruncated: failedCount > Self.ltiFailureListLimit)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/lti-grades/transport
@@ -253,7 +230,7 @@ extension InstructorLMSRoutes {
     private func ltiFailures(
         rows: [APILTIGradeSync], on db: Database
     ) async throws
-        -> [InstructorLTIGradesContext.Failure]
+        -> [LTIGradeFailureRow]
     {
         let failed = rows.filter { !$0.pending && $0.error != nil }.prefix(Self.ltiFailureListLimit)
         guard !failed.isEmpty else { return [] }
@@ -264,7 +241,7 @@ extension InstructorLMSRoutes {
             .all()
         let titles = Dictionary(assignments.map { ($0.testSetupID, $0.title) }) { first, _ in first }
         return failed.map { row in
-            InstructorLTIGradesContext.Failure(
+            LTIGradeFailureRow(
                 student: names[row.userID] ?? "Unknown student",
                 assignment: titles[row.testSetupID] ?? row.testSetupID,
                 reason: row.error ?? "")

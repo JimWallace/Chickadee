@@ -1,8 +1,9 @@
 // APIServer/BrightSpace/InstructorBrightspaceContext.swift
 //
-// Leaf view-context types for the instructor BrightSpace tab
-// (`GET /instructor/brightspace`). `BrightSpacePagePresenter` is their only
-// builder, so they live beside it rather than with the route contexts (#1728).
+// The view-model types for the instructor BrightSpace tab
+// (`GET /instructor/brightspace`, `InstructorBrightspacePage`).
+// `BrightSpacePagePresenter` is their only builder, so they live beside it
+// rather than with the route contexts (#1728).
 
 import Core
 import Foundation
@@ -45,8 +46,6 @@ struct InstructorBrightspaceContext: Encodable {
             name: nil, hasName: false, isMe: false, connected: false, needsReconnect: false)
     }
 
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
     let hasActiveCourse: Bool
     let courseIsArchived: Bool
     /// True when the server has BrightSpace app credentials configured at all.

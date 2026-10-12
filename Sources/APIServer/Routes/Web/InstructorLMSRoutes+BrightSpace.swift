@@ -10,7 +10,7 @@
 // The page's view model is assembled by `BrightSpacePagePresenter`
 // (Services/); the handlers here resolve the request and act.
 //
-//   GET  /instructor/brightspace                       → instructor-brightspace.leaf
+//   GET  /instructor/brightspace                       → InstructorBrightspacePage
 //   POST /instructor/brightspace/test                  → whoami connection test (JSON)
 //   GET  /instructor/brightspace/grade-objects         → [BrightSpaceGradeObject] (dropdown)
 //   POST /instructor/brightspace/sync-now              → hard reset: re-queue errored pushes, then sweep immediately
@@ -27,7 +27,7 @@ extension InstructorLMSRoutes {
     // MARK: - GET /instructor/brightspace
 
     @Sendable
-    func brightspacePage(req: Request) async throws -> View {
+    func brightspacePage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         // One-shot flashes from the connect/disconnect/designate actions.
@@ -35,9 +35,10 @@ extension InstructorLMSRoutes {
             success: req.session.data["bs_flash_success"], error: req.session.data["bs_flash_error"])
         req.session.data["bs_flash_success"] = nil
         req.session.data["bs_flash_error"] = nil
-        let ctx = try await BrightSpacePagePresenter.context(
+        let model = try await BrightSpacePagePresenter.context(
             user: user, courseState: courseState, flashes: flashes, on: req.db, application: req.application)
-        return try await req.view.render("instructor-brightspace", ctx)
+        let page = try await PageRequestContext.courseAware(req)
+        return try await HTMLResponse { InstructorBrightspacePage(page: page, model: model) }.encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/brightspace/test

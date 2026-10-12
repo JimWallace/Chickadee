@@ -9,7 +9,7 @@
 //
 //   GET /instructor/students       → instructor-students.leaf
 //   GET /instructor/students-data  → [EnrolledStudentRow] JSON (5s poll)
-//   GET /instructor/brightspace    → instructor-brightspace.leaf
+//   GET /instructor/brightspace    → InstructorBrightspacePage
 
 import Core
 import Fluent

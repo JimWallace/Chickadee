@@ -53,7 +53,7 @@ struct GitHubCourseRoutes: RouteCollection {
     // MARK: - GET /instructor/github
 
     @Sendable
-    func page(req: Request) async throws -> View {
+    func page(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let app = try await APIGitHubApp.query(on: req.db).first() else { throw Abort(.notFound) }
         let courseState = try await req.resolveActiveCourse(for: user)
@@ -89,11 +89,13 @@ struct GitHubCourseRoutes: RouteCollection {
             }
             if canEdit { SecurityHeadersMiddleware.allowFormAction("https://github.com", on: req) }
         }
-        return try await req.view.render(
-            "instructor-github",
-            InstructorGitHubContext(
-                currentUser: try await req.courseAwareUserContext(),
-                activeInstructorTab: "github",
+        let page = try await PageRequestContext.courseAware(req)
+        let flash = FlashMessages(
+            success: req.query[String.self, at: "ok"].flatMap(Notice.init(rawValue:))?.message, error: flashError)
+        return try await HTMLResponse {
+            InstructorGitHubPage(
+                page: page,
+                flash: flash,
                 hasActiveCourse: course != nil,
                 courseCode: course?.code ?? "",
                 canEdit: canEdit,
@@ -102,9 +104,8 @@ struct GitHubCourseRoutes: RouteCollection {
                 organizationText: req.query[String.self, at: "org"] ?? "",
                 assignments: rows,
                 templatesUnavailable: templatesUnavailable,
-                repositories: repositories,
-                flashSuccess: req.query[String.self, at: "ok"].flatMap(Notice.init(rawValue:))?.message,
-                flashError: flashError))
+                repositories: repositories)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/github/bind

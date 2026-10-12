@@ -80,7 +80,7 @@ import Testing
                 "AdminUsersPage",
                 "assignment-submissions.leaf",
                 "index.leaf",
-                "instructor-slip-days.leaf",
+                "InstructorSlipDaysPage",
                 "instructor-students.leaf",
                 "leaderboard.leaf",
             ],
@@ -191,7 +191,7 @@ import Testing
     @Test func everyFilterIsEitherLiveOrInAGetForm() throws {
         let liveFilters = [
             "AdminPage", "AdminUsersPage", "assignment-submissions.leaf", "index.leaf",
-            "instructor-slip-days.leaf", "instructor-students.leaf", "leaderboard.leaf",
+            "InstructorSlipDaysPage", "instructor-students.leaf", "leaderboard.leaf",
         ]
         for input in try Self.filterInputs() {
             let isLive = input.tag.contains("data-list-filter=")

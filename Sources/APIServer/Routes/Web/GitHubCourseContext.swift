@@ -1,32 +1,9 @@
 // APIServer/Routes/Web/GitHubCourseContext.swift
 //
-// The view model of the instructor's course GitHub page
-// (docs/github-submissions.md slice 4).
+// The row types of the instructor's course GitHub page
+// (`InstructorGitHubPage`, docs/github-submissions.md slice 4).
 
 import Foundation
-
-struct InstructorGitHubContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    let hasActiveCourse: Bool
-    let courseCode: String
-    /// Per-course instructors may change the page; TAs may only read it.
-    let canEdit: Bool
-    /// The bound organization, or nil.
-    let organization: InstructorGitHubOrganization?
-    /// Where an organization owner installs the App.
-    let installURL: String
-    /// The typed organization, kept after a refused bind.
-    let organizationText: String
-    /// Assignments that accept GitHub submission.
-    let assignments: [InstructorGitHubAssignmentRow]
-    /// True when the organization's template list could not be read.
-    let templatesUnavailable: Bool
-    /// Every course repository, for staff (slice 5 adds the last push).
-    let repositories: [InstructorGitHubRepositoryRow]
-    let flashSuccess: String?
-    let flashError: String?
-}
 
 struct InstructorGitHubOrganization: Encodable {
     let login: String
