@@ -96,7 +96,7 @@ test('the failure-detail list stays in the renderer, where the Swift coverage te
 });
 
 test('both authoring pages load the classic core before the module renderer', async () => {
-  for (const file of ['Resources/Views/_assignment-edit-body.leaf', 'Resources/Views/assignment-new.leaf']) {
+  for (const file of ['Resources/Views/_assignment-edit-body.leaf', 'Sources/APIServer/Views/Pages/AssignmentNewPage.swift']) {
     const src = await fs.readFile(path.resolve(file), 'utf8');
     const core = src.indexOf('/test-renderer-script-core.js');
     const wiring = src.indexOf('/test-renderer-script.js');

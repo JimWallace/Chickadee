@@ -48,7 +48,7 @@ test('each checked function becomes one public 1-point .py test script', () => {
 });
 
 test('the new-assignment page loads the core before the panel', async () => {
-  const src = await fs.readFile(path.resolve('Resources/Views/assignment-new.leaf'), 'utf8');
+  const src = await fs.readFile(path.resolve('Sources/APIServer/Views/Pages/AssignmentNewPage.swift'), 'utf8');
   const core = src.indexOf('/generated-starter-tests-core.js');
   const wiring = src.indexOf('/generated-starter-tests.js');
   assert.ok(core >= 0 && wiring >= 0 && core < wiring, 'core must be loaded before generated-starter-tests.js');

@@ -25,7 +25,7 @@ const Core = require('../../Public/inputs-editor-core.js');
 
 // Both authoring surfaces must reach section inputs through the same modules.
 const SECTION_INPUT_PAGES = [
-  'Resources/Views/assignment-new.leaf',
+  'Sources/APIServer/Views/Pages/AssignmentNewPage.swift',
   'Resources/Views/_assignment-edit-body.leaf',
 ];
 

@@ -6,7 +6,7 @@
 // pages render from a single copy instead of two copies that drift on
 // every polish release.
 //
-// The form HTML lives in Resources/Views/_family-editor-body.leaf (included
+// The form HTML lives in FamilyEditorBody (Sources/APIServer/Views/, rendered
 // by both pages); this file owns every event listener, fetch, and piece
 // of state that hangs off those DOM IDs.  DOM IDs are stable:
 //   family-editor-body, family-editor-status, family-id, family-name,

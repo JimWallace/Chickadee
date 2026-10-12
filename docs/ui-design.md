@@ -155,13 +155,17 @@ names only Leaf templates. `PageArchetypeTests` resolves each name to a
   `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`.
 - Full-bleed app (nearest; it owns the viewport through its own
   `PresentLayout`, not the `fullBleed` flag): `LeaderboardPresentPage`.
-- Body-partial shim: `NotebookPage` (`BaseLayout` plus `NotebookBody`).
+- Body-partial shim: `NotebookPage` (`BaseLayout` plus `NotebookBody`) and
+  `AssignmentEditPage` (`BaseLayout` plus `AssignmentEditBody`).
+- Titlebar page (nearest; its `.editor-titlebar` holds the name input, not
+  an `<h1>` in a `.page-titlebar`): `AssignmentNewPage`.
 
 The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
-`instructor-mcp.leaf` and `account.leaf` now render `AdminUserPage`,
-`RegisterPage`, `AlertsPage`, `InstructorMCPPage` and `AccountPage`. The five
-templates are not served. They stay only because the test reads them as
-exemplars.
+`instructor-mcp.leaf`, `account.leaf` and `assignment-edit.leaf` now render
+`AdminUserPage`, `RegisterPage`, `AlertsPage`, `InstructorMCPPage`,
+`AccountPage` and `AssignmentEditPage`. The six templates are not served. They
+stay only because the test reads them as exemplars. `_assignment-edit-body.leaf`
+is still served, inside `workbench.leaf`.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each

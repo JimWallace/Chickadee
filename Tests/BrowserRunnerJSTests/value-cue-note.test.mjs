@@ -23,7 +23,7 @@ test('every value editor includes the one note partial and holds no copy of its 
     assert.doesNotMatch(source, /amber border/, file + ' holds its own copy of the note');
   }
   // The create page reaches the section inputs through _suite-sections.
-  assert.doesNotMatch(await read('Resources/Views/assignment-new.leaf'), /amber border/);
+  assert.doesNotMatch(await read('Sources/APIServer/Views/Pages/AssignmentNewPage.swift'), /amber border/);
 });
 
 test('the note links a heading that docs/inputs.md has', async () => {

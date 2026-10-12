@@ -3,7 +3,7 @@
 // Client side of the assignment suite editor.  Owns ROW-level behaviour
 // inside server-rendered section shells:
 //   - renders each row into an existing <tbody data-section-id> (the
-//     shell markup is emitted by `assignment-edit.leaf` from the
+//     shell markup is emitted by `SuiteSections` from the
 //     `suiteSectionRows` context)
 //   - handles row drag within and across sections (cross-section drag
 //     updates item.sectionID; clears dependsOn to avoid orphan parents;
