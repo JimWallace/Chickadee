@@ -82,8 +82,8 @@ extension WebRoutes {
 
         let listedCount = showsStandings ? standingsBoard.rankedCount : board.rankedCount
         let session = LiveSessionPresentation.make(activity)
-        let context =
-            LeaderboardContext(
+        let presentation =
+            LeaderboardPresentation(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
                 courseLabel: course.map { [$0.code, $0.term?.shortLabel].compactMap { $0 }.joined(separator: " ") }
@@ -130,17 +130,16 @@ extension WebRoutes {
                 // an open-ended session emphatically can.
                 pollsLive: activity.window.map { $0.state(at: Date()) != .afterClose } ?? false,
                 hasPollUntil: activity.window?.closesAtISO != nil,
-                pollUntilISO: activity.window?.closesAtISO ?? "",
-                currentUser: req.currentUserContext)
+                pollUntilISO: activity.window?.closesAtISO ?? "")
 
         // Two representations, one query, the shape every polled page here
-        // uses: `?fragment=body` renders the SAME partial the page rendered
+        // uses: `?fragment=body` renders the SAME view the page rendered
         // inline, so the refresh cannot drift from what it replaces.
         guard req.query[String.self, at: "fragment"] == "body" else {
-            return try await req.view.render("leaderboard", context).encodeResponse(for: req)
+            let page = LeaderboardPage(page: PageRequestContext(request: req), board: presentation)
+            return try await HTMLResponse { page }.encodeResponse(for: req)
         }
-        return try await req.view.render("_leaderboard-body", context)
-            .encodePollFragment(for: req)
+        return Response.pollFragment(html: ByteBuffer(string: LeaderboardBody(board: presentation).render()), for: req)
     }
 }
 

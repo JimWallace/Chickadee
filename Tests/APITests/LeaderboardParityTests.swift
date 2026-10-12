@@ -64,7 +64,7 @@ import VaporTesting
             let html = try await getHTML("/testsetups/lpy_kick/leaderboard", cookie: cookie, on: app)
             let kicker = try #require(html.range(of: "<p class=\"page-crumb\">CS101</p>"))
             let title = try #require(html.range(of: "<h1>Race lpy_kick</h1>"))
-            #expect(kicker.upperBound < title.lowerBound)
+            #expect(kicker.upperBound <= title.lowerBound)
         }
     }
 

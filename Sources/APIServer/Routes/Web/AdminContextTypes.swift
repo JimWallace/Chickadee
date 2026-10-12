@@ -250,22 +250,6 @@ struct AdminRunnerChartBar: Encodable {
     let title: String
 }
 
-struct AdminRunnerDetailContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let runner: AdminWorkerRow
-    let tags: [String]
-    let summary: AdminRunnerSummary
-    let recentJobs: [AdminRunnerJobRow]
-    let snapshots: [AdminRunnerSnapshotRow]
-    let firstSeenAt: String?
-    /// The snapshots oldest to newest, one bar each.
-    let chartBars: [AdminRunnerChartBar]
-    /// Three or four evenly spaced clock times for the chart's x-axis.
-    let chartLabels: [String]
-    /// "12m 3s" — how long since the last heartbeat; empty while the runner is online.
-    let offlineForText: String
-}
-
 struct AdminCourseEnrolledUserRow: Encodable {
     let id: String
     let username: String

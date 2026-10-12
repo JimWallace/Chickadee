@@ -170,7 +170,9 @@ struct FlashBanner<Content: HTML>: HTML {
         self.content = content()
     }
 
-    var body: some HTML {
+    /// A `div`, so a page can add an `id` or `hidden` for a banner its
+    /// script toggles.
+    var body: some HTML<HTMLTag.div> {
         div(.class(kind.rawValue), .role(role)) { content }
     }
 }
