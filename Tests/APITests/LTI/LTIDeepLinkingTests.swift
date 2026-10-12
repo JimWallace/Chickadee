@@ -478,6 +478,23 @@ import VaporTesting
         }
     }
 
+    /// The pages in the frame carry no CSRF token: minting one writes a secret
+    /// to a new session and sends a session cookie into the frame. The picker
+    /// is checked above; this checks the return page.
+    @Test func theFramedPagesCarryNoCSRFTokenAndSetNoSessionCookie() async throws {
+        try await withApp(app) { _ in
+            let fixture = try await fixture()
+            let launched = try await launch(sendStateCookie: false)
+            #expect(launched.html.contains(#"<meta name="csrf-token" content="">"#))
+            let ticket = try #require(Self.ticket(in: launched.html))
+            try await choose([fixture.lab1.publicID], ticket: ticket) { res in
+                #expect(res.status == .ok)
+                #expect(res.headers.setCookie?["vapor-session"] == nil)
+                #expect(res.body.string.contains(#"<meta name="csrf-token" content="">"#))
+            }
+        }
+    }
+
     /// A cookie that names another login's state can only come from tampering
     /// or a crossed login, so it is refused even on a deep-linking launch.
     @Test func aDeepLinkingLaunchWithAnotherLoginsStateCookieIsRefused() async throws {

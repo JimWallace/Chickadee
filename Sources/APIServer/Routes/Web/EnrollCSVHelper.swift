@@ -1,7 +1,7 @@
 // APIServer/Routes/Web/EnrollCSVHelper.swift
 //
 // Shared utilities for CSV-based bulk enrollment, used by both AdminRoutes
-// and AssignmentRoutes so the logic and result view context stay in sync.
+// and CourseAdminRoutes so the logic and the result page stay in sync.
 
 import Fluent
 import Foundation
@@ -146,29 +146,6 @@ struct EnrollCSVFormContext: Encodable {
     let courseCode: String
     let courseName: String
     let error: String?
-}
-
-/// Context for the shared `admin-enroll-csv-result` view, rendered by both
-/// admin and instructor CSV enrollment handlers.
-struct EnrollCSVResultContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let courseCode: String
-    let courseName: String
-    let enrolledCount: Int
-    /// Usernames the parser produced that don't yet have an APIUser row;
-    /// recorded as pre-enrollments and resolved on first SSO login.
-    let preEnrolledCount: Int
-    let alreadyEnrolledCount: Int
-    /// Usernames the parser rejected (failed shape validation) — surfaced
-    /// to the instructor so they can fix the CSV.
-    let rejectedUsernames: [String]
-    /// URL the back-button should link to (admin course page or /instructor).
-    let returnURL: String
-    // No computed properties here: synthesized `Encodable` does not encode
-    // them, so the template could never read them. Three did exist, and the
-    // page showed no rejected count, no pre-enrolled note and no rejected
-    // usernames (#1973). The template derives those from the stored fields
-    // with the `count` tag and a comparison instead.
 }
 
 // MARK: - Bulk-enroll execution

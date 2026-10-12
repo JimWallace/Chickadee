@@ -1,7 +1,7 @@
 // APIServer/Middleware/LeafErrorMiddleware.swift
 //
 // Catches all errors thrown by route handlers or downstream middleware and
-// renders a branded HTML error page for browser requests.  API and worker
+// renders the branded HTML error page (ErrorPage) for browser requests.  API and worker
 // endpoints (/api/…, /worker/…) still receive a plain JSON error response so
 // machine clients are not broken.
 //
@@ -69,23 +69,16 @@ struct LeafErrorMiddleware: AsyncMiddleware {
                 )
             }
 
-            // Browser routes get a Leaf-rendered error page.
-            let ctx = ErrorPageContext(
-                currentUser: request.currentUserContext,
-                status: Int(status.code),
-                title: title,
-                message: message
-            )
-
-            do {
-                let view = try await request.view.render("error", ctx).get()
-                var headers = HTTPHeaders()
-                headers.contentType = .html
-                return Response(status: status, headers: headers, body: .init(buffer: view.data))
-            } catch {
-                // Fallback if the template itself fails to render.
-                return Response(status: status, body: .init(string: "\(status.code) \(reason)"))
-            }
+            // Browser routes get the branded error page. ErrorPage reads
+            // nothing from disk and cannot throw, so no fallback is needed.
+            return try await HTMLResponse(status: status) {
+                ErrorPage(
+                    page: PageRequestContext(errorPageRequest: request),
+                    status: Int(status.code),
+                    title: title,
+                    message: message
+                )
+            }.encodeResponse(for: request)
         }
     }
 }
@@ -130,13 +123,4 @@ func friendlyReason(status: HTTPStatus, reason: String) -> String {
     default:
         return trimmed.isEmpty ? "Something went wrong." : trimmed
     }
-}
-
-// MARK: - View context
-
-private struct ErrorPageContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let status: Int
-    let title: String
-    let message: String
 }

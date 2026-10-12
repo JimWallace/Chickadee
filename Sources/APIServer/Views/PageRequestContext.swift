@@ -25,10 +25,31 @@ struct PageRequestContext: Sendable {
 
 extension PageRequestContext {
     init(request req: Request) {
+        self.init(request: req, csrfToken: CSRF.createToken(from: req))
+    }
+
+    /// The context for a page that shows the course tabs. The course-aware
+    /// user is resolved and cached on the request first, so `currentUser`
+    /// carries the enrolled courses. A route behind
+    /// `NavCourseContextMiddleware` already has it cached.
+    static func courseAware(_ req: Request) async throws -> PageRequestContext {
+        _ = try await req.courseAwareUserContext()
+        return PageRequestContext(request: req)
+    }
+
+    /// The error page's context. An error can be thrown before
+    /// SessionsMiddleware has run, and reading the session then traps in a
+    /// debug build, so the token is minted only when a session exists. With
+    /// no session there is no signed-in user, so no form on the page needs one.
+    init(errorPageRequest req: Request) {
+        self.init(request: req, csrfToken: req.hasSession ? CSRF.createToken(from: req) : "")
+    }
+
+    private init(request req: Request, csrfToken: String) {
         let security = req.application.securityConfiguration
         self.init(
             currentUser: req.currentUserContext,
-            csrfToken: CSRF.createToken(from: req),
+            csrfToken: csrfToken,
             appVersion: ChickadeeVersion.current,
             sessionIdleTimeoutSeconds: max(0, Int(security.sessionIdleTimeoutSeconds)),
             sessionIdleWarningSeconds: max(0, Int(security.sessionIdleWarningSeconds)),

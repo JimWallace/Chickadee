@@ -4,9 +4,9 @@
 # always does) and the template still renders. Thirty-three sites shipped this
 # way before the guard existed.
 guard="scripts/check-leaf-semantics.sh"
-files="Resources/Views/enroll.leaf"
+files="Resources/Views/base.leaf"
 description="Swift .isEmpty property access in a Leaf tag parameter"
 expect="Leaf cannot resolve Swift properties on a collection"
 apply() {
-    printf '#if(courses.isEmpty):\n<p>guard fixture</p>\n#endif\n' >> Resources/Views/enroll.leaf
+    printf '#if(courses.isEmpty):\n<p>guard fixture</p>\n#endif\n' >> Resources/Views/base.leaf
 }

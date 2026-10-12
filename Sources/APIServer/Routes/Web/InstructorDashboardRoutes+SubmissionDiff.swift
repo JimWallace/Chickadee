@@ -17,7 +17,7 @@ extension InstructorDashboardRoutes {
     // MARK: - GET /instructor/:assignmentID/submissions/:submissionID/diff
 
     @Sendable
-    func submissionDiffPage(req: Request) async throws -> View {
+    func submissionDiffPage(req: Request) async throws -> Response {
         let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         guard
             let submissionID = req.parameters.get("submissionID"),
@@ -45,7 +45,6 @@ extension InstructorDashboardRoutes {
         let sides = await submissionDiffSides(source)
 
         let rows = LineDiff.unified(old: sides.oldLines, new: sides.newLines, context: 3)
-        let counts = LineDiff.counts(rows)
         let assignmentIDRaw = assignment.publicID
         let historyURL = submission.userID.map {
             "/instructor/\(assignmentIDRaw)/students/\($0.uuidString)/history"
@@ -54,11 +53,9 @@ extension InstructorDashboardRoutes {
             student.map {
                 accountIdentityName(displayName: $0.displayName, preferredName: $0.preferredName, username: $0.username)
             } ?? "unknown"
-        return try await req.view.render(
-            "submission-diff",
-            SubmissionDiffContext(
-                currentUser: req.currentUserContext,
-                assignmentID: assignmentIDRaw,
+        return try await HTMLResponse {
+            SubmissionDiffPage(
+                page: PageRequestContext(request: req),
                 assignmentTitle: assignment.title,
                 studentName: studentName,
                 studentUsername: student.flatMap {
@@ -67,13 +64,11 @@ extension InstructorDashboardRoutes {
                 attemptNumber: submission.attemptNumber ?? 1,
                 comparedLabel: sides.comparedLabel,
                 unavailableReason: sides.unavailableReason,
-                addedCount: counts.added,
-                removedCount: counts.removed,
-                rows: rows.map(SubmissionDiffRowView.init),
+                rows: rows,
                 resultsURL: "/submissions/\(submissionID)",
                 historyURL: historyURL ?? "/instructor/\(assignmentIDRaw)/submissions"
             )
-        )
+        }.encodeResponse(for: req)
     }
 }
 
@@ -186,46 +181,4 @@ func diffLines(_ text: String) -> [String] {
     var body = text
     if body.hasSuffix("\n") { body.removeLast() }
     return body.isEmpty ? [] : body.components(separatedBy: "\n")
-}
-
-// MARK: - Template context
-
-private struct SubmissionDiffContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let assignmentTitle: String
-    /// The same identity line as the history page this is reached from.
-    let studentName: String
-    let studentUsername: String?
-    let attemptNumber: Int
-    let comparedLabel: String
-    let unavailableReason: String?
-    let addedCount: Int
-    let removedCount: Int
-    let rows: [SubmissionDiffRowView]
-    let resultsURL: String
-    let historyURL: String
-}
-
-/// One listing row, with its kind spelled as flags the template branches on
-/// (Leaf cannot compare an enum's raw value in a class attribute safely).
-private struct SubmissionDiffRowView: Encodable {
-    let isAdded: Bool
-    let isRemoved: Bool
-    let isFold: Bool
-    /// True for the cell-boundary marker line, styled muted.
-    let isMarker: Bool
-    let oldNumber: String
-    let newNumber: String
-    let text: String
-
-    init(_ row: LineDiffRow) {
-        isAdded = row.kind == .added
-        isRemoved = row.kind == .removed
-        isFold = row.kind == .fold
-        isMarker = row.kind != .fold && row.text == notebookDiffCellMarker
-        oldNumber = row.kind == .fold ? "" : row.oldNumber.map(String.init) ?? ""
-        newNumber = row.kind == .fold ? "" : row.newNumber.map(String.init) ?? ""
-        text = row.text
-    }
 }

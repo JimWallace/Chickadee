@@ -1,9 +1,10 @@
 // Tests/APITests/EnrollCSVResultPageTests.swift
 //
-// The CSV enrollment result page reads only what its context encodes
-// (#1973). It used to read three computed properties, which synthesized
-// `Encodable` never encodes, so the rejected count, the pre-enrolled note
-// and the rejected-usernames section never rendered.
+// The CSV enrollment result page shows the rejected count, the pre-enrolled
+// note and the rejected usernames (#1973). The Leaf template once read them
+// from three computed properties, which synthesized `Encodable` never
+// encodes, so none of them rendered. The page is Swift now
+// (`AdminEnrollCSVResultPage`); the checks stay.
 
 import Testing
 import Vapor
@@ -20,12 +21,13 @@ import Vapor
     private func render(
         preEnrolledCount: Int, rejectedUsernames: [String], on app: Application
     ) async throws -> String {
-        let context = EnrollCSVResultContext(
-            currentUser: nil, courseCode: "CS100", courseName: "Intro", enrolledCount: 3,
-            preEnrolledCount: preEnrolledCount, alreadyEnrolledCount: 1,
-            rejectedUsernames: rejectedUsernames, returnURL: "/instructor")
-        let view = try await app.view.render("admin-enroll-csv-result", context)
-        return String(buffer: view.data)
+        let result = EnrollUsernamesResult(
+            enrolledCount: 3, preEnrolledCount: preEnrolledCount, alreadyEnrolledCount: 1,
+            rejectedUsernames: rejectedUsernames)
+        return AdminEnrollCSVResultPage(
+            page: ElementaryPageFixtures.page(), courseCode: "CS100", courseName: "Intro", result: result,
+            returnURL: "/instructor"
+        ).render()
     }
 
     /// The value the page shows in the Rejected row.

@@ -2,7 +2,7 @@
 //
 // Course staff reach one student's history on one assignment from two places:
 // the assignment's roster and the course's per-student view. Both render
-// `student-assignment-history.leaf` (#1710), so both name the student the way
+// `StudentAssignmentHistoryPage` (#1710), so both name the student the way
 // the account page does. They differ in the back link, and only the roster
 // route links each submission to its diff: the diff page's History link goes
 // back to the roster's copy of this page.

@@ -121,8 +121,8 @@ them is the answer.
 | **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | admin, admin-users |
 | **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
-| **Plain student page** | `<h1>` → content | `account.leaf` | index, submit, enroll |
-| **Auth box** | `.auth-box` centred card | `register.leaf` | login, oauth-consent |
+| **Plain student page** | `<h1>` → content | `account.leaf` | index |
+| **Auth box** | `.auth-box` centred card | `register.leaf` | — |
 | **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
 | **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
 
@@ -139,7 +139,20 @@ also the least copyable file here, which is the honest reading of an
 archetype with one member.
 
 The pages in the **Also** column are the archetype too; they are just not
-the reference.  `Tests/APITests/PageArchetypeTests.swift` reads this table —
+the reference.
+
+During the Elementary migration (`docs/elementary-spike.md`), the column
+names only Leaf templates. `PageArchetypeTests` resolves each name to a
+`.leaf` file. These ported pages also follow an archetype:
+
+- Auth box: `LoginPage`, `OAuthConsentPage`.
+- Plain student page: `SubmitPage`, `EnrollPage`.
+
+The routes for `admin-user.leaf` and `register.leaf` now render
+`AdminUserPage` and `RegisterPage`. The two templates are not served. They
+stay only because the test reads them as exemplars.
+
+`Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
 exemplar against its own row on every run.  It checks the exemplars and
 nothing else: no page fails for not being one.  It does hold them to

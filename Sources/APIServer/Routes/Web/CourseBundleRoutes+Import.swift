@@ -28,7 +28,7 @@ extension CourseBundleRoutes {
     // MARK: - POST /admin/courses/import
 
     @Sendable
-    func importCourse(req: Request) async throws -> View {
+    func importCourse(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         guard caller.isAdmin else { throw Abort(.forbidden) }
 
@@ -328,21 +328,10 @@ extension CourseBundleRoutes {
 
     // ── 8. Render result page ─────────────────────────────────────────
 
-    private func renderImportResult(req: Request, tally: ImportTally) async throws -> View {
-        let ctx = ImportResultContext(
-            currentUser: req.currentUserContext,
-            courseID: tally.courseID.uuidString,
-            courseCode: tally.courseCode,
-            courseName: tally.courseName,
-            termLabel: tally.termLabel,
-            testSetupsImported: tally.testSetupsImported,
-            assignmentsImported: tally.assignmentsImported,
-            usersCreated: tally.usersCreated,
-            usersMatched: tally.usersMatched,
-            submissionsImported: tally.submissionsImported,
-            resultsImported: tally.resultsImported
-        )
-        return try await req.view.render("admin-import-result", ctx)
+    private func renderImportResult(req: Request, tally: ImportTally) async throws -> Response {
+        try await HTMLResponse {
+            AdminImportResultPage(page: PageRequestContext(request: req), tally: tally)
+        }.encodeResponse(for: req)
     }
 }
 
@@ -363,6 +352,7 @@ struct ImportTally: Sendable {
     var courseID: UUID
     var courseCode: String
     var courseName: String
+    /// "Fall 2026", or nil when the bundle carried no term.
     var termLabel: String?
     var usersCreated: Int = 0
     var usersMatched: Int = 0
@@ -373,23 +363,6 @@ struct ImportTally: Sendable {
     /// Every file and directory the import wrote, recorded before the
     /// write, so a failed transaction can remove them (#2164).
     var createdPaths: [String] = []
-}
-
-// MARK: - View context
-
-private struct ImportResultContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let courseID: String
-    let courseCode: String
-    let courseName: String
-    /// "Fall 2026", or nil when the bundle carried no term.
-    let termLabel: String?
-    let testSetupsImported: Int
-    let assignmentsImported: Int
-    let usersCreated: Int
-    let usersMatched: Int
-    let submissionsImported: Int
-    let resultsImported: Int
 }
 
 // MARK: - Import phase helpers (6c–6h)

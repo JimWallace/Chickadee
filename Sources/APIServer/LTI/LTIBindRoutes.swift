@@ -4,7 +4,7 @@
 // Reached only after an instructor launch from an unbound context: the
 // launch signs the instructor in and leaves the context in the session.
 //
-//   GET  /lti/bind → lti-bind.leaf, the instructor's unbound courses
+//   GET  /lti/bind → LTIBindPage, the instructor's unbound courses
 //   POST /lti/bind → bind the chosen course, then go to it
 //
 // Registered in the authenticated, CSRF-protected group: unlike the launch,
@@ -27,16 +27,15 @@ struct LTIBindRoutes: RouteCollection {
     }
 
     @Sendable
-    func bindPage(req: Request) async throws -> View {
+    func bindPage(req: Request) async throws -> Response {
         let pending = try Self.pending(req)
         let user = try req.auth.require(APIUser.self)
         let courses = try await Self.bindableCourses(for: user, on: req.db)
-        return try await req.view.render(
-            "lti-bind",
-            LTIBindContext(
-                currentUser: req.currentUserContext,
-                contextTitle: pending.contextTitle,
-                courses: Self.options(courses)))
+        return try await HTMLResponse {
+            LTIBindPage(
+                page: PageRequestContext(request: req), contextTitle: pending.contextTitle,
+                courses: Self.options(courses))
+        }.encodeResponse(for: req)
     }
 
     @Sendable
@@ -108,13 +107,7 @@ struct LTIBindRoutes: RouteCollection {
     }
 }
 
-struct LTIBindContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let contextTitle: String
-    let courses: [LTIBindCourseOption]
-}
-
-struct LTIBindCourseOption: Encodable {
+struct LTIBindCourseOption {
     let id: String
     let code: String
     let name: String

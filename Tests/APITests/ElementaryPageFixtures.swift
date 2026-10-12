@@ -13,15 +13,22 @@ import Foundation
 struct ElementaryPageFixture {
     /// The page's Swift type name, as declared in `Views/Pages/`.
     let typeName: String
+    /// The page's archetype, or the nearest one when the page predates the
+    /// rulebook and fits none exactly.
     let archetype: PageArchetypeTests.Archetype
     /// One render per branch worth checking.
     let renders: [String]
+    /// True for the page an archetype names as its exemplar in
+    /// docs/ui-design.md. Only exemplars are held to the archetype's rules:
+    /// "It checks the exemplars and nothing else: no page fails for not being
+    /// one."
+    var isExemplar = false
 }
 
 enum ElementaryPageFixtures {
 
     static var all: [ElementaryPageFixture] {
-        [adminUserPage]
+        [adminUserPage, loginPage, registerPage] + historyPages + mcpLtiPages + studentPages
     }
 
     // MARK: - Shared values
@@ -54,6 +61,36 @@ enum ElementaryPageFixtures {
 
     // MARK: - Pages
 
+    static var loginPage: ElementaryPageFixture {
+        func render(error: String?, loggedOut: Bool, local: Bool, sso: Bool) -> String {
+            LoginPage(
+                page: page(), error: error, loggedOut: loggedOut, showLocalLogin: local, showRegisterLink: local,
+                showSSOLogin: sso
+            ).render()
+        }
+        return ElementaryPageFixture(
+            typeName: "LoginPage",
+            archetype: .authBox,
+            renders: [
+                render(error: nil, loggedOut: true, local: true, sso: true),
+                render(error: "invalid", loggedOut: false, local: true, sso: false),
+                render(error: "sso_failed", loggedOut: false, local: false, sso: true),
+            ]
+        )
+    }
+
+    static var registerPage: ElementaryPageFixture {
+        ElementaryPageFixture(
+            typeName: "RegisterPage",
+            archetype: .authBox,
+            renders: [
+                RegisterPage(page: page(), error: nil).render(),
+                RegisterPage(page: page(), error: "taken").render(),
+            ],
+            isExemplar: true
+        )
+    }
+
     static var adminUserPage: ElementaryPageFixture {
         let fall = AdminCourseRef(id: "c1", code: "CS135", name: "Design", termLabel: "Fall 2026")
         let untermed = AdminCourseRef(id: "c2", code: "CS136", name: "Algorithms", termLabel: nil)
@@ -75,7 +112,8 @@ enum ElementaryPageFixtures {
                 render(
                     signedInAdmin, enrolled: [fall, untermed], available: [],
                     flash: FlashMessages(error: AdminEnrollError.invalidCourse.message)),
-            ]
+            ],
+            isExemplar: true
         )
     }
 }

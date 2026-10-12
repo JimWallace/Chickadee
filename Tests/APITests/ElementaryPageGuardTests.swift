@@ -118,8 +118,14 @@ import Testing
     /// checked above; the flash rule is still open (docs/elementary-spike.md).
     /// The tabbed and shim archetypes read Leaf partials too, and need their
     /// rules adapted before a page of that shape moves to Swift.
-    @Test func everyPageMatchesItsArchetype() throws {
-        for fixture in Self.fixtures {
+    ///
+    /// Only exemplars are checked, as `PageArchetypeTests` checks only the
+    /// exemplar templates: a page that predates the rulebook may fit no
+    /// archetype exactly, and the port keeps its markup unchanged.
+    @Test func everyExemplarMatchesItsArchetype() throws {
+        let exemplars = Self.fixtures.filter(\.isExemplar)
+        #expect(!exemplars.isEmpty, "no fixture is marked as an exemplar, so this test checks nothing")
+        for fixture in exemplars {
             for html in fixture.renders {
                 let main = try #require(RenderedMarkupRules.mainContent(of: html))
                 let page = PageArchetypeTests.Page(file: fixture.typeName, markup: main, source: "")

@@ -192,9 +192,12 @@ extension WebRoutes {
         let chips = try await SubmitChips.make(setupID: setupID, assignment: assignment, user: user, on: req.db)
         let aiFeedbackNotice =
             if let assignment { try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db) } else { false }
-        return try await req.view.render(
-            "submit",
-            SubmitContext(
+        let githubSubmitURL =
+            try await GitHubSubmissionOffer.isOffered(setup: setup, on: req.db)
+            ? "/testsetups/\(setupID)/github" : nil
+        return try await HTMLResponse {
+            SubmitPage(
+                page: PageRequestContext(request: req),
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
                 acceptAttribute: submissionAcceptAttribute(manifest: manifest),
@@ -203,15 +206,11 @@ extension WebRoutes {
                     ? submissionRejectionMessage(manifest: manifest) : nil,
                 requiredFilesText: requiredFiles.isEmpty
                     ? nil : requiredFiles.joined(separator: ", "),
-                attemptNumber: chips.attemptNumber,
-                deadlineText: chips.deadlineText,
-                deadlineISO: chips.deadlineISO,
-                currentUser: req.currentUserContext,
-                githubSubmitURL: try await GitHubSubmissionOffer.isOffered(setup: setup, on: req.db)
-                    ? "/testsetups/\(setupID)/github" : nil,
+                chips: chips,
+                githubSubmitURL: githubSubmitURL,
                 aiFeedbackNotice: aiFeedbackNotice
             )
-        ).encodeResponse(for: req)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /testsetups/:id/submit
@@ -290,7 +289,7 @@ extension WebRoutes {
     // MARK: - GET /testsetups/:id/history
 
     @Sendable
-    func submissionHistoryPage(req: Request) async throws -> View {
+    func submissionHistoryPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
         guard
@@ -336,14 +335,9 @@ extension WebRoutes {
             )
         }
 
-        return try await req.view.render(
-            "submission-history",
-            SubmissionHistoryContext(
-                testSetupID: setupID,
-                assignmentTitle: title,
-                rows: rows,
-                currentUser: req.currentUserContext
-            ))
+        return try await HTMLResponse {
+            SubmissionHistoryPage(page: PageRequestContext(request: req), assignmentTitle: title, rows: rows)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - GET /submissions/:id

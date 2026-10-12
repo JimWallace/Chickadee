@@ -4,7 +4,7 @@
 // Chickadee assignments from inside the LMS.
 //
 //   POST /lti/launch    → a verified deep-linking launch renders
-//                         lti-deep-link.leaf, the bound course's assignments
+//                         LTIDeepLinkPage, the bound course's assignments
 //                         (`startPicker`)
 //   POST /lti/deep-link → sign an LtiDeepLinkingResponse with the tool key and
 //                         hand it to the platform's return URL
@@ -18,7 +18,7 @@
 // route is therefore public and outside the CSRF group, like the launch.
 //
 // A launch from an LMS course that is not linked yet shows an instructor
-// "Link this LMS course" first (`startBind`, lti-deep-link-bind.leaf). The
+// "Link this LMS course" first (`startBind`, LTIDeepLinkBindPage). The
 // request travels to `POST /lti/deep-link/bind` in a short-lived token the
 // tool key signed (`LTIDeepLinkBindToken`); that route applies the same rules
 // as `/lti/bind`, links the course, and continues to the picker.
@@ -69,8 +69,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
         ).save(on: req.db)
         allowFraming(platform: platform, returnURL: request.returnURL, on: req)
         return try await renderPicker(
-            ticket: ticket, course: course, acceptMultiple: request.acceptMultiple, error: nil, req: req
-        ).encodeResponse(for: req)
+            ticket: ticket, course: course, acceptMultiple: request.acceptMultiple, error: nil, req: req)
     }
 
     // MARK: - Link the LMS course first
@@ -87,8 +86,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
         allowFraming(platform: platform, returnURL: request.returnURL, on: req)
         return try await renderBind(
             token: try await req.application.ltiToolKeyAuthority().sign(token), contextTitle: contextTitle,
-            user: user, error: nil, req: req
-        ).encodeResponse(for: req)
+            user: user, error: nil, req: req)
     }
 
     // MARK: - POST /lti/deep-link/bind
@@ -127,8 +125,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
         else {
             return try await Self.renderBind(
                 token: raw, contextTitle: token.contextTitle, user: user,
-                error: "Choose a course you teach that is not linked yet.", req: req
-            ).encodeResponse(for: req)
+                error: "Choose a course you teach that is not linked yet.", req: req)
         }
         try await LTICourseBinding.bind(course, platformID: token.platformID, contextID: token.contextID, on: req.db)
         await AuditLogger.record(
@@ -140,19 +137,18 @@ struct LTIDeepLinkRoutes: RouteCollection {
 
     private static func renderBind(
         token: String, contextTitle: String, user: APIUser, error: String?, req: Request
-    ) async throws -> View {
-        try await req.view.render(
-            "lti-deep-link-bind",
-            LTIDeepLinkBindContext(
-                currentUser: nil, embedded: true, token: token, contextTitle: contextTitle,
-                courses: LTIBindRoutes.options(try await LTIBindRoutes.bindableCourses(for: user, on: req.db)),
-                error: error))
+    ) async throws -> Response {
+        let courses = LTIBindRoutes.options(try await LTIBindRoutes.bindableCourses(for: user, on: req.db))
+        return try await HTMLResponse {
+            LTIDeepLinkBindPage(
+                page: framedPage(req), token: token, contextTitle: contextTitle, courses: courses, error: error)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /lti/deep-link
 
     @Sendable
-    func returnSelection(req: Request) async throws -> View {
+    func returnSelection(req: Request) async throws -> Response {
         let body = try? req.content.decode(SelectionBody.self)
         let pending = try await Self.pending(ticket: body?.ticket, req: req)
         let request = pending.row.request
@@ -202,9 +198,9 @@ struct LTIDeepLinkRoutes: RouteCollection {
         // The form posts to the platform, another origin: allow exactly it.
         SecurityHeadersMiddleware.allowFormAction(
             SecurityHeadersMiddleware.cspOrigin(of: request.returnURL), on: req)
-        return try await req.view.render(
-            "lti-deep-link-return",
-            LTIDeepLinkReturnContext(currentUser: nil, embedded: true, returnURL: request.returnURL, jwt: jwt))
+        return try await HTMLResponse {
+            LTIDeepLinkReturnPage(page: Self.framedPage(req), returnURL: request.returnURL, jwt: jwt)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - Helpers
@@ -214,22 +210,34 @@ struct LTIDeepLinkRoutes: RouteCollection {
 
     private static func renderPicker(
         ticket: String, course: APICourse, acceptMultiple: Bool, error: String?, req: Request
-    ) async throws -> View {
+    ) async throws -> Response {
         let courseID = try course.requireID()
         let assignments = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
             .sort(\.$title)
             .all()
-        return try await req.view.render(
-            "lti-deep-link",
-            LTIDeepLinkContext(
-                currentUser: nil,
-                embedded: true,
-                ticket: ticket,
-                courseCode: course.code,
-                acceptMultiple: acceptMultiple,
-                assignments: assignments.map { LTIDeepLinkOption(publicID: $0.publicID, title: $0.title) },
-                error: error))
+        let options = assignments.map { LTIDeepLinkOption(publicID: $0.publicID, title: $0.title) }
+        return try await HTMLResponse {
+            LTIDeepLinkPage(
+                page: framedPage(req), ticket: ticket, courseCode: course.code, acceptMultiple: acceptMultiple,
+                assignments: options, error: error)
+        }.encodeResponse(for: req)
+    }
+
+    /// The page values for a page in the LMS frame: no signed-in user and no
+    /// CSRF token. The frame carries no session cookie, and the forms carry the
+    /// ticket or the bind token instead. Minting a CSRF token would write a
+    /// secret to a new session and send a session cookie into the frame, which
+    /// a deep-linking launch must not do. The Leaf pages did, through the
+    /// `csrfToken` tag in `base.leaf`; the test app registers no such tag, so
+    /// the test that forbids the cookie could not see it.
+    private static func framedPage(_ req: Request) -> PageRequestContext {
+        let security = req.application.securityConfiguration
+        return PageRequestContext(
+            currentUser: nil, csrfToken: "", appVersion: ChickadeeVersion.current,
+            sessionIdleTimeoutSeconds: max(0, Int(security.sessionIdleTimeoutSeconds)),
+            sessionIdleWarningSeconds: max(0, Int(security.sessionIdleWarningSeconds)),
+            iconSprite: req.application.iconSprite)
     }
 
     /// Lets the platform show these pages in its frame: its issuer origin and
@@ -263,36 +271,8 @@ struct LTIDeepLinkRoutes: RouteCollection {
     }
 }
 
-/// Both page contexts set `embedded`: the pages render inside the LMS frame,
-/// where the site nav's links (home, log in) would load pages that refuse to
-/// be framed and that have no session there. `base.leaf` then omits the nav.
-struct LTIDeepLinkContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let embedded: Bool
-    let ticket: String
-    let courseCode: String
-    let acceptMultiple: Bool
-    let assignments: [LTIDeepLinkOption]
-    let error: String?
-}
-
-struct LTIDeepLinkBindContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let embedded: Bool
-    let token: String
-    let contextTitle: String
-    let courses: [LTIBindCourseOption]
-    let error: String?
-}
-
-struct LTIDeepLinkOption: Encodable {
+/// One assignment in the deep-linking picker.
+struct LTIDeepLinkOption {
     let publicID: String
     let title: String
-}
-
-struct LTIDeepLinkReturnContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let embedded: Bool
-    let returnURL: String
-    let jwt: String
 }

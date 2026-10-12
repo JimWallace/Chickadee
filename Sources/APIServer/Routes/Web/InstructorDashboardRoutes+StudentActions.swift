@@ -14,7 +14,7 @@ extension InstructorDashboardRoutes {
     // MARK: - GET /instructor/:assignmentID/students/:studentID/history
 
     @Sendable
-    func studentSubmissionHistoryPage(req: Request) async throws -> View {
+    func studentSubmissionHistoryPage(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForStaffRead(req)
         let assignmentIDRaw = assignment.publicID
         guard
@@ -52,10 +52,9 @@ extension InstructorDashboardRoutes {
 
         let studentName = accountIdentityName(
             displayName: student.displayName, preferredName: student.preferredName, username: student.username)
-        return try await req.view.render(
-            "student-assignment-history",
-            StudentAssignmentHistoryContext(
-                currentUser: req.currentUserContext,
+        return try await HTMLResponse {
+            StudentAssignmentHistoryPage(
+                page: PageRequestContext(request: req),
                 studentName: studentName,
                 studentUsername: accountIdentitySecondary(identityName: studentName, username: student.username),
                 assignmentID: assignmentIDRaw,
@@ -66,7 +65,7 @@ extension InstructorDashboardRoutes {
                 historyPath: "/instructor/\(assignmentIDRaw)/students/\(studentIDRaw)/history",
                 rows: rows
             )
-        )
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/:assignmentID/submissions/:submissionID/retest

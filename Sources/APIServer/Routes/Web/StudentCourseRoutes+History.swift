@@ -289,7 +289,7 @@ extension StudentCourseRoutes {
     // MARK: - GET /:courseCode/students/:urlToken/assignments/:assignmentID/history
 
     @Sendable
-    func studentAssignmentHistoryPage(req: Request) async throws -> View {
+    func studentAssignmentHistoryPage(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
             req: req, action: "view student submission history")
         let (course, student, assignment) = (action.course, action.student, action.assignment)
@@ -328,10 +328,9 @@ extension StudentCourseRoutes {
 
         let studentName = accountIdentityName(
             displayName: student.displayName, preferredName: student.preferredName, username: student.username)
-        return try await req.view.render(
-            "student-assignment-history",
-            StudentAssignmentHistoryContext(
-                currentUser: req.currentUserContext,
+        return try await HTMLResponse {
+            StudentAssignmentHistoryPage(
+                page: PageRequestContext(request: req),
                 studentName: studentName,
                 studentUsername: accountIdentitySecondary(identityName: studentName, username: student.username),
                 assignmentID: assignmentIDRaw,
@@ -342,7 +341,7 @@ extension StudentCourseRoutes {
                 historyPath: historyPath,
                 rows: rows
             )
-        )
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/retest
