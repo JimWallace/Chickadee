@@ -31,6 +31,18 @@ struct GitHubSubmitPage: HTML {
             if let errorText = state.errorText {
                 div(.class("form-error"), .role("alert")) { errorText }
             }
+            if let starter = state.starter, !state.courseRepositoryMode {
+                section(.class("page-section")) {
+                    h2 { "Starter repository" }
+                    p(.class("section-intro")) {
+                        "Make a private copy of "
+                        a(.href(starter.url)) { starter.name }
+                        " with "
+                        strong { "Use this template" }
+                        ", then submit from it."
+                    }
+                }
+            }
             if state.needsLink {
                 p {
                     "Link a GitHub account on your "
@@ -61,6 +73,9 @@ struct GitHubSubmitPage: HTML {
                             a(.href(commit.commitURL)) { code { commit.shortSHA } }
                             " \(commit.summary)"
                         }
+                    }
+                    if state.notFromStarter {
+                        p(.class("section-note")) { "This repository was not made from the starter repository." }
                     }
                     form(.method(.post), .action("/testsetups/\(testSetupID)/github"), .class("inline-form")) {
                         CSRFField(token: page.csrfToken)

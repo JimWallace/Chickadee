@@ -6,7 +6,8 @@ account on the account page, a student can submit a commit from a repository
 they own, a course can give each student a private repository in a course
 organization, made from a template, staff can see the last push to each
 course repository, and an assignment can post its public-test count to a
-graded commit. They are built so that the privacy review
+graded commit. A slice-3 follow-up adds starter repositories and refuses a
+public repository (see "Starter repositories"). They are built so that the privacy review
 (slice 0) can examine working behaviour. No deployment may register an App, and
 no course may use any of it, until the review finishes. The section "What
 reaches GitHub" lists every item of data that crosses, by slice. See
@@ -368,6 +369,69 @@ ask it, and every GitHub route is 404 while it is false. The results page, for
 the student and for staff, shows "From GitHub: owner/name at abc1234" with a
 link to the commit.
 
+## Starter repositories (a slice-3 follow-up)
+
+A course that does not bind an organization can still give every student the
+same starting code. The instructor names a **public template repository**. Each
+student copies it with *Use this template* into a **private** repository in
+their own account, and submits from that copy through slice 3.
+
+### Why a template and not a fork
+
+| | Fork of a public repository | Fork of a private repository | Private copy of a public template |
+|---|---|---|---|
+| Who can read the student's work | Everyone, because a fork of a public repository is public | The student, the owners of the canonical repository, and possibly other people with access to it | The student only |
+| What the student needs | A GitHub account | Read access to the canonical repository, so membership of the organization | A GitHub account |
+| Organization setting | None | Forks of private repositories must be allowed, which slice 4 warns against | None |
+| End of term | Nothing | GitHub deletes the forks of a student whose access is removed | Nothing |
+| Pull requests | The default target is the canonical repository, so one wrong click shows a solution to the class | The same | The copy has no upstream |
+| A fix to the starter code | The student syncs the fork | The same | Not automatic: announce the fix |
+
+Only the third column keeps each student's work private without a course
+organization, so Chickadee supports only that one. Slice 4 is the choice for a
+course that wants the copies in an organization it controls.
+
+### As built
+
+- **The setting.** The edit page's GitHub setting has a *Starter repository*
+  field beside *Allow submission from a GitHub commit*. It takes `owner/name`
+  or the repository's GitHub URL, and stores `owner/name` in the manifest as
+  `githubStarterRepository` (`GitHubRepositoryName` checks it). The field is
+  saved only with GitHub submission on, and turning submission off clears it.
+  Text that is not a repository name is refused with an error, and nothing is
+  saved. `makeWorkerManifestJSON(preserving:)` keeps the field, and
+  `runnerSanitized` drops it. The audit entry `github.submission_toggled`
+  records the value.
+- **The submit page** shows a *Starter repository* section with a link to the
+  template and the steps. It is not shown in course-repository mode, where
+  Chickadee makes the copy.
+- **Which template the copy came from.** When the student chooses a
+  repository, the page reads it by its ID, because the list of granted
+  repositories does not carry `template_repository`. When the repository was
+  not made from the starter repository, the commit section says so. This is a
+  note, not a refusal: a student may start from an empty repository, and the
+  check compares names only.
+- **Chickadee does not check that the starter repository exists, is public or
+  is a template.** It reads nothing about it, and it needs no permission for
+  it. An instructor who names a private repository gives students a link that
+  they cannot open.
+
+### Public repositories are refused
+
+This rule applies to every GitHub submission, with or without a starter
+repository. A public repository shows the student's solution to everyone, so
+the page and the POST refuse it with `notPrivate`: "This repository is public,
+so anyone can read your solution. Make it private on GitHub, then try again."
+
+- The POST refuses it after the ownership check and before the download, so
+  no tarball is read.
+- The page shows the same sentence as a banner when a public repository is
+  chosen, and keeps the list, so that the student can choose another one.
+- The rule uses the `private` field of the repository read by its ID. A
+  repository whose visibility was not read counts as public, as in slice 6.
+- Course repositories are made private, so the rule does not change course-
+  repository mode. The commit-status poster keeps its own check and log line.
+
 ## Course repositories (slice 4)
 
 This slice is the Classroom feature: each student gets a private repository in
@@ -603,6 +667,7 @@ Chickadee.
 | 2 | That a Chickadee user authorizes the App (the OAuth request itself) | Out | The student's own GitHub account |
 | 2 | The student's GitHub user ID and login | In | Stored in `github_account_links`; the user token is revoked at once |
 | 3 | The repository and branch names, the head commit's SHA and message | In | Read for the page only; not stored |
+| 3 | Whether the chosen repository is private, and the `owner/name` of the template it was made from | In | Read for the page and the submit only; not stored |
 | 3 | The commit's files (tarball) | In | Stored as the submission zip, as an upload is |
 | 3 | The repository ID, `owner/name` and the SHA of each GitHub submission | In | Stored on the submission row |
 | 4 | That an instructor authorizes the App, and their role in the organization | Out, then In | The instructor's own account; the role is read once and not stored |

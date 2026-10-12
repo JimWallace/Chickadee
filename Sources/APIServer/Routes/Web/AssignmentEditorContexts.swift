@@ -278,4 +278,6 @@ struct GitHubSubmissionSetting: Encodable {
     let enabled: Bool
     /// Commit statuses (slice 6).
     let statusChecks: Bool
+    /// The starter repository as `owner/name`, or empty.
+    let starterRepository: String
 }

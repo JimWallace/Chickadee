@@ -644,7 +644,8 @@ struct InstructorDashboardRoutes: RouteCollection {
                 && manifest?.effectiveGradingMode != .browser
                 ? GitHubSubmissionSetting(
                     enabled: manifest?.githubSubmission == true,
-                    statusChecks: manifest?.githubStatusChecks == true) : nil,
+                    statusChecks: manifest?.githubStatusChecks == true,
+                    starterRepository: manifest?.githubStarterRepository ?? "") : nil,
             // Read straight off the manifest JSON, not from resolution: the
             // select shows what is DECLARED, and resolution would fill the box
             // in with a derived answer the author never chose.
