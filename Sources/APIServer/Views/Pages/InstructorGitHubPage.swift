@@ -221,6 +221,7 @@ private struct InstructorGitHubTemplateRow: HTML {
                                     .attributes(.selected, when: option.selected)
                             }
                         }
+                        " "
                         button(.class("btn action-btn"), .type(.submit)) { "Save" }
                     }
                 } else {

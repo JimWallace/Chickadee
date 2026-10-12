@@ -38,6 +38,7 @@ struct InstructorActivityPage: HTML {
                                     .attributes(.selected, when: option.selected)
                             }
                         }
+                        " "
                         noscript { button(.type(.submit), .class("btn action-btn")) { "Show" } }
                     }
                 }

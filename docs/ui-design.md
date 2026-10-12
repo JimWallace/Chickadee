@@ -182,7 +182,8 @@ Anatomy rules that hold across archetypes:
 - **Tab bars are the `_admin-tabs` / `_instructor-tabs` partials.**  The
   active tab rides `activeAdminTab` / `activeInstructorTab`.  A Swift admin
   page opens with `AdminTabs(active:page:)` instead, which also renders the
-  version banner.
+  version banner, and a Swift instructor page opens with
+  `InstructorTabs(active:)`.
 - **Headings are structural:** tabbed pages start their sections at `<h2>`
   (the tab bar is the page title); every other page has exactly one `<h1>`.
   Don't restyle a heading to fake a different level.
@@ -700,7 +701,7 @@ no second poller:
 
 | Attribute | What it says |
 |---|---|
-| `data-poll-url` | the server endpoint rendering the replacement, from the SAME Leaf partial the page rendered inline |
+| `data-poll-url` | the server endpoint rendering the replacement, from the SAME partial or Swift view the page rendered inline |
 | `data-poll-interval` | milliseconds between polls (default 5000) |
 | `data-poll-swap` | `region` replaces the element's own contents; omitted replaces its `<tbody>` |
 | `data-poll-until` | an instant after which the poll stops for good; omitted polls while the tab is open |
