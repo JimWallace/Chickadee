@@ -12,7 +12,7 @@
 // "Upload & submit": if a file picker is present, uploaded notebook files are
 // submitted directly to the native runner (no browser-side grading).
 //
-// Loaded on Resources/Views/_notebook-body.leaf after notebook-core.js. That
+// Loaded on the NotebookBody view after notebook-core.js. That
 // file holds the pure rules: the editor readiness probes, the kernel recovery
 // and reseed decisions, and the results formatting. What remains here is the
 // page: the DOM, the iframe, the timers, storage and fetch.

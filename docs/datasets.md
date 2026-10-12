@@ -394,8 +394,8 @@ they explore in the editor is exactly what the worker grades.
 ### Instructor view
 
 In the **Files** panel of both authoring pages
-(`Resources/Views/_assignment-edit-body.leaf` and `assignment-new.leaf`, the
-`supportFileRows` loop) each support-file row carries one inline control. What
+(`AssignmentEditBody` and `AssignmentNewPage`, the `supportFileRows` loop,
+through `SupportFileRow`) each support-file row carries one inline control. What
 shipped is flatter than the expanding "Personalize ▾" this note first sketched
 — the row count is the only setting, so there was nothing worth hiding behind
 a disclosure:

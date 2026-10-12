@@ -1,4 +1,4 @@
-// Page wiring for the assignment edit surface (_assignment-edit-body.leaf),
+// Page wiring for the assignment edit surface (AssignmentEditBody),
 // loaded on both of its hosts: the standalone edit page and the workbench's
 // edit pane.  Extracted from the partial's inline script blocks so every URL
 // builder and event hook is linted and testable; the template carries data

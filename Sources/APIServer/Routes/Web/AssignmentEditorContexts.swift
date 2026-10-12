@@ -75,7 +75,7 @@ struct EditAssignmentContext: Encodable {
     /// template uses these to render the `.section-block` + `<tbody
     /// data-section-id>` shells that `suite-table.js` populates.
     let suiteSectionRows: [SuiteSectionShellRow]
-    /// Drive `SuiteSections` (and `_suite-sections.leaf`), shared with the
+    /// Drive `SuiteSections`, shared with the
     /// create page: where the per-section forms post, and whether they carry
     /// `data-ck-inplace`.
     let sectionActionBase: String

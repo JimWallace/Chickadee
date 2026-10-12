@@ -43,7 +43,7 @@ struct WorkbenchPage: HTML {
                 """
                 /* The workbench owns the viewport: the panes scroll internally, the page never
                    does.  The reading-column cap is dropped by `fullBleed` on the context, which
-                   adds `.main-fullbleed` in base.leaf. */
+                   adds `.main-fullbleed` in BaseLayout. */
                 .wb-shell {
                     display: flex;
                     flex-direction: column;

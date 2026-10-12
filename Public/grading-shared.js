@@ -28,7 +28,7 @@
 //     (forwarding the worker's own ?v= cache-buster pins all grading files to
 //     one release).
 //   - Pages: a <script src="/grading-shared.js?v=..."> tag BEFORE
-//     browser-runner.js (see _notebook-body.leaf).
+//     browser-runner.js (see NotebookBody).
 // Exposes exactly one global: ChickadeeGradingShared.
 //
 // The Swift/native grading parity is pinned separately by

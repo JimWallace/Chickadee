@@ -81,7 +81,7 @@
 
         var saver = core.makeDebouncedSaver(doSave, 500);
 
-        // The amber-cue note (_value-cue-note.leaf) shows only while the
+        // The amber-cue note (ValueCueNote) shows only while the
         // table has a row, since the cue it explains is drawn on a row (#1996).
         var cueNote = block.querySelector('.js-value-cue-note');
         function syncCueNote() {

@@ -152,7 +152,7 @@
 
         function addEmptyRow(tbody) {
             // Same classes as the server-rendered rows in the templates
-            // (_suite-sections.leaf, _assignment-edit-body.leaf), so a
+            // (SuiteSections, AssignmentEditBody), so a
             // JS-added row and a reloaded row cannot render differently.
             var removeCellOpen = rowOptions.removeCell === 'icon'
                 ? '<td class="section-var-removecell">'

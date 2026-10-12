@@ -10,7 +10,7 @@
 // Plugins/EmbedRunnerSupport. So both runners load the same bytes.
 //
 // Loading: classic script, no dependencies. A <script> tag loads it before
-// browser-runner.js (see _notebook-body.leaf).
+// browser-runner.js (see NotebookBody).
 // Exposes exactly one global: ChickadeeRunnerSupportSources.
 
 (function (root) {
