@@ -536,6 +536,17 @@ private struct EditStudentOptionsBlock: HTML {
                 "Posts only the public-test count to a private repository, and needs GitHub submission on and a "
                     + "GitHub App with commit statuses."
             }
+            label(.class("form-label")) {
+                " Starter repository "
+                input(
+                    .class("form-input"), .type(.text), .name("starterRepository"),
+                    .value(github.starterRepository), .placeholder("owner/name"))
+                " "
+            }
+            p(.class("field-note field-note--muted")) {
+                "A public template that students copy into a private repository of their own; "
+                    + "not used with a course repository."
+            }
             button(.class("btn action-btn"), .type(.submit)) { "Save GitHub setting" }
         }
     }

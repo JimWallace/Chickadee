@@ -91,7 +91,9 @@ enum EditorSamples {
             achievementSignalOptions: AchievementSignalPresentation.all,
             recordDimensionOptions: RecordDimensionPresentation.all, brightspaceSyncEnabled: rich,
             brightspaceGradeObjectID: nil, submissionMode: "notebook",
-            githubSubmission: rich ? GitHubSubmissionSetting(enabled: true, statusChecks: false) : nil,
+            githubSubmission: rich
+                ? GitHubSubmissionSetting(enabled: true, statusChecks: false, starterRepository: "org/lab1-<starter>")
+                : nil,
             assignmentLanguageOptions: languageOptions, activity: activity(isSet: rich), secretRevealEnabled: rich,
             solutionVisibilityAfterDue: false, passingThresholdPercent: rich ? 60 : nil,
             aiFeedback: rich ? AIFeedbackSetting(enabled: false) : nil, timeLimitSeconds: 10,
