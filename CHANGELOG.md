@@ -9,6 +9,30 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.617] - 2026-10-12
+
+### Changed
+
+- **The admin pages render with Elementary.** Overview, Health Alerts, People, Storage, Retention, Audit Log, LEARN, MCP, LTI and GitHub, and the polled runner and people rows, are now type-checked Swift views. One `AdminTabs` component renders the version banner and the tab bar for all of them. Each port was compared with its Leaf output, and the markup is the same apart from attribute escaping and the two fixes below. The poll endpoints still answer 304 when nothing changed. The Leaf templates for these pages and their partials are removed, except `alerts.leaf`, which stays unserved as the admin tabbed exemplar that `PageArchetypeTests` reads.
+
+### Fixed
+
+- **An empty flash message no longer shows an empty banner on Health Alerts.** A bare `?ok=` or `?error=` in the URL drew an empty banner. The page now ignores empty values.
+- **An account with an empty display name shows its username on People.** Before, the row sorted by an empty name and showed its username twice.
+
+### Changed
+
+- **The student pages, leaderboards and submission views render with Elementary.** The dashboard, account, submission result, GitHub submit and feedback pages, the leaderboard and its projector view, the runner detail page, the instructor submissions page, a student's course submissions and CSV enrolment are now type-checked Swift views. The leaderboard and projector polls render the same views as their pages and still answer 304 when nothing changed. Each port was compared with its Leaf output, including the spaces between inline elements, and the markup is the same apart from escaping and some whitespace that the page layout does not show. The Leaf templates for these pages and their partials are removed, except `account.leaf`, which stays unserved as the plain student page exemplar.
+
+### Fixed
+
+- **The projector view's tournament headings no longer skip a level.** The round labels in present mode are `h2` under the page's `h1`, not `h3`. They look the same.
+
+### Added
+
+- **The style guards read Elementary page CSS.** `check-styles.sh`, `check-design-tokens.sh`, `check-class-resolution.sh`, `check-css-vars.sh` and `check-ui-vocabulary.sh` now read the CSS in Swift `PageStyle` blocks as well as template `<style>` blocks. A SwiftLint rule keeps flash banners in the layout, and `BaseLayoutParityTests` keeps `base.leaf` and `BaseLayout` loading the same assets while both are served.
+
+
 ## [0.5.616] - 2026-10-12
 
 ### Changed
