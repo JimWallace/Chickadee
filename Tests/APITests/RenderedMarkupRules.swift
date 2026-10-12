@@ -1,10 +1,11 @@
 // Tests/APITests/RenderedMarkupRules.swift
 //
-// The UI rules of docs/ui-design.md, applied to rendered HTML instead of to
-// template files. The shell guards (check-styles.sh, check-class-resolution.sh,
-// check-css-vars.sh, check-ui-vocabulary.sh) read Resources/Views/*.leaf and
-// cannot see a Swift view at all; ElementaryPageGuardTests feeds every
-// Elementary page through these instead (docs/elementary-spike.md, "Guards").
+// The UI rules of docs/ui-design.md, applied to rendered HTML. The shell
+// guards (check-styles.sh, check-class-resolution.sh, check-css-vars.sh,
+// check-ui-vocabulary.sh) read the Swift view sources, which shows them every
+// branch but not a value built at run time or markup split across lines;
+// ElementaryPageGuardTests feeds every Elementary page through these rules too
+// (docs/elementary-spike.md, "Guards").
 //
 // Each rule returns one line per violation; empty means the page holds.
 
@@ -24,6 +25,43 @@ enum RenderedMarkupRules {
                 return !compact.isEmpty && compact != "display:none" && !compact.hasPrefix("--")
             }
         }.map { "style=\"\($0)\"" }
+    }
+
+    // MARK: - Per-datum custom properties (check-styles.sh rule 4c, S1)
+
+    /// An inline custom property carries a value that varies per datum (a bar
+    /// height, a share, an avatar colour), never a per-page dial such as a
+    /// width. `allowed` is `perDatumInlineProperties()`. Every property in the
+    /// attribute is checked, wherever it sits (#2404). check-styles.sh reads
+    /// the same list for the literals in view source; this also sees a value
+    /// held in a variable, such as the avatar's.
+    static func perPageInlinePropertyViolations(in html: String, allowed: Set<String>) -> [String] {
+        attributeValues(named: "style", in: html).compactMap { value in
+            let names = value.matches(of: /(--[A-Za-z0-9_-]+)\s*:/).map { String($0.1) }
+            let unlisted = names.filter { !allowed.contains($0) }
+            return unlisted.isEmpty ? nil : "style=\"\(value)\" assigns \(unlisted.joined(separator: ", ")) inline"
+        }
+    }
+
+    /// `PER_DATUM_INLINE_PROPS` in scripts/check-styles.sh: one list for the
+    /// source scan and the rendered check.
+    static func perDatumInlineProperties() throws -> Set<String> {
+        let url = repositoryRoot.appendingPathComponent("scripts/check-styles.sh")
+        let script = try String(contentsOf: url, encoding: .utf8)
+        guard let line = script.firstMatch(of: /\nPER_DATUM_INLINE_PROPS="([^"]*)"/) else { return [] }
+        return Set(line.1.split(separator: " ").map(String.init))
+    }
+
+    // MARK: - Sortable headers (check-styles.sh rule 4c, S2)
+
+    /// A `th` that declares `data-sort-type` holds the shared
+    /// `button.sort-header`, or it is decorative markup that sorts nothing.
+    static func orphanSortHeaderViolations(in html: String) -> [String] {
+        html.matches(of: /<th(\s[^>]*)?>([\s\S]*?)<\/th>/).compactMap { match in
+            guard let attributes = match.1, attributes.contains(" data-sort-type=\"") else { return nil }
+            let hasButton = match.2.contains(/<button[^>]*\sclass="([^"]* )?sort-header( [^"]*)?"/)
+            return hasButton ? nil : "<th\(attributes)> has no button.sort-header"
+        }
     }
 
     // MARK: - Scripts (check-styles.sh rules 3b, 3b-2 and 3b-3)

@@ -1,11 +1,12 @@
 // Tests/APITests/ElementaryPageGuardTests.swift
 //
-// The UI guards for Elementary views. The shell guards read only
-// Resources/Views/*.leaf, so a page rendered from Swift is invisible to them
-// (docs/elementary-spike.md, "Guards"). This suite renders every page in
-// ElementaryPageFixtures and holds the HTML to the same rules.
+// The UI guards for Elementary views, on rendered markup. The shell guards
+// read the view sources; this suite renders every page in
+// ElementaryPageFixtures and holds the HTML to the rules that need the
+// rendered page (docs/elementary-spike.md, "Guards").
 
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 
@@ -64,6 +65,35 @@ import Testing
     @Test func inlineStylesAreOnlyDisplayNoneOrCustomProperties() {
         for (page, html) in Self.renders {
             #expect(RenderedMarkupRules.inlineStyleViolations(in: html).isEmpty, "\(page)")
+        }
+    }
+
+    /// An inline custom property carries a per-datum value only. The list is
+    /// check-styles.sh's, and it must name every per-student avatar property.
+    @Test func inlineCustomPropertiesArePerDatum() throws {
+        let allowed = try RenderedMarkupRules.perDatumInlineProperties()
+        #expect(allowed.contains("--bar-h"), "the list was not read from scripts/check-styles.sh")
+        let avatar = AvatarPresentation(
+            for: AvatarSpec.drawn(fromSeed: 1), size: .standard, accessibility: .decorative, isStaff: false)
+        for property in avatar.inlineProperties {
+            #expect(allowed.contains(property.name), "\(property.name) is missing from PER_DATUM_INLINE_PROPS")
+        }
+        #expect(
+            Self.renders.contains { $0.html.contains(" style=\"--") },
+            "no fixture renders an inline custom property, so this rule reads nothing")
+        for (page, html) in Self.renders {
+            let broken = RenderedMarkupRules.perPageInlinePropertyViolations(in: html, allowed: allowed)
+            #expect(broken.isEmpty, "\(page): \(broken)")
+        }
+    }
+
+    @Test func everySortableHeaderCarriesTheSharedButton() {
+        #expect(
+            Self.renders.contains { $0.html.contains(" data-sort-type=\"") },
+            "no fixture renders a sortable header, so this rule reads nothing")
+        for (page, html) in Self.renders {
+            let broken = RenderedMarkupRules.orphanSortHeaderViolations(in: html)
+            #expect(broken.isEmpty, "\(page): \(broken)")
         }
     }
 
@@ -228,5 +258,24 @@ import Testing
 
         let longTitle = Array(repeating: "word", count: RenderedMarkupRules.titleWordCap + 1).joined(separator: " ")
         #expect(RenderedMarkupRules.longTitles(in: "<b title=\"\(longTitle)\">x</b>").count == 1)
+    }
+
+    /// The per-datum and sortable-header rules, which moved here from
+    /// check-styles.sh when the Leaf templates went, each fire on their defect.
+    @Test func theRulesMovedFromCheckStylesRejectAPageThatBreaksThem() throws {
+        let allowed = try RenderedMarkupRules.perDatumInlineProperties()
+        let perPage = RenderedMarkupRules.perPageInlinePropertyViolations
+        #expect(perPage(#"<div style="--filter-width:220px"></div>"#, allowed).count == 1)
+        #expect(perPage(#"<div style="display:none; --filter-width:220px"></div>"#, allowed).count == 1)
+        #expect(perPage(#"<div style="--bar-h:40%; --filter-width:220px"></div>"#, allowed).count == 1)
+        #expect(perPage(#"<div style="--bar-h:40%"></div>"#, allowed).isEmpty)
+        #expect(perPage(#"<i style="--av-cap: var(--avatar-cap-plum); --av-border: var(--x)"></i>"#, allowed).isEmpty)
+
+        let orphan = RenderedMarkupRules.orphanSortHeaderViolations
+        #expect(orphan(#"<table><tr><th data-sort-type="text">User</th></tr></table>"#).count == 1)
+        #expect(orphan(#"<th data-sort-type="text"><span class="sort-icon"></span>User</th>"#).count == 1)
+        let wired = #"<th data-sort-type="text"><button class="sort-header" type="button">U</button></th>"#
+        #expect(orphan(wired).isEmpty)
+        #expect(orphan(#"<th class="col-hide-phone">Plain</th>"#).isEmpty)
     }
 }
