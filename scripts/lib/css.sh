@@ -35,9 +35,7 @@ strip_css_comments() {
 # Prints every <style> ... </style> block of the named templates, in order.
 # An Elementary view (a .swift file) holds its page CSS in a
 # PageStyle("""...""") literal instead; its body is printed between <style>
-# and </style> lines, so every caller reads both kinds the same way. A literal
-# that closes with `""",` is followed by another literal of the same call
-# (PageStyle's several-part form), so that one is read too.
+# and </style> lines, so every caller reads both kinds the same way.
 page_style_blocks() {
   local f
   for f in "$@"; do
@@ -46,7 +44,7 @@ page_style_blocks() {
         awk '
           /PageStyle\(/ { pending = 1 }
           pending && !inblock && /"""/ { inblock = 1; pending = 0; print "<style>"; next }
-          inblock && /"""/ { inblock = 0; print "</style>"; if ($0 ~ /""",[[:space:]]*$/) pending = 1; next }
+          inblock && /"""/ { inblock = 0; print "</style>"; next }
           inblock { print }
         ' "$f"
         ;;

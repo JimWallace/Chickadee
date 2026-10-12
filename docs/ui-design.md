@@ -149,26 +149,28 @@ names only Leaf templates. `PageArchetypeTests` resolves each name to a
 - Instructor tabbed: `AssignmentsPage` and every `Instructor*Page` that opens
   with `InstructorTabs`.
 - Titlebar page: `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`,
-  `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`.
+  `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`,
+  and, as the nearest fit, `AssignmentNewPage` (its `.editor-titlebar` holds
+  the name input, not an `<h1>` in a `.page-titlebar`).
 - Auth box: `LoginPage`, `OAuthConsentPage`.
 - Plain student page: `SubmitPage`, `EnrollPage`, `IndexPage`, `AccountPage`,
   `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`.
 - Full-bleed app: `WorkbenchPage` (`BaseLayout` with `fullBleed`, around
-  `AssignmentEditBody` and `NotebookBody`).
-- Full-bleed app (nearest; it owns the viewport through its own
-  `PresentLayout`, not the `fullBleed` flag): `LeaderboardPresentPage`.
+  `AssignmentEditBody` and `NotebookBody`), and, as the nearest fit,
+  `LeaderboardPresentPage` (it owns the viewport through its own
+  `PresentLayout`, not the `fullBleed` flag).
 - Body-partial shim: `NotebookPage` (`BaseLayout` plus `NotebookBody`) and
   `AssignmentEditPage` (`BaseLayout` plus `AssignmentEditBody`).
-- Titlebar page (nearest; its `.editor-titlebar` holds the name input, not
-  an `<h1>` in a `.page-titlebar`): `AssignmentNewPage`.
 
 The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
 `instructor-mcp.leaf`, `account.leaf`, `assignment-edit.leaf` and
 `workbench.leaf` now render `AdminUserPage`, `RegisterPage`, `AlertsPage`,
 `InstructorMCPPage`, `AccountPage`, `AssignmentEditPage` and `WorkbenchPage`.
 The seven templates are not served. They stay only because the test reads them
-as exemplars. `_assignment-edit-body.leaf` and `_notebook-body.leaf` are not
-served either; they stay because the exemplars extend them.
+as exemplars. Five partials are not served either. They stay because the
+exemplars extend them: `_assignment-edit-body.leaf`, `_notebook-body.leaf`,
+and through the first, `_family-editor-body.leaf`, `_suite-sections.leaf` and
+`_value-cue-note.leaf`.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each

@@ -40,11 +40,10 @@ struct NotebookBody: HTML {
     let appVersion: String
 
     var body: some HTML {
-        // The first part, the `.main` override, only when this body is the page.
-        PageStyle(
-            embedded
-                ? nil
-                : """
+        // The `.main` override only when this body is the page.
+        if !embedded {
+            PageStyle(
+                """
                 /* Override the 900px max-width for this page only.  The default .main also
                    carries a 2rem top+bottom margin (styles.css) — wasted vertical space on the
                    editor page, where every pixel counts on laptops/iPads — so trim it to a
@@ -55,9 +54,11 @@ struct NotebookBody: HTML {
                    host, which sizes itself to the viewport — restyling it from here would
                    reach outside this half and fight `.main-fullbleed`. */
                 .main { max-width: 100%; padding: 0 1rem; margin: .5rem auto 0; }
-                """,
+                """
+            )
+        }
+        PageStyle(
             """
-
             /* Closed-assignment "view only" notice. */
             .nb-closed-notice { color: var(--gray-600); font-size: var(--text-base); }
 
