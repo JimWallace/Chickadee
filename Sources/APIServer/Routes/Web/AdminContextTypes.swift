@@ -215,64 +215,6 @@ struct AdminStorageShareRow: Encodable, Sendable {
     }
 }
 
-struct AdminContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let workers: [AdminRunnerRow]
-    let courses: [AdminCourseRow]
-    /// Whether the course list is long enough to earn a filter box
-    /// (`ListFilterPolicy`).
-    let showCourseFilter: Bool
-    let version: String
-    /// Default (24h) activity series, JSON-encoded into the page so the chart
-    /// renders before the first poll.  The client re-fetches GET /admin/activity
-    /// when the window changes or on its refresh interval.
-    let activityChart: ActivityChartData
-
-    // Explicit initializer (rather than relying on the synthesized memberwise
-    // one): under the CI build's batch/non-WMO mode the synthesized init's
-    // symbol can fail to emit, producing an "undefined reference to
-    // AdminContext.init(...)" link error in chickadee-server. A hand-written
-    // init is emitted normally and sidesteps that. It also derives
-    // `showCourseFilter` from the course count.
-    init(
-        currentUser: CurrentUserContext?,
-        activeAdminTab: String,
-        workers: [AdminRunnerRow],
-        courses: [AdminCourseRow],
-        version: String,
-        activityChart: ActivityChartData
-    ) {
-        self.currentUser = currentUser
-        self.activeAdminTab = activeAdminTab
-        self.workers = workers
-        self.courses = courses
-        self.showCourseFilter = ListFilterPolicy.showsFilter(rowCount: courses.count)
-        self.version = version
-        self.activityChart = activityChart
-    }
-}
-
-struct AdminUsersContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let users: [AdminUserRow]
-    let userCount: Int
-    let adminCount: Int
-}
-
-/// Context for the rows-only fragment of the runners table (`?fragment=rows`).
-struct WorkerRowsFragmentContext: Encodable {
-    let workers: [AdminRunnerRow]
-}
-
-/// Context for the rows-only fragment of the users table (`?fragment=rows`).
-/// Carries exactly what `_user-rows.leaf` reads, so the fragment cannot start
-/// depending on page-level state the poll does not compute.
-struct UserRowsFragmentContext: Encodable {
-    let users: [AdminUserRow]
-}
-
 /// One course as the admin pages name it, in an enrolled or enrollable list.
 struct AdminCourseRef: Encodable {
     let id: String
@@ -412,32 +354,6 @@ struct AdminAlertsRuleRow: Encodable {
     let lastFiredAt: String?
     /// The condition the rule fires on, from the live configuration.
     let thresholdText: String
-}
-
-struct AdminAlertsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let enabled: Bool
-    let webhookURL: String
-    let webhookURLFromEnvironment: Bool
-    let checkIntervalSeconds: Int
-    let cooldownSeconds: Int
-    let runnerOfflineSeconds: Int
-    let queueDepthThreshold: Int
-    let oldestPendingSeconds: Int
-    let errorRatePercent: Int
-    let rules: [AdminAlertsRuleRow]
-    /// The webhook shortened from the middle for display; "Not set" when empty.
-    let webhookDisplay: String
-    /// The newest paged firing's time and result, or none yet.
-    let hasLastDelivery: Bool
-    let lastDeliveryISO: String
-    let lastDeliveryResult: String
-    /// Recent firings under their day headings, newest first.
-    let firingDays: [DayGroup<AdminAlertFiringRow>]
-    let firingCount: Int
-    let flashSuccess: String?
-    let flashError: String?
 }
 
 struct AdminAuditRow: Encodable {

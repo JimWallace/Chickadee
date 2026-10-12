@@ -1,4 +1,4 @@
-// Page wiring for the admin dashboard (admin.leaf): the runner-table load
+// Page wiring for the admin dashboard (AdminPage): the runner-table load
 // summary, the diagnostic cards (headline + sparkline, click cycles the
 // 24h/7d/30d window), the Active Users card, and the import-course picker.
 // Extracted from the template's inline script block so it is linted and

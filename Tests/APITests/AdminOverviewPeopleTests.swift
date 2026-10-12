@@ -142,7 +142,7 @@ import VaporTesting
                 maxConcurrentJobs: 2, activeJobs: 0, lastHeartbeatAt: Date())
             let page = try await getHTML("/admin", cookie: cookie, on: app)
             let fragment = try await getHTML("/admin/runners?fragment=rows", cookie: cookie, on: app)
-            let row = "data-load=\"0\"\n                    data-max-jobs=\"2\""
+            let row = "data-load=\"0\" data-max-jobs=\"2\""
             #expect(page.contains(row))
             #expect(fragment.contains(row))
             #expect(page.contains("id=\"workers-table\""))

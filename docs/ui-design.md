@@ -118,7 +118,7 @@ them is the answer.
 
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
-| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | admin, admin-users |
+| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | — |
 | **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
 | **Plain student page** | `<h1>` → content | `account.leaf` | index |
@@ -145,12 +145,13 @@ During the Elementary migration (`docs/elementary-spike.md`), the column
 names only Leaf templates. `PageArchetypeTests` resolves each name to a
 `.leaf` file. These ported pages also follow an archetype:
 
+- Admin tabbed: `AdminPage`, `AdminUsersPage`.
 - Auth box: `LoginPage`, `OAuthConsentPage`.
 - Plain student page: `SubmitPage`, `EnrollPage`.
 
-The routes for `admin-user.leaf` and `register.leaf` now render
-`AdminUserPage` and `RegisterPage`. The two templates are not served. They
-stay only because the test reads them as exemplars.
+The routes for `admin-user.leaf`, `register.leaf` and `alerts.leaf` now
+render `AdminUserPage`, `RegisterPage` and `AlertsPage`. The three templates
+are not served. They stay only because the test reads them as exemplars.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each

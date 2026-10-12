@@ -14,19 +14,17 @@ extension AdminRoutes {
     // MARK: - GET /admin/runners
 
     @Sendable
-    /// Two representations, one query: `?fragment=rows` renders
-    /// `_worker-rows.leaf` — the SAME partial the dashboard renders, so the
-    /// poll cannot drift from the page — and anything else keeps the JSON
-    /// array unchanged (the runner-detail page's poll reads it).
+    /// Two representations, one query: `?fragment=rows` renders `WorkerRows`
+    /// — the SAME view the dashboard renders, so the poll cannot drift from
+    /// the page — and anything else keeps the JSON array unchanged (the
+    /// runner-detail page's poll reads it).
     func runners(req: Request) async throws -> Response {
         let rows = try await makeWorkerRows(req: req)
         guard req.query[String.self, at: "fragment"] == "rows" else {
             return try await rows.encodeResponse(for: req)
         }
-        return try await req.view.render(
-            "_worker-rows", WorkerRowsFragmentContext(workers: rows.map(AdminRunnerRow.init))
-        )
-        .encodePollFragment(for: req)
+        let html = WorkerRows(workers: rows.map(AdminRunnerRow.init)).render()
+        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
     }
 
     // MARK: - GET /admin/runners/:runnerID
