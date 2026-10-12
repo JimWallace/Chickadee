@@ -1,0 +1,11 @@
+# Native alert() is at zero: errors surface through the inline .form-error
+# banner (ChickadeeUI.showActionError). A Swift view could carry one only in
+# an attribute value or a script body; the source scan sees every branch.
+guard="scripts/check-styles.sh"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="a native alert() in a Swift view"
+expect="new native alert() in a Swift view"
+apply() {
+    printf 'let ckGuardFixture = a(.href("#"), .custom(name: "data-x", value: "alert(1)")) { "guard fixture" }\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
+}

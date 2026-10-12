@@ -1,11 +1,13 @@
 # An onclick=/onchange= attribute is an inline script by another name, and the
 # one shape a CSP nonce cannot rescue.  With 'unsafe-inline' out of script-src
 # (#1516) the handler does not fail loudly — the control just stops responding.
+# Elementary spells it `.on(.click, …)`; the rendered page is checked by
+# ElementaryPageGuardTests, and the source by this rule.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="an inline event-handler attribute in a template"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="an inline event-handler attribute in a Swift view"
 expect="inline event-handler attribute"
 apply() {
-    printf '<button type="button" onclick="alert(1)">Guard fixture</button>\n' \
-        >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = button(.on(.click, "go()")) { "Guard fixture" }\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
 }

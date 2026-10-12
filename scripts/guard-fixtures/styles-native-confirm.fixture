@@ -1,9 +1,10 @@
 # Destructive confirmation goes through ChickadeeUI.confirmAction (or the
 # data-confirm seam); the native dialog is at zero and stays there.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="a native confirm() in a template"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="a native confirm() in a Swift view"
 expect="native confirm()"
 apply() {
-    printf '<form onsubmit="return confirm(%s)"></form>\n' "'sure?'" >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = form(.custom(name: "data-x", value: "return confirm(%s)")) {}\n' "'sure?'" \
+        >> Sources/APIServer/Views/BaseLayout.swift
 }

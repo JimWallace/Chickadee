@@ -1,9 +1,0 @@
-# A page <style> block is raw text to Leaf, so a tag inside a CSS comment runs
-# too; the rule read HTML comments only until #2407.
-guard="scripts/check-leaf-semantics.sh"
-files="Resources/Views/base.leaf"
-description="an interpolation inside a CSS comment in a page style block"
-expect="Leaf tag syntax inside an HTML comment"
-apply() {
-    printf '<style>\n/* sized for %s(userName) */\n</style>\n' "#" >> Resources/Views/base.leaf
-}

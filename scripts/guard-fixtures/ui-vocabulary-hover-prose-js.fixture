@@ -1,0 +1,11 @@
+# The hover budget holds for the HTML that first-party JS builds, which no
+# rendered-page test sees.
+guard="scripts/check-ui-vocabulary.sh"
+files="Public/app.js"
+description="hover text over the word budget in a JS-built HTML string"
+expect="hover text over"
+apply() {
+    printf "\nconst ckGuardFixture = '<p title=\"%s\">x</p>';\n" \
+        "Two students share about eight of their forty rows, which is the expected overlap between two independent forty-row samples drawn from the same two-hundred-row pool of cases." \
+        >> Public/app.js
+}

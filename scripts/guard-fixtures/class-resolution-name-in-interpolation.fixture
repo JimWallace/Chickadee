@@ -1,0 +1,11 @@
+# A class name inside a ternary inside an interpolation is still assigned. A
+# line scan that stops at the first `)` loses it, as the Leaf scan once lost
+# a name written against a tag (#2402).
+guard="scripts/check-class-resolution.sh"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="a class name with no rule, inside an interpolated ternary in a Swift view"
+expect="ck-guard-fixture-in-interpolation"
+apply() {
+    printf 'let ckGuardFixture = div(.class("card \\(open ? "ck-guard-fixture-in-interpolation" : "")")) { "x" }\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
+}
