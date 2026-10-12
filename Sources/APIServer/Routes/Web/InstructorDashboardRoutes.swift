@@ -4,10 +4,10 @@
 // Requires instructor or admin role (enforced by routes.swift).
 //
 //   GET  /instructor                               → AssignmentsPage (all setups + status)
-//   GET  /instructor/new                           → assignment-new.leaf
+//   GET  /instructor/new                           → AssignmentNewPage
 //   POST /instructor/new/save                      → save draft assignment, redirect to /instructor
 //   POST /instructor                               → create draft assignment → redirect to edit
-//   GET  /instructor/:assignmentID/edit            → assignment-edit.leaf
+//   GET  /instructor/:assignmentID/edit            → AssignmentEditPage
 //   POST /instructor/:assignmentID/edit/save       → update assignment content + validate
 //   POST /instructor/:assignmentID/status          → set open/closed status → redirect to /instructor
 //   POST /instructor/:assignmentID/open            → set isOpen=true → redirect to /instructor
@@ -542,9 +542,11 @@ struct InstructorDashboardRoutes: RouteCollection {
     // MARK: - GET /instructor/:assignmentID/edit
 
     @Sendable
-    func editPage(req: Request) async throws -> View {
+    func editPage(req: Request) async throws -> Response {
         let ctx = try await makeEditAssignmentContext(req: req, embedded: false)
-        return try await req.view.render("assignment-edit", ctx)
+        return try await HTMLResponse {
+            AssignmentEditPage(page: PageRequestContext(request: req), edit: ctx)
+        }.encodeResponse(for: req)
     }
 
     /// Builds the edit page's context.

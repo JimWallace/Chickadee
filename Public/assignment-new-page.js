@@ -1,4 +1,4 @@
-// Page wiring for the Create Assignment page (assignment-new.leaf).
+// Page wiring for the Create Assignment page (AssignmentNewPage).
 // Extracted from the page's inline script blocks so every URL builder and
 // event hook is linted and testable; the template carries data only — the
 // JSON seeds plus the #new-assignment-config island this file reads

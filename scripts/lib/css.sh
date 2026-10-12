@@ -59,7 +59,10 @@ page_style_blocks() {
 # view now, so the page-CSS rules skip the template copy rather than count the
 # same rules twice. The list shrinks to nothing when the exemplars move to
 # Swift (docs/elementary-spike.md); never add a template that is still served.
-retired_exemplar_templates="Resources/Views/admin-user.leaf Resources/Views/register.leaf Resources/Views/alerts.leaf Resources/Views/instructor-mcp.leaf Resources/Views/account.leaf"
+# One exception: `_assignment-edit-body.leaf` is still served inside
+# workbench.leaf, but its page CSS is the same rules `AssignmentEditBody`
+# carries, so it is listed to stop the guards counting them twice.
+retired_exemplar_templates="Resources/Views/admin-user.leaf Resources/Views/register.leaf Resources/Views/alerts.leaf Resources/Views/instructor-mcp.leaf Resources/Views/account.leaf Resources/Views/assignment-edit.leaf Resources/Views/_assignment-edit-body.leaf"
 
 # Prints the templates whose page CSS the style guards read: every template
 # except the retired exemplars above.

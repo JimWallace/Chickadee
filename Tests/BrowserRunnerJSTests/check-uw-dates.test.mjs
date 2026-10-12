@@ -20,7 +20,7 @@ const ChickadeeUI = require('../../Public/chickadee-ui.js');
 // conversion), so the call site to verify is the wiring file; the template
 // itself must stay free of any checkUWDates code.
 const FORMERLY_INLINED = [
-  { template: 'Resources/Views/assignment-new.leaf', wiring: 'Public/assignment-new-page.js' },
+  { template: 'Sources/APIServer/Views/Pages/AssignmentNewPage.swift', wiring: 'Public/assignment-new-page.js' },
   { template: 'Resources/Views/_assignment-edit-body.leaf', wiring: 'Public/assignment-edit-page.js' },
   { template: 'Sources/APIServer/Views/Pages/AssignmentsPage.swift', wiring: 'Public/assignments.js' },
 ];
