@@ -8,7 +8,7 @@
 //   GET  /testsetups/:id/submit     → SubmitPage      (student submission form)
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
 //   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
-//   GET  /testsetups/:id/leaderboard → leaderboard.leaf (class activity ranking)
+//   GET  /testsetups/:id/leaderboard → LeaderboardPage (class activity ranking)
 //   GET  /submissions/:id           → SubmissionPage  (live results)
 
 import Core

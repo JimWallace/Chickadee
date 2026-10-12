@@ -148,11 +148,13 @@ names only Leaf templates. `PageArchetypeTests` resolves each name to a
 - Admin tabbed: `AlertsPage` and every `Admin*Page` that opens with `AdminTabs`.
 - Instructor tabbed: `AssignmentsPage` and every `Instructor*Page` that opens
   with `InstructorTabs`.
-- Titlebar page: `AdminCoursePage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`,
-  `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`.
+- Titlebar page: `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`,
+  `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`.
 - Auth box: `LoginPage`, `OAuthConsentPage`.
 - Plain student page: `SubmitPage`, `EnrollPage`, `IndexPage`, `AccountPage`,
-  `SubmissionPage`, `GitHubSubmitPage`.
+  `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`.
+- Full-bleed app (nearest; it owns the viewport through its own
+  `PresentLayout`, not the `fullBleed` flag): `LeaderboardPresentPage`.
 
 The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
 `instructor-mcp.leaf` and `account.leaf` now render `AdminUserPage`,
@@ -405,7 +407,7 @@ duplicate.
   `.bracket-entrant` lines (`.bracket-entrant--won` bold,
   `.bracket-entrant--you` tinted), inside a `.table-scroll`.  A won tag is
   `.tier-open`; a live tag is `.tier-preview`.
-  **Present mode** (`leaderboard-present.leaf`, staff only, dark whatever the
+  **Present mode** (`LeaderboardPresentPage`, staff only, dark whatever the
   viewer prefers, no site chrome) is a `.present` page: `.present-header` with
   `.present-kicker`, `.present-title` and `.present-clock` (a
   `.present-clock-label` over a large `.present-clock-time`); then a

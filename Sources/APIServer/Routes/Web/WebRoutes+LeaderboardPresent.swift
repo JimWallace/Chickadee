@@ -85,7 +85,7 @@ extension WebRoutes {
 
         let boardURL = "/testsetups/\(setupID)/leaderboard"
         let session = LiveSessionPresentation.make(activity)
-        let context = LeaderboardPresentContext(
+        let presentation = PresentModePresentation(
             testSetupID: setupID,
             assignmentTitle: assignment?.title ?? setupID,
             courseCode: course?.code ?? "",
@@ -116,11 +116,16 @@ extension WebRoutes {
             pollURL: "\(boardURL)?present=1&fragment=present",
             boardURL: boardURL)
 
+        // `?fragment=present` renders the SAME view the page renders inline,
+        // so the refresh cannot drift from what it replaces.
         guard req.query[String.self, at: "fragment"] == "present" else {
-            return try await req.view.render("leaderboard-present", context).encodeResponse(for: req)
+            return try await HTMLResponse {
+                LeaderboardPresentPage(page: PageRequestContext(request: req), board: presentation)
+            }
+            .encodeResponse(for: req)
         }
-        return try await req.view.render("_leaderboard-present-body", context)
-            .encodePollFragment(for: req)
+        let html = LeaderboardPresentBody(board: presentation).render()
+        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
     }
 
     /// Everyone seeded into the run. A bye is a match with one entrant, so
@@ -155,7 +160,10 @@ struct PresentPlace: Encodable, Sendable {
     }
 }
 
-private struct LeaderboardPresentContext: Encodable {
+/// Everything Present mode shows. `LeaderboardPresentPage` draws the fixed
+/// chrome from it, and `LeaderboardPresentBody` the part that moves, inline
+/// and again as the `?fragment=present` refresh.
+struct PresentModePresentation {
     let testSetupID: String
     let assignmentTitle: String
     let courseCode: String

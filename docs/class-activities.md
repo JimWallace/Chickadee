@@ -662,9 +662,9 @@ from the freshest stamp, so the session clock is one attribute.
 the champion banner, the tournament's status and winner, and the union's count
 all move with the table beside them, so a rows-only swap would show fresh ranks
 under a stale champion — and the bracket's per-round tables are generated in a
-loop and are not individually addressable. So `leaderboard.leaf`'s section body
-became `_leaderboard-body.leaf`, rendered inline and again as `?fragment=body`,
-and `table-poll.js` gained a region branch: an element with `data-poll-url`
+loop and are not individually addressable. So the leaderboard page's section
+body became its own view (now `LeaderboardBody`), rendered inline and again as
+`?fragment=body`, and `table-poll.js` gained a region branch: an element with `data-poll-url`
 that is not a table swaps its own contents. Everything else — the suppression
 rules, the background-refresh header, the conditional ETag request, the
 re-applied row behaviours — is shared, which is what makes this a branch there
@@ -747,7 +747,7 @@ errors rather than passes.
 - `Sources/APIServer/Services/LeaderboardEntries.swift`,
   `Sources/APIServer/Models/APILeaderboardEntry.swift`,
   `Sources/APIServer/Routes/Web/WebRoutes+Leaderboard.swift`,
-  `Resources/Views/leaderboard.leaf`
+  `Sources/APIServer/Views/Pages/LeaderboardPage.swift`, `Sources/APIServer/Views/LeaderboardBody.swift`
 - `Sources/APIServer/Services/ActivityAuthoring.swift` (the lock and the
   seeded record, shared by the web edit page and `set_activity`)
 - `Sources/APIServer/Services/ClassAchievements.swift`
