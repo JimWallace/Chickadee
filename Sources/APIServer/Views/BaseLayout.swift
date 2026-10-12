@@ -125,13 +125,39 @@ struct FlashBanners: HTML {
 
     var body: some HTML {
         if let success = flash.success {
-            div(.class("flash flash-success"), .role("status")) { success }
+            FlashBanner(.success) { success }
         }
         if let notice = flash.notice {
-            div(.class("flash flash-success"), .role("status")) { notice }
+            FlashBanner(.success) { notice }
         }
         if let error = flash.error {
-            div(.class("flash flash-error"), .role("alert")) { error }
+            FlashBanner(.error, role: "alert") { error }
         }
+    }
+}
+
+/// One success or error banner. The layout renders the one-shot flash
+/// messages with it. A page uses it only for a banner that shows the page's
+/// state on every load, or that carries more than text (the minted MCP token).
+/// The flash classes are written here and nowhere else
+/// (SwiftLint `elementary_flash_only_in_layout`).
+struct FlashBanner<Content: HTML>: HTML {
+    enum Kind: String {
+        case success = "flash flash-success"
+        case error = "flash flash-error"
+    }
+
+    let kind: Kind
+    let role: MarkupAttributeValue.Role
+    let content: Content
+
+    init(_ kind: Kind, role: MarkupAttributeValue.Role = "status", @HTMLBuilder content: () -> Content) {
+        self.kind = kind
+        self.role = role
+        self.content = content()
+    }
+
+    var body: some HTML {
+        div(.class(kind.rawValue), .role(role)) { content }
     }
 }

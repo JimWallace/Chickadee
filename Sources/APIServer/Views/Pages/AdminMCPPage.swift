@@ -83,8 +83,7 @@ struct AdminMCPPage: HTML {
             if !enabled {
                 // A page-state banner, not a one-shot flash: it shows on every
                 // load while MCP is off.
-                // swiftlint:disable:next elementary_flash_only_in_layout
-                div(.class("flash flash-error"), .role("status")) {
+                FlashBanner(.error) {
                     strong { "MCP is inactive." }
                     " Set "
                     code { "MCP_MODE" }
@@ -127,10 +126,9 @@ struct AdminMCPPage: HTML {
     }
 
     /// The token, shown once, right after a mint. It carries a textarea, so it
-    /// cannot go through the layout's flash banners.
+    /// is a `FlashBanner` of its own, not a one-shot flash message.
     private func mintedTokenBanner(_ token: String) -> some HTML {
-        // swiftlint:disable:next elementary_flash_only_in_layout
-        div(.class("flash flash-success"), .role("status")) {
+        FlashBanner(.success) {
             p(.class("mcp-token-caption")) {
                 strong { "Access token for \(mintedFor ?? "")" }
                 " · scopes: "
