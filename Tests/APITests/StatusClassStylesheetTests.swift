@@ -48,7 +48,7 @@ import Testing
         }
     }
 
-    /// admin-audit.leaf mints `tier #(row.outcomeTier)` on every log row, so
+    /// AdminAuditPage mints `tier <outcomeTier>` on every log row, so
     /// the badge variant each `AuditOutcome` names has to exist in the sheet.
     /// Same failure mode as the two above: a third outcome would ship a pill
     /// with no colour and nothing would fail.
@@ -57,7 +57,7 @@ import Testing
         for outcome in AuditOutcome.allCases {
             #expect(
                 css.contains(".\(outcome.tierClass)"),
-                "Public/styles.css defines no .\(outcome.tierClass) — admin-audit.leaf mints this class for every audit row"
+                "Public/styles.css defines no .\(outcome.tierClass) — AdminAuditPage mints this class for every audit row"
             )
         }
     }

@@ -16,6 +16,12 @@ struct PageRequestContext: Sendable {
     let sessionIdleWarningSeconds: Int
     /// The inline icon sprite (`_icons.leaf`), loaded once at startup.
     let iconSprite: String
+    /// True when the content-authoring MCP endpoint is mounted. The admin tab
+    /// bar shows its MCP item only then.
+    var mcpEnabled = false
+    /// The avatar sprite (`_avatar-sprite.leaf`). Only pages that show an
+    /// avatar render it, through `AvatarSprite`.
+    var avatarSprite = ""
 
     /// A static asset path with the cache-busting version query.
     func asset(_ path: String) -> String {
@@ -53,31 +59,43 @@ extension PageRequestContext {
             appVersion: ChickadeeVersion.current,
             sessionIdleTimeoutSeconds: max(0, Int(security.sessionIdleTimeoutSeconds)),
             sessionIdleWarningSeconds: max(0, Int(security.sessionIdleWarningSeconds)),
-            iconSprite: req.application.iconSprite
+            iconSprite: req.application.iconSprite,
+            mcpEnabled: req.application.appConfig.mcp.mode.isMounted,
+            avatarSprite: req.application.sprite(.avatars)
         )
     }
 }
 
-private struct IconSpriteStorageKey: StorageKey {
-    typealias Value = String
+private struct SpriteStorageKey: StorageKey {
+    typealias Value = [StaticSprite: String]
+}
+
+/// A static SVG sprite in the views directory. Neither file holds Leaf tags,
+/// so its bytes are the rendered markup.
+enum StaticSprite: String, CaseIterable, Sendable {
+    /// The Feather icons, inlined on every page by the layout.
+    case icons = "_icons.leaf"
+    /// The avatar parts, inlined once by each page that shows an avatar.
+    case avatars = "_avatar-sprite.leaf"
 }
 
 extension Application {
-    /// The icon sprite markup. Read from disk when `loadIconSprite()` has not
-    /// run (an app built without `AppMiddleware`, as the tests build one), so
-    /// a page never loses its icons without a sound.
-    var iconSprite: String {
-        storage[IconSpriteStorageKey.self] ?? readIconSprite()
+    /// The markup of `sprite`. Read from disk when `loadSprites()` has not run
+    /// (an app built without `AppMiddleware`, as the tests build one), so a
+    /// page never loses its icons without a sound.
+    func sprite(_ sprite: StaticSprite) -> String {
+        storage[SpriteStorageKey.self]?[sprite] ?? readSprite(sprite)
     }
 
-    /// Caches the static icon sprite from the views directory. The file holds
-    /// no Leaf tags, so its bytes are the rendered markup.
-    func loadIconSprite() {
-        storage[IconSpriteStorageKey.self] = readIconSprite()
+    var iconSprite: String { sprite(.icons) }
+
+    /// Caches every static sprite once, at startup.
+    func loadSprites() {
+        storage[SpriteStorageKey.self] = Dictionary(
+            uniqueKeysWithValues: StaticSprite.allCases.map { ($0, readSprite($0)) })
     }
 
-    private func readIconSprite() -> String {
-        let path = directory.viewsDirectory + "_icons.leaf"
-        return (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+    private func readSprite(_ sprite: StaticSprite) -> String {
+        (try? String(contentsOfFile: directory.viewsDirectory + sprite.rawValue, encoding: .utf8)) ?? ""
     }
 }

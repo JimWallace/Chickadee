@@ -93,6 +93,32 @@ enum RenderedMarkupRules {
         }
     }
 
+    // MARK: - Admin tabbed pages (PageArchetypeTests, the _admin-tabs partial)
+
+    /// The floor every admin tabbed page stands on, read from `<main>`: the
+    /// version banner, then the one hidden h1, then the one tab bar, all from
+    /// `AdminTabs`, before any section. PageArchetypeTests checks that a Leaf
+    /// page extends the partial; a Swift page has no partials to read, so this
+    /// checks what the component renders.
+    static func adminTabbedViolations(in main: String) -> [String] {
+        var broken: [String] = []
+        let banners = main.ranges(of: #"<p class="admin-version-banner">"#)
+        let navs = main.ranges(of: #"<nav class="admin-tabs""#)
+        let headings = openTags(named: "h1", in: main)
+        if banners.count != 1 { broken.append("\(banners.count) version banners where AdminTabs renders one") }
+        if navs.count != 1 { broken.append("\(navs.count) admin tab bars where AdminTabs renders one") }
+        if headings != [#"<h1 class="visually-hidden">"#] {
+            broken.append("its h1s are \(headings); the only h1 is the hidden one AdminTabs renders")
+        }
+        if let banner = banners.first, let nav = navs.first {
+            if banner.lowerBound > nav.lowerBound { broken.append("the version banner comes after the tab bar") }
+            if let section = main.range(of: "<section"), section.lowerBound < nav.lowerBound {
+                broken.append("a section comes before the tab bar")
+            }
+        }
+        return broken
+    }
+
     // MARK: - Reading markup
 
     /// The contents of `<main>`: the part of the page an archetype describes.

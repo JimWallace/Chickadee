@@ -135,6 +135,30 @@ import Testing
         }
     }
 
+    /// Every admin tabbed page, exemplar or not, opens with `AdminTabs`. This
+    /// is the Swift half of "tab bars only through their component"; SwiftLint
+    /// `elementary_tabs_only_in_component` keeps the classes out of other views.
+    @Test func everyAdminTabbedPageOpensWithAdminTabs() throws {
+        for fixture in Self.fixtures where fixture.archetype == .adminTabbed {
+            for html in fixture.renders {
+                let main = try #require(RenderedMarkupRules.mainContent(of: html))
+                let broken = RenderedMarkupRules.adminTabbedViolations(in: main)
+                #expect(broken.isEmpty, "\(fixture.typeName): \(broken)")
+            }
+        }
+    }
+
+    /// The admin tabbed rule holds for the component and fails when the page
+    /// drops it, adds a second h1, or puts a section above the tab bar.
+    @Test func theAdminTabbedRuleRejectsAPageThatBreaksIt() {
+        let tabs = AdminTabs(active: .alerts, page: ElementaryPageFixtures.page()).render()
+        let section = #"<section class="page-section"><h2>A</h2></section>"#
+        #expect(RenderedMarkupRules.adminTabbedViolations(in: tabs + section).isEmpty)
+        #expect(RenderedMarkupRules.adminTabbedViolations(in: section).count == 3)
+        #expect(RenderedMarkupRules.adminTabbedViolations(in: tabs + "<h1>Alerts</h1>" + section).count == 1)
+        #expect(RenderedMarkupRules.adminTabbedViolations(in: section + tabs).count == 1)
+    }
+
     // MARK: - The rules fire
 
     /// A guard that never fires is indistinguishable from a page that holds.

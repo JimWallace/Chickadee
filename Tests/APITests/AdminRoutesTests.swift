@@ -1085,7 +1085,7 @@ private struct PassthroughResponder: AsyncResponder {
                     #expect(body.contains("fragment_user"))
                     // The full row markup the page renders, not a reduced copy:
                     // the role form, its CSRF field, and the sortable timestamp.
-                    #expect(body.contains("name='_csrf'"))
+                    #expect(body.contains("name=\"_csrf\""))
                     #expect(body.contains("js-relative-time"))
                 })
         }

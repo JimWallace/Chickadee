@@ -118,7 +118,7 @@ them is the answer.
 
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
-| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | admin, admin-users |
+| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | — |
 | **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | assignments, instructor-students |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | admin-course, assignment-submissions |
 | **Plain student page** | `<h1>` → content | `account.leaf` | index |
@@ -145,12 +145,13 @@ During the Elementary migration (`docs/elementary-spike.md`), the column
 names only Leaf templates. `PageArchetypeTests` resolves each name to a
 `.leaf` file. These ported pages also follow an archetype:
 
+- Admin tabbed: `AlertsPage` and every `Admin*Page` that opens with `AdminTabs`.
 - Auth box: `LoginPage`, `OAuthConsentPage`.
 - Plain student page: `SubmitPage`, `EnrollPage`.
 
-The routes for `admin-user.leaf` and `register.leaf` now render
-`AdminUserPage` and `RegisterPage`. The two templates are not served. They
-stay only because the test reads them as exemplars.
+The routes for `admin-user.leaf`, `register.leaf` and `alerts.leaf` now
+render `AdminUserPage`, `RegisterPage` and `AlertsPage`. The three templates
+are not served. They stay only because the test reads them as exemplars.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
@@ -169,9 +170,15 @@ Anatomy rules that hold across archetypes:
 - **Flash banners render through the `_flash` partial** — never hand-rolled.
   It emits `.flash-success role="status"` / `.flash-error role="alert"` from
   the `flashSuccess` / `flashError` / `notice` context values.  Static state
-  banners use `.flash-neutral` / `.flash-warning` with `role="status"`.
+  banners use `.flash-neutral` / `.flash-warning` with `role="status"`.  In a
+  Swift view, pass `FlashMessages` to `BaseLayout` for the one-shot messages,
+  and write a state banner as `FlashBanner(.warning)` or
+  `FlashBanner(.neutral)`.  SwiftLint keeps the `flash-` classes in
+  `BaseLayout.swift`.
 - **Tab bars are the `_admin-tabs` / `_instructor-tabs` partials.**  The
-  active tab rides `activeAdminTab` / `activeInstructorTab`.
+  active tab rides `activeAdminTab` / `activeInstructorTab`.  A Swift admin
+  page opens with `AdminTabs(active:page:)` instead, which also renders the
+  version banner.
 - **Headings are structural:** tabbed pages start their sections at `<h2>`
   (the tab bar is the page title); every other page has exactly one `<h1>`.
   Don't restyle a heading to fake a different level.
@@ -287,7 +294,7 @@ duplicate.
 - **`.results-table`** (+ `.table-scroll`), **`.sortable-table`** — the one
   column sort (`Public/sortable-table.js`).  Markup:
   `<th data-sort-key="…" data-sort-type="text|number|date|duration">` wrapping
-  `<button class="sort-header">`; the cell's sort value is `data-sort-value`,
+  `<button class="sort-header">` (Swift: `SortHeader`); the cell's sort value is `data-sort-value`,
   else `data-iso`, else a contained `<select>`'s value, else its text — the
   MACHINE value, deliberately not the displayed text `.filter-input` matches
   (you sort Last Seen by its ISO and filter it by "2 hours ago").
@@ -336,8 +343,8 @@ duplicate.
   symbols in `_avatar-sprite.leaf`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
   last, on top and untilted, the ring.
-  **A page that renders `_avatar` must also include `_avatar-sprite`, once per
-  page** — forget it and the page still returns 200 and shows an empty circle,
+  **A page that renders `_avatar` (Swift: `Avatar`) must also include
+  `_avatar-sprite` (Swift: `AvatarSprite`), once per page** — forget it and the page still returns 200 and shows an empty circle,
   which no guard can catch.  Five colours are per-student
   (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
   assigned inline, which is the sanctioned form); `--av-border` colours a solid

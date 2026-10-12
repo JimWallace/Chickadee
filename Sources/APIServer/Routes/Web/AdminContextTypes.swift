@@ -215,64 +215,6 @@ struct AdminStorageShareRow: Encodable, Sendable {
     }
 }
 
-struct AdminContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let workers: [AdminRunnerRow]
-    let courses: [AdminCourseRow]
-    /// Whether the course list is long enough to earn a filter box
-    /// (`ListFilterPolicy`).
-    let showCourseFilter: Bool
-    let version: String
-    /// Default (24h) activity series, JSON-encoded into the page so the chart
-    /// renders before the first poll.  The client re-fetches GET /admin/activity
-    /// when the window changes or on its refresh interval.
-    let activityChart: ActivityChartData
-
-    // Explicit initializer (rather than relying on the synthesized memberwise
-    // one): under the CI build's batch/non-WMO mode the synthesized init's
-    // symbol can fail to emit, producing an "undefined reference to
-    // AdminContext.init(...)" link error in chickadee-server. A hand-written
-    // init is emitted normally and sidesteps that. It also derives
-    // `showCourseFilter` from the course count.
-    init(
-        currentUser: CurrentUserContext?,
-        activeAdminTab: String,
-        workers: [AdminRunnerRow],
-        courses: [AdminCourseRow],
-        version: String,
-        activityChart: ActivityChartData
-    ) {
-        self.currentUser = currentUser
-        self.activeAdminTab = activeAdminTab
-        self.workers = workers
-        self.courses = courses
-        self.showCourseFilter = ListFilterPolicy.showsFilter(rowCount: courses.count)
-        self.version = version
-        self.activityChart = activityChart
-    }
-}
-
-struct AdminUsersContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let users: [AdminUserRow]
-    let userCount: Int
-    let adminCount: Int
-}
-
-/// Context for the rows-only fragment of the runners table (`?fragment=rows`).
-struct WorkerRowsFragmentContext: Encodable {
-    let workers: [AdminRunnerRow]
-}
-
-/// Context for the rows-only fragment of the users table (`?fragment=rows`).
-/// Carries exactly what `_user-rows.leaf` reads, so the fragment cannot start
-/// depending on page-level state the poll does not compute.
-struct UserRowsFragmentContext: Encodable {
-    let users: [AdminUserRow]
-}
-
 /// One course as the admin pages name it, in an enrolled or enrollable list.
 struct AdminCourseRef: Encodable {
     let id: String
@@ -296,46 +238,6 @@ struct AdminMCPAccountRow: Encodable {
     let coursesText: String
     /// Courses the account is not yet enrolled in, for the enrol picker.
     let enrollableCourses: [AdminCourseRef]
-}
-
-struct AdminMCPContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    /// True only when MCP is mounted, the signing authority is loaded, and the
-    /// issuer/resource resolve — i.e. tokens can actually be minted.
-    let enabled: Bool
-    /// False in read_only mode: the page hides the read+write mint option and
-    /// shows a read-only banner.
-    let writeAllowed: Bool
-    let issuer: String?
-    let resource: String?
-    let tokenTTLSeconds: Int
-    /// True only in local-auth mode: manual `mcp` service accounts are the
-    /// mechanism there. With SSO active, instructors authorize agents via the
-    /// browser flow instead, so the service-account UI is hidden.
-    let showServiceAccounts: Bool
-    let accounts: [AdminMCPAccountRow]
-    /// All courses, for the per-account enrollment picker.
-    let allCourses: [AdminCourseRef]
-    /// Browser-flow OAuth grants (all of them — admin view), with revoke.
-    let grants: [AgentGrantRow]
-    /// Set immediately after a mint so the page can show the token exactly once.
-    let mintedToken: String?
-    let mintedFor: String?
-    let mintedScopes: String?
-    /// A short error key surfaced as a banner (e.g. "username_taken").
-    let error: String?
-    /// The mode pill: "Read/write", "Read-only" or "Inactive".
-    let modeLabel: String
-    /// Token lifetime in words ("1 hour", "30 minutes").
-    let tokenLifetimeText: String
-}
-
-struct AdminStoragePageContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let storage: AdminStorageContext
-    let assignmentRows: [AdminStorageShareRow]
 }
 
 struct AdminCourseDetailContext: Encodable {
@@ -414,32 +316,6 @@ struct AdminAlertsRuleRow: Encodable {
     let thresholdText: String
 }
 
-struct AdminAlertsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let enabled: Bool
-    let webhookURL: String
-    let webhookURLFromEnvironment: Bool
-    let checkIntervalSeconds: Int
-    let cooldownSeconds: Int
-    let runnerOfflineSeconds: Int
-    let queueDepthThreshold: Int
-    let oldestPendingSeconds: Int
-    let errorRatePercent: Int
-    let rules: [AdminAlertsRuleRow]
-    /// The webhook shortened from the middle for display; "Not set" when empty.
-    let webhookDisplay: String
-    /// The newest paged firing's time and result, or none yet.
-    let hasLastDelivery: Bool
-    let lastDeliveryISO: String
-    let lastDeliveryResult: String
-    /// Recent firings under their day headings, newest first.
-    let firingDays: [DayGroup<AdminAlertFiringRow>]
-    let firingCount: Int
-    let flashSuccess: String?
-    let flashError: String?
-}
-
 struct AdminAuditRow: Encodable {
     let timestamp: String
     /// Machine instant behind `timestamp`, so the WHEN cell can lead with a
@@ -494,22 +370,6 @@ enum AuditCategoryTile {
     }
 }
 
-struct AdminAuditContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let rows: [AdminAuditRow]
-    /// The same rows under day headings, newest first.
-    let days: [DayGroup<AdminAuditRow>]
-    /// Available action filters (grouped label shown to the admin).
-    let actionOptions: [SelectOption]
-    /// The actor substring currently filtered on (echoed back into the input).
-    let filterActor: String
-    /// True when any filter is active — drives the "Clear filters" affordance.
-    let filtered: Bool
-    /// Total entries matching the current filter (may exceed the 200 shown).
-    let matchCount: Int
-}
-
 /// One archived course on the retention report.
 struct AdminRetentionRow: Encodable {
     let id: String
@@ -532,41 +392,10 @@ struct AdminRetentionRow: Encodable {
     let isDeletable: Bool
 }
 
-struct AdminRetentionContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    let retentionDays: Int
-    let rows: [AdminRetentionRow]
-    /// How many of `rows` are currently past the retention window and eligible
-    /// for permanent deletion (drives the summary line).
-    let deletableCount: Int
-    let flashSuccess: String?
-    let flashError: String?
-}
-
 // MARK: - LTI (docs/lti-1-3.md slice 1b)
 
-struct AdminLTIContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    /// False when `PUBLIC_BASE_URL` is unset: the tool URLs are paths only.
-    let baseURLConfigured: Bool
-    let loginURL: String
-    let launchURL: String
-    let jwksURL: String
-    let platforms: [AdminLTIPlatformRow]
-    /// Platforms with launches switched on, for the title's note.
-    let enabledPlatformCount: Int
-    /// True when a registration failed validation, so the form reopens with
-    /// what the admin typed, or when no platform exists yet, so the only way
-    /// forward is already open.
-    let newPlatformOpen: Bool
-    let newFields: LTIPlatformFieldsContext
-    let flashSuccess: String?
-    let flashError: String?
-}
-
-struct AdminLTIPlatformRow: Encodable {
+/// One registered platform on the admin LTI page.
+struct AdminLTIPlatformRow {
     let id: String
     let displayName: String
     let issuer: String
@@ -575,59 +404,10 @@ struct AdminLTIPlatformRow: Encodable {
     let enabled: Bool
     /// True when an edit of this row failed validation.
     let editOpen: Bool
-    let fields: LTIPlatformFieldsContext
-}
-
-/// The sub-context of the shared platform field set: a unique id prefix per
-/// form, so the add form and every edit form can sit on one page.
-struct LTIPlatformFieldsContext: Encodable {
-    let idPrefix: String
-    let form: LTIPlatformForm
-    /// A validation error for this form, shown inside it rather than at the
-    /// top of the page, which can be a whole table away.
-    var error: String?
+    let fields: LTIPlatformFields
 }
 
 // MARK: - GitHub (docs/github-submissions.md slice 1)
-
-struct AdminGitHubContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeAdminTab: String
-    /// False when `PUBLIC_BASE_URL` is unset: the manifest needs absolute URLs.
-    let baseURLConfigured: Bool
-    /// The registered App, or nil when none is registered.
-    let app: AdminGitHubAppDetails?
-    /// True when an App is registered but its secrets file is missing or
-    /// unreadable (#1771); `secretsMissing` says which, and `secretsPath` is
-    /// the file the admin must restore. Empty when there is no problem.
-    let secretsUnavailable: Bool
-    let secretsMissing: Bool
-    let secretsPath: String
-    /// The App's three options and whether GitHub grants each, read when the
-    /// page renders (#1776). Empty when there is no App, its secrets are
-    /// unavailable, or GitHub did not answer.
-    let capabilities: [GitHubCapabilityRow]
-    /// True when at least one option is not granted.
-    let capabilitiesIncomplete: Bool
-    /// True when the App's secrets are readable but GitHub did not say what
-    /// the App may do.
-    let capabilitiesUnknown: Bool
-    /// The manifest form, or nil when an App is registered or the form cannot
-    /// be built.
-    let creation: GitHubAppCreationContext?
-    /// The organization the admin typed, so the field keeps it.
-    let organization: String
-    /// True when an option was set, so the disclosure stays open.
-    let organizationOpen: Bool
-    /// True when the manifest asks for the course-repository permissions.
-    let courseRepositories: Bool
-    /// True when the manifest asks GitHub to deliver push events.
-    let pushEvents: Bool
-    /// True when the manifest asks to post commit statuses.
-    let commitStatuses: Bool
-    let flashSuccess: String?
-    let flashError: String?
-}
 
 struct AdminGitHubAppDetails: Encodable {
     let name: String

@@ -29,6 +29,7 @@ enum ElementaryPageFixtures {
 
     static var all: [ElementaryPageFixture] {
         [adminUserPage, loginPage, registerPage] + historyPages + mcpLtiPages + studentPages
+            + adminIntegrationPages + adminCorePages + adminDataPages
     }
 
     // MARK: - Shared values

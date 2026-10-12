@@ -25,7 +25,7 @@ struct AdminImportResultPage: HTML {
                     " — \(tally.courseName)"
                 }
                 if tally.termLabel == nil {
-                    div(.class("flash flash-warning"), .role("status")) {
+                    FlashBanner(.warning) {
                         "The bundle has no year and term. Set them on the "
                         a(.href(coursePath)) { "course page" }
                         "."

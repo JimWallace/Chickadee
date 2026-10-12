@@ -1360,8 +1360,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 
 /* ── Section tab bar (admin + instructor) ────────────── */
-/* Markup lives in _admin-tabs.leaf / _instructor-tabs.leaf — one shared
-   partial per area.  (A comment here used to claim LeafKit rejected a shared
+/* Markup lives in the AdminTabs view / _instructor-tabs.leaf — one shared
+   component per area.  (A comment here used to claim LeafKit rejected a shared
    partial with a false cycle error; the #1266 investigation discredited that
    class of diagnosis, and the partials render fine.) */
 
@@ -2588,7 +2588,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .diagnostic-value-alert { color: var(--red); }
 
 /* ── Clickable diagnostic cards with sparklines ─────────
-   Shared by the admin dashboard (admin.leaf) and the instructor dashboard
+   Shared by the admin dashboard (AdminPage) and the instructor dashboard
    (assignments.leaf); both poll a /metrics/cards endpoint and cycle the
    window on click. */
 .diagnostic-card-cyclable {

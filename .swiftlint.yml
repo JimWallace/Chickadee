@@ -166,14 +166,21 @@ custom_rules:
   elementary_raw_html:
     name: "Raw HTML only where escaping is handled"
     included: "Sources/APIServer/Views/.*\\.swift"
-    excluded: "Sources/APIServer/Views/(BaseLayout|PageStyle)\\.swift"
+    excluded: "Sources/APIServer/Views/(BaseLayout|PageStyle|AvatarSprite)\\.swift"
     regex: "HTMLRaw\\("
-    message: "HTMLRaw skips escaping. Raw output lives in BaseLayout (doctype, icon sprite) and PageStyle (author CSS) only."
+    message: "HTMLRaw skips escaping. Raw output lives in BaseLayout (doctype, icon sprite), AvatarSprite (avatar sprite) and PageStyle (author CSS) only."
+    severity: error
+  elementary_tabs_only_in_component:
+    name: "Tab bars come from their component"
+    included: "Sources/APIServer/Views/.*\\.swift"
+    excluded: "Sources/APIServer/Views/AdminTabs\\.swift"
+    regex: "\\badmin-(tabs?|version-banner)\\b"
+    message: "Open an admin page with AdminTabs; no other view writes the tab bar or the version banner (docs/ui-design.md, Page archetypes)."
     severity: error
   elementary_flash_only_in_layout:
-    name: "Flash banners come from the layout"
+    name: "Banners come from FlashBanner"
     included: "Sources/APIServer/Views/.*\\.swift"
     excluded: "Sources/APIServer/Views/BaseLayout\\.swift"
-    regex: "flash-(success|error)"
-    message: "BaseLayout renders the flash banners once for every page; pass FlashMessages to the layout instead (docs/ui-design.md, Flash banners)."
+    regex: "\\bflash-(success|error|warning|neutral)\\b"
+    message: "BaseLayout renders the flash banners; pass FlashMessages to the layout, or use FlashBanner for a state banner (docs/ui-design.md, Flash banners)."
     severity: error

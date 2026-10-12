@@ -5,7 +5,7 @@
 // launches from. Registrations live in `lti_platforms`, not in environment
 // variables, so an admin adds or rotates one without a restart.
 //
-//   GET  /admin/lti                               → admin-lti.leaf
+//   GET  /admin/lti                               → AdminLTIPage
 //   POST /admin/lti/platforms                     → register a platform
 //   POST /admin/lti/platforms/:platformID         → edit a platform
 //   POST /admin/lti/platforms/:platformID/enabled → enable or disable
@@ -37,7 +37,7 @@ extension AdminRoutes {
     // MARK: - GET /admin/lti
 
     @Sendable
-    func ltiPage(req: Request) async throws -> View {
+    func ltiPage(req: Request) async throws -> Response {
         let notice = req.query[String.self, at: "ok"].flatMap(LTIAdminNotice.init(rawValue:))
         return try await renderLTIPage(req: req, flashSuccess: notice?.message)
     }
@@ -63,7 +63,6 @@ extension AdminRoutes {
             return req.redirect(to: "/admin/lti?ok=\(LTIAdminNotice.registered.rawValue)")
         } catch let error as LTIPlatformFormError {
             return try await renderLTIPage(req: req, newForm: (form, error.message))
-                .encodeResponse(for: req)
         }
     }
 
@@ -92,8 +91,7 @@ extension AdminRoutes {
             return req.redirect(to: "/admin/lti?ok=\(LTIAdminNotice.updated.rawValue)")
         } catch let error as LTIPlatformFormError {
             return try await renderLTIPage(
-                req: req, editing: platform.id.map { ($0, form, error.message) }
-            ).encodeResponse(for: req)
+                req: req, editing: platform.id.map { ($0, form, error.message) })
         }
     }
 
@@ -173,7 +171,7 @@ extension AdminRoutes {
         flashSuccess: String? = nil,
         newForm: (form: LTIPlatformForm, error: String)? = nil,
         editing: (id: UUID, form: LTIPlatformForm, error: String)? = nil
-    ) async throws -> View {
+    ) async throws -> Response {
         let platforms = try await APILTIPlatform.query(on: req.db).sort(\.$displayName).all()
         let rows = platforms.compactMap { platform -> AdminLTIPlatformRow? in
             guard let id = platform.id else { return nil }
@@ -186,7 +184,7 @@ extension AdminRoutes {
                 deploymentCount: platform.deploymentIDs.count,
                 enabled: platform.enabled,
                 editOpen: isEditing,
-                fields: LTIPlatformFieldsContext(
+                fields: LTIPlatformFields(
                     idPrefix: "lti-\(id.uuidString)",
                     form: isEditing
                         ? (editing?.form ?? LTIPlatformForm(platform: platform))
@@ -194,20 +192,19 @@ extension AdminRoutes {
                     error: isEditing ? editing?.error : nil))
         }
         let endpoints = LTIToolEndpoints(publicBaseURL: req.application.appConfig.security.publicBaseURL)
-        let ctx = AdminLTIContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "lti",
-            baseURLConfigured: endpoints.isAbsolute,
-            loginURL: endpoints.loginURL,
-            launchURL: endpoints.launchURL,
-            jwksURL: endpoints.jwksURL,
-            platforms: rows,
-            enabledPlatformCount: rows.filter(\.enabled).count,
-            newPlatformOpen: newForm != nil || rows.isEmpty,
-            newFields: LTIPlatformFieldsContext(
-                idPrefix: "lti-new", form: newForm?.form ?? .empty, error: newForm?.error),
-            flashSuccess: flashSuccess,
-            flashError: nil)
-        return try await req.view.render("admin-lti", ctx)
+        return try await HTMLResponse {
+            AdminLTIPage(
+                page: PageRequestContext(request: req),
+                flash: FlashMessages(success: flashSuccess),
+                baseURLConfigured: endpoints.isAbsolute,
+                loginURL: endpoints.loginURL,
+                launchURL: endpoints.launchURL,
+                jwksURL: endpoints.jwksURL,
+                platforms: rows,
+                enabledPlatformCount: rows.filter(\.enabled).count,
+                newPlatformOpen: newForm != nil || rows.isEmpty,
+                newFields: LTIPlatformFields(
+                    idPrefix: "lti-new", form: newForm?.form ?? .empty, error: newForm?.error))
+        }.encodeResponse(for: req)
     }
 }
