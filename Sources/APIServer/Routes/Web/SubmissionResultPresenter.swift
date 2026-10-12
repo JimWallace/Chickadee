@@ -450,7 +450,7 @@ extension WebRoutes {
     }
 
     // Internal (was private): called from `submissionPage` in WebRoutes+Submission.swift.
-    /// Builds the final Leaf-facing `SubmissionContext` from the processed
+    /// Builds the `SubmissionContext` that `SubmissionPage` renders from the processed
     /// pieces.  Pulled out so `submissionPage` itself stays a thin orchestrator.
     func buildSubmissionContext(
         subID: String,
@@ -463,7 +463,6 @@ extension WebRoutes {
         let secretReveal = decorations.secretReveal
         let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
-        let currentUser = decorations.currentUser
         let isPending = submission.statusValue == .pending || submission.statusValue == .assigned
         let isBrowserComplete = false  // browser submissions now go straight to "complete"
         let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
@@ -504,7 +503,6 @@ extension WebRoutes {
             hasDelta: delta.hasDelta,
             deltaHeaderText: delta.headerText,
             badges: badges,
-            currentUser: currentUser,
             classGoals: decorations.classGoals,
             hasClassGoals: !decorations.classGoals.isEmpty,
             secretRevealAvailable: secretReveal.available,
@@ -792,10 +790,9 @@ struct SecretRevealBanner {
 // Internal (was private): constructed by `submissionPage` in
 // WebRoutes+Submission.swift.
 /// Per-page decoration data attached to `SubmissionContext` — class-wide
-/// achievement badges and the current user's display context.
+/// achievement badges, the override, the class goals and the page links.
 struct SubmissionDecorations {
     let badges: [AchievementBadge]
-    let currentUser: CurrentUserContext?
     /// Instructor override percent for this student × assignment, nil when
     /// none.  The effective grade shown above the autograded breakdown.
     let overrideGradePercent: Int?

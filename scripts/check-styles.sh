@@ -307,7 +307,7 @@ fi
 # Page-local <style> blocks should only define page-unique classes.  Two
 # regressions the cleanup removed (and that render fine, so no test catches):
 #   A. a page block re-defines a selector that already lives in the global
-#      sheet (e.g. submission.leaf shadowing the global .achievement-badge);
+#      sheet (e.g. the submission page shadowing the global .achievement-badge);
 #   B. the same selector is defined in more than one page block (cross-page
 #      duplication that should be hoisted to styles.css).
 # `.main` is an allowlisted intentional global override (notebook.leaf narrows

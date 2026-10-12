@@ -2,7 +2,7 @@
 //
 // User account & course membership routes (any authenticated user).
 //
-//   GET  /account                      → account.leaf (user info + enrolled courses)
+//   GET  /account                      → AccountPage (user info + enrolled courses)
 //   POST /account/enroll               → join a course → redirect to /account
 //   POST /account/unenroll/:courseID   → leave a course → redirect to /account
 //   POST /account/avatar               → AccountRoutes+Avatar.swift
@@ -24,7 +24,7 @@ struct AccountRoutes: RouteCollection {
     // MARK: - GET /account
 
     @Sendable
-    func accountPage(req: Request) async throws -> View {
+    func accountPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.internalServerError) }
 
@@ -96,10 +96,14 @@ struct AccountRoutes: RouteCollection {
             displayName: user.displayName,
             preferredName: user.preferredName,
             username: user.username)
-        return try await req.view.render(
-            "account",
-            AccountContext(
-                currentUser: req.currentUserContext,
+        let page = PageRequestContext(request: req)
+        return try await HTMLResponse {
+            AccountPage(
+                page: page,
+                flash: FlashMessages(
+                    success: accountFlashSuccess(req: req, avatarNotice: avatarNotice),
+                    error: req.query[String.self, at: "githubError"]
+                        .flatMap(GitHubLinkError.init(rawValue:))?.message),
                 username: user.username,
                 preferredName: user.preferredName,
                 identityName: identityName,
@@ -113,8 +117,6 @@ struct AccountRoutes: RouteCollection {
                 email: user.email,
                 enrolledCourses: enrolledRows,
                 availableCourses: availableRows,
-                hasEnrolledCourses: !enrolledRows.isEmpty,
-                hasAvailableCourses: !availableRows.isEmpty,
                 error: req.query[String.self, at: "error"],
                 exportStatus: export?.statusValue?.rawValue ?? "none",
                 exportRequestedAtDisplay: export.map { dateFormatter.string(from: $0.requestedAt) },
@@ -122,11 +124,9 @@ struct AccountRoutes: RouteCollection {
                 exportCanRequest: dataExportCanBeRequested(export),
                 exportNotice: req.query[String.self, at: "exportNotice"],
                 exportError: req.query[String.self, at: "exportError"],
-                github: github,
-                flashSuccess: accountFlashSuccess(req: req, avatarNotice: avatarNotice),
-                flashError: req.query[String.self, at: "githubError"]
-                    .flatMap(GitHubLinkError.init(rawValue:))?.message
-            ))
+                showGitHub: github != nil,
+                githubLogin: github?.login)
+        }.encodeResponse(for: req)
     }
 
     /// The one-shot success banner after a redirect back to this page.
@@ -240,58 +240,8 @@ func accountIdentitySecondary(identityName: String, username: String) -> String?
     identityName == username ? nil : username
 }
 
-private struct AccountContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let username: String
-    let preferredName: String?
-    /// The heading beside the avatar. See `accountIdentityName`.
-    let identityName: String
-    /// The username under the heading, nil when the heading already IS the
-    /// username. See `accountIdentitySecondary`.
-    let identitySecondary: String?
-    /// The student's generated chickadee, replacing the initials monogram this
-    /// page carried until v0.5.  Materialized on first render by
-    /// `AvatarStore.ensureSpec`, and decorative: the name beside it carries the
-    /// identity, so announcing the bird too would only repeat it.
-    let avatar: AvatarPresentation
-    /// The backdrop and border choices (docs/student-wardrobe.md, W1).
-    let avatarPicker: AvatarPickerContext
-    /// A posted choice was refused by `AvatarCustomization`.
-    let avatarInvalid: Bool
-    let studentID: String?
-    let email: String?
-    let enrolledCourses: [AccountCourseRow]
-    let availableCourses: [AccountCourseRow]
-    /// Emptiness, decided in Swift because Leaf cannot decide it.
-    ///
-    /// LeafKit has no property resolution for `.isEmpty` on an array: the path
-    /// resolves to nil, so `#if(rows.isEmpty)` is ALWAYS false and
-    /// `#if(!rows.isEmpty)` is ALWAYS true. Both spellings therefore render the
-    /// table, which is why this page showed an "Available courses" heading over
-    /// a header-only table with nothing in it. (The type-level coercion is a
-    /// second trap in the same area: `#if(array)` converts via `.bool(isEmpty)`,
-    /// so a bare array test is true when the array is EMPTY.)
-    let hasEnrolledCourses: Bool
-    let hasAvailableCourses: Bool
-    let error: String?
-    /// Personal-data export state (#557): "none" | "pending" | "complete" |
-    /// "failed", plus display timestamps and whether the request button shows.
-    let exportStatus: String
-    let exportRequestedAtDisplay: String?
-    let exportCompletedAtDisplay: String?
-    let exportCanRequest: Bool
-    let exportNotice: String?
-    let exportError: String?
-    /// The GitHub section (docs/github-submissions.md slice 2), or nil to hide
-    /// it: no App registered and no existing link.
-    let github: AccountGitHubContext?
-    /// The GitHub link notices, rendered by base.leaf's `_flash` partial.
-    let flashSuccess: String?
-    let flashError: String?
-}
-
 /// The account page's GitHub section.
-private struct AccountGitHubContext: Encodable {
+private struct AccountGitHubContext {
     /// The linked login, or nil when no account is linked. The section is
     /// built without a login only when the Link button works.
     let login: String?

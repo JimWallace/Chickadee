@@ -154,7 +154,7 @@ import VaporTesting
                     #expect(html.contains("<symbol id=\"av-plumage\""), "sprite missing")
                     #expect(html.contains("class=\"avatar\""))
                     for layer in ["#av-backdrop", "#av-plumage"] {
-                        #expect(html.contains("<use href=\"\(layer)\"/>"), "no \(layer) layer")
+                        #expect(html.contains("<use href=\"\(layer)\" />"), "no \(layer) layer")
                     }
                     // The three varying layers are interpolated: each must
                     // appear resolved, and no interpolation may survive as text.

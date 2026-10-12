@@ -1,8 +1,8 @@
 // Tests/APITests/StatusClassStylesheetTests.swift
 //
-// submission.leaf builds class names by interpolation —
-// `status-#(outcome.status)` on every outcome row and
-// `result-mark-#(outcome.markClass)` on every mark chip — so the stylesheet
+// SubmissionPage builds class names by interpolation —
+// `status-<outcome.status>` on every outcome row and
+// `result-mark-<outcome.markClass>` on every mark chip — so the stylesheet
 // rules those names resolve to are invisible to the compiler AND to the
 // static style guards (check-styles.sh scans selectors, not the interpolated
 // names templates mint at render time).
@@ -43,7 +43,7 @@ import Testing
         for name in Self.markClasses {
             #expect(
                 css.contains(".status-\(name)"),
-                "Public/styles.css defines no .status-\(name) — submission.leaf mints this class for every outcome row"
+                "Public/styles.css defines no .status-\(name) — SubmissionPage mints this class for every outcome row"
             )
         }
     }
@@ -67,7 +67,7 @@ import Testing
         for name in Self.markClasses {
             #expect(
                 css.contains(".result-mark-\(name)"),
-                "Public/styles.css defines no .result-mark-\(name) — submission.leaf mints this class for every mark chip"
+                "Public/styles.css defines no .result-mark-\(name) — SubmissionPage mints this class for every mark chip"
             )
         }
     }

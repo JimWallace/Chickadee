@@ -4,12 +4,12 @@
 // All routes in this collection require authentication (enforced by RoleMiddleware
 // in routes.swift).
 //
-//   GET  /                          → index.leaf      (assignments)
+//   GET  /                          → IndexPage       (assignments)
 //   GET  /testsetups/:id/submit     → SubmitPage      (student submission form)
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
 //   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
 //   GET  /testsetups/:id/leaderboard → leaderboard.leaf (class activity ranking)
-//   GET  /submissions/:id           → submission.leaf (live results)
+//   GET  /submissions/:id           → SubmissionPage  (live results)
 
 import Core
 import Fluent
@@ -58,13 +58,9 @@ struct WebRoutes: RouteCollection {
     func index(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
 
-        // Resolve active course and build course-aware user context for tabs.
+        // Resolve the active course. The page context below caches the
+        // course-aware user from the same resolution, for the course tabs.
         let courseState = try await req.resolveActiveCourse(for: user)
-        let userContext = CurrentUserContext(
-            user: user,
-            activeCourse: courseState.active,
-            enrolledCourses: courseState.all
-        )
 
         // If the user has no active enrollment but open-mode courses exist → redirect to /enroll.
         // We only redirect when self-enrolment is actually possible; if all courses are closed
@@ -87,7 +83,7 @@ struct WebRoutes: RouteCollection {
         // list. An admin with no enrollment administers courses from /admin; the
         // home dashboard is never an all-courses view, for any role.
         guard let activeCourseUUID = courseState.activeCourseUUID else {
-            return try await Self.renderEmptyDashboard(req: req, userContext: userContext)
+            return try await Self.renderEmptyDashboard(req: req, activeCourse: courseState.active)
         }
 
         let fmt = waterlooDateTimeFormatter()
@@ -202,29 +198,28 @@ struct WebRoutes: RouteCollection {
             rows: rows, setupKeyByID: setupKeyByID, contentItems: contentItems,
             allAssignments: allAssignments, allSections: allSections)
 
-        return try await req.view.render(
-            "index",
-            IndexContext(
+        let page = try await PageRequestContext.courseAware(req)
+        return try await HTMLResponse {
+            IndexPage(
+                page: page,
+                activeCourse: courseState.active,
                 displayGroups: displayGroups,
                 hasAny: !displayGroups.isEmpty,
-                currentUser: userContext,
-                slipDaySummary: slipDayData.summaryLine
-            )
-        ).encodeResponse(for: req)
+                slipDaySummary: slipDayData.summaryLine)
+        }.encodeResponse(for: req)
     }
 
     /// The "not enrolled in any courses" dashboard — the home page is
     /// course-scoped for every role, so with no active enrollment there is
     /// nothing to list.
     private static func renderEmptyDashboard(
-        req: Request, userContext: CurrentUserContext?
+        req: Request, activeCourse: CourseContext?
     ) async throws -> Response {
-        try await req.view.render(
-            "index",
-            IndexContext(
-                displayGroups: [], hasAny: false, currentUser: userContext,
-                slipDaySummary: nil)
-        ).encodeResponse(for: req)
+        let page = try await PageRequestContext.courseAware(req)
+        return try await HTMLResponse {
+            IndexPage(
+                page: page, activeCourse: activeCourse, displayGroups: [], hasAny: false, slipDaySummary: nil)
+        }.encodeResponse(for: req)
     }
 
     // The legacy GET/POST /testsetups/new raw-zip upload pair was deleted in
