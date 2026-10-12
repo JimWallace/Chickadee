@@ -53,7 +53,7 @@ extension InstructorDashboardRoutes {
     /// written answers and an editor; it opens by itself when the row still
     /// needs a person (a draft, or feedback the student has resubmitted since).
     @Sendable
-    func feedbackReviewPage(req: Request) async throws -> View {
+    func feedbackReviewPage(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
             throw Abort(.notFound)
@@ -93,19 +93,21 @@ extension InstructorDashboardRoutes {
             FeedbackReviewText(index: $0.index, paragraphs: ProseParagraphs.split($0.prompt))
         }
 
-        return try await req.view.render(
-            "assignment-feedback",
-            FeedbackReviewContext(
-                currentUser: req.currentUserContext,
+        let gatesOpen = try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db)
+        let page = PageRequestContext(request: req)
+        return try await HTMLResponse {
+            AssignmentFeedbackPage(
+                page: page,
+                flash: FlashMessages(
+                    success: req.query[String.self, at: "notice"], error: req.query[String.self, at: "error"]),
                 assignmentID: assignment.publicID,
                 assignmentTitle: assignment.title,
-                gatesOpen: try await ReflectionFeedbackService.gatesOpen(assignment, on: req.db),
+                gatesOpen: gatesOpen,
                 prompts: prompts,
                 rows: reviewRows,
                 reviewCount: reviewRows.filter(\.needsReview).count,
-                maxDraftLength: ReflectionFeedbackService.maxDraftLength,
-                flashError: req.query[String.self, at: "error"],
-                flashSuccess: req.query[String.self, at: "notice"]))
+                maxDraftLength: ReflectionFeedbackService.maxDraftLength)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /instructor/:assignmentID/feedback
@@ -194,23 +196,6 @@ extension InstructorDashboardRoutes {
         case .stale: return "Resubmitted since"
         }
     }
-}
-
-struct FeedbackReviewContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let assignmentTitle: String
-    /// False when either gate is off: the agent cannot read or draft, but the
-    /// page still lets staff review what is already there.
-    let gatesOpen: Bool
-    /// The questions, once, from the starter notebook.
-    let prompts: [FeedbackReviewText]
-    let rows: [FeedbackReviewRow]
-    /// Rows that still need a person: a draft, or a stale one.
-    let reviewCount: Int
-    let maxDraftLength: Int
-    let flashError: String?
-    let flashSuccess: String?
 }
 
 struct FeedbackReviewRow: Encodable {

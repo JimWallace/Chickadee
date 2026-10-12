@@ -343,7 +343,7 @@ extension WebRoutes {
     // MARK: - GET /submissions/:id
 
     @Sendable
-    func submissionPage(req: Request) async throws -> View {
+    func submissionPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
 
         guard
@@ -462,7 +462,6 @@ extension WebRoutes {
             sectionedOutcomes: sectionedOutcomes,
             decorations: SubmissionDecorations(
                 badges: badges,
-                currentUser: req.currentUserContext,
                 overrideGradePercent: overrideGradePercent,
                 classGoals: classGoals,
                 secretReveal: SecretRevealBanner(
@@ -482,7 +481,8 @@ extension WebRoutes {
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
-        return try await req.view.render("submission", ctx)
+        let page = PageRequestContext(request: req)
+        return try await HTMLResponse { SubmissionPage(page: page, result: ctx) }.encodeResponse(for: req)
     }
 
     // MARK: - submissionPage helpers

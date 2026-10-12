@@ -36,7 +36,7 @@ struct GitHubSubmissionRoutes: RouteCollection {
     // MARK: - GET /testsetups/:id/github
 
     @Sendable
-    func page(req: Request) async throws -> View {
+    func page(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let userID = try user.requireID()
         let setup = try await Self.offeredSetup(req: req, user: user)
@@ -72,16 +72,13 @@ struct GitHubSubmissionRoutes: RouteCollection {
                 state.errorText = error.message
             }
         }
-        return try await req.view.render(
-            "github-submit",
-            GitHubSubmitContext(
-                testSetupID: setupID,
-                assignmentTitle: assignment?.title ?? setupID,
-                chips: try await SubmitChips.make(
-                    setupID: setupID, assignment: assignment, user: user, on: req.db),
-                state: state,
-                currentUser: req.currentUserContext,
-                flashSuccess: state.noticeText))
+        let chips = try await SubmitChips.make(setupID: setupID, assignment: assignment, user: user, on: req.db)
+        let page = PageRequestContext(request: req)
+        return try await HTMLResponse {
+            GitHubSubmitPage(
+                page: page, flash: FlashMessages(success: state.noticeText), testSetupID: setupID,
+                assignmentTitle: assignment?.title ?? setupID, chips: chips, state: state)
+        }.encodeResponse(for: req)
     }
 
     // MARK: - POST /testsetups/:id/github

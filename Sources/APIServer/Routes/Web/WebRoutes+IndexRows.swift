@@ -89,7 +89,7 @@ func dashboardRowStatus(
 
 /// The four gates the dashboard's Actions cell renders, derived once per row.
 ///
-/// They live here, rather than as conditions spelled out in `index.leaf`,
+/// They live here, rather than as conditions spelled out in `IndexPage`,
 /// because the cell also has to know whether it is offering *anything* — and
 /// two copies of the same conditions eventually disagree, rendering a dash
 /// beside live buttons or buttons beside a dash.

@@ -129,16 +129,6 @@ struct GitHubSubmitState: Encodable {
     }
 }
 
-struct GitHubSubmitContext: Encodable {
-    let testSetupID: String
-    let assignmentTitle: String
-    let chips: SubmitChips
-    let state: GitHubSubmitState
-    let currentUser: CurrentUserContext?
-    /// Rendered by the `_flash` partial in `base`.
-    let flashSuccess: String?
-}
-
 /// The link from a submission to the commit it was made from.
 enum GitHubSourceLink {
     static func commitURL(repositoryName: String, sha: String) -> String {

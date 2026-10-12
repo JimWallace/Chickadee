@@ -121,7 +121,7 @@ them is the answer.
 | **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | — |
 | **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | — |
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | — |
-| **Plain student page** | `<h1>` → content | `account.leaf` | index |
+| **Plain student page** | `<h1>` → content | `account.leaf` | — |
 | **Auth box** | `.auth-box` centred card | `register.leaf` | — |
 | **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
 | **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
@@ -148,15 +148,17 @@ names only Leaf templates. `PageArchetypeTests` resolves each name to a
 - Admin tabbed: `AlertsPage` and every `Admin*Page` that opens with `AdminTabs`.
 - Instructor tabbed: `AssignmentsPage` and every `Instructor*Page` that opens
   with `InstructorTabs`.
-- Titlebar page: `AdminCoursePage`, `AssignmentSubmissionsPage`,
+- Titlebar page: `AdminCoursePage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`,
   `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`.
 - Auth box: `LoginPage`, `OAuthConsentPage`.
-- Plain student page: `SubmitPage`, `EnrollPage`.
+- Plain student page: `SubmitPage`, `EnrollPage`, `IndexPage`, `AccountPage`,
+  `SubmissionPage`, `GitHubSubmitPage`.
 
-The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf` and
-`instructor-mcp.leaf` now render `AdminUserPage`, `RegisterPage`,
-`AlertsPage` and `InstructorMCPPage`. The four templates are not served. They
-stay only because the test reads them as exemplars.
+The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
+`instructor-mcp.leaf` and `account.leaf` now render `AdminUserPage`,
+`RegisterPage`, `AlertsPage`, `InstructorMCPPage` and `AccountPage`. The five
+templates are not served. They stay only because the test reads them as
+exemplars.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
