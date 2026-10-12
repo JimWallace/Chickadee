@@ -4,7 +4,7 @@
 // course (InstructorDashboardRoutes+AIAgents.swift), and the course's
 // authoring voice for connected agents.
 //
-//   GET  /instructor/mcp   → instructor-mcp.leaf (access, attestation, voice guide)
+//   GET  /instructor/mcp   → InstructorMCPPage (access, attestation, voice guide)
 //   POST /instructor/mcp   → save or reset (per-course instructor only) → redirect with a flash
 //
 // One editable guide per course, seeded from Chickadee's house authoring-voice
@@ -26,7 +26,7 @@ extension InstructorDashboardRoutes {
     static let mcpGuidanceMaxLength = 8000
 
     @Sendable
-    func mcpPanelPage(req: Request) async throws -> View {
+    func mcpPanelPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
 
@@ -76,26 +76,25 @@ extension InstructorDashboardRoutes {
 
         let isCustomized = course.map(courseHasCustomAuthoringVoice) ?? false
         let guidanceText = course.map(courseAuthoringVoice) ?? MCPServerInstructions.authoringVoice
-        let ctx = InstructorMCPContext(
-            currentUser: try await req.courseAwareUserContext(),
-            activeInstructorTab: "mcp",
-            hasActiveCourse: course != nil,
-            courseCode: course?.code ?? "",
-            guidanceText: guidanceText,
-            guidanceLength: guidanceText.count,
-            isCustomized: isCustomized,
-            // Precomputed so the template branches on flat bools (LeafKit
-            // 1.14.2 mis-parses compound conditions).
-            showResetButton: canEdit && isCustomized,
-            sourceNote: isCustomized ? "Customized" : "Chickadee default",
-            maxLength: Self.mcpGuidanceMaxLength,
-            canEdit: canEdit,
-            readOnlyNote: readOnlyNote,
-            mcpDisabled: !req.application.appConfig.mcp.mode.isMounted,
-            agentAccess: try await agentAccessFacts(course: course, viewer: user, req: req),
-            flashSuccess: flashSuccess,
-            flashError: flashError)
-        return try await req.view.render("instructor-mcp", ctx)
+        let agentAccess = try await agentAccessFacts(course: course, viewer: user, req: req)
+        let page = try await PageRequestContext.courseAware(req)
+        return try await HTMLResponse {
+            InstructorMCPPage(
+                page: page,
+                flash: FlashMessages(success: flashSuccess, error: flashError),
+                hasActiveCourse: course != nil,
+                courseCode: course?.code ?? "",
+                guidanceText: guidanceText,
+                guidanceLength: guidanceText.count,
+                isCustomized: isCustomized,
+                showResetButton: canEdit && isCustomized,
+                sourceNote: isCustomized ? "Customized" : "Chickadee default",
+                maxLength: Self.mcpGuidanceMaxLength,
+                canEdit: canEdit,
+                readOnlyNote: readOnlyNote,
+                mcpDisabled: !req.application.appConfig.mcp.mode.isMounted,
+                agentAccess: agentAccess)
+        }.encodeResponse(for: req)
     }
 
     @Sendable

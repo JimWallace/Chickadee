@@ -20,14 +20,10 @@ import Vapor
 extension InstructorDashboardRoutes {
 
     @Sendable
-    func activityPage(req: Request) async throws -> View {
+    func activityPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
-        let userContext = CurrentUserContext(
-            user: user,
-            activeCourse: courseState.active,
-            enrolledCourses: courseState.all
-        )
+        let page = try await PageRequestContext.courseAware(req)
 
         struct ActivityQuery: Content {
             var actor: String?
@@ -44,17 +40,11 @@ extension InstructorDashboardRoutes {
         guard let courseID = courseState.activeCourseUUID else {
             // No active course: render the empty state rather than 404ing, so
             // the tab behaves like the other instructor tabs.
-            return try await req.view.render(
-                "instructor-activity",
-                InstructorActivityContext(
-                    currentUser: userContext,
-                    activeInstructorTab: "activity",
-                    days: [],
-                    staffOptions: [],
-                    hasRows: false,
-                    hasActiveCourse: false,
-                    filterActor: trimmedActor,
-                    filtered: actorFilter != nil))
+            return try await HTMLResponse {
+                InstructorActivityPage(
+                    page: page, hasActiveCourse: false, days: [], staffOptions: [], hasRows: false,
+                    filtered: actorFilter != nil)
+            }.encodeResponse(for: req)
         }
 
         let rows = try await CourseTimelineService.timeline(
@@ -62,38 +52,16 @@ extension InstructorDashboardRoutes {
         staffOptions = try await Self.activityStaffOptions(
             courseID: courseID, selected: actorFilter, db: req.db)
 
-        return try await req.view.render(
-            "instructor-activity",
-            InstructorActivityContext(
-                currentUser: userContext,
-                activeInstructorTab: "activity",
-                days: ActivityDay.group(rows),
-                staffOptions: staffOptions,
-                hasRows: !rows.isEmpty,
-                hasActiveCourse: true,
-                filterActor: trimmedActor,
-                filtered: actorFilter != nil))
+        return try await HTMLResponse {
+            InstructorActivityPage(
+                page: page, hasActiveCourse: true, days: ActivityDay.group(rows), staffOptions: staffOptions,
+                hasRows: !rows.isEmpty, filtered: actorFilter != nil)
+        }.encodeResponse(for: req)
     }
 }
 
-/// Activity tab (`GET /instructor/activity`): the merged content-edit +
-/// course-event timeline for the active course.
-private struct InstructorActivityContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    /// The rows grouped under Today / Yesterday / date headings.
-    let days: [ActivityDay]
-    /// The person select: "Everyone" first, then course staff by name.
-    let staffOptions: [ActivityStaffOption]
-    /// Explicit flag — Leaf's `array.isEmpty` is unreliable in this codebase.
-    let hasRows: Bool
-    let hasActiveCourse: Bool
-    let filterActor: String
-    let filtered: Bool
-}
-
 /// One entry in the Activity tab's person select.
-private struct ActivityStaffOption: Encodable, Equatable {
+struct ActivityStaffOption: Equatable, Sendable {
     /// The `actor` query value; empty for "Everyone".
     let username: String
     let displayName: String

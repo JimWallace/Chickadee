@@ -2,7 +2,7 @@
 //
 // GET /instructor/metrics/cards — JSON sparkline series for the instructor
 // dashboard's diagnostic cards, scoped to the caller's active course.  Polled
-// by assignments.leaf the same way the admin dashboard polls
+// by AssignmentsPage the same way the admin dashboard polls
 // /admin/metrics/cards; the client cycles 24h / 7d / 30d from one payload.
 
 import Core

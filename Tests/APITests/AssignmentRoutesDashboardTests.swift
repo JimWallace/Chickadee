@@ -574,7 +574,7 @@ import VaporTesting
                         )
                         let formSegment = html[actionRange.upperBound..<formEnd.lowerBound]
                         #expect(
-                            formSegment.contains("name='_csrf'"),
+                            formSegment.contains("name=\"_csrf\""),
                             "Delete form for \(assignment.publicID) must include the CSRF hidden field"
                         )
                     }

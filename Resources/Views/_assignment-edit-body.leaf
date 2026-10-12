@@ -436,7 +436,7 @@
                 <span id="suite-default-limit-status" class="upload-status-inline" role="status" aria-live="polite"></span>
             </label>
             <!-- Add Section — form POST + full page reload.  Mirrors the
-                 dashboard pattern (Resources/Views/assignments.leaf:29-51)
+                 dashboard pattern (Sources/APIServer/Views/Pages/AssignmentsPage.swift)
                  so section CRUD doesn't ride the fragile whole-state
                  `PUT /suite` pipeline. -->
             <details class="add-section-details popup-anchor" id="add-suite-section-details">
