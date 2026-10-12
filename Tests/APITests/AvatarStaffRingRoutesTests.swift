@@ -60,9 +60,9 @@ import VaporTesting
             let studentTable = try #require(html.range(of: "id=\"enrolled-students-table\""))
             let staffPart = html[staffTable.lowerBound..<studentTable.lowerBound]
             let studentPart = html[studentTable.lowerBound...]
-            #expect(staffPart.contains("<use href=\"#av-ring-staff\" data-av-ring/>"))
+            #expect(staffPart.contains("<use href=\"#av-ring-staff\" data-av-ring />"))
             #expect(!studentPart.contains("#av-ring-staff"))
-            #expect(studentPart.contains("<use href=\"#av-ring-none\" data-av-ring/>"))
+            #expect(studentPart.contains("<use href=\"#av-ring-none\" data-av-ring />"))
         }
     }
 

@@ -1,7 +1,7 @@
 // APIServer/Routes/Web/CourseFieldsContext.swift
 //
-// The values of one course form, rendered by `_course-fields.leaf`. Four forms
-// share the partial: the admin new-course form, the settings and clone forms
+// The values of one course form, rendered by `CourseFields`. Four forms
+// share the view: the admin new-course form, the settings and clone forms
 // on an admin course page, and the instructor New term tab (#1974).
 
 import Core

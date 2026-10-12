@@ -1,8 +1,8 @@
 // APIServer/Routes/Web/StaffFieldsContext.swift
 //
-// The sub-context of `_staff-fields.leaf`: the identifier and role fields of a
-// staff form. The instructor roster and the admin course page render the same
-// partial, as the course forms share `_course-fields` (CourseFieldsContext).
+// The values of `StaffFields`: the identifier and role fields of a staff form.
+// The instructor roster and the admin course page render the same view, as the
+// course forms share `CourseFields` (CourseFieldsContext).
 
 import Core
 

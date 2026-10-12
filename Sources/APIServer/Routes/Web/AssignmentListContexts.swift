@@ -76,46 +76,6 @@ struct CourseSectionRow: Encodable {
     let items: [InstructorSectionItem]
 }
 
-/// Students tab (`GET /instructor/students`): the enrolled-students roster
-/// plus enrollment-mode controls.  The table self-updates by polling
-/// `GET /instructor/students-data`, which returns `[EnrolledStudentRow]`.
-struct InstructorStudentsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let activeInstructorTab: String
-    /// Student-role rows plus pending pre-enrolments: the polled table.
-    let enrolledStudents: [EnrolledStudentRow]
-    /// Instructor and TA rows: a small static list above the students.
-    let staffRows: [EnrolledStudentRow]
-    let hasStaff: Bool
-    let hasEnrolledStudents: Bool  // explicit flag — Leaf's array.isEmpty is unreliable
-    let enrolledStudentCount: Int
-    /// Student-role enrolments only, and the pending count beside it, for the
-    /// title bar's "31 enrolled · 2 pending".
-    let activeStudentCount: Int
-    let pendingCount: Int
-    /// Whether the students list has enough rows to earn a Filter box
-    /// (`ListFilterPolicy`).
-    let showStudentFilter: Bool
-    let courseEnrollmentMode: String
-    let courseIsArchived: Bool
-    /// True when BrightSpace is configured on the server AND the active course
-    /// is linked to a LEARN org unit, or the course reads its roster from the
-    /// LMS through NRPS — gates the "Check against LEARN" button.
-    let brightspaceLinkAvailable: Bool
-    /// True when the viewer may manage the roster (change roles, unenroll, invite
-    /// staff): a per-course instructor or an admin. TAs pass the `/instructor`
-    /// gate but see the roster read-only (#417 Slice F). Independent of archived.
-    let canManageRoster: Bool
-    /// `courseIsArchived || !canManageRoster` — folded so the Leaf template gates
-    /// every mutating control on one flag (LeafKit 1.14.2 mis-parses `||`).
-    let rosterReadOnly: Bool
-    /// The "Add staff member" panel's fields (`_staff-fields`).
-    let staffForm: StaffFieldsContext
-    /// Flash banners after a staff-invite POST redirect.
-    let flashSuccess: String?
-    let flashError: String?
-}
-
 /// One bar of a server-rendered sparkline.  `heightPercent` is already
 /// normalized to 0–100 against the series maximum, so the Leaf template needs
 /// no arithmetic and the chart renders without JavaScript.  Populated buckets

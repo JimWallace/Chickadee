@@ -218,7 +218,7 @@ private func enrollmentRole(
             #expect(enrollments == 0)
             let html = try await getHTML(
                 "/admin/courses/\(courseID)?staffError=\(error.rawValue)", cookie: cookie, on: app)
-            #expect(html.contains(error.message.replacingOccurrences(of: "'", with: "&#39;")))
+            #expect(html.contains(error.message))
             #expect(
                 html.contains(#"<div class="add-panel card is-open" id="add-staff-panel">"#),
                 "the refusal opens the panel it belongs to")

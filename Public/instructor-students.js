@@ -1,4 +1,4 @@
-// Page wiring for the instructor students roster (instructor-students.leaf):
+// Page wiring for the instructor students roster (InstructorStudentsPage):
 // row-click navigation, the roster's own enrolled and pending counts, and the
 // empty-state message — all re-applied after each background repaint by
 // table-poll.js. LEARN readiness is rendered by the server from what the

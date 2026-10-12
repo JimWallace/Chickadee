@@ -223,7 +223,7 @@ The Core type, the migration, the model accessor, and tests
 ### Slice 5: Clone for a new term (instructor) (built)
 
 - The instructor area has a **New term** tab (`GET /instructor/new-term`,
-  `instructor-new-term.leaf`). It clones the active course with the same
+  `InstructorNewTermPage`). It clones the active course with the same
   form as the admin clone: code, name, year and term, with the term after
   the active course's term as the default.
 - `POST /instructor/new-term` requires a per-course `instructor` role in the

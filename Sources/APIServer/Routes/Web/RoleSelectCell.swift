@@ -1,7 +1,7 @@
 // Sources/APIServer/Routes/Web/RoleSelectCell.swift
 
 /// One person's course-role select on a roster row, rendered by
-/// `_role-select.leaf`. The instructor roster (students and staff) and the
+/// `RoleSelect`. The instructor roster (students and staff) and the
 /// admin course page share it, so the three option labels live in one place.
 struct RoleSelectCell: Codable {
     /// The person's user id; it names the select element.

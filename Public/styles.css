@@ -1495,7 +1495,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 @media (max-width: 640px) { .ext-details form { min-width: 0; } }
 /* Inline set/clear panel shared by the grade-override control
    (assignment-submissions.leaf) and the register-pending-student control
-   (instructor-students.leaf) — hoisted from a page block so both pages render
+   (InstructorStudentsPage) — hoisted from a page block so both pages render
    identically. */
 .form-flush { margin: 0; }
 .ext-panel {
