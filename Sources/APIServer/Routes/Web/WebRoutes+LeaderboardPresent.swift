@@ -56,6 +56,11 @@ extension WebRoutes {
                 setup: setup, viewerID: nil, includeNames: false, on: req.db)
             // A title is a noun phrase; where the run stands goes in the clock's place.
             title = tournament.map { "Tournament · \($0.scheduleName.lowercased())" } ?? "Tournament"
+        case .composite:
+            // A composite ranks nobody, so present mode has no podium. The
+            // composed image replaces it with the composite view (slice 5 of
+            // docs/class-composite.md).
+            title = "Class composite"
         case .leaderboard:
             // Named rather than left to a catch-all arm, so a fifth
             // aggregation does not render the metric board silently (#1745).

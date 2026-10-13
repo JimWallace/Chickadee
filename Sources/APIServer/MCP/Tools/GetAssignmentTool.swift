@@ -99,10 +99,13 @@ struct GetAssignmentTool: ContentTool {
         /// ISO-8601 instants; nil when that bound is not set.
         let opensAt: String?
         let closesAt: String?
+        /// The composite block `set_activity` accepts; nil for any kind but
+        /// `classComposite`. Defaulted so existing call sites still compile.
+        var composite: CompositeSpec?
 
         private enum CodingKeys: String, CodingKey {
             case kind, kindDisplayName, leaderboardVisibility, leaderboardPath, aggregation
-            case opponentSource, opponentFile, opensAt, closesAt
+            case opponentSource, opponentFile, opensAt, closesAt, composite
         }
 
         /// The three nullable keys are always present, explicitly null when
@@ -120,6 +123,7 @@ struct GetAssignmentTool: ContentTool {
             try c.encode(opponentFile, forKey: .opponentFile)
             try c.encode(opensAt, forKey: .opensAt)
             try c.encode(closesAt, forKey: .closesAt)
+            try c.encode(composite, forKey: .composite)
         }
     }
 
@@ -204,6 +208,11 @@ struct GetAssignmentTool: ContentTool {
                     "opponentFile": MCPSchema.nullableString,
                     "opensAt": MCPSchema.nullableString,
                     "closesAt": MCPSchema.nullableString,
+                    "composite": .object([
+                        "type": .array([.string("object"), .string("null")]),
+                        "description": .string(
+                            "The composite block, in set_activity's shape; null for any other kind."),
+                    ]),
                 ]),
                 "required": .array([
                     .string("kind"), .string("kindDisplayName"), .string("leaderboardVisibility"),
@@ -277,7 +286,8 @@ struct GetAssignmentTool: ContentTool {
                     opponentSource: activity.kind.opponentSource.rawValue,
                     opponentFile: activity.opponentFile,
                     opensAt: activity.window?.opensAtISO,
-                    closesAt: activity.window?.closesAtISO)
+                    closesAt: activity.window?.closesAtISO,
+                    composite: activity.composite)
             }
         )
     }

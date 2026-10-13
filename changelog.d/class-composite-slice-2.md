@@ -1,0 +1,3 @@
+### Added
+
+- **Class composite: the `classComposite` activity kind (slice 2 of `docs/class-composite.md`).** An instructor can choose "Class composite" on the edit page or with MCP `set_activity`. The kind carries a `composite` block: the compositor (tile, sequence, sum or gallery), the slots, the contribution size, the deal order and the projector settings. A new composite starts from a 6 × 8 grid of 8 × 8 tiles. The edit page shows the settings with the slot count as a share of the roster, and the slots and contribution size lock once a student has submitted. The leaderboard page stays staff-only for this kind. Slots are not dealt and nothing is displayed yet.

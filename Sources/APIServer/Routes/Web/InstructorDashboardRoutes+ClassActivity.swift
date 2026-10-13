@@ -6,6 +6,7 @@
 //   POST /instructor/:assignmentID/activity
 //   POST /instructor/:assignmentID/activity/opponent
 //   POST /instructor/:assignmentID/activity/window
+//   POST /instructor/:assignmentID/activity/composite
 //   POST /instructor/:assignmentID/tournament/run
 
 import Core
@@ -168,6 +169,56 @@ extension InstructorDashboardRoutes {
             on: req
         )
         return req.redirect(to: editPath + "?notice=Session+window+saved")
+    }
+
+    // MARK: - POST /instructor/:assignmentID/activity/composite
+
+    /// Saves a class composite's settings (docs/class-composite.md). Its own
+    /// endpoint, like the window, so a change to the frame rate during a
+    /// session never closes or re-validates the assignment.
+    ///
+    /// A structural field that is absent keeps the stored value. That is how
+    /// the lock reads on the page: once a student has submitted, those inputs
+    /// render disabled, and a disabled input is not posted. A present field
+    /// that does not parse is refused rather than dropped, for the window's
+    /// reason: a half-applied change is one the instructor believes is in
+    /// force. `ActivityAuthoring` refuses a spec that breaks a rule and a
+    /// structural change under live submissions.
+    @Sendable
+    func saveActivityComposite(req: Request) async throws -> Response {
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let editPath = "/instructor/\(assignment.publicID)/edit"
+        func refuse(_ message: String) -> Response {
+            let encoded = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            return req.redirect(to: editPath + "?error=" + encoded)
+        }
+        guard let current = currentManifestActivity(setup.manifest), let stored = current.composite else {
+            return refuse("Choose the Class composite kind and save before changing its settings.")
+        }
+        let body = (try? req.content.decode(CompositeFormBody.self)) ?? CompositeFormBody()
+        let spec: CompositeSpec
+        do {
+            spec = try body.spec(keeping: stored)
+        } catch let error as CompositeFormBody.Unreadable {
+            return refuse(error.message)
+        }
+        do {
+            try await ActivityAuthoring.setActivity(setup: setup, to: current.withComposite(spec), on: req.db)
+        } catch let error as AppError {
+            return refuse(error.reason)
+        }
+        await AuditLogger.record(
+            action: .activityCompositeChanged,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignment.publicID,
+                "compositor": spec.compositor.rawValue,
+                "slots": String(spec.layout.slotCount),
+            ],
+            on: req
+        )
+        return req.redirect(to: editPath + "?notice=Composite+settings+saved")
     }
 
     // MARK: - POST /instructor/:assignmentID/tournament/run

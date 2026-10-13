@@ -76,6 +76,7 @@ the first student submission. Creation-time choice is a follow-up.
 | `elimination` | `paired` (the one entrant a schedule pairs the job with; the bot for a student's own submission) | `bracket` | `record` on `tournamentWinner` | 5 (shipped) |
 | `bugHunt` | `variants` (instructor's seeded variants) | `union` | already shipped, re-described only | — |
 | `testsVersusImplementations` | `classmates` (the same matrix a round robin plays) | `union` — every match read twice, as a kill and as a fault | nothing; the page is the reward surface | 6 (shipped) |
+| `classComposite` | `none` | `composite` — one image from each dealt slot's contribution | nothing; the composed image is the reward surface | `docs/class-composite.md` |
 
 `ActivityKind` (`Sources/Core/ClassActivity.swift`) carries only the kinds that
 work end to end. A kind the runner cannot execute is a silent misroute, not a
@@ -87,7 +88,7 @@ compile. Every seam that depends on an opponent — the worker's
 `activity-match` capability, the claim gate, the browser-grading refusal, the
 opponent picker — asks `stagesAnOpponent`, never the kind. The aggregation
 axis is a type too since slice 4: `ActivityAggregation` (`leaderboard` |
-`standings` | `bracket` | `union`), read off the kind by the exhaustive
+`standings` | `bracket` | `union` | `composite`), read off the kind by the exhaustive
 `aggregation`. Every kind has a ranking page, so the leaderboard route asks
 only whether the viewer may see it.
 

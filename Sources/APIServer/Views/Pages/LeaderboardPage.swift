@@ -109,6 +109,11 @@ struct LeaderboardPage: HTML {
                     + "then most classmates tested; code that is still holding first. Students appear under "
                     + "their class handle."
             }
+        } else if board.showsComposite {
+            p(.class("section-intro")) {
+                "Each student renders one slot of a shared image. Nobody is ranked, and the image never "
+                    + "changes a grade."
+            }
         } else if board.showsStandings {
             p(.class("section-intro")) {
                 "Highest average match score first, then most wins. Each row is the student's latest "

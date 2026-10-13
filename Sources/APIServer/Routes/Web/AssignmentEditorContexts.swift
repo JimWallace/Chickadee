@@ -214,14 +214,25 @@ struct ActivityEditFacts: Encodable {
     /// instructor-entered local datetime, which is the #1118 rule.
     let windowOpensAtLocal: String
     let windowClosesAtLocal: String
+    /// The class-composite form's facts; nil for any other kind. Defaulted
+    /// so a context built before the composite existed still compiles.
+    var composite: CompositeEditFacts? = nil
 
     static func make(setup: APITestSetup, on db: any Database) async throws -> ActivityEditFacts {
         let activity = setup.decodedManifest()?.activity
         let testSetupID = setup.id ?? ""
         let needsOpponentFile = activity?.takesAnOpponentFile == true
+        let locked = try await ActivityAuthoring.hasStudentSubmissions(setup: setup, on: db)
+        var composite: CompositeEditFacts?
+        if let spec = activity?.composite {
+            composite = CompositeEditFacts.make(
+                spec: spec,
+                enrolledStudents: try await enrolledStudentCount(forCourse: setup.courseID, on: db),
+                locked: locked)
+        }
         return ActivityEditFacts(
             kindOptions: ActivityKindOption.options(current: activity?.kind),
-            locked: try await ActivityAuthoring.hasStudentSubmissions(setup: setup, on: db),
+            locked: locked,
             isSet: activity != nil,
             kindLabel: activity?.kind.displayName ?? "",
             summary: activity?.kind.summary ?? "",
@@ -235,7 +246,8 @@ struct ActivityEditFacts: Encodable {
                     current: activity?.opponentFile)
                 : [],
             windowOpensAtLocal: dueAtLocalInputString(activity?.window?.opensAt),
-            windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt))
+            windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt),
+            composite: composite)
     }
 }
 

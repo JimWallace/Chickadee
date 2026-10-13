@@ -194,6 +194,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case leaderboardVisibilityChanged = "leaderboard_visibility.changed"
     case activityOpponentFileChanged = "activity_opponent_file.changed"
     case activityWindowChanged = "activity_window.changed"
+    case activityCompositeChanged = "activity_composite.changed"
     case tournamentStarted = "tournament.started"
     // Advisory passing threshold
     case passingThresholdChanged = "passing_threshold.changed"
@@ -288,7 +289,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
-            .activityWindowChanged, .tournamentStarted,
+            .activityWindowChanged, .activityCompositeChanged, .tournamentStarted,
             .passingThresholdChanged, .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged,
             .aiFeedbackAssignmentToggled, .aiFeedbackReleased, .aiFeedbackDiscarded:
             return .grading
@@ -340,7 +341,7 @@ enum AuditAction: String, Sendable, CaseIterable {
             .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
             .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
             .solutionVisibilityChanged, .leaderboardVisibilityChanged, .activityOpponentFileChanged,
-            .activityWindowChanged,
+            .activityWindowChanged, .activityCompositeChanged,
             .tournamentStarted, .passingThresholdChanged, .slipDaySpent, .slipDayRefunded,
             .aiFeedbackCourseToggled, .aiFeedbackAssignmentToggled, .aiFeedbackReleased,
             .aiFeedbackDiscarded, .aiFeedbackAttestationChanged, .slipDaySettingsChanged, .slipDayAdjustmentChanged,
@@ -416,6 +417,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .leaderboardVisibilityChanged: return "Leaderboard visibility changed"
         case .activityOpponentFileChanged: return "Activity opponent file changed"
         case .activityWindowChanged: return "Activity session window changed"
+        case .activityCompositeChanged: return "Class composite settings changed"
         case .tournamentStarted: return "Tournament started"
         case .slipDaySpent: return "Slip day spent"
         case .slipDayRefunded: return "Slip day refunded"
