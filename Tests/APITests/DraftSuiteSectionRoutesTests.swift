@@ -73,7 +73,9 @@ import VaporTesting
 
     private func loadManifestDict(setupID: String) async throws -> [String: Any] {
         guard let setup = try await APITestSetup.find(setupID, on: app.db),
-            let data = setup.manifest.data(using: .utf8),
+            // The stored text can be v2 (docs/manifest-format-v2.md); these
+            // tests read the v1 keys.
+            let data = manifestTextAsV1(setup.manifest).data(using: .utf8),
             let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { throw IssueRecorded("manifest load failed") }
         return dict

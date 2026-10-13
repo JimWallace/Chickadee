@@ -831,8 +831,7 @@ func bundleEntryURL(extractDir: URL, path: String, directory: String) -> URL? {
 /// A v1 manifest is stored byte-for-byte, as it always was.  A v2 manifest
 /// (docs/manifest-format-v2.md) is re-encoded through `encodeManifest`, the
 /// one writer, so that the database holds only what this release writes.
-/// That matters while a release that cannot read v2 is still a rollback
-/// target.  v1 text that does not decode is stored as it is; the import keeps
+/// v1 text that does not decode is stored as it is; the import keeps
 /// its old behaviour for it.  v2 text that does not decode is refused: it
 /// would otherwise reach the database in a form no release reads.
 func storableImportedManifest(_ manifest: String) throws -> String {

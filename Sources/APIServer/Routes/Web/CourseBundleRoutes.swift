@@ -307,7 +307,8 @@ struct CourseBundleRoutes: RouteCollection {
             return BundledTestSetup(
                 bundleID: bid,
                 originalID: sid,
-                manifest: s.manifest,
+                // v1, so a deployment that predates v2 can import the bundle.
+                manifest: manifestTextAsV1(s.manifest),
                 zipFilename: "testsetups/\(sid).zip",
                 notebookFilename: exportableNotebookPath(of: s).map { _ in "testsetups/\(sid).ipynb" }
             )

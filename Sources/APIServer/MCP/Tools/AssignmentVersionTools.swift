@@ -280,7 +280,7 @@ struct GetAssignmentVersionTool: ContentTool {
             actor: row.actorUsername,
             origin: row.origin,
             summary: row.summary,
-            manifest: row.manifest,
+            manifest: manifestTextAsV1(row.manifest),
             files: files,
             hasNotebook: row.notebookHash != nil,
             path: input.path,

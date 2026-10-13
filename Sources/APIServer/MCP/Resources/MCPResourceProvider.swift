@@ -295,7 +295,8 @@ struct MCPResourceProvider: Sendable {
                 .object([
                     "uri": .string(uri),
                     "mimeType": .string("application/json"),
-                    "text": .string(setup.manifest),
+                    // v1: the resource description names the v1 keys.
+                    "text": .string(manifestTextAsV1(setup.manifest)),
                 ])
             ])
         ])

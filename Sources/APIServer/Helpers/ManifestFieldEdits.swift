@@ -66,7 +66,10 @@ func mutateManifestJSON(
     for _ in 0..<manifestWriteAttempts {
         guard let written = try transform(setup.manifest) else { return }
         // A no-op edit writes nothing, so nothing keyed on the bytes (a
-        // version snapshot, the runner's setup cache) sees a change.
+        // version snapshot, the runner's setup cache) sees a change. The
+        // first edit of a v1 row can rewrite it as v2
+        // (docs/manifest-format-v2.md); `manifestHash` hashes both forms the
+        // same, so the retest check and version snapshots see no change.
         if written == setup.manifest { return }
         if try await replaceManifest(of: setup, with: written, on: db) { return }
         // Another edit saved first. Start again from what it saved.

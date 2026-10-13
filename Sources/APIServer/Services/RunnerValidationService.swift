@@ -351,7 +351,7 @@ private func resolveAndCacheValidationMaterialization(
         }
 
         let materialization = SubmissionMaterialization(
-            key: manifestHash((seedHex ?? "") + "|" + setup.manifest),
+            key: manifestHash((seedHex ?? "") + "|" + manifestTextAsV1(setup.manifest)),
             seedHex: seedHex,
             inputs: inputs)
         if let encoded = try? JSONEncoder().encode(materialization),

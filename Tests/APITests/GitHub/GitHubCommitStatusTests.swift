@@ -64,7 +64,9 @@ import VaporTesting
         #expect(decoded.githubStatusChecks)
         #expect(!decoded.runnerSanitized().githubStatusChecks)
         let rebuilt = try makeWorkerManifestJSON(preserving: decoded, testSuites: [], language: nil)
-        #expect(rebuilt.contains("githubStatusChecks"))
+        // The stored text can be v2 (docs/manifest-format-v2.md), so read
+        // the flag from the decoded value rather than from the key text.
+        #expect(try #require(decodeManifest(fromJSON: rebuilt)).githubStatusChecks)
         let plain = try JSONDecoder().decode(TestProperties.self, from: Data(#"{"schemaVersion":1}"#.utf8))
         let encoded = try #require(String(data: try JSONEncoder().encode(plain), encoding: .utf8))
         #expect(!encoded.contains("githubStatusChecks"))

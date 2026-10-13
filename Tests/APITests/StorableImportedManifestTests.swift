@@ -1,10 +1,9 @@
 // Tests/APITests/StorableImportedManifestTests.swift
 //
-// Course-bundle import stores each setup's manifest text.  In phase 3 of
-// docs/manifest-format-v2.md the server reads v2 but writes only v1, so a
-// release that cannot read v2 stays a safe rollback target.
-// `storableImportedManifest` keeps that true at the import door: v1 text is
-// stored byte-for-byte, and v2 text is re-encoded as v1.
+// Course-bundle import stores each setup's manifest text.
+// `storableImportedManifest` stores v1 text byte-for-byte and stores v2 text
+// through `encodeManifest`, the one writer, so the database holds only what
+// this release writes (docs/manifest-format-v2.md).
 
 import Foundation
 import Testing
@@ -25,25 +24,21 @@ import Testing
         #expect(try storableImportedManifest("not json") == "not json")
     }
 
-    @Test func v2TextIsStoredAsV1() throws {
+    /// Phase 4: the import stores a v2 manifest through `encodeManifest`,
+    /// which writes v2 when that form holds the manifest exactly.
+    @Test func v2TextIsStoredThroughTheWriter() throws {
         let v2 = #"""
             {"schemaVersion": 2, "language": "none",
              "files": [{"name": "main.py", "required": true}],
              "testSuites": [{"tier": "public", "script": "pubtest_f_1.py", "origin": {"family": "f"}}]}
             """#
         let stored = try storableImportedManifest(v2)
-        let object = try #require(
-            try JSONSerialization.jsonObject(with: Data(stored.utf8)) as? [String: Any])
-        #expect(object["schemaVersion"] as? Int == 1)
-        #expect(object["requiredFiles"] as? [String] == ["main.py"])
-        #expect(object["languageDeclared"] as? Bool == true)
-        let suites = try #require(object["testSuites"] as? [[String: Any]])
-        #expect(suites.first?["generatedBy"] as? String == "f")
-        #expect(suites.first?["origin"] == nil)
+        #expect(TestProperties.wireVersion(of: stored) == 2)
+        #expect(stored == (try encodeManifest(try #require(decodeManifest(fromJSON: v2)))))
 
         let reread = try #require(decodeManifest(fromJSON: stored))
-        let original = try #require(decodeManifest(fromJSON: v2))
-        #expect(reread == original)
+        #expect(reread == (try #require(decodeManifest(fromJSON: v2))))
+        #expect(reread.testSuites.map(\.origin) == [.family(id: "f")])
     }
 
     /// v2 text that does not decode would reach the database in a form that

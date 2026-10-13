@@ -72,6 +72,10 @@ struct BackfillDeclaredLanguage: ChickadeeMigration {
     /// question has an answer, and it does.
     func revert(on database: Database) async throws {}
 
+    /// v1 only: it edits the v1 keys as a dictionary.  It has run on every
+    /// database that holds a manifest, and v2 (docs/manifest-format-v2.md)
+    /// came after it, so it never sees v2 text.
+    ///
     /// Rewrites the manifest JSON with `languageDeclared` set, and `language`
     /// set or removed to match `language`.
     ///
