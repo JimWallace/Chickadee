@@ -18,7 +18,7 @@ import Vapor
 
     private func context(_ app: Application, subject: String) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: subject, grantedScopes: [.read],
             actingClientID: "agent-1", actingClientName: "Claude Bot")
     }

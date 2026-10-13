@@ -178,7 +178,7 @@ struct OIDCConfiguration: Sendable {
         guard discoveryResponse.status == .ok else {
             throw OIDCConfigurationError.discoveryFailed(httpStatus: discoveryResponse.status.code)
         }
-        let discovery = try discoveryResponse.content.decode(OIDCDiscovery.self)
+        let discovery = try await discoveryResponse.decodeContent(OIDCDiscovery.self)
 
         // Fetch JWKS and register keys for JWT verification
         app.logger.info("Fetching OIDC JWKS: \(discovery.jwksURI)")
@@ -188,8 +188,7 @@ struct OIDCConfiguration: Sendable {
         guard jwksResponse.status == .ok else {
             throw OIDCConfigurationError.jwksFetchFailed(httpStatus: jwksResponse.status.code)
         }
-        var jwksBuffer = jwksResponse.body ?? ByteBuffer()
-        let jwksJSON = jwksBuffer.readString(length: jwksBuffer.readableBytes) ?? ""
+        let jwksJSON = jwksResponse.bodyText ?? ""
         try await app.jwt.keys.add(jwksJSON: jwksJSON)
 
         app.logger.info(

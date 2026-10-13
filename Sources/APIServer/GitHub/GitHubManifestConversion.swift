@@ -75,7 +75,7 @@ extension Application {
                 guard response.status == .created || response.status == .ok else {
                     throw GitHubAppRegistrationError.conversionFailed
                 }
-                return try response.content.decode(GitHubManifestConversion.self)
+                return try await response.decodeContent(GitHubManifestConversion.self)
             }
         }
         set { storage[GitHubManifestConverterKey.self] = newValue }

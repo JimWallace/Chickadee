@@ -30,7 +30,7 @@ extension AdminRoutes {
     @Sendable
     func createMCPAccount(req: Request) async throws -> Response {
         struct Body: Content { var username: String }
-        let username = try req.content.decode(Body.self).username
+        let username = try await req.decodeContent(Body.self).username
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !username.isEmpty else {
             return req.redirect(to: "/admin/mcp?error=username_required")
@@ -65,7 +65,7 @@ extension AdminRoutes {
             return try await renderMCPPage(
                 req: req, mintedToken: nil, mintedFor: nil, mintedScopes: nil, error: "mcp_disabled")
         }
-        let scopeChoice = (try? req.content.decode(Body.self))?.scope
+        let scopeChoice = (try? await req.decodeContent(Body.self))?.scope
         let requested: Set<ContentScope> = scopeChoice == "read" ? [.read] : [.read, .write]
         // Never mint a token claiming a scope the current mode won't honor:
         // under read_only the ceiling clamps a read+write request down to read.
@@ -198,7 +198,7 @@ extension AdminRoutes {
         struct Body: Content { var courseID: String }
         let user = try await findMCPAccount(req)
         guard
-            let raw = (try? req.content.decode(Body.self))?.courseID,
+            let raw = (try? await req.decodeContent(Body.self))?.courseID,
             let courseUUID = UUID(uuidString: raw),
             let course = try await APICourse.find(courseUUID, on: req.db),
             let userID = user.id,
@@ -227,7 +227,7 @@ extension AdminRoutes {
         struct Body: Content { var courseID: String }
         let user = try await findMCPAccount(req)
         guard
-            let raw = (try? req.content.decode(Body.self))?.courseID,
+            let raw = (try? await req.decodeContent(Body.self))?.courseID,
             let courseUUID = UUID(uuidString: raw),
             let userID = user.id
         else {

@@ -26,7 +26,7 @@ extension InstructorDashboardRoutes {
             // actually turns the toggle off.
             var enabled: String?
         }
-        let enabled = ((try? req.content.decode(ToggleBody.self))?.enabled) != nil
+        let enabled = ((try? await req.decodeContent(ToggleBody.self))?.enabled) != nil
         try await AssignmentAuthoringService.updateMetadata(
             assignment, secretRevealEnabled: enabled, audit: .web(req), on: req.db)
         await AuditLogger.record(

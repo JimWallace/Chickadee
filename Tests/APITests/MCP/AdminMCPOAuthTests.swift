@@ -83,7 +83,7 @@ import VaporTesting
         return String(tail[..<end])
     }
 
-    private func submitConsent(_ app: Application, token: String) async throws -> TestingHTTPResponse {
+    private func submitConsent(_ app: Application, token: String) async throws -> TestResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/authorize",
             beforeRequest: { req in
@@ -92,7 +92,7 @@ import VaporTesting
             })
     }
 
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestingHTTPResponse {
+    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/token",
             beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
@@ -103,7 +103,7 @@ import VaporTesting
         return components.queryItems?.first(where: { $0.name == name })?.value
     }
 
-    private func jsonField(_ name: String, in res: TestingHTTPResponse) -> String? {
+    private func jsonField(_ name: String, in res: TestResponse) -> String? {
         let object = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
         return object?[name] as? String
     }

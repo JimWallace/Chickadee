@@ -223,7 +223,7 @@ import VaporTesting
             isPublished: isPublished)
         try await item.save(on: app.db)
         let itemID = try item.requireID()
-        let request = Request(application: app, on: app.eventLoopGroup.any())
+        let request = makeTestRequest(on: app)
         let attachment = try await ContentAttachmentStore.store(
             bytes: bytes, originalName: name, label: nil, sortOrder: 1, itemID: itemID,
             on: request)

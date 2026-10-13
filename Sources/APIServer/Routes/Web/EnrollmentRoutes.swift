@@ -65,7 +65,7 @@ struct EnrollmentRoutes: RouteCollection {
         struct EnrollBody: Content {
             var courseIDs: [String]?
         }
-        let body = try req.content.decode(EnrollBody.self)
+        let body = try await req.decodeContent(EnrollBody.self)
         let selectedIDs = Set((body.courseIDs ?? []).compactMap { UUID(uuidString: $0) })
 
         // Look up valid (non-archived) courses from the submitted IDs.
@@ -113,7 +113,7 @@ struct EnrollmentRoutes: RouteCollection {
             /// back where the user clicked.
             var next: String?
         }
-        let nextPath = (try? req.content.decode(ActivateBody.self))?.next
+        let nextPath = (try? await req.decodeContent(ActivateBody.self))?.next
 
         // Verify the user is actually enrolled in this course.
         let activated: Bool

@@ -92,7 +92,7 @@ import _CryptoExtras
         useGitHub(refusing: ["stale"])
         try await withApp(app) { _ in
             let studentID = try await linkedStudent(cachedToken: "stale")
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             let access = try await GitHubSubmissionAccess.resolve(userID: studentID, req: req)
             #expect(access.token == "stale")
 
@@ -108,7 +108,7 @@ import _CryptoExtras
         useGitHub(refusing: ["stale", "fresh-0"])
         try await withApp(app) { _ in
             let studentID = try await linkedStudent(cachedToken: "stale")
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             let access = try await GitHubSubmissionAccess.resolve(userID: studentID, req: req)
 
             await #expect(throws: GitHubSubmitError.notInstalled) {
@@ -126,7 +126,7 @@ import _CryptoExtras
         useGitHub(refusing: ["stale"])
         try await withApp(app) { _ in
             let studentID = try await linkedStudent(cachedToken: "stale")
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             let access = try await GitHubSubmissionAccess.resolve(userID: studentID, req: req)
 
             _ = try await access.ownedRepositories(req: req)

@@ -21,7 +21,7 @@ import VaporTesting
 
     private func context(subject: String, scopes: Set<DiagnosticScope> = [.read]) -> AdminToolContext {
         AdminToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: subject,
             grantedScopes: scopes)
     }

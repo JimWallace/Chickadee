@@ -25,7 +25,7 @@ import Vapor
 
     private func context(_ app: Application) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: "vr_inst",
             grantedScopes: [.read, .write])
     }
@@ -270,7 +270,7 @@ import Vapor
             try await enrollment.save(on: app.db)
 
             let taContext = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "vr_ta",
                 grantedScopes: [.read, .write])
 

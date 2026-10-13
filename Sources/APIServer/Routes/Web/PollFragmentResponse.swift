@@ -39,12 +39,12 @@ extension Response {
     /// The empty-body case (no active course) takes the same path, so a client
     /// polling an empty table also settles into 304s instead of re-clearing it.
     static func emptyPollFragment(for req: Request) -> Response {
-        pollFragment(html: ByteBuffer(), for: req)
+        pollFragment(html: "", for: req)
     }
 
     /// `csrfToken` is the token the rows were rendered with. It is left out
     /// of the ETag, so unchanged rows get the same ETag on every poll.
-    static func pollFragment(html: ByteBuffer, csrfToken: String? = nil, for req: Request) -> Response {
+    static func pollFragment(html: String, csrfToken: String? = nil, for req: Request) -> Response {
         let etag = Self.weakETag(for: html, ignoring: csrfToken)
 
         // A conditional request lists one or more candidates; `*` matches any
@@ -65,17 +65,15 @@ extension Response {
         // `no-cache` means "revalidate", not "do not store": the client is
         // expected to come back with If-None-Match, which is the whole point.
         headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
-        return Response(status: .ok, headers: headers, body: .init(buffer: html))
+        return Response(status: .ok, headers: headers, body: .init(string: html))
     }
 
-    static func weakETag(for buffer: ByteBuffer, ignoring csrfToken: String? = nil) -> String {
-        var bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) ?? []
-        if let csrfToken, !csrfToken.isEmpty,
-            let text = buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes)
-        {
-            bytes = Array(text.replacingOccurrences(of: csrfToken, with: "").utf8)
+    static func weakETag(for html: String, ignoring csrfToken: String? = nil) -> String {
+        var text = html
+        if let csrfToken, !csrfToken.isEmpty {
+            text = text.replacingOccurrences(of: csrfToken, with: "")
         }
-        let digest = SHA256.hash(data: Data(bytes))
+        let digest = SHA256.hash(data: Data(text.utf8))
         let hex = digest.map { String(format: "%02x", $0) }.joined()
         return "W/\"\(hex.prefix(32))\""
     }

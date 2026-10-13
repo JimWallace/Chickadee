@@ -64,7 +64,7 @@ extension PublishedAssignmentRoutes {
         // Authoring action, so the same TA+ gate the script and suite editors
         // use — this executes the instructor's reference solution.
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
-        let input = try req.content.decode(ComputeExpectedRequest.self)
+        let input = try await req.decodeContent(ComputeExpectedRequest.self)
         guard let manifest = setup.decodedManifest() else {
             throw WebAssignmentError.invalidParameter(
                 name: "assignmentID", reason: "Manifest is not valid JSON")

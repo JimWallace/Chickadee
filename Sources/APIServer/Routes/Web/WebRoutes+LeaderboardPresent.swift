@@ -130,7 +130,7 @@ extension WebRoutes {
             .encodeResponse(for: req)
         }
         let html = LeaderboardPresentBody(board: presentation).render()
-        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
+        return Response.pollFragment(html: html, for: req)
     }
 
     /// Everyone seeded into the run. A bye is a match with one entrant, so

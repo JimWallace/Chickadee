@@ -123,7 +123,7 @@ import VaporTesting
         return submission
     }
 
-    private func requestJob(workerID: String, runnerVersion: String) async throws -> TestingHTTPResponse {
+    private func requestJob(workerID: String, runnerVersion: String) async throws -> TestResponse {
         let path = "/api/v1/worker/request"
         let payload = WorkerActivityPayload(
             workerID: workerID,

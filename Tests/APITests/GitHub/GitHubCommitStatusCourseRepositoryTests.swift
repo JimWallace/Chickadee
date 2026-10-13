@@ -128,7 +128,7 @@ import VaporTesting
         useGitHub()
         try await withApp(app) { app in
             let row = try await submission()
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             let collection = TestOutcomeCollection(
                 submissionID: "sub_gh", testSetupID: "gh_setup", attemptNumber: 1, buildStatus: .passed,
                 compilerOutput: nil, outcomes: [wrMakeOutcome(name: "a")], totalTests: 1, passCount: 1,

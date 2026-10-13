@@ -34,7 +34,7 @@ func getHTML(
 
 /// GETs `path` with the session `cookie` and returns the whole response, for a
 /// test that reads its status or headers (#2362).
-func getResponse(_ path: String, cookie: String, on app: Application) async throws -> TestingHTTPResponse {
+func getResponse(_ path: String, cookie: String, on app: Application) async throws -> TestResponse {
     try await app.asyncSendRequest(.GET, path) { req in
         req.headers.add(name: .cookie, value: cookie)
     }

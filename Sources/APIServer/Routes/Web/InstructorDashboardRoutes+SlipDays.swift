@@ -118,7 +118,7 @@ extension InstructorDashboardRoutes {
             /// reveal hold (`SlipDayPolicy.releaseRevealHold`).
             let releaseRevealHold: String?
         }
-        let form = try req.content.decode(SettingsForm.self)
+        let form = try await req.decodeContent(SettingsForm.self)
         let enabled = form.enabled != nil
         let days = form.daysPerStudent ?? SlipDayPolicy.defaultDaysPerStudent
         let hours = form.extensionHours ?? SlipDayPolicy.defaultExtensionHours
@@ -171,7 +171,7 @@ extension InstructorDashboardRoutes {
             let userID: String
             let delta: Int
         }
-        let form = try req.content.decode(AdjustForm.self)
+        let form = try await req.decodeContent(AdjustForm.self)
         guard let studentUUID = UUID(uuidString: form.userID), [-1, 1].contains(form.delta),
             let enrollment = try await APICourseEnrollment.query(on: req.db)
                 .filter(\.$userID == studentUUID)
@@ -225,7 +225,7 @@ extension InstructorDashboardRoutes {
         struct RefundForm: Content {
             let spendID: String
         }
-        let form = try req.content.decode(RefundForm.self)
+        let form = try await req.decodeContent(RefundForm.self)
         guard let spendUUID = UUID(uuidString: form.spendID) else {
             return req.redirect(to: "/instructor/slip-days?error=notfound")
         }

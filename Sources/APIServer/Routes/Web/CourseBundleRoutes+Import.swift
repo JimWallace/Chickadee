@@ -32,7 +32,7 @@ extension CourseBundleRoutes {
         let caller = try req.auth.require(APIUser.self)
         guard caller.isAdmin else { throw Abort(.forbidden) }
 
-        let uploadBuffer = try readUploadedBundleBuffer(req: req)
+        let uploadBuffer = try await readUploadedBundleBuffer(req: req)
 
         let tmpZipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-import-\(UUID().uuidString).zip").path
@@ -82,11 +82,11 @@ extension CourseBundleRoutes {
 
     // ── 1. Receive the uploaded bundle ────────────────────────────────
 
-    private func readUploadedBundleBuffer(req: Request) throws -> ByteBuffer {
+    private func readUploadedBundleBuffer(req: Request) async throws -> ByteBuffer {
         struct BundleUpload: Content {
             let file: File
         }
-        let upload = try req.content.decode(BundleUpload.self)
+        let upload = try await req.decodeContent(BundleUpload.self)
         guard upload.file.data.readableBytes > 0 else {
             throw AppError.badRequest(reason: "Empty bundle upload")
         }
@@ -475,7 +475,7 @@ private func importBundledTestSetups(
             throw Abort(.badRequest, reason: "Invalid test setup file: \(bundledSetup.zipFilename)")
         }
         tally.createdPaths.append(newZipPath)
-        try await runBlocking(app: app) {
+        try await runBlocking {
             try FileManager.default.copyItem(
                 at: srcZip,
                 to: URL(fileURLWithPath: newZipPath))
@@ -489,7 +489,7 @@ private func importBundledTestSetups(
         {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             tally.createdPaths.append(nbPath)
-            try await runBlocking(app: app) {
+            try await runBlocking {
                 try FileManager.default.copyItem(
                     at: extractDir.appendingPathComponent(bundledNotebook), to: URL(fileURLWithPath: nbPath))
             }
@@ -497,7 +497,7 @@ private func importBundledTestSetups(
         } else if let nbData = await extractNotebookFromZip(zipPath: newZipPath) {
             let nbPath = setupsDir + "\(newSetupID).ipynb"
             tally.createdPaths.append(nbPath)
-            try await runBlocking(app: app) {
+            try await runBlocking {
                 try nbData.write(to: URL(fileURLWithPath: nbPath))
             }
             notebookPath = nbPath

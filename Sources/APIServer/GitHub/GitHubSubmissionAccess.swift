@@ -18,7 +18,7 @@ struct GitHubSubmissionAccess: Sendable {
     /// drop when GitHub refuses the token (#1768).
     let tokenAccountID: Int64
     /// A fresh token for that account, once the cached one is dropped.
-    let renewToken: @Sendable (Request) async throws -> String
+    let renewToken: @Sendable (any GitHubCallScope) async throws -> String
     /// Set in course-repository mode (slice 4): the only repository this
     /// student may submit from, read with the course organization's token.
     /// Nil means the student submits from a repository they own (slice 3).
@@ -33,7 +33,7 @@ struct GitHubSubmissionAccess: Sendable {
     }
 
     /// Resolves the App, the link and a token. Throws `GitHubSubmitError`.
-    static func resolve(userID: UUID, req: Request) async throws -> GitHubSubmissionAccess {
+    static func resolve(userID: UUID, req: any GitHubCallScope) async throws -> GitHubSubmissionAccess {
         guard let (app, secrets) = try await GitHubAppRegistration.resolve(req: req) else {
             throw GitHubSubmitError.unavailable
         }
@@ -43,7 +43,7 @@ struct GitHubSubmissionAccess: Sendable {
         let client = req.application.githubRepoClient
         let accountID = link.githubUserID
         let login = link.githubLogin
-        let renew: @Sendable (Request) async throws -> String = { req in
+        let renew: @Sendable (any GitHubCallScope) async throws -> String = { req in
             try await installationToken(accountID: accountID, app: app, secrets: secrets, req: req) { jwt in
                 // The installation must be on the linked account itself: a login
                 // that has since moved to another GitHub account is not taken.
@@ -75,7 +75,7 @@ struct GitHubSubmissionAccess: Sendable {
     /// The student needs a link, because their GitHub login is the
     /// collaborator on that repository.
     static func resolveCourseRepository(
-        userID: UUID, testSetupID: String, courseID: UUID, req: Request
+        userID: UUID, testSetupID: String, courseID: UUID, req: any GitHubCallScope
     ) async throws -> GitHubSubmissionAccess {
         guard let link = try await APIGitHubAccountLink.query(on: req.db).filter(\.$userID == userID).first()
         else { throw GitHubSubmitError.notLinked }
@@ -93,7 +93,7 @@ struct GitHubSubmissionAccess: Sendable {
     /// An installation token for `accountID`, from the cache or new. `find`
     /// receives the App JWT and returns the installation to use.
     static func installationToken(
-        accountID: Int64, app: APIGitHubApp, secrets: GitHubAppSecrets, req: Request,
+        accountID: Int64, app: APIGitHubApp, secrets: GitHubAppSecrets, req: any GitHubCallScope,
         find: @escaping @Sendable (_ appJWT: String) async throws -> Int64
     ) async throws -> String {
         let cache = req.application.githubInstallationTokens
@@ -110,7 +110,7 @@ struct GitHubSubmissionAccess: Sendable {
     /// The repositories this student may submit from: in course-repository
     /// mode the one made for them, else the granted repositories that the
     /// linked account owns, by name.
-    func ownedRepositories(req: Request) async throws -> [GitHubRepository] {
+    func ownedRepositories(req: any GitHubCallScope) async throws -> [GitHubRepository] {
         if let courseRepositoryID {
             return [try await ownedRepository(id: courseRepositoryID, req: req)]
         }
@@ -126,7 +126,7 @@ struct GitHubSubmissionAccess: Sendable {
     /// repository that the classmate granted to the App.
     /// In course-repository mode the rule is instead that `id` is the
     /// repository made for this student.
-    func ownedRepository(id: Int64, req: Request) async throws -> GitHubRepository {
+    func ownedRepository(id: Int64, req: any GitHubCallScope) async throws -> GitHubRepository {
         if let courseRepositoryID, id != courseRepositoryID { throw GitHubSubmitError.notOwner }
         let repository = try await call(req) { token in try await client.repository(token, id) }
         guard let repository else { throw GitHubSubmitError.repositoryNotFound }
@@ -138,25 +138,25 @@ struct GitHubSubmissionAccess: Sendable {
 
     /// One repository that may be submitted: `ownedRepository(id:req:)`, and
     /// private. A public repository shows the student's solution to everyone.
-    func submittableRepository(id: Int64, req: Request) async throws -> GitHubRepository {
+    func submittableRepository(id: Int64, req: any GitHubCallScope) async throws -> GitHubRepository {
         let repository = try await ownedRepository(id: id, req: req)
         guard repository.isPrivate else { throw GitHubSubmitError.notPrivate }
         return repository
     }
 
-    func branches(of repository: GitHubRepository, req: Request) async throws -> [String] {
+    func branches(of repository: GitHubRepository, req: any GitHubCallScope) async throws -> [String] {
         try await call(req) { token in try await client.branches(token, repository.fullName).sorted() }
     }
 
     /// The commit `ref` points to now. Resolved once; everything after uses the SHA.
-    func commit(_ ref: String, in repository: GitHubRepository, req: Request) async throws -> GitHubCommit {
+    func commit(_ ref: String, in repository: GitHubRepository, req: any GitHubCallScope) async throws -> GitHubCommit {
         let commit = try await call(req) { token in try await client.commit(token, repository.fullName, ref) }
         guard let commit else { throw GitHubSubmitError.commitNotFound }
         return commit
     }
 
     /// The gzipped tarball of `sha`, no larger than the tar cap allows.
-    func tarball(of repository: GitHubRepository, sha: String, req: Request) async throws -> Data {
+    func tarball(of repository: GitHubRepository, sha: String, req: any GitHubCallScope) async throws -> Data {
         try await call(req) { token in
             try await client.tarball(token, repository.fullName, sha, GitHubTarball.maxTarBytes)
         }
@@ -164,7 +164,7 @@ struct GitHubSubmissionAccess: Sendable {
 
     /// Runs a GitHub call with the token, and once more with a fresh one when
     /// GitHub refuses it.
-    func call<T: Sendable>(_ req: Request, _ body: (_ token: String) async throws -> T) async throws -> T {
+    func call<T: Sendable>(_ req: any GitHubCallScope, _ body: (_ token: String) async throws -> T) async throws -> T {
         try await Self.calling(req, accountID: tokenAccountID, token: token, renew: renewToken, body)
     }
 
@@ -179,8 +179,8 @@ struct GitHubSubmissionAccess: Sendable {
     /// without this every later call in the same request started from the
     /// refused one again (#2205).
     static func calling<T: Sendable>(
-        _ req: Request, accountID: Int64, token: String,
-        renew: @Sendable (Request) async throws -> String,
+        _ req: any GitHubCallScope, accountID: Int64, token: String,
+        renew: @Sendable (any GitHubCallScope) async throws -> String,
         _ body: (_ token: String) async throws -> T
     ) async throws -> T {
         let current = await req.application.githubInstallationTokens.token(forAccount: accountID) ?? token
@@ -206,7 +206,7 @@ struct GitHubSubmissionAccess: Sendable {
     /// is logged and reported as `githubFailed`, so the student sees one
     /// sentence and no transport detail. Tokens are never logged.
     static func calling<T: Sendable>(
-        _ req: Request, _ body: () async throws -> T
+        _ req: any GitHubCallScope, _ body: () async throws -> T
     ) async throws -> T {
         do {
             return try await body()

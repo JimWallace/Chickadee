@@ -13,7 +13,7 @@ import Vapor
 @Suite struct AssignmentAuthoringServiceTests {
     /// The audit origin the service functions require (#2489).
     private func audit(_ app: Application) -> VisibilityAudit {
-        .web(Request(application: app, on: app.eventLoopGroup.any()))
+        .web(makeTestRequest(on: app))
     }
 
     private func makeAssignment(

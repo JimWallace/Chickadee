@@ -345,7 +345,7 @@ private func resolveAndCacheValidationMaterialization(
                 strict: false)
         {
             let sidecarPath = submission.zipPath + ".grading"
-            try? await runBlocking(app: app) {
+            try? await runBlocking {
                 try substituted.write(to: URL(fileURLWithPath: sidecarPath))
             }
         }

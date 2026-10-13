@@ -96,7 +96,7 @@ extension InstructorDashboardRoutes {
             on: req.db
         )
 
-        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
+        return await req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/retest
@@ -140,7 +140,7 @@ extension InstructorDashboardRoutes {
             on: req
         )
 
-        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
+        return await req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/reset-notebook
@@ -205,7 +205,7 @@ extension InstructorDashboardRoutes {
             "student_notebook_reset assignment=\(assignmentIDRaw) student=\(studentIDRaw) by=\(user.id?.uuidString ?? "nil")"
         )
 
-        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
+        return await req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/grade-override
@@ -234,7 +234,7 @@ extension InstructorDashboardRoutes {
             throw WebAssignmentError.notFound(resource: "Student")
         }
 
-        let body = try req.content.decode(OverrideBody.self)
+        let body = try await req.decodeContent(OverrideBody.self)
         guard let percent = body.overridePercent, (0...100).contains(percent) else {
             throw WebAssignmentError.invalidParameter(
                 name: "overridePercent",
@@ -295,7 +295,7 @@ extension InstructorDashboardRoutes {
             )
         }
 
-        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
+        return await req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/regrant-reveal-token
@@ -329,7 +329,7 @@ extension InstructorDashboardRoutes {
             )
         }
 
-        return req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
+        return await req.redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw)
     }
 
     /// Resolves the `:studentID` UUID parameter to a `role == "student"` user

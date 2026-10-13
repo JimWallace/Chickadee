@@ -233,7 +233,7 @@ func ensureUserNotebookWorkingCopy(
     // burst of them (a lab section opening an assignment) previously parked
     // cooperative-pool threads on disk reads/writes.
     if let overwriteWith {
-        try await runBlocking(app: application) {
+        try await runBlocking {
             try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
             try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
         }
@@ -243,7 +243,7 @@ func ensureUserNotebookWorkingCopy(
         return overwriteWith
     }
 
-    let existingWorkingCopy: Data? = try await runBlocking(app: application) {
+    let existingWorkingCopy: Data? = try await runBlocking {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
             !data.isEmpty,
             (try? JSONSerialization.jsonObject(with: data)) != nil
@@ -313,7 +313,7 @@ func ensureUserNotebookWorkingCopy(
         logger.info("working_copy_refreshed setup=\(setupID) user=\(userID.uuidString) path=\(resolvedRelativePath)")
     }
 
-    try await runBlocking(app: application) {
+    try await runBlocking {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
     }
@@ -355,7 +355,7 @@ func discardOtherNotebookViewCopy(
     let fileManager = FileManager.default
     guard fileManager.fileExists(atPath: path) else { return }
     do {
-        try await runBlocking(app: application) {
+        try await runBlocking {
             try fileManager.removeItem(atPath: path)
         }
     } catch {
@@ -574,7 +574,7 @@ private func latestNotebookSubmissionData(
             continue
         }
         let zipPath = submission.zipPath
-        let candidate: Data? = try await runBlocking(app: application) {
+        let candidate: Data? = try await runBlocking {
             guard let data = try? Data(contentsOf: URL(fileURLWithPath: zipPath)),
                 (try? JSONSerialization.jsonObject(with: data)) != nil
             else { return nil }
@@ -638,7 +638,7 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
     // The exists/exists/symlink triple per support file is synchronous
     // filesystem work on every notebook visit — run the whole pass on the
     // thread pool (#1156).
-    try? await runBlocking(app: application) {
+    try? await runBlocking {
         let fm = FileManager.default
         for name in supportNames {
             let src = sharedDir + name
@@ -686,7 +686,7 @@ func writeDatasetFiles(
     // Skip the slice + write when nothing that determines the bytes has
     // changed since the last materialization and every target file is still
     // present (a deleted file is repaired, matching the old always-rewrite).
-    let state: (fingerprint: String, targetsPresent: Bool)? = try? await runBlocking(app: application) {
+    let state: (fingerprint: String, targetsPresent: Bool)? = try? await runBlocking {
         (
             fingerprint: datasetMaterializationFingerprint(
                 props: props, seedHex: seedHex, sharedDir: sharedDir),
@@ -706,7 +706,7 @@ func writeDatasetFiles(
     // slice, then writes one file per dataset — synchronous I/O + CPU. Thread
     // pool (#1156).
     let wrote: Bool =
-        (try? await runBlocking(app: application) {
+        (try? await runBlocking {
             guard
                 let files = DatasetResolver.resolve(
                     manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)

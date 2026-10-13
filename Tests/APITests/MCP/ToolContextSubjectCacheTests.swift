@@ -17,7 +17,7 @@ import Vapor
 
     private func context(_ app: Application, subject: String = "tester", request: Request? = nil) -> ToolContext {
         ToolContext(
-            request: request ?? Request(application: app, on: app.eventLoopGroup.any()),
+            request: request ?? makeTestRequest(on: app),
             subject: subject, grantedScopes: [.read, .write])
     }
 
@@ -36,7 +36,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let (user, _) = try await instructor(on: app)
-            let request = Request(application: app, on: app.eventLoopGroup.any())
+            let request = makeTestRequest(on: app)
             let first = try await context(app, request: request).requireEligibleSubject()
             #expect(first.id == user.id)
 
@@ -57,7 +57,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             _ = try await instructor(on: app)
-            let request = Request(application: app, on: app.eventLoopGroup.any())
+            let request = makeTestRequest(on: app)
             _ = try await context(app, request: request).requireEligibleSubject()
             await #expect(throws: MCPToolError.notAuthorized(detail: "Unknown token subject.")) {
                 _ = try await context(app, subject: "nobody", request: request).requireEligibleSubject()
@@ -69,7 +69,7 @@ import Vapor
     @Test func aRefusalIsNotKept() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let request = Request(application: app, on: app.eventLoopGroup.any())
+            let request = makeTestRequest(on: app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await context(app, request: request).requireEligibleSubject()
             }

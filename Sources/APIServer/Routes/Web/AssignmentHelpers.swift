@@ -93,8 +93,8 @@ extension Request {
 
     /// `redirectToAssignmentReturnPath` for a handler that has not decoded
     /// its form body: reads the `returnTo` field itself.
-    func redirectToAssignmentReturnPath(assignmentIDRaw: String) -> Response {
-        let body = try? content.decode(AssignmentReturnTo.self)
+    func redirectToAssignmentReturnPath(assignmentIDRaw: String) async -> Response {
+        let body = try? await decodeContent(AssignmentReturnTo.self)
         return redirectToAssignmentReturnPath(assignmentIDRaw: assignmentIDRaw, returnTo: body?.returnTo)
     }
 }

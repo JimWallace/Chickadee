@@ -52,7 +52,7 @@ private struct RecordingSessionDriver: SessionDriver {
     }
 
     private func makeRequest() -> Request {
-        Request(application: app, on: app.eventLoopGroup.next())
+        makeTestRequest(on: app)
     }
 
     /// The common case by a wide margin: a request reads its session, changes

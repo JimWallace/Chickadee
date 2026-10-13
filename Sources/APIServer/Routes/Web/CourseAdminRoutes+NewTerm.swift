@@ -75,7 +75,7 @@ extension CourseAdminRoutes {
         // the per-course instructor floor is what makes that a lifecycle act.
         try await requireCourseRole(caller: user, courseID: sourceID, atLeast: .instructor, db: req.db)
 
-        let form = try req.content.decode(CloneForm.self)
+        let form = try await req.decodeContent(CloneForm.self)
         let code = (form.code ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let name = (form.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, !name.isEmpty else {

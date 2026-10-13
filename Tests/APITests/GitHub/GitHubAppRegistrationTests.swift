@@ -44,11 +44,11 @@ import VaporTesting
     }
 
     private func state() async throws -> GitHubAppRegistration.State {
-        try await GitHubAppRegistration.state(req: Request(application: app, on: app.eventLoopGroup.next()))
+        try await GitHubAppRegistration.state(req: makeTestRequest(on: app))
     }
 
     private func resolved() async throws -> Bool {
-        try await GitHubAppRegistration.resolve(req: Request(application: app, on: app.eventLoopGroup.next())) != nil
+        try await GitHubAppRegistration.resolve(req: makeTestRequest(on: app)) != nil
     }
 
     @Test func noRowIsNoApp() async throws {

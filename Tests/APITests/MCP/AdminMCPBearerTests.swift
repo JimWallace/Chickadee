@@ -33,7 +33,7 @@ import VaporTesting
 
     private func post(
         _ app: Application, body: String, bearer: String?
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         try await app.asyncSendRequest(.POST, "/admin-mcp") { req in
             req.headers.contentType = .json
             if let bearer { req.headers.add(name: .authorization, value: "Bearer \(bearer)") }

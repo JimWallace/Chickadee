@@ -153,7 +153,7 @@ extension InstructorDashboardRoutes {
             rosterReadOnly: courseIsArchived || !canManageRoster,
             csrfToken: csrfToken
         ).render()
-        return Response.pollFragment(html: ByteBuffer(string: html), csrfToken: csrfToken, for: req)
+        return Response.pollFragment(html: html, csrfToken: csrfToken, for: req)
     }
 }
 

@@ -31,7 +31,7 @@ import VaporTesting
     /// POSTs `fields` to `path` as the admin, with a CSRF token bound to the session.
     private func post(
         _ path: String, _ fields: [String: String], cookie: String,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         let (token, boundCookie) = try await csrfFields(for: "/admin/lti", cookie: cookie, on: app)
         var body = fields
@@ -47,7 +47,7 @@ import VaporTesting
 
     /// GETs `path` with the session cookie.
     private func get(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         try check(try await getResponse(path, cookie: cookie, on: app))
     }

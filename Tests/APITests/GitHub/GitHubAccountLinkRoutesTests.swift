@@ -77,7 +77,7 @@ import VaporTesting
 
     @discardableResult
     private func get(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void = { _ in }
+        _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void = { _ in }
     ) async throws -> String {
         let res = try await getResponse(path, cookie: cookie, on: app)
         try check(res)
@@ -87,7 +87,7 @@ import VaporTesting
     /// POSTs with a CSRF token bound to the session; returns the cookie to use next.
     @discardableResult
     private func post(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void
     ) async throws -> String {
         let (token, bound) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         var next = bound

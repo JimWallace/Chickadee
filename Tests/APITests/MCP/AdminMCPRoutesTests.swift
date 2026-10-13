@@ -49,7 +49,7 @@ import VaporTesting
     /// cookie through in case the GET rotates it.
     private func adminCSRFPost(
         _ app: Application, to path: String, cookie: inout String, fields: [String: String]
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         let (token, bound) = try await csrfFields(for: "/admin/mcp", cookie: cookie, on: app)
         cookie = bound
         var body = fields

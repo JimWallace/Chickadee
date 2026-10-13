@@ -45,7 +45,7 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func putAchievements(req: Request) async throws -> AchievementsResponse {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
-        let body = try req.content.decode(AchievementsBody.self)
+        let body = try await req.decodeContent(AchievementsBody.self)
         let rows = try await AchievementsEditing.apply(
             rows: body.achievements, setup: setup, on: req.db)
         return AchievementsResponse(achievements: rows)

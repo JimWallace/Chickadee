@@ -118,7 +118,7 @@ func solutionFileDownloadResponse(
 private func streamedFileResponse(
     req: Request, path: String, filename: String
 ) async throws -> Response? {
-    let exists: Bool = try await runBlocking(on: req) {
+    let exists: Bool = try await runBlocking {
         var isDirectory = ObjCBool(false)
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
             !isDirectory.boolValue,

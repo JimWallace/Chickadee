@@ -54,7 +54,7 @@ struct TestSetupRoutes: RouteCollection {
     @Sendable
     func uploadTestSetup(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        let upload = try req.content.decode(TestSetupUpload.self)
+        let upload = try await req.decodeContent(TestSetupUpload.self)
 
         // Scope the create to the target course: only an instructor of that
         // course (and not an archived one) may upload a setup into it. Replaces

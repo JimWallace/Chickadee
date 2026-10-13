@@ -33,7 +33,8 @@ import VaporTesting
 
     @Test func compressibleAssetIsGzippedOverTheWire() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.asyncTest(
+                method: .running(hostname: "localhost", port: 0),
                 .GET, "/styles.css",
                 headers: ["Accept-Encoding": "gzip"]
             ) { res async in
@@ -45,7 +46,8 @@ import VaporTesting
 
     @Test func htmlIsExcludedFromCompression() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.asyncTest(
+                method: .running(hostname: "localhost", port: 0),
                 .GET, "/page",
                 headers: ["Accept-Encoding": "gzip"]
             ) { res async in
@@ -59,7 +61,8 @@ import VaporTesting
 
     @Test func clientWithoutAcceptEncodingGetsIdentity() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.asyncTest(
+                method: .running(hostname: "localhost", port: 0),
                 .GET, "/styles.css"
             ) { res async in
                 #expect(res.status == .ok)

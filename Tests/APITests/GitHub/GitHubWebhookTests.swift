@@ -71,7 +71,7 @@ import VaporTesting
 
     private func deliver(
         _ body: Data, event: String = "push", signature: String?,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         try await app.asyncTest(
             .POST, "/github/webhook",

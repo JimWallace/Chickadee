@@ -19,7 +19,7 @@ extension PublishedAssignmentRoutes {
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let idStr = assignment.publicID
 
-        let form = try parseSaveEditedAssignmentForm(req: req)
+        let form = try await parseSaveEditedAssignmentForm(req: req)
 
         let title = (form.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(form.dueAtRaw)
@@ -372,7 +372,7 @@ extension PublishedAssignmentRoutes {
         return next == current ? nil : ActivityChange(next: next)
     }
 
-    fileprivate func parseSaveEditedAssignmentForm(req: Request) throws -> SaveEditedAssignmentForm {
+    fileprivate func parseSaveEditedAssignmentForm(req: Request) async throws -> SaveEditedAssignmentForm {
         struct SaveBody: Content {
             var assignmentName: String?
             var dueAt: String?
@@ -386,7 +386,7 @@ extension PublishedAssignmentRoutes {
             var liveEdit: String?
         }
 
-        guard let body = try? req.content.decode(SaveBody.self) else {
+        guard let body = try? await req.decodeContent(SaveBody.self) else {
             throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment upload payload")
         }
 

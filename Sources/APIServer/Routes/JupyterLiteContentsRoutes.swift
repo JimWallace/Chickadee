@@ -103,7 +103,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         // The editor's contents endpoint fires repeatedly while a student
         // works; notebooks and materialized datasets can be large. Thread
         // pool, not the request thread (#1156).
-        let fileData = try await runBlocking(on: req) { try Data(contentsOf: targetURL) }
+        let fileData = try await runBlocking { try Data(contentsOf: targetURL) }
         let isNotebook = targetURL.pathExtension.lowercased() == "ipynb"
         let (content, format, mimetype): (JupyterContentsModel.Content, String, String) = {
             guard wantsContent else {

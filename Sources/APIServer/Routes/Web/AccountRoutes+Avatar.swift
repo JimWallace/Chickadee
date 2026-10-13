@@ -30,7 +30,7 @@ extension AccountRoutes {
     @Sendable
     func saveAvatar(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let form = try req.content.decode(AvatarChoiceForm.self)
+        let form = try await req.decodeContent(AvatarChoiceForm.self)
 
         let current = try await AvatarStore.ensureSpec(for: user, on: req.db)
         let isStaff =

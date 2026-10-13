@@ -71,7 +71,7 @@ import VaporTesting
     /// Posts the Save form with the stored values, changed by `overrides`.
     private func save(
         _ fixture: Fixture, _ overrides: [String: String] = [:],
-        afterResponse: @escaping (TestingHTTPResponse) throws -> Void
+        afterResponse: @escaping (TestResponse) throws -> Void
     ) async throws {
         var fields = [
             "_csrf": fixture.csrf, "assignmentName": "Lab 1", "dueAt": Self.dueLocal,

@@ -84,7 +84,7 @@ import VaporTesting
     /// Drives the real enqueue door (the one all five validation triggers
     /// call), returning the primary submission's id.
     private func enqueue(_ fx: Fixture) async throws -> String {
-        let req = Request(application: app, on: app.eventLoopGroup.any())
+        let req = makeTestRequest(on: app)
         return try await enqueueRunnerValidationSubmission(
             context: req,
             setupID: fx.setupID,

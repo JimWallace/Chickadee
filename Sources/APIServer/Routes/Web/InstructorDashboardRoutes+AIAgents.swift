@@ -74,7 +74,7 @@ extension InstructorDashboardRoutes {
             /// "record" or "withdraw".
             let action: String
         }
-        let recording = try req.content.decode(AttestationForm.self).action == "record"
+        let recording = try await req.decodeContent(AttestationForm.self).action == "record"
         enrollment.aiFeedbackAttestedAt = recording ? Date() : nil
         try await enrollment.save(on: req.db)
         await AuditLogger.record(

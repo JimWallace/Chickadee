@@ -31,7 +31,7 @@ extension InstructorDashboardRoutes {
             // actually turns the policy off.
             var afterDue: String?
         }
-        let afterDue = ((try? req.content.decode(ToggleBody.self))?.afterDue) != nil
+        let afterDue = ((try? await req.decodeContent(ToggleBody.self))?.afterDue) != nil
         if afterDue {
             let hasSolution = try await assignmentHasSolution(
                 assignment: assignment, db: req.db,

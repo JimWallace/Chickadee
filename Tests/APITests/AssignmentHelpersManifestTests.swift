@@ -825,7 +825,7 @@ final class AssignmentHelpersManifestTests {
         try await withApp(try await Application.make(.testing)) { app in
             app.directory.publicDirectory = publicDirectory
 
-            let req = Request(application: app, on: app.eventLoopGroup.next())
+            let req = makeTestRequest(on: app)
             removeMaterializedNotebookFiles(req: req, setupID: "setup_123")
 
             for root in roots {

@@ -102,7 +102,7 @@ struct GitHubSubmissionRoutes: RouteCollection {
         // The deadline is the time this request arrived, checked before any
         // GitHub call so a slow download cannot move it.
         _ = try await requireOpenStudentAssignment(for: setupID, user: user, gate: .submission, on: req)
-        let body = try req.content.decode(SubmitBody.self)
+        let body = try await req.decodeContent(SubmitBody.self)
         let sha = body.sha.lowercased()
         var page = URLComponents()
         page.path = "/testsetups/\(setupID)/github"

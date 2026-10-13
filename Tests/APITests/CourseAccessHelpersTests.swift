@@ -82,7 +82,7 @@ import Vapor
                 userID: try user.requireID(), courseID: try course.requireID(), role: .ta)
             try await enrollment.save(on: app.db)
 
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             #expect(try await req.cachedIsCourseStaff(user, inCourse: course.requireID()))
 
             // Downgrade the enrollment behind the request's back: the memoized
@@ -93,7 +93,7 @@ import Vapor
             #expect(try await req.cachedIsCourseStaff(user, inCourse: course.requireID()))
 
             // ...while a fresh request resolves the new role.
-            let fresh = Request(application: app, on: app.eventLoopGroup.any())
+            let fresh = makeTestRequest(on: app)
             #expect(try await fresh.cachedIsCourseStaff(user, inCourse: course.requireID()) == false)
         }
     }
@@ -108,7 +108,7 @@ import Vapor
             try await makeTestEnrollment(on: app, userID: member.requireID(), courseID: courseID)
             let admin = try await makeTestUser(on: app, username: "boss", role: "admin")
 
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             await #expect(throws: AppError.self) {
                 try await req.cachedRequireCourseEnrollment(caller: outsider, courseID: courseID)
             }
@@ -131,7 +131,7 @@ import Vapor
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
             let context = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "boss",
                 grantedScopes: [.read, .write])
 

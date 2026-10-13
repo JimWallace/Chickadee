@@ -87,7 +87,7 @@ struct CourseBundleRoutes: RouteCollection {
             }
         }
         let logger = req.logger
-        try await runBlocking(on: req) {
+        try await runBlocking {
             try writeExportStaging(
                 stagingDir: stagingDir,
                 manifestData: manifestData,

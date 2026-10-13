@@ -168,6 +168,9 @@ jobs:
       - name: Block defaulted language parameters
         run: scripts/no-language-defaults.sh
 
+      - name: Keep Vapor 5 removals out of Sources
+        run: scripts/check-vapor5-readiness.sh
+
       - name: Every guard has a fixture or a stated exemption
         run: scripts/check-guard-coverage.sh
 

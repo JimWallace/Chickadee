@@ -96,7 +96,7 @@ import VaporTesting
         _ scopes: Set<DiagnosticScope>, subject: String = "root"
     ) -> AdminToolContext {
         AdminToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: subject,
             grantedScopes: scopes)
     }

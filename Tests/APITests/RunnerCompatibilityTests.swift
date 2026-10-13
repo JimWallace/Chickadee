@@ -229,7 +229,7 @@ import VaporTesting
         workerID: String,
         profile: RunnerCapabilityProfile?,
         runnerVersion: String = "runner-tests/1.0"
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         let path = "/api/v1/worker/request"
         let payload = WorkerActivityPayload(
             workerID: workerID,

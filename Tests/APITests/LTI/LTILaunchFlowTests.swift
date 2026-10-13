@@ -64,7 +64,7 @@ import VaporTesting
     /// POSTs a launch and hands the response to `check`.
     private func launch(
         idToken: String, state: String, cookie: String?,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         try await app.asyncTest(
             .POST, "/lti/launch",
@@ -77,7 +77,7 @@ import VaporTesting
 
     /// GETs `path` with a session cookie.
     private func get(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         try check(try await getResponse(path, cookie: cookie, on: app))
     }

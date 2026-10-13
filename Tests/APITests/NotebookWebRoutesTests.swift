@@ -695,7 +695,7 @@ import VaporTesting
         file: String? = nil,
         view: String? = nil,
         body: String,
-        afterResponse: (TestingHTTPResponse) throws -> Void
+        afterResponse: (TestResponse) throws -> Void
     ) async throws {
         let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         let params = [file.map { "file=\($0)" }, view.map { "view=\($0)" }].compactMap { $0 }

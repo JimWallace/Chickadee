@@ -44,7 +44,7 @@ import VaporTesting
 
     private func choose(
         _ handle: String, courseID: UUID, cookie: String, on app: Application
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         let form = try await csrfFields(for: "/account", cookie: cookie, on: app)
         return try await choose(handle, courseID: courseID, form: form, on: app)
     }
@@ -53,9 +53,9 @@ import VaporTesting
     /// open, submitted after the world moved.
     private func choose(
         _ handle: String, courseID: UUID, form: (token: String, cookie: String), on app: Application
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         let (token, newCookie) = form
-        var captured: TestingHTTPResponse?
+        var captured: TestResponse?
         try await app.asyncTest(
             .POST, "/account/handle/\(courseID.uuidString)",
             beforeRequest: { req in

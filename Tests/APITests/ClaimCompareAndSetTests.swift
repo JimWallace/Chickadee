@@ -51,12 +51,7 @@ import VaporTesting
     }
 
     private func makeRequest() -> Request {
-        Request(
-            application: app,
-            method: .POST,
-            url: URI(path: "/api/v1/worker/request"),
-            on: app.eventLoopGroup.next()
-        )
+        makeTestRequest(on: app, method: .POST, url: URI(path: "/api/v1/worker/request"))
     }
 
     private func payload(workerID: String) -> WorkerActivityPayload {

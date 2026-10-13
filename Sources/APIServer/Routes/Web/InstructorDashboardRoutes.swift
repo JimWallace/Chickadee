@@ -227,7 +227,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             var assignmentIDs: [String]
         }
         let caller = try req.auth.require(APIUser.self)
-        let body = try req.content.decode(ReorderBody.self)
+        let body = try await req.decodeContent(ReorderBody.self)
         let orderedIDs = Array(NSOrderedSet(array: body.assignmentIDs).compactMap { $0 as? String })
         guard !orderedIDs.isEmpty else { return .ok }
         guard orderedIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
@@ -286,7 +286,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             var items: [ItemRef]
         }
         let caller = try req.auth.require(APIUser.self)
-        let body = try req.content.decode(ReorderBody.self)
+        let body = try await req.decodeContent(ReorderBody.self)
         guard !body.items.isEmpty else { return .ok }
 
         let assignmentIDs = body.items.filter { $0.type == "assignment" }.map(\.id)
@@ -354,7 +354,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
 
-        let body = try req.content.decode(StatusBody.self)
+        let body = try await req.decodeContent(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
             throw WebAssignmentError.invalidParameter(
                 name: "status",
@@ -428,7 +428,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             /// otherwise the assignment edit page (the legacy caller).
             var returnTo: String?
         }
-        let body = try req.content.decode(BSBody.self)
+        let body = try await req.decodeContent(BSBody.self)
         let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let mapping: String
         if raw == BrightspaceSync.doNotSyncToken {

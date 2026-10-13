@@ -31,7 +31,7 @@ import VaporTesting
 
     @Test func notebookPageIsNotIsolatedByDefault() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/testsetups/setup_123/notebook") { res async in
+            try await app.asyncTest(.GET, "/testsetups/setup_123/notebook") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
@@ -41,7 +41,7 @@ import VaporTesting
 
     @Test func jupyterliteAssetsAreNotIsolatedByDefault() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/notebooks/index.html") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
                 #expect(res.headers.first(name: "Cross-Origin-Resource-Policy") == nil)
@@ -53,7 +53,7 @@ import VaporTesting
 
     @Test func notebookPageIsIsolatedWhenEnabled() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(.GET, "/testsetups/setup_123/notebook") { res async in
+            try await app.asyncTest(.GET, "/testsetups/setup_123/notebook") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
@@ -63,7 +63,7 @@ import VaporTesting
 
     @Test func jupyterliteAssetsAreIsolatedWhenEnabled() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/notebooks/index.html") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
@@ -76,7 +76,7 @@ import VaporTesting
 
     @Test func validatePageAlwaysReceivesCOEPHeaders() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/instructor/assignment_123/validate") { res async in
+            try await app.asyncTest(.GET, "/instructor/assignment_123/validate") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
@@ -86,7 +86,7 @@ import VaporTesting
 
     @Test func unrelatedPageNeverReceivesCOEPHeaders() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(.GET, "/plain") { res async in
+            try await app.asyncTest(.GET, "/plain") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
@@ -105,7 +105,7 @@ import VaporTesting
             for path in [
                 "/python-grading-worker.js", "/r-grading-worker.js", "/freeze-watchdog-worker.js",
             ] {
-                try await app.testing().test(.GET, path) { res async in
+                try await app.asyncTest(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(
                         res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp",
@@ -121,7 +121,7 @@ import VaporTesting
         // /python-eval-worker.js is spawned only by the (non-isolated) assignment
         // editor pages, so it must NOT be forced require-corp.
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(.GET, "/python-eval-worker.js") { res async in
+            try await app.asyncTest(.GET, "/python-eval-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
@@ -130,7 +130,7 @@ import VaporTesting
 
     @Test func workerScriptsAreNotIsolatedWhenDisabled() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/python-grading-worker.js") { res async in
+            try await app.asyncTest(.GET, "/python-grading-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
@@ -152,13 +152,13 @@ import VaporTesting
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
         + "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 
-    private func variesOnUserAgent(_ res: TestingHTTPResponse) -> Bool {
+    private func variesOnUserAgent(_ res: TestResponse) -> Bool {
         res.headers["Vary"].contains { $0.contains("User-Agent") }
     }
 
     @Test func notebookPageIsNotIsolatedForWebKit() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/testsetups/setup_123/notebook",
                 headers: ["User-Agent": Self.safariUA]
             ) { res async in
@@ -171,7 +171,7 @@ import VaporTesting
 
     @Test func notebookPageStaysIsolatedForChrome() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/testsetups/setup_123/notebook",
                 headers: ["User-Agent": Self.chromeUA]
             ) { res async in
@@ -184,7 +184,7 @@ import VaporTesting
 
     @Test func iframeAssetsAreNotIsolatedForWebKit() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/jupyterlite/notebooks/index.html",
                 headers: ["User-Agent": Self.safariUA]
             ) { res async in
@@ -196,7 +196,7 @@ import VaporTesting
 
     @Test func iframeAssetsStayIsolatedForChrome() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/jupyterlite/notebooks/index.html",
                 headers: ["User-Agent": Self.chromeUA]
             ) { res async in
@@ -208,7 +208,7 @@ import VaporTesting
 
     @Test func validatePageIsNotIsolatedForWebKit() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/instructor/assignment_123/validate",
                 headers: ["User-Agent": Self.safariUA]
             ) { res async in
@@ -236,7 +236,7 @@ import VaporTesting
     ])
     func workbenchChainIsIsolatedForChrome(path: String) async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, path, headers: ["User-Agent": Self.chromeUA]
             ) { res async in
                 #expect(res.status == .ok)
@@ -252,7 +252,7 @@ import VaporTesting
     ])
     func workbenchChainIsNotIsolatedForWebKit(path: String) async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, path, headers: ["User-Agent": Self.safariUA]
             ) { res async in
                 #expect(res.status == .ok)
@@ -266,7 +266,7 @@ import VaporTesting
     /// every instructor on every assignment and has no business being isolated.
     @Test func plainEditPageStaysUnisolated() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/instructor/assignment_123/edit", headers: ["User-Agent": Self.chromeUA]
             ) { res async in
                 #expect(res.status == .ok)
