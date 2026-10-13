@@ -67,12 +67,12 @@ struct AdminPage: HTML {
                     }
                 }
                 MetricsDiagnosticCard(
-                    hook: "card", key: "jobsProcessed", label: "Jobs Processed", spoken: "Jobs processed",
+                    hook: .admin, key: "jobsProcessed", label: "Jobs Processed", spoken: "Jobs processed",
                     valueID: "diag-jobs-processed")
                 MetricsDiagnosticCard(
-                    hook: "card", key: "load", label: "Max Load", spoken: "Max load", valueID: "diag-max-load")
+                    hook: .admin, key: "load", label: "Max Load", spoken: "Max load", valueID: "diag-max-load")
                 MetricsDiagnosticCard(
-                    hook: "card", key: "queueWaitP95Ms", label: "P95 Wait Time", spoken: "P95 wait time",
+                    hook: .admin, key: "queueWaitP95Ms", label: "P95 Wait Time", spoken: "P95 wait time",
                     valueID: "diag-queue-p95")
             }
         }

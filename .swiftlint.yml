@@ -182,7 +182,7 @@ custom_rules:
     name: "Row menus come from their component"
     included: "Sources/APIServer/Views/.*\\.swift"
     excluded: "Sources/APIServer/Views/RowMenu\\.swift"
-    regex: "ext-details row-menu"
+    regex: "\"[^\"\\n]*\\brow-menu(?![-\\w])[^\"\\n]*\""
     message: "Write a row's More actions menu with RowMenu(for:); no other view writes its disclosure shell (docs/ui-design.md, Component vocabulary)."
     severity: error
   elementary_flash_only_in_layout:

@@ -61,6 +61,11 @@ struct AdminMCPPage: HTML {
             PageStyle(
                 """
                 .mcp-token-caption { margin: .1rem 0 .5rem; }
+                .mcp-enroll-form {
+                    display: flex;
+                    gap: .3rem;
+                    padding: .3rem;
+                }
                 """
             )
         }
@@ -272,7 +277,7 @@ private struct AdminMCPAccountRowView: HTML {
         RowMenu(for: account.username) {
             if !account.enrollableCourses.isEmpty {
                 form(
-                    .method(.post), .action("/admin/mcp/accounts/\(account.id)/enroll"), .class("field-inline")
+                    .method(.post), .action("/admin/mcp/accounts/\(account.id)/enroll"), .class("mcp-enroll-form")
                 ) {
                     CSRFField(token: csrfToken)
                     label(.class("visually-hidden"), .for("enroll-\(account.id)")) {

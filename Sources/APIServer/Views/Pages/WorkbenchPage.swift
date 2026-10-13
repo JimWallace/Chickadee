@@ -232,7 +232,7 @@ struct WorkbenchPage: HTML {
             // Set by workbench.js when a left-pane edit invalidates what the
             // notebook shows. Advisory only: reloading the pane would restart the
             // kernel and lose the author's live state, so the author chooses when.
-            span(.class("chip"), .id("wb-stale-chip"), .role("status"), .hidden) {}
+            span(.class("field-note"), .id("wb-stale-chip"), .role("status"), .hidden) {}
         }
     }
 

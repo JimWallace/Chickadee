@@ -205,8 +205,8 @@ private struct EditHeaderFields: HTML {
                 " "
             }
             p(.class("card-meta fine-print")) {
-                "The language sets the extension of generated tests, so it cannot change once pattern families "
-                    + "or notebook checks exist; \(edit.uploadOnlyLanguagesProse) assignments are upload-only."
+                "The language sets the extension of generated tests, so set it before you add pattern families "
+                    + "or notebook checks. \(edit.uploadOnlyLanguagesProse) assignments are upload-only."
             }
             label(.class("form-label field-gap")) {
                 "Submission Method "

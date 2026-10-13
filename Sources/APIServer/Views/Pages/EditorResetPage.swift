@@ -38,7 +38,7 @@ struct EditorResetPage: HTML {
         div(.class("notice-box"), .role("status")) {
             h1 { "Editor reset" }
             p(.class("reset-lead")) {
-                "The editor data cached in this browser is cleared; your submitted work is safe, and you are "
+                "This browser no longer holds cached editor data. Your submitted work is safe, and you are "
                     + "still logged in."
             }
         }
@@ -56,7 +56,7 @@ struct EditorResetPage: HTML {
             ", so a kernel that never finishes loading can start again."
         }
         p(.class("reset-lead")) {
-            "Your submitted work is safe and you stay logged in; only unsaved edits in this browser are lost."
+            "Your submitted work is safe and you stay logged in. You lose only unsaved edits in this browser."
         }
         form(.method(.post), .action("/reset-editor"), .class("reset-actions")) {
             CSRFField(token: page.csrfToken)

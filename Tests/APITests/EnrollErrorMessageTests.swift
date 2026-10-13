@@ -1,8 +1,8 @@
 // Tests/APITests/EnrollErrorMessageTests.swift
 //
 // POST /enroll with nothing selected redirects to /enroll?error=none_selected.
-// The page must then say why the student is back on it. Before this fix the
-// route always passed a nil error, so the message never showed.
+// The page then says why the student is back on it. No other code shows a
+// message.
 
 import Core
 import Testing

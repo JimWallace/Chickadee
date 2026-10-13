@@ -34,17 +34,17 @@ struct AssignmentsPage: HTML {
             section(.class("diagnostics-section")) {
                 div(.class("diagnostics-cards")) {
                     MetricsDiagnosticCard(
-                        hook: "idash-card", key: "submissions", label: "Submissions", spoken: "Submissions",
+                        hook: .instructor, key: "submissions", label: "Submissions", spoken: "Submissions",
                         valueID: "idash-submissions")
                     MetricsDiagnosticCard(
-                        hook: "idash-card", key: "activeStudents", label: "Active Students", spoken: "Active students",
+                        hook: .instructor, key: "activeStudents", label: "Active Students", spoken: "Active students",
                         valueID: "idash-active-students")
                     MetricsDiagnosticCard(
-                        hook: "idash-card", key: "activeAssignments", label: "Active Assignments",
+                        hook: .instructor, key: "activeAssignments", label: "Active Assignments",
                         spoken: "Active assignments",
                         valueID: "idash-active-assignments")
                     MetricsDiagnosticCard(
-                        hook: "idash-card", key: "browserErrors", label: "Browser Errors", spoken: "Browser errors",
+                        hook: .instructor, key: "browserErrors", label: "Browser Errors", spoken: "Browser errors",
                         valueID: "idash-browser-errors")
                 }
             }

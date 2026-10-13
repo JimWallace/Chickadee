@@ -92,10 +92,15 @@ private struct SparkSlot: HTML {
 /// A cyclable dashboard card that a page script fills from `/metrics/cards`:
 /// the value, the sparkline and the time window, which starts at 24 hours.
 struct MetricsDiagnosticCard: HTML {
-    /// The data attribute the script finds the card by: `card` on the admin
-    /// dashboard (admin-dashboard.js), `idash-card` on the instructor one
-    /// (assignments.js).
-    let hook: String
+    /// The data attribute the page script finds the card by.
+    enum Hook: String {
+        /// The admin dashboard (admin-dashboard.js).
+        case admin = "card"
+        /// The instructor dashboard (assignments.js).
+        case instructor = "idash-card"
+    }
+
+    let hook: Hook
     let key: String
     let label: String
     /// The label in sentence case, for the screen-reader name.
@@ -104,7 +109,7 @@ struct MetricsDiagnosticCard: HTML {
 
     var body: some HTML {
         div(
-            .class("diagnostic-card diagnostic-card-cyclable"), .data(hook, value: key), .role("button"),
+            .class("diagnostic-card diagnostic-card-cyclable"), .data(hook.rawValue, value: key), .role("button"),
             .tabindex(0), .ariaLabel("\(spoken), last 24 hours. Press to change time window.")
         ) {
             div(.class("diagnostic-label")) {
