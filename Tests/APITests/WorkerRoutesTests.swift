@@ -836,7 +836,11 @@ import VaporTesting
                             == JobOpponent.matchSeed(
                                 submissionID: try #require(sub.id),
                                 opponentIdentity: JobOpponent.supportFileIdentity("bot.py")))
-                    #expect(job.manifest.activity == nil)
+                    // `RunnerManifest` has no `activity` field, so check the wire.
+                    let wire = try #require(
+                        try JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any])
+                    let wireManifest = try #require(wire["manifest"] as? [String: Any])
+                    #expect(wireManifest["activity"] == nil)
                 })
         }
     }

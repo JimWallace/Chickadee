@@ -39,8 +39,8 @@ import Testing
         try json.write(to: tmpDir.appendingPathComponent(name), atomically: true, encoding: .utf8)
     }
 
-    private func manifest(_ json: String) throws -> TestProperties {
-        try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
+    private func manifest(_ json: String) throws -> RunnerManifest {
+        try JSONDecoder().decode(RunnerManifest.self, from: Data(json.utf8))
     }
 
     private let rOnlyManifest =

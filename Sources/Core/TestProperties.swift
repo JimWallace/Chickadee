@@ -758,52 +758,10 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// would force every runner binary to know every `PatternKind` /
     /// `NotebookCheckKind` case the server ever introduces (a new raw value
     /// crashes the enum decoder), defeating rolling deployments.
+    ///
+    /// Built from `RunnerManifest`, which lists the fields a runner reads.
+    /// Every other field is at its default here.
     public func runnerSanitized() -> TestProperties {
-        TestProperties(
-            schemaVersion: schemaVersion,
-            gradingMode: gradingMode,
-            submissionMode: submissionMode,
-            requiredFiles: requiredFiles,
-            testSuites: testSuites,
-            timeLimitSeconds: timeLimitSeconds,
-            makefile: makefile,
-            starterNotebook: starterNotebook,
-            // Kept: the runner reads the language off `Job.language`, but a
-            // manifest that silently lost it here would resolve to "none" on
-            // any path that reads the runner-facing copy.
-            language: language,
-            // Kept for the same reason, plus one of its own: it is what lets the
-            // runner tell "declared to have no language" from "nobody has
-            // declared one", which is the distinction a runner needs before it
-            // can refuse a job rather than guess at Python.
-            languageDeclared: languageDeclared,
-            patternFamilies: [],
-            notebookChecks: [],
-            // Expressions are a server-side authoring concern — both global
-            // AND section scope.  Their source is evaluated server-side per
-            // student; only the resolved values travel to grading (worker via
-            // `Job.personalizedInputs`, browser via the seed endpoint), and
-            // the runner reads neither `globalExpressions` nor
-            // `sections[].expressions`.  Strip every `PersonalizationExpression`
-            // from the runner-facing manifest so reference-solution source
-            // (e.g. `= solution.countAdults(...)`) never ships in the Job
-            // payload.  Section *variables* (literals) are kept for parity
-            // with `globalVariables`.
-            sections: sections.map { section in
-                TestSuiteSection(
-                    id: section.id, name: section.name,
-                    variables: section.variables, expressions: [])
-            },
-            globalVariables: globalVariables,
-            globalExpressions: [],
-            // `datasets` and `graderOnlyFiles` are dropped via the memberwise
-            // default: the runner receives the materialized per-student file
-            // (delivered with the job, like `_ck_inputs.py`) and the grader-only
-            // file (via the test-setup zip) directly — never the specs/markers.
-            // `activity` is dropped the same way, and for the enum-decoder
-            // reason above: an `ActivityKind` a runner's build predates would
-            // fail the whole manifest, so a match's needs travel on the job.
-            achievements: []
-        )
+        runnerManifest().testProperties
     }
 }

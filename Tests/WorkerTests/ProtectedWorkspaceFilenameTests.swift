@@ -21,13 +21,13 @@ import Testing
     private static func manifest(
         scripts: [String], requiredFiles: [String] = []
     )
-        -> TestProperties
+        -> RunnerManifest
     {
         TestProperties(
             requiredFiles: requiredFiles,
             testSuites: scripts.map { TestSuiteEntry(tier: .pub, script: $0) },
             timeLimitSeconds: 10, language: nil
-        )
+        ).runnerManifest()
     }
 
     private static func directory() throws -> URL {

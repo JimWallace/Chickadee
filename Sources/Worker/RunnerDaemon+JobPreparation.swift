@@ -254,7 +254,7 @@ extension WorkerDaemon {
     /// starterNotebook — fall back to "assignment.ipynb" since that is
     /// the conventional name used by every existing assignment.
     func removeStarterNotebookIfPresent(
-        manifest: TestProperties,
+        manifest: RunnerManifest,
         testSetupDir: URL,
         submissionFilename: String?,
         stageTimings: inout JobStageTimings
@@ -272,7 +272,7 @@ extension WorkerDaemon {
 
     func normalizeSubmission(
         job: Job,
-        manifest: TestProperties,
+        manifest: RunnerManifest,
         paths: JobWorkspacePaths,
         testSetupDir: URL,
         stageTimings: inout JobStageTimings

@@ -274,10 +274,12 @@ import Testing
             matchSeed: JobOpponent.matchSeed(submissionID: "sub_match", opponentIdentity: "submission:m"),
             submissionID: "m", submissionURL: testURL("https://x.test/m.bin"), submissionFilename: "strategy.py")
         let botDir = try await stageOpponent(
-            bot, manifest: TestProperties(language: nil), into: opponentDirectory(workDir: work, index: 0),
+            bot, manifest: TestProperties(language: nil).runnerManifest(),
+            into: opponentDirectory(workDir: work, index: 0),
             testSetupDir: setup, downloadedSubmission: nil)
         let mateDir = try await stageOpponent(
-            mate, manifest: TestProperties(language: nil), into: opponentDirectory(workDir: work, index: 1),
+            mate, manifest: TestProperties(language: nil).runnerManifest(),
+            into: opponentDirectory(workDir: work, index: 1),
             testSetupDir: setup, downloadedSubmission: raw)
         #expect(botDir.lastPathComponent == "opponent-0")
         #expect(mateDir.lastPathComponent == "opponent-1")
