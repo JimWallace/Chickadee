@@ -91,7 +91,8 @@ import VaporTesting
             let props = try #require(setup.decodedManifest())
             #expect(props.language == nil)
             #expect(props.languageDeclared == true)
-            #expect(!setup.manifest.contains("\"language\":"))
+            // The stored text can be v2, which writes "none"; the v1 form omits the key.
+            #expect(!manifestTextAsV1(setup.manifest).contains("\"language\":"))
 
             // An upload-only language carries both modes with it.
             try await declareManifestLanguage(setup: setup, to: .cpp, on: app.db)

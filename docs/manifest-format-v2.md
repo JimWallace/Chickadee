@@ -353,7 +353,18 @@ Phase 3 must ship in a release before phase 4 (constraint 2).
   (see D6 and D7). This fails only while authoring: nothing stores v2 that
   has not passed it.
 
-### Work for phase 4
+### What phase 4 built
+
+- `encodeManifest` (`Sources/APIServer/Models/APITestSetup.swift`) stores
+  `v2Envelope()` when it is not nil, and v1 otherwise.
+- `encodeManifestV1` and `manifestTextAsV1` give the v1 form for each path
+  that sends a manifest out of the server: the browser runner's manifest
+  endpoint, the MCP manifest resource and course-bundle export. The runner
+  job was already v1 (`RunnerManifest`). Version snapshots and restore copy
+  stored text as it is; this release reads both forms.
+- Rollback floor: the phase 3 release.
+
+### Work for phase 4 (as planned before phase 4)
 
 - **Rollback floor.** Once phase 4 is deployed, a rollback must not go to a
   release before phase 3: no earlier release can read v2.

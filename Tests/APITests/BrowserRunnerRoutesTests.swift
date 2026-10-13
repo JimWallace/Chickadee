@@ -174,6 +174,43 @@ import VaporTesting
         }
     }
 
+    /// docs/manifest-format-v2.md phase 4: storage can hold v2, but
+    /// `browser-runner.js` reads the v1 keys, so the endpoint serves v1.
+    @Test func manifestStoredAsV2IsServedAsV1() async throws {
+        try await withApp(app) { _ in
+            let manifest = """
+                {"schemaVersion": 2, "gradingMode": "browser", "language": "none",
+                 "testSuites": [{"tier": "public", "script": "test_unit.py", "origin": {"family": "f"},
+                                 "dependsOn": ["test_build.py"]}],
+                 "sections": [{"id": "s", "name": "S", "inputs": [{"name": "limit", "value": 5}]}],
+                 "timeLimitSeconds": 12}
+                """
+            let setupID = try await insertSetup(manifest: manifest)
+            let cookie = try await loginAsStudent("student1", on: app)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let data = Data(res.body.readableBytesView)
+                    let json = try #require(
+                        JSONSerialization.jsonObject(with: data) as? [String: Any])
+                    #expect(json["schemaVersion"] as? Int == 1)
+                    #expect(json["timeLimitSeconds"] as? Int == 12)
+                    let suites = try #require(json["testSuites"] as? [[String: Any]])
+                    #expect(suites.first?["generatedBy"] as? String == "f")
+                    #expect(suites.first?["origin"] == nil)
+                    #expect(suites.first?["dependsOn"] as? [String] == ["test_build.py"])
+                    let sections = try #require(json["sections"] as? [[String: Any]])
+                    let variables = try #require(sections.first?["variables"] as? [[String: Any]])
+                    #expect(variables.first?["name"] as? String == "limit")
+                })
+        }
+    }
+
     @Test func manifestReturns404ForUnknownSetup() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsStudent("student1", on: app)

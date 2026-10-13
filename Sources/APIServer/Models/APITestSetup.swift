@@ -109,8 +109,8 @@ func encodeManifestV1(_ props: TestProperties) throws -> String {
 /// out of the server.  v1 text is returned byte-for-byte; text that does not
 /// decode is returned as it is, as these paths always did.
 func manifestTextAsV1(_ stored: String) -> String {
-    guard let decoded = decodeManifest(fromJSON: stored),
-        decoded.schemaVersion != TestProperties.v1SchemaVersion,
+    guard TestProperties.wireVersion(of: stored) == ManifestV2.schemaVersion,
+        let decoded = decodeManifest(fromJSON: stored),
         let v1 = try? encodeManifestV1(decoded)
     else { return stored }
     return v1
