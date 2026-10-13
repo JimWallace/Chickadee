@@ -114,7 +114,7 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Sources/APIServer",
-            exclude: ["README.md"],
+            exclude: ["README.md", "CLAUDE.md", "MCP/CLAUDE.md", "Views/CLAUDE.md"],
             swiftSettings: strictWarnings
         ),
 
@@ -156,7 +156,7 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Sources/Worker",
-            exclude: ["README.md"],
+            exclude: ["README.md", "CLAUDE.md"],
             swiftSettings: strictWarnings,
             // Compiles Tools/runner-support/* into the binary. Replaces 2,223
             // lines of hand-typed string literals that mirrored those files;

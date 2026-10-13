@@ -33,7 +33,7 @@ Swift targets share a clean dependency boundary:
 
 - **`APIServer` / `chickadee-server`** — Vapor app. REST API + web UI (Elementary views).
   Handles auth, assignment management, submission intake, result storage, the
-  JupyterLite notebook workflow, and the MCP server (see below).
+  JupyterLite notebook workflow, and the MCP server (see `Sources/APIServer/MCP/CLAUDE.md`).
 - **`Worker` / `chickadee-runner`** — Daemon process. Polls for jobs, runs
   shell-script test suites in subprocesses (sandboxed or unsandboxed), reports
   structured results back to the server.
@@ -58,6 +58,26 @@ handing them to the shell scripts.
 
 ---
 
+## Where the Area Rules Live
+
+This file holds the rules for the whole repository. Rules for one area are in a
+`CLAUDE.md` in that area's directory. Claude Code loads each one when it works
+on a file there.
+
+| File | Holds |
+|---|---|
+| `Sources/APIServer/CLAUDE.md` | REST API, auth and roles in detail, `AppConfig`, runner trust, courses and deadlines, class goals, authoring editors, pattern families, browser isolation |
+| `Sources/APIServer/MCP/CLAUDE.md` | MCP server, the student-data wall, derived language and tier prose |
+| `Sources/APIServer/Views/CLAUDE.md` | Elementary pages, UI and stylesheet rules (also for `Public/styles.css` and `Public/*.js`), the `ui-review` agent |
+| `Sources/Worker/CLAUDE.md` | Sandbox boundary, test setup cache, runner flags |
+| `Tools/jupyterlite/CLAUDE.md` | The vendored editor and kernels, kernel traps |
+
+`Public/` has no `CLAUDE.md`, because the server serves every file in it. Before
+you change `Public/styles.css` or a page-wiring `Public/*.js` file, read
+`Sources/APIServer/Views/CLAUDE.md`.
+
+---
+
 ## Key Design Decisions
 
 **Shell scripts, not language runners.** Each test suite is a `.sh` file at the
@@ -79,29 +99,19 @@ build fails (e.g. `make` step fails), `buildStatus` is `"failed"` and
 **Test outcomes have four states only:** `pass`, `fail`, `error`, `timeout`.
 
 **Three test tiers:** `public` (shown immediately), `release` (hidden until
-deadline), `secret` (never shown). A fourth, `student`, was documented here and
-advertised by the MCP schema for most of the project's life while `TestTier`
-never had it — so `author_script` accepted it into its JSON schema and then
-rejected it at `TestTier(rawValue:)`, and the web suite editor silently coerced
-it to `.pub`. It is gone from the schema, and the tier prose is now DERIVED from
-`TestTier.allCases` (`MCPTierProse`, guarded by `MCPTierCoverageTests`) so
-neither a phantom nor a truncated list can reappear. Student-contributed tests
-do not want a tier: the suite is instructor-authored, and a student's
-contribution is submission content, not a suite entry — see
+deadline), `secret` (never shown). There is no `student` tier, and the MCP
+tier prose is derived from `TestTier.allCases` (`Sources/APIServer/MCP/CLAUDE.md`).
+Student-contributed tests do not want a tier: the suite is instructor-authored,
+and a student's contribution is submission content, not a suite entry — see
 [docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md).
 
 **Gamification fields are present from day one but nullable.** `memoryUsageBytes`,
 `attemptNumber`, `isFirstPassSuccess` are in the schema now so we never need a
 migration later. They can be null/zero until the feature is built.
 
-**`ScriptRunner` is the sandbox boundary.** `UnsandboxedScriptRunner` is the
-default in development. `SandboxedScriptRunner` implements the same protocol
-using platform sandboxing (macOS: `sandbox-exec`; Linux: `unshare` user/net
-namespaces). Enable with `--sandbox` on the runner.
-
 **Subprocess boundary for all language execution.** Swift never imports a JVM,
 Python interpreter, or any language runtime. Everything goes through
-`Process` + sandbox.
+`Process` + sandbox (`ScriptRunner`, `Sources/Worker/CLAUDE.md`).
 
 **Browser grading has four substrates, routed per script (#1271).**
 `RoutingExecutor` in `Public/grading-executors.js` sends each script to the xeus
@@ -110,13 +120,9 @@ that the native worker uses. It boots only the runtimes that the assignment
 contains. `RunnerCore` owns the suite loop and output interpretation for all
 four; a substrate only runs a script and reports its exit code and streams. See
 `docs/architecture.md`. xeus-r is the only route to in-browser R; its masks and
-its one-top-level-expression rule are in `docs/r-support.md`.
-
-**Every worker the notebook page spawns must be in
-`NotebookAssetIsolationMiddleware.isolatedWorkerScripts`.** If it is not, an
-isolated engine refuses the script. The submission then fails over to the native
-worker with no error. `IsolatedWorkerScriptDriftTests` guards the list. See
-`docs/adding-a-xeus-kernel.md` step 8.
+its one-top-level-expression rule are in `docs/r-support.md`. Every worker the
+notebook page spawns must be in `NotebookAssetIsolationMiddleware.isolatedWorkerScripts`
+(`Sources/APIServer/CLAUDE.md`).
 
 **Assignment languages.** Seven ship. `LanguageDescriptor`
 (`Sources/Core/LanguageDescriptor.swift`) holds the facts per language, and MCP
@@ -134,15 +140,9 @@ worker with no error. `IsolatedWorkerScriptDriftTests` guards the list. See
 
 An upload-only language also sets `submissionMode: "uploadOnly"`. There is no
 third "both" value (`TestProperties.swift`). Which check kinds each language
-refuses, and why: `docs/authoring-parity.md`. Per-language literal traps:
-`docs/adding-a-xeus-kernel.md` §"Traps".
+refuses, and why: `docs/authoring-parity.md`. The kernel traps (masking the exit
+call, one quirk per kernel) are in `Tools/jupyterlite/CLAUDE.md`.
 
-- **Mask the exit call.** The kernels mask R `quit()`, Lua `os.exit`, and
-  Octave `exit` and `quit`. The Java wrapper requires a sentinel line, because
-  `System.exit(0)` cannot be masked. If a mask regresses, every test reads as a
-  pass.
-- **Budget one quirk per kernel, not the same one.** R's per-expression wait and
-  its stderr trap did not occur on Lua or Octave.
 - **`.sh` carries no language signal.** To ask whether a language generates a
   `.sh` wrapper, read `LanguageDescriptor.generatesLanguagelessWrapper`. Do not
   write `language == .cpp`.
@@ -160,11 +160,6 @@ boundaries, and each records the result at once. See
 - **Fail loudly while authoring. Never fail while grading, rendering a page or
   extracting a student's submission.** Every remaining `?? .python` follows this
   rule; the per-site table is in `docs/language-declaration.md`.
-- **`makeWorkerManifestJSON(preserving:)` copies the decoded manifest.** Do not
-  build a fresh dict: it drops `languageDeclared`.
-- **Personalization runs per language on the server**
-  (`PersonalizationEvaluator`). Expression source and the solution never reach
-  the runner. See `docs/personalization-eval-runtime.md`.
 
 **A declared language is not exclusive. Shell is the substrate.** The
 declaration controls what Chickadee generates. A script's own extension controls
@@ -182,154 +177,31 @@ authoring step. `minimumRunnerVersion` is the wrong tool for a new language.
 Validation runs on the native worker, so browser-graded assignments are gated
 too. See `docs/runner-capability-profiles.md`.
 
-**A class goal counts one of three things, and the sweep evaluates no fourth.**
-`isSweepEvaluableClassGoal` admits exactly four shapes: no conditions, or a
-single `grade`, `itemsCovered` or `classCoverage` `atLeast`. Every other shape
-is refused at save time and skipped with a log by the sweep, so a hand-authored
-manifest cannot mis-grade a bonus. A union or corpus goal grades on the smaller
-of coverage and breadth. See
-[docs/collaborative-class-assignments.md](docs/collaborative-class-assignments.md)
-§"Class goals in force".
-
-**Post-deadline reveals wait for the slip-day claim window, not just the
-deadline.** `postDeadlineRevealDeadline` (`AssignmentDeadlineService`) is the one
-resolver for that moment. Release-tier output and the solution reveal both use
-it. See [docs/solution-visibility.md](docs/solution-visibility.md).
-
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
-(plus the non-human `mcp` service-account role) — the legacy global
-`student`/`instructor` roles were retired by the #417 multi-course-roles
-series (`CollapseUserRoles` migration). Teaching authority is **per-course**:
-each enrollment row carries a `CourseRole` (`student` < `ta` < `instructor`),
-so one account can be an instructor in one course and a student in another.
-TAs author content and grade but cannot manage enrollment/deadlines/
-archival/staff. Enforcement chokepoints: `requireCourseRole(atLeast:)` /
-`evaluateCourseWrite` in `CourseAccessHelpers.swift` (web + MCP share the
-policy); the `/instructor` area gate is `ActiveCourseStaffMiddleware`
-(staff in the *active* course), with per-resource gates on every
-parameterized route. See `docs/multi-course-roles.md`.
+(plus the non-human `mcp` service-account role). Teaching authority is
+**per-course**: each enrollment row carries a `CourseRole` (`student` < `ta` <
+`instructor`), so one account can be an instructor in one course and a student
+in another. TAs author content and grade but cannot manage enrollment,
+deadlines, archival or staff. The gates are in `Sources/APIServer/CLAUDE.md`
+and `docs/multi-course-roles.md`.
 
-**Auth is pluggable.** `AUTH_MODE` env var selects `.local` (username/password),
-`.sso` (OIDC/OAuth), or `.dual` (both active simultaneously). `APIUser` carries
-`authProvider` + `externalSubject` for SSO identity. Both `.local` and `.sso`
-are fully implemented. The OIDC flow uses Authorization Code + PKCE; the
-discovery document and JWKS are fetched at startup from `OIDC_AUTH_SERVER`.
-Role assignment uses the `SSO_ADMIN_USERS` env var (a comma-separated identity
-allowlist checked against JWT claims on every login); instructor authority is
-per-course (assigned from the course roster), so there is no SSO instructor
-allowlist (`SSO_INSTRUCTOR_USERS` was retired in the multi-course-roles work).
-The current implementation is tested against UWaterloo DUO; claim names
-(`winaccountname`, `user_id`) are in `OIDCIDTokenClaims.swift` and can be
-adjusted for other providers.
+**A course is one offering: a code plus a year and a term.** A bare code can
+name more than one active course. **Do not add a code-only lookup.** See
+`Sources/APIServer/CLAUDE.md` and [docs/course-terms.md](docs/course-terms.md).
 
 **The CSP `script-src` permits no inline execution (#1516).** An inline
-`<script>` in a template does not run, and an `onclick=` / `onchange=` attribute
-never fires. Neither failure is loud. Put page JS in a `Public/*.js` file and
-use the delegated data attributes at the foot of `app.js` (`docs/ui-design.md`
-§"Page-local scripts"; `check-styles.sh` rules 3b, 3b-2 and 3b-3). Do not
-suppress a coarse third-party scanner rule to accept one of its findings. What
-the policy keeps, and why, is in the `scripts/check-security-headers.sh`
-header.
+`<script>` does not run and an `onclick=` attribute never fires, with no error.
+Put page JS in a `Public/*.js` file (`Sources/APIServer/Views/CLAUDE.md`).
 
-**HTTPS enforcement is optional and proxy-aware.** `AppSecurityConfiguration`
-reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
-`SESSION_COOKIE_SECURE`. `HTTPSRedirectMiddleware` handles the enforcement and
-respects `X-Forwarded-Proto` from reverse proxies.
+**Environment configuration is centralized.** Every env var the server reads
+flows through `AppConfig` (`Sources/APIServer/Configuration/`); see
+`Sources/APIServer/CLAUDE.md`. Do not add a new variable ("What Not To Do").
 
-**Environment configuration is centralized (v0.4.168+).** Every env var read
-by the server flows through `AppConfig` (`Sources/APIServer/Configuration/`).
-At startup `configure(_:)` calls `AppConfig.fromEnvironment(workDir:)` once,
-stashes the result on `Application.appConfig`, and emits a redacted summary
-to the log. Subsystems read typed substructs (`appConfig.auth`, `.security`,
-`.workers`, `.oidc`, `.database`, `.lockout`, `.diagnostics`, `.alerts`,
-`.brightspace`, `.scanMode`) rather than calling `Environment.get` directly.
-Tests can preload an `AppConfig` via `Application.preloadedAppConfig` (the
-seam `configure(_:)` checks first) or pass one to `makeTestApp(appConfig:)`.
-
-**Worker secret is auto-generated.** If no secret is provided at startup, a
-random three-word diceware passphrase is generated from the EFF wordlist and
-persisted to `.worker-secret`. The runner reads it from `RUNNER_SHARED_SECRET`.
-All runner↔server requests are HMAC-signed (`WorkerHMACAuthMiddleware`).
-
-**Local runner autostart.** The server can spawn a `chickadee-runner` subprocess
-automatically if `.local-runner-autostart` exists (or is toggled via the admin
-dashboard). This is a development convenience; production runs the runner
-separately.
-
-**MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server and
-its own OAuth 2.1 authorization server. `MCP_MODE` (`off` / `read_only` /
-`read_write`) gates it. The protocol era is resolved per request (#1218), and
-`initialize` never negotiates up to the modern revision. OAuth codes and tokens
-are stored only as hashes and are consumed by an atomic conditional `UPDATE`,
-so a code cannot be replayed. See `docs/architecture.md` §"MCP surfaces" and
-`docs/mcp-2026-07-28-revision.md`. The `initialize` instructions end with the
-authoring-voice guide, and a course's instructors can replace it for their
-course (see "Voice and Register" below).
-
-**The MCP student-data wall has one gated exception: AI-assisted feedback.**
-The `feedback:*` tools read students' written answers (`reflection`-tagged
-cells) by pseudonymous handle, and only where an admin turned on the course
-gate and an instructor turned on the assignment gate. **No MCP tool may set
-either gate** (`MCPAIFeedbackGateTests`). Student-submission access stays in
-`MCPStudentDataBoundary`, and the RLS policy in
-`deploy/sql/mcp-least-privilege-role.sql` checks both gates. Chickadee still
-calls no model API. The instructor AI agents tab (`/instructor/mcp`) records
-each staff member's UW-licensed-account attestation; by decision, nothing
-enforces it. See
-[docs/ai-assisted-feedback.md](docs/ai-assisted-feedback.md).
-
-**The MCP surface holds no language names (#1290).** Every language list in
-agent-facing copy derives from `allCases` (`MCPLanguageProse`), and
-`get_server_info` reports a `languages` payload. `MCPLanguageCoverageTests`
-fails on any list that stops short. A new language needs no edit to MCP prose.
-See `docs/adding-a-xeus-kernel.md`, compiler-invisible item 8.
-
-**Pattern-generated test families (v0.4.75+).** Instructors can define a
-`PatternFamily` (Core/) — one function, shared defaults, a table of cases —
-and Chickadee expands each enabled case into an ordinary test script in the
-assignment's language at save time. Families live in
-`TestProperties.patternFamilies`; generated entries in `testSuites` carry
-`generatedBy: <familyID>` so the raw-script edit endpoints refuse to mutate
-them (you edit the family instead). Ten kinds ship; `PatternKind` lists them.
-Generated filenames are deterministic (`{tier}test_{familyID}_{caseKey}`, with
-the language's generated extension) and embed a `spec_hash` header so manifest
-bytes change when any case changes.
-
-**The authoring editors ([docs/authoring-editors.md](docs/authoring-editors.md)).**
-
-- The suite editor is server-authoritative. `PUT /instructor/:assignmentID/suite`
-  and `PUT /instructor/:assignmentID/families` persist each edit and return the
-  reconciled state. `dependsOn` accepts `family:<id>` tokens, which the server
-  expands before it persists them.
-- `POST /testsetups/:id/notebook/save` is a live-edit endpoint, like `PUT /suite`.
-  It never changes visibility. Re-validation still runs.
-- The authoring pages read the language from one seed, `AuthoringLanguageFacts`,
-  and every value in the seed is derived from the code that owns the answer. A
-  new language needs zero JavaScript edits. A new fact is a new field, derived
-  from its owner. `AuthoringLanguageFactsTests` asserts the derivation.
-- Auto-compute of a case's expected value runs on the server
-  (`PersonalizationEvaluator`) for every language but Python.
-
-**Assignment vanity URLs (v0.4.71).** Each assignment gets a per-course
-unique slug. Student links prefer `/:courseCode/:assignmentSlug` routes while
-the canonical `/testsetups/:id/submit` handlers remain active for
-compatibility. The first segment is the course's `urlKey`: the code, or
-"CS135-F26" for a course with a term (see the next entry).
-
-**A course is one offering: a code plus a year and a term
-([docs/course-terms.md](docs/course-terms.md)).** Every door that creates a
-course declares a term, and nothing infers one. A bare code can name more than
-one active course. **Do not add a code-only lookup.** Use
-`findActiveCourse(byKey:viewer:on:)` on the web or `resolveMCPCourse` in MCP;
-MCP refuses a write through an ambiguous code. A clone for a new term starts
-every copied assignment closed, with no dates and the solution reveal off.
-
-**Runner-side LRU test setup cache (v0.4.41).** `TestSetupCache` (Swift actor,
-default 16 entries) keeps fully-prepared test setup directories keyed by
-`testSetupID`. Cache key hashes manifest + zip content, so any suite edit
-busts the entry. Concurrent jobs for the same setup share one in-flight
-population task.
+**The MCP server never exposes student data, with one gated exception.** The
+AI-assisted feedback tools read written answers only behind a course gate and
+an assignment gate, and no MCP tool may set either gate. See
+`Sources/APIServer/MCP/CLAUDE.md`.
 
 ---
 
@@ -415,116 +287,21 @@ Two manifest rules worth knowing:
 
 ---
 
-## REST API
-
-Base path: `/api/v1`
-
-```
-# Runner endpoints (HMAC-signed)
-POST /worker/request                    — Runner polls for a pending job
-POST /worker/results                    — Runner reports TestOutcomeCollection
-GET  /worker/artifacts/:submissionID    — Runner downloads submission zip
-
-# Test setups (instructor upload; download available to all authenticated users)
-POST /api/v1/testsetups                 — Instructor uploads test setup zip (multipart)
-GET  /api/v1/testsetups/:id/download    — Stream zip to runner
-
-# Submissions
-POST /api/v1/submissions                — Accept student submission zip
-GET  /api/v1/submissions                — List submissions (?testSetupID= filter)
-GET  /api/v1/submissions/:id            — Submission status
-GET  /api/v1/submissions/:id/results    — Full TestOutcomeCollection (?tiers= filter)
-
-# Web / browser results
-GET  /results/:id                       — Browser-rendered result view
-
-# Instructor suite editor (server-authoritative, v0.4.79+)
-GET  /instructor/:assignmentID/suite    — Author-facing view of the ordered suite list
-PUT  /instructor/:assignmentID/suite    — Persist drag-reorder, tier/points/displayName edits
-PUT  /instructor/:assignmentID/families — Save a pattern family (add/edit/delete)
-
-# Notebook authoring from the embedded editor (course staff, TA+)
-POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLite
-                                          back to the assignment
-                                          (?file=assignment|solution)
-```
-
-Web routes (Elementary views, session auth required) live under `/` and handle
-login, registration, the student dashboard, assignment pages, submission
-history, instructor assignment CRUD, and the admin panel.
-
-All JSON endpoints use `application/json`. The test setup upload is multipart.
-
----
-
 ## Auth & Roles
 
 Deployment roles: `user` < `admin` (plus the non-login `mcp` service role).
-Per-course roles on the enrollment row: `student` < `ta` < `instructor`
-(#417 — there is no global student/instructor anymore).
-
-- **Unauthenticated:** login, register, runner endpoints (HMAC-signed separately)
-- **Authenticated (any user):** web UI, submission queries, result views,
-  JupyterLite content routes, notebook download — visibility scoped to
-  enrolled courses
-- **Course staff (per-course `ta`+):** assignment content editing, grading
-  actions (retest/reset/grade-override), all-tier/result visibility for that
-  course
-- **Per-course `instructor`:** everything a TA can do, plus enrollment/roster/
-  staff management, assignment lifecycle (create/delete/open/close/deadlines),
-  course sections, archival, BrightSpace binding
-- **Admin:** admin panel, course creation, worker secret/autostart management,
-  runner dashboard (admins bypass per-course role checks, but MCP agents
-  acting for them stay enrollment-scoped)
-
-Session auth uses Vapor's `SessionAuthenticator`. Sessions are persisted
-via the Fluent driver (v0.4.46), so they survive restarts and work across
-multi-process deployments. Session cookie is `HttpOnly; SameSite=Lax`; `Secure`
-flag is set automatically when `PUBLIC_BASE_URL` is `https://` or `AUTH_MODE`
-is non-local.
+Per-course roles on the enrollment row: `student` < `ta` < `instructor`.
+`AUTH_MODE` selects local, SSO (OIDC) or both. The per-role table, the session
+rules and the SSO details are in `Sources/APIServer/CLAUDE.md`.
 
 ---
 
 ## JupyterLite
 
-Chickadee embeds JupyterLite at `Public/jupyterlite/` for in-browser notebook
-editing. The config is in `Tools/jupyterlite/`. `Public/jupyterlite` is generated
-output and is checked in. The measurements and the history behind each rule
-below are in [docs/jupyterlite.md](docs/jupyterlite.md).
-
-- **Every vendored kernel is a xeus kernel, one environment each**
-  (`Tools/jupyterlite/environment-<language>.yml`). The environments are
-  separate on purpose, because a kernel fetches its whole environment at boot.
-  `check-xeus-vendored.sh` asserts that they stay distinct. A vendored kernel
-  appears in the editor's picker, so a language that can be authored must be
-  one that can be graded.
-- **The channel is `emscripten-forge-4x`.** The `emscripten-forge-dev` alias
-  serves the frozen 3x channel. Do not point an environment file at it.
-- **A student can import only what the environment contains.** The CSP is
-  `connect-src 'self'`, so there is no runtime install.
-- **Import checks read the vendored bytes, never the environment YAML.**
-  `KernelImportGuard` refuses a browser-graded script whose imports the kernel
-  cannot satisfy, from `importable-modules.json`.
-- **A name in an environment file changes nothing until the kernel is rebuilt.**
-  Re-vendor with `.github/workflows/revendor-kernels.yml`.
-  `check-env-vendored-sync.sh` compares the declared packages with the shipped
-  bytes.
-- **A package has two costs: boot, paid by everyone, and attach, charged to the
-  10-second test limit. Be sparing.** Measure with `Tools/browser-grading-smoke`.
-- **A guard derivation must assert its own completeness, and a guard whose
-  answer depends on the CI event it runs under is not a guard.** The
-  `chickadee-*` glob in `build-jupyterlite.sh` still fails open for a kernel it
-  does not know.
-- **The vendored `pyodide-http` and the waitAsync polyfill worker are patched,
-  and must stay patched** (`scripts/patch-*.py`, asserted by
-  `check-xeus-vendored.sh` and `verify-jupyterlite.sh`).
-- **Synchronous stdin uses a different transport per engine.** Read the
-  middleware, not `jupyter-lite.json`: Chromium and Firefox are isolated and use
-  `SharedArrayBuffer`; WebKit is not isolated and uses the service worker.
-- **jszip, CodeMirror and the xeus bootstrap are vendored under `Public/vendor/`**,
-  so no page load reaches a third-party CDN. Pyodide is gone (v0.5.19).
-  `'unsafe-eval'` cannot be narrowed to `'wasm-unsafe-eval'`, because JupyterLab
-  compiles JSON-schema validators at run time.
+Chickadee embeds JupyterLite at `Public/jupyterlite/`, which is generated output
+and is checked in. The config and the rules for the vendored kernels are in
+`Tools/jupyterlite/CLAUDE.md`; the measurements are in
+[docs/jupyterlite.md](docs/jupyterlite.md).
 
 ---
 
@@ -615,70 +392,34 @@ greeting. The example below does so in R."
 ## UI / Stylesheet Conventions
 
 The web UI is Elementary views (`Sources/APIServer/Views/`) and one stylesheet
-(`Public/styles.css`). The render tests prove that a page renders, not how it
-looks, so `ElementaryPageGuardTests`, SwiftLint and `scripts/check-styles.sh`
-enforce these rules. The rules, the token tables, the component vocabulary
-and the page archetypes are in [docs/ui-design.md](docs/ui-design.md).
+(`Public/styles.css`). The rules are in `Sources/APIServer/Views/CLAUDE.md` and
+[docs/ui-design.md](docs/ui-design.md). Two rules apply to every UI change:
 
-- No inline `style=""` in a view, except a JS-toggled `display:none` or a
-  custom-property assignment.
-- Shared styling goes in `styles.css`. Page-unique styling goes in a page
-  `<style>` block with role-named classes. The page `<style>` total is a
-  shrink-only ratchet.
-- Every `var(--x)` resolves, with no hardcoded fallback (`check-css-vars.sh`).
-- Design tokens are mandatory for colours, font sizes, radii, spacing and pop-out
-  shadows (`check-design-tokens.sh`).
-- Pages follow a named archetype. Start a new page by copying its archetype's
-  exemplar (`PageArchetypeTests`).
-- Every assigned class name resolves to a rule (`check-class-resolution.sh`).
-  Behaviour-only hooks take the `js-` prefix.
-- JS makes no styling decisions. It toggles a class or sets a custom property.
-- Do not invent a second name for a component the vocabulary already has
-  (`check-ui-vocabulary.sh`). `cursor` and `text-decoration` values are a closed
-  affordance registry.
-- Chrome is not prose. Text longer than one sentence goes in `docs/`, and the UI
-  links there. No native `alert()`.
-- The nginx maintenance page mirrors the palette by value
-  (`check-maintenance-palette.sh`).
-- **The views are guarded mostly by a render test.** `ElementaryPageGuardTests`
-  renders every page in `ElementaryPageFixtures` and applies the markup rules
-  to the HTML; a page type without a fixture fails it. SwiftLint rules forbid
-  `.style(` and `HTMLRaw(` in views. See `docs/elementary-spike.md` §"Guards".
+- Run `scripts/check-styles.sh` before you push.
 - **Run the `ui-review` agent on any change touching
   `Sources/APIServer/Views/`, `Public/styles.css`, or a page-wiring
-  `Public/*.js`.** It reviews the layer
-  the guards structurally cannot: whether a construct duplicates the
-  vocabulary, whether the idiom is the lightest that fits, and whether the
-  copy is at house length. Green guards are necessary, not sufficient — every
-  style regression so far has been mechanically legal.
-
-  **This is unconditional and needs no confirmation.** The agent is checked in
-  at `.claude/agents/ui-review.md`, so every Claude Code session has it. Run it
-  as part of doing the work, the same way you run `scripts/check-styles.sh` —
-  do not ask whether to, do not offer merging without it as an option, and do
-  not skip it because a general instruction elsewhere discourages spawning
-  agents. CI runs the same brief on every pull request that touches those paths
-  (`.github/workflows/ui-review.yml`): it posts the report on the PR and the
-  job fails on a `changes requested` verdict, so a session where the agent
-  cannot run needs no note in the PR — the workflow is the review, and its
-  findings are handled like any other bot finding. The workflow needs one
-  repository secret (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`) and
-  passes with a warning when neither is set. A UI change that has not been
-  through `ui-review`, by either route, is not finished.
-
-Run `scripts/check-styles.sh` before you push a UI change. The
-visual-regression harness (`Tools/visual-regression/`) covers one page per
-archetype. A page with no committed baseline bootstraps loudly: commit the CI
-capture in the same PR.
+  `Public/*.js`.** This is unconditional and needs no confirmation. A UI change
+  that has not been through `ui-review`, by the agent or by the CI workflow
+  (`.github/workflows/ui-review.yml`), is not finished.
 
 ---
 
-## Subagents
+## Subagents and Hooks
 
 The subagents are in `.claude/agents/`. Each one reports and does not edit.
-- After a code change, run `test-runner`. It reports only the failing tests.
+- After a code change, run `test-runner` with a filter for the suites that the
+  change affects. Run it with no filter once before a push.
 - After a change to an Elementary view, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
-- Before a commit, run `diff-reviewer` on the uncommitted diff. Before a push, run `lint-guard`.
+- Before a commit, run `diff-reviewer` on the uncommitted diff.
+
+The hooks in `.claude/hooks/` do three jobs, so you need not:
+- `format-swift.py` runs `swift-format` on each Swift file that you edit.
+- `pre-push-format-lint.py` runs `scripts/format-lint.sh` (every step of the CI
+  `format-lint` job) before `git push`, and stops the push when a step fails.
+  `lint-guard` runs the same script when you want the report earlier.
+- `ask-before-test-edit.py` asks the maintainer before any change to an
+  existing file under `Tests/`, by an edit tool or by a shell command.
+  `scripts/test-claude-hooks.py` tests all three hooks in CI.
 
 ---
 
@@ -752,39 +493,18 @@ Full details, plus how to enable the optional merge queue, are in
 ## Deployment & CI/CD (production)
 
 **Prod is full CI/CD with zero-downtime deploys — a green merge to `main`
-reaches production on its own.** The pipeline:
-
-1. Merge to `main` → `auto-release.yml` tags `vX.Y.Z` and `docker-build.yml`
-   publishes `ghcr.io/jimwallace/chickadee:latest` (the build does **not**
-   publish a per-release `:X.Y.Z` image tag — only `:latest` and
-   `:sha-<commit>`, because auto-release pushes the tag with `GITHUB_TOKEN`,
-   which by design can't trigger the tag build).
-2. A host-side daemon, **`chickadee-deployer`** (systemd;
-   `deploy/chickadee-deployer.sh`), polls GitHub Releases and **blue-green-deploys
-   each new release automatically** via `scripts/bluegreen-deploy.sh`: a new
-   "color" container boots beside the live one, is health-gated, then the host
-   nginx upstream is flipped to it (zero dropped requests), the old color is
-   drained and kept for instant rollback. Non-major bumps deploy unattended;
-   **major bumps are held for human approval** (SemVer gate). Each deploy is
-   snapshotted first and auto-rolls-back if the new version degrades after cutover.
-
-**Implication for working here:** once a change is merged and CI is green, you
-can **rely on it being deployed to prod** within ~10–15 min (image build + the
-daemon's poll). No SSH, no manual deploy step.
+reaches production on its own,** within about 10–15 minutes. `auto-release.yml`
+tags the release, `docker-build.yml` publishes `:latest` and `:sha-<commit>`,
+and the host-side `chickadee-deployer` daemon blue-green-deploys it
+(`scripts/bluegreen-deploy.sh`). Major bumps wait for a human. No SSH and no
+manual deploy step.
 
 **Verify a fix is live via the admin diagnostics MCP** (`Chickadee_Admin`,
-read-only): `get_deployment_info` (the running version — confirms your release
-shipped), `get_deploy_status` / `get_deploy_history` (the daemon's state + recent
-deploy/rollback events), and `list_runners` / `get_health_alerts` / `query_logs`
-/ `get_browser_diagnostics` to confirm the fix's *behaviour*. If a brand-new
-admin tool isn't visible, reconnect the MCP client to pick up the new catalog.
-
-**Deploy control is host-side, by design.** The admin-MCP deploy tools are
-strictly read-only; pause / approve-a-major / rollback are operator actions on
-the host (`systemctl`, or writing `command.json` in the deploy state dir). The
-app container never holds the Docker socket.
-
-Full design, runbook, and host steps:
+read-only): `get_deployment_info` for the running version,
+`get_deploy_status` / `get_deploy_history` for the daemon, and
+`list_runners` / `get_health_alerts` / `query_logs` /
+`get_browser_diagnostics` for the behaviour. Deploy control (pause, approve a
+major, roll back) is host-side by design. Full design and runbook:
 [docs/zero-downtime-deploy.md](docs/zero-downtime-deploy.md).
 
 ---
@@ -797,26 +517,10 @@ Python, R, Lua, Octave, C++, Racket and Java assignments; browser (xeus/wasm)
 and native worker grading that share one RunnerCore; per-student
 personalization; pattern-generated test families (10 kinds) and notebook checks
 (10 kinds); achievements; student slip days; per-course roles; BrightSpace grade
-sync (awaiting UW IST prod credentials); an MCP authoring surface of 60 tools
-plus a read-only admin-diagnostics MCP of 19 (`MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source of
-truth for the count); OIDC SSO; and zero-downtime auto-deploys. The 0.4 arc is
-summarised at the top of `CHANGELOG-0.4.md`. The 0.5-boundary cleanup is in the
-0.5.0 entry of `CHANGELOG.md`. Every browser grader and every editor kernel is
-xeus (#1271, done); the measurements are in `docs/archive/xeus-python-grading-*`.
-
-Instructor validation is a `kind == .validation` submission, graded by the
-**native worker** (`WorkerJobRoutes.collectClaimCandidates`). It never runs a
-kernel. There is no `assignment-validate.js`.
-
-**Every page is an Elementary view; nothing renders Leaf.** A page is an
-`HTML` type under `Sources/APIServer/Views/Pages/`, returned as
-`HTMLResponse { ... }`, with `PageRequestContext` for the CSRF token, version
-and sprites. The two SVG sprites live in `Resources/Sprites/`. A page type
-needs a fixture in `ElementaryPageFixtures`, or `ElementaryPageGuardTests`
-fails. Split a large page into small `HTML` structs, because type-check time
-grows with the size of one builder closure. The traps and guards are in
-`docs/elementary-spike.md`.
+sync (awaiting UW IST prod credentials); an MCP authoring surface plus a
+read-only admin-diagnostics MCP (`MCPToolCatalog.live` holds the count); OIDC
+SSO; and zero-downtime auto-deploys. The 0.4 arc is summarised at the top of
+`CHANGELOG-0.4.md`.
 
 - **A scanner that cannot tell markup from prose about markup matches its own
   documentation.** This shipped twice in drift guards. Parse structure, and

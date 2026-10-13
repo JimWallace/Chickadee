@@ -189,6 +189,9 @@ jobs:
       - name: Build-retry helper self-tests
         run: scripts/ci-build-retry.sh --self-test
 
+      - name: Claude Code hook self-tests
+        run: scripts/test-claude-hooks.py
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles
