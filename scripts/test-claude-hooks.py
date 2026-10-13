@@ -22,8 +22,8 @@ HOOKS = os.path.join(REPO, ".claude", "hooks")
 failures: list[str] = []
 
 
-def run_hook(hook: str, event: dict, project: str) -> str:
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=project)
+def run_hook(hook: str, event: dict, project: str, extra_env: dict | None = None) -> str:
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=project, **(extra_env or {}))
     result = subprocess.run(
         [sys.executable, os.path.join(HOOKS, hook)],
         input=json.dumps(dict(event, cwd=project)),
@@ -149,10 +149,44 @@ def test_format_hook() -> None:
         shutil.rmtree(project)
 
 
+def test_toolchain_lookup() -> None:
+    """A cloud session installs the toolchain under ~/swift/ and puts it on
+    the shell PATH only. The format hook must still find it."""
+    project = make_project()
+    home = tempfile.mkdtemp(prefix="claude-hooks-home-")
+    try:
+        bin_dir = os.path.join(home, "swift", "swift-0.0-RELEASE", "usr", "bin")
+        os.makedirs(bin_dir)
+        stubs = {
+            "swift": "#!/bin/sh\nexit 0\n",
+            "swift-format": '#!/bin/sh\nfor last; do :; done\necho formatted > "$last"\n',
+        }
+        for name, body in stubs.items():
+            path = os.path.join(bin_dir, name)
+            with open(path, "w") as f:
+                f.write(body)
+            os.chmod(path, 0o755)
+        source = os.path.join(project, "Sources", "Code.swift")
+        run_hook(
+            "format-swift.py",
+            {"tool_name": "Edit", "tool_input": {"file_path": "Sources/Code.swift"}},
+            project,
+            # An empty PATH: in CI the swift-ci image has a real toolchain in
+            # /usr/bin, which would hide the lookup under test.
+            {"HOME": home, "PATH": os.path.join(home, "empty-path")},
+        )
+        with open(source) as f:
+            expect("the format hook finds a toolchain under ~/swift/", f.read(), "formatted\n")
+    finally:
+        shutil.rmtree(project)
+        shutil.rmtree(home)
+
+
 def main() -> None:
     test_edit_hook()
     test_pre_push_hook()
     test_format_hook()
+    test_toolchain_lookup()
     if failures:
         print(f"\n{len(failures)} case(s) failed:")
         for failure in failures:

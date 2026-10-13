@@ -17,6 +17,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from toolchain_path import environment_with_toolchain  # noqa: E402
+
 GIT_PUSH = re.compile(r"(?:^|[;&|(\s])git\s+(?:-[^\s]+\s+)*push\b")
 NO_CODE_FLAGS = ("--delete", "--dry-run", " -d ", " -n ")
 
@@ -50,6 +53,7 @@ def main() -> None:
     result = subprocess.run(
         [script],
         cwd=project_dir,
+        env=environment_with_toolchain(),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

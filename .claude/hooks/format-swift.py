@@ -17,6 +17,9 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from toolchain_path import environment_with_toolchain  # noqa: E402
+
 
 def main() -> None:
     try:
@@ -38,13 +41,15 @@ def main() -> None:
     if os.path.commonpath([project_dir, target]) != project_dir or not os.path.isfile(target):
         return
 
-    swift_format = shutil.which("swift-format")
+    env = environment_with_toolchain()
+    swift_format = shutil.which("swift-format", path=env.get("PATH"))
     if swift_format is None:
         return
 
     subprocess.run(
         [swift_format, "format", "--in-place", target],
         cwd=project_dir,
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,
