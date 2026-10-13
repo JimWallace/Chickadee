@@ -70,7 +70,7 @@ import VaporTesting
 
             let served = try await solutionNotebookData(
                 for: assignment, setup: setup, db: app.db, testSetupsDirectory: app.testSetupsDirectory)
-            let text = String(decoding: served, as: UTF8.self)
+            let text = try #require(String(bytes: served, encoding: .utf8))
             #expect(text.contains("saved"))
             #expect(text.contains("bundled") == false)
         }
@@ -86,7 +86,7 @@ import VaporTesting
                     at: SolutionLocation(assignment), setup: setup, sources: SolutionSource.any,
                     db: app.db, testSetupsDirectory: app.testSetupsDirectory))
             #expect(found.source == .setupZip)
-            #expect(String(decoding: found.data, as: UTF8.self).contains("bundled"))
+            #expect(try #require(String(bytes: found.data, encoding: .utf8)).contains("bundled"))
         }
     }
 
