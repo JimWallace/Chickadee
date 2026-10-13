@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.643] - 2026-10-13
+
+### Added
+
+- **Class composite: contribution ingest (slice 4 of `docs/class-composite.md`).** When a student's submission to a class composite is graded, the server checks the reported contribution again (its shape must be the assignment's, and its data valid base64 of the right length) and stores it in the new `composite_contributions` table, one row for each student, where a newer submission replaces an older one. A passing contribution records its slot as the class-coverage item `slot-<n>`, so an unscoped `itemsCovered` class goal counts the filled slots. Both result paths store contributions through the shared ingest effects. Deleting a course deletes its composite slots and contributions.
+
+
 ## [0.5.642] - 2026-10-13
 
 ### Changed
