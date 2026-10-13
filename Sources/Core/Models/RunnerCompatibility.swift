@@ -28,6 +28,12 @@ public struct RunnerCapability: Codable, Hashable, Sendable {
     /// A build that stages one opponent would ignore the list and grade the
     /// suite once with nobody staged, so the gate makes such a job wait.
     public static let activityMatrix = RunnerCapability(name: "activity-matrix")
+
+    /// Advertised by every runner build whose RunnerCore reads a test footer's
+    /// `composite` object (docs/class-composite.md). An older build grades a
+    /// class composite correctly but drops the contribution with no error, so
+    /// the gate keeps the job away from it.
+    public static let activityComposite = RunnerCapability(name: "activity-composite")
 }
 
 public struct LanguageVersion: Codable, Hashable, Sendable {

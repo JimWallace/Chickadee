@@ -18,7 +18,7 @@ of all parts together.
 | 0 | This design note | proposed |
 | 1 | Output contract: the `composite` footer field in `RunnerCore` | shipped |
 | 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | shipped |
-| 3 | Slot dealing, and the slot as a per-student input | planned |
+| 3 | Slot dealing, and the slot as a per-student input | shipped |
 | 4 | Ingest: the `composite_contributions` table and the coverage row | planned |
 | 5 | The composite view on the leaderboard page | planned |
 | 6 | Reference renders and `emptySlots: reference`, spare slots, and the `sum` and `gallery` compositors | planned |
@@ -163,34 +163,61 @@ the grade. The composite is a display. It never changes a grade.
 
 ### 2. The slot (slice 3)
 
-**Dealing.** When a student first opens the assignment during the window, the
-server deals the next free slot and stores it in `composite_slots`
-(assignment, student, slot, dealt-at). The slot does not change after that. If
-a submission arrives for a student with no slot (for example, the student opened
-the page before the window), `gradingInputs` deals one at that time.
+**Dealing.** When a student first opens the notebook page or the upload page
+while the assignment is open and inside its window, the server deals a slot and
+stores it in `composite_slots` (assignment, student, slot, round, dealt-at).
+The slot does not change after that. If a submission arrives for a student with
+no slot (for example, the student opened the page before the window), grading
+deals one at that time. `CompositeSlots` (`Sources/APIServer/Services/`) owns
+both paths. A deal never fails the page or the grading run: an error is logged,
+and the run grades without the slot inputs.
 
-Dealing writes on a page load, so it must be idempotent and safe under a race.
-A unique key on (assignment, student) makes a second deal for the same student
-fail, and the loser reads the row that won. A unique key on (assignment, slot,
-round) stops two students from receiving the same slot in one round; the loser
-retries with the next free slot.
+The dealer takes the first (round, slot) that nobody holds, in deal order. So a
+slot freed by a deleted student is dealt again, and a second round starts only
+when every slot of the first is taken.
+
+Dealing writes on a page load, so it is idempotent and safe under a race. A
+unique key on (assignment, student) makes a second deal for the same student
+fail, and the loser reads the row that won. A unique key on (assignment, round,
+slot) stops two students from receiving the same slot in one round; the loser
+retries with the next free pair. No insert runs inside a transaction, because a
+failed insert on Postgres aborts the transaction.
 
 A student who does not come to class gets no slot, so absent students do not
 leave fixed holes in the image.
 
-**Dealing order.** One of `rowMajor`, `centreOut` or `random`. With
-`centreOut`, the image grows from the middle, which reads well on a projector.
+**Dealing order.** One of `rowMajor`, `centreOut` or `random`
+(`CompositeSpec.dealSequence`). With `centreOut`, the image grows from the
+middle, which reads well on a projector; a tie goes to the lower slot. `random`
+is a shuffle seeded from the assignment's ID, so one assignment always deals in
+one order.
 
 **More students than slots.** Deal a second round. Two students then own the
 same slot, and the composite shows the latest passing contribution.
 
-**Delivery.** The slot is the input `slot` in the per-student input set, so a
-Python test reads it from `_ck_inputs.py`, and each other language reads it
-from its own inputs file. For a `tile` layout, the inputs also carry `col` and
-`row`, so a test script does not repeat the grid arithmetic.
+**Delivery.** The slot is the input `composite_slot` in the per-student input
+set, so a Python test reads `_ck["composite_slot"]` from `_ck_inputs.py`, and
+each other language reads it from its own inputs file. For a grid layout, the
+inputs also carry `composite_col` and `composite_row`, so a test script does
+not repeat the grid arithmetic. The names are prefixed and reserved, so they
+cannot collide with an instructor's own inputs; on a clash, the composite's
+value wins. The worker job and the browser seed endpoint both merge them in, so
+the two grading paths read the same values.
 
-**Staff.** A staff member's validation submission gets the reference slot
-(slot 0) unless the staff member asks for another.
+**No language, no composite.** An assignment with no declared language has no
+inputs file, so `ActivityAuthoring` refuses a class composite on it
+(`compositeNeedsLanguageMessage`). If the language is later changed to none,
+grading still runs and leaves the slot inputs out: grading never fails.
+
+**Staff.** A validation run, and a staff member who grades in the browser, get
+the reference slot (slot 0) and are never dealt a slot: a dealt slot is a
+student's. Opening the page as staff deals nothing.
+
+**The MCP lock reads the owner pool.** The least-privilege MCP database role
+cannot read `composite_slots` (it maps students to slots), and it reads
+`submissions` filtered to validation runs. So `set_activity` answers both lock
+questions on `ToolContext.mainDB`. This also corrects the existing kind lock,
+which on the MCP pool saw no student submissions.
 
 ### 3. Ingest (slice 4)
 
@@ -322,9 +349,9 @@ checks that size.
 change between a grid and a count moves every slot. This is a new check in
 `ActivityAuthoring`, with its own refusal message
 (`compositeLayoutLockedMessage`). The kind lock does not cover it: that check
-compares only the kind, and its message says that the kind is locked. Slice 2
-locks at the first student submission only, because no slot is dealt before
-slice 3.
+compares only the kind, and its message says that the kind is locked. The edit
+page disables the structural inputs under the same rule
+(`ActivityAuthoring.compositeStructureLocked`).
 
 **A new composite starts from `CompositeSpec.starter`:** a 6 × 8 grid of
 8 × 8 still RGB tiles. Choosing the kind on the edit page or with
@@ -391,7 +418,7 @@ range, or when the total payload for all slots is more than 4 MB.
 | Seam | Rule |
 |---|---|
 | Suite rebuilds | `makeWorkerManifestJSON(preserving:)` already keeps the `activity` block. `AssignmentHelpersManifestTests` gains a composite round trip. |
-| Layout lock | `compositor`, `layout`, `contribution` and `dealOrder` lock at the first deal or the first student submission, whichever comes first (the first submission only until slice 3). This is a new check with its own message, separate from the kind lock. `frameRate`, `showFailed` and `emptySlots` are display settings and stay editable. |
+| Layout lock | `compositor`, `layout`, `contribution` and `dealOrder` lock at the first deal or the first student submission, whichever comes first (`compositeStructureLocked`). This is a new check with its own message, separate from the kind lock. `frameRate`, `showFailed` and `emptySlots` are display settings and stay editable. |
 | Surgical edits | A `withComposite` rebuild, like `withWindow`, so no edit drops another field. |
 | Old runners | An old `RunnerCore` drops the unknown footer field, so the contribution is lost with no error. A new capability token, `activity-composite`, keeps a composite job away from a runner that does not advertise it. The browser wasm ships with the server, so it is always current. |
 | Browser grading | Permitted. A composite stages no opponent. |

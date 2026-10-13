@@ -17,7 +17,7 @@ import VaporTesting
     private func compositeManifest(_ spec: CompositeSpec = .starter) throws -> String {
         let props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "tile.sh")],
-            language: nil,
+            language: .python,
             activity: ClassActivity(kind: .classComposite, composite: spec))
         return try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
     }

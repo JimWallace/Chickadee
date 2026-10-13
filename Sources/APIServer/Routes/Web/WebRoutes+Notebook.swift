@@ -105,6 +105,12 @@ extension WebRoutes {
         {
             return redirect
         }
+        // A class composite deals the student's slot on first open inside its
+        // session window (docs/class-composite.md). Staff are never dealt one.
+        if !isStaff, !isClosed, let assignment {
+            await CompositeSlots.dealOnOpen(
+                setup: setup, assignment: assignment, userID: userID, logger: req.logger, on: req.db)
+        }
 
         let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignmentTitle = {

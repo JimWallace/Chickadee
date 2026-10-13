@@ -29,6 +29,11 @@ enum RunnerActivityGate {
         runnerProfile: RunnerCapabilityProfile?,
         manifest: TestProperties
     ) -> CompatibilityResult {
+        // A class composite stages no opponent, but its contribution needs a
+        // RunnerCore that reads the footer's `composite` object.
+        if let activity = manifest.activity, activity.kind.aggregation == .composite {
+            return require(.activityComposite, of: runnerProfile, because: "a class composite reports a contribution")
+        }
         guard let activity = manifest.activity, activity.stagesAnOpponent,
             let required = activity.kind.opponentSource.requiredRunnerCapability
         else {
@@ -44,6 +49,18 @@ enum RunnerActivityGate {
                         + "(this \(activity.kind.displayName.lowercased()) activity stages an opponent)"
                 ]
             )
+        }
+        return CompatibilityResult(isCompatible: true)
+    }
+
+    private static func require(
+        _ capability: RunnerCapability, of runnerProfile: RunnerCapabilityProfile?, because reason: String
+    ) -> CompatibilityResult {
+        guard let runnerProfile else { return CompatibilityResult(isCompatible: true) }
+        let advertised = Set(runnerProfile.capabilities.map { normalized($0.name) })
+        guard advertised.contains(normalized(capability.name)) else {
+            return CompatibilityResult(
+                isCompatible: false, reasons: ["runner does not provide \(capability.name) (\(reason))"])
         }
         return CompatibilityResult(isCompatible: true)
     }

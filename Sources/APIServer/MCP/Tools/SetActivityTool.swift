@@ -290,7 +290,8 @@ struct SetActivityTool: ContentTool {
                 .withComposite(input.composite)
         }
         do {
-            try await ActivityAuthoring.setActivity(setup: setup, to: requested, on: context.db)
+            try await ActivityAuthoring.setActivity(
+                setup: setup, to: requested, on: context.db, lockDB: context.mainDB)
         } catch let error as AppError {
             // Surface the lock as an arguments error so an agent reads a
             // fixable message rather than a 400.

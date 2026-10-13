@@ -187,6 +187,12 @@ extension WebRoutes {
             {
                 return redirect
             }
+            // As on the notebook page: deal a class composite's slot on first
+            // open inside its session window. Staff are never dealt one.
+            if !isClosed, !(try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)) {
+                await CompositeSlots.dealOnOpen(
+                    setup: setup, assignment: assignment, userID: userID, logger: req.logger, on: req.db)
+            }
         }
         let requiredFiles = manifest?.requiredFiles ?? []
         let chips = try await SubmitChips.make(setupID: setupID, assignment: assignment, user: user, on: req.db)

@@ -127,7 +127,7 @@ struct RunnerProfileDetector {
     /// the host has installed. Static so a test can pin the set without
     /// running the probes.
     static let buildCapabilities: Set<RunnerCapability> = [
-        .activityMatch, .activityOpponentSubmission, .activityMatrix,
+        .activityMatch, .activityOpponentSubmission, .activityMatrix, .activityComposite,
     ]
 
     private func platformName() -> String {

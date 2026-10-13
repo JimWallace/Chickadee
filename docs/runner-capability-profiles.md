@@ -351,6 +351,10 @@ Currently detected automatically:
     (round robin). Separate again, because a build that stages one
     submission would decode a matrix job without the list and grade it
     against nobody.
+  - `activity-composite`: this build's RunnerCore reads a test footer's
+    `composite` object (docs/class-composite.md). A class composite stages no
+    opponent, but an older build grades it while dropping the contribution
+    with no error, so `RunnerActivityGate` keeps the job away from it.
 
 Detection failures do not crash the runner. Missing tools simply do not appear
 in the advertised profile.
