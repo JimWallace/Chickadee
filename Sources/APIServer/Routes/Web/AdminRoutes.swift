@@ -170,8 +170,9 @@ struct AdminRoutes: RouteCollection {
         guard req.query[String.self, at: "fragment"] == "rows" else {
             return try await rows.encodeResponse(for: req)
         }
-        let html = UserRows(users: rows, csrfToken: PageRequestContext(request: req).csrfToken).render()
-        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
+        let csrfToken = PageRequestContext(request: req).csrfToken
+        let html = UserRows(users: rows, csrfToken: csrfToken).render()
+        return Response.pollFragment(html: ByteBuffer(string: html), csrfToken: csrfToken, for: req)
     }
 
     /// Loads every user, ordered most-recently-seen first (NULL last_seen

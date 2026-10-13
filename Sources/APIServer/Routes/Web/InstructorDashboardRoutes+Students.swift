@@ -147,12 +147,13 @@ extension InstructorDashboardRoutes {
         let canManageRoster =
             user.isAdmin || (courseState.active?.role ?? .student) >= .instructor
         let courseIsArchived = try await APICourse.find(activeCourseUUID, on: req.db)?.isArchived ?? false
+        let csrfToken = PageRequestContext(request: req).csrfToken
         let html = StudentRows(
             students: Self.splitRoster(roster.rows).students,
             rosterReadOnly: courseIsArchived || !canManageRoster,
-            csrfToken: PageRequestContext(request: req).csrfToken
+            csrfToken: csrfToken
         ).render()
-        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
+        return Response.pollFragment(html: ByteBuffer(string: html), csrfToken: csrfToken, for: req)
     }
 }
 

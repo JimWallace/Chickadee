@@ -18,6 +18,11 @@
 // otherwise disagree about the ETag for identical rows and each poll would
 // repaint whichever process it did not hit last.
 //
+// The rows carry CSRF tokens, and every token has a fresh random salt, so two
+// renders of the same rows never have the same bytes. The ETag is therefore
+// taken over the rows with the request's token removed. On a 304 the client
+// keeps its rows, and their older tokens stay valid for the same session.
+//
 // What this deliberately does NOT save is the server's own work: the rows are
 // queried and rendered before they can be hashed. Skipping that needs a cheap
 // version stamp per table (a max(updated_at) + count probe), which is a
@@ -35,8 +40,10 @@ extension Response {
         pollFragment(html: ByteBuffer(), for: req)
     }
 
-    static func pollFragment(html: ByteBuffer, for req: Request) -> Response {
-        let etag = Self.weakETag(for: html)
+    /// `csrfToken` is the token the rows were rendered with. It is left out
+    /// of the ETag, so unchanged rows get the same ETag on every poll.
+    static func pollFragment(html: ByteBuffer, csrfToken: String? = nil, for req: Request) -> Response {
+        let etag = Self.weakETag(for: html, ignoring: csrfToken)
 
         // A conditional request lists one or more candidates; `*` matches any
         // existing representation.
@@ -59,8 +66,11 @@ extension Response {
         return Response(status: .ok, headers: headers, body: .init(buffer: html))
     }
 
-    static func weakETag(for buffer: ByteBuffer) -> String {
-        let bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) ?? []
+    static func weakETag(for buffer: ByteBuffer, ignoring csrfToken: String? = nil) -> String {
+        var bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) ?? []
+        if let csrfToken, !csrfToken.isEmpty {
+            bytes = Array(String(decoding: bytes, as: UTF8.self).replacingOccurrences(of: csrfToken, with: "").utf8)
+        }
         let digest = SHA256.hash(data: Data(bytes))
         let hex = digest.map { String(format: "%02x", $0) }.joined()
         return "W/\"\(hex.prefix(32))\""
