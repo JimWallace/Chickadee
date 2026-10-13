@@ -174,6 +174,29 @@ import VaporTesting
         }
     }
 
+    /// A student's fetch carries no authoring data: no expression source,
+    /// no family or check spec, no dataset spec, no grader-only file name.
+    @Test func manifestServesOnlyTheRunnerContract() async throws {
+        try await withApp(app) { _ in
+            let manifest = try encodeManifest(BrowserRunnerManifestJSONTests.stored)
+            let setupID = try await insertSetup(manifest: manifest)
+            let cookie = try await loginAsStudent("student1", on: app)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(!res.body.string.contains("LEAK"), "authoring data reached the browser")
+                    let json = try #require(
+                        try JSONSerialization.jsonObject(with: Data(res.body.readableBytesView)) as? [String: Any])
+                    #expect((json["testSuites"] as? [[String: Any]])?.count == 1)
+                })
+        }
+    }
+
     /// docs/manifest-format-v2.md phase 4: storage can hold v2, but
     /// `browser-runner.js` reads the v1 keys, so the endpoint serves v1.
     @Test func manifestStoredAsV2IsServedAsV1() async throws {
