@@ -90,7 +90,8 @@ struct BrowserRunnerRoutes: RouteCollection {
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/manifest
 
-    /// Returns the test setup manifest (test.properties.json content) as JSON.
+    /// Returns the runner contract of the test setup manifest as JSON
+    /// (`browserRunnerManifestJSON`), never the stored manifest itself.
     ///
     /// The browser runner uses this instead of reading test.properties.json
     /// from the zip, because the zip on disk does not include that file
@@ -116,16 +117,18 @@ struct BrowserRunnerRoutes: RouteCollection {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
 
-        // Withhold the *names* of grader-only support files (option B —
-        // docs/datasets.md) from the student-facing manifest. Their contents are
-        // already withheld at every download path (#1055); this closes the
-        // residual leak where `graderOnlyFiles` still named the holdout /
-        // answer-key files in the JSON served to the student's browser.
+        // Serve the runner contract only. The stored manifest also holds
+        // authoring data that must not reach a student's browser: `=`
+        // expression source (which can call the reference solution), pattern
+        // family and notebook check specs (reference implementations, expected
+        // values for every tier), dataset specs and grader-only file names.
+        // The native runner never receives these either (`RunnerManifest`).
+        guard let body = browserRunnerManifestJSON(setup.manifest) else {
+            throw Abort(.internalServerError, reason: "The test setup manifest could not be read.")
+        }
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
-        return Response(
-            status: .ok, headers: headers,
-            body: .init(string: manifestWithGraderOnlyFilesStripped(setup.manifest)))
+        return Response(status: .ok, headers: headers, body: .init(string: body))
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/seed
@@ -235,22 +238,20 @@ struct BrowserRunnerSeedResponse: Content {
     let language: String?
 }
 
-/// Returns the manifest JSON with `graderOnlyFiles` emptied, so the
-/// student-facing browser manifest endpoint does not leak the *names* of
-/// reserved holdout / answer-key support files (option B — `docs/datasets.md`).
-/// Their contents are already withheld at every download path (#1055); this
-/// closes the residual name leak in the manifest the browser fetches.
+/// The manifest JSON that the browser runner's manifest endpoint serves: the
+/// runner contract (`RunnerManifest`), the same fields the native runner
+/// receives on `Job.manifest`, in the v1 form that `browser-runner.js` reads.
+/// Nil when the stored manifest does not decode.
 ///
-/// Strict no-op — the input is returned byte-for-byte — when there is nothing
-/// to strip: the key is absent, already empty, or the body is not a manifest.
-/// Only when grader-only names are present is the manifest re-encoded, through
-/// the typed `TestProperties` round trip every other manifest write uses
-/// (#1721), so the served bytes carry the one stable encoding; an empty list is
-/// omitted from that encoding, so the key is absent rather than `[]`.
-func manifestWithGraderOnlyFilesStripped(_ manifest: String) -> String {
-    guard var props = decodeManifest(fromJSON: manifest), !props.graderOnlyFiles.isEmpty else {
-        return manifest
-    }
-    props.graderOnlyFiles = []
-    return (try? encodeManifest(props)) ?? manifest
+/// `browser-runner.js` reads `timeLimitSeconds`, `sections` (`id`, `name`)
+/// and, per `testSuites` entry, `script`, `tier`, `name`, `dependsOn`,
+/// `points`, `timeLimitSeconds` and `sectionID`. All of them are in
+/// `RunnerManifest`. Everything that is not, such as expression source,
+/// family and check specs, datasets and grader-only file names, stays on the
+/// server.
+func browserRunnerManifestJSON(_ stored: String) -> String? {
+    guard let manifest = decodeManifest(fromJSON: stored),
+        let data = try? ManifestCodec.stableEncoder.encode(manifest.runnerManifest())
+    else { return nil }
+    return String(bytes: data, encoding: .utf8)
 }
