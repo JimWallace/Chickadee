@@ -25,7 +25,7 @@ So the controls that matter for this submission are:
    agent can forward to its model (`data-flow-inventory.md`).
 
 **Second resource (2026-07): the admin diagnostic surface.** A separate,
-read-only MCP endpoint at `POST /admin-mcp` (19 tools,
+read-only MCP endpoint at `POST /admin-mcp` (20 tools,
 `AdminMCPToolCatalog.live`) with its own RFC 8707 audience, its own scope
 vocabulary (`diagnostics:read` — no write case exists), and a consent gate of
 `isAdmin` re-checked per call. A content token cannot authenticate there and

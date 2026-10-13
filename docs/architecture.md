@@ -773,7 +773,7 @@ in [`mcp-authoring-roadmap.md`](mcp-authoring-roadmap.md).
 
 ### Admin diagnostics (`POST /admin-mcp`)
 
-A separate, **read-only** surface for operational diagnosis: **19 tools** in
+A separate, **read-only** surface for operational diagnosis: **20 tools** in
 `AdminMCPToolCatalog` (`Sources/APIServer/MCP/Admin/`) — deployment/version
 info, deploy status and history, queue state, runner listing and detail,
 metrics snapshots and timeseries, storage usage, health alerts, browser
