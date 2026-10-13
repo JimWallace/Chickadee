@@ -1,10 +1,11 @@
 # The handler rule read one line at a time, so a handler on a later line of a
-# multi-line tag passed (#2405).
+# multi-line tag passed (#2405). A JS template literal is where a multi-line
+# tag reaches the page now.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="an inline event-handler attribute on a later line of a multi-line tag"
+files="Public/app.js"
+description="an inline event-handler attribute on a later line of a multi-line tag in JS-built HTML"
 expect="inline event-handler attribute"
 apply() {
-    printf '<button\n    type="button"\n    onclick="alert(1)">Guard fixture</button>\n' \
-        >> Resources/Views/base.leaf
+    printf 'const ckGuardFixture = `<button\n    type="button"\n    onclick="go()">Guard fixture</button>`;\n' \
+        >> Public/app.js
 }

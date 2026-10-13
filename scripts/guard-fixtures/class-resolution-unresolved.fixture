@@ -1,9 +1,9 @@
 # A class with no rule is either a typo or dead markup; both render fine and
 # so are invisible to the render tests.
 guard="scripts/check-class-resolution.sh"
-files="Resources/Views/base.leaf"
-description="a class name with no stylesheet rule"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="a class name with no stylesheet rule in a Swift view"
 expect="resolve"
 apply() {
-    printf '<div class="ck-guard-fixture-no-such-rule">x</div>\n' >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = div(.class("ck-guard-fixture-no-such-rule")) { "x" }\n' >> Sources/APIServer/Views/BaseLayout.swift
 }

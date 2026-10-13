@@ -33,15 +33,15 @@ set -euo pipefail
 #      px hairlines (1px/-1px), 0, auto, %, and calc()/clamp() are outside
 #      the rule.  Preferred steps for NEW code are in docs/ui-design.md.
 #
-# Scope: Public/*.css + <style> blocks in Resources/Views/*.leaf.  The
-# token scales themselves are declared in Public/styles.css (`--text-*`,
-# `--radius-*`); check-css-vars.sh separately asserts every var() resolves.
+# Scope: Public/*.css + the PageStyle blocks of the Elementary views in
+# Sources/APIServer/Views.  The token scales themselves are declared in
+# Public/styles.css (`--text-*`, `--radius-*`); check-css-vars.sh separately
+# asserts every var() resolves.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 css_files=(Public/*.css)
-views=(Resources/Views/*.leaf)
 status=0
 
 # The spacing lattice (rule 4).  Shrink-only — see the header comment.
@@ -51,10 +51,14 @@ SPACING_STEPS=" -.25rem -.75rem .1rem .15rem .2rem .25rem .3rem .35rem .4rem .45
 # prose mentioning a hex value don't false-positive.
 # shellcheck source=lib/css.sh
 . "scripts/lib/css.sh"
-# Page CSS: served templates plus Elementary PageStyle literals.
+# Page CSS: the Elementary PageStyle literals.
 views=()
-while IFS= read -r f; do views+=("$f"); done < <(served_style_templates)
 while IFS= read -r f; do views+=("$f"); done < <(swift_page_style_files)
+if [ "${#views[@]}" -eq 0 ]; then
+  echo "ERROR: check-design-tokens found no PageStyle block under Sources/APIServer/Views."
+  echo "       The page-CSS scan is broken; fix it rather than trusting a vacuous pass."
+  exit 1
+fi
 
 # Emit "<label>:<text>" for each declaration of the given property found in
 # comment-stripped CSS on stdin.
@@ -110,7 +114,7 @@ check_source() {
   css="$(cat)"
 
   # 1. colour placement: literals allowed only on custom-property declaration
-  #    lines in Public/*.css.  Leaf <style> blocks may not contain any.
+  #    lines in Public/*.css.  Page style blocks may not contain any.
   local hexes
   if [[ "$label" == Public/*.css ]]; then
     hexes="$(printf '%s\n' "$css" \

@@ -10,7 +10,7 @@ set -euo pipefail
 #
 # The boundary is checked from both sides (#2144). A file under `Helpers/`
 # is there because it works with a request, a database driver type or a
-# model, so it must import Vapor, Fluent or Leaf, or name a model type
+# model, so it must import Vapor or Fluent, or name a model type
 # (`API...`). A Helpers file that does neither is pure and belongs in
 # `Utilities/`. Seven such files sat in Helpers/ before this check existed.
 # Before this guard the boundary leaked both ways: the migration registry and
@@ -52,7 +52,7 @@ helpers_dir="Sources/APIServer/Helpers"
 
 # An import of a framework module, with the same attribute and declaration
 # kind allowances as above.
-framework='^[[:space:]]*(@[A-Za-z_]+[[:space:]]+)*import[[:space:]]+((struct|class|enum|protocol|func|var|let|typealias)[[:space:]]+)?(Vapor|Fluent[A-Za-z]*|Leaf)([^A-Za-z0-9_]|$)'
+framework='^[[:space:]]*(@[A-Za-z_]+[[:space:]]+)*import[[:space:]]+((struct|class|enum|protocol|func|var|let|typealias)[[:space:]]+)?(Vapor|Fluent[A-Za-z]*)([^A-Za-z0-9_]|$)'
 # A Fluent model type name: `APIUser`, `APITestSetup`, ... The module's own
 # `APIServer` (in every file header) and `APIServerApp` are not models.
 model='\bAPI[A-Z][A-Za-z0-9]*\b'
@@ -62,7 +62,7 @@ names_a_model() {
 }
 
 pure=()
-# Recursive, as above: the Leaf tags sit in Helpers/LeafTags/ (#2495).
+# Recursive, as above (#2495).
 while IFS= read -r file; do
   if grep -qE "$framework" "$file"; then continue; fi
   if names_a_model "$file"; then continue; fi
@@ -70,7 +70,7 @@ while IFS= read -r file; do
 done < <(find "$helpers_dir" -name '*.swift' | sort)
 
 if [ "${#pure[@]}" -gt 0 ]; then
-  echo "ERROR: a file under $helpers_dir imports no Vapor, Fluent or Leaf and names no model."
+  echo "ERROR: a file under $helpers_dir imports neither Vapor nor Fluent and names no model."
   echo
   for file in "${pure[@]}"; do
     echo "  $file"
@@ -81,4 +81,4 @@ if [ "${#pure[@]}" -gt 0 ]; then
   exit 1
 fi
 
-echo "check-utilities-imports: OK (no Vapor or database import under $dir; every Helpers/ file needs Vapor, Fluent, Leaf or a model)"
+echo "check-utilities-imports: OK (no Vapor or database import under $dir; every Helpers/ file needs Vapor, Fluent or a model)"

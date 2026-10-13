@@ -1,5 +1,5 @@
 # Helpers/ holds code that works with a request, a database driver type or a
-# model (#2144). A Helpers file that imports none of Vapor, Fluent and Leaf
+# model (#2144). A Helpers file that imports neither Vapor nor Fluent
 # and names no model is pure, belongs in Utilities/, and must fail the guard.
 guard="scripts/check-utilities-imports.sh"
 files="Sources/APIServer/Helpers/BlockingWork.swift"

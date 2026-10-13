@@ -21,8 +21,8 @@ name: UI review
 # says so and passes. The Claude GitHub App lets the review post as
 # claude[bot]; without it the action falls back to GITHUB_TOKEN.
 #
-# The paths filter is the rule in CLAUDE.md verbatim: Resources/Views/, the
-# Elementary views in Sources/APIServer/Views/, Public/styles.css, and
+# The paths filter is the rule in CLAUDE.md: the Elementary views in
+# Sources/APIServer/Views/ (every page is one), Public/styles.css, and
 # first-party Public/*.js (one level deep, so the
 # vendored trees under Public/vendor/ and Public/jupyterlite/ do not trigger
 # it). The brief and this file are on the list so a change to either gets a
@@ -32,7 +32,6 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
     paths:
-      - "Resources/Views/**"
       - "Sources/APIServer/Views/**"
       - "Public/styles.css"
       - "Public/*.js"

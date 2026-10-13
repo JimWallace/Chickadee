@@ -1,14 +1,14 @@
 # Page CSS is where concept drift lives, so its total may only shrink. One line
 # more than the baseline always exceeds it, whatever the count is today.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="more page style lines than the baseline allows"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="more PageStyle lines than the baseline allows"
 expect="page <style> blocks grew"
 apply() {
     n="$(sed -n 's/^PAGE_STYLE_BASELINE=//p' scripts/check-styles.sh)"
-    printf '<style>\n' >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = PageStyle("""\n' >> Sources/APIServer/Views/BaseLayout.swift
     for i in $(seq 0 "$n"); do
-        printf '.guard-fixture-growth-%s { padding: 1rem; }\n' "$i" >> Resources/Views/base.leaf
+        printf '    .guard-fixture-growth-%s { padding: 1rem; }\n' "$i" >> Sources/APIServer/Views/BaseLayout.swift
     done
-    printf '</style>\n' >> Resources/Views/base.leaf
+    printf '    """)\n' >> Sources/APIServer/Views/BaseLayout.swift
 }

@@ -8,10 +8,11 @@ set -euo pipefail
 # passes every test — so they need a static guard.  The convention:
 #
 #   * Shared styling lives in Public/styles.css; page-unique styling lives in a
-#     page-local <style> block with role-named classes.
-#   * No inline style="" in templates EXCEPT a JS-toggled `display:none` initial
-#     state or a CSS custom-property assignment (e.g. style="--wb-left-width:42%").
-#   * No new native alert() in templates or first-party Public/*.js — use the
+#     view's PageStyle block with role-named classes.
+#   * No inline style="" in a view or a JS-built HTML string EXCEPT a
+#     JS-toggled `display:none` initial state or a CSS custom-property
+#     assignment (e.g. style="--wb-left-width:42%").
+#   * No new native alert() in a view or first-party Public/*.js — use the
 #     inline .form-error pattern.
 #   * Every var(--x) resolves, and no var(--x, #hex) colour fallbacks (see
 #     scripts/check-css-vars.sh).
@@ -24,12 +25,21 @@ cd "$repo_root"
 # shellcheck source=lib/css.sh
 . "scripts/lib/css.sh"
 
-views=(Resources/Views/*.leaf)
-# Page CSS lives in template <style> blocks and in Elementary PageStyle
-# literals; the page-CSS rules (4, 4b) read both.
+# Every page is an Elementary view (docs/elementary-spike.md). The rules below
+# that grep markup source read the view files; the rules that need rendered
+# markup (inline style values, inline scripts and handlers, per-datum custom
+# properties, sortable headers) are in Tests/APITests/RenderedMarkupRules.swift
+# and run in ElementaryPageGuardTests. Each section below says which.
+views=()
+while IFS= read -r f; do views+=("$f"); done < <(swift_view_files)
+# Page CSS lives in the views' PageStyle literals; rules 4 and 4b read those.
 style_views=()
-while IFS= read -r f; do style_views+=("$f"); done < <(served_style_templates)
 while IFS= read -r f; do style_views+=("$f"); done < <(swift_page_style_files)
+if [ "${#views[@]}" -eq 0 ] || [ "${#style_views[@]}" -eq 0 ]; then
+  echo "ERROR: check-styles found no Swift view or no PageStyle block under Sources/APIServer/Views."
+  echo "       The scan is broken; fix it rather than trusting a vacuous pass."
+  exit 1
+fi
 status=0
 
 # ── 1. CSS custom-property guard ────────────────────────────────────────────
@@ -42,14 +52,20 @@ scripts/check-design-tokens.sh || status=1
 scripts/check-maintenance-palette.sh || status=1
 
 # ── 2. Inline-style allowlist ───────────────────────────────────────────────
-# A style="" attribute is allowed only if every ;-separated declaration is
+# A style attribute is allowed only if every ;-separated declaration is
 # `display:none` or a `--custom-prop:` assignment.  Anything else (margins,
-# colours, flex, …) belongs in a semantic class.
+# colours, flex, …) belongs in a semantic class.  Three halves:
+#   * here, the string literals of every `.custom(name: "style", …)` call in
+#     a Swift view, so a branch that no fixture renders is covered;
+#   * RenderedMarkupRules.inlineStyleViolations, run on every rendered fixture
+#     by ElementaryPageGuardTests, which also sees a value held in a variable;
+#     the SwiftLint rule elementary_no_inline_style bans `.style(`;
+#   * rule 3e below, for JS-built HTML strings.
+# style_values prints `file:line<TAB>value` for each Swift style attribute.
+style_values() { swift_call_literals 'name: "style",' '' "${views[@]}"; }
 inline_violations=""
-while IFS= read -r hit; do
-  [ -z "$hit" ] && continue
-  # hit = path:line:style="..."
-  value="$(printf '%s' "$hit" | sed -E 's/.*style="([^"]*)".*/\1/')"
+while IFS=$'\t' read -r where value; do
+  [ -z "$where" ] && continue
   ok=1
   IFS=';' read -ra decls <<< "$value"
   for decl in "${decls[@]}"; do
@@ -61,27 +77,30 @@ while IFS= read -r hit; do
       *) ok=0 ;;
     esac
   done
-  [ "$ok" -eq 0 ] && inline_violations+="  ${hit}"$'\n'
-done < <(grep -rno 'style="[^"]*"' "${views[@]}" || true)
+  [ "$ok" -eq 0 ] && inline_violations+="  ${where}: style=\"${value}\""$'\n'
+done < <(style_values)
 
 if [ -n "$inline_violations" ]; then
   status=1
-  echo "ERROR: disallowed inline style=\"\" in a template."
+  echo "ERROR: disallowed inline style=\"\" in a Swift view."
   echo "       Move it to a semantic CSS class.  Inline styles are permitted"
   echo "       only for a JS-toggled display:none or a --custom-prop assignment."
   printf '%s' "$inline_violations"
   echo
 fi
 
-# ── 3. No new native alert() in templates ───────────────────────────────────
+# ── 3. No new native alert() in a Swift view ────────────────────────────────
 # At ZERO as of the S9 feedback-channel consolidation: every blocking error
 # now uses the inline .form-error banner (ChickadeeUI.showActionError). The
-# baseline may only go DOWN, so from here the rule is absolute.
+# baseline may only go DOWN, so from here the rule is absolute.  A view could
+# only carry one in an attribute value or an inline script, and both are
+# refused on the rendered page too; this reads the source, so it also sees a
+# branch that no fixture renders.
 ALERT_BASELINE=0
 alert_count="$( { grep -rho 'alert(' "${views[@]}" || true; } | wc -l | tr -d ' ')"
 if [ "$alert_count" -gt "$ALERT_BASELINE" ]; then
   status=1
-  echo "ERROR: new native alert() in a template (found ${alert_count}, baseline ${ALERT_BASELINE})."
+  echo "ERROR: new native alert() in a Swift view (found ${alert_count}, baseline ${ALERT_BASELINE})."
   echo "       Surface errors with the inline .form-error pattern instead."
   grep -rn 'alert(' "${views[@]}" | sed 's/^/  /'
   echo
@@ -90,9 +109,9 @@ elif [ "$alert_count" -lt "$ALERT_BASELINE" ]; then
 fi
 
 # ── 3a. No new native alert() in first-party JS ─────────────────────────────
-# Same rule, same direction, for Public/*.js.  The template ratchet alone was
-# leaky: the inline-script ratchet (3b) pushes page JS out into Public/*.js,
-# which the template glob never sees — so an alert() could be laundered out of
+# Same rule, same direction, for Public/*.js.  The view ratchet alone was
+# leaky: the inline-script rule (3b) pushes page JS out into Public/*.js,
+# which the view scan never sees — so an alert() could be laundered out of
 # scope by the very move 3b encourages.  Top-level Public/*.js only; the
 # vendored/generated trees (Public/pyodide, Public/jupyterlite, Public/vendor,
 # Public/runner-wasm) are not ours to lint.  Also at ZERO as of S9.
@@ -109,69 +128,20 @@ elif [ "$js_alert_count" -lt "$JS_ALERT_BASELINE" ]; then
 fi
 
 # ── 3b. Inline <script> is closed (#1135; last holdout retired by #1516) ────
-# JS inside a template <script> block is invisible to every tool — ESLint
-# can't parse Leaf-interpolated JS, CodeQL skips it, node --check can't run
-# it.  Page behaviour lives in Public/*.js files (loaded with <script src>);
-# a template carries data via data-* attributes or a single-line JSON island.
-# The 2026-08 pass externalized every page's blocks and left base.leaf's
-# multipart-CSRF interceptor as a line-ratcheted holdout; #1516 moved that to
-# /multipart-forms.js so 'unsafe-inline' could leave the CSP script-src.  The
-# rule is now absolute and has no allowed file: an inline script added to a
-# template would not merely be unlinted, it would NOT RUN.
-# <script src=…> includes and single-line <script …>…</script> elements
-# (the JSON seed islands) don't count here — rule 3b-2 covers those.
-count_inline_script() {
-  # Non-blank lines inside multi-line <script> bodies.  A single-line
-  # element must match on "<script" (not "<script>"): the JSON islands carry
-  # id/type attributes, and treating them as block openers leaks the
-  # in-script state across the rest of the file.
-  awk '
-    /<script[^>]*src=/ { next }
-    /<script/ && /<\/script>/ { next }
-    /<script/ { inscript = 1; next }
-    /<\/script>/ { inscript = 0; next }
-    inscript && NF > 0 { n++ }
-    END { print n + 0 }
-  ' "$1"
-}
-inline_script_offenders=""
-for f in "${views[@]}"; do
-  n="$(count_inline_script "$f")"
-  [ "$n" -gt 0 ] && inline_script_offenders+="  ${f} (${n} lines)"$'\n'
-done
-if [ -n "$inline_script_offenders" ]; then
-  status=1
-  echo "ERROR: multi-line inline <script> in a template."
-  echo "       Put page JS in a Public/*.js file (loaded with <script src>) so it"
-  echo "       is linted and testable; pass page data via data-* attributes or a"
-  echo "       single-line JSON island.  See docs/ui-design.md."
-  printf '%s' "$inline_script_offenders"
-  echo
-fi
-
-# ── 3b-2. A single-line inline <script> must be a DATA block ────────────────
-# Rule 3b skips one-line <script …>…</script> elements because that is the
-# shape of the JSON seed islands (`type="application/json"`), which are data,
-# never executed, and which `script-src` therefore does not govern.  Written
-# without a type — or with a JavaScript one — the same shape IS executed, slips
-# past 3b on a technicality, and is blocked at run time by the CSP with no
-# error a test would see.  So: a one-line inline script must declare a
-# non-JavaScript type.
-one_line_script_offenders="$(
-  grep -nE '<script[^>]*>[^<]*</script>' "${views[@]}" 2>/dev/null \
-    | grep -v 'src=' \
-    | grep -vE 'type="(application/json|application/ld\+json|text/template)"' \
-    || true
-)"
-if [ -n "$one_line_script_offenders" ]; then
-  status=1
-  echo "ERROR: executable single-line inline <script> in a template."
-  echo "       The CSP script-src carries no 'unsafe-inline', so this would not run."
-  echo "       Put the code in a Public/*.js file loaded with <script src>, or give"
-  echo "       the element a data type (application/json) if it is a seed island."
-  printf '%s\n' "$one_line_script_offenders"
-  echo
-fi
+# JS inside an inline <script> block is invisible to every tool — ESLint,
+# CodeQL and node --check all skip it.  Page behaviour lives in Public/*.js
+# files (loaded with <script src>); a page carries data via data-* attributes
+# or a JSON island (JSONIsland.swift).  #1516 moved the last holdout out so
+# 'unsafe-inline' could leave the CSP script-src: an inline script added to a
+# page would not merely be unlinted, it would NOT RUN.
+#
+# 3b-2. A one-line inline <script> must be a DATA block (a JSON island); with
+# no type, or a JavaScript one, it is executed and blocked by the CSP.
+#
+# Both rules read markup, so for a Swift view they live on the rendered page:
+# RenderedMarkupRules.scriptViolations, run on every fixture by
+# ElementaryPageGuardTests.scriptsCarryNoInlineCodeAndNoHandlers.  Its "rule
+# fires" check is eachRuleRejectsAPageThatBreaksIt.
 
 # ── 3b-3. No inline event-handler attributes ────────────────────────────────
 # An onclick= / onchange= attribute is an inline script by another name, and
@@ -180,9 +150,13 @@ fi
 # added here does not fail loudly; the control simply stops responding.  The
 # replacement is a data attribute read by a delegated listener: see the
 # declarative control behaviours at the foot of Public/app.js.
-# The scan reads each tag whole, so it finds a handler on a later line of a
-# multi-line tag and one in single quotes, and it reads the HTML strings in
-# Public/*.js that reach the page through innerHTML (#2405).
+# Two halves.  The HTML strings in Public/*.js that reach the page through
+# innerHTML are scanned here, a tag at a time, so a handler on a later line of
+# a multi-line tag and one in single quotes are found (#2405).  A Swift view's
+# rendered markup is held to the same rule by
+# RenderedMarkupRules.scriptViolations; its source is grepped here too for the
+# two ways Elementary spells a handler (`.on(.click, …)` and a custom `on…`
+# attribute), so a branch no fixture renders is covered.
 event_attr_offenders="$(
   awk '
     FNR == 1 && NR > 1 { scan(prev) }
@@ -202,11 +176,12 @@ event_attr_offenders="$(
         rest = substr(rest, 2)
       }
     }
-  ' "${views[@]}" Public/*.js
+  ' Public/*.js
+  grep -nE '\.on\(\.[a-zA-Z]+|name: *"on[a-z]+"' "${views[@]}" || true
 )"
 if [ -n "$event_attr_offenders" ]; then
   status=1
-  echo "ERROR: inline event-handler attribute in a template or a JS-built HTML string."
+  echo "ERROR: inline event-handler attribute in a Swift view or a JS-built HTML string."
   echo "       The CSP script-src carries no 'unsafe-inline', so this handler would"
   echo "       never fire.  Use a data-* attribute plus a delegated listener in"
   echo "       Public/app.js — see the declarative control behaviours there."
@@ -270,7 +245,7 @@ if [ -n "$s3d" ]; then
 fi
 
 # ── 3e. style=\" in a JS-built HTML string must be custom-prop-only ──────────
-# The same rule templates already live under (section 2): a style attribute
+# The same rule Swift views live under (section 2): a style attribute
 # inside a generated-HTML string may only assign CSS custom properties (e.g.
 # the meter's --bar-h) or the JS-toggled display:none initial state. Anything
 # else is a styling decision the CSS guards cannot see. The editors' row
@@ -298,7 +273,7 @@ if [ -n "$js_inline_violations" ]; then
   echo "ERROR: disallowed style=\"\" inside a JS-built HTML string."
   echo "       Use a class from Public/styles.css. A style attribute in generated"
   echo "       markup may only assign a --custom-prop or the display:none initial"
-  echo "       state — the same rule templates follow."
+  echo "       state — the same rule Swift views follow."
   printf '%s' "$js_inline_violations"
   echo
 fi
@@ -377,7 +352,7 @@ fi
 # it (#2399, #2400; #2320 was the same defect). For each top-level rule whose
 # selector is one such class, the guard reports a later top-level rule for
 # exactly `.x` that sets the same property, when the two class names share a
-# line in a template or a first-party JS file (a child element such as
+# line in a Swift view or a first-party JS file (a child element such as
 # `.card-meta` is never on the same element as `.card`).
 modifier_order_hits="$(
   strip_css_comments < Public/styles.css | awk '
@@ -481,10 +456,15 @@ fi
 # ── 4c. Consolidated widget idioms may not fork back (ui-consistency-audit) ─
 # S1: live list filtering is Public/list-filter.js (input[data-list-filter]).
 # The two idioms it replaced must not return: a page-local filter
-# implementation in an inline script, or the readonly-until-focus autofill
-# hack hand-carried in template markup (the component owns that suppression).
-s1_hack="$(grep -rn "onfocus=\"this\.removeAttribute('readonly')\"" "${views[@]}" || true)"
-s1_local="$(grep -rnE 'function apply[A-Za-z]*Filter' "${views[@]}" || true)"
+# implementation, or the readonly-until-focus autofill hack hand-carried in
+# markup (the component owns that suppression).  Page JS lives in Public/*.js
+# now, so that is where a page-local filter would appear; the component's own
+# file is exempt.  The hack is an attribute value, so it is read in the Swift
+# views and in JS-built HTML strings.
+s1_hack="$(grep -rn "removeAttribute('readonly')" "${views[@]}" || true)
+$(grep -n "onfocus=\"this\.removeAttribute('readonly')\"" Public/*.js || true)"
+s1_hack="$(sed '/^$/d' <<< "$s1_hack")"
+s1_local="$(grep -nE 'function apply[A-Za-z]*Filter' Public/*.js | grep -v '^Public/list-filter\.js:' || true)"
 if [ -n "${s1_hack}${s1_local}" ]; then
   status=1
   echo "ERROR: a page re-implements the shared list-filter idiom."
@@ -498,7 +478,7 @@ fi
 # filter boxes shared list-filter.js and still came in three widths — two inline
 # --filter-width values plus a page-local flex basis — because the property read
 # as a per-page dial. It is declared once in styles.css (:root) and may not be
-# re-assigned in a template.
+# re-assigned in a view.
 #
 # The rest of the contract (a .filter-group wrapper, type=search, no markup
 # autocomplete, live-or-GET-form) is structural, so it is asserted by walking the
@@ -519,28 +499,33 @@ fi
 # every one carries a palette token chosen for the STUDENT the server is
 # rendering, so no stylesheet can hold it and no modifier class could enumerate
 # 9,216 of them. They are a closed set, five today, listed with the field each
-# reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift); the
-# partial test derives from that list, so a page cannot invent a sixth.
+# reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift).
+#
+# Two halves read this one list. Here, the literal style values of the Swift
+# views (section 2's style_values), so a branch no fixture renders is covered.
+# On the rendered page, RenderedMarkupRules.perPageInlinePropertyViolations
+# (ElementaryPageGuardTests.inlineCustomPropertiesArePerDatum) reads the list
+# from this line, and also sees a value held in a variable, such as the
+# avatar's; it asserts every AvatarPresentation.inlineProperties name is here.
 PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border"
 # Every custom property in the attribute is checked, wherever it sits: the
 # first one only, in an attribute that starts with `--`, let a second one or
 # one after `display:none;` through (#2404).
 inline_prop_violations=""
-while IFS= read -r hit; do
-  [ -z "$hit" ] && continue
-  value="$(printf '%s' "$hit" | sed -E 's/.*style="([^"]*)".*/\1/')"
+while IFS=$'\t' read -r where value; do
+  [ -z "$where" ] && continue
   while IFS= read -r name; do
     [ -z "$name" ] && continue
     case " $PER_DATUM_INLINE_PROPS " in
       *" $name "*) ;;
-      *) inline_prop_violations+="  ${hit}"$'\n'; break ;;
+      *) inline_prop_violations+="  ${where}: style=\"${value}\""$'\n'; break ;;
     esac
   done < <(printf '%s' "$value" | grep -oE -- '--[A-Za-z0-9_-]+[[:space:]]*:' | sed -E 's/[[:space:]]*:$//')
-done < <(grep -rno 'style="[^"]*--[^"]*"' "${views[@]}" || true)
+done < <(style_values)
 
 if [ -n "$inline_prop_violations" ]; then
   status=1
-  echo "ERROR: a template assigns a component custom property inline."
+  echo "ERROR: a Swift view assigns a component custom property inline."
   echo "       A component's width is one decision, declared in styles.css"
   echo "       (:root), or a named modifier class there — never an inline"
   echo "       number, which no review reads and every page can differ on."
@@ -552,21 +537,25 @@ fi
 # S2: column sorting is Public/sortable-table.js (.sortable-table +
 # th > button.sort-header). The two dialects it replaced must not return: a
 # page-local sort implementation, or a page-local sort affordance (the
-# th[data-sort-key]::after glyph CSS, the .sort-icon span). A th that declares
-# data-sort-type must carry the shared button, or it is decorative markup that
-# sorts nothing.
-s2_impl="$(grep -rnE 'function sort[A-Za-z]*(ByHeader|Rows|Array)' "${views[@]}" || true)"
-s2_glyph="$(grep -rnE 'data-sort-key\]::after|class="sort-icon"' "${views[@]}" Public/*.css || true)"
-s2_orphan="$(grep -rn 'data-sort-type' "${views[@]}" | grep -v 'sort-header' || true)"
-if [ -n "${s2_impl}${s2_glyph}${s2_orphan}" ]; then
+# th[data-sort-key]::after glyph CSS, the .sort-icon span). Page JS lives in
+# Public/*.js, so a page-local sorter is looked for there, outside the
+# component's own file. The glyph is looked for in the stylesheets, the page
+# CSS and markup of the Swift views, and JS-built HTML.
+# A th that declares data-sort-type must carry the shared button, or it is
+# decorative markup that sorts nothing. In a Swift view the button sits on a
+# later line than the th, so that half reads the rendered page:
+# RenderedMarkupRules.orphanSortHeaderViolations
+# (ElementaryPageGuardTests.everySortableHeaderCarriesTheSharedButton).
+s2_impl="$(grep -nE 'function sort[A-Za-z]*(ByHeader|Rows|Array)' Public/*.js | grep -v '^Public/sortable-table\.js:' || true)"
+s2_glyph="$(grep -rnE 'data-sort-key\]::after|class="sort-icon"|\.class\("([^"]* )?sort-icon[ "]' "${views[@]}" Public/*.css Public/*.js || true)"
+if [ -n "${s2_impl}${s2_glyph}" ]; then
   status=1
   echo "ERROR: a page re-implements the shared sortable-table idiom."
   echo "       Use .sortable-table + <th data-sort-key data-sort-type>"
   echo "       <button class=\"sort-header\">, and Public/sortable-table.js's"
   echo "       apply() to restore the sort after a repaint."
   { [ -n "$s2_impl" ] && printf '%s\n' "$s2_impl"
-    [ -n "$s2_glyph" ] && printf '%s\n' "$s2_glyph"
-    [ -n "$s2_orphan" ] && printf '%s\n' "$s2_orphan"; } | sed 's/^/  /'
+    [ -n "$s2_glyph" ] && printf '%s\n' "$s2_glyph"; } | sed 's/^/  /'
   echo
 fi
 
@@ -575,17 +564,31 @@ fi
 # the trash can had fifteen, in three byte-level variants, which is how "change
 # the delete icon" became a grep-and-pray.
 #
-# TWO files may hold geometry, for two different vocabularies: _icons.leaf is
-# the stroked 24x24 Feather set inlined on every page, and _avatar-sprite.leaf
-# is the flat-filled 64x64 chickadee parts, included only by pages that show an
-# avatar. A third would want the same justification: a distinct vocabulary with
-# a distinct set of pages, not just somewhere else to paste a path.
-s4_svg="$(grep -rln '<path d=\|<polyline points=\|<circle cx=' "${views[@]}" Public/*.js \
-  | grep -vE 'Resources/Views/(_icons|_avatar-sprite)\.leaf' || true)"
+# TWO files may hold geometry, for two different vocabularies:
+# Resources/Sprites/icons.svg is the stroked 24x24 Feather set inlined on every
+# page, and Resources/Sprites/avatar-sprite.svg is the flat-filled 64x64
+# chickadee parts, included only by pages that show an avatar. A third would
+# want the same justification: a distinct vocabulary with a distinct set of
+# pages, not just somewhere else to paste a path.
+#
+# Read: every Swift view, in both spellings (raw markup in a string, and
+# Elementary's SVG attributes `.d(`, `.points(`, `.cx(` or a custom attribute
+# of those names); JS-built HTML; and every other .svg under Resources/.
+s4_svg="$(
+  {
+    grep -lE '<path d=|<polyline points=|<circle cx=|\.(d|points|cx)\(|name: *"(d|points|cx)"' "${views[@]}" || true
+    grep -lE '<path d=|<polyline points=|<circle cx=' Public/*.js || true
+    find Resources -name '*.svg' 2>/dev/null \
+      | grep -vxE 'Resources/Sprites/(icons|avatar-sprite)\.svg' \
+      | while IFS= read -r f; do grep -lE '<path |<polyline |<circle |<polygon |<rect |<ellipse |<line ' "$f" || true; done \
+      || true
+  } | sed '/^$/d'
+)"
 if [ -n "$s4_svg" ]; then
   status=1
   echo "ERROR: inline SVG geometry outside the icon sprite."
-  echo "       Add a <symbol> to Resources/Views/_icons.leaf and reference it:"
+  echo "       Add a <symbol> to Resources/Sprites/icons.svg and reference it:"
+  echo "       Icon(\"name\") in a view, or in JS-built HTML"
   echo "       <svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-name\"/></svg>"
   printf '%s\n' "$s4_svg" | sed 's/^/  /'
   echo
@@ -600,16 +603,17 @@ fi
 # check used to carry for it is gone. The rule is now absolute, like the
 # alert() ratchets above — the native dialog was the last piece of UI outside
 # the design system, unthemed and invisible to the axe scan.
-s5_inline="$(grep -rnE 'on(click|submit)="return (window\.)?confirm\(' "${views[@]}" || true)"
+# The Swift views are read as source: a confirm() there could only sit in an
+# attribute value or a script body, which the rendered page refuses as well
+# (3b-3), but this also sees a branch no fixture renders.
 s5_raw="$(grep -rnE '(^|[^.\w])confirm\(' "${views[@]}" Public/*.js \
   | grep -v 'ChickadeeUI.confirmAction' || true)"
-if [ -n "${s5_inline}${s5_raw}" ]; then
+if [ -n "${s5_raw}" ]; then
   status=1
   echo "ERROR: a native confirm() — the shared dialog is the only one."
   echo "       Declare the question in markup with data-confirm=\"…\", or await"
   echo "       ChickadeeUI.confirmAction(msg) where there is no element to mark."
-  { [ -n "$s5_inline" ] && printf '%s\n' "$s5_inline"
-    [ -n "$s5_raw" ] && printf '%s\n' "$s5_raw"; } | sed 's/^/  /'
+  printf '%s\n' "$s5_raw" | sed 's/^/  /'
   echo
 fi
 
@@ -638,12 +642,6 @@ scripts/check-class-resolution.sh || status=1
 # plus the two things nothing else looks at: the affordances that tell a user
 # an element is interactive, and how much prose a tooltip carries.
 scripts/check-ui-vocabulary.sh || status=1
-
-# ── 7. Leaf idioms that render fine and resolve wrong ───────────────────────
-# A Swift property on a collection (`rows.isEmpty`) and a `#//` line comment
-# both render without an error, so no render test sees them. CI ran this as
-# its own step, so this, the one local entry point, missed it (#1978).
-scripts/check-leaf-semantics.sh || status=1
 
 if [ "$status" -eq 0 ]; then
   echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors; ratchets within baseline)"

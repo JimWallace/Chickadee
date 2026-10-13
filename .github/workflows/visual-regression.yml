@@ -24,9 +24,12 @@ on:
     paths:
       - "Public/**"
       - "!Public/jupyterlite/**"
-      - "Resources/Views/**"
-      # The route code builds each page's Leaf context, so a change there can
-      # change what a page renders with no template edit (#2409).
+      # Every page is an Elementary view; the icon and avatar sprites are
+      # files under Resources/Sprites/.
+      - "Sources/APIServer/Views/**"
+      - "Resources/Sprites/**"
+      # The route code builds each page's view model, so a change there can
+      # change what a page renders with no view edit (#2409).
       - "Sources/APIServer/Routes/Web/**"
       - "Tools/visual-regression/**"
       - ".github/workflows/visual-regression.yml"

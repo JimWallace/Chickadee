@@ -1,9 +1,10 @@
 # A page block re-defining a selector whose global rule is a one-line @media
 # block passed, because the global selector scan lost it (#2403).
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="a page style block re-defining a selector the global sheet sets in a one-line @media rule"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="a PageStyle block re-defining a selector the global sheet sets in a one-line @media rule"
 expect="re-defines a selector from the global sheet"
 apply() {
-    printf '<style>\n.col-hide-phone { color: inherit; }\n</style>\n' >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = PageStyle("""\n    .col-hide-phone { color: inherit; }\n    """)\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
 }

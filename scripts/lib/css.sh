@@ -32,53 +32,91 @@ strip_css_comments() {
   ' "$@"
 }
 
-# Prints every <style> ... </style> block of the named templates, in order.
-# An Elementary view (a .swift file) holds its page CSS in a
-# PageStyle("""...""") literal instead; its body is printed between <style>
-# and </style> lines, so every caller reads both kinds the same way.
+# Prints the page CSS of the named Elementary views (.swift files), in order.
+# A view holds its page CSS in a PageStyle("""...""") literal. Its body is
+# printed between <style> and </style> lines, so a caller reads every view's
+# page CSS as a run of style blocks.
 page_style_blocks() {
   local f
   for f in "$@"; do
-    case "$f" in
-      *.swift)
-        awk '
-          /PageStyle\(/ { pending = 1 }
-          pending && !inblock && /"""/ { inblock = 1; pending = 0; print "<style>"; next }
-          inblock && /"""/ { inblock = 0; print "</style>"; next }
-          inblock { print }
-        ' "$f"
-        ;;
-      *) sed -n '/<style>/,/<\/style>/p' "$f" ;;
-    esac
-  done
-}
-
-# Templates that no route renders any more: their page moved to an Elementary
-# view, and the template stays only because PageArchetypeTests reads it as an
-# archetype exemplar (docs/ui-design.md). Their page CSS lives in the Swift
-# view now, so the page-CSS rules skip the template copy rather than count the
-# same rules twice. The list shrinks to nothing when the exemplars move to
-# Swift (docs/elementary-spike.md); never add a template that is still served.
-# Exceptions: the body partials that the exemplars `assignment-edit.leaf` and
-# `workbench.leaf` extend (`_notebook-body.leaf` as `NotebookBody`,
-# `_assignment-edit-body.leaf` as `AssignmentEditBody`). They are not served
-# either; they stay because the test resolves an exemplar's partials. Their CSS
-# is the same rules as the Swift copies, so it is counted once, from the Swift.
-retired_exemplar_templates="Resources/Views/admin-user.leaf Resources/Views/register.leaf Resources/Views/alerts.leaf Resources/Views/instructor-mcp.leaf Resources/Views/account.leaf Resources/Views/assignment-edit.leaf Resources/Views/_notebook-body.leaf Resources/Views/_assignment-edit-body.leaf Resources/Views/workbench.leaf"
-
-# Prints the templates whose page CSS the style guards read: every template
-# except the retired exemplars above.
-served_style_templates() {
-  local f
-  for f in Resources/Views/*.leaf; do
-    case " $retired_exemplar_templates " in *" $f "*) ;; *) printf '%s\n' "$f" ;; esac
+    awk '
+      /PageStyle\(/ { pending = 1 }
+      pending && !inblock && /"""/ { inblock = 1; pending = 0; print "<style>"; next }
+      inblock && /"""/ { inblock = 0; print "</style>"; next }
+      inblock { print }
+    ' "$f"
   done
 }
 
 # Prints the Elementary view files that hold a PageStyle block, one per line,
-# in a stable order. The style guards add these to the templates they read.
+# in a stable order. These are the page CSS the style guards read.
 swift_page_style_files() {
   grep -rlE 'PageStyle\(' Sources/APIServer/Views --include='*.swift' 2>/dev/null \
     | while IFS= read -r f; do grep -q '"""' "$f" && printf '%s\n' "$f"; done \
     | LC_ALL=C sort
+}
+
+# Prints every Elementary view source file, one per line, in a stable order.
+# Every page is built from these. The guards that grep markup source read
+# them; the rules that need rendered markup are in
+# Tests/APITests/RenderedMarkupRules.swift.
+swift_view_files() {
+  find Sources/APIServer/Views -name '*.swift' | LC_ALL=C sort
+}
+
+# swift_call_literals NEEDLE SEP FILE...
+#
+# For each call in the Swift files whose text starts with NEEDLE (which ends
+# inside the call's argument list, e.g. `.class(` or
+# `.custom(name: "style", value:`), prints `file:line<TAB>literals`: the text
+# of every string literal among the call's arguments, joined with SEP.
+#
+# The walk tracks strings, interpolations and parentheses, so it reads a call
+# that spans lines, a value concatenated with `+` (SEP ""), every literal of a
+# ternary (`.class(open ? "a b" : "a")`, SEP " "), and a literal inside an
+# interpolation (`"card \(open ? "is-open" : "")"`). An interpolation becomes
+# `_` in the literal around it. A value held in a variable is out of reach;
+# the rendered-page rules (Tests/APITests/RenderedMarkupRules.swift) read it.
+swift_call_literals() {
+  local needle="$1" sep="$2"
+  shift 2
+  awk -v needle="$needle" -v sep="$sep" '
+    FNR == 1 && NR > 1 { walk(text, prev) }
+    FNR == 1 { text = ""; prev = FILENAME }
+    { text = text $0 "\n" }
+    END { if (NR > 0) walk(text, prev) }
+    function walk(text, file,   n, i, p, top, mode, depth, seg, ch, out, nested, line, start, pre) {
+      n = length(text); i = 1; line = 1
+      while (i <= n) {
+        p = index(substr(text, i), needle)
+        if (p == 0) break
+        pre = substr(text, i, p - 1); line += gsub(/\n/, "\n", pre)
+        i += p - 1 + length(needle); start = line
+        # A stack of modes: "c" is code, with a paren depth; "s" is a string.
+        # A literal of the call itself is at depth 2 of the stack; one inside
+        # an interpolation is deeper, and is printed after the call literals
+        # so it never splits a concatenated value.
+        top = 1; mode[1] = "c"; depth[1] = 1; out = ""; nested = ""
+        while (i <= n && top > 0) {
+          ch = substr(text, i, 1)
+          if (ch == "\n") line++
+          if (mode[top] == "c") {
+            if (ch == "\"") { top++; mode[top] = "s"; seg[top] = "" }
+            else if (ch == "(") depth[top]++
+            else if (ch == ")") { depth[top]--; if (depth[top] == 0) top-- }
+            i++
+          } else if (ch == "\\") {
+            if (substr(text, i + 1, 1) == "(") { seg[top] = seg[top] "_"; top++; mode[top] = "c"; depth[top] = 1 }
+            i += 2
+          } else if (ch == "\"" || ch == "\n") {
+            if (top == 2) out = (out == "") ? seg[top] : out sep seg[top]
+            else nested = (nested == "") ? seg[top] : nested " " seg[top]
+            top--; i++
+          } else { seg[top] = seg[top] ch; i++ }
+        }
+        if (nested != "") out = (out == "") ? nested : out " " nested
+        print file ":" start "\t" out
+      }
+    }
+  ' "$@"
 }
