@@ -50,7 +50,8 @@ def main() -> None:
     result = subprocess.run(
         [script],
         cwd=project_dir,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         check=False,
     )
@@ -60,15 +61,23 @@ def main() -> None:
     # The summary is at the end of the output. Keep the last lines, which name
     # each failing step, and enough of the log above them to show the error.
     tail = "\n".join(result.stdout.strip().splitlines()[-60:])
+    if result.returncode == 2:
+        reason = (
+            "scripts/format-lint.sh could not read the format-lint job from "
+            ".github/workflows/swift-tests.yml, so the push did not run. "
+            "Fix the script or the workflow, then push again.\n\n" + tail
+        )
+    else:
+        reason = (
+            "scripts/format-lint.sh failed, so the push did not run. "
+            "Fix each failing step, then push again.\n\n" + tail
+        )
     json.dump(
         {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    "scripts/format-lint.sh failed, so the push did not run. "
-                    "Fix each failing step, then push again.\n\n" + tail
-                ),
+                "permissionDecisionReason": reason,
             }
         },
         sys.stdout,

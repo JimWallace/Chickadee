@@ -7,7 +7,7 @@ set -uo pipefail
 # The list of steps is not copied here. The script reads it from the
 # `format-lint` job in .github/workflows/swift-tests.yml, so a step added to
 # CI runs here too, with no edit. The `lint-guard` agent and the Claude Code
-# pre-push hook (.claude/hooks/pre-push-format-lint.sh) both run this script.
+# pre-push hook (.claude/hooks/pre-push-format-lint.py) both run this script.
 #
 # Usage:
 #   scripts/format-lint.sh          run every step, print a summary

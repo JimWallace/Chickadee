@@ -299,9 +299,17 @@ rules and the SSO details are in `Sources/APIServer/CLAUDE.md`.
 ## JupyterLite
 
 Chickadee embeds JupyterLite at `Public/jupyterlite/`, which is generated output
-and is checked in. The config and the rules for the vendored kernels are in
+and is checked in. Every browser grader and every editor kernel is xeus (#1271,
+done). The config and the rules for the vendored kernels are in
 `Tools/jupyterlite/CLAUDE.md`; the measurements are in
-[docs/jupyterlite.md](docs/jupyterlite.md).
+[docs/jupyterlite.md](docs/jupyterlite.md) and
+`docs/archive/xeus-python-grading-*`.
+
+Read `Tools/jupyterlite/CLAUDE.md` before you change `Public/jupyterlite/`,
+`Public/vendor/`, a kernel environment file, `scripts/build-jupyterlite.sh`,
+`scripts/check-xeus-vendored.sh`, a `scripts/patch-*.py` file or
+`.github/workflows/revendor-kernels.yml`. Claude Code does not load it by
+itself for those paths.
 
 ---
 
@@ -416,7 +424,9 @@ The hooks in `.claude/hooks/` do three jobs, so you need not:
 - `format-swift.py` runs `swift-format` on each Swift file that you edit.
 - `pre-push-format-lint.py` runs `scripts/format-lint.sh` (every step of the CI
   `format-lint` job) before `git push`, and stops the push when a step fails.
-  `lint-guard` runs the same script when you want the report earlier.
+  `lint-guard` runs the same script when you want the report earlier. When
+  `.claude/settings.json` does not register this hook, run `lint-guard`
+  before each push.
 - `ask-before-test-edit.py` asks the maintainer before any change to an
   existing file under `Tests/`, by an edit tool or by a shell command.
   `scripts/test-claude-hooks.py` tests all three hooks in CI.
@@ -520,7 +530,8 @@ personalization; pattern-generated test families (10 kinds) and notebook checks
 sync (awaiting UW IST prod credentials); an MCP authoring surface plus a
 read-only admin-diagnostics MCP (`MCPToolCatalog.live` holds the count); OIDC
 SSO; and zero-downtime auto-deploys. The 0.4 arc is summarised at the top of
-`CHANGELOG-0.4.md`.
+`CHANGELOG-0.4.md`. The 0.5-boundary cleanup is in the 0.5.0 entry of
+`CHANGELOG.md`.
 
 - **A scanner that cannot tell markup from prose about markup matches its own
   documentation.** This shipped twice in drift guards. Parse structure, and
@@ -575,7 +586,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/inputs.md` — global and section inputs: literals, `=` expressions, `$name` references
 - `docs/personalization-pattern-families.md` — per-student values in pattern families
 - `docs/personalization-eval-runtime.md` — where, and in which language, personalization expressions run
-- `docs/archive/xeus-python-grading-spike.md`, `docs/archive/xeus-python-grading-migration-plan.md` — the finished Pyodide-to-xeus migration (#1271), measured; the live state is in the JupyterLite section above
+- `docs/archive/xeus-python-grading-spike.md`, `docs/archive/xeus-python-grading-migration-plan.md` — the finished Pyodide-to-xeus migration (#1271), measured; the live state is in `Tools/jupyterlite/CLAUDE.md`
 - `docs/cpp-support.md` — first-class C++: upload-only, the `.sh` wrapper, single-TU inclusion, the literal refusals
 - `docs/cpp-assignment-language-decision.md` — the C++ memo, superseded in part; it still governs why C++ has no browser kernel
 - `docs/authoring-parity.md` — what a non-Python author can and cannot do, and which gaps are correct refusals

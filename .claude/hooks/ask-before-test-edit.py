@@ -6,8 +6,9 @@ file needs no approval. A permission rule cannot tell the two apart, because
 `Edit(...)` rules match the Edit and Write tools alike, so this hook checks
 whether the target file already exists.
 
-The project settings allow every other tool call without a prompt, so this
-hook is the only prompt a session sees. It reads two kinds of call:
+The maintainer wants this to be the only prompt a session sees, so the
+project settings can allow every other tool call. The hook reads two kinds of
+call:
 
 - Edit, MultiEdit, Write and NotebookEdit: the target path.
 - Bash: a command that writes to an existing path under Tests/ with an
