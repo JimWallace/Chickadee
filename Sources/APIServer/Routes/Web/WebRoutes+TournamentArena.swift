@@ -49,7 +49,7 @@ extension WebRoutes {
     func arenaMatchResult(req: Request) async throws -> HTTPStatus {
         let setup = try await requireArenaSetup(req)
         guard let matchSubmissionID = req.parameters.get("submissionID") else { throw Abort(.notFound) }
-        let body = try req.content.decode(ArenaResultBody.self)
+        let body = try await req.decodeContent(ArenaResultBody.self)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let collection: TestOutcomeCollection
