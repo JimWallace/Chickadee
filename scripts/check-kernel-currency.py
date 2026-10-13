@@ -78,7 +78,12 @@ ENV_DIR = REPO_ROOT / "Tools" / "jupyterlite"
 # solving for the host platform would compare against entirely different builds.
 PLATFORM = "emscripten-wasm32"
 
-VENDORED_TARBALL = re.compile(r"^(?P<name>.+)-(?P<version>[^-]+)-(?P<build>[^-]+)\.tar\.gz$")
+# A tarball that the build rewrites carries `.chickadee.<12 hex>` before
+# `.tar.gz` (scripts/patch-xeus-python-http.py). That suffix is not part of the
+# conda build string, so the comparison against the solver ignores it.
+VENDORED_TARBALL = re.compile(
+    r"^(?P<name>.+)-(?P<version>[^-]+)-(?P<build>[^-]+?)(?:\.chickadee\.[0-9a-f]{12})?\.tar\.gz$"
+)
 
 
 def environment_files() -> list[pathlib.Path]:
@@ -288,6 +293,21 @@ def self_test() -> int:
         clean = report([], [])
     check("a difference exits non-zero", drifted, 1)
     check("no difference exits zero", clean, 0)
+
+    # A rewritten tarball's content suffix is not part of its build string.
+    for filename, want in [
+        ("pyodide-http-0.2.2-pyhcf101f3_0.tar.gz", ("pyodide-http", "0.2.2", "pyhcf101f3_0")),
+        (
+            "pyodide-http-0.2.2-pyhcf101f3_0.chickadee.d559a3a226f3.tar.gz",
+            ("pyodide-http", "0.2.2", "pyhcf101f3_0"),
+        ),
+    ]:
+        match = VENDORED_TARBALL.match(filename)
+        check(
+            f"{filename} parses",
+            (match["name"], match["version"], match["build"]) if match else None,
+            want,
+        )
 
     # The env-name reader must agree with what is actually vendored, which is
     # what keeps this script pointed at the right directories.

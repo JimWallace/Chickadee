@@ -1,0 +1,10 @@
+# The kernel package tree is served as immutable, so a name in the metadata
+# that is not on disk (a rename on one side only) must be seen to fail.
+guard="scripts/check-xeus-vendored.sh"
+files="Public/jupyterlite/xeus/chickadee-python/empack_env_meta.json"
+description="empack_env_meta.json names a rewritten archive under a hash that is not on disk"
+expect="which is not on disk in kernel_packages/"
+apply() {
+    sed -i -E 's/\.chickadee\.[0-9a-f]{12}\.tar\.gz/.chickadee.000000000000.tar.gz/' \
+        Public/jupyterlite/xeus/chickadee-python/empack_env_meta.json
+}

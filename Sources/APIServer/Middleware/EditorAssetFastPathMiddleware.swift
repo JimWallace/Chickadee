@@ -24,6 +24,9 @@
 //     `154.377fd2862adcf65a4294.js`) — the bytes behind a given URL never
 //     change; a rebuild produces a new hash → new URL.  Cached immutably
 //     for a year, eliminating the per-boot revalidation storm.
+//   * The conda tarballs under each `kernel_packages/` tree, whose names
+//     each map to one set of bytes (see `isImmutableKernelPackage`). Cached
+//     immutably for a year too.
 //   * Everything else on the fast path (unhashed names like the MathJax
 //     fonts, /vendor/, the kernel binaries) is stamped `no-cache` so it
 //     revalidates: re-vendoring rewrites those bytes IN PLACE under stable
@@ -118,11 +121,11 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
         }
 
         let response = try await request.fileio.asyncStreamFile(at: absolutePath)
-        if Self.isContentHashedBundleAsset(path: path) {
+        if Self.isContentHashedBundleAsset(path: path) || Self.isImmutableKernelPackage(path: path) {
             response.headers.replaceOrAdd(
                 name: .cacheControl, value: "public, max-age=31536000, immutable")
         } else {
-            // Stable-name vendored bytes (the patched kernel wheel, all.json, the
+            // Stable-name vendored bytes (all.json, the
             // Pyodide runtime, MathJax fonts) are rewritten IN PLACE across a
             // re-vendor, so they must revalidate. An ETag ALONE is not enough:
             // with no Cache-Control the browser caches heuristically and skips the
@@ -138,6 +141,20 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
             response.setCrossOriginIsolationHeaders()
         }
         return response
+    }
+
+    /// True for a conda tarball in a vendored `kernel_packages/` tree. Each name
+    /// maps to one set of bytes: an upstream artifact's `name-version-build`
+    /// never changes its bytes, and a tarball the build rewrites carries the
+    /// hash of its own bytes in its name (`scripts/patch-xeus-python-http.py`;
+    /// asserted by `scripts/check-xeus-vendored.sh` section 9). So a browser
+    /// that has a package never needs to ask for it again. That removes ~50
+    /// conditional requests from every warm kernel boot, which is ~7,500 for a
+    /// class of 150 that joins a lecture activity at once
+    /// (docs/live-lecture-scale.md, R1). A new version arrives under a new name
+    /// through `empack_env_meta.json`, which stays on the revalidating path.
+    static func isImmutableKernelPackage(path: String) -> Bool {
+        path.hasSuffix(".tar.gz") && vendoredKernelPackagePrefixes.contains { path.hasPrefix($0) }
     }
 
     /// True for JupyterLite bundle files whose *filename* carries a webpack

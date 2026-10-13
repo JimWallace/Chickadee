@@ -60,8 +60,11 @@ Usage: patch-xeus-python-http.py <jupyterlite-build-dir>
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import pathlib
+import re
 import sys
 import tarfile
 import typing
@@ -145,6 +148,17 @@ URLLIB3 = Target(
 
 TARGETS = [PYODIDE_HTTP, URLLIB3]
 
+#: The suffix a rewritten archive carries: `.chickadee.` and the first 12 hex
+#: characters of the archive's SHA-256. Every other file in `kernel_packages/`
+#: is a pristine upstream conda artifact, whose `name-version-build` name never
+#: changes its bytes. A rewritten archive keeps that name only at the cost of a
+#: name whose bytes DO change, which forbids immutable caching of the whole
+#: tree. With the hash in the name, every name maps to one set of bytes, and
+#: EditorAssetFastPathMiddleware can serve `kernel_packages/` as immutable.
+#: scripts/check-xeus-vendored.sh and scripts/check-kernel-currency.py know
+#: this suffix.
+CONTENT_SUFFIX = re.compile(r"\.chickadee\.[0-9a-f]{12}(?=\.tar\.gz$)")
+
 
 def fail(message: str) -> None:
     print(f"patch-xeus-python-http: {message}", file=sys.stderr)
@@ -220,6 +234,38 @@ def patch_archive(archive: pathlib.Path, target: Target) -> str:
     return "patched"
 
 
+def content_address(archive: pathlib.Path) -> pathlib.Path:
+    """Rename a rewritten archive to carry its content hash, and point the
+    env's `empack_env_meta.json` at the new name. Idempotent: an archive whose
+    name already matches its bytes is left alone.
+
+    Every reader fetches `pkgRoot/<filename>` from the metadata (mambajs in the
+    editor, `xeus-kernel-shared.js` in grading), so the rename and the
+    metadata edit must happen together.
+    """
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()[:12]
+    base = CONTENT_SUFFIX.sub("", archive.name)
+    if not base.endswith(".tar.gz"):
+        fail(f"{archive.name}: not a .tar.gz archive")
+    wanted = base[: -len(".tar.gz")] + f".chickadee.{digest}.tar.gz"
+    if archive.name == wanted:
+        return archive
+
+    meta_path = archive.parent.parent / "empack_env_meta.json"
+    if not meta_path.is_file():
+        fail(f"{archive.name}: no empack_env_meta.json beside {archive.parent}")
+    meta = json.loads(meta_path.read_text())
+    entries = [p for p in meta.get("packages", []) if p.get("filename") == archive.name]
+    if len(entries) != 1:
+        fail(f"{meta_path}: expected one entry with filename {archive.name}, found {len(entries)}")
+    entries[0]["filename"] = wanted
+
+    renamed = archive.with_name(wanted)
+    archive.rename(renamed)
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return renamed
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         fail("usage: patch-xeus-python-http.py <jupyterlite-build-dir>")
@@ -238,7 +284,8 @@ def main() -> None:
             continue
         for archive in archives:
             status = patch_archive(archive, target)
-            print(f"patch-xeus-python-http: {status} ({archive.name})")
+            named = content_address(archive)
+            print(f"patch-xeus-python-http: {status} ({named.name})")
 
 
 if __name__ == "__main__":
