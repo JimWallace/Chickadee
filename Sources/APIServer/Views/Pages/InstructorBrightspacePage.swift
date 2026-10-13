@@ -20,10 +20,12 @@ struct InstructorBrightspacePage: HTML {
             InstructorTabs(active: .brightspace)
             AvatarSprite(page: page)
             if model.hasActiveCourse {
-                titlebar
-                if model.usesLTIGrades {
-                    FlashBanner(.neutral) {
-                        "Grades for this course go to the LMS through the LTI grade service, not the Valence sync."
+                section(.class("page-section")) {
+                    titlebar
+                    if model.usesLTIGrades {
+                        FlashBanner(.neutral) {
+                            "Grades for this course go to the LMS through the LTI grade service, not the Valence sync."
+                        }
                     }
                 }
             }

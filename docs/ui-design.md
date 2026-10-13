@@ -143,8 +143,8 @@ member.
 
 The pages in the **Also** column are the archetype too; they are just not
 the reference.  Two of them are the nearest fit rather than an exact one:
-`AssignmentNewPage`'s `.editor-titlebar` holds the name input, not an `<h1>`
-in a `.page-titlebar`, and `LeaderboardPresentPage` owns the viewport through
+`AssignmentNewPage`'s `.page-titlebar` holds the name input, not an `<h1>`,
+and `LeaderboardPresentPage` owns the viewport through
 its own `PresentLayout`, not the `fullBleed` flag.  The shim's body view is
 the page's whole content: `NotebookPage` is `BaseLayout` around `NotebookBody`,
 and the workbench renders `AssignmentEditBody` and `NotebookBody` in its two
@@ -235,7 +235,7 @@ duplicate.
   yes.  Never call the native one: `check-styles.sh` holds it at zero,
   as it does for native alerting.
 - **`FlashMessages` / `FlashBanner`** + `.flash-*` — see page anatomy above.
-- **`.page-titlebar`** (+ `--baseline`), **`.page-subtitle`** — the page
+- **`.page-titlebar`** (+ `--baseline`, `.page-titlebar--top`), **`.page-subtitle`** — the page
   header row and its secondary line.  Cluster multiple left/right items
   inside with `.toolbar`.
 - **`.page-section`**, **`.section-intro`**, **`.section-note`** — section

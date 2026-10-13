@@ -68,8 +68,10 @@ extension Response {
 
     static func weakETag(for buffer: ByteBuffer, ignoring csrfToken: String? = nil) -> String {
         var bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) ?? []
-        if let csrfToken, !csrfToken.isEmpty {
-            bytes = Array(String(decoding: bytes, as: UTF8.self).replacingOccurrences(of: csrfToken, with: "").utf8)
+        if let csrfToken, !csrfToken.isEmpty,
+            let text = buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes)
+        {
+            bytes = Array(text.replacingOccurrences(of: csrfToken, with: "").utf8)
         }
         let digest = SHA256.hash(data: Data(bytes))
         let hex = digest.map { String(format: "%02x", $0) }.joined()

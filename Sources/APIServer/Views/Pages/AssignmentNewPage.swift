@@ -182,7 +182,7 @@ private struct NewAssignmentTitlebar: HTML {
     let assignmentLanguageOptions: [SelectOption]
 
     var body: some HTML {
-        div(.class("editor-titlebar")) {
+        div(.class("page-titlebar page-titlebar--top")) {
             div(.class("editor-title-col")) {
                 label(.class("visually-hidden"), .for("assignmentNameInput")) { "Assignment Name" }
                 " "

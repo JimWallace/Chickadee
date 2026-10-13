@@ -2464,6 +2464,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .page-titlebar h1, .page-titlebar h2 { margin: 0; }
 .page-titlebar--baseline { align-items: baseline; }
+/* A tall title column (the assignment editors) holds the actions at the top. */
+.page-titlebar--top { align-items: flex-start; }
 
 /* Secondary line directly under a .page-titlebar (username + role, course
    name).  The negative top margin tucks it against the titlebar it follows. */
@@ -2641,14 +2643,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
    AssignmentNewPage and AssignmentEditBody (UI audit).  display:* is
    intentionally left inline on JS-toggled elements (a class display rule
    would collide with scripts that clear style.display via ''). */
-.editor-titlebar {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-bottom: 1.25rem;
-}
 .editor-title-col { flex: 1; min-width: 16rem; }
 .editor-actions {
     display: flex;

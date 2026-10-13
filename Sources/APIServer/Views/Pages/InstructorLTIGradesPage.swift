@@ -36,10 +36,12 @@ struct InstructorLTIGradesPage: HTML {
         BaseLayout(title: "LMS grades", page: page, flash: flash) {
             InstructorTabs(active: .brightspace)
             if canPushAll {
-                div(.class("toolbar toolbar--end section-gap")) {
-                    form(.method(.post), .action("/instructor/lti-grades/push-all"), .class("inline-form")) {
-                        CSRFField(token: page.csrfToken)
-                        button(.class("btn btn-primary"), .type(.submit)) { "Sync now" }
+                section(.class("page-section")) {
+                    div(.class("toolbar toolbar--end section-gap")) {
+                        form(.method(.post), .action("/instructor/lti-grades/push-all"), .class("inline-form")) {
+                            CSRFField(token: page.csrfToken)
+                            button(.class("btn btn-primary"), .type(.submit)) { "Sync now" }
+                        }
                     }
                 }
             }

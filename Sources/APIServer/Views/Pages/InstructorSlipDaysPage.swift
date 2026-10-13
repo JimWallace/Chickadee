@@ -42,27 +42,29 @@ struct InstructorSlipDaysPage: HTML {
                     p(.class("empty")) { "Select a course to manage its slip days." }
                 }
             } else {
-                div(.class("page-titlebar")) {
-                    h2 {
-                        "Slip days "
-                        if enabled {
-                            span(.class("tier tier-open")) { "On" }
-                        } else {
-                            span(.class("tier tier-closed")) { "Off" }
+                section(.class("page-section")) {
+                    div(.class("page-titlebar")) {
+                        h2 {
+                            "Slip days "
+                            if enabled {
+                                span(.class("tier tier-open")) { "On" }
+                            } else {
+                                span(.class("tier tier-closed")) { "Off" }
+                            }
+                        }
+                        if canEditSettings {
+                            a(
+                                .class("btn action-btn"), .href("#slip-settings-panel"),
+                                .data("add-target", value: "slip-settings-panel")
+                            ) { "Edit settings" }
                         }
                     }
-                    if canEditSettings {
-                        a(
-                            .class("btn action-btn"), .href("#slip-settings-panel"),
-                            .data("add-target", value: "slip-settings-panel")
-                        ) { "Edit settings" }
+                    p(.class("section-intro")) {
+                        "Students extend a deadline themselves from a fixed budget. A staff extension on an assignment always takes precedence."
                     }
-                }
-                p(.class("section-intro")) {
-                    "Students extend a deadline themselves from a fixed budget. A staff extension on an assignment always takes precedence."
-                }
-                if canEditSettings {
-                    settingsPanel
+                    if canEditSettings {
+                        settingsPanel
+                    }
                 }
                 factsCard
                 ledger
