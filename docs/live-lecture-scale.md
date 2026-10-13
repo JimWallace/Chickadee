@@ -13,7 +13,7 @@ system before the Winter term.
 | Lecture load-test scenario | Planned |
 | Shared board cache and version number | Planned |
 | Push channel (server-sent events) | Proposed |
-| Join-cost fixes (kernel assets) | Proposed |
+| Join-cost fixes (kernel assets) | Immutable kernel packages in review (#2544); lite environment proposed |
 | Dress rehearsals | Planned, before January |
 
 ## What the system does today
@@ -281,13 +281,39 @@ In order. Each item is a separate change with its own tests.
 W1 to W4 are the minimum for a polling-only Winter term. W7 makes the board
 feel live. W5 decides whether the join is smooth.
 
+## Decisions (2026-10-13)
+
+- **Python first.** The lecture activities start on the Python kernel. Other
+  kernels come later.
+- **Polling first.** A 5-second delay on the projector is acceptable for the
+  first activities, so push (W7) can come after W2 to W4.
+- **Failover is not the driver.** Most student browsers grade without fault.
+  A few failovers to the runners are acceptable, so W6 is low priority.
+- **No staging environment yet.** W1 runs locally until one exists.
+- **The join is the first risk to fix (R1).** On a local machine (4 cores,
+  debug build, loopback), the application served 150 cold Python joins at the
+  same time in 23.5 s: 7,200 requests and 9.1 GB, about 3 Gbit/s, with no
+  errors. So the application is not the bottleneck for the join. The network
+  is: 8.7 GB through a lecture hall's shared Wi-Fi takes minutes. The fix is to
+  have the bytes on the laptops before the lecture, and keep them valid:
+  - Kernel packages are served as immutable (#2544), so a warm join asks the
+    server for nothing.
+  - No re-vendor in the week before a lecture activity.
+  - Lecture activities early in the term need only the standard library. The
+    two activities we checked (the Game of Life with SVG output, and
+    rock-paper-scissors) import only the standard library and
+    `IPython.display`, which is part of the bare 28-package kernel (9.7 MB).
+    A stdlib-only "Python (lite)" environment for lecture activities would
+    cut the cold join about six times. numpy and pandas come later in the
+    term, in the full environment, downloaded once in a lab or at home before
+    the first lecture that needs them.
+- **Opponent activities will be needed, in a form without runners.** The
+  first model to evaluate: play against the instructor's solution in the
+  browser. A later model: play against past submissions of classmates, as an
+  auto-battler game does. See "Opponents without runners" (to be written).
+
 ## Open questions
 
-- Which kernel do the lecture activities use? The join cost differs by a factor
-  of six between Lua and Octave.
-- Is a 5-second delay on the projector acceptable for the first activities, so
-  that push (W7) can come later?
-- Do the opponent kinds (round robin, tournaments) need to work under A1, or
-  can they stay in labs on the runners?
-- Is there a staging environment on Postgres with production-sized hardware,
-  or must we build one for W1?
+- Who builds the staging environment for W1, and when?
+- Which opponent model comes first, and must the opponent's code stay hidden
+  from students?
