@@ -37,8 +37,7 @@ import Testing
         #expect(stored == (try encodeManifest(try #require(decodeManifest(fromJSON: v2)))))
 
         let reread = try #require(decodeManifest(fromJSON: stored))
-        #expect(reread.requiredFiles == ["main.py"])
-        #expect(reread.languageDeclaration == .noLanguage)
+        #expect(reread == (try #require(decodeManifest(fromJSON: v2))))
         #expect(reread.testSuites.map(\.origin) == [.family(id: "f")])
     }
 

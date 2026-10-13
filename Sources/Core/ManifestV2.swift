@@ -18,10 +18,10 @@
 //   `testItems` is the only list.
 //
 // `TestProperties.init(from:)` reads this form when `schemaVersion` is 2.
-// Nothing writes it yet: the server writes v1 until a release that reads v2
-// is deployed (constraint 2 in the note).  `TestProperties.v2Envelope()` is
-// the writer's entry point; it returns nil for a manifest that the v2 form
-// cannot hold exactly, so that manifest stays v1.
+// The server's storage writer (`encodeManifest`) writes it through
+// `TestProperties.v2Envelope()`, which returns nil for a manifest that the v2
+// form cannot hold exactly, so that manifest stays v1.  Every path that sends
+// a manifest out of the server sends v1.
 
 import Foundation
 

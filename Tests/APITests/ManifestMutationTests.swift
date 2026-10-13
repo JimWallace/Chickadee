@@ -84,6 +84,21 @@ import VaporTesting
         }
     }
 
+    /// docs/manifest-format-v2.md phase 4: the first edit of a v1 row can
+    /// rewrite it as v2.  When the content does not change, the manifest hash
+    /// must not change either: the retest check compares it, and a changed
+    /// hash would re-queue every submission.
+    @Test func rewritingAV1RowAsV2KeepsItsManifestHash() async throws {
+        try await withApp(app) { app in
+            let canonicalV1 = try encodeManifestV1(try #require(decodeManifest(fromJSON: Self.manifest)))
+            let setup = try await storedSetup(manifest: canonicalV1, on: app)
+            let before = manifestHash(setup.manifest)
+            try await mutateManifest(setup: setup, on: app.db) { _ in }
+            #expect(TestProperties.wireVersion(of: setup.manifest) == 2)
+            #expect(manifestHash(setup.manifest) == before)
+        }
+    }
+
     @Test func declaringNoLanguageOmitsTheKeyAndRecordsTheAnswer() async throws {
         try await withApp(app) { app in
             let setup = try await storedSetup(manifest: Self.manifest, on: app)
@@ -91,8 +106,9 @@ import VaporTesting
             let props = try #require(setup.decodedManifest())
             #expect(props.language == nil)
             #expect(props.languageDeclared == true)
-            // The stored text can be v2, which writes "none"; the v1 form omits the key.
-            #expect(!manifestTextAsV1(setup.manifest).contains("\"language\":"))
+            // The stored text can be v2 (docs/manifest-format-v2.md), which
+            // writes "none" where v1 omits the key, so assert the answer itself.
+            #expect(props.languageDeclaration == .noLanguage)
 
             // An upload-only language carries both modes with it.
             try await declareManifestLanguage(setup: setup, to: .cpp, on: app.db)

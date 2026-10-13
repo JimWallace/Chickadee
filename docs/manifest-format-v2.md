@@ -321,7 +321,7 @@ green.
 | 1 | D9 comments, D2 `TestSettings`, D4 `origin` and D5 `languageDeclaration` as computed properties | None | Low |
 | 2 | D1 `RunnerManifest` for `Job.manifest`, same wire shape | None | Medium: the runner decode path |
 | 3 | The v2 decoder (D6 to D8, D10). The server reads v1 and v2, and writes v1 | None written | Low |
-| 4 | The server writes v2 to storage and bundles. The runner manifest stays v1 | Yes | Medium |
+| 4 | The server writes v2 to storage. Every outward path (runner job, browser, MCP, bundle export) stays v1 | Yes | Medium |
 | 5 (v0.7) | Stop the write of the legacy `patternFamilies` and `notebookChecks` mirror | Yes | Low |
 
 Phase 3 must ship in a release before phase 4 (constraint 2).
@@ -362,7 +362,18 @@ Phase 3 must ship in a release before phase 4 (constraint 2).
   endpoint, the MCP manifest resource and course-bundle export. The runner
   job was already v1 (`RunnerManifest`). Version snapshots and restore copy
   stored text as it is; this release reads both forms.
-- Rollback floor: the phase 3 release.
+- `manifestHash` hashes v2 text in its v1 form. A v1 row keeps its old hash,
+  and the same content stored as v2 hashes the same, so the retest check
+  (`lastRetestedManifestHash`), version de-duplication and the
+  materialization key see no change when an edit rewrites a v1 row as v2. A
+  no-op edit still rewrites a non-canonical row in the current stable
+  encoding, as before; the one new cost is that each runner downloads that
+  setup's zip once more, because the download version keys on the bytes.
+- MCP `get_assignment_version` sends a snapshot's manifest as v1.
+- **Rollback floor: the phase 3 release.** A release before it reads v2
+  without an error but loses the v2-only keys. The blue-green deployer keeps
+  the previous colour running on the same database, so phase 3 must be live
+  in production, not only released, before phase 4 merges.
 
 ### Work for phase 4 (as planned before phase 4)
 

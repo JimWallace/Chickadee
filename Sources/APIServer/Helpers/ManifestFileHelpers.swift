@@ -369,5 +369,8 @@ private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [Configur
 /// SHA-256 hex digest of `setup.manifest`.  Used by the auto-retest
 /// trigger as the dedup key for "manifest unchanged since last retest".
 func manifestHash(_ manifestJSON: String) -> String {
-    sha256HexDigest(manifestJSON)
+    // v2 text hashes as its v1 form, so a row stored as v1 and the same
+    // content stored as v2 hash the same (docs/manifest-format-v2.md). v1
+    // text hashes as it is, so every hash recorded before v2 still matches.
+    sha256HexDigest(manifestTextAsV1(manifestJSON))
 }

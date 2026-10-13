@@ -50,4 +50,15 @@ import Testing
         #expect(TestProperties.wireVersion(of: outward) == 1)
         #expect(outward == (try encodeManifestV1(Self.declared)))
     }
+
+    // MARK: - Hashing across the two forms
+
+    /// A hash recorded for a v1 row (the retest hash, a version snapshot)
+    /// still matches once the same content is stored as v2.
+    @Test func theSameContentInBothFormsHashesTheSame() throws {
+        let v1 = try encodeManifestV1(Self.declared)
+        let v2 = try encodeManifest(Self.declared)
+        #expect(manifestHash(v1) == manifestHash(v2))
+        #expect(manifestHash(v1) == sha256HexDigest(v1))
+    }
 }
