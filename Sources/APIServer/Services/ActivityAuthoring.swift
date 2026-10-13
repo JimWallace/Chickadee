@@ -86,12 +86,12 @@ enum ActivityAuthoring {
     /// the second is grading content an instructor may fix mid-lab the way a
     /// test script is.
     ///
-    /// Refuses choosing an opponent file on a browser-graded assignment
-    /// (`activityOpponentGradingConflictMessage`): only the native worker
-    /// builds the opponent directory, so the match would run with nobody on
-    /// the other side. `set_grading_mode` refuses the same pair from the mode
-    /// side. The kind alone is not refused — a bot kind with no file chosen
-    /// stages nothing and grades as it always did.
+    /// Refuses a kind whose opponent the worker chooses (the hill, round
+    /// robin, tests versus implementations) on a browser-graded assignment
+    /// (`activityOpponentGradingConflictMessage`): the browser has no claim
+    /// step, so the match would run with nobody on the other side.
+    /// `set_grading_mode` refuses the same pair from the mode side. A bot
+    /// kind is not refused: the browser runner stages the bot.
     ///
     /// Validates the opponent file: it must be a bare filename naming one of
     /// the setup's support files, and a kind with no opponent takes none. A
@@ -243,7 +243,7 @@ enum ActivityAuthoring {
         "A class activity's window needs ISO-8601 times, for example 2026-09-22T14:00:00Z."
 
     private static func validateOpponent(of activity: ClassActivity, setup: APITestSetup) async throws {
-        if activity.stagesAnOpponent,
+        if activity.kind.opponentSource.opponentNeedsWorker,
             currentManifestGradingMode(setup.manifest) == GradingMode.browser.rawValue
         {
             throw AppError.badRequest(reason: activityOpponentGradingConflictMessage)

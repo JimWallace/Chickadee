@@ -83,3 +83,19 @@ test('every language module delegates its nonce to this copy', async () => {
       `${lang}-grading-shared.js must not carry its own status-line parser`);
   }
 });
+
+// The environment cells write the variable's name into kernel code, so a
+// name that is not a plain upper-case identifier is refused, never escaped.
+test('assertEnvName accepts Chickadee names and refuses anything else', () => {
+  assert.equal(shared.assertEnvName('CHICKADEE_MATCH_SEED'), 'CHICKADEE_MATCH_SEED');
+  for (const bad of ['', 'lower', 'A-B', 'A B', 'X)\nimport os', '1ABC', null, 7]) {
+    assert.throws(() => shared.assertEnvName(bad), /not an environment variable name/);
+  }
+});
+
+test('envCellPython sets one variable as a JSON-quoted literal', () => {
+  assert.equal(
+    shared.envCellPython('CHICKADEE_MATCH_SEED', 'ca"fe'),
+    'import os\nos.environ["CHICKADEE_MATCH_SEED"] = "ca\\"fe"');
+  assert.throws(() => shared.envCellPython('bad name', 'x'));
+});

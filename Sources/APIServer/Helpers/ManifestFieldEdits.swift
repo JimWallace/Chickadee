@@ -205,11 +205,13 @@ let graderOnlyGradingConflictMessage =
 
 /// One message for every door of the opponent/browser refusal (mode switch,
 /// zip upload, and `set_activity` from the kind's direction). Only the native
-/// worker stages an opponent (docs/class-activities.md), so a browser-graded
-/// match would run with nobody on the other side and read as a win.
+/// worker stages a classmate's submission, which it chooses when it claims
+/// the job (docs/class-activities.md), so a browser-graded match would run
+/// with nobody on the other side and read as a win. A bot is not refused.
 let activityOpponentGradingConflictMessage =
-    "This class activity plays each submission against an opponent, which only the native "
-    + "worker can stage. Keep worker grading, or choose an activity kind with no opponent."
+    "This class activity plays each submission against the submission of a classmate, which only "
+    + "the native worker can choose and stage. Keep worker grading, or choose a kind that plays "
+    + "the bot of the instructor."
 
 /// The upload-only-language coherence rule's message, shared by the
 /// setup-upload API, the submission-mode editor and the MCP tools.

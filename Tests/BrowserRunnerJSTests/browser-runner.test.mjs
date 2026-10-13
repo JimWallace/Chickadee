@@ -1873,3 +1873,33 @@ test('the declared substrate failing to boot fails the grade over, even when ano
     harness.postBodies.length, 0,
     'a dead declared substrate must fail over, never post zeros for its tests');
 });
+
+// A bot match graded in the browser: the bot is copied under opponent/ as the
+// native worker's OpponentStaging does, and the match seed goes to the kernel
+// init. Anything the seed endpoint did not name, or a name that is not a bare
+// file the setup holds, stages nothing.
+test('stageOpponent copies the bot under opponent/ and returns the match seed', async () => {
+  const harness = await loadRunnerHarness();
+  const { stageOpponent } = harness.hooks;
+  const files = { 'bot.py': 'def move(): return "R"\n', 'test.py': 'x' };
+  const match = stageOpponent(files, { file: 'bot.py', matchSeed: 'cafe' });
+  assert.equal(match.seed, 'cafe');
+  assert.deepEqual(Object.keys(match), ['seed']);
+  assert.equal(files['opponent/bot.py'], files['bot.py']);
+});
+
+test('stageOpponent stages nothing without a usable bot', async () => {
+  const harness = await loadRunnerHarness();
+  const { stageOpponent } = harness.hooks;
+  for (const opponent of [
+    null,
+    { file: 'bot.py' },
+    { file: 'missing.py', matchSeed: 'cafe' },
+    { file: '../bot.py', matchSeed: 'cafe' },
+    { file: 'dir/bot.py', matchSeed: 'cafe' },
+  ]) {
+    const files = { 'bot.py': 'x', 'dir/bot.py': 'y' };
+    assert.equal(stageOpponent(files, opponent), null);
+    assert.deepEqual(Object.keys(files).filter((k) => k.startsWith('opponent/')), []);
+  }
+});

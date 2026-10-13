@@ -25,6 +25,7 @@ assignment on the code path it runs today.
 | 6 | Tests and code (asymmetric reading of the matrix): `testsVersusImplementations`, the `union` aggregation, the two-table class page | shipped |
 | 7 | Synthetic class submission (coverage percent): `classAggregate` submissions, `class_coverage_runs`, the `classCoverage` goal signal | shipped |
 | 8 | Live-session controls: the `window` block, the submission refusal, the countdown and the leaderboard's background refresh | shipped |
+| 9 | Browser-graded bot challenges: `/seed` names the bot and a fresh match seed, the browser runner stages them; the refusal narrows to `champion` and `classmates` | shipped |
 
 One thing a reader should not go looking for after slice 4: **the web create
 page has no activity control.** The kind is chosen on the edit page (the "Class
@@ -231,15 +232,29 @@ the bot match with no bot in the workspace, silently. Fails open, like the
 language gate, for an activity with no opponent and for a runner advertising
 no profile at all.
 
-**Browser grading is refused** for any activity that stages an opponent (a bot
-kind with its file chosen, or a hill kind at all), at the same doors that refuse grader-only files: the
-zip upload, `set_grading_mode` (and the web mode change and section adoption
-through `setManifestGradingMode`), and choosing the file through `set_activity`
-or the picker from the other side. One message,
-`activityOpponentGradingConflictMessage`. A `bestMetric` assignment may still be
-browser-graded. Slice 1's advice to mark the bot grader-only stands, for a
-different reason now: worker grading is forced by the opponent itself, and
-`graderOnly` is what keeps the bot's *source* out of students' hands.
+**Browser grading.** The browser runner stages a bot as the worker does. For a
+bot kind with its file chosen, and for a bracket entrant's own practice
+submission, `/seed` names the bot and a fresh match seed
+(`BrowserRunnerOpponent`). The runner copies the bot into `opponent/` and sets
+`CHICKADEE_OPPONENT_DIR` and `CHICKADEE_MATCH_SEED` in the kernel before the
+clean-state snapshot. A new seed for each run is the same as the worker's seed
+for each submission. Two limits apply:
+
+- The bot's source reaches the student's browser, so it cannot be grader-only.
+  The rule that refuses grader-only files on a browser-graded assignment stays.
+  If the bot's source must stay hidden, keep worker grading.
+- The match script must be in a kernel language (`.py`, `.R`, `.lua`, `.m`).
+  The browser runs no `.sh`; a `.sh` script reports an error outcome, never a
+  win.
+
+**Browser grading is refused** only for an opponent that the worker chooses
+when it claims the job: the hill's champion and the classmates of a round
+robin (`ActivityOpponentSource.opponentNeedsWorker`). The refusal is at the
+same doors that refuse grader-only files: the zip upload, `set_grading_mode`
+(and the web mode change and section adoption through
+`setManifestGradingMode`), and choosing the kind through `set_activity` from
+the other side. One message, `activityOpponentGradingConflictMessage`. A
+`bestMetric` assignment may be browser-graded.
 
 ### New tables
 
@@ -687,7 +702,7 @@ for existing API callers.
 | Suite rebuilds | `makeWorkerManifestJSON(preserving:)` copies the decoded manifest and replaces only the suite (#1655), so `activity` survives every rebuild without being named; the create paths, which build from nothing, pass it. `AssignmentHelpersManifestTests` pins the round trip. This was the `languageDeclared` trap, one field later. |
 | Surgical edits | `setManifestActivity` is a `mutateManifest` edit like `setManifestMinimumRunnerVersion`: a typed edit of the decoded manifest, stored with the stable encoder, so no other field is touched. |
 | Old runners | `runnerSanitized()` drops the block (slice 1). `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot (slice 2), `activity-opponent-submission` for a hill (slice 3) and for a tournament's paired match (slice 5, the same contract), `activity-matrix` for a round robin and for tests-and-code (slices 4 and 6, the same contract); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
-| Browser grading | `stagesAnOpponent` plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles` (slice 2). A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
+| Browser grading | A bot challenge and a bracket entrant's practice run may be browser-graded: the browser runner stages the bot (not grader-only) and the match seed. A champion or classmates opponent plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles`. A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
 | Visibility, opponent and window edits | `withLeaderboardVisibility` / `withOpponentFile` / `withWindow` each rebuild the block from the stored one, so no surface's edit can drop another's field — three forms, three rebuilds, one rule. The edit page's kind select carries the stored block forward when the kind is unchanged. |
 | Setup cache | The key hashes the manifest. Assignments without `activity` keep their key. |
 | Versioning | Snapshots carry the manifest verbatim; `AssignmentVersionStoreTests` pins that the block survives. |
@@ -703,12 +718,13 @@ for existing API callers.
    seeds a `highestMetric` record achievement, curating the built-in records
    alongside it as a first Save of the Achievements table would, so Pathfinder
    and friends keep awarding.
-2. For `beatTheInstructor`, upload the bot as a support file (mark it
-   grader-only to keep its source from students) and choose it: the Activity
-   section's "Opponent file" select, or `set_activity` with `opponentFile`.
-   The order does not matter — the kind may be set first — but nothing is
-   staged until a file is chosen, and choosing one needs worker grading (it
-   is refused on a browser-graded assignment).
+2. For `beatTheInstructor`, upload the bot as a support file and choose it:
+   the Activity section's "Opponent file" select, or `set_activity` with
+   `opponentFile`. The order does not matter — the kind may be set first —
+   but nothing is staged until a file is chosen. On worker grading, mark the
+   bot grader-only to keep its source from students. On browser grading the
+   bot cannot be grader-only, and the match script must be in a kernel
+   language.
 3. Author one suite entry whose script plays the trials and prints a footer
    with `metric`. The script finds the bot at
    `$CHICKADEE_OPPONENT_DIR/<opponentFile>` and a per-match seed in

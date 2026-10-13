@@ -294,6 +294,12 @@ end)()`;
         return '_ck.setenv("CHICKADEE_ASSIGNMENT_SEED", ' + luaStringLiteral(seed) + ')';
     }
 
+    // Any one variable, through the same overlay.
+    function envCellLua(name, value) {
+        var checked = root.ChickadeeGradingShared.assertEnvName(name);
+        return '_ck.setenv(' + luaStringLiteral(checked) + ', ' + luaStringLiteral(String(value)) + ')';
+    }
+
     // One copy of the nonce, in Public/grading-shared.js (#1963). Every
     // worker and the notebook page load that file before this one. Read at
     // call time, so a harness that loads only this module still loads.
@@ -344,6 +350,7 @@ end)()`;
         luaStringLiteral: luaStringLiteral,
         luaLiteral: luaLiteral,
         assignmentSeedLua: assignmentSeedLua,
+        envCellLua: envCellLua,
         makeNonce: makeNonce,
         runScriptLua: runScriptLua,
         parseRunOutput: parseRunOutput,

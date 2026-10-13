@@ -145,9 +145,12 @@
     }
 
     class GradingWorkerExecutor {
-        constructor(files, assignmentSeed, runnerCore, factory, reportPhase, label) {
+        constructor(files, assignmentSeed, runnerCore, factory, reportPhase, label, match) {
             this.files = files;
             this.assignmentSeed = assignmentSeed ?? null;
+            // { seed } when an opponent is staged under opponent/ in `files`
+            // (a bot match), else null. See matchCells in xeus-kernel-shared.js.
+            this.match = match ?? null;
             this.runnerCore = runnerCore;
             this.factory = factory;
             // Which substrate this instance drives (a display label such as
@@ -340,7 +343,7 @@
                 this._spawn();
                 try {
                     const reply = await this._postWithTimeout(
-                        { type: 'init', files: this.files, seed: this.assignmentSeed },
+                        { type: 'init', files: this.files, seed: this.assignmentSeed, match: this.match },
                         GRADING_INIT_TIMEOUT_MS);
                     if (reply && reply.__timedOut) {
                         throw new Error('grading worker init timed out after ' + GRADING_INIT_TIMEOUT_MS + 'ms');
@@ -441,9 +444,9 @@
         const LANGUAGE_LABELS = tables.languageLabels;
         const INTERPRETER_KINDS = tables.interpreterKinds;
 
-        function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage) {
+        function makeExecutor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage, match) {
             return new RoutingExecutor(
-                files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage);
+                files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage, match);
         }
 
         // -------------------------------------------------------------------------
@@ -463,9 +466,10 @@
         // -------------------------------------------------------------------------
 
         class RoutingExecutor {
-            constructor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage) {
+            constructor(files, assignmentSeed, runnerCore, reportPhase, suites, assignmentLanguage, match) {
                 this.files = files;
                 this.assignmentSeed = assignmentSeed ?? null;
+                this.match = match ?? null;
                 this.runnerCore = runnerCore;
                 this.reportPhase = reportPhase;
                 this.suites = Array.isArray(suites) ? suites : [];
@@ -532,7 +536,7 @@
                 const executor = factory
                     ? new GradingWorkerExecutor(
                         this.files, this.assignmentSeed, this.runnerCore, factory,
-                        this.reportPhase, label)
+                        this.reportPhase, label, this.match)
                     : new UnavailableExecutor(
                         label + ' grading needs Web Worker support, '
                         + 'which this browser did not provide');

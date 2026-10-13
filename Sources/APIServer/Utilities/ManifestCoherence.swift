@@ -22,8 +22,9 @@ enum ManifestCoherence {
         if manifest.gradingMode == .browser, !manifest.graderOnlyFiles.isEmpty {
             found.append(graderOnlyGradingConflictMessage)
         }
-        // Only the native worker stages an opponent.
-        if manifest.gradingMode == .browser, manifest.activity?.stagesAnOpponent == true {
+        // Only the native worker stages a classmate's submission; the browser
+        // runner stages a bundled bot.
+        if manifest.gradingMode == .browser, manifest.activity?.kind.opponentSource.opponentNeedsWorker == true {
             found.append(activityOpponentGradingConflictMessage)
         }
         // A language with no editor kernel is upload-only by construction.

@@ -540,7 +540,7 @@ private struct EditActivityBlock: HTML {
             }
             p(.class("field-note field-note--muted")) {
                 if activity.opponentFileChosen {
-                    "The worker copies this file into the directory "
+                    "The grader copies this file into the directory "
                     code { "CHICKADEE_OPPONENT_DIR" }
                     " names, where the match script reads it."
                 } else {

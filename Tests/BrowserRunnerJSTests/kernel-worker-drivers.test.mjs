@@ -86,6 +86,7 @@ const GRADERS = [
     {
         file: 'python-grading-worker.js', label: 'Python', prefix: 'python',
         module: 'ChickadeePythonGradingShared', kernelName: 'xpython', script: SCRIPT + '.py',
+        envCell: (c) => c.ChickadeeGradingShared.envCellPython,
         setup: (c, dir) => [
             c.ChickadeeGradingShared.assignmentSeedPython(SEED),
             c.ChickadeePythonGradingShared.cleanStateCellPython(dir),
@@ -100,6 +101,7 @@ const GRADERS = [
     {
         file: 'r-grading-worker.js', label: 'R', prefix: 'r',
         module: 'ChickadeeRGradingShared', kernelName: 'xr', script: SCRIPT + '.R',
+        envCell: (c) => c.ChickadeeRGradingShared.envCellR,
         setup: (c) => [c.ChickadeeRGradingShared.assignmentSeedR(SEED)],
         output: (nonce) => '\n' + nonce + ':status:1\nhello\n' + nonce + ':end\n',
         expected: { exitCode: 1, stdout: 'hello', stderr: 'kernel stderr' },
@@ -107,6 +109,7 @@ const GRADERS = [
     {
         file: 'lua-grading-worker.js', label: 'Lua', prefix: 'lua',
         module: 'ChickadeeLuaGradingShared', kernelName: 'xlua', script: SCRIPT + '.lua',
+        envCell: (c) => c.ChickadeeLuaGradingShared.envCellLua,
         setup: (c) => [
             c.ChickadeeLuaGradingShared.SETUP_LUA,
             c.ChickadeeLuaGradingShared.assignmentSeedLua(SEED),
@@ -117,6 +120,7 @@ const GRADERS = [
     {
         file: 'octave-grading-worker.js', label: 'Octave', prefix: 'octave',
         module: 'ChickadeeOctaveGradingShared', kernelName: 'xoctave', script: SCRIPT + '.m',
+        envCell: (c) => c.ChickadeeOctaveGradingShared.envCellOctave,
         setup: (c) => [
             c.ChickadeeOctaveGradingShared.SETUP_OCTAVE,
             c.ChickadeeOctaveGradingShared.assignmentSeedOctave(SEED),
@@ -153,6 +157,39 @@ for (const grader of GRADERS) {
         const expected = grader.setup(worker.context, calls[1].mount)
             .filter((cell) => !cell.includes(SEED));
         assert.deepEqual(executed(calls), expected);
+    });
+
+    // A staged opponent (a bot match) sets the two variables the native
+    // worker exports, right after the seed and before the workspace cells,
+    // so a Python script reset keeps them.
+    test(`${grader.file}: a match sets the opponent dir and the match seed after the seed`, async () => {
+        const worker = loadWorker(grader.file);
+        const calls = fakeKernel(worker.context, () => null);
+        await send(worker, { id: 1, type: 'init', files: {}, seed: SEED, match: { seed: 'cafe' } });
+        const dir = calls[1].mount;
+        const envCell = grader.envCell(worker.context);
+        const expected = grader.setup(worker.context, dir);
+        const afterSeed = expected.findIndex((cell) => cell.includes(SEED)) + 1;
+        expected.splice(afterSeed, 0,
+            envCell('CHICKADEE_OPPONENT_DIR', dir + '/opponent'),
+            envCell('CHICKADEE_MATCH_SEED', 'cafe'));
+        assert.deepEqual(executed(calls), expected);
+    });
+
+    test(`${grader.file}: a match cell that fails fails the init`, async () => {
+        const worker = loadWorker(grader.file);
+        fakeKernel(worker.context, (code) => (code.includes('CHICKADEE_MATCH_SEED') ? { failure: 'Error: no' } : null));
+        const replies = await send(worker, { id: 9, type: 'init', files: {}, seed: null, match: { seed: 'cafe' } });
+        const last = replies[replies.length - 1];
+        assert.equal(last.ok, false);
+        assert.equal(last.error, `the ${grader.label} kernel did not set the match environment: Error: no`);
+    });
+
+    test(`${grader.file}: no match means no match cells`, async () => {
+        const worker = loadWorker(grader.file);
+        const calls = fakeKernel(worker.context, () => null);
+        await send(worker, { id: 1, type: 'init', files: {}, seed: SEED, match: null });
+        assert.ok(!executed(calls).some((cell) => cell.includes('CHICKADEE_MATCH_SEED')));
     });
 
     test(`${grader.file}: a seed cell that fails fails the init`, async () => {

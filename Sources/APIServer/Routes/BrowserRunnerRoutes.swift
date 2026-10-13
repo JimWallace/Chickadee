@@ -173,11 +173,11 @@ struct BrowserRunnerRoutes: RouteCollection {
         else {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
             return BrowserRunnerSeedResponse(
-                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil, opponent: nil)
         }
         guard let userID = caller.id, let assignmentID = assignment.id else {
             return BrowserRunnerSeedResponse(
-                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil)
+                seed: nil, personalizedInputs: nil, personalizedFiles: nil, language: nil, opponent: nil)
         }
 
         let seed = try await AssignmentSeedStore.ensureSeed(
@@ -189,7 +189,9 @@ struct BrowserRunnerRoutes: RouteCollection {
         var personalizedInputs: [String: String]?
         var personalizedFiles: [String: String]?
         var language: AssignmentLanguage?
+        var opponent: BrowserRunnerOpponent?
         if let manifest = setup.decodedManifest() {
+            opponent = manifest.activity?.browserStagedBot.map { BrowserRunnerOpponent(botFile: $0) }
             let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             // nil language yields no grading inputs (there is no syntax to
             // render them in); datasets below are language-independent and
@@ -215,7 +217,7 @@ struct BrowserRunnerRoutes: RouteCollection {
         }
         return BrowserRunnerSeedResponse(
             seed: seed, personalizedInputs: personalizedInputs,
-            personalizedFiles: personalizedFiles, language: language?.rawValue)
+            personalizedFiles: personalizedFiles, language: language?.rawValue, opponent: opponent)
     }
 
 }
@@ -244,6 +246,12 @@ struct BrowserRunnerSeedResponse: Content {
     /// extension. Nil when no assignment owns the setup — the same case that
     /// yields a nil seed, where there is nothing personalized to deliver.
     let language: String?
+    /// The bundled bot that this run plays, when the activity stages one for
+    /// a student's own submission (`ClassActivity.browserStagedBot`). The
+    /// browser copies the file into `opponent/` and sets
+    /// `CHICKADEE_OPPONENT_DIR` and `CHICKADEE_MATCH_SEED`, as the native
+    /// worker does (`OpponentStaging`). Nil when nothing is staged.
+    var opponent: BrowserRunnerOpponent?
 }
 
 /// The manifest JSON that the browser runner's manifest endpoint serves: the

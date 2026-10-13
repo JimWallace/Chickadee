@@ -48,6 +48,7 @@ self.ChickadeeXeusKernel.serveGradingWorker({
     // os.environ persists for the whole session, so one set covers every
     // script (parity with the worker's test subprocess).
     seedCell: _shared.assignmentSeedPython,
+    envCell: _shared.envCellPython,
     workspaceCells: function (workDir) {
         return [
             // Record the state a fresh process starts in, after the seed and
