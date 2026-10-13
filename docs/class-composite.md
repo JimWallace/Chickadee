@@ -17,7 +17,7 @@ of all parts together.
 |---|---|---|
 | 0 | This design note | proposed |
 | 1 | Output contract: the `composite` footer field in `RunnerCore` | shipped |
-| 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | planned |
+| 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | shipped |
 | 3 | Slot dealing, and the slot as a per-student input | planned |
 | 4 | Ingest: the `composite_contributions` table and the coverage row | planned |
 | 5 | The composite view on the leaderboard page | planned |
@@ -59,9 +59,11 @@ slot, and a student cannot choose an easy part.
 ## Relation to the bug hunt
 
 A class composite is not a new assignment type. It is a new activity kind, as
-`bugHunt` and `roundRobin` are, and its aggregation is a sibling of `union`.
-The bug hunt already has the structure that a composite needs: each student
-covers items, and the class total is the union of the items.
+`roundRobin` is, and its aggregation is a sibling of `union`. The bug hunt is
+not an `ActivityKind`: it is a contribution assignment
+(`docs/collaborative-class-assignments.md`), and its coverage table
+(`class_item_coverage`) already has the structure that a composite needs: each
+student covers items, and the class total is the union of the items.
 
 | | Bug hunt (`union`) | Class composite (`composite`) |
 |---|---|---|
@@ -254,9 +256,10 @@ the student's result page shows their own contribution, drawn by the same
 3, row 5") and its state. A student sees what they added to the image on the
 screen, and checks it before they look up.
 
-A composite activity therefore ignores `leaderboardVisibleToStudents`: the
-leaderboard page is staff-only for this kind, and the save-time checks refuse
-the switch for it, so the meaning of the switch is not ambiguous. The JSON
+The leaderboard page is staff-only for this kind: `ActivityAuthoring` refuses
+`leaderboardVisibility: visible` on a class composite
+(`compositeLeaderboardHiddenMessage`), and the edit page shows no visibility
+toggle for it, so the meaning of the switch is not ambiguous. The JSON
 endpoint is staff-only for the full set. A student request returns only that
 student's own contribution.
 
@@ -314,10 +317,21 @@ late: a smaller layout would leave dealt slots outside the grid. Each student's
 slot and the size of each contribution depend on the layout, and the grader
 checks that size.
 
-`layout`, `contribution` and `dealOrder` lock together. This is a new check in
-`ActivityAuthoring`, with its own refusal message that names the layout. The
-kind lock does not cover it: that check compares only the kind, and its message
-says that the kind is locked.
+`compositor`, `layout`, `contribution` and `dealOrder` lock together
+(`CompositeSpec.hasSameStructure`). The compositor is in the set because a
+change between a grid and a count moves every slot. This is a new check in
+`ActivityAuthoring`, with its own refusal message
+(`compositeLayoutLockedMessage`). The kind lock does not cover it: that check
+compares only the kind, and its message says that the kind is locked. Slice 2
+locks at the first student submission only, because no slot is dealt before
+slice 3.
+
+**A new composite starts from `CompositeSpec.starter`:** a 6 × 8 grid of
+8 × 8 still RGB tiles. Choosing the kind on the edit page or with
+`set_activity` and no block seeds it, so the kind select alone makes a valid
+activity. A compositor change between a grid and a count keeps every slot
+(`CompositeLayout.reshaped(forGrid:)`): a grid becomes its slot count, and a
+count becomes the smallest near-square grid that holds it.
 
 **Size the layout for the expected attendance, not for the roster.** The
 authoring control shows the ratio, for example "Roster: 62. Slots: 48 (77%)."
@@ -377,7 +391,7 @@ range, or when the total payload for all slots is more than 4 MB.
 | Seam | Rule |
 |---|---|
 | Suite rebuilds | `makeWorkerManifestJSON(preserving:)` already keeps the `activity` block. `AssignmentHelpersManifestTests` gains a composite round trip. |
-| Layout lock | `layout`, `contribution` and `dealOrder` lock at the first deal or the first student submission, whichever comes first. This is a new check with its own message, separate from the kind lock. `frameRate`, `showFailed` and `emptySlots` are display settings and stay editable. |
+| Layout lock | `compositor`, `layout`, `contribution` and `dealOrder` lock at the first deal or the first student submission, whichever comes first (the first submission only until slice 3). This is a new check with its own message, separate from the kind lock. `frameRate`, `showFailed` and `emptySlots` are display settings and stay editable. |
 | Surgical edits | A `withComposite` rebuild, like `withWindow`, so no edit drops another field. |
 | Old runners | An old `RunnerCore` drops the unknown footer field, so the contribution is lost with no error. A new capability token, `activity-composite`, keeps a composite job away from a runner that does not advertise it. The browser wasm ships with the server, so it is always current. |
 | Browser grading | Permitted. A composite stages no opponent. |

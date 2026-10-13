@@ -48,6 +48,26 @@ enum ActivityAuthoring {
         "\(kind.displayName) has no opponent, so it takes no opponent file."
     }
 
+    /// The refusal for a composite's structure change under live
+    /// submissions. Separate from `kindLockedMessage`, which names the kind:
+    /// here the kind is unchanged and only the slots would move.
+    static let compositeLayoutLockedMessage =
+        "This assignment already has student submissions, so the composite's compositor, layout, "
+        + "contribution size and deal order are locked. The frame rate and the empty-slot settings "
+        + "can still change."
+
+    /// The refusal for showing a composite's leaderboard page to students:
+    /// the composite is for the projector, and each student sees only their
+    /// own contribution (docs/class-composite.md).
+    static let compositeLeaderboardHiddenMessage =
+        "A class composite is shown on the projector only, so its leaderboard stays hidden from "
+        + "students. Each student sees their own contribution on their result page."
+
+    /// The refusal for a composite block on a kind that is not a composite.
+    static func compositeOnOtherKindMessage(_ kind: ActivityKind) -> String {
+        "\(kind.displayName) is not a class composite, so it takes no composite settings."
+    }
+
     /// Sets, changes or clears (`nil`) the activity block, returning the block
     /// as stored.
     ///
@@ -77,17 +97,25 @@ enum ActivityAuthoring {
     /// otherwise silence the built-in records (`classRecordsForAward` treats a
     /// non-empty manifest list as authoritative), so the built-ins are seeded
     /// alongside it exactly as a first Save of the Achievements table would.
+    ///
+    /// A class composite always carries a `composite` block: a composite
+    /// chosen without one keeps the stored block when the kind is unchanged
+    /// and gets `CompositeSpec.starter` otherwise, so the edit page's kind
+    /// select alone makes a valid activity. The block's structure locks with
+    /// the kind (`compositeLayoutLockedMessage`); its display settings do not.
     @discardableResult
     static func setActivity(
-        setup: APITestSetup, to activity: ClassActivity?, on db: any Database
+        setup: APITestSetup, to requested: ClassActivity?, on db: any Database
     ) async throws -> ClassActivity? {
         let current = currentManifestActivity(setup.manifest)
-        if current?.kind != activity?.kind, try await hasStudentSubmissions(setup: setup, on: db) {
+        if current?.kind != requested?.kind, try await hasStudentSubmissions(setup: setup, on: db) {
             throw AppError.badRequest(reason: kindLockedMessage)
         }
+        let activity = try requested.map { try withSeededComposite($0, current: current) }
         if let activity {
             try await validateOpponent(of: activity, setup: setup)
             try validateWindow(of: activity)
+            try await validateComposite(of: activity, current: current, setup: setup, on: db)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
         if let activity, activity.kind.aggregation == .leaderboard {
@@ -142,6 +170,45 @@ enum ActivityAuthoring {
         }
     }
 
+    /// The requested block with its composite settled: kept or seeded for a
+    /// class composite, refused on any other kind.
+    private static func withSeededComposite(
+        _ activity: ClassActivity, current: ClassActivity?
+    ) throws -> ClassActivity {
+        guard activity.kind == .classComposite else {
+            guard activity.composite == nil else {
+                throw AppError.badRequest(reason: compositeOnOtherKindMessage(activity.kind))
+            }
+            return activity
+        }
+        guard activity.leaderboardVisibility == .hidden else {
+            throw AppError.badRequest(reason: compositeLeaderboardHiddenMessage)
+        }
+        guard activity.composite == nil else { return activity }
+        let kept = current?.kind == .classComposite ? current?.composite : nil
+        return activity.withComposite(kept ?? .starter)
+    }
+
+    /// Refuses a composite block that breaks a `CompositeSpec` rule, and a
+    /// change to its structure once a student has submitted.
+    ///
+    /// Slice 2 locks at the first submission only. Slots are not dealt yet;
+    /// slice 3 extends the lock to the first deal (docs/class-composite.md).
+    private static func validateComposite(
+        of activity: ClassActivity, current: ClassActivity?, setup: APITestSetup, on db: any Database
+    ) async throws {
+        guard let composite = activity.composite else { return }
+        if let problem = composite.problem {
+            throw AppError.badRequest(reason: problem.message)
+        }
+        if current?.kind == .classComposite, let stored = current?.composite,
+            !stored.hasSameStructure(as: composite),
+            try await hasStudentSubmissions(setup: setup, on: db)
+        {
+            throw AppError.badRequest(reason: compositeLayoutLockedMessage)
+        }
+    }
+
     static let windowBoundsOutOfOrderMessage =
         "A class activity's window must close after it opens."
 
@@ -175,7 +242,7 @@ enum ActivityAuthoring {
 
     /// The record a leaderboard kind seeds.
     /// The record dimension `setActivity` seeds for an aggregation; nil for
-    /// a union kind, which seeds none. The seeders decline while a record of
+    /// a union or composite kind, which seeds none. The seeders decline while a record of
     /// that dimension is already on the manifest, so an instructor's own
     /// record counts. One exhaustive switch, so the `set_activity` report
     /// cannot answer for the leaderboard alone (#2190).
@@ -183,7 +250,7 @@ enum ActivityAuthoring {
         switch aggregation {
         case .leaderboard: return .highestMetric
         case .standings, .bracket: return .tournamentWinner
-        case .union: return nil
+        case .union, .composite: return nil
         }
     }
 

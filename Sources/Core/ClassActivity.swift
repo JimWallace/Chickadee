@@ -93,6 +93,9 @@ public enum ActivityAggregation: String, Codable, CaseIterable, Sendable {
     /// and how each classmate's own work held up. Materialises nothing of
     /// its own — both halves are queries over `match_results`.
     case union
+    /// A shared image composed from one contribution per dealt slot
+    /// (`docs/class-composite.md`). Shows a picture, ranks nobody.
+    case composite
 }
 
 /// The activity kinds this build can author and grade.
@@ -135,6 +138,11 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     /// work held up. The two readings feed achievements only; the match entry
     /// is graded as a round robin's is (#2186).
     case testsVersusImplementations
+    /// Class composite: each student renders one slot of a shared image — a
+    /// tile, a projection angle or a frame — and reports it as the footer's
+    /// `composite` object; the projector composes the class's contributions.
+    /// No opponent, and no grade effect (`docs/class-composite.md`).
+    case classComposite
 
     /// Two-or-three-word chrome label.
     public var displayName: String {
@@ -145,6 +153,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .roundRobin: return "Round robin"
         case .elimination: return "Tournament"
         case .testsVersusImplementations: return "Tests and code"
+        case .classComposite: return "Class composite"
         }
     }
 
@@ -187,6 +196,10 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
                 + "fault and once against the code that has it; the match entry is graded on its "
                 + "mean win fraction like any suite entry, so give it 0 points to keep match results "
                 + "off the grade."
+        case .classComposite:
+            return
+                "Each student renders one dealt slot of a shared image, which the projector composes; "
+                + "it never changes a grade."
         }
     }
 
@@ -198,6 +211,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
         case .roundRobin: return .standings
         case .elimination: return .bracket
         case .testsVersusImplementations: return .union
+        case .classComposite: return .composite
         }
     }
 
@@ -207,7 +221,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable {
     public var opponentSource: ActivityOpponentSource {
         switch self {
         case .beatTheInstructor: return .supportFile
-        case .bestMetric: return .none
+        case .bestMetric, .classComposite: return .none
         case .kingOfTheHill: return .champion
         case .roundRobin, .testsVersusImplementations: return .classmates
         case .elimination: return .paired
@@ -383,16 +397,22 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// default and what every activity before this carried — means the
     /// assignment's own open/closed state is the only gate.
     public let window: LiveSessionWindow?
+    /// For a `classComposite` activity: the slots, the contribution shape
+    /// and the projector settings. Nil on every other kind, and nil on a
+    /// composite until `ActivityAuthoring` seeds `CompositeSpec.starter`.
+    public let composite: CompositeSpec?
 
     public init(
         kind: ActivityKind,
         leaderboardVisibility: LeaderboardVisibility = .hidden,
         opponentFile: String? = nil,
-        window: LiveSessionWindow? = nil
+        window: LiveSessionWindow? = nil,
+        composite: CompositeSpec? = nil
     ) {
         self.kind = kind
         self.leaderboardVisibility = leaderboardVisibility
         self.opponentFile = opponentFile
+        self.composite = composite
         // An unbounded window is no window: storing an empty block would put
         // a field on the manifest that says nothing and make "has a window"
         // two different questions at two different call sites.
@@ -400,7 +420,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, leaderboardVisibility, opponentFile, window
+        case kind, leaderboardVisibility, opponentFile, window, composite
     }
 
     public init(from decoder: Decoder) throws {
@@ -411,6 +431,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         opponentFile = try c.decodeIfPresent(String.self, forKey: .opponentFile)
         let decoded = try c.decodeIfPresent(LiveSessionWindow.self, forKey: .window)
         window = (decoded?.isBounded == true) ? decoded : nil
+        composite = try c.decodeIfPresent(CompositeSpec.self, forKey: .composite)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -420,6 +441,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         // Omitted when nil, so a slice-1 block's bytes are unchanged.
         try c.encodeIfPresent(opponentFile, forKey: .opponentFile)
         try c.encodeIfPresent(window, forKey: .window)
+        try c.encodeIfPresent(composite, forKey: .composite)
     }
 
     /// True when a submission arriving at `now` is inside the live-session
@@ -470,7 +492,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withOpponentFile(_ file: String?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: file,
-            window: window)
+            window: window, composite: composite)
     }
 
     /// The same block with a different leaderboard visibility, everything
@@ -478,7 +500,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withLeaderboardVisibility(_ visibility: LeaderboardVisibility) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: visibility, opponentFile: opponentFile,
-            window: window)
+            window: window, composite: composite)
     }
 
     /// The same block with a different live-session window, everything else
@@ -488,6 +510,14 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     public func withWindow(_ window: LiveSessionWindow?) -> ClassActivity {
         ClassActivity(
             kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
-            window: window)
+            window: window, composite: composite)
+    }
+
+    /// The same block with a different composite block, everything else
+    /// kept — the fourth rebuild, for the composite form's own save.
+    public func withComposite(_ composite: CompositeSpec?) -> ClassActivity {
+        ClassActivity(
+            kind: kind, leaderboardVisibility: leaderboardVisibility, opponentFile: opponentFile,
+            window: window, composite: composite)
     }
 }

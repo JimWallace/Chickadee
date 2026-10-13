@@ -131,7 +131,8 @@ import Testing
         switch kind.opponentSource {
         case .classmates: #expect([.standings, .union].contains(kind.aggregation))
         case .paired: #expect(kind.aggregation == .bracket)
-        case .none, .supportFile, .champion: #expect(kind.aggregation == .leaderboard)
+        case .none: #expect([.leaderboard, .composite].contains(kind.aggregation))
+        case .supportFile, .champion: #expect(kind.aggregation == .leaderboard)
         }
     }
 

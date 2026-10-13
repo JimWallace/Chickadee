@@ -89,6 +89,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "activity", use: saveActivityLeaderboardSetting)
         r.post(":assignmentID", "activity", "opponent", use: saveActivityOpponentFile)
         r.post(":assignmentID", "activity", "window", use: saveActivityWindow)
+        r.post(":assignmentID", "activity", "composite", use: saveActivityComposite)
         r.post(":assignmentID", "tournament", "run", use: runTournament)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)

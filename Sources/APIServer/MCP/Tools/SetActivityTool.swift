@@ -31,6 +31,10 @@ struct SetActivityTool: ContentTool {
         var opensAt: String?
         /// The window's end, ISO-8601, same rules.
         var closesAt: String?
+        /// For a `classComposite` kind: the whole composite block. Absent
+        /// keeps the stored block while the kind is unchanged, else seeds
+        /// `CompositeSpec.starter`. Refused on any other kind.
+        var composite: CompositeSpec?
     }
 
     struct Output: Encodable, Sendable {
@@ -55,10 +59,12 @@ struct SetActivityTool: ContentTool {
         /// not set or there is no activity.
         var opensAt: String?
         var closesAt: String?
+        /// The stored composite block; null for any kind but `classComposite`.
+        var composite: CompositeSpec?
 
         private enum CodingKeys: String, CodingKey {
             case assignmentPublicID, kind, leaderboardVisibility, leaderboardPath
-            case recordAchievementSeeded, opponentSource, opponentFile, opensAt, closesAt
+            case recordAchievementSeeded, opponentSource, opponentFile, opensAt, closesAt, composite
         }
 
         /// The two opponent keys are always present — explicitly null when
@@ -78,6 +84,7 @@ struct SetActivityTool: ContentTool {
             // predates the field".
             try c.encode(opensAt, forKey: .opensAt)
             try c.encode(closesAt, forKey: .closesAt)
+            try c.encode(composite, forKey: .composite)
         }
     }
 
@@ -110,7 +117,14 @@ struct SetActivityTool: ContentTool {
         + "instants, either may stand alone, and a submission outside the window is refused (course "
         + "staff are not gated, so an instructor can run and demonstrate the session). Each is "
         + "absent to keep the stored bound and \"\" to clear it; a window that closes before it "
-        + "opens is refused. No regrade or close. Read "
+        + "opens is refused. A \"composite\" aggregation composes one image from each dealt slot: "
+        + "pass the whole composite block (compositor, layout, contribution, and optionally dealOrder, "
+        + "frameRate, showFailed, emptySlots); absent keeps the stored block, and a new composite "
+        + "starts from a 6 by 8 grid of 8 by 8 RGB tiles. The compositor, layout, contribution and "
+        + "dealOrder lock once a student has submitted; the other three stay editable. A composite's "
+        + "leaderboard stays hidden from students: it is for the projector. Each test "
+        + "script reports its rendering as the footer's `composite` object, which never changes a "
+        + "grade. No regrade or close. Read "
         + "the current state from get_assignment; get_server_info lists the kinds with their "
         + "opponent sources."
     static let inputSchema: JSONValue = .object([
@@ -149,6 +163,7 @@ struct SetActivityTool: ContentTool {
                 "description": .string(
                     "ISO-8601 instant it stops. Absent keeps the stored bound; \"\" clears it."),
             ]),
+            "composite": compositeSchema,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("kind")]),
         "additionalProperties": .bool(false),
@@ -168,10 +183,64 @@ struct SetActivityTool: ContentTool {
             "opponentFile": MCPSchema.nullableString,
             "opensAt": MCPSchema.nullableString,
             "closesAt": MCPSchema.nullableString,
+            "composite": .object([
+                "type": .array([.string("object"), .string("null")]),
+                "description": .string("The stored composite block; null for any other kind."),
+            ]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("recordAchievementSeeded"),
         ]),
+    ])
+    /// The composite block's input schema. Every enum derives from its
+    /// `CaseIterable` owner, so a new compositor needs no edit here.
+    static let compositeSchema: JSONValue = .object([
+        "type": .string("object"),
+        "description": .string(
+            "For kind \"classComposite\" only: the slots and the contribution each slot holds."),
+        "properties": .object([
+            "compositor": .object([
+                "type": .string("string"),
+                "enum": .array(CompositeCompositor.allCases.map { .string($0.rawValue) }),
+                "description": .string(
+                    "tile and gallery take a grid layout (cols, rows); sequence and sum take a count."),
+            ]),
+            "layout": .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "cols": MCPSchema.integer, "rows": MCPSchema.integer, "count": MCPSchema.integer,
+                ]),
+                "additionalProperties": .bool(false),
+            ]),
+            "contribution": .object([
+                "type": .string("object"),
+                "description": .string(
+                    "The size every contribution must have: w and h in pixels, frames, and format."),
+                "properties": .object([
+                    "w": MCPSchema.integer, "h": MCPSchema.integer, "frames": MCPSchema.integer,
+                    "format": .object([
+                        "type": .string("string"),
+                        "enum": .array(CompositePixelFormat.allCases.map { .string($0.rawValue) }),
+                    ]),
+                ]),
+                "required": .array([.string("w"), .string("h"), .string("frames"), .string("format")]),
+                "additionalProperties": .bool(false),
+            ]),
+            "dealOrder": .object([
+                "type": .string("string"),
+                "enum": .array(CompositeDealOrder.allCases.map { .string($0.rawValue) }),
+            ]),
+            "frameRate": MCPSchema.integer,
+            "showFailed": MCPSchema.boolean,
+            "emptySlots": .object([
+                "type": .string("string"),
+                "enum": .array(CompositeEmptySlots.allCases.map { .string($0.rawValue) }),
+                "description": .string(
+                    "What a slot with no passing contribution shows; \"reference\" is refused for sum."),
+            ]),
+        ]),
+        "required": .array([.string("compositor"), .string("layout"), .string("contribution")]),
+        "additionalProperties": .bool(false),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
@@ -214,7 +283,11 @@ struct SetActivityTool: ContentTool {
                 .withWindow(
                     Self.resolvedWindow(
                         opensAt: input.opensAt, closesAt: input.closesAt, kind: block.kind,
-                        current: current))
+                        current: current)
+                )
+                // Absent: `ActivityAuthoring` keeps the stored block while
+                // the kind is unchanged and seeds the starter otherwise.
+                .withComposite(input.composite)
         }
         do {
             try await ActivityAuthoring.setActivity(setup: setup, to: requested, on: context.db)
@@ -235,7 +308,8 @@ struct SetActivityTool: ContentTool {
             opponentSource: stored?.activity?.kind.opponentSource.rawValue,
             opponentFile: stored?.activity?.opponentFile,
             opensAt: stored?.activity?.window?.opensAtISO,
-            closesAt: stored?.activity?.window?.closesAtISO)
+            closesAt: stored?.activity?.window?.closesAtISO,
+            composite: stored?.activity?.composite)
     }
 
     /// The visibility the call means: the given value, or, when absent, the

@@ -354,22 +354,28 @@ private struct EditActivityBlock: HTML {
                 }
             }
             p(.class("field-note field-note--muted")) { activity.summary }
-            form(.method(.post), .action("/instructor/\(assignmentID)/activity"), .dataFlag("ck-inplace")) {
-                CSRFField(token: csrfToken)
-                " "
-                label(.class("form-label")) {
+            // A composite's leaderboard page stays staff-only (docs/class-composite.md).
+            if activity.showsVisibilityToggle {
+                form(.method(.post), .action("/instructor/\(assignmentID)/activity"), .dataFlag("ck-inplace")) {
+                    CSRFField(token: csrfToken)
                     " "
-                    input(.type(.checkbox), .name("visible"))
-                        .attributes(.checked, when: activity.leaderboardVisible)
-                    " Show the leaderboard to students"
+                    label(.class("form-label")) {
+                        " "
+                        input(.type(.checkbox), .name("visible"))
+                            .attributes(.checked, when: activity.leaderboardVisible)
+                        " Show the leaderboard to students"
+                    }
+                    p(.class("field-note field-note--muted")) {
+                        "Students see each entry by class handle, with rank and metric only."
+                    }
+                    button(.class("btn action-btn"), .type(.submit)) { "Save leaderboard setting" }
                 }
-                p(.class("field-note field-note--muted")) {
-                    "Students see each entry by class handle, with rank and metric only."
-                }
-                button(.class("btn action-btn"), .type(.submit)) { "Save leaderboard setting" }
             }
             if activity.needsOpponentFile {
                 opponentForm
+            }
+            if let composite = activity.composite {
+                compositeSettings(composite)
             }
             form(.method(.post), .action("/instructor/\(assignmentID)/activity/window"), .dataFlag("ck-inplace")) {
                 CSRFField(token: csrfToken)
@@ -392,6 +398,132 @@ private struct EditActivityBlock: HTML {
                 p(.class("field-note field-note--muted")) { "Submissions outside these times are refused." }
                 button(.class("btn action-btn"), .type(.submit)) { "Save session window" }
             }
+        }
+    }
+
+    /// The class composite's settings (docs/class-composite.md): the current
+    /// values as a detail grid, and the form on demand. Once a student has
+    /// submitted, the structural inputs render disabled and the endpoint
+    /// keeps their stored values; the display settings stay open.
+    private func compositeSettings(_ composite: CompositeEditFacts) -> some HTML {
+        div {
+            p(.class("field-note field-note--muted")) { composite.rosterLine }
+            dl(.class("detail-grid")) {
+                dt { "Compositor" }
+                dd { composite.compositorLabel }
+                dt { "Slots" }
+                dd { composite.slotsLabel }
+                dt { "Contribution" }
+                dd { composite.contributionLabel }
+                dt { "Deal order" }
+                dd { composite.dealOrderLabel }
+                dt { "Frame rate" }
+                dd { composite.frameRateLabel }
+                dt { "Failed contributions" }
+                dd { composite.showFailedLabel }
+                dt { "Empty slots" }
+                dd { composite.emptySlotsLabel }
+            }
+            details {
+                summary(.class("disclosure-summary")) {
+                    span(.class("accordion-caret"), .ariaHidden) { Icon("i-chevron-right") }
+                    "Change composite settings"
+                }
+                compositeForm(composite)
+            }
+        }
+    }
+
+    private func compositeForm(_ composite: CompositeEditFacts) -> some HTML {
+        form(.method(.post), .action("/instructor/\(assignmentID)/activity/composite"), .dataFlag("ck-inplace")) {
+            CSRFField(token: csrfToken)
+            label(.class("form-label field-gap")) {
+                "Compositor "
+                select(.class("form-input"), .name("compositor")) {
+                    SelectOptions(options: composite.compositorOptions)
+                }
+                .attributes(.disabled, when: composite.structureLocked)
+                " "
+            }
+            div(.class("toolbar field-gap")) {
+                if composite.usesGrid {
+                    compositeNumber(
+                        "Columns", name: "cols", value: composite.columns,
+                        max: CompositeEditFacts.maxGridSide, locked: composite.structureLocked)
+                    compositeNumber(
+                        "Rows", name: "rows", value: composite.rows,
+                        max: CompositeEditFacts.maxGridSide, locked: composite.structureLocked)
+                } else {
+                    compositeNumber(
+                        "Slots", name: "count", value: composite.count,
+                        max: CompositeEditFacts.maxSlots, locked: composite.structureLocked)
+                }
+            }
+            div(.class("toolbar field-gap")) {
+                compositeNumber(
+                    "Width (px)", name: "w", value: composite.width,
+                    max: CompositeEditFacts.maxContributionSide, locked: composite.structureLocked)
+                compositeNumber(
+                    "Height (px)", name: "h", value: composite.height,
+                    max: CompositeEditFacts.maxContributionSide, locked: composite.structureLocked)
+                compositeNumber(
+                    "Frames", name: "frames", value: composite.frames,
+                    max: CompositeEditFacts.maxFrames, locked: composite.structureLocked)
+                label(.class("field-inline")) {
+                    "Pixel format "
+                    select(.class("form-input input-compact"), .name("format")) {
+                        SelectOptions(options: composite.formatOptions)
+                    }
+                    .attributes(.disabled, when: composite.structureLocked)
+                    " "
+                }
+            }
+            label(.class("form-label field-gap")) {
+                "Deal order "
+                select(.class("form-input"), .name("dealOrder")) {
+                    SelectOptions(options: composite.dealOrderOptions)
+                }
+                .attributes(.disabled, when: composite.structureLocked)
+                " "
+            }
+            if composite.structureLocked {
+                p(.class("field-note field-note--muted")) {
+                    "Students have submitted, so these settings are locked."
+                }
+            }
+            div(.class("toolbar field-gap")) {
+                compositeNumber(
+                    "Frame rate (fps)", name: "frameRate", value: composite.frameRate,
+                    max: CompositeEditFacts.maxFrameRate, locked: false)
+            }
+            label(.class("form-label field-gap")) {
+                " "
+                input(.type(.checkbox), .name("showFailed"))
+                    .attributes(.checked, when: composite.showFailed)
+                " Show failed contributions with a mark"
+            }
+            label(.class("form-label field-gap")) {
+                "Empty slots "
+                select(.class("form-input"), .name("emptySlots")) {
+                    SelectOptions(options: composite.emptySlotsOptions)
+                }
+                " "
+            }
+            button(.class("btn action-btn"), .type(.submit)) { "Save composite settings" }
+        }
+    }
+
+    private func compositeNumber(
+        _ title: String, name: String, value: String, max: Int, locked: Bool
+    ) -> some HTML {
+        label(.class("field-inline")) {
+            "\(title) "
+            input(
+                .type(.number), .name(name), .min(1), .max(max), .step(1),
+                .class("form-input input-compact"), .value(value)
+            )
+            .attributes(.disabled, when: locked)
+            " "
         }
     }
 

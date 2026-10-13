@@ -79,6 +79,10 @@ struct LeaderboardPresentation {
     /// True once the roster has code to test; the template gates on this.
     let hasUnion: Bool
     let union: UnionPresentation?
+    /// True for a class composite: the page shows the composed image
+    /// (docs/class-composite.md). Defaulted, so a context built before the
+    /// composite existed still compiles and still shows its own board.
+    var showsComposite: Bool = false
     /// True when the page shows the session's state line. A COPY question
     /// only — whether the page refreshes is `pollsLive`, which answers a
     /// different one, and an open-ended session says yes to that and no to

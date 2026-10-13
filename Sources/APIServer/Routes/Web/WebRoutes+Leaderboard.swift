@@ -51,6 +51,7 @@ extension WebRoutes {
         let showsBracket = activity.kind.aggregation == .bracket
         let showsUnion = activity.kind.aggregation == .union
         let showsMetricBoard = activity.kind.aggregation == .leaderboard
+        let showsComposite = activity.kind.aggregation == .composite
         let boardURL = "/testsetups/\(setupID)/leaderboard"
         // Staff always read the whole list; a student reads a window of it
         // unless they ask for the rest.
@@ -121,6 +122,7 @@ extension WebRoutes {
                 showsUnion: showsUnion,
                 hasUnion: union != nil,
                 union: union,
+                showsComposite: showsComposite,
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page

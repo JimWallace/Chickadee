@@ -53,6 +53,11 @@ struct LeaderboardBody: HTML {
             } else {
                 p(.class("empty")) { "No student has submitted yet." }
             }
+        } else if board.showsComposite {
+            // The composed image arrives with the composite view (slice 5 of
+            // docs/class-composite.md); until a slot holds a contribution,
+            // this line is all the page has to say.
+            p(.class("empty")) { "No slot has a contribution yet." }
         } else if board.showsStandings {
             if board.standings.isEmpty {
                 p(.class("empty")) { "No submission has played a match yet." }
