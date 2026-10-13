@@ -290,6 +290,8 @@ private func orderedTestItems(
     var items: [TestItem] = []
     var seen = Set<String>()
     for entry in testSuites {
+        // Not a switch over `entry.origin`: when the family lookup fails, this
+        // chain falls through to the check branch, and a switch would not.
         if let fid = entry.generatedBy, let fam = familyByID[fid], seen.insert(fid).inserted {
             items.append(.family(fam))
         } else if let cid = entry.generatedByCheck, let chk = checkByID[cid], seen.insert(cid).inserted {

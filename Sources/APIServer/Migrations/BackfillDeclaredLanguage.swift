@@ -43,7 +43,7 @@ struct BackfillDeclaredLanguage: ChickadeeMigration {
             guard let manifest = setup.decodedManifest() else { continue }
             // Already answered — by an author on the edit page, or by an earlier
             // run of this migration. Never re-derive over a real answer.
-            guard manifest.languageDeclared != true else { continue }
+            guard manifest.languageDeclaration == .undeclared else { continue }
 
             let resolved = AssignmentLanguage.derivedDeclaration(
                 manifest: manifest,

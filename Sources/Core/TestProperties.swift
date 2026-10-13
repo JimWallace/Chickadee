@@ -174,7 +174,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     /// check.  Raw-script-edit guards consult this so they refuse to mutate
     /// generated entries regardless of which generator produced them.
     public var isGenerated: Bool {
-        generatedBy != nil || generatedByCheck != nil
+        origin != .handWritten
     }
 }
 

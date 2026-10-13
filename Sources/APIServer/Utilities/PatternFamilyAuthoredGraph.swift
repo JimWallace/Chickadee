@@ -92,7 +92,8 @@ func reconstructAuthoredOrdering(
     var seenFamilyIDs: Set<String> = []
     var seenCheckIDs: Set<String> = []
     for entry in props.testSuites {
-        if let fid = entry.generatedBy {
+        switch entry.origin {
+        case .family(let fid):
             guard !seenFamilyIDs.contains(fid) else { continue }
             seenFamilyIDs.insert(fid)
             if nextFamilyIDs.contains(fid) {
@@ -102,7 +103,7 @@ func reconstructAuthoredOrdering(
                         sectionID: normaliseSectionID(entry.sectionID)
                     ))
             }
-        } else if let cid = entry.generatedByCheck {
+        case .check(let cid):
             guard !seenCheckIDs.contains(cid) else { continue }
             seenCheckIDs.insert(cid)
             if nextCheckIDs.contains(cid) {
@@ -112,7 +113,7 @@ func reconstructAuthoredOrdering(
                         sectionID: normaliseSectionID(entry.sectionID)
                     ))
             }
-        } else {
+        case .handWritten:
             rebuilt.append(
                 .script(
                     AuthoredRawScript(

@@ -250,10 +250,13 @@ struct GetSuiteTool: ContentTool {
         var generatedByFamily: [String: [String]] = [:]
         var generatedByCheck: [String: [String]] = [:]
         for entry in manifest?.testSuites ?? [] {
-            if let fid = entry.generatedBy {
+            switch entry.origin {
+            case .family(let fid):
                 generatedByFamily[fid, default: []].append(entry.script)
-            } else if let cid = entry.generatedByCheck {
+            case .check(let cid):
                 generatedByCheck[cid, default: []].append(entry.script)
+            case .handWritten:
+                break
             }
         }
         let items = payload.items.map {

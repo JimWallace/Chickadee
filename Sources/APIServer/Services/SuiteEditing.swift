@@ -193,7 +193,8 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) as
     var emittedFamilyIDs: Set<String> = []
     var emittedCheckIDs: Set<String> = []
     for entry in props.testSuites {
-        if let fid = entry.generatedBy {
+        switch entry.origin {
+        case .family(let fid):
             guard !emittedFamilyIDs.contains(fid), let family = familyByID[fid] else { continue }
             emittedFamilyIDs.insert(fid)
             items.append(
@@ -205,7 +206,7 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) as
                     dependsOn: family.dependsOn,
                     sectionID: entry.sectionID
                 ))
-        } else if let cid = entry.generatedByCheck {
+        case .check(let cid):
             guard !emittedCheckIDs.contains(cid), let check = checkByID[cid] else { continue }
             emittedCheckIDs.insert(cid)
             items.append(
@@ -217,7 +218,7 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) as
                     dependsOn: check.dependsOn,
                     sectionID: entry.sectionID
                 ))
-        } else {
+        case .handWritten:
             await items.append(
                 SuiteItemDTO(
                     kind: "script",

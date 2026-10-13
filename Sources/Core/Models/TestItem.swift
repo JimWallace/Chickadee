@@ -1,9 +1,10 @@
 // Core/Models/TestItem.swift
 //
 // One entry in the unified "test item" list — a pattern family OR a notebook
-// check.  Both are instructor-authored specs that expand into generated `.py`
-// test scripts at manifest-save time (see PatternFamily / NotebookCheck), and
-// the editor UI presents them as flavours of the same "add a test" action.
+// check.  Both are instructor-authored specs that expand into generated test
+// scripts, in the assignment's language, at manifest-save time (see
+// PatternFamily / NotebookCheck), and the editor UI presents them as
+// flavours of the same "add a test" action.
 // `TestItem` is the single type server + UI code iterates so neither has to
 // branch on "is this a family or a check" for the shared envelope concerns
 // (id, display name, prerequisites).

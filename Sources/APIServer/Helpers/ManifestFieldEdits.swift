@@ -341,8 +341,7 @@ func declareManifestLanguage(
 /// The declaration rule that `declareManifestLanguage` documents, shared with
 /// `changeDeclaredLanguage`.
 func applyLanguageDeclaration(_ language: AssignmentLanguage?, to props: inout TestProperties) {
-    props.languageDeclared = true
-    props.language = language
+    props.languageDeclaration = language.map(LanguageDeclaration.language) ?? .noLanguage
     if let language, requiresUploadOnlySubmission(language) {
         props.submissionMode = .uploadOnly
         props.gradingMode = .worker

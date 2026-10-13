@@ -169,31 +169,28 @@ A new `TestProperties` field is then server-only unless a person adds it to
 
 ### D2. Use one shared settings type (P5)
 
+Implemented in phase 1 (`Sources/Core/TestSettings.swift`).
+
 ```swift
-public struct TestSettings: Codable, Equatable, Sendable {
+public struct TestSettings: Equatable, Sendable {
     public var tier: TestTier
     public var points: Int
     public var hint: String?
     public var timeLimitSeconds: Int?
     public var failureDetail: FailureDetail?
 }
-
-public struct TestSettingsOverride: Codable, Equatable, Sendable {
-    public var tier: TestTier?
-    public var points: Int?
-    public var hint: String?
-    public var timeLimitSeconds: Int?
-    public var failureDetail: FailureDetail?
-
-    public func applied(to base: TestSettings) -> TestSettings
-}
 ```
 
-`TestSuiteEntry`, `PatternDefaults` and `NotebookCheck` hold a
-`TestSettings`. `PatternCase` holds a `TestSettingsOverride`. The wire shape
-stays flat: each type encodes the settings keys at its own level, as today.
-The current initializers and property names stay as forwarding members, so
-call sites do not change.
+`TestSettings` is a computed view, not a stored field.
+`TestSuiteEntry.settings` (with a setter), `PatternDefaults.settings` and
+`NotebookCheck.settings` read the stored fields.
+`PatternCase.resolvedSettings(defaults:)` composes the existing
+`resolved*(defaults:)` rules, so no override type is necessary.
+
+The stored fields stay, for two reasons. First, the four types have
+different decode defaults and encode rules. Second, their encoded bytes feed
+`spec_hash` and the runner cache key. A stored `TestSettings` would need a
+hand-written encoder in each type only to keep the bytes the same.
 
 ### D3. Give each check kind its own payload (P4). Withdrawn: see "Corrections"
 
@@ -227,6 +224,7 @@ public enum SuiteEntryOrigin: Equatable, Sendable {
 }
 ```
 
+Implemented in phase 1 (`Sources/Core/SuiteEntryOrigin.swift`).
 `TestSuiteEntry.origin` is a computed property over the two stored optionals.
 The sites that now test `generatedBy` and then `generatedByCheck` switch on it
 instead. The wire shape does not change.
@@ -236,13 +234,16 @@ instead. The wire shape does not change.
 ```swift
 public enum LanguageDeclaration: Equatable, Sendable {
     case undeclared
-    case none
+    case noLanguage
     case language(AssignmentLanguage)
 }
 ```
 
-`TestProperties.languageDeclaration` is a computed property over the two
-stored fields, with a setter that writes both. The wire shape does not
+Implemented in phase 1 (`Sources/Core/LanguageDeclaration.swift`). The case
+is `noLanguage`, not `none`, so that it is not confused with `Optional.none`. `TestProperties.languageDeclaration` is a computed property
+over the two stored fields, with a setter that writes both. A recorded
+language without the flag reads as `undeclared`, which is the rule that
+bundle import and the backfill already apply. The wire shape does not
 change. A future v2 could encode it as one key.
 
 ### D6. Use one input type (P6)

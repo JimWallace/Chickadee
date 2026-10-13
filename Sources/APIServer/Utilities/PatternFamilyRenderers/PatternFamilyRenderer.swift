@@ -288,18 +288,18 @@ private func renderCase(
             perStudentNames: perStudentNames)
     }
 
-    let tier = c.resolvedTier(defaults: family.defaults)
+    let settings = c.resolvedSettings(defaults: family.defaults)
     return GeneratedScript(
         filename: generatedScriptFilename(
-            familyID: family.id, caseKey: c.key, tier: tier, language: language),
+            familyID: family.id, caseKey: c.key, tier: settings.tier, language: language),
         source: source,
-        tier: tier,
-        points: c.resolvedPoints(defaults: family.defaults),
+        tier: settings.tier,
+        points: settings.points,
         displayName: c.label,
         caseKey: c.key,
         familyID: family.id,
-        timeLimitSeconds: normalizedGeneratedTimeLimit(c.resolvedTimeLimit(defaults: family.defaults)),
-        failureDetail: c.resolvedFailureDetail(defaults: family.defaults)
+        timeLimitSeconds: normalizedGeneratedTimeLimit(settings.timeLimitSeconds),
+        failureDetail: settings.failureDetail
     )
 }
 
