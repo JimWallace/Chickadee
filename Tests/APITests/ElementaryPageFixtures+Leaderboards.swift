@@ -243,7 +243,47 @@ enum LeaderboardSamples {
             ("hill student", board(.hill, isStaff: false, you: viewer(isRanked: true))),
             ("hill staff", board(.hill, isStaff: true)),
             ("hill empty", board(.hill, isStaff: false, empty: true)),
+            ("composite staff", composite(.starter, holders: true, live: true)),
+            ("composite strip, no holders", composite(sequenceSpec, holders: false, live: false)),
+            ("composite missing", composite(nil, holders: false, live: false)),
         ]
+    }
+
+    // MARK: - Class composite (docs/class-composite.md)
+
+    static let sequenceSpec = CompositeSpec(
+        compositor: .sequence, layout: .count(12),
+        contribution: CompositeContributionShape(width: 8, height: 8, frames: 30, format: .rgb8), dealOrder: .rowMajor)
+
+    static func composite(_ spec: CompositeSpec?, holders: Bool, live: Bool) -> LeaderboardPresentation {
+        var result = board(.standings, isStaff: true, live: live, sessionWindow: live ? window : nil)
+        result.showsComposite = true
+        result.compositeStage = spec.map {
+            .board(spec: $0, testSetupID: "ts1", present: false, pollUntilISO: live ? "2026-10-12T18:50:00Z" : nil)
+        }
+        result.compositeBoard =
+            spec == nil
+            ? nil
+            : CompositeBoardPresentation(
+                progressText: "2 of 48 tiles complete",
+                holders: holders
+                    ? [
+                        .init(
+                            place: "Column 1, row 1", who: "Calm Finch · Ada", stateText: "Passed",
+                            tierClass: "tier-open"),
+                        .init(
+                            place: "Column 2, row 1", who: "Brisk Wren · Alan", stateText: "Did not pass, grading",
+                            tierClass: "tier-danger"),
+                        .init(
+                            place: "Column 3, row 1", who: "Quiet Cedar", stateText: "No contribution", tierClass: ""),
+                    ] : [])
+        return result
+    }
+
+    static func presentComposite(_ spec: CompositeSpec) -> PresentModePresentation {
+        var result = present(window: window)
+        result.compositeStage = .board(spec: spec, testSetupID: "ts1", present: true, pollUntilISO: nil)
+        return result
     }
 
     // MARK: - Present mode
@@ -297,6 +337,8 @@ enum LeaderboardSamples {
                     bracket: tournament(named: false, viewer: nil, complete: false), showsBracket: true, window: window)
             ),
             ("bracket none", present(showsBracket: true)),
+            ("composite grid", presentComposite(.starter)),
+            ("composite strip", presentComposite(sequenceSpec)),
         ]
     }
 
