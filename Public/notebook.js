@@ -2072,7 +2072,7 @@
             const block = document.createElement('section');
             block.className = 'submission-section-block';
             if (group.sectionName) {
-                const heading = document.createElement('h3');
+                const heading = document.createElement('h2');
                 heading.className = 'submission-section-heading';
                 heading.textContent = group.sectionName;
                 block.appendChild(heading);
