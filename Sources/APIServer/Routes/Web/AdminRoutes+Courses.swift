@@ -382,6 +382,11 @@ extension AdminRoutes {
                 // explicitly (docs/collaborative-class-assignments.md, Phase 4).
                 try await APIClassCoverageRun.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
+                // The per-item coverage union records who covered each item
+                // first. Keyed by setup with no foreign key, so nothing else
+                // removes it.
+                try await APIClassItemCoverage.query(on: db)
+                    .filter(\.$testSetupID ~~ setupIDs).delete()
                 try await APISubmission.query(on: db)
                     .filter(\.$testSetupID ~~ setupIDs).delete()
             }
