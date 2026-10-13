@@ -263,8 +263,11 @@ public struct PersonalizationExpression: Codable, Equatable, Sendable {
 public struct TestProperties: Codable, Equatable, Sendable {
     /// The `schemaVersion` that the v1 form carries.  `ManifestV2` holds v2.
     public static let v1SchemaVersion = 1
-    /// The version this value was read from: 1 or 2.  The v1 encoder writes
-    /// 1 whatever this holds.
+    /// 1 for every in-memory manifest, whichever form it was read from, so
+    /// equal content compares equal.  The writer decides the wire version;
+    /// `wireVersion(of:)` reads the version of stored text.  A version other
+    /// than 1 or 2 is read as v1 and keeps its number, so the upload can
+    /// refuse it.
     public var schemaVersion: Int
     public var gradingMode: GradingMode
     /// How students hand work in — see `SubmissionMode`. `.uploadOnly`
@@ -702,8 +705,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        // Always 1: this is the v1 form, whatever version the value was read
-        // from.  A value read from v2 and written here must read back as v1.
+        // Always 1: this is the v1 form.  A value with any other number (one
+        // read from an unknown version) must still write valid v1.
         try c.encode(Self.v1SchemaVersion, forKey: .schemaVersion)
         try c.encode(gradingMode, forKey: .gradingMode)
         try c.encode(submissionMode, forKey: .submissionMode)

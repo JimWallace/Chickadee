@@ -23,6 +23,8 @@
 // the writer's entry point; it returns nil for a manifest that the v2 form
 // cannot hold exactly, so that manifest stays v1.
 
+import Foundation
+
 /// The v2 wire form of a manifest.
 public struct ManifestV2: Codable, Equatable, Sendable {
     public static let schemaVersion = 2
@@ -222,12 +224,13 @@ extension ManifestV2 {
             : nil
     }
 
-    /// The manifest that this envelope holds.  `schemaVersion` is 2, the
-    /// version it was read from.
+    /// The manifest that this envelope holds.  Its `schemaVersion` is the v1
+    /// number, like every in-memory manifest: the writer, not the value,
+    /// decides the wire version.
     var testProperties: TestProperties {
         get throws {
             var p = TestProperties(
-                schemaVersion: Self.schemaVersion,
+                schemaVersion: TestProperties.v1SchemaVersion,
                 gradingMode: gradingMode,
                 submissionMode: submissionMode,
                 githubSubmission: github?.submission ?? false,
@@ -363,9 +366,17 @@ extension TestProperties {
     public func v2Envelope() -> ManifestV2? {
         let envelope = ManifestV2(self)
         guard let data = try? ManifestCodec.stableEncoder.encode(envelope),
-            var roundTripped = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            let roundTripped = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
         else { return nil }
-        roundTripped.schemaVersion = schemaVersion
         return roundTripped == self ? envelope : nil
+    }
+
+    /// The `schemaVersion` that stored manifest text carries, read without a
+    /// full decode, or nil when the text has none.  The in-memory value does
+    /// not keep it (see `ManifestV2.testProperties`), so a caller that must
+    /// know how the text was written asks the text.
+    public static func wireVersion(of text: String) -> Int? {
+        struct VersionOnly: Decodable { let schemaVersion: Int? }
+        return (try? ManifestCodec.decoder.decode(VersionOnly.self, from: Data(text.utf8)))?.schemaVersion
     }
 }
