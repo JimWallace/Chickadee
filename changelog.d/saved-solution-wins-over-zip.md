@@ -1,0 +1,3 @@
+### Fixed
+
+- **A saved solution wins over one bundled in the setup zip.** When an instructor's uploaded setup zip carried a `solution.*`, that entry was searched first, so every later solution save (the editor, MCP `update_solution`, the edit form) was stored but never shown: the editor, `get_solution` and the student reveal kept the bundled one while validation graded the saved one. Worse, an edit-form save with no solution upload re-validated against the zip's original answer key and linked it, reverting the saved solution. The search order is now the linked validation submission, the newest validation submission, the setup zip, then the draft, and the edit form follows it.

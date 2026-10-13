@@ -14,9 +14,12 @@ gate, the slip-day interaction that shapes it, and the deliberate limits.
   - **`afterDue`** — each enrolled student may view the solution once *their
     own* reveal moment has passed (below).
 - What is revealed is the same artifact staff see: the reference solution
-  resolved from the setup zip's `solution.*` entry, the linked validation
-  submission, the newest validation submission, or the unvalidated draft
-  (`solutionNotebookData` / `solutionFileDownloadResponse`). For a notebook
+  resolved from the linked validation submission, the newest validation
+  submission, the setup zip's `solution.*` entry, or the unvalidated draft,
+  in that order (`SolutionSource`, `solutionNotebookData` /
+  `solutionFileDownloadResponse`). Every solution save stores a validation
+  submission and leaves the zip alone, so a bundled zip entry searched first
+  would hide every later save. For a notebook
   assignment the student opens it in the editor — seeded through
   `ensureUserNotebookWorkingCopy`, so `{{name}}` placeholders render with the
   *student's own* personalization, and the answers line up with their variant.
