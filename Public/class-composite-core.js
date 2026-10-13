@@ -76,7 +76,7 @@
 
     /// Standard base64 to bytes. `atob` exists in every browser and in node.
     function decodeBase64(text) {
-        var binary = atob(text);
+        var binary = globalThis.atob(text);
         var bytes = new Uint8Array(binary.length);
         for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
         return bytes;
