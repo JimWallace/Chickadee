@@ -586,4 +586,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddAIFeedbackAttestation())
     // Class composite (docs/class-composite.md, slice 3): the dealt slots.
     app.migrations.add(CreateCompositeSlots())
+    // Class composite, slice 4: the latest contribution of each student.
+    app.migrations.add(CreateCompositeContributions())
 }

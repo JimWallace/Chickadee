@@ -163,11 +163,13 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --      assignment_personalization_seeds, class_achievements, achievement_results,
 --      user_activity_events, brightspace_sync_log, pre_enrollments, audit_log,
 --      request_metrics, runner_profiles, runner_snapshots, composite_slots,
---      oauth_* ...
+--      composite_contributions, oauth_* ...
 --
 --    composite_slots maps each student to their class-composite slot. The one
 --    MCP use of it, the set_activity structure lock, counts rows on the MAIN
 --    (owner) pool via ToolContext.mainDB, so it needs no grant here.
+--    composite_contributions holds each student's rendered pixels. No MCP tool
+--    reads it.
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.
 --
 --    assignment_personalization_seeds STAYS DENIED. The MCP personalization
@@ -193,3 +195,5 @@ CREATE POLICY mcp_ai_feedback_rows ON reflection_feedback
 --                                                   -- (seed bookkeeping runs on the owner pool)
 --      SELECT * FROM composite_slots LIMIT 1;       -- must ERROR: permission denied
 --                                                   -- (the set_activity lock runs on the owner pool)
+--      SELECT * FROM composite_contributions LIMIT 1;
+--                                                   -- must ERROR: permission denied

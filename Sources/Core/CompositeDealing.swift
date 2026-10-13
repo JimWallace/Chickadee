@@ -61,6 +61,13 @@ extension CompositeSpec {
         return inputs
     }
 
+    /// The class-coverage item a passing contribution for `slot` records
+    /// (slice 4). An unscoped `itemsCovered` class goal counts these.
+    public static func coverageItem(forSlot slot: Int) -> String { "slot-\(slot)" }
+
+    /// Every slot's coverage item, in slot order.
+    public var coverageItems: [String] { (0..<layout.slotCount).map(Self.coverageItem(forSlot:)) }
+
     /// Squared distance from the layout's centre, in doubled coordinates so
     /// it stays an integer for an even side (the centre then falls between
     /// two cells).
