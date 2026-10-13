@@ -312,29 +312,18 @@ extension WebRoutes {
         let viewMode = args.viewMode
         let workingCopyPath = userNotebookWorkingCopyRelativePath(
             setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
-        if fileKind == .solution {
-            let solutionData = try await solutionNotebookData(
-                for: assignment, setup: setup, db: req.db,
-                testSetupsDirectory: req.application.testSetupsDirectory)
-            _ = try await ensureUserNotebookWorkingCopy(
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                relativePath: workingCopyPath,
-                defaultData: solutionData,
-                viewMode: viewMode,
-                on: req.db, application: req.application, logger: req.logger
-            )
-        } else {
-            _ = try await ensureUserNotebookWorkingCopy(
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                relativePath: workingCopyPath,
-                viewMode: viewMode,
-                on: req.db, application: req.application, logger: req.logger
-            )
-        }
+        let seed = try await workingCopySeed(
+            req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: args.isStaff)
+        _ = try await ensureUserNotebookWorkingCopy(
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: setup,
+            relativePath: workingCopyPath,
+            defaultData: seed.data,
+            refreshFromSeed: seed.refresh,
+            viewMode: viewMode,
+            on: req.db, application: req.application, logger: req.logger
+        )
         let jupyterLiteNotebookPath = workingCopyPath
         let encodedPath =
             jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
@@ -570,6 +559,42 @@ extension WebRoutes {
         return notebookViewMode(from: requested) ?? .template
     }
 
+    /// What a working copy of `fileKind` is seeded from, and whether an existing
+    /// copy is refreshed from it. The page and `/notebook/source` both resolve
+    /// it here, so the editor's frame and its content fetch never disagree.
+    ///
+    /// Course staff always open the stored notebook as it is now: the starter
+    /// or the solution, refreshed whenever it has changed (by an MCP edit,
+    /// another author's save, or a version restore). A stale staff copy would
+    /// show the old notebook and, saved, would write it back over the new one.
+    /// A student's copy holds their own work, so it is never refreshed; the
+    /// solution, when revealed, still seeds it, and the starter comes from
+    /// their latest submission inside `ensureUserNotebookWorkingCopy`.
+    private func workingCopySeed(
+        req: Request,
+        setup: APITestSetup,
+        assignment: APIAssignment?,
+        fileKind: NotebookFileKind,
+        isStaff: Bool
+    ) async throws -> (data: Data?, refresh: Bool) {
+        switch fileKind {
+        case .solution:
+            let solution = try await solutionNotebookData(
+                for: assignment, setup: setup, db: req.db,
+                testSetupsDirectory: req.application.testSetupsDirectory)
+            return (solution, isStaff)
+        case .assignment:
+            guard isStaff else { return (nil, false) }
+            do {
+                return (try await notebookData(for: setup), true)
+            } catch {
+                req.logger.warning(
+                    "staff_working_copy_not_refreshed setup=\(setup.id ?? "unknown") reason=\(error)")
+                return (nil, false)
+            }
+        }
+    }
+
     /// Whether the stored notebook still carries `{{name}}` placeholders —
     /// i.e. whether the template and rendered views of it actually differ.
     /// Drives the staff view switch, which is pointless on an assignment
@@ -677,14 +702,8 @@ extension WebRoutes {
         let viewMode = try await resolveNotebookViewMode(
             req: req, setup: setup, assignment: assignment,
             fileKind: fileKind, isStaff: isStaff, requested: query.view)
-        let defaultData: Data? =
-            if fileKind == .solution {
-                try await solutionNotebookData(
-                    for: assignment, setup: setup, db: req.db,
-                    testSetupsDirectory: req.application.testSetupsDirectory)
-            } else {
-                nil
-            }
+        let seed = try await workingCopySeed(
+            req: req, setup: setup, assignment: assignment, fileKind: fileKind, isStaff: isStaff)
 
         let payload = try await ensureUserNotebookWorkingCopy(
             setupID: setupID,
@@ -692,7 +711,8 @@ extension WebRoutes {
             fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
                 setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode),
-            defaultData: defaultData,
+            defaultData: seed.data,
+            refreshFromSeed: seed.refresh,
             viewMode: viewMode,
             on: req.db, application: req.application, logger: req.logger
         )

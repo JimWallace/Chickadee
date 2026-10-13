@@ -1241,6 +1241,183 @@ import VaporTesting
         }
     }
 
+    @Test func staffWorkingCopyFollowsTheStoredStarter() async throws {
+        try await withApp(app) { _ in
+            // Staff open the stored notebook as it is now, not the copy made on
+            // their first visit. That copy outlives every change made elsewhere
+            // (an MCP edit, another author's save, a version restore), and a
+            // staff member who saved it would write the old notebook back over
+            // the new one.
+            let cookie = try await staffCookie(username: "notebook_staff_starter")
+
+            let setupID = "setup_nb_staff_starter"
+            let setup = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "First starter"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Follow Lab", isOpen: false)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("First starter")) })
+
+            let notebookPath = try #require(setup.notebookPath)
+            try Data(notebookJSON(markdown: "Second starter").utf8).write(to: URL(fileURLWithPath: notebookPath))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains("Second starter"))
+                    #expect(res.body.string.contains("First starter") == false)
+                })
+        }
+    }
+
+    @Test func staffWorkingCopyFollowsAnotherAuthorsSolutionSave() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await staffCookie(username: "notebook_staff_reader")
+            let otherAuthor = try await staffCookie(username: "notebook_staff_author")
+
+            // The solution lives in a validation submission, as an editor or
+            // MCP save stores it. A `solution.*` bundled in the setup zip takes
+            // precedence over every save, so it would hide the change under test.
+            let setupID = "setup_nb_staff_solution"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Assignment"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Solution Follow Lab", isOpen: false)
+            try await postNotebookSave(
+                setupID: setupID, cookie: otherAuthor, file: "solution",
+                body: notebookJSON(markdown: "First solution")
+            ) { res in
+                #expect(res.status == .ok)
+            }
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("First solution")) })
+
+            try await postNotebookSave(
+                setupID: setupID, cookie: otherAuthor, file: "solution",
+                body: notebookJSON(markdown: "Second solution")
+            ) { res in
+                #expect(res.status == .ok)
+            }
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.body.string.contains("Second solution"))
+                    #expect(res.body.string.contains("First solution") == false)
+                })
+        }
+    }
+
+    @Test func unchangedStaffWorkingCopyKeepsItsModificationTime() async throws {
+        try await withApp(app) { _ in
+            // The editor keeps its in-browser edits while the copy's mtime is
+            // unchanged and reloads the copy when it moves. A refresh that
+            // rewrote an identical copy on every visit would discard those
+            // edits on every reload.
+            let cookie = try await staffCookie(username: "notebook_staff_mtime")
+            let staff = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_mtime").first())
+
+            let setupID = "setup_nb_staff_mtime"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Stable starter"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Mtime Lab", isOpen: false)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.status == .ok) })
+
+            let copyPath = workingCopyPath(setupID: setupID, userID: try staff.requireID())
+            let earlier = Date(timeIntervalSince1970: 1_600_000_000)
+            try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: copyPath)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Stable starter")) })
+
+            #expect(workingCopyMtimeEpoch(absolutePath: copyPath) == Int(earlier.timeIntervalSince1970))
+        }
+    }
+
+    @Test func authorsOwnSolutionSaveDoesNotRefreshTheirCopy() async throws {
+        try await withApp(app) { _ in
+            // The save writes the author's copy and the stored solution as two
+            // separate serializations, and the stored solution is normalized
+            // again on every read. Neither may count as a change, or the next
+            // visit would move the mtime and reload over the author's open tab.
+            let cookie = try await staffCookie(username: "notebook_staff_own_save")
+            let staff = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_own_save").first())
+
+            let setupID = "setup_nb_staff_own_save"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Assignment"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Own Save Lab", isOpen: false)
+
+            try await postNotebookSave(
+                setupID: setupID, cookie: cookie, file: "solution",
+                body: notebookJSON(markdown: "Saved solution")
+            ) { res in
+                #expect(res.status == .ok)
+            }
+
+            let copyPath =
+                publicDir + "jupyterlite/files/"
+                + userNotebookWorkingCopyRelativePath(
+                    setupID: setupID, userID: try staff.requireID(), fileKind: .solution, viewMode: .personalized)
+            let earlier = Date(timeIntervalSince1970: 1_600_000_000)
+            try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: copyPath)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Saved solution")) })
+
+            #expect(workingCopyMtimeEpoch(absolutePath: copyPath) == Int(earlier.timeIntervalSince1970))
+        }
+    }
+
+    @Test func unchangedPersonalizedStaffCopyKeepsItsModificationTime() async throws {
+        try await withApp(app) { _ in
+            // The rendered view is substituted on every read, which re-encodes
+            // the notebook; an unchanged rendering must still leave the copy
+            // alone.
+            let cookie = try await staffCookie(username: "notebook_staff_rendered")
+            let staff = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_rendered").first())
+
+            let setupID = "setup_nb_staff_rendered"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: personalizedManifest)
+            _ = try await insertAssignment(testSetupID: setupID, title: "Rendered Lab", isOpen: false)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Maria")) })
+
+            let copyPath =
+                publicDir + "jupyterlite/files/"
+                + userNotebookWorkingCopyRelativePath(
+                    setupID: setupID, userID: try staff.requireID(), fileKind: .assignment, viewMode: .personalized)
+            let earlier = Date(timeIntervalSince1970: 1_600_000_000)
+            try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: copyPath)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Maria")) })
+
+            #expect(workingCopyMtimeEpoch(absolutePath: copyPath) == Int(earlier.timeIntervalSince1970))
+        }
+    }
+
     @Test func notebookPageRendersSaveButtonForStaffOnly() async throws {
         try await withApp(app) { _ in
             // The authoring control is rendered server-side, so a student never

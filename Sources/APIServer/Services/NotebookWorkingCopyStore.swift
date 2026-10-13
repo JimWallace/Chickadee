@@ -180,6 +180,33 @@ func workingCopyMtimeEpoch(absolutePath: String) -> Int {
     return Int(mtime.timeIntervalSince1970)
 }
 
+/// Whether two notebook payloads hold the same JSON document.
+///
+/// Byte equality is too strict for a refresh decision: the solution is
+/// normalized and a personalized starter is substituted on every read, and
+/// `JSONSerialization` writes object keys in no fixed order, so an unchanged
+/// notebook can come back as different bytes. Each side is re-encoded with
+/// sorted keys before the bytes are compared.
+private func sameNotebookContent(_ lhs: Data, _ rhs: Data) -> Bool {
+    if lhs == rhs { return true }
+    func canonical(_ data: Data) -> Data? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+    guard let left = canonical(lhs), let right = canonical(rhs) else { return false }
+    return left == right
+}
+
+/// Returns `userID`'s working copy at `relativePath`, seeding it on first use.
+///
+/// An existing copy is returned untouched, which is what keeps a student's
+/// work across visits. With `refreshFromSeed`, the copy is instead rebuilt
+/// from the seed on every call and rewritten only when its bytes differ, so
+/// the viewer always opens the stored notebook as it is now. Course staff open
+/// the starter and the solution this way: their copy is a view of the stored
+/// notebook, and a stale one would be saved back over a newer version. An
+/// unchanged copy keeps its mtime, so the editor keeps the in-browser edits it
+/// holds; a rewritten one moves the mtime, and the editor reloads it.
 func ensureUserNotebookWorkingCopy(
     setupID: String,
     userID: UUID,
@@ -187,6 +214,7 @@ func ensureUserNotebookWorkingCopy(
     relativePath: String? = nil,
     defaultData: Data? = nil,
     overwriteWith: Data? = nil,
+    refreshFromSeed: Bool = false,
     viewMode: NotebookViewMode = .personalized,
     on db: any Database,
     application: Application,
@@ -222,7 +250,7 @@ func ensureUserNotebookWorkingCopy(
         else { return nil }
         return data
     }
-    if let existingData = existingWorkingCopy {
+    if let existingData = existingWorkingCopy, !refreshFromSeed {
         // Symlinks are idempotent — run on every visit so existing working copies
         // also pick up support files when the feature is first deployed.
         await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
@@ -274,6 +302,16 @@ func ensureUserNotebookWorkingCopy(
         case .template:
             seedData
         }
+
+    if let existingData = existingWorkingCopy {
+        if sameNotebookContent(existingData, processedData) {
+            await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+            await writeDatasetFiles(
+                setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
+            return existingData
+        }
+        logger.info("working_copy_refreshed setup=\(setupID) user=\(userID.uuidString) path=\(resolvedRelativePath)")
+    }
 
     try await runBlocking(app: application) {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
