@@ -399,6 +399,7 @@
         // script is still decided per script by RunnerCore's classification,
         // exactly as the native worker does it.
         let assignmentLanguage = null;
+        let opponent = null;
         try {
             const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
             const parsed = JSON.parse(seedText);
@@ -417,6 +418,9 @@
             }
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;
+            }
+            if (parsed && parsed.opponent && typeof parsed.opponent === 'object') {
+                opponent = parsed.opponent;
             }
             // Per-student dataset slices (Phase 1 datasets): overwrite the full-source
             // support file from the zip with the student's personal slice so test
@@ -445,6 +449,13 @@
             const language = INPUTS_WRITERS[assignmentLanguage] ? assignmentLanguage : 'python';
             files[INPUTS_FILE_NAMES[language]] = INPUTS_WRITERS[language](personalizedInputs);
         }
+
+        // The bot this run plays, staged the way the native worker stages it
+        // (OpponentStaging): a copy of the setup's file under opponent/, and
+        // the match seed. Nothing is staged when the file is not in the
+        // setup; the match script then reports that no opponent is staged,
+        // as it would on a worker given no bot.
+        const match = stageOpponent(files, opponent);
 
         // 4. Fetch manifest from server (test.properties.json is not in the zip;
         //    the server serves it directly from the database via the manifest endpoint).
@@ -501,7 +512,7 @@
         //    when the per-test timeout fires. A browser with no Worker fails
         //    the grade over to the native worker (see executorForKind).
         const executor = makeExecutor(
-            files, assignmentSeed, runnerCore, options.reportPhase, suites, assignmentLanguage);
+            files, assignmentSeed, runnerCore, options.reportPhase, suites, assignmentLanguage, match);
         try {
             const scriptExists = (name) => executor.scriptExists(name);
             // Apply the per-script override before handing the limit to the
@@ -574,6 +585,23 @@
     // -------------------------------------------------------------------------
     // Status display
     // -------------------------------------------------------------------------
+
+    // Stage the bot a run plays, from the seed endpoint's `opponent`
+    // ({ file, matchSeed }). Copies the setup's file to opponent/<file>, as
+    // the native worker's OpponentStaging does, and returns the `match` the
+    // kernel init needs ({ seed }), or null when nothing is staged: no
+    // opponent, a name that is not a bare file name, or a file the setup does
+    // not hold.
+    function stageOpponent(files, opponent) {
+        if (!opponent || typeof opponent.file !== 'string' || typeof opponent.matchSeed !== 'string') {
+            return null;
+        }
+        const name = opponent.file;
+        if (!name || name.includes('/') || name.includes('\\') || name === '.' || name === '..') return null;
+        if (!Object.prototype.hasOwnProperty.call(files, name)) return null;
+        files['opponent/' + name] = files[name];
+        return { seed: opponent.matchSeed };
+    }
 
     function setRunnerStatus(type, msg) {
         if (!statusEl) return;
@@ -871,6 +899,7 @@
         testHooks.exports = {
             runAndSubmit,
             runScripts,
+            stageOpponent,
             scriptExtension,
             loadRunnerCore,
             extractNotebookToMap,

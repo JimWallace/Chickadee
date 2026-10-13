@@ -113,14 +113,14 @@ import Vapor
     }
 
     /// The mode-side door of the opponent refusal (docs/class-activities.md):
-    /// an activity that stages an opponent keeps worker grading, while a kind
-    /// with no opponent may switch. The message is the one shared with the
-    /// zip upload and set_activity.
-    @Test func refusesBrowserWhileTheActivityStagesAnOpponent() async throws {
+    /// an activity whose opponent the worker chooses at claim (the hill)
+    /// keeps worker grading. The message is the one shared with the zip
+    /// upload and set_activity.
+    @Test func refusesBrowserWhileTheWorkerChoosesTheOpponent() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let opponentManifest =
-                #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}"#
+                #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"kingOfTheHill"}}"#
             let assignment = try await fixture(on: app, manifest: opponentManifest)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetGradingModeTool().execute(
@@ -134,6 +134,21 @@ import Vapor
             } catch let error as MCPToolError {
                 #expect(String(describing: error).contains(activityOpponentGradingConflictMessage))
             }
+        }
+    }
+
+    /// A bot challenge may switch to browser grading: the browser runner
+    /// stages the bot as the worker does.
+    @Test func allowsBrowserForABotChallenge() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let botManifest =
+                #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}"#
+            let assignment = try await fixture(on: app, manifest: botManifest)
+            _ = try await SetGradingModeTool().execute(
+                .init(assignmentPublicID: assignment.publicID, gradingMode: "browser"), context(app))
+            let setup = try #require(try await APITestSetup.find("setup_gm", on: app.db))
+            #expect(currentManifestGradingMode(setup.manifest) == "browser")
         }
     }
 

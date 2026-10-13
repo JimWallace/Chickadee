@@ -45,6 +45,7 @@ self.ChickadeeXeusKernel.serveGradingWorker({
     // something.  See the bootSeeds comment in r-grading-shared.js.
     kernel: _r.R_KERNEL,
     seedCell: _r.assignmentSeedR,
+    envCell: _r.envCellR,
     // Puts the working directory, the environment and options() back before
     // every script (#2384). See resetCellR in r-grading-shared.js.
     beforeEachScript: _r.resetCellR,

@@ -41,6 +41,7 @@ self.ChickadeeXeusKernel.serveGradingWorker({
     // the workspace's modules.
     harness: { source: _lua.SETUP_LUA, what: 'the Lua grading harness failed to install' },
     seedCell: _lua.assignmentSeedLua,
+    envCell: _lua.envCellLua,
     makeNonce: _lua.makeNonce,
     runScript: _lua.runScriptLua,
     parseRunOutput: _lua.parseRunOutput,

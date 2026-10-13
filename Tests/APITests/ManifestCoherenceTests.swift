@@ -47,6 +47,23 @@ import Testing
                 == requiresUploadOnlyMessage(.cpp))
     }
 
+    /// The browser runner stages a bundled bot, so a bot challenge and a
+    /// bracket (whose entrants practise against the bot) may be browser-graded.
+    /// A kind whose opponent the worker chooses at claim may not.
+    @Test func onlyAWorkerChosenOpponentRefusesBrowserGrading() {
+        for kind in [ActivityKind.beatTheInstructor, .elimination] {
+            #expect(
+                ManifestCoherence.violation(
+                    in: manifest(gradingMode: .browser, activity: ClassActivity(kind: kind, opponentFile: "bot.py")))
+                    == nil)
+        }
+        for kind in [ActivityKind.kingOfTheHill, .roundRobin, .testsVersusImplementations] {
+            #expect(
+                ManifestCoherence.violation(in: manifest(gradingMode: .browser, activity: ClassActivity(kind: kind)))
+                    == activityOpponentGradingConflictMessage)
+        }
+    }
+
     @Test func everyBrokenRuleIsListedInOrder() {
         let broken = manifest(
             gradingMode: .browser, submissionMode: .notebook, graderOnlyFiles: ["key.txt"],

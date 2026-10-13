@@ -315,6 +315,12 @@
         return 'setenv("CHICKADEE_ASSIGNMENT_SEED", ' + octaveStringLiteral(seed) + ');';
     }
 
+    // Any one variable, the same way.
+    function envCellOctave(name, value) {
+        var checked = root.ChickadeeGradingShared.assertEnvName(name);
+        return 'setenv(' + octaveStringLiteral(checked) + ', ' + octaveStringLiteral(String(value)) + ');';
+    }
+
     // One copy of the nonce, in Public/grading-shared.js (#1963). Every
     // worker and the notebook page load that file before this one. Read at
     // call time, so a harness that loads only this module still loads.
@@ -363,6 +369,7 @@
         octaveStringLiteral: octaveStringLiteral,
         octaveLiteral: octaveLiteral,
         assignmentSeedOctave: assignmentSeedOctave,
+        envCellOctave: envCellOctave,
         makeNonce: makeNonce,
         runScriptOctave: runScriptOctave,
         resetCellOctave: resetCellOctave,

@@ -72,6 +72,22 @@ public enum ActivityOpponentSource: String, Codable, CaseIterable, Sendable {
         case .classmates: return .activityMatrix
         }
     }
+
+    /// True when a student's own submission can be graded only by the native
+    /// worker: its opponent is a classmate's submission that the server
+    /// chooses when a runner claims the job (the hill, round robin, tests
+    /// versus implementations). The browser has no claim step, so it cannot
+    /// play those. A bundled bot is a file in the setup, and the browser
+    /// runner stages it as the worker does: a bot challenge, and the
+    /// practice match a bracket entrant plays (docs/class-activities.md,
+    /// "Browser grading"). A bracket's own matches are separate jobs, which
+    /// the worker or the projector arena plays.
+    public var opponentNeedsWorker: Bool {
+        switch self {
+        case .none, .supportFile, .paired: return false
+        case .champion, .classmates: return true
+        }
+    }
 }
 
 /// How the class's results combine — the second hidden axis. The instructor
@@ -475,12 +491,26 @@ public struct ClassActivity: Codable, Equatable, Sendable {
     /// assignment's path. A script written for the primitive still fails
     /// loudly on its own when the directory is unset (the fixture does), and
     /// the edit page's picker says so. `champion` stages whoever holds the
-    /// hill, file or not, so the kind itself is worker-only.
+    /// hill, file or not, so the kind itself is worker-only
+    /// (`ActivityOpponentSource.opponentNeedsWorker`).
     public var stagesAnOpponent: Bool {
         switch kind.opponentSource {
         case .none: return false
         case .supportFile: return opponentFile != nil
         case .champion, .classmates, .paired: return true
+        }
+    }
+
+    /// The bundled bot that a student's own submission plays, when the
+    /// browser runner grades it: the chosen file on a bot challenge, and the
+    /// practice opponent on a bracket. Nil when nothing is staged, and nil on
+    /// a kind whose opponent the worker chooses (`opponentNeedsWorker`). The
+    /// worker stages the same file for the same submissions
+    /// (`WorkerJobRoutes.jobOpponent`, `pairedJobOpponent`).
+    public var browserStagedBot: String? {
+        switch kind.opponentSource {
+        case .supportFile, .paired: return opponentFile
+        case .none, .champion, .classmates: return nil
         }
     }
 

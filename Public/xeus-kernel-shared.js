@@ -507,11 +507,14 @@
     }
 
     // The browser-grading protocol. Every reply carries the originating `id`:
-    //   { id, type: 'init', files: { <relativePath>: <string | number[]> }, seed }
+    //   { id, type: 'init', files: { <relativePath>: <string | number[]> }, seed, match }
     //     → boot the kernel, materialize the file map into a fresh work dir and
     //       chdir there, then run the setup cells: the harness, the line that
-    //       sets CHICKADEE_ASSIGNMENT_SEED when `seed` is non-null, and the
-    //       workspace cells
+    //       sets CHICKADEE_ASSIGNMENT_SEED when `seed` is non-null, the lines
+    //       that set CHICKADEE_OPPONENT_DIR (<work dir>/opponent) and
+    //       CHICKADEE_MATCH_SEED when `match` is { seed } (an opponent is
+    //       staged under opponent/ in the file map, as the native worker's
+    //       OpponentStaging does), and the workspace cells
     //     → posts back { id, ok: true }  (or { id, ok: false, error })
     //   { id, type: 'run', script: <name>, limit: <seconds> }
     //     → grade one script, capturing its stdout/stderr and exit code
@@ -533,6 +536,8 @@
     //                      boot that subset and install the rest on demand
     //   harness          — optional { source, what }, the first setup cell
     //   seedCell         — (seed) => the cell that sets the assignment seed
+    //   envCell          — (name, value) => the cell that sets one environment
+    //                      variable for the session
     //   workspaceCells   — optional (workDir) => [{ source, what }], run last
     //   beforeEachScript — optional (workDir) => a cell run before every attempt
     //   makeNonce        — () => a fresh nonce for one run
@@ -542,6 +547,18 @@
     //   missingPackage   — { pattern, textOf(reply, parsed), afterInstall? },
     //                      see runInstallingMissingPackages
     // A setup cell's `what` is the start of the error message when it fails.
+    // The cells that tell a match script where its opponent is, when one is
+    // staged: the same two variables the native worker exports
+    // (Sources/Worker/OpponentStaging.swift). None when `match` is absent.
+    function matchCells(config, workDir, match) {
+        if (!match || typeof match.seed !== 'string' || !match.seed) return [];
+        var what = 'the ' + config.label + ' kernel did not set the match environment';
+        return [
+            { source: config.envCell('CHICKADEE_OPPONENT_DIR', workDir + '/opponent'), what: what },
+            { source: config.envCell('CHICKADEE_MATCH_SEED', match.seed), what: what },
+        ];
+    }
+
     function serveGradingWorker(config) {
         var workDir = null;
         serve({
@@ -563,6 +580,7 @@
                         what: 'the ' + config.label + ' kernel did not set the assignment seed',
                     });
                 }
+                cells = cells.concat(matchCells(config, dir, msg.match));
                 if (config.workspaceCells) cells = cells.concat(config.workspaceCells(dir));
                 await runSetupCells(cells);
                 api.reply({

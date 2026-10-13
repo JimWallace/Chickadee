@@ -90,6 +90,24 @@ for _module_name in student_module_names_in_load_order():
         return `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(seed)}`;
     }
 
+    // The names a grading worker sets in the kernel's environment are
+    // Chickadee's own (CHICKADEE_OPPONENT_DIR, CHICKADEE_MATCH_SEED). Each
+    // language's envCell writes the name into code unquoted or as a literal,
+    // so a name that is not a plain identifier is refused, never escaped.
+    function assertEnvName(name) {
+        if (typeof name !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(name)) {
+            throw new Error('not an environment variable name: ' + JSON.stringify(name));
+        }
+        return name;
+    }
+
+    // Set one environment variable for the whole session, as the native
+    // runner exports it into the test subprocess. Run with the seed cell,
+    // before the clean-state snapshot, so a script reset keeps it.
+    function envCellPython(name, value) {
+        return `import os\nos.environ[${JSON.stringify(assertEnvName(name))}] = ${JSON.stringify(String(value))}`;
+    }
+
     // Derive the script's exit code from the captured SystemExit code
     // (preferred) or — when none was captured — from the raised JS error,
     // mirroring a `python3 script` subprocess: 0 on clean completion, 1 on an
@@ -190,6 +208,8 @@ for _module_name in student_module_names_in_load_order():
     root.ChickadeeGradingShared = {
         envConfigPython: envConfigPython,
         assignmentSeedPython: assignmentSeedPython,
+        assertEnvName: assertEnvName,
+        envCellPython: envCellPython,
         deriveExitCode: deriveExitCode,
         writeFilesToEmscriptenFS: writeFilesToEmscriptenFS,
         makeNonce: makeNonce,

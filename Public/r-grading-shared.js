@@ -211,6 +211,13 @@
         return 'Sys.setenv(CHICKADEE_ASSIGNMENT_SEED = ' + rStringLiteral(seed) + ')';
     }
 
+    // Any one variable, the same way. The name goes in unquoted as the
+    // argument name, so it must be a plain identifier (assertEnvName).
+    function envCellR(name, value) {
+        var checked = root.ChickadeeGradingShared.assertEnvName(name);
+        return 'Sys.setenv(' + checked + ' = ' + rStringLiteral(String(value)) + ')';
+    }
+
     // One copy of the nonce, in Public/grading-shared.js (#1963). Every
     // worker and the notebook page load that file before this one. Read at
     // call time, so a harness that loads only this module still loads.
@@ -351,6 +358,7 @@
         rStringLiteral: rStringLiteral,
         rLiteral: rLiteral,
         assignmentSeedR: assignmentSeedR,
+        envCellR: envCellR,
         makeNonce: makeNonce,
         runScriptR: runScriptR,
         resetCellR: resetCellR,

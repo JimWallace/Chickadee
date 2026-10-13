@@ -2,8 +2,9 @@
 //
 // The opponent half of set_activity and the ActivityAuthoring core it shares
 // with the edit page (docs/class-activities.md, slice 2): the file must be one
-// of the setup's support files, a kind with no opponent takes none, an
-// opponent kind is refused on a browser-graded assignment, an absent argument
+// of the setup's support files, a kind with no opponent takes none, a kind
+// whose opponent the worker chooses is refused on a browser-graded assignment
+// while a bot is not, an absent argument
 // keeps the stored file while "" clears it, and get_assignment reports both
 // the source and the file.
 
@@ -109,26 +110,37 @@ import Vapor
     }
 
     /// The kind's own door of the browser refusal; set_grading_mode holds the
-    /// other. Choosing the bot is what is refused: the kind alone stages
-    /// nothing and stays as free as it was in slice 1.
-    @Test func refusesChoosingAnOpponentOnABrowserGradedAssignment() async throws {
+    /// other. A kind whose opponent the worker chooses at claim (the hill)
+    /// is refused: the browser has no claim step.
+    @Test func refusesAWorkerChosenOpponentOnABrowserGradedAssignment() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app, manifest: browserManifest)
-            let kindOnly = try await SetActivityTool().execute(
-                .init(
-                    assignmentPublicID: assignment.publicID, kind: "beatTheInstructor", leaderboardVisibility: nil),
-                context(app))
-            #expect(kindOnly.opponentSource == "supportFile")
-            #expect(kindOnly.opponentFile == nil)
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetActivityTool().execute(
                     .init(
-                        assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
-                        leaderboardVisibility: nil, opponentFile: "bot.py"),
+                        assignmentPublicID: assignment.publicID, kind: "kingOfTheHill", leaderboardVisibility: nil),
                     context(app))
             }
-            #expect(try await stored(on: app) == ClassActivity(kind: .beatTheInstructor))
+            #expect(try await stored(on: app) == nil)
+        }
+    }
+
+    /// A bot is staged by the browser runner as by the worker, so choosing it
+    /// on a browser-graded assignment is allowed (docs/class-activities.md,
+    /// "Browser grading").
+    @Test func allowsChoosingABotOnABrowserGradedAssignment() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, manifest: browserManifest)
+            let chosen = try await SetActivityTool().execute(
+                .init(
+                    assignmentPublicID: assignment.publicID, kind: "beatTheInstructor",
+                    leaderboardVisibility: nil, opponentFile: "bot.py"),
+                context(app))
+            #expect(chosen.opponentSource == "supportFile")
+            #expect(chosen.opponentFile == "bot.py")
+            #expect(try await stored(on: app) == ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py"))
         }
     }
 

@@ -434,6 +434,64 @@ import VaporTesting
         }
     }
 
+    /// A bot challenge graded in the browser: the seed endpoint names the bot
+    /// and a match seed, which the browser stages as the worker's
+    /// OpponentStaging does (docs/class-activities.md, "Browser grading").
+    /// Each run gets a new seed, as each worker submission does.
+    @Test func seedResponseNamesTheBotAndAFreshMatchSeed() async throws {
+        try await withApp(app) { _ in
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","testSuites":[],"timeLimitSeconds":10,\
+                "activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}
+                """
+            let setupID = try await insertSetup(manifest: manifest)
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent("student1", on: app)
+
+            func fetchOpponent() async throws -> [String: Any]? {
+                var opponent: [String: Any]?
+                try await app.asyncTest(
+                    .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                    beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                    afterResponse: { res in
+                        #expect(res.status == .ok)
+                        let json =
+                            try JSONSerialization.jsonObject(
+                                with: Data(res.body.readableBytesView)) as? [String: Any]
+                        opponent = json?["opponent"] as? [String: Any]
+                    })
+                return opponent
+            }
+
+            let first = try #require(try await fetchOpponent(), "a bot challenge must name its bot")
+            let second = try #require(try await fetchOpponent())
+            #expect(first["file"] as? String == "bot.py")
+            let seed = try #require(first["matchSeed"] as? String)
+            #expect(seed.count == 64 && seed.allSatisfy(\.isHexDigit))
+            #expect(second["matchSeed"] as? String != seed, "each run must get a new match seed")
+        }
+    }
+
+    /// No activity, no bot: the field is absent and the browser stages
+    /// nothing.
+    @Test func seedResponseHasNoOpponentWithoutABot() async throws {
+        try await withApp(app) { _ in
+            let manifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+            let setupID = try await insertSetup(manifest: manifest)
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent("student1", on: app)
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    let json =
+                        try JSONSerialization.jsonObject(
+                            with: Data(res.body.readableBytesView)) as? [String: Any]
+                    #expect(json?["opponent"] == nil)
+                })
+        }
+    }
+
     // MARK: - Effective-open gate (hidden-assignment leak)
 
     /// Security regression: an enrolled student must NOT be able to fetch a
