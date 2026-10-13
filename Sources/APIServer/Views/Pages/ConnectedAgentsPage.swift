@@ -13,7 +13,7 @@ struct ConnectedAgentsPage: HTML {
     var body: some HTML {
         BaseLayout(title: "Connected agents", page: page) {
             section(.class("page-section")) {
-                h2(.class("agents-heading")) { "Connected agents" }
+                h1(.class("agents-heading")) { "Connected agents" }
                 p(.class("section-intro")) {
                     "AI agents authorized to author course content on \(isAdmin ? "a user's" : "your") behalf over the Model Context Protocol. Revoking stops the agent immediately; any access token it holds lapses within minutes. "
                     a(

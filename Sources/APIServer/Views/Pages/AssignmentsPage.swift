@@ -33,17 +33,18 @@ struct AssignmentsPage: HTML {
             h2(.class("page-heading")) { heading }
             section(.class("diagnostics-section")) {
                 div(.class("diagnostics-cards")) {
-                    DashboardCard(
-                        key: "submissions", label: "Submissions", spoken: "Submissions",
+                    MetricsDiagnosticCard(
+                        hook: .instructor, key: "submissions", label: "Submissions", spoken: "Submissions",
                         valueID: "idash-submissions")
-                    DashboardCard(
-                        key: "activeStudents", label: "Active Students", spoken: "Active students",
+                    MetricsDiagnosticCard(
+                        hook: .instructor, key: "activeStudents", label: "Active Students", spoken: "Active students",
                         valueID: "idash-active-students")
-                    DashboardCard(
-                        key: "activeAssignments", label: "Active Assignments", spoken: "Active assignments",
+                    MetricsDiagnosticCard(
+                        hook: .instructor, key: "activeAssignments", label: "Active Assignments",
+                        spoken: "Active assignments",
                         valueID: "idash-active-assignments")
-                    DashboardCard(
-                        key: "browserErrors", label: "Browser Errors", spoken: "Browser errors",
+                    MetricsDiagnosticCard(
+                        hook: .instructor, key: "browserErrors", label: "Browser Errors", spoken: "Browser errors",
                         valueID: "idash-browser-errors")
                 }
             }
@@ -129,30 +130,6 @@ struct AssignmentsPage: HTML {
                     }
                 }
             }
-        }
-    }
-}
-
-/// One cyclable dashboard card. Public/assignments.js fills the value and the
-/// sparkline, and cycles the window on press.
-private struct DashboardCard: HTML {
-    let key: String
-    let label: String
-    /// The label in sentence case, for the screen-reader name.
-    let spoken: String
-    let valueID: String
-
-    var body: some HTML {
-        div(
-            .class("diagnostic-card diagnostic-card-cyclable"), .data("idash-card", value: key), .role("button"),
-            .tabindex(0), .ariaLabel("\(spoken), last 24 hours. Press to change time window.")
-        ) {
-            div(.class("diagnostic-label")) {
-                span(.class("diagnostic-window-chip")) { "24h" }
-                " \(label)"
-            }
-            div(.class("diagnostic-value"), .id(valueID)) { "—" }
-            div(.class("diagnostic-spark"), .ariaHidden) {}
         }
     }
 }

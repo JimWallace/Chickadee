@@ -1,11 +1,10 @@
 // APIServer/Views/DiagnosticCards.swift
 //
-// The stat cards of the per-assignment submissions page
-// (`AssignmentSubmissionsPage`), each with an optional server-rendered
-// sparkline. The admin and instructor dashboards keep their own card views:
-// their cards are empty shells that a script fills from `/metrics/cards`, with
-// their own data hooks and value ids, so they share the classes but not the
-// markup.
+// The diagnostic cards. `DiagnosticCards` draws the stat cards of the
+// per-assignment submissions page (`AssignmentSubmissionsPage`), each with an
+// optional server-rendered sparkline. `MetricsDiagnosticCard` is the empty
+// shell on the admin and instructor dashboards that a page script fills from
+// `/metrics/cards`.
 
 import Elementary
 
@@ -86,6 +85,39 @@ private struct SparkSlot: HTML {
             // A custom-property assignment: the bar's height.
             span(.class("spark-fill"), .custom(name: "style", value: "--bar-h:\(bar.heightPercent)%")) {}
                 .attributes(.class("spark-fill-empty"), when: bar.isEmpty)
+        }
+    }
+}
+
+/// A cyclable dashboard card that a page script fills from `/metrics/cards`:
+/// the value, the sparkline and the time window, which starts at 24 hours.
+struct MetricsDiagnosticCard: HTML {
+    /// The data attribute the page script finds the card by.
+    enum Hook: String {
+        /// The admin dashboard (admin-dashboard.js).
+        case admin = "card"
+        /// The instructor dashboard (assignments.js).
+        case instructor = "idash-card"
+    }
+
+    let hook: Hook
+    let key: String
+    let label: String
+    /// The label in sentence case, for the screen-reader name.
+    let spoken: String
+    let valueID: String
+
+    var body: some HTML {
+        div(
+            .class("diagnostic-card diagnostic-card-cyclable"), .data(hook.rawValue, value: key), .role("button"),
+            .tabindex(0), .ariaLabel("\(spoken), last 24 hours. Press to change time window.")
+        ) {
+            div(.class("diagnostic-label")) {
+                span(.class("diagnostic-window-chip")) { "24h" }
+                " \(label)"
+            }
+            div(.class("diagnostic-value"), .id(valueID)) { "—" }
+            div(.class("diagnostic-spark"), .ariaHidden) {}
         }
     }
 }

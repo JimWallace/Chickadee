@@ -113,10 +113,9 @@ private struct StudentRow: HTML {
             form(.method(.post), .action(student.registerURL), .class("ext-panel")) {
                 CSRFField(token: csrfToken)
                 p(.class("section-note")) {
-                    "Materialize "
+                    "Create a real account for "
                     code { student.username }
-                    " into a real account now (for grade-sync testing). They appear on assignment rosters "
-                    "immediately; their real login adopts this account."
+                    " now, for grade-sync testing; their real login adopts it."
                 }
                 label(.class("ext-field-label")) {
                     "Display name "
@@ -145,39 +144,31 @@ private struct StudentRow: HTML {
     }
 
     private var rowMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(student.displayName)")
-            ) {
-                Icon("i-more")
-            }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                if !student.isPending {
-                    form(
-                        .method(.post), .action(student.newHandleURL),
-                        .data(
-                            "confirm",
-                            value:
-                                "Give @\(student.username) a new class handle? They will see the new handle on their account page and on leaderboards."
-                        )
-                    ) {
-                        CSRFField(token: csrfToken)
-                        button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                            Icon("i-refresh")
-                            "Give new handle"
-                        }
-                    }
-                }
+        RowMenu(for: student.displayName) {
+            if !student.isPending {
                 form(
-                    .method(.post), .action(student.unenrollURL),
-                    .data("confirm", value: "Remove @\(student.username) from this course?")
+                    .method(.post), .action(student.newHandleURL),
+                    .data(
+                        "confirm",
+                        value:
+                            "Give @\(student.username) a new class handle? They will see the new handle on their account page and on leaderboards."
+                    )
                 ) {
                     CSRFField(token: csrfToken)
-                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                        Icon("i-trash")
-                        "Remove from course"
+                    button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
+                        Icon("i-refresh")
+                        "Give new handle"
                     }
+                }
+            }
+            form(
+                .method(.post), .action(student.unenrollURL),
+                .data("confirm", value: "Remove @\(student.username) from this course?")
+            ) {
+                CSRFField(token: csrfToken)
+                button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
+                    Icon("i-trash")
+                    "Remove from course"
                 }
             }
         }

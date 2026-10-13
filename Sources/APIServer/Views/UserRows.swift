@@ -97,30 +97,22 @@ struct UserRow: HTML {
     }
 
     private var rowMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(user.username)")
+        RowMenu(for: user.username) {
+            form(
+                .method(.post), .action("/admin/users/\(user.id)/delete"),
+                .data(
+                    "confirm",
+                    value:
+                        "Delete @\(user.username)? They lose access immediately and their enrollments are removed. Their submissions are kept, and a returning user gets a new account rather than this one."
+                )
             ) {
-                Icon("i-more")
-            }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                form(
-                    .method(.post), .action("/admin/users/\(user.id)/delete"),
-                    .data(
-                        "confirm",
-                        value:
-                            "Delete @\(user.username)? They lose access immediately and their enrollments are removed. Their submissions are kept, and a returning user gets a new account rather than this one."
-                    )
+                CSRFField(token: csrfToken)
+                button(
+                    .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem"),
+                    .ariaLabel("Delete user")
                 ) {
-                    CSRFField(token: csrfToken)
-                    button(
-                        .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem"),
-                        .ariaLabel("Delete user")
-                    ) {
-                        Icon("i-trash")
-                        "Delete user"
-                    }
+                    Icon("i-trash")
+                    "Delete user"
                 }
             }
         }

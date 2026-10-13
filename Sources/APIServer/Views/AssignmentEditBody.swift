@@ -205,12 +205,8 @@ private struct EditHeaderFields: HTML {
                 " "
             }
             p(.class("card-meta fine-print")) {
-                "Chickadee normally works the language out from the starter notebook's kernel or a test script's "
-                    + "extension. Declare it when there is nothing to work it out from — a suite made only of "
-                    + "pattern families — or for C++, whose generated tests are shell wrappers carrying no language "
-                    + "extension. \(edit.uploadOnlyLanguagesProse) assignments are upload-only and have no notebook "
-                    + "editor. Declare the language before adding pattern families or notebook checks: their "
-                    + "filenames carry the language's extension, so it cannot be changed once they exist."
+                "The language sets the extension of generated tests, so set it before you add pattern families "
+                    + "or notebook checks. \(edit.uploadOnlyLanguagesProse) assignments are upload-only."
             }
             label(.class("form-label field-gap")) {
                 "Submission Method "

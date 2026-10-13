@@ -34,7 +34,7 @@ struct InstructorBrightspacePage: HTML {
                 }
             } else if model.brightspaceSyncEnabled {
                 if !model.syncHealthy {
-                    div(.class("form-error"), .role("status")) {
+                    FlashBanner(.warning) {
                         "Grade sync is paused: the LEARN account this course pushes as is disconnected. "
                         if model.usesServiceAccount {
                             "Ask a Chickadee admin."
@@ -476,25 +476,17 @@ private struct InstructorBrightspaceRosterRow: HTML {
                     ) {
                         Icon("i-link")
                     }
-                    details(.class("ext-details row-menu")) {
-                        summary(
-                            .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                            .ariaLabel("More actions for \(student.displayName)")
+                    RowMenu(for: student.displayName) {
+                        form(
+                            .method(.post), .action(student.unenrollURL),
+                            .data("confirm", value: "Remove \(student.displayName) from this course?")
                         ) {
-                            Icon("i-more")
-                        }
-                        div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                            form(
-                                .method(.post), .action(student.unenrollURL),
-                                .data("confirm", value: "Remove \(student.displayName) from this course?")
+                            CSRFField(token: page.csrfToken)
+                            button(
+                                .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
                             ) {
-                                CSRFField(token: page.csrfToken)
-                                button(
-                                    .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
-                                ) {
-                                    Icon("i-trash")
-                                    "Remove from course"
-                                }
+                                Icon("i-trash")
+                                "Remove from course"
                             }
                         }
                     }

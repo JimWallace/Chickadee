@@ -114,8 +114,6 @@ struct WorkbenchPage: HTML {
                    the viewport edge. */
                 .wb-pane-edit { padding: 0 .75rem; }
 
-                /* Degraded right pane: the assignment has no notebook on disk yet. */
-
                 .wb-splitter {
                     width: .5rem;
                     cursor: col-resize;
@@ -147,13 +145,6 @@ struct WorkbenchPage: HTML {
                 .wb-view[aria-pressed="true"] {
                     background: var(--health-teal);
                     color: var(--surface);
-                }
-                /* Set by workbench.js when a left-pane edit invalidates what the notebook is
-                   showing.  Advisory only — reloading the pane would restart the kernel and
-                   discard the author's live state, so the author chooses when. */
-                .wb-stale-chip {
-                    font-size: var(--text-sm);
-                    color: var(--gray-700);
                 }
 
                 /* Below the point where an honest split is possible (720px notebook floor +
@@ -238,7 +229,10 @@ struct WorkbenchPage: HTML {
             }
             span(.class("wb-bar-spacer")) {}
             " "
-            span(.class("wb-stale-chip"), .id("wb-stale-chip"), .role("status"), .hidden) {}
+            // Set by workbench.js when a left-pane edit invalidates what the
+            // notebook shows. Advisory only: reloading the pane would restart the
+            // kernel and lose the author's live state, so the author chooses when.
+            span(.class("field-note"), .id("wb-stale-chip"), .role("status"), .hidden) {}
         }
     }
 

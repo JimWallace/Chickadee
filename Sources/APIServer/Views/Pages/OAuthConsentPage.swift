@@ -63,14 +63,12 @@ struct OAuthConsentPage: HTML {
             ". Only continue if you recognize this destination."
         }
         if firstTimeApproval {
-            div(.class("error-box")) {
-                p {
-                    "⚠️ You have "
-                    strong { "not approved this app before" }
-                    ". Any app can register itself and choose its own name — authorize it only if you trust "
-                    strong { redirectHost }
-                    "."
-                }
+            FlashBanner(.warning) {
+                "You have "
+                strong { "not approved this app before" }
+                ". Any app can register itself and choose its own name — authorize it only if you trust "
+                strong { redirectHost }
+                "."
             }
         }
         p(.class("consent-note")) {

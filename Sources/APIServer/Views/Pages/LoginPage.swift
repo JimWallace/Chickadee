@@ -33,7 +33,7 @@ struct LoginPage: HTML {
                 }
                 if showSSOLogin {
                     div(.class("form")) {
-                        a(.class("btn btn-primary btn--center"), .href("/auth/sso/start")) { "Login with UWaterloo" }
+                        a(.class("btn btn-primary btn--center"), .href("/auth/sso/start")) { "Log in with UWaterloo" }
                         p(.class("field-note")) { "Use your WatIAM username and password." }
                     }
                 }

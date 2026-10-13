@@ -38,9 +38,8 @@ struct EditorResetPage: HTML {
         div(.class("notice-box"), .role("status")) {
             h1 { "Editor reset" }
             p(.class("reset-lead")) {
-                "Your browser’s cached notebook-editor data has been cleared. Reopen your assignment and the "
-                    + "notebook kernel will start from a clean slate. Your submitted work is safe — only unsaved "
-                    + "local edits sitting in this browser were cleared, and you are still logged in."
+                "This browser no longer holds cached editor data. Your submitted work is safe, and you are "
+                    + "still logged in."
             }
         }
         div(.class("reset-actions")) {
@@ -52,15 +51,12 @@ struct EditorResetPage: HTML {
     @HTMLBuilder private var confirmState: some HTML {
         h1 { "Reset the notebook editor" }
         p(.class("reset-lead")) {
-            "If the in-browser notebook editor keeps spinning and the kernel never finishes loading, resetting "
-                + "clears the editor’s cached data in "
+            "Resetting clears the notebook editor’s cached data in "
             strong { "this browser" }
-            " so it can boot from a clean slate. It is the same as “Clear site data” in your browser settings, "
-                + "scoped to Chickadee."
+            ", so a kernel that never finishes loading can start again."
         }
         p(.class("reset-lead")) {
-            "Your submitted work is safe and you stay logged in. Only unsaved local edits sitting in this "
-                + "browser’s editor cache are cleared."
+            "Your submitted work is safe and you stay logged in. You lose only unsaved edits in this browser."
         }
         form(.method(.post), .action("/reset-editor"), .class("reset-actions")) {
             CSRFField(token: page.csrfToken)

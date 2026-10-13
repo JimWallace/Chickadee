@@ -178,6 +178,13 @@ custom_rules:
     regex: "\\b(admin-(tabs?|version-banner)|instructor-tabs?)\\b"
     message: "Open an admin page with AdminTabs and an instructor page with InstructorTabs; no other view writes a tab bar or the admin version banner (docs/ui-design.md, Page archetypes)."
     severity: error
+  elementary_row_menu_only_in_component:
+    name: "Row menus come from their component"
+    included: "Sources/APIServer/Views/.*\\.swift"
+    excluded: "Sources/APIServer/Views/RowMenu\\.swift"
+    regex: "\"[^\"\\n]*\\brow-menu(?![-\\w])[^\"\\n]*\""
+    message: "Write a row's More actions menu with RowMenu(for:); no other view writes its disclosure shell (docs/ui-design.md, Component vocabulary)."
+    severity: error
   elementary_flash_only_in_layout:
     name: "Banners come from FlashBanner"
     included: "Sources/APIServer/Views/.*\\.swift"

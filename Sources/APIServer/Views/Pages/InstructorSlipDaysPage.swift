@@ -108,8 +108,8 @@ struct InstructorSlipDaysPage: HTML {
                         .class("form-input slip-day-settings-number"), .type(.number), .name("extensionHours"),
                         .min(1), .max(336), .value(String(extensionHours)))
                     span(.class("field-note field-note--muted")) {
-                        "Each day extends the deadline by this many hours, counted from the original deadline. "
-                            + "A claim must be made within this window."
+                        "Each day extends the original deadline by this many hours, and a claim must be made "
+                            + "within that window."
                     }
                 }
                 label(.class("form-label")) {
@@ -257,29 +257,21 @@ private struct SlipDayLedgerRow: HTML {
     }
 
     private var refundMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(student.displayName)")
-            ) {
-                Icon("i-more")
-            }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                for spend in student.refundableSpends {
-                    form(
-                        .method(.post), .action("/instructor/slip-days/refund"),
-                        .data(
-                            "confirm",
-                            value:
-                                "Refund this slip day? The day is returned to the student and the deadline extension is recomputed (or removed)."
-                        )
-                    ) {
-                        CSRFField(token: page.csrfToken)
-                        input(.type(.hidden), .name("spendID"), .value(spend.id))
-                        button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                            Icon("i-rewind")
-                            "Refund \(spend.assignmentTitle) slip day"
-                        }
+        RowMenu(for: student.displayName) {
+            for spend in student.refundableSpends {
+                form(
+                    .method(.post), .action("/instructor/slip-days/refund"),
+                    .data(
+                        "confirm",
+                        value:
+                            "Refund this slip day? The day is returned to the student and the deadline extension is recomputed (or removed)."
+                    )
+                ) {
+                    CSRFField(token: page.csrfToken)
+                    input(.type(.hidden), .name("spendID"), .value(spend.id))
+                    button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
+                        Icon("i-rewind")
+                        "Refund \(spend.assignmentTitle) slip day"
                     }
                 }
             }

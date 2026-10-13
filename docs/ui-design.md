@@ -262,9 +262,10 @@ duplicate.
   ("No students match this filter.").  The markup contract is asserted by
   `Tests/APITests/ListFilterMarkupTests.swift`, which walks the tags rather
   than searching the document.
-- **`.field-inline`**, `.field-stack` (+ `--grow`, `--narrow`), `.field-note`
-  (+ `--muted`), `.field-help`, `.input-compact`, `.editor-input`,
-  `.select-xs` — form-field layout, hints, and the compact control sizes.
+- **`.field-inline`**, `.field-stack` (+ `--grow`, `--narrow`),
+  `.checkbox-row`, `.field-note` (+ `--muted`), `.field-help`,
+  `.input-compact`, `.editor-input`, `.select-xs` — form-field layout, hints,
+  and the compact control sizes.
 - **`.cell-input`** (+ `--with-check`), `.input-mono`, `.points-input`,
   `.suite-name-input` — form controls embedded in dense table cells (inputs
   panels, case tables, suite rows).  Server-rendered rows and JS row
@@ -321,7 +322,8 @@ duplicate.
   A page never writes it.
 - **`.diagnostics-cards`** + `.diagnostic-card`, `.diagnostic-label`,
   `.diagnostic-value` — stat tiles.
-  `.diagnostics-section` wraps a group of them under one heading.
+  `.diagnostics-section` wraps a group of them under one heading.  A dashboard
+  tile that a script fills from `/metrics/cards` is `MetricsDiagnosticCard`.
 - **`.chip`**, `.chip-row` — neutral tags.  A chip is the answer for a short
   labelled value beside a control; it carries no status colour, so if the
   value needs one it is a `.tier`, not a chip.  `.chip-ok` / `.chip-err` add
@@ -505,8 +507,10 @@ duplicate.
   on one line, so a ticking time does not change the row height.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
   `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
-  `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so
-  the app.js floater lifts it out of the table's overflow clip; a `+ Add` is a
+  `+ Add ▾` menu.  Write a ⋯ as `RowMenu(for:)` with the items inside;
+  SwiftLint keeps its shell in `RowMenu.swift`.  A ⋯ is an `ext-details` whose
+  panel is a `.popover-panel`, so the app.js floater lifts it out of the
+  table's overflow clip; a `+ Add` is a
   `popup-anchor` with the `.suite-section-popup` shell.  Outside click and
   Escape close every such popup, and Escape returns focus to the summary.  The
   summary's `aria-label` names the row.  A menu is never empty: render none

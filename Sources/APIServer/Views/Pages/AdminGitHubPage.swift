@@ -231,7 +231,7 @@ private struct AdminGitHubOption: HTML {
     let note: String
 
     var body: some HTML {
-        Elementary.label(.class("form-label")) {
+        Elementary.label(.class("checkbox-row")) {
             input(.type(.checkbox), .name(name))
                 .attributes(.checked, when: checked)
             label

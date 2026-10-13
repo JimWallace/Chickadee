@@ -484,29 +484,21 @@ private struct AdminCourseUserRow: HTML {
                     ) {
                         Icon("i-pencil")
                     }
-                    details(.class("ext-details row-menu")) {
-                        summary(
-                            .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                            .ariaLabel("More actions for @\(user.username)")
+                    RowMenu(for: "@\(user.username)") {
+                        form(
+                            .method(.post), .action("/admin/courses/\(course.id)/unenroll/\(user.id)"),
+                            .data(
+                                "confirm",
+                                value:
+                                    "Remove @\(user.username) from \(course.code)? They lose access immediately. Their submissions and grades are kept, and you can add them back from this page."
+                            )
                         ) {
-                            Icon("i-more")
-                        }
-                        div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                            form(
-                                .method(.post), .action("/admin/courses/\(course.id)/unenroll/\(user.id)"),
-                                .data(
-                                    "confirm",
-                                    value:
-                                        "Remove @\(user.username) from \(course.code)? They lose access immediately. Their submissions and grades are kept, and you can add them back from this page."
-                                )
+                            CSRFField(token: csrfToken)
+                            button(
+                                .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
                             ) {
-                                CSRFField(token: csrfToken)
-                                button(
-                                    .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
-                                ) {
-                                    Icon("i-trash")
-                                    "Remove from course"
-                                }
+                                Icon("i-trash")
+                                "Remove from course"
                             }
                         }
                     }

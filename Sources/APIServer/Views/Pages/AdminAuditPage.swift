@@ -106,7 +106,7 @@ struct AdminAuditPage: HTML {
                     .name("actor"), .value(filterActor), .placeholder("username"))
             }
             if filtered {
-                a(.href("/admin/audit")) { "Clear" }
+                a(.class("btn action-btn"), .href("/admin/audit")) { "Clear" }
             }
             noscript {
                 button(.type(.submit), .class("btn action-btn")) { "Filter" }
