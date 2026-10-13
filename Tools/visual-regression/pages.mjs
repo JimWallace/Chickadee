@@ -13,6 +13,7 @@
 //   admin tabs      → admin-dashboard, admin-users, admin-alerts
 //   titlebar/form   → admin-course-new, admin-course
 //   error page      → error-404
+//   class composite → composite-leaderboard, composite-tile
 //
 // admin-audit is deliberately NOT here: its rows are UUIDs and timestamps
 // that differ every run, so a pixel baseline would be one big mask. Its
@@ -36,6 +37,7 @@ export const PHONE_PAGE_NAMES = [
 
 export function pageList({
   setupID, courseID, instructorState, studentState, resultsPath, gradedResultsPath,
+  compositeSetupID, compositeResultsPath,
 }) {
   const pages = [
     { name: "login", path: "/login", state: null },
@@ -57,6 +59,16 @@ export function pageList({
   }
   if (gradedResultsPath) {
     pages.push({ name: "submission-graded", path: gradedResultsPath, state: studentState });
+  }
+  // The class composite: the staff leaderboard's canvas, filled by its first
+  // JSON poll, and the student's own tile on the result page.
+  if (compositeSetupID) {
+    pages.push({
+      name: "composite-leaderboard", path: `/testsetups/${compositeSetupID}/leaderboard`, state: instructorState,
+    });
+  }
+  if (compositeResultsPath) {
+    pages.push({ name: "composite-tile", path: compositeResultsPath, state: studentState });
   }
   return pages;
 }

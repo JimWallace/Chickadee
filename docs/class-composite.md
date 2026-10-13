@@ -494,8 +494,9 @@ adds, and keeps every existing assignment on the code path it uses now.
    and `deleteCourse`.
 5. **The composite view.** The JSON endpoint, `class-composite.js` with all
    four compositors, the four slot states, playback, present mode, the
-   student's own-contribution panel on the result page, the node tests and
-   `ui-review`.
+   student's own-contribution panel on the result page, the node tests,
+   `ui-review`, and the `composite-leaderboard` and `composite-tile`
+   visual-regression pages.
 6. **Reference renders and spare slots.** "Prepare reference" is a staff
    action that renders the reference solution for every slot and stores the
    results. It is a server-initiated job that waits behind every student
