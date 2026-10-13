@@ -331,6 +331,3 @@ Sources: [Vapor 5 Beta](https://blog.vapor.codes/posts/vapor-5-beta/),
   `hasAvatar`, `hasSpends`, `canRefund`, the BrightSpace panel gates and
   `AvatarPresentation.isLabelled`). Their comments say "kept from the Leaf
   templates". A view could compute these directly; that is a follow-up.
-- **The sprite headers.** The comment at the top of each sprite file still
-  mentions where the Leaf layout included it. The bytes were kept identical
-  in the move.
