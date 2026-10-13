@@ -2128,7 +2128,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .composite-slots--overlay .composite-slot--empty { box-shadow: inset 0 0 0 1px var(--border); }
 .composite-slots--overlay .composite-slot--failed { box-shadow: inset 0 0 0 2px var(--red); }
 .composite-slots--strip .composite-slot { background: var(--gray-200); border-radius: var(--radius-sm); }
-.composite-slots--strip .composite-slot--passed { background: var(--health-teal); }
+.composite-slots--strip .composite-slot--passed { background: var(--green); }
 .composite-slots--strip .composite-slot--failed { background: var(--red); }
 .composite-slot--rendering { animation: composite-pulse 1.2s ease-in-out infinite; }
 .composite-slot--arrived { animation: composite-arrive .8s ease-out; }

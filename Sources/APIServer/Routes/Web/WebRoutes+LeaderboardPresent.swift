@@ -84,6 +84,7 @@ extension WebRoutes {
                 return place
             }
         }
+        let compositeProgress = try await compositeProgress(setup: setup, activity: activity, assignment: assignment, on: req.db)
         let podium = PresentPlace.podiumOrder(places)
         let winner = tournament?.winner
 
@@ -111,18 +112,20 @@ extension WebRoutes {
             championOnPodium: podium.contains(where: \.isChampion),
             hasWindow: session != nil,
             window: session,
-            hasProgress: session == nil && tournament != nil,
-            progressLabel: tournament?.progressLabel ?? "",
-            progressValue: tournament?.progressValue ?? "",
+            // A composite's progress shows beside its clock: it is the run's
+            // whole state, with or without a window.
+            hasProgress: compositeProgress != nil || (session == nil && tournament != nil),
+            progressLabel: compositeProgress?.label ?? tournament?.progressLabel ?? "",
+            progressValue: compositeProgress?.value ?? tournament?.progressValue ?? "",
             // A finished tournament cannot change, so its wall stops saying Live.
-            // A composite's stage polls its own JSON instead.
-            pollsLive: aggregation != .composite && tournament?.isComplete != true
+            pollsLive: tournament?.isComplete != true
                 && (activity.window.map { $0.state(at: Date()) != .afterClose } ?? true),
             pollURL: "\(boardURL)?present=1&fragment=present",
             boardURL: boardURL,
             compositeStage: aggregation == .composite
                 ? activity.composite.map {
-                    CompositeStagePresentation.board(spec: $0, testSetupID: setupID, present: true)
+                    CompositeStagePresentation.board(
+                        spec: $0, testSetupID: setupID, present: true, pollUntilISO: activity.window?.closesAtISO)
                 } : nil)
 
         // `?fragment=present` renders the SAME view the page renders inline,
@@ -135,6 +138,21 @@ extension WebRoutes {
         }
         let html = LeaderboardPresentBody(board: presentation).render()
         return Response.pollFragment(html: html, for: req)
+    }
+
+    /// A class composite's progress for the clock's place: "Tiles complete"
+    /// over "31 of 48". Nil on every other kind.
+    private func compositeProgress(
+        setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, on db: any Database
+    ) async throws -> (label: String, value: String)? {
+        guard activity.kind == .classComposite, let spec = activity.composite, let assignmentID = assignment?.id,
+            let setupID = setup.id
+        else { return nil }
+        let snapshot = try await CompositeSnapshot.build(
+            assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec, since: .max,
+            onlyUserID: nil, includeOwners: false, on: db)
+        let noun = spec.compositor.slotNoun
+        return ("\(noun.prefix(1).uppercased())\(noun.dropFirst()) complete", "\(snapshot.complete) of \(snapshot.total)")
     }
 
     /// Everyone seeded into the run. A bye is a match with one entrant, so

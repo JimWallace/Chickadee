@@ -275,11 +275,17 @@ GET /testsetups/:testSetupID/composite?since=<cursor>
 `CompositeSnapshot` returns the state of every slot that is not empty, the
 pixels of each slot that changed at or after the cursor, a new cursor, and the
 count of complete slots. It uses an ETag over the body, with sorted keys, so an
-unchanged poll is one 304. Staff receive every slot, with each holder's class
-handle; present mode passes `present=1` and receives no handles, because the
-room reads the wall. A student receives only their own slot. The page does not
-use the HTML region poll for this kind: `class-composite.js` polls the JSON
-every five seconds instead.
+unchanged poll is one 304. Staff receive every dealt slot, with each holder's
+class handle; present mode passes `present=1` and receives no handles, because
+the room reads the wall. A student receives only their own slot.
+
+The canvas is outside the polled HTML region, because a region swap would
+replace it. Its frame polls the JSON through the `json` mode of
+`table-poll.js`, so it keeps the shared poll rules: the background-refresh
+header, no poll in a hidden tab, and the conditional request.
+`class-composite.js` draws each body that arrives. The region keeps its own
+poll and shows the progress line and, closed by default, the list of slot
+holders: the slot, the holder's handle and name, and the state.
 
 A slot shows its latest passing contribution. With none, it shows its latest
 failed one, unless `showFailed` is off. With two students on one slot, the
@@ -301,7 +307,7 @@ necessary. One cell for each slot lies over the canvas (a grid layout) or in a
 strip under it (`sequence` and `sum`). `class-composite.js` sets each cell's
 state classes, and the stylesheet draws them.
 
-**Live arrival.** A slot whose pixels arrive flashes gold once, so the room
+**Live arrival.** A slot whose pixels change flashes gold once, so the room
 sees each change.
 
 **Compositors.** `class-composite-core.js` holds the drawing rules and runs
@@ -314,10 +320,10 @@ scales the brightest sample to 255.
 clock, so the full image moves together at the `frameRate` of the block.
 
 **Present mode.** The stage takes the podium's place, as large as the screen
-permits, with the progress line under it: "31 of 48 tiles complete".
+permits. The progress takes the clock's place: "Tiles complete, 31 of 48".
 
-**Staff view.** The leaderboard page is staff-only for this kind. Point at a
-slot to see the holder's handle and the test result.
+**Staff view.** The leaderboard page is staff-only for this kind. The holder
+list under the image names who holds each slot; a cell's tooltip repeats it.
 
 **Student view: their own contribution only.** The full composite is for the
 projector. A student does not see the composite on their own device. Instead,

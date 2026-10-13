@@ -54,8 +54,10 @@ struct LeaderboardBody: HTML {
                 p(.class("empty")) { "No student has submitted yet." }
             }
         } else if board.showsComposite {
-            if let stage = board.compositeStage {
-                CompositeStage(stage: stage)
+            if let composite = board.compositeBoard {
+                CompositeHolders(composite: composite)
+            } else {
+                p(.class("empty")) { "The class composite is shown on the projector." }
             }
         } else if board.showsStandings {
             if board.standings.isEmpty {
@@ -379,5 +381,49 @@ private struct MetricLine: HTML {
             }
         }
         .attributes(.class("leaderboard-row--you"), when: row.isViewer)
+    }
+}
+
+/// A class composite's progress and, for staff, who holds each slot. Closed by
+/// default: staff open it to chase a failed or empty slot.
+private struct CompositeHolders: HTML {
+    let composite: CompositeBoardPresentation
+
+    var body: some HTML {
+        p(.class("text-muted")) { composite.progressText }
+        if composite.holders.isEmpty {
+            p(.class("empty")) { "No slot has been dealt yet." }
+        } else {
+            details {
+                summary(.class("disclosure-summary")) {
+                    span(.class("accordion-caret"), .ariaHidden) { Icon("i-chevron-right") }
+                    "Slot holders (\(composite.holders.count))"
+                }
+                table(.class("results-table"), .id("composite-holders")) {
+                    thead {
+                        tr {
+                            th(.custom(name: "scope", value: "col")) { "Slot" }
+                            th(.custom(name: "scope", value: "col")) { "Holder" }
+                            th(.custom(name: "scope", value: "col")) { "State" }
+                        }
+                    }
+                    tbody {
+                        for holder in composite.holders {
+                            tr {
+                                td { holder.place }
+                                td { holder.who }
+                                td {
+                                    if holder.tierClass.isEmpty {
+                                        span(.class("text-muted")) { holder.stateText }
+                                    } else {
+                                        span(.class("tier \(holder.tierClass)")) { holder.stateText }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

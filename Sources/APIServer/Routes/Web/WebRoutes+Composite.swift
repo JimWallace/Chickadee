@@ -2,8 +2,9 @@
 //
 // GET /testsetups/:testSetupID/composite?since=<cursor> — the class
 // composite's slot states and changed pixels as JSON
-// (docs/class-composite.md, slice 5). `class-composite.js` polls it from the
-// leaderboard page and present mode.
+// (docs/class-composite.md, slice 5). `table-poll.js` polls it in its JSON
+// mode for the canvas on the leaderboard page and in present mode, and
+// `class-composite.js` draws what arrives.
 //
 // Staff read every slot, with the holders' handles on the ordinary page.
 // Present mode passes `present=1` and reads no handles, because the room reads
@@ -52,15 +53,10 @@ extension Response {
     /// HTML.
     static func conditionalJSON(_ json: String, for req: Request) -> Response {
         let etag = weakETag(for: json)
+        if let notModified = notModified(etag: etag, for: req) { return notModified }
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .eTag, value: etag)
         headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
-        let candidates = req.headers[.ifNoneMatch]
-            .flatMap { $0.split(separator: ",") }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        if candidates.contains(etag) || candidates.contains("*") {
-            return Response(status: .notModified, headers: headers)
-        }
         headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")
         return Response(status: .ok, headers: headers, body: .init(string: json))
     }

@@ -110,7 +110,8 @@ import VaporTesting
             #expect(snap.total == 4)
 
             let hidden = try await snapshot(f, spec: spec(showFailed: false), on: app)
-            #expect(hidden.slots.map(\.slot) == [0, 2], "with showFailed off, a failed slot is empty")
+            #expect(hidden.slots.map(\.state) == ["passed", "empty", "empty"], "with showFailed off, a failed slot is empty")
+            #expect(hidden.pixels.map(\.slot) == [0])
         }
     }
 
@@ -231,6 +232,7 @@ import VaporTesting
             try await wrEnrollUser(
                 try #require(try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()), on: app)
             let f = try await fixture(spec(), on: app)
+            _ = try await holder("view_page", slot: 0, f, on: app)
             try await app.asyncTest(
                 .GET, "/testsetups/\(f.setupID)/leaderboard",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
@@ -238,11 +240,15 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("js-class-composite"))
-                    #expect(html.contains("data-composite-url=\"/testsetups/\(f.setupID)/composite\""))
+                    #expect(html.contains("data-poll-url=\"/testsetups/\(f.setupID)/composite\""))
+                    #expect(html.contains("data-poll-swap=\"json\""), "the canvas polls through table-poll.js")
                     #expect(html.contains("data-composite-owners=\"true\""))
                     #expect(html.contains("--composite-cols: 2; --composite-rows: 2"))
                     #expect(html.contains("/class-composite.js"))
-                    #expect(!html.contains("data-poll-swap"), "the stage polls its own JSON")
+                    #expect(html.contains("/table-poll.js"))
+                    #expect(html.contains("0 of 4 tiles complete"))
+                    #expect(html.contains("Slot holders (1)"))
+                    #expect(html.contains("Column 1, row 1"))
                 })
             try await app.asyncTest(
                 .GET, "/testsetups/\(f.setupID)/leaderboard?present=1",
@@ -250,9 +256,11 @@ import VaporTesting
                 afterResponse: { res in
                     let html = res.body.string
                     #expect(html.contains("present-composite"))
-                    #expect(html.contains("data-composite-url=\"/testsetups/\(f.setupID)/composite?present=1\""))
+                    #expect(html.contains("data-poll-url=\"/testsetups/\(f.setupID)/composite?present=1\""))
                     #expect(html.contains("data-composite-owners=\"false\""))
+                    #expect(html.contains("Tiles complete"))
                     #expect(!html.contains("on the board"))
+                    #expect(!html.contains("Slot holders"), "the room reads no names")
                 })
         }
     }
@@ -281,7 +289,7 @@ import VaporTesting
                     #expect(html.contains("Your tile: column 2, row 2"))
                     #expect(html.contains("data-composite-pixels=\"\(pixels)\""))
                     #expect(html.contains("Passed"))
-                    #expect(!html.contains("data-composite-url"), "the own tile does not poll")
+                    #expect(!html.contains("data-poll-url"), "the own tile does not poll")
                 })
         }
     }

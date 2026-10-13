@@ -1,7 +1,7 @@
 // APIServer/Services/CompositeSnapshot.swift
 //
 // What the composite view draws (docs/class-composite.md, slice 5): the state
-// of every slot that is not empty, and the pixels of each slot that changed
+// of every dealt slot, and the pixels of each slot that changed
 // after the client's cursor. `GET /testsetups/:id/composite` returns it as
 // JSON, so the polled HTML stays small and the canvas is never replaced.
 //
@@ -18,7 +18,7 @@ import Vapor
 
 struct CompositeSnapshot: Content, Equatable {
 
-    /// One slot that is not empty, or that is rendering.
+    /// One slot that is dealt, rendering or showing a contribution.
     struct Slot: Content, Equatable {
         let slot: Int
         /// `passed`, `failed` or `empty`.
@@ -59,7 +59,15 @@ struct CompositeSnapshot: Content, Equatable {
             slotQuery = slotQuery.filter(\.$userID == onlyUserID)
         }
         let rows = try await rowQuery.all()
-        let slotByUser = Dictionary(try await slotQuery.all().map { ($0.userID, $0.slot) }) { first, _ in first }
+        let dealt = try await slotQuery.all()
+        let slotByUser = Dictionary(dealt.map { ($0.userID, $0.slot) }) { first, _ in first }
+        // The holder a slot names when it shows no contribution: the newest
+        // round, then the lowest user ID, so every poll and every server
+        // names the same student.
+        let holderBySlot = Dictionary(
+            dealt.sorted { ($0.round, $1.userID.uuidString) > ($1.round, $0.userID.uuidString) }
+                .map { ($0.slot, $0.userID) }
+        ) { first, _ in first }
 
         let inFlight = [SubmissionStatus.pending, .assigned, .running].map(\.rawValue)
         let renderingSlots: Set<Int> =
@@ -82,8 +90,7 @@ struct CompositeSnapshot: Content, Equatable {
         }
 
         let owners = includeOwners ? try await handles(of: Array(slotByUser.keys), inCourse: courseID, on: db) : [:]
-        let holderBySlot = Dictionary(slotByUser.map { ($1, $0) }) { first, _ in first }
-        let slots = Set(shown.keys).union(renderingSlots).sorted().map { slot in
+        let slots = Set(shown.keys).union(renderingSlots).union(holderBySlot.keys).sorted().map { slot in
             let row = shown[slot]
             let state = row.map { $0.passed ? "passed" : "failed" } ?? "empty"
             let ownerID = row?.userID ?? holderBySlot[slot]

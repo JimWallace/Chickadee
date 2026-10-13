@@ -6,7 +6,7 @@
 // compositors combine contributions into RGBA, and how a JSON snapshot
 // merges into what the page already holds. Nothing here touches the DOM, so
 // the rules run under node (class-composite-core.test.mjs) and the wiring
-// keeps only element lookups, the poll and the animation loop.
+// keeps only element lookups and the animation loop.
 (function () {
     'use strict';
 
@@ -189,18 +189,13 @@
     }
 
     /// The cell's tooltip on the staff page: the holder's handle and state.
+    /// Slots count from 1, as on the page's holder list.
     function slotTitle(slot, slotState) {
-        var label = 'Slot ' + slot;
+        var label = 'Slot ' + (slot + 1);
         if (!slotState) { return label + ': empty'; }
         var words = { passed: 'passed', failed: 'did not pass', empty: 'empty' };
         var text = label + (slotState.owner ? ' · ' + slotState.owner : '') + ': ' + words[slotState.state];
         return slotState.rendering ? text + ', grading' : text;
-    }
-
-    /// "31 of 48 tiles complete".
-    function progressText(spec, complete, total) {
-        var noun = { tile: 'tiles', gallery: 'panels', sequence: 'frames', sum: 'angles' }[spec.compositor] || 'slots';
-        return complete + ' of ' + total + ' ' + noun + ' complete';
     }
 
     var api = {
@@ -217,8 +212,7 @@
         mergeSnapshot: mergeSnapshot,
         emptyState: emptyState,
         slotClasses: slotClasses,
-        slotTitle: slotTitle,
-        progressText: progressText
+        slotTitle: slotTitle
     };
 
     var root = typeof window !== 'undefined' ? window : globalThis;

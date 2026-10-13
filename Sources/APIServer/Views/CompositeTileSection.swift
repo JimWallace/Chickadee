@@ -10,11 +10,11 @@ struct CompositeTileSection: HTML {
     let tile: CompositeTilePanel
 
     var body: some HTML {
-        section(.class("class-goals-block"), .ariaLabel("Class composite")) {
-            h2(.class("class-goals-heading")) { "Class composite" }
-            p(.class("section-note")) {
-                "\(tile.slotText) · "
-                span(.class(tile.passed ? "tier tier-open" : "tier tier-closed")) { tile.stateText }
+        section(.class("page-section"), .ariaLabel("Class composite")) {
+            h2 { "Class composite" }
+            p {
+                "\(tile.slotText) "
+                span(.class(tile.passed ? "tier tier-open" : "tier tier-danger")) { tile.stateText }
             }
             div(.class("composite-tile")) {
                 CompositeStage(stage: tile.stage)

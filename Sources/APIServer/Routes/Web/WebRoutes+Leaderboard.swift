@@ -81,6 +81,16 @@ extension WebRoutes {
                 allURL: "\(boardURL)?all=1", on: req.db)
             : nil
 
+        // The composite is for the projector: only staff read its board.
+        let compositeBoard: CompositeBoardPresentation? =
+            if isStaff, showsComposite, let spec = activity.composite, let assignmentID = assignment?.id {
+                try await CompositeBoardPresentation.build(
+                    assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec,
+                    on: req.db)
+            } else {
+                nil
+            }
+
         let listedCount = showsStandings ? standingsBoard.rankedCount : board.rankedCount
         let session = LiveSessionPresentation.make(activity)
         let presentation =
@@ -123,10 +133,13 @@ extension WebRoutes {
                 hasUnion: union != nil,
                 union: union,
                 showsComposite: showsComposite,
-                compositeStage: showsComposite
+                compositeStage: isStaff && showsComposite
                     ? activity.composite.map {
-                        CompositeStagePresentation.board(spec: $0, testSetupID: setupID, present: false)
+                        CompositeStagePresentation.board(
+                            spec: $0, testSetupID: setupID, present: false,
+                            pollUntilISO: activity.window?.closesAtISO)
                     } : nil,
+                compositeBoard: compositeBoard,
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page
@@ -134,9 +147,7 @@ extension WebRoutes {
                 // just an open assignment and says nothing — while whether it
                 // refreshes is about whether anything can still change, which
                 // an open-ended session emphatically can.
-                // A composite's stage polls its own JSON, and a swap of
-                // the region would replace its canvas.
-                pollsLive: !showsComposite && (activity.window.map { $0.state(at: Date()) != .afterClose } ?? false),
+                pollsLive: activity.window.map { $0.state(at: Date()) != .afterClose } ?? false,
                 hasPollUntil: activity.window?.closesAtISO != nil,
                 pollUntilISO: activity.window?.closesAtISO ?? "")
 

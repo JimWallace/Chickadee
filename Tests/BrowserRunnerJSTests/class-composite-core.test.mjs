@@ -108,14 +108,9 @@ test('a cell carries its state and rendering classes', () => {
 });
 
 test('the staff tooltip names the holder and the state', () => {
-  assert.equal(Core.slotTitle(3, null), 'Slot 3: empty');
+  assert.equal(Core.slotTitle(3, null), 'Slot 4: empty', 'slots count from 1');
   assert.equal(Core.slotTitle(3, { state: 'failed', rendering: true, owner: 'Calm Finch' }),
-    'Slot 3 · Calm Finch: did not pass, grading');
-});
-
-test('the progress line names what the compositor fills', () => {
-  assert.equal(Core.progressText(spec(), 31, 48), '31 of 48 tiles complete');
-  assert.equal(Core.progressText(spec({ compositor: 'sequence' }), 2, 12), '2 of 12 frames complete');
+    'Slot 4 · Calm Finch: did not pass, grading');
 });
 
 test('base64 decodes to bytes', () => {

@@ -424,10 +424,13 @@ duplicate.
   `.composite-slot--empty`, `--failed`, `--passed`, `--rendering` (a pulse)
   or `--arrived` (a gold flash). The view sets `--composite-cols`,
   `--composite-rows` and `--composite-aspect`. `class-composite.js` sets the
-  cell classes only. A `.composite-scrub` range follows Play in a `.toolbar`.
+  cell classes only, and a cell's `title` repeats the holder list on the page.
+  A `.composite-scrub` range follows the Pause button in a `.toolbar`. The
+  frame polls in the `json` mode of `table-poll.js`, outside any polled region.
   Present mode wraps it in `.present-composite`, which makes it as large as the
-  screen permits. The result page wraps it in `.composite-tile`, which shows
-  one student's contribution.
+  screen permits, and puts the progress in the clock's place. The result page
+  wraps it in `.composite-tile`, which shows one student's contribution. In the
+  strip, passed is `--green` and failed is `--red`, the test-status pair.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the Chickadee picker).  Use it for any group
@@ -714,7 +717,7 @@ no second poller:
 |---|---|
 | `data-poll-url` | the server endpoint rendering the replacement, from the SAME view the page rendered inline |
 | `data-poll-interval` | milliseconds between polls (default 5000) |
-| `data-poll-swap` | `region` replaces the element's own contents; omitted replaces its `<tbody>` |
+| `data-poll-swap` | `region` replaces the element's own contents; `json` replaces nothing and hands each changed JSON body to the element as a `chickadee:poll-data` event; omitted replaces its `<tbody>` |
 | `data-poll-until` | an instant after which the poll stops for good; omitted polls while the tab is open |
 
 Every poll is conditional (ETag / 304) and carries `X-Background-Refresh: 1`,
@@ -726,8 +729,10 @@ box pointed into it stops finding its target — the file says so at
 `swapTargetFor`. Reach for `region` only when the rows do not move alone, as
 on a class activity's leaderboard, where the champion banner, the tournament
 status, the union count and the session countdown all change with the table
-beside them. Whatever the mode, keep a page's fixed chrome — its heading, its
-chips, its intro — OUTSIDE the polled element.
+beside them. Reach for `json` only for something the page draws rather than
+renders: the class composite's canvas, whose pixels a region swap would throw
+away. It polls at once, then on the interval. Whatever the mode, keep a page's
+fixed chrome — its heading, its chips, its intro — OUTSIDE the polled element.
 
 The affordances that say an element is interactive are a **closed registry**,
 enforced by `scripts/check-ui-vocabulary.sh`:

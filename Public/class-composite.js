@@ -2,28 +2,31 @@
 //
 // Wires the class-composite view (docs/class-composite.md, slice 5). Every
 // `.js-class-composite` element is one stage: a canvas, one cell for each
-// slot, optional playback controls and a progress line. The decisions are in
-// class-composite-core.js; this file keeps the element lookups, the poll and
-// the animation clock.
+// slot, and the playback controls when the view moves. The decisions are in
+// class-composite-core.js; this file keeps the element lookups and the
+// animation clock.
 //
-// A stage with `data-composite-url` polls the JSON snapshot every five
-// seconds, with an ETag, and draws what it holds. A stage with
-// `data-composite-pixels` draws that one contribution and never polls: the
-// student's own tile on the result page.
+// It does not poll. On the leaderboard page and in present mode the stage's
+// frame carries `data-poll-swap="json"`, so `table-poll.js` polls the JSON
+// snapshot with the shared rules and hands each changed body over as a
+// `chickadee:poll-data` event. This file merges it, moves the frame's poll URL
+// on to the new cursor, and draws. A stage with `data-composite-pixels` draws
+// that one contribution and nothing polls it: the student's own tile on the
+// result page.
 //
 // The stylesheet draws the slot states. This file only sets each cell's
 // classes (`ChickadeeCompositeCore.slotClasses`) and, on the staff page, its
-// title.
+// title, which repeats the holder list on the page.
 (function () {
     'use strict';
 
     var Core = window.ChickadeeCompositeCore;
-    var POLL_MS = 5000;
 
     function initStage(stage) {
         var spec = Core.specFromDataset(stage.dataset);
+        var frame = stage.querySelector('.js-composite-frame');
         var canvas = stage.querySelector('.js-composite-canvas');
-        if (!canvas) { return; }
+        if (!frame || !canvas) { return; }
         var size = Core.canvasSize(spec);
         canvas.width = size.width;
         canvas.height = size.height;
@@ -39,10 +42,10 @@
                 cells.push(cell);
             }
         }
-        var progress = stage.querySelector('.js-composite-progress');
         var playButton = stage.querySelector('.js-composite-play');
-        var slider = stage.querySelector('.js-composite-frame');
+        var scrub = stage.querySelector('.js-composite-scrub');
         var showsOwners = stage.dataset.compositeOwners === 'true';
+        var baseURL = frame.getAttribute('data-poll-url');
 
         var state = Core.emptyState(spec.count);
         var bytesBySlot = {};
@@ -53,75 +56,58 @@
             var image = context.createImageData(size.width, size.height);
             image.data.set(Core.composeRGBA(spec, bytesBySlot, tick));
             context.putImageData(image, 0, 0);
-            if (slider) { slider.value = String(tick); }
+            if (scrub) { scrub.value = String(tick); }
         }
 
-        function apply(next, changedSlots) {
-            state = next;
+        function apply(next) {
+            // Only a slot whose pixels really changed flashes: the newest
+            // slot's pixels come back on every changed poll.
+            var arrived = Object.keys(next.pixels).filter(function (slot) {
+                return next.pixels[slot] !== state.pixels[slot];
+            }).map(Number);
             var decoded = {};
-            Object.keys(state.pixels).forEach(function (slot) {
-                decoded[slot] =
-                    changedSlots.indexOf(Number(slot)) === -1 && bytesBySlot[slot]
-                        ? bytesBySlot[slot]
-                        : Core.decodeBase64(state.pixels[slot]);
+            Object.keys(next.pixels).forEach(function (slot) {
+                decoded[slot] = arrived.indexOf(Number(slot)) === -1 && bytesBySlot[slot]
+                    ? bytesBySlot[slot]
+                    : Core.decodeBase64(next.pixels[slot]);
             });
+            state = next;
             bytesBySlot = decoded;
             cells.forEach(function (cell, slot) {
                 var slotState = state.slots[slot] || null;
                 var classes = Core.slotClasses(slotState);
-                if (changedSlots.indexOf(slot) !== -1) { classes.push('composite-slot--arrived'); }
+                if (arrived.indexOf(slot) !== -1) { classes.push('composite-slot--arrived'); }
                 cell.className = classes.join(' ');
                 if (showsOwners) { cell.title = Core.slotTitle(slot, slotState); }
             });
-            if (progress) { progress.textContent = Core.progressText(spec, state.complete, state.total); }
             draw();
         }
 
-        var url = stage.dataset.compositeUrl;
-        var etag = '';
-        function poll() {
-            var separator = url.indexOf('?') === -1 ? '?' : '&';
-            var request = url + (state.cursor ? separator + 'since=' + encodeURIComponent(state.cursor) : '');
-            var headers = etag ? { 'If-None-Match': etag } : {};
-            fetch(request, { credentials: 'same-origin', headers: headers })
-                .then(function (response) {
-                    if (response.status === 304 || !response.ok) { return null; }
-                    etag = response.headers.get('ETag') || '';
-                    return response.json();
-                })
-                .then(function (snapshot) {
-                    if (!snapshot) { return; }
-                    var changed = (snapshot.pixels || []).map(function (p) { return p.slot; });
-                    apply(Core.mergeSnapshot(state, snapshot), changed);
-                })
-                .catch(function () { /* The next poll tries again. */ })
-                .then(function () { window.setTimeout(poll, POLL_MS); });
-        }
-
-        if (url) {
-            poll();
+        if (baseURL) {
+            frame.addEventListener('chickadee:poll-data', function (event) {
+                apply(Core.mergeSnapshot(state, event.detail));
+                if (state.cursor) {
+                    var separator = baseURL.indexOf('?') === -1 ? '?' : '&';
+                    frame.setAttribute('data-poll-url', baseURL + separator + 'since=' + encodeURIComponent(state.cursor));
+                }
+            });
         } else if (stage.dataset.compositePixels) {
-            apply(
-                Core.mergeSnapshot(state, {
-                    complete: 0,
-                    total: 1,
-                    slots: [{ slot: 0, state: stage.dataset.compositeState || 'passed', rendering: false }],
-                    pixels: [{ slot: 0, data: stage.dataset.compositePixels }]
-                }),
-                []);
+            apply(Core.mergeSnapshot(state, {
+                slots: [{ slot: 0, state: stage.dataset.compositeState || 'passed', rendering: false }],
+                pixels: [{ slot: 0, data: stage.dataset.compositePixels }]
+            }));
         }
 
         if (playButton) {
             playButton.addEventListener('click', function () {
                 playing = !playing;
                 playButton.textContent = playing ? 'Pause' : 'Play';
-                playButton.setAttribute('aria-pressed', playing ? 'false' : 'true');
             });
         }
-        if (slider) {
-            slider.max = String(Core.loopLength(spec) - 1);
-            slider.addEventListener('input', function () {
-                tick = parseInt(slider.value, 10) || 0;
+        if (scrub) {
+            scrub.max = String(Core.loopLength(spec) - 1);
+            scrub.addEventListener('input', function () {
+                tick = parseInt(scrub.value, 10) || 0;
                 draw();
             });
         }

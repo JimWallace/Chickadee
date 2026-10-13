@@ -19,12 +19,18 @@ struct CompositeStagePresentation: Encodable {
     let pixelsState: String
     /// True on the staff page: each cell's title names its holder.
     let showsOwners: Bool
+    /// When the session window closes, ISO 8601; the poll stops then. Empty
+    /// for no window.
+    var pollUntilISO = ""
 
     /// The staff leaderboard page, or present mode when `present` is true.
-    static func board(spec: CompositeSpec, testSetupID: String, present: Bool) -> CompositeStagePresentation {
+    static func board(spec: CompositeSpec, testSetupID: String, present: Bool, pollUntilISO: String?)
+        -> CompositeStagePresentation
+    {
         let url = "/testsetups/\(testSetupID)/composite" + (present ? "?present=1" : "")
         return CompositeStagePresentation(
-            spec: spec, snapshotURL: url, pixels: nil, pixelsState: "", showsOwners: !present)
+            spec: spec, snapshotURL: url, pixels: nil, pixelsState: "", showsOwners: !present,
+            pollUntilISO: pollUntilISO ?? "")
     }
 
     /// A student's own contribution: one slot at the contribution's size.
@@ -66,18 +72,10 @@ struct CompositeStagePresentation: Encodable {
         return "--composite-cols: \(cellColumns); --composite-rows: \(cellRows); --composite-aspect: \(aspect)"
     }
 
-    /// True when the view moves, so it needs playback controls.
-    var isAnimated: Bool { spec.contribution.frames > 1 || spec.compositor == .sequence }
-
-    /// "48 tiles", for the progress line before the first poll.
-    var initialProgress: String {
-        let noun: String
-        switch spec.compositor {
-        case .tile: noun = "tiles"
-        case .gallery: noun = "panels"
-        case .sequence: noun = "frames"
-        case .sum: noun = "angles"
-        }
-        return "0 of \(spec.layout.slotCount) \(noun) complete"
+    /// True when the view moves, so it needs playback controls: more than one
+    /// tick in the shared clock (`ChickadeeCompositeCore.isAnimated`).
+    var isAnimated: Bool {
+        let frames = spec.contribution.frames
+        return (spec.compositor == .sequence ? spec.layout.slotCount * frames : frames) > 1
     }
 }
