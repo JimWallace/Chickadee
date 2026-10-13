@@ -72,6 +72,23 @@ jobs:
       - name: Snapshot retention behaviour tests
         run: scripts/test-snapshot-retention.sh
 
+  # The Claude Code hooks (.claude/hooks/) are Python, and their format case
+  # runs swift-format, so this needs python3 AND the toolchain. format-lint's
+  # plain swift image has no python3, which is why this is not a step there.
+  # The -ci image carries both, as for guard-self-tests.
+  claude-hooks-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Claude Code hook behaviour tests
+        run: scripts/test-claude-hooks.py
+
   # The class-handle word lists (Sources/Core/AvatarHandle.swift) against the
   # review data in Tools/handle-review/data. Node only, like the two jobs above
   # need only python3: the runner image has it, and no Swift is involved.
@@ -188,9 +205,6 @@ jobs:
 
       - name: Build-retry helper self-tests
         run: scripts/ci-build-retry.sh --self-test
-
-      - name: Claude Code hook self-tests
-        run: scripts/test-claude-hooks.py
 
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
@@ -610,6 +624,7 @@ jobs:
       - guard-self-tests
       - mutation-trend-tests
       - deployer-tests
+      - claude-hooks-tests
       - handle-review
       - build
       - core-tests
