@@ -254,8 +254,13 @@ names. `check-xeus-vendored.sh` section 9 asserts the naming, and
 
 A warm boot now asks the server for no package at all, where it used to send
 ~50 conditional GETs. For one student that removes latency, not bytes. For a
-class of 150 that joins a lecture activity at once it removes ~7,500 requests
-(`docs/live-lecture-scale.md`, R1).
+class of 150 that joins a lecture activity at once it removes 48 × 150 = 7,200
+requests.
+
+What the naming does not cover: an upstream artifact rebuilt with new bytes
+under the same `name-version-build`. Conda channels do not do that, and nothing
+here checks it, because `empack_env_meta.json` records no checksum. If it ever
+happens, the students who have the old bytes keep them.
 
 One cutover case: during a blue-green deploy that changes a rewritten archive, a
 browser can read the metadata from one color and ask the other color for the

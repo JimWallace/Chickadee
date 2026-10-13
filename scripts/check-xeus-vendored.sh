@@ -367,18 +367,31 @@ PY
 #    the patch would ship new bytes under a name that students have cached.
 #    And each env's empack_env_meta.json must name exactly the files on disk,
 #    since every reader fetches `kernel_packages/<filename>` from it.
-python3 - "$BUILD_DIR" <<'PY'
+python3 - "$BUILD_DIR" "$ROOT_DIR" <<'PY'
+import fnmatch
 import hashlib
+import importlib.util
 import json
 import pathlib
 import re
 import sys
 
 build = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
 suffix = re.compile(r"\.chickadee\.([0-9a-f]{12})\.tar\.gz$")
-# The archives the build rewrites. Keep in step with TARGETS in
-# scripts/patch-xeus-python-http.py.
-rewritten = ("pyodide-http-", "urllib3-")
+
+# The archives the build rewrites come from the patch script itself, so a new
+# target is covered here with no edit. A hand-kept copy of the list would let a
+# new rewritten archive pass this check under a stable name.
+spec = importlib.util.spec_from_file_location(
+    "patch_xeus_python_http", root / "scripts" / "patch-xeus-python-http.py")
+patcher = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(patcher)
+rewritten = [target.archive_glob.rsplit("/", 1)[-1] for target in patcher.TARGETS]
+if not rewritten:
+    print("check-xeus-vendored: patch-xeus-python-http.py lists no TARGETS — the "
+          "rewritten-archive check would cover nothing", file=sys.stderr)
+    sys.exit(1)
 failed = False
 
 for packages in sorted((build / "xeus").glob("*/kernel_packages")):
@@ -403,7 +416,7 @@ for packages in sorted((build / "xeus").glob("*/kernel_packages")):
 
     for archive in sorted(packages.iterdir()):
         match = suffix.search(archive.name)
-        if archive.name.startswith(rewritten) and not match:
+        if any(fnmatch.fnmatch(archive.name, pattern) for pattern in rewritten) and not match:
             print(
                 f"check-xeus-vendored: {env.name}/kernel_packages/{archive.name} is rewritten "
                 "by the build but carries no content hash in its name — run "

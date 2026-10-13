@@ -149,9 +149,8 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
     /// hash of its own bytes in its name (`scripts/patch-xeus-python-http.py`;
     /// asserted by `scripts/check-xeus-vendored.sh` section 9). So a browser
     /// that has a package never needs to ask for it again. That removes ~50
-    /// conditional requests from every warm kernel boot, which is ~7,500 for a
-    /// class of 150 that joins a lecture activity at once
-    /// (docs/live-lecture-scale.md, R1). A new version arrives under a new name
+    /// conditional requests from every warm kernel boot, which is ~7,200 for a
+    /// class of 150 that joins at once. A new version arrives under a new name
     /// through `empack_env_meta.json`, which stays on the revalidating path.
     static func isImmutableKernelPackage(path: String) -> Bool {
         path.hasSuffix(".tar.gz") && vendoredKernelPackagePrefixes.contains { path.hasPrefix($0) }

@@ -60,6 +60,7 @@ Usage: patch-xeus-python-http.py <jupyterlite-build-dir>
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import io
 import json
@@ -210,25 +211,30 @@ def patch_archive(archive: pathlib.Path, target: Target) -> str:
 
         # Rebuild the archive, substituting the one member. Streaming into
         # memory keeps the original member order and metadata intact.
+        # A fixed gzip mtime makes the rewrite byte-for-byte reproducible, so
+        # the content hash in the archive's name (`content_address`) changes
+        # only when the patched bytes do. A wall-clock mtime would give every
+        # re-vendor a new name, and every student a new download.
         buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w:gz") as out:
-            for m in members:
-                if m.name == member.name:
-                    info = tarfile.TarInfo(m.name)
-                    info.size = len(new_source)
-                    info.mode = m.mode
-                    info.mtime = m.mtime
-                    info.uid, info.gid = m.uid, m.gid
-                    info.uname, info.gname = m.uname, m.gname
-                    info.type = m.type
-                    out.addfile(info, io.BytesIO(new_source))
-                elif m.isfile():
-                    data = tf.extractfile(m)
-                    if data is None:
-                        continue
-                    out.addfile(m, io.BytesIO(data.read()))
-                else:
-                    out.addfile(m)
+        with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
+            with tarfile.open(fileobj=gz, mode="w") as out:
+                for m in members:
+                    if m.name == member.name:
+                        info = tarfile.TarInfo(m.name)
+                        info.size = len(new_source)
+                        info.mode = m.mode
+                        info.mtime = m.mtime
+                        info.uid, info.gid = m.uid, m.gid
+                        info.uname, info.gname = m.uname, m.gname
+                        info.type = m.type
+                        out.addfile(info, io.BytesIO(new_source))
+                    elif m.isfile():
+                        data = tf.extractfile(m)
+                        if data is None:
+                            continue
+                        out.addfile(m, io.BytesIO(data.read()))
+                    else:
+                        out.addfile(m)
 
     archive.write_bytes(buf.getvalue())
     return "patched"
