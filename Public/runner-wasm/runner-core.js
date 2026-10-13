@@ -1297,6 +1297,16 @@ async function createInstantiator(options, swift) {
   };
   const __bjs_codec_Array_M10RunnerWasmT11JSSuiteItem = __bjs_arrayCodec(__bjs_codec_M10RunnerWasmT11JSSuiteItem);
   const __bjs_codec_Array_String = __bjs_arrayCodec(__bjs_stringCodec);
+  const __bjs_codec_M10RunnerWasmT23JSCompositeContribution = {
+    lower: (v) => {
+      structHelpers.M10RunnerWasmT23JSCompositeContribution.lower(v);
+    },
+    lift: () => {
+      const struct = structHelpers.M10RunnerWasmT23JSCompositeContribution.lift();
+      return struct;
+    }
+  };
+  const __bjs_codec_Optional_M10RunnerWasmT23JSCompositeContribution = __bjs_optionalCodec(__bjs_codec_M10RunnerWasmT23JSCompositeContribution);
   const __bjs_codec_Optional_String = __bjs_optionalCodec(__bjs_stringCodec);
   const __bjs_codec_Optional_Double = __bjs_optionalCodec(__bjs_primitiveCodecs.Double);
   const __bjs_codec_Optional_Int = __bjs_optionalCodec(__bjs_primitiveCodecs.Int);
@@ -1406,6 +1416,29 @@ async function createInstantiator(options, swift) {
       return { exitCode: int1, stdout: string1, stderr: string, executionTimeMs: int, timedOut: bool };
     }
   });
+  const __bjs_createStructHelpers_M10RunnerWasmT23JSCompositeContribution = () => ({
+    lower: (value) => {
+      i32Stack.push(value.w | 0);
+      i32Stack.push(value.h | 0);
+      i32Stack.push(value.frames | 0);
+      const bytes = textEncoder.encode(value.format);
+      const id = swift.memory.retain(bytes);
+      i32Stack.push(bytes.length);
+      i32Stack.push(id);
+      const bytes1 = textEncoder.encode(value.data);
+      const id1 = swift.memory.retain(bytes1);
+      i32Stack.push(bytes1.length);
+      i32Stack.push(id1);
+    },
+    lift: () => {
+      const string = strStack.pop();
+      const string1 = strStack.pop();
+      const int = i32Stack.pop();
+      const int1 = i32Stack.pop();
+      const int2 = i32Stack.pop();
+      return { w: int2, h: int1, frames: int, format: string1, data: string };
+    }
+  });
   const __bjs_createStructHelpers_M10RunnerWasmT13JSTestOutcome = () => ({
     lower: (value) => {
       const bytes = textEncoder.encode(value.testName);
@@ -1429,6 +1462,7 @@ async function createInstantiator(options, swift) {
       f64Stack.push(value.score);
       i32Stack.push(value.points | 0);
       __bjs_codec_Optional_Double.lower(value.metric);
+      __bjs_codec_Optional_M10RunnerWasmT23JSCompositeContribution.lower(value.composite);
       i32Stack.push(value.executionTimeMs | 0);
       __bjs_codec_Optional_Int.lower(value.memoryUsageBytes);
       i32Stack.push(value.attemptNumber | 0);
@@ -1439,16 +1473,17 @@ async function createInstantiator(options, swift) {
       const int = i32Stack.pop();
       const optValue = __bjs_codec_Optional_Int.lift();
       const int1 = i32Stack.pop();
-      const optValue1 = __bjs_codec_Optional_Double.lift();
+      const optValue1 = __bjs_codec_Optional_M10RunnerWasmT23JSCompositeContribution.lift();
+      const optValue2 = __bjs_codec_Optional_Double.lift();
       const int2 = i32Stack.pop();
       const f64 = f64Stack.pop();
-      const optValue2 = __bjs_codec_Optional_String.lift();
+      const optValue3 = __bjs_codec_Optional_String.lift();
       const string = strStack.pop();
       const string1 = strStack.pop();
       const string2 = strStack.pop();
-      const optValue3 = __bjs_codec_Optional_String.lift();
+      const optValue4 = __bjs_codec_Optional_String.lift();
       const string3 = strStack.pop();
-      return { testName: string3, testClass: optValue3, tier: string2, status: string1, shortResult: string, longResult: optValue2, score: f64, points: int2, metric: optValue1, executionTimeMs: int1, memoryUsageBytes: optValue, attemptNumber: int, isFirstPassSuccess: bool };
+      return { testName: string3, testClass: optValue4, tier: string2, status: string1, shortResult: string, longResult: optValue3, score: f64, points: int2, metric: optValue2, composite: optValue1, executionTimeMs: int1, memoryUsageBytes: optValue, attemptNumber: int, isFirstPassSuccess: bool };
     }
   });
   return {
@@ -1558,6 +1593,13 @@ async function createInstantiator(options, swift) {
       };
       bjs["swift_js_struct_lift_JSScriptOutput"] = function() {
         const value = structHelpers.M10RunnerWasmT14JSScriptOutput.lift();
+        return swift.memory.retain(value);
+      };
+      bjs["swift_js_struct_lower_JSCompositeContribution"] = function(objectId) {
+        structHelpers.M10RunnerWasmT23JSCompositeContribution.lower(swift.memory.getObject(objectId));
+      };
+      bjs["swift_js_struct_lift_JSCompositeContribution"] = function() {
+        const value = structHelpers.M10RunnerWasmT23JSCompositeContribution.lift();
         return swift.memory.retain(value);
       };
       bjs["swift_js_struct_lower_JSTestOutcome"] = function(objectId) {
@@ -1813,6 +1855,8 @@ async function createInstantiator(options, swift) {
       structHelpers.M10RunnerWasmT11JSSuiteItem = __bjs_helpers_M10RunnerWasmT11JSSuiteItem;
       const __bjs_helpers_M10RunnerWasmT14JSScriptOutput = __bjs_createStructHelpers_M10RunnerWasmT14JSScriptOutput();
       structHelpers.M10RunnerWasmT14JSScriptOutput = __bjs_helpers_M10RunnerWasmT14JSScriptOutput;
+      const __bjs_helpers_M10RunnerWasmT23JSCompositeContribution = __bjs_createStructHelpers_M10RunnerWasmT23JSCompositeContribution();
+      structHelpers.M10RunnerWasmT23JSCompositeContribution = __bjs_helpers_M10RunnerWasmT23JSCompositeContribution;
       const __bjs_helpers_M10RunnerWasmT13JSTestOutcome = __bjs_createStructHelpers_M10RunnerWasmT13JSTestOutcome();
       structHelpers.M10RunnerWasmT13JSTestOutcome = __bjs_helpers_M10RunnerWasmT13JSTestOutcome;
       const exports = {
@@ -1866,6 +1910,17 @@ async function createInstantiator(options, swift) {
           const ret1 = swift.memory.getObject(ret);
           swift.memory.release(ret);
           return ret1;
+        },
+        JSCompositeContribution: {
+          init: function(w, h, frames, format, data) {
+            const formatBytes = textEncoder.encode(format);
+            const formatId = swift.memory.retain(formatBytes);
+            const dataBytes = textEncoder.encode(data);
+            const dataId = swift.memory.retain(dataBytes);
+            instance2.exports.bjs_JSCompositeContribution_init(w, h, frames, formatId, formatBytes.length, dataId, dataBytes.length);
+            const structValue = structHelpers.M10RunnerWasmT23JSCompositeContribution.lift();
+            return structValue;
+          }
         },
         JSExtractedPython: {
           init: function(executableModule, introspectableSource, codeCellCount) {
@@ -1933,7 +1988,7 @@ async function createInstantiator(options, swift) {
           }
         },
         JSTestOutcome: {
-          init: function(testName, testClass, tier, status, shortResult, longResult, score, points, metric, executionTimeMs, memoryUsageBytes, attemptNumber, isFirstPassSuccess) {
+          init: function(testName, testClass, tier, status, shortResult, longResult, score, points, metric, composite, executionTimeMs, memoryUsageBytes, attemptNumber, isFirstPassSuccess) {
             const testNameBytes = textEncoder.encode(testName);
             const testNameId = swift.memory.retain(testNameBytes);
             const isSome = testClass != null;
@@ -1965,6 +2020,7 @@ async function createInstantiator(options, swift) {
               result3 = 0;
             }
             const isSome2 = metric != null;
+            __bjs_codec_Optional_M10RunnerWasmT23JSCompositeContribution.lower(composite);
             const isSome3 = memoryUsageBytes != null;
             instance2.exports.bjs_JSTestOutcome_init(testNameId, testNameBytes.length, +isSome, result, result1, tierId, tierBytes.length, statusId, statusBytes.length, shortResultId, shortResultBytes.length, +isSome1, result2, result3, score, points, +isSome2, isSome2 ? metric : 0, executionTimeMs, +isSome3, isSome3 ? memoryUsageBytes : 0, attemptNumber, isFirstPassSuccess);
             const structValue = structHelpers.M10RunnerWasmT13JSTestOutcome.lift();
@@ -1979,7 +2035,7 @@ async function createInstantiator(options, swift) {
 }
 
 // .build/plugins/PackageToJS/outputs/Package/instantiate.js
-var MODULE_PATH = "RunnerWasm.64934f203d17.wasm";
+var MODULE_PATH = "RunnerWasm.c5f4eae282cc.wasm";
 async function instantiate(options) {
   const { instantiator, ...result } = await _instantiate(options);
   options.wasi.initialize(result.instance);
@@ -3387,7 +3443,7 @@ async function initBrowser(_options) {
   };
   let module = options.module;
   if (!module) {
-    module = fetch(new URL("RunnerWasm.64934f203d17.wasm", import.meta.url));
+    module = fetch(new URL("RunnerWasm.c5f4eae282cc.wasm", import.meta.url));
   }
   const instantiateOptions = await defaultBrowserSetup({
     module,

@@ -16,7 +16,7 @@ of all parts together.
 | slice | what | state |
 |---|---|---|
 | 0 | This design note | proposed |
-| 1 | Output contract: the `composite` footer field in `RunnerCore` | planned |
+| 1 | Output contract: the `composite` footer field in `RunnerCore` | shipped |
 | 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | planned |
 | 3 | Slot dealing, and the slot as a per-student input | planned |
 | 4 | Ingest: the `composite_contributions` table and the coverage row | planned |
@@ -134,10 +134,26 @@ The test script writes the contribution in its footer:
 | `format` | `gray8` or `rgb8` |
 | `data` | Base64 of `w × h × frames × channels` bytes, frame by frame, row by row |
 
-`interpretScriptOutput` passes the object through to an optional field on
-`TestOutcome`. It does not decode `data`. `Tests/Fixtures/output-contract.json`
-gains rows for a footer with a composite and for a footer without one, and CI
-asserts them against the native build and the vendored wasm.
+`interpretScriptOutput` reads the object into `CompositeContribution`
+(`Sources/RunnerCore/CompositeContribution.swift`), an optional field on
+`TestOutcome`. It checks the shape without decoding `data`: `w`, `h` and
+`frames` are positive whole numbers, `format` is known, and `data` is standard
+padded base64 whose decoded length is exactly `w × h × frames × channels` and at
+most 64 KB. It computes that length from the text, so no pixel is decoded. Any
+other shape gives no contribution, and the grade does not change. The browser
+bridge carries the same object as `JSCompositeContribution`, with the footer's
+keys, which are also the keys of the `Codable` form that the server decodes.
+
+`Tests/Fixtures/output-contract.json` has rows for a valid contribution, a
+failed test with a contribution, and four invalid shapes. CI asserts them
+against the native build and the vendored wasm, which slice 1 re-vendored. The
+server still validates every payload at ingest (slice 4), because a
+browser-posted outcome is not trusted.
+
+Slice 4 must also decide how a composite counts against the stored result's
+size budget. `TestOutcomeCollection`'s truncation cuts only `longResult` and
+copies `composite` unchanged, and a contribution can be up to about 87 KB of
+base64.
 
 The contribution is attached to the test outcome, so a script can grade the
 correctness of the contribution in the same run. The exit code and `score` are

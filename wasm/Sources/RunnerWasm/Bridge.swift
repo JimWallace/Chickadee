@@ -148,6 +148,31 @@ public func bridgeClassifyScript(name: String, source: String) -> String {
     }
 }
 
+/// A class-composite contribution, with the footer's field names (`w`, `h`)
+/// so the browser posts the same keys that `CompositeContribution`'s `Codable`
+/// conformance reads on the server.
+@JS public struct JSCompositeContribution {
+    public var w: Int
+    public var h: Int
+    public var frames: Int
+    public var format: String
+    public var data: String
+
+    @JS public init(w: Int, h: Int, frames: Int, format: String, data: String) {
+        self.w = w
+        self.h = h
+        self.frames = frames
+        self.format = format
+        self.data = data
+    }
+
+    init(_ contribution: CompositeContribution) {
+        self.init(
+            w: contribution.width, h: contribution.height, frames: contribution.frames,
+            format: contribution.format.rawValue, data: contribution.data)
+    }
+}
+
 /// The canonical `TestOutcome` shape, field for field, with the enums as
 /// their raw strings — what the browser POSTs and the server decodes.
 @JS public struct JSTestOutcome {
@@ -160,6 +185,7 @@ public func bridgeClassifyScript(name: String, source: String) -> String {
     public var score: Double
     public var points: Int
     public var metric: Double?
+    public var composite: JSCompositeContribution?
     public var executionTimeMs: Int
     public var memoryUsageBytes: Int?
     public var attemptNumber: Int
@@ -167,7 +193,8 @@ public func bridgeClassifyScript(name: String, source: String) -> String {
 
     @JS public init(
         testName: String, testClass: String?, tier: String, status: String, shortResult: String,
-        longResult: String?, score: Double, points: Int, metric: Double?, executionTimeMs: Int,
+        longResult: String?, score: Double, points: Int, metric: Double?,
+        composite: JSCompositeContribution?, executionTimeMs: Int,
         memoryUsageBytes: Int?, attemptNumber: Int, isFirstPassSuccess: Bool
     ) {
         self.testName = testName
@@ -179,6 +206,7 @@ public func bridgeClassifyScript(name: String, source: String) -> String {
         self.score = score
         self.points = points
         self.metric = metric
+        self.composite = composite
         self.executionTimeMs = executionTimeMs
         self.memoryUsageBytes = memoryUsageBytes
         self.attemptNumber = attemptNumber
@@ -190,7 +218,8 @@ public func bridgeClassifyScript(name: String, source: String) -> String {
             testName: outcome.testName, testClass: outcome.testClass, tier: outcome.tier.rawValue,
             status: outcome.status.rawValue, shortResult: outcome.shortResult,
             longResult: outcome.longResult, score: outcome.score, points: outcome.points,
-            metric: outcome.metric, executionTimeMs: outcome.executionTimeMs,
+            metric: outcome.metric, composite: outcome.composite.map(JSCompositeContribution.init),
+            executionTimeMs: outcome.executionTimeMs,
             memoryUsageBytes: outcome.memoryUsageBytes, attemptNumber: outcome.attemptNumber,
             isFirstPassSuccess: outcome.isFirstPassSuccess)
     }

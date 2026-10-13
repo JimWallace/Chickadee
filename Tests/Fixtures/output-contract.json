@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to RunnerCore's interpretScriptOutput, which BOTH runners now use (the worker directly; the browser via the wasm executeSuites bridge). `native` records the exact display strings + partial-credit `score` interpretScriptOutput produces and is the single source of truth — Tests/WorkerTests/OutputContractTests.swift asserts the native build matches it, and Tests/BrowserRunnerJSTests/output-contract.test.mjs drives the REAL vendored wasm and asserts it matches too, so the two runners are byte-identical (status, shortResult, longResult, score). interpretScriptOutput strips a leading `<test>: ` label from shortResult (when the footer carries a `test` field) and surfaces a footer `traceback` field as longResult. `score` is the fraction of the test's points earned, in 0...1: an explicit footer `score` wins (clamped, orthogonal to the exit-code status), else 1 on a pass and 0 otherwise. NOTE: the wasm side only asserts `score` once the vendored artifact carries it (re-vendored on main by runner-wasm-vendor.yml); the native side always asserts it. `metric` is the footer's optional unclamped ranking number (a leaderboard's sort key, never credit): surfaced verbatim when present, absent (null) otherwise, orthogonal to both `score` and the exit code. Rows written before it existed carry no `metric` key in `native`, which means null; the wasm side asserts it under the same once-present rule as `score`.",
+  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to RunnerCore's interpretScriptOutput, which BOTH runners now use (the worker directly; the browser via the wasm executeSuites bridge). `native` records the exact display strings + partial-credit `score` interpretScriptOutput produces and is the single source of truth — Tests/WorkerTests/OutputContractTests.swift asserts the native build matches it, and Tests/BrowserRunnerJSTests/output-contract.test.mjs drives the REAL vendored wasm and asserts it matches too, so the two runners are byte-identical (status, shortResult, longResult, score). interpretScriptOutput strips a leading `<test>: ` label from shortResult (when the footer carries a `test` field) and surfaces a footer `traceback` field as longResult. `score` is the fraction of the test's points earned, in 0...1: an explicit footer `score` wins (clamped, orthogonal to the exit-code status), else 1 on a pass and 0 otherwise. NOTE: the wasm side only asserts `score` once the vendored artifact carries it (re-vendored on main by runner-wasm-vendor.yml); the native side always asserts it. `metric` is the footer's optional unclamped ranking number (a leaderboard's sort key, never credit): surfaced verbatim when present, absent (null) otherwise, orthogonal to both `score` and the exit code. Rows written before it existed carry no `metric` key in `native`, which means null; the wasm side asserts it under the same once-present rule as `score`. `composite` is the footer's optional class-composite contribution (docs/class-composite.md), a display and never credit: carried through verbatim when its shape is valid (positive whole `w`, `h` and `frames`, a known `format`, and standard base64 `data` of exactly w*h*frames*channels bytes), null otherwise and on rows that carry no `composite` key; the wasm side asserts it under the same once-present rule.",
   "cases": [
     {
       "name": "pass with JSON footer only",
@@ -138,6 +138,54 @@
       "exitCode": 0,
       "status": "pass",
       "native": { "shortResult": "t: passed", "score": 1, "longResult": null, "metric": null }
+    },
+    {
+      "name": "composite contribution carried through, footer stripped from longResult",
+      "stdout": "rendering tile 3\n{\"score\":1,\"shortResult\":\"tile rendered\",\"composite\":{\"w\":2,\"h\":1,\"frames\":1,\"format\":\"gray8\",\"data\":\"AP8=\"}}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "tile rendered", "score": 1, "longResult": "stdout:\nrendering tile 3", "composite": {"w": 2, "h": 1, "frames": 1, "format": "gray8", "data": "AP8="} }
+    },
+    {
+      "name": "composite on a failing exit code (a failed contribution is still reported)",
+      "stdout": "{\"shortResult\":\"wrong colour\",\"composite\":{\"w\":1,\"h\":1,\"frames\":2,\"format\":\"rgb8\",\"data\":\"AAAA////\"}}\n",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "wrong colour", "score": 0, "longResult": null, "composite": {"w": 1, "h": 1, "frames": 2, "format": "rgb8", "data": "AAAA////"} }
+    },
+    {
+      "name": "composite whose data length does not match its dimensions is ignored",
+      "stdout": "{\"score\":1,\"shortResult\":\"ok\",\"composite\":{\"w\":2,\"h\":2,\"frames\":1,\"format\":\"gray8\",\"data\":\"AP8=\"}}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "ok", "score": 1, "longResult": null, "composite": null }
+    },
+    {
+      "name": "composite with an unknown pixel format is ignored",
+      "stdout": "{\"score\":1,\"shortResult\":\"ok\",\"composite\":{\"w\":2,\"h\":1,\"frames\":1,\"format\":\"rgba8\",\"data\":\"AP8=\"}}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "ok", "score": 1, "longResult": null, "composite": null }
+    },
+    {
+      "name": "composite with a non-integer dimension is ignored",
+      "stdout": "{\"score\":1,\"shortResult\":\"ok\",\"composite\":{\"w\":1.5,\"h\":1,\"frames\":1,\"format\":\"gray8\",\"data\":\"AP8=\"}}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "ok", "score": 1, "longResult": null, "composite": null }
+    },
+    {
+      "name": "composite with data outside the base64 alphabet is ignored",
+      "stdout": "{\"score\":1,\"shortResult\":\"ok\",\"composite\":{\"w\":2,\"h\":1,\"frames\":1,\"format\":\"gray8\",\"data\":\"AP8*\"}}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "ok", "score": 1, "longResult": null, "composite": null }
     }
   ]
 }

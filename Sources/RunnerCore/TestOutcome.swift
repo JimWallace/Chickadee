@@ -30,6 +30,10 @@ public struct TestOutcome: Equatable, Sendable {
     /// grade never reads it. Nil when the script reported none, which is every
     /// script written before class activities existed.
     public let metric: Double?
+    /// This test's contribution to a class composite, from the footer's
+    /// optional `composite` object (`docs/class-composite.md`). A display,
+    /// never credit. Nil for every script that reports none.
+    public let composite: CompositeContribution?
 
     // MARK: - Performance
     public let executionTimeMs: Int
@@ -49,6 +53,7 @@ public struct TestOutcome: Equatable, Sendable {
         score: Double = 1,
         points: Int = 1,
         metric: Double? = nil,
+        composite: CompositeContribution? = nil,
         executionTimeMs: Int,
         memoryUsageBytes: Int?,
         attemptNumber: Int,
@@ -63,6 +68,7 @@ public struct TestOutcome: Equatable, Sendable {
         self.score = score
         self.points = points
         self.metric = metric
+        self.composite = composite
         self.executionTimeMs = executionTimeMs
         self.memoryUsageBytes = memoryUsageBytes
         self.attemptNumber = attemptNumber
@@ -90,6 +96,7 @@ extension TestOutcome: Codable {
         score = try c.decodeIfPresent(Double.self, forKey: .score) ?? (status == .pass ? 1 : 0)
         points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
         metric = try c.decodeIfPresent(Double.self, forKey: .metric)
+        composite = try c.decodeIfPresent(CompositeContribution.self, forKey: .composite)
         executionTimeMs = try c.decode(Int.self, forKey: .executionTimeMs)
         memoryUsageBytes = try c.decodeIfPresent(Int.self, forKey: .memoryUsageBytes)
         attemptNumber = try c.decode(Int.self, forKey: .attemptNumber)

@@ -99,7 +99,7 @@ test('typed executeSuites drives the shared loop with typed callbacks', async ()
   assert.equal(outcomes.length, 2);
   assert.deepEqual(outcomes[0], {
     testName: 'a', testClass: null, tier: 'public', status: 'pass', shortResult: 'passed',
-    longResult: null, score: 0.5, points: 2, metric: 12.5, executionTimeMs: 4,
+    longResult: null, score: 0.5, points: 2, metric: 12.5, composite: null, executionTimeMs: 4,
     memoryUsageBytes: null, attemptNumber: 3, isFirstPassSuccess: false,
   });
   assert.equal(outcomes[1].testName, 'Named');
