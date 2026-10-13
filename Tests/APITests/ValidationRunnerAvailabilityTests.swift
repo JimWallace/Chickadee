@@ -64,7 +64,7 @@ import VaporTesting
                 runnerID: "val-live", displayName: "host-a",
                 profile: makeProfile(), seenAt: staleSeenAt, on: app.db)
 
-            let req = Request(application: app, on: app.eventLoopGroup.next())
+            let req = makeTestRequest(on: app)
             let available = try await hasCompatibleValidationRunner(
                 context: req, requirements: nil)
             #expect(available == true)
@@ -89,7 +89,7 @@ import VaporTesting
                 runnerID: "val-dead", displayName: "host-b",
                 profile: makeProfile(), seenAt: deadSeenAt, on: app.db)
 
-            let req = Request(application: app, on: app.eventLoopGroup.next())
+            let req = makeTestRequest(on: app)
             let available = try await hasCompatibleValidationRunner(
                 context: req, requirements: nil)
             #expect(available == false)

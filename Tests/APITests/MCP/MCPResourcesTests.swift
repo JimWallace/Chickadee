@@ -16,7 +16,7 @@ import Vapor
         _ app: Application, subject: String, scopes: Set<ContentScope> = [.read]
     ) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: subject,
             grantedScopes: scopes)
     }

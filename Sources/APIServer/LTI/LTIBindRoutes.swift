@@ -43,7 +43,7 @@ struct LTIBindRoutes: RouteCollection {
         struct Body: Content { var courseID: UUID }
         let pending = try Self.pending(req)
         let user = try req.auth.require(APIUser.self)
-        let courseID = try req.content.decode(Body.self).courseID
+        let courseID = try await req.decodeContent(Body.self).courseID
         guard
             let course = try await Self.bindableCourses(for: user, on: req.db).first(where: { $0.id == courseID })
         else { throw Abort(.forbidden, reason: "You can link only a course you teach that is not linked yet.") }

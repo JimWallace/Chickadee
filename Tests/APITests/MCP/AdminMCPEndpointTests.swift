@@ -34,7 +34,7 @@ import VaporTesting
     @Test func postInitializeReturnsToolsOnlyResult() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/admin-mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .ok)
@@ -48,7 +48,7 @@ import VaporTesting
     @Test func postNotificationReturns202() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/admin-mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .accepted)
@@ -59,7 +59,7 @@ import VaporTesting
 
     @Test func unparseableBodyReturns400() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/admin-mcp", headers: jsonHeaders, body: ByteBuffer(string: "not json")
             ) { res async in
                 #expect(res.status == .badRequest)
@@ -70,7 +70,7 @@ import VaporTesting
 
     @Test func getReturns405() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/admin-mcp") { res async in
+            try await app.asyncTest(.GET, "/admin-mcp") { res async in
                 #expect(res.status == .methodNotAllowed)
             }
         }
@@ -83,7 +83,7 @@ import VaporTesting
                 "Content-Type": "application/json", "Origin": "https://evil.example",
             ]
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/admin-mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .forbidden)

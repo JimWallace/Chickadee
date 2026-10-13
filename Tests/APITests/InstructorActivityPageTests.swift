@@ -142,7 +142,7 @@ import VaporTesting
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
-            let request = Request(application: app, on: app.eventLoopGroup.any())
+            let request = makeTestRequest(on: app)
             await AuditLogger.record(
                 action: .enrollmentRoleChanged, targetType: .enrollment,
                 targetID: UUID().uuidString,

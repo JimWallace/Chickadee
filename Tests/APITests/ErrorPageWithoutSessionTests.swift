@@ -13,7 +13,7 @@ import VaporTesting
         app.middleware.use(ErrorPageMiddleware())
         app.get("missing") { _ -> String in throw Abort(.notFound) }
         try await withApp(app) { app in
-            try await app.testing().test(.GET, "missing") { res in
+            try await app.asyncTest(.GET, "missing") { res in
                 #expect(res.status == .notFound)
                 #expect(res.headers.contentType == .html)
                 #expect(res.headers.setCookie?["vapor-session"] == nil)

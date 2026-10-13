@@ -63,14 +63,16 @@ extension GitHubAppGrants {
     /// What the App asks for now, or nil when GitHub cannot be asked or does
     /// not answer. The reason is logged; the page says only that it could not
     /// read them.
-    static func ofApp(_ app: APIGitHubApp, secrets: GitHubAppSecrets, req: Request) async -> GitHubAppGrants? {
+    static func ofApp(
+        _ app: APIGitHubApp, secrets: GitHubAppSecrets, req: any GitHubCallScope
+    ) async -> GitHubAppGrants? {
         await read(app: app, secrets: secrets, req: req) { client, jwt in try await client.appGrants(jwt) }
     }
 
     /// What the App's installation `installationID` was granted, or nil when
     /// GitHub cannot be asked or does not answer.
     static func ofInstallation(
-        _ installationID: Int64, app: APIGitHubApp, secrets: GitHubAppSecrets, req: Request
+        _ installationID: Int64, app: APIGitHubApp, secrets: GitHubAppSecrets, req: any GitHubCallScope
     ) async -> GitHubAppGrants? {
         await read(app: app, secrets: secrets, req: req) { client, jwt in
             try await client.installationGrants(jwt, installationID)
@@ -79,7 +81,7 @@ extension GitHubAppGrants {
 
     /// Signs the App JWT and runs `body` with it.
     private static func read(
-        app: APIGitHubApp, secrets: GitHubAppSecrets, req: Request,
+        app: APIGitHubApp, secrets: GitHubAppSecrets, req: any GitHubCallScope,
         _ body: (GitHubRepoClient, String) async throws -> GitHubAppGrants
     ) async -> GitHubAppGrants? {
         do {

@@ -19,7 +19,7 @@ extension MCPOAuthRoutes {
     func register(req: Request) async throws -> Response {
         let metadata: RegistrationRequest
         do {
-            metadata = try req.content.decode(RegistrationRequest.self)
+            metadata = try await req.decodeContent(RegistrationRequest.self)
         } catch {
             return Self.registrationError("invalid_client_metadata", "Could not parse client metadata.")
         }
@@ -108,7 +108,7 @@ extension MCPOAuthRoutes {
 
     @Sendable
     func revoke(req: Request) async throws -> Response {
-        if let token = (try? req.content.decode(RevokeForm.self))?.token, !token.isEmpty {
+        if let token = (try? await req.decodeContent(RevokeForm.self))?.token, !token.isEmpty {
             let hash = sha256HexDigest(token)
             // Match the current or just-rotated refresh-token hash.  Bound to a
             // `let` first so the trailing closure isn't read as the `if` body.

@@ -14,15 +14,15 @@ import VaporTesting
 
     @Test func theTokenDoesNotChangeTheETag() {
         let first = Response.weakETag(
-            for: ByteBuffer(string: #"<tr><input name="_csrf" value="aa-11"></tr>"#), ignoring: "aa-11")
+            for: #"<tr><input name="_csrf" value="aa-11"></tr>"#, ignoring: "aa-11")
         let second = Response.weakETag(
-            for: ByteBuffer(string: #"<tr><input name="_csrf" value="bb-22"></tr>"#), ignoring: "bb-22")
+            for: #"<tr><input name="_csrf" value="bb-22"></tr>"#, ignoring: "bb-22")
         #expect(first == second)
     }
 
     @Test func changedRowsStillChangeTheETag() {
-        let first = Response.weakETag(for: ByteBuffer(string: "<tr>a aa-11</tr>"), ignoring: "aa-11")
-        let second = Response.weakETag(for: ByteBuffer(string: "<tr>b bb-22</tr>"), ignoring: "bb-22")
+        let first = Response.weakETag(for: "<tr>a aa-11</tr>", ignoring: "aa-11")
+        let second = Response.weakETag(for: "<tr>b bb-22</tr>", ignoring: "bb-22")
         #expect(first != second)
     }
 }

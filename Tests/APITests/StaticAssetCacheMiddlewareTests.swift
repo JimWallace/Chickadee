@@ -30,7 +30,7 @@ import VaporTesting
 
     @Test func versionedAssetGetsImmutableCacheControl() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/styles.css?v=\(ChickadeeVersion.current)"
             ) { res async in
                 #expect(res.status == .ok)
@@ -41,7 +41,7 @@ import VaporTesting
 
     @Test func unversionedAssetKeepsDefaultRevalidation() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/styles.css") { res async in
+            try await app.asyncTest(.GET, "/styles.css") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .cacheControl) == nil)
             }
@@ -50,7 +50,7 @@ import VaporTesting
 
     @Test func staleVersionIsNotStamped() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/styles.css?v=0.0.0-stale") { res async in
+            try await app.asyncTest(.GET, "/styles.css?v=0.0.0-stale") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .cacheControl) == nil)
             }
@@ -59,7 +59,7 @@ import VaporTesting
 
     @Test func existingCacheControlIsPreserved() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/runner-core.js?v=\(ChickadeeVersion.current)"
             ) { res async in
                 #expect(res.headers.first(name: .cacheControl) == "no-cache")
@@ -69,7 +69,7 @@ import VaporTesting
 
     @Test func nonAssetPathIsNotStamped() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/page?v=\(ChickadeeVersion.current)"
             ) { res async in
                 #expect(res.status == .ok)

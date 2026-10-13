@@ -81,7 +81,7 @@ import VaporTesting
     private func consent(
         _ app: Application, cookie: String, clientID: String, redirectURI: String,
         scope: String, decision: String
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         // GET the consent screen (authenticated) to mint the single-use token,
         // then submit it. The POST carries no cookie — the token alone guards it.
         var html = ""
@@ -102,7 +102,7 @@ import VaporTesting
             })
     }
 
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestingHTTPResponse {
+    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/token",
             beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
@@ -131,7 +131,7 @@ import VaporTesting
         #expect(tokenRes.status == .ok)
     }
 
-    private func mcpPost(_ app: Application, token: String) async throws -> TestingHTTPResponse {
+    private func mcpPost(_ app: Application, token: String) async throws -> TestResponse {
         try await app.asyncSendRequest(
             .POST, "/mcp",
             headers: ["Content-Type": "application/json", "Authorization": "Bearer \(token)"],

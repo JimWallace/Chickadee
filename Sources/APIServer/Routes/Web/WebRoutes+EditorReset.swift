@@ -44,7 +44,7 @@ extension WebRoutes {
     @Sendable
     func performEditorReset(req: Request) async throws -> Response {
         struct ResetForm: Content { var next: String? }
-        let next = safeEditorResetReturnPath((try? req.content.decode(ResetForm.self))?.next)
+        let next = safeEditorResetReturnPath((try? await req.decodeContent(ResetForm.self))?.next)
         let response = try await HTMLResponse {
             EditorResetPage(page: PageRequestContext(request: req), done: true, next: next)
         }.encodeResponse(for: req)

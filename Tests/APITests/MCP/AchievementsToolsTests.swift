@@ -15,7 +15,7 @@ import Vapor
 @Suite struct AchievementsToolsTests {
     private func context(_ app: Application, scopes: Set<ContentScope>) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: "tester",
             grantedScopes: scopes)
     }

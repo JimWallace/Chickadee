@@ -153,7 +153,7 @@ extension GitHubOAuthClient {
                     try req.content.encode(request, as: .urlEncodedForm)
                 }
                 // GitHub answers 200 with an `error` field for a bad code.
-                let body = try response.content.decode(TokenResponse.self)
+                let body = try await response.decodeContent(TokenResponse.self)
                 guard response.status == .ok, body.error == nil, let token = body.accessToken, !token.isEmpty
                 else { throw GitHubLinkError.exchangeFailed }
                 return token
@@ -162,7 +162,7 @@ extension GitHubOAuthClient {
                 let response = try await github.send(
                     .GET, api + "/user", headers: GitHubTransport.apiHeaders(bearer: token))
                 guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
-                return try response.content.decode(GitHubUser.self)
+                return try await response.decodeContent(GitHubUser.self)
             },
             revokeToken: { token, clientID, clientSecret in
                 var headers = GitHubTransport.apiHeaders()
@@ -182,7 +182,7 @@ extension GitHubOAuthClient {
                     .GET, api + "/user/installations?per_page=100",
                     headers: GitHubTransport.apiHeaders(bearer: token))
                 guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
-                return try response.content.decode(InstallationList.self).installations.map {
+                return try await response.decodeContent(InstallationList.self).installations.map {
                     GitHubUserInstallation(
                         installationID: $0.id, accountID: $0.account.id,
                         accountLogin: $0.account.login, accountType: $0.account.type)
@@ -194,7 +194,7 @@ extension GitHubOAuthClient {
                     headers: GitHubTransport.apiHeaders(bearer: token))
                 if response.status == .notFound || response.status == .forbidden { return nil }
                 guard response.status == .ok else { throw GitHubLinkError.exchangeFailed }
-                let membership = try response.content.decode(Membership.self)
+                let membership = try await response.decodeContent(Membership.self)
                 return membership.state == "active" ? membership.role : nil
             })
     }

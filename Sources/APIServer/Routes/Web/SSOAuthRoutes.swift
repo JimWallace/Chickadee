@@ -420,11 +420,10 @@ struct SSOAuthRoutes: RouteCollection {
                     ] as [String: String], as: .urlEncodedForm)
             }
             if response.status == .ok {
-                return try response.content.decode(OIDCTokenResponse.self)
+                return try await response.decodeContent(OIDCTokenResponse.self)
             }
             lastStatus = response.status
-            var bodyBuffer = response.body ?? ByteBuffer()
-            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+            lastBody = response.bodyText ?? "(empty)"
         }
 
         // 2) client_secret_post + PKCE code_verifier
@@ -442,11 +441,10 @@ struct SSOAuthRoutes: RouteCollection {
                     ] as [String: String], as: .urlEncodedForm)
             }
             if response.status == .ok {
-                return try response.content.decode(OIDCTokenResponse.self)
+                return try await response.decodeContent(OIDCTokenResponse.self)
             }
             lastStatus = response.status
-            var bodyBuffer = response.body ?? ByteBuffer()
-            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+            lastBody = response.bodyText ?? "(empty)"
         }
 
         // 3) client_secret_post without PKCE verifier (provider-specific fallback)
@@ -463,11 +461,10 @@ struct SSOAuthRoutes: RouteCollection {
                     ] as [String: String], as: .urlEncodedForm)
             }
             if response.status == .ok {
-                return try response.content.decode(OIDCTokenResponse.self)
+                return try await response.decodeContent(OIDCTokenResponse.self)
             }
             lastStatus = response.status
-            var bodyBuffer = response.body ?? ByteBuffer()
-            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+            lastBody = response.bodyText ?? "(empty)"
         }
 
         req.logger.error("Token exchange returned HTTP \(lastStatus.code): \(lastBody)")

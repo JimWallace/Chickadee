@@ -139,7 +139,7 @@ extension MCPOAuthRoutes {
         // Identity + CSRF ride on the single-use consent token, not the session
         // cookie — so this works in the cross-site connector context where the
         // cookie is dropped. Look the token up by hash, then burn it.
-        let form = try req.content.decode(ConsentForm.self)
+        let form = try await req.decodeContent(ConsentForm.self)
         let tokenHash = sha256HexDigest(form.requestToken)
         guard
             let record = try await MCPConsentRequest.query(on: req.db)

@@ -436,7 +436,7 @@ extension StudentCourseRoutes {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
-        let body = try req.content.decode(ExtensionBody.self)
+        let body = try await req.decodeContent(ExtensionBody.self)
         let rawDate = (body.extendedDueAt ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawDate.isEmpty,
             let newDueAt = parseDueDate(rawDate)
@@ -535,7 +535,7 @@ extension StudentCourseRoutes {
         let studentUUID = action.studentID
         let testSetupID = assignment.testSetupID
 
-        let body = try req.content.decode(OverrideBody.self)
+        let body = try await req.decodeContent(OverrideBody.self)
         guard let percent = body.overridePercent, (0...100).contains(percent) else {
             throw WebAssignmentError.invalidParameter(
                 name: "overridePercent",

@@ -277,8 +277,8 @@ are structs on Swift HTTP Types, body decoding is async, middleware is
 "still in progress", configuration moves to Swift Configuration, and the
 testing library is new. There is no release date; the team says it depends
 partly on the ecosystem packages. It requires Swift 6.4 and **macOS 26**.
-`Package.swift` targets macOS 15, so the platform minimum must rise for the
-move.
+`Package.swift` targeted macOS 15 then. It targets macOS 26.2 now, the
+minimum that Vapor 5 sets (docs/vapor-5-migration.md).
 
 **Leaf does not support Vapor 5 yet.** The beta announcement says only
 "Leaf integration will be available soon"; Fluent, JWT and Queues are also

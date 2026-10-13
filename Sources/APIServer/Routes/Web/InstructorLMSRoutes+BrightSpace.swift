@@ -90,7 +90,7 @@ extension InstructorLMSRoutes {
             let userID: String
             let userKey: String
         }
-        let form = try req.content.decode(ConnectForm.self)
+        let form = try await req.decodeContent(ConnectForm.self)
         let valenceUserID = form.userID.trimmingCharacters(in: .whitespacesAndNewlines)
         let valenceUserKey = form.userKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !valenceUserID.isEmpty, !valenceUserKey.isEmpty else {
@@ -202,7 +202,7 @@ extension InstructorLMSRoutes {
             return brightspaceRedirect(req, error: "Could not resolve your account.")
         }
         struct BindForm: Content { let orgUnitID: String? }
-        let rawOrgUnit = (try req.content.decode(BindForm.self).orgUnitID ?? "")
+        let rawOrgUnit = (try await req.decodeContent(BindForm.self).orgUnitID ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let courseState = try await req.resolveActiveCourse(for: user)

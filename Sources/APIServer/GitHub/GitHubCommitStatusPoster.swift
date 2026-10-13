@@ -48,23 +48,21 @@ enum GitHubCommitStatusPoster {
     /// already committed, and the runner gives up on its report after 30
     /// seconds of silence and sends it again. Each GitHub call has its own
     /// request timeout (`GitHubTransport.callTimeout`), and shutdown cancels
-    /// the work. The post gets a request of its own, because the report's
+    /// the work. The post gets a scope of its own, because the report's
     /// request ends when its response is sent.
     static func startPost(
         submission: APISubmission, collection: TestOutcomeCollection, req: Request
     ) async {
-        let app = req.application
-        let logger = req.logger
-        await app.backgroundWork.start {
-            let request = Request(application: app, logger: logger, on: app.eventLoopGroup.any())
-            await postIfEnabled(submission: submission, collection: collection, req: request)
+        let scope = BackgroundGitHubCallScope(application: req.application, logger: req.logger)
+        await scope.application.backgroundWork.start {
+            await postIfEnabled(submission: submission, collection: collection, req: scope)
         }
     }
 
     /// Posts the status when the submission, the assignment and the
     /// repository all allow it. Never throws.
     static func postIfEnabled(
-        submission: APISubmission, collection: TestOutcomeCollection, req: Request
+        submission: APISubmission, collection: TestOutcomeCollection, req: any GitHubCallScope
     ) async {
         guard submission.kind == APISubmission.Kind.student,
             submission.sourceKind == SubmissionSource.github.rawValue,
@@ -100,7 +98,7 @@ enum GitHubCommitStatusPoster {
     /// The course organization's access when the assignment uses course
     /// repositories, else the student's own installation.
     private static func access(
-        userID: UUID, setup: APITestSetup, req: Request
+        userID: UUID, setup: APITestSetup, req: any GitHubCallScope
     ) async throws -> GitHubSubmissionAccess {
         let setupID = try setup.requireID()
         if try await APIGitHubAssignmentTemplate.query(on: req.db).filter(\.$testSetupID == setupID).first() != nil {
@@ -111,7 +109,7 @@ enum GitHubCommitStatusPoster {
     }
 
     /// The results page, which only the student and course staff can open.
-    private static func targetURL(submissionID: String, req: Request) -> String? {
+    private static func targetURL(submissionID: String, req: any GitHubCallScope) -> String? {
         guard var base = req.application.securityConfiguration.publicBaseURL?.absoluteString else { return nil }
         while base.hasSuffix("/") { base.removeLast() }
         return base + "/submissions/\(submissionID)"

@@ -52,7 +52,7 @@ import VaporTesting
     /// next (the response's, when it sets one).
     @discardableResult
     private func get(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void = { _ in }
+        _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void = { _ in }
     ) async throws -> String {
         let res = try await getResponse(path, cookie: cookie, on: app)
         try check(res)

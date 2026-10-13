@@ -85,7 +85,7 @@ struct AuthRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        let body = try req.content.decode(LoginBody.self)
+        let body = try await req.decodeContent(LoginBody.self)
         let rateConfig = req.application.loginRateLimitConfiguration
         let usernameKey = body.username.lowercased()
         let now = Date()
@@ -190,7 +190,7 @@ struct AuthRoutes: RouteCollection {
         if req.application.authMode == .sso {
             throw Abort(.notFound)
         }
-        let body = try req.content.decode(RegisterBody.self)
+        let body = try await req.decodeContent(RegisterBody.self)
 
         // Basic length validation.
         guard body.username.count >= 3 else {

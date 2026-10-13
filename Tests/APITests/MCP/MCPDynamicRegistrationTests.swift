@@ -25,13 +25,13 @@ import VaporTesting
         return app
     }
 
-    private func register(_ app: Application, body: String) async throws -> TestingHTTPResponse {
+    private func register(_ app: Application, body: String) async throws -> TestResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/register",
             headers: ["Content-Type": "application/json"], body: ByteBuffer(string: body))
     }
 
-    private func jsonObject(_ res: TestingHTTPResponse) -> [String: Any]? {
+    private func jsonObject(_ res: TestResponse) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8))) as? [String: Any]
     }
 

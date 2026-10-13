@@ -28,7 +28,7 @@ extension InstructorDashboardRoutes {
             // Checkbox: "on" when checked, absent from the body when not.
             var enabled: String?
         }
-        let enabled = ((try? req.content.decode(ToggleBody.self))?.enabled) != nil
+        let enabled = ((try? await req.decodeContent(ToggleBody.self))?.enabled) != nil
         let editURL = "/instructor/\(assignment.publicID)/edit"
         guard try await APICourse.find(assignment.courseID, on: req.db)?.aiFeedbackEnabled == true else {
             return req.redirect(
@@ -125,7 +125,7 @@ extension InstructorDashboardRoutes {
             var feedback: String?
         }
         let pageURL = "/instructor/\(assignment.publicID)/feedback"
-        let body = try req.content.decode(ReviewBody.self)
+        let body = try await req.decodeContent(ReviewBody.self)
         let handle = body.handle
         guard
             let row = try await APIReflectionFeedback.query(on: req.db)

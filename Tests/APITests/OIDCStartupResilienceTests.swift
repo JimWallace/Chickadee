@@ -267,7 +267,7 @@ import VaporTesting
     @Test func ssoStartRedirectsToLoginWhileDiscoveryIsUnavailable() async throws {
         let app = try await makeSSOApp(discoveryBase: "http://127.0.0.1:\(Self.closedPort)")
         try await withApp(app) { app in
-            try await app.testing().test(.GET, "/auth/sso/start") { res in
+            try await app.asyncTest(.GET, "/auth/sso/start") { res in
                 #expect(res.status == .seeOther || res.status == .found)
                 let location = res.headers.first(name: .location) ?? ""
                 #expect(location.contains("error=sso_not_configured"))

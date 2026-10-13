@@ -90,7 +90,7 @@ extension LTIRoutes {
     private func performLogin(_ req: Request) async throws -> Response {
         let params =
             req.method == .POST
-            ? try? req.content.decode(LoginParameters.self)
+            ? try? await req.decodeContent(LoginParameters.self)
             : try? req.query.decode(LoginParameters.self)
         guard let params, let issuer = params.iss, let loginHint = params.loginHint, params.targetLinkURI != nil
         else { throw LTILaunchFailure.missingLoginParameters }
@@ -150,7 +150,7 @@ extension LTIRoutes {
     }
 
     private func performLaunch(_ req: Request) async throws -> Response {
-        let body = try? req.content.decode(LaunchBody.self)
+        let body = try? await req.decodeContent(LaunchBody.self)
         if let error = body?.error { throw LTILaunchFailure.platformReportedError(error) }
         guard let state = body?.state, let idToken = body?.idToken else {
             throw LTILaunchFailure.missingLaunchParameters

@@ -38,7 +38,7 @@ struct BrowserResultRoutes: RouteCollection {
     @Sendable
     func submitBrowserResult(req: Request) async throws -> BrowserResultResponse {
         let caller = try req.auth.require(APIUser.self)
-        let body = try req.content.decode(BrowserResultBody.self)
+        let body = try await req.decodeContent(BrowserResultBody.self)
 
         // Validate the referenced test setup exists.
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
@@ -177,7 +177,7 @@ struct BrowserResultRoutes: RouteCollection {
     @Sendable
     func submitRunnerSubmission(req: Request) async throws -> RunnerSubmissionResponse {
         let caller = try req.auth.require(APIUser.self)
-        let body = try req.content.decode(RunnerSubmitBody.self)
+        let body = try await req.decodeContent(RunnerSubmitBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
@@ -281,7 +281,7 @@ struct BrowserResultRoutes: RouteCollection {
     @Sendable
     func submitBrowserFailover(req: Request) async throws -> RunnerSubmissionResponse {
         let caller = try req.auth.require(APIUser.self)
-        let body = try req.content.decode(BrowserFailoverBody.self)
+        let body = try await req.decodeContent(BrowserFailoverBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")

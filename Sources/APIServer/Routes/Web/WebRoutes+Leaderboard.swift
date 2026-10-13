@@ -141,7 +141,7 @@ extension WebRoutes {
             let page = LeaderboardPage(page: PageRequestContext(request: req), board: presentation)
             return try await HTMLResponse { page }.encodeResponse(for: req)
         }
-        return Response.pollFragment(html: ByteBuffer(string: LeaderboardBody(board: presentation).render()), for: req)
+        return Response.pollFragment(html: LeaderboardBody(board: presentation).render(), for: req)
     }
 }
 

@@ -157,7 +157,7 @@ import VaporTesting
 
     private func post(
         _ path: String, form: [String: String], cookie: String,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         let (token, bound) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         try await app.asyncTest(

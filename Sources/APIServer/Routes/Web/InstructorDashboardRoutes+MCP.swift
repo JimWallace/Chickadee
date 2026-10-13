@@ -116,7 +116,7 @@ extension InstructorDashboardRoutes {
             /// "reset" from the Reset button; absent for a normal save.
             let action: String?
         }
-        let form = try req.content.decode(GuidanceForm.self)
+        let form = try await req.decodeContent(GuidanceForm.self)
         // Browsers submit textarea content with CRLF line endings; normalize so
         // stored text (and the compare against the default below) is \n-only.
         let raw = (form.instructions ?? "")

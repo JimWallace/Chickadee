@@ -242,7 +242,7 @@ extension WebRoutes {
         _ = try await requireOpenStudentAssignment(
             for: setupID, user: user, gate: .submission, on: req)
 
-        let body = try req.content.decode(SubmitFormBody.self)
+        let body = try await req.decodeContent(SubmitFormBody.self)
 
         // The file-type gate. The page rejects a wrong type client-side as a
         // courtesy, but that is a convenience, not a control: a direct POST

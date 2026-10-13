@@ -23,7 +23,7 @@ import VaporTesting
     // MARK: - Helpers
 
     private func req() -> Request {
-        Request(application: app, on: app.eventLoopGroup.any())
+        makeTestRequest(on: app)
     }
 
     /// Creates a content item and stores one attachment (bytes on disk +

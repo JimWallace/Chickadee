@@ -54,7 +54,7 @@ import VaporTesting
         _ body: String,
         auth: (cookie: String, csrf: String),
         userAgent: String? = nil
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         try await app.asyncSendRequest(.POST, "/api/v1/client-diagnostics") { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)

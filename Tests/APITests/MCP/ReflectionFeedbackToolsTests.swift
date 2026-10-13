@@ -43,7 +43,7 @@ import Vapor
         scopes: Set<ContentScope> = [.feedbackRead, .feedbackWrite]
     ) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: subject,
             grantedScopes: scopes,
             actingClientName: "Claude")

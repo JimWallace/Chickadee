@@ -459,8 +459,8 @@ import VaporTesting
             let secret = workerSecret  // String — Sendable
             let testApp = app  // Application — @unchecked Sendable
 
-            var responses: [TestingHTTPResponse] = []
-            try await withThrowingTaskGroup(of: TestingHTTPResponse.self) { group in
+            var responses: [TestResponse] = []
+            try await withThrowingTaskGroup(of: TestResponse.self) { group in
                 for workerID in ["w1", "w2"] {
                     // Compute per-worker values outside the task so the closure
                     // captures only Sendable types and avoids capturing `self`.

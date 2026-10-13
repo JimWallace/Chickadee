@@ -78,7 +78,7 @@ extension DraftAssignmentRoutes {
     /// through `multipartFiles` — and returns the fields a typed handler
     /// would expect.  Throws `WebAssignmentError.invalidParameter` when the
     /// body isn't recognised.
-    func parseSaveNewAssignmentForm(req: Request) throws -> SaveNewAssignmentForm {
+    func parseSaveNewAssignmentForm(req: Request) async throws -> SaveNewAssignmentForm {
         struct SaveBody: Content {
             var assignmentName: String?
             var dueAt: String?
@@ -94,7 +94,7 @@ extension DraftAssignmentRoutes {
             var requiredCapabilitiesCSV: String?
         }
 
-        guard let body = try? req.content.decode(SaveBody.self) else {
+        guard let body = try? await req.decodeContent(SaveBody.self) else {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid assignment upload payload"

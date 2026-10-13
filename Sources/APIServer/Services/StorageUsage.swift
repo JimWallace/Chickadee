@@ -44,7 +44,7 @@ enum StorageUsage {
         let publicDir = app.directory.publicDirectory
 
         func dirSize(_ path: String) async throws -> Int {
-            try await runBlocking(app: app) { directorySizeBytes(at: path) }
+            try await runBlocking { directorySizeBytes(at: path) }
         }
 
         // Per-id footprints feed both the aggregate cards and the per-assignment
@@ -53,10 +53,10 @@ enum StorageUsage {
         // "Submissions" card to avoid scanning that (potentially large) dir
         // twice.  Test setups have `shared/`+`notebooks/` subtrees, so the
         // card keeps an authoritative recursive walk.
-        async let submissionSizesFetch = runBlocking(app: app) {
+        async let submissionSizesFetch = runBlocking {
             topLevelFileSizesByID(inDirectory: submissionsDir)
         }
-        async let setupSizesFetch = runBlocking(app: app) {
+        async let setupSizesFetch = runBlocking {
             testSetupSizesByID(testSetupsDirectory: testSetupsDir)
         }
 

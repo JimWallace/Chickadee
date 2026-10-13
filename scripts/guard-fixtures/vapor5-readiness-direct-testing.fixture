@@ -1,0 +1,9 @@
+# Vapor 5 rewrites VaporTesting. A test that calls it directly compiles on
+# Vapor 4 and is one more file to change at the migration.
+guard="scripts/check-vapor5-readiness.sh"
+files="Tests/APITests/HTMLResponseTests.swift"
+description="a test that calls app.testing() directly"
+expect="a test uses VaporTesting or builds a Request directly"
+apply() {
+    printf '\nfunc guardFixture(_ app: Application) async throws {\n    try await app.testing().test(.GET, "/") { _ in }\n}\n' >> Tests/APITests/HTMLResponseTests.swift
+}

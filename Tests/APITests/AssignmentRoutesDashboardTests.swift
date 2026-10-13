@@ -160,7 +160,7 @@ import VaporTesting
             try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
 
             // No periodic sweep runs in tests — the gate itself must open it.
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             let gated = try await requireOpenStudentAssignment(
                 for: "setup_lazy_open", user: student, gate: .submission, on: req)
             #expect(gated != nil, "The gate must let the student in once the open date has arrived")

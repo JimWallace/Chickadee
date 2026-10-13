@@ -39,7 +39,7 @@ extension InstructorDashboardRoutes {
             var visibility: String?
             var returnTo: String?
         }
-        let body = try? req.content.decode(ToggleBody.self)
+        let body = try? await req.decodeContent(ToggleBody.self)
         let visible: Bool
         switch body?.visibility {
         case "visible": visible = true
@@ -97,7 +97,7 @@ extension InstructorDashboardRoutes {
         struct OpponentBody: Content {
             var opponentFile: String?
         }
-        let raw = (try? req.content.decode(OpponentBody.self))?.opponentFile ?? ""
+        let raw = (try? await req.decodeContent(OpponentBody.self))?.opponentFile ?? ""
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let next = current.withOpponentFile(trimmed.isEmpty ? nil : trimmed)
         do {
@@ -143,7 +143,7 @@ extension InstructorDashboardRoutes {
             var opensAt: String?
             var closesAt: String?
         }
-        let body = (try? req.content.decode(WindowBody.self)) ?? WindowBody()
+        let body = (try? await req.decodeContent(WindowBody.self)) ?? WindowBody()
         // An empty field clears that bound; a field the parser cannot read is
         // refused rather than silently dropped, since a window half-applied is
         // one an instructor believes is in force.
@@ -202,7 +202,7 @@ extension InstructorDashboardRoutes {
         guard let current = currentManifestActivity(setup.manifest), let stored = current.composite else {
             return refuse("Choose the Class composite kind and save before changing its settings.")
         }
-        let body = (try? req.content.decode(CompositeFormBody.self)) ?? CompositeFormBody()
+        let body = (try? await req.decodeContent(CompositeFormBody.self)) ?? CompositeFormBody()
         let spec: CompositeSpec
         do {
             spec = try body.spec(keeping: stored)
@@ -243,7 +243,7 @@ extension InstructorDashboardRoutes {
         struct RunBody: Content {
             var schedule: String?
         }
-        let token = (try? req.content.decode(RunBody.self))?.schedule ?? TournamentSchedule.bracket.rawValue
+        let token = (try? await req.decodeContent(RunBody.self))?.schedule ?? TournamentSchedule.bracket.rawValue
         guard let schedule = TournamentSchedule(rawValue: token) else {
             return req.redirect(to: submissionsPath + "?error=Choose+a+tournament+schedule")
         }

@@ -580,6 +580,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/zero-downtime-deploy.md` — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
 - `docs/runner-capability-profiles.md` — runner capability matching, the language gate, `minimumRunnerVersion`
 - `docs/swift-toolchain-upgrades.md` — the semi-annual Swift upgrade: where the pins live, its traps, the verification gauntlet
+- `docs/vapor-5-migration.md` — what Vapor 5 changes, the Vapor 4 preparation already done, and what is left for the move
 - `docs/runner-wasm-migration.md` — the plan that made RunnerCore one grading core for the worker and the browser
 - `docs/runner-wasm-swift-6-4-review.md` — what the Swift 6.4 move changed for the browser wasm, measured
 - `docs/personalization-phase1.md` — the per-student seed contract (`CHICKADEE_ASSIGNMENT_SEED`)

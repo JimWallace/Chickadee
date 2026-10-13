@@ -111,7 +111,7 @@ import VaporTesting
     }
 
     private func get(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void
     )
         async throws
     {
@@ -120,7 +120,7 @@ import VaporTesting
 
     private func submit(
         repositoryID: Int64 = owned.id, sha: String = sha, branch: String = "main", cookie: String,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         try await post(
             "/testsetups/gh_setup/github",
@@ -130,7 +130,7 @@ import VaporTesting
 
     private func post(
         _ path: String, form: [String: String], cookie: String,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         let (token, bound) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         try await app.asyncTest(

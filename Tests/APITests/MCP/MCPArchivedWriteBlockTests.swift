@@ -21,7 +21,7 @@ import Vapor
 @Suite struct MCPArchivedWriteBlockTests {
     private func context(_ app: Application) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: "tester",
             grantedScopes: [.read, .write]
         )

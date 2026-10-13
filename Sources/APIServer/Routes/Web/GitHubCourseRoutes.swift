@@ -115,7 +115,7 @@ struct GitHubCourseRoutes: RouteCollection {
         struct BindBody: Content { let organization: String? }
         let courseID = try await Self.requireInstructorCourse(req)
         let text =
-            (try? req.content.decode(BindBody.self))?.organization?
+            (try? await req.decodeContent(BindBody.self))?.organization?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard let organization = GitHubOrganizationName(text) else {
             return Self.redirect(req, error: .invalidOrganization, organization: text)
@@ -280,7 +280,7 @@ struct GitHubCourseRoutes: RouteCollection {
             let templateID: String?
         }
         let courseID = try await Self.requireInstructorCourse(req)
-        let body = try req.content.decode(TemplateBody.self)
+        let body = try await req.decodeContent(TemplateBody.self)
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db), setup.courseID == courseID
         else { throw Abort(.notFound) }
         let existing = try await APIGitHubAssignmentTemplate.query(on: req.db)

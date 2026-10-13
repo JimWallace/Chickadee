@@ -47,7 +47,7 @@ import VaporTesting
     @Test func stableNameBundleConfigRevalidates() async throws {
         try await withApp(try await makeApp()) { app in
             for path in ["/jupyterlite/jupyter-lite.json", "/jupyterlite/lab/index.html"] {
-                try await app.testing().test(.GET, path) { res async in
+                try await app.asyncTest(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(res.headers.first(name: .cacheControl) == "no-cache")
                 }
@@ -57,7 +57,7 @@ import VaporTesting
 
     @Test func contentHashedSlowPathChunkIsImmutable() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/build/100.5a28c9e.js") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/build/100.5a28c9e.js") { res async in
                 #expect(res.status == .ok)
                 #expect(
                     res.headers.first(name: .cacheControl)
@@ -68,7 +68,7 @@ import VaporTesting
 
     @Test func nonBundlePathsAreUntouched() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/styles.css") { res async in
+            try await app.asyncTest(.GET, "/styles.css") { res async in
                 #expect(res.status == .ok)
                 // Not under /jupyterlite/ or /pyodide/, so this middleware adds nothing.
                 #expect(res.headers.first(name: .cacheControl) == nil)

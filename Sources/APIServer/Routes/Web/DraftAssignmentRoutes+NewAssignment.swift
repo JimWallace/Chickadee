@@ -130,7 +130,7 @@ extension DraftAssignmentRoutes {
         }
         let courseID = try await req.requireActiveCourseID(for: user, action: "creating an assignment")
 
-        let payload = try parseNewAssignmentDraftPayload(req: req)
+        let payload = try await parseNewAssignmentDraftPayload(req: req)
 
         let setup = try await resolveOrCreateNewAssignmentDraft(
             req: req,
@@ -203,8 +203,8 @@ extension DraftAssignmentRoutes {
 
     // MARK: - updateNewAssignmentDraft helpers
 
-    fileprivate func parseNewAssignmentDraftPayload(req: Request) throws -> NewAssignmentDraftPayload {
-        guard let body = try? req.content.decode(DraftBody.self) else {
+    fileprivate func parseNewAssignmentDraftPayload(req: Request) async throws -> NewAssignmentDraftPayload {
+        guard let body = try? await req.decodeContent(DraftBody.self) else {
             throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment draft payload")
         }
 
@@ -286,7 +286,7 @@ extension DraftAssignmentRoutes {
         let saveUser = try req.auth.require(APIUser.self)
         let courseID = try await req.requireActiveCourseID(for: saveUser, action: "creating an assignment")
 
-        let form = try parseSaveNewAssignmentForm(req: req)
+        let form = try await parseSaveNewAssignmentForm(req: req)
         let validation = try await validateSaveNewAssignment(
             req: req,
             saveUserID: saveUser.id,
@@ -724,7 +724,7 @@ extension DraftAssignmentRoutes {
 
         let publishUser = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: publishUser)
-        let body = try req.content.decode(PublishBody.self)
+        let body = try await req.decodeContent(PublishBody.self)
 
         guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
             throw WebAssignmentError.invalidParameter(

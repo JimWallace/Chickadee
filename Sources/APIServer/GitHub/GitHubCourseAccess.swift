@@ -17,11 +17,11 @@ struct GitHubCourseAccess: Sendable {
     let client: GitHubRepoClient
     /// A fresh token for the organization's installation, once a refused one
     /// is dropped from the cache (#1768).
-    let renewToken: @Sendable (Request) async throws -> String
+    let renewToken: @Sendable (any GitHubCallScope) async throws -> String
 
     /// Throws `GitHubSubmitError.unavailable` when no App is registered or
     /// the course has no organization bound.
-    static func resolve(courseID: UUID, req: Request) async throws -> GitHubCourseAccess {
+    static func resolve(courseID: UUID, req: any GitHubCallScope) async throws -> GitHubCourseAccess {
         guard
             let (app, secrets) = try await GitHubAppRegistration.resolve(req: req),
             let organization = try await APIGitHubCourseOrganization.query(on: req.db)
@@ -29,7 +29,7 @@ struct GitHubCourseAccess: Sendable {
         else { throw GitHubSubmitError.unavailable }
         let installationID = organization.installationID
         let orgID = organization.orgID
-        let renew: @Sendable (Request) async throws -> String = { req in
+        let renew: @Sendable (any GitHubCallScope) async throws -> String = { req in
             try await GitHubSubmissionAccess.installationToken(
                 accountID: orgID, app: app, secrets: secrets, req: req
             ) { _ in installationID }
@@ -41,12 +41,12 @@ struct GitHubCourseAccess: Sendable {
 
     /// Runs a GitHub call with the token, and once more with a fresh one when
     /// GitHub refuses it (#1768).
-    func call<T: Sendable>(_ req: Request, _ body: (_ token: String) async throws -> T) async throws -> T {
+    func call<T: Sendable>(_ req: any GitHubCallScope, _ body: (_ token: String) async throws -> T) async throws -> T {
         try await GitHubSubmissionAccess.calling(
             req, accountID: organization.orgID, token: token, renew: renewToken, body)
     }
 
-    func templates(req: Request) async throws -> [GitHubRepository] {
+    func templates(req: any GitHubCallScope) async throws -> [GitHubRepository] {
         try await call(req) { token in
             try await client.templates(token)
                 .sorted { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
@@ -54,7 +54,7 @@ struct GitHubCourseAccess: Sendable {
     }
 
     /// Nil when the setting cannot be read.
-    func privateForksAllowed(req: Request) async -> Bool? {
+    func privateForksAllowed(req: any GitHubCallScope) async -> Bool? {
         let login = organization.orgLogin
         return try? await call(req) { token in try await client.privateForksAllowed(token, login) }
     }
@@ -64,7 +64,7 @@ struct GitHubCourseAccess: Sendable {
     /// and GitHub releases a renamed login for anyone to take, so a stale one
     /// could invite a stranger (#1766). Throws
     /// `GitHubSubmitError.linkedAccountGone` when no account has the ID.
-    func currentLogin(of link: APIGitHubAccountLink, req: Request) async throws -> String {
+    func currentLogin(of link: APIGitHubAccountLink, req: any GitHubCallScope) async throws -> String {
         let userID = link.githubUserID
         guard let login = try await call(req, { token in try await client.userLogin(token, userID) }) else {
             throw GitHubSubmitError.linkedAccountGone
@@ -81,7 +81,7 @@ struct GitHubCourseAccess: Sendable {
     /// invitation can be sent again without making a second repository.
     func makeRepository(
         template: APIGitHubAssignmentTemplate, name: String, testSetupID: String, link: APIGitHubAccountLink,
-        login: String, req: Request
+        login: String, req: any GitHubCallScope
     ) async throws -> APIGitHubCourseRepository {
         let made = try await call(req) { token in
             try await client.generate(token, template.templateFullName, organization.orgLogin, name)
@@ -97,7 +97,7 @@ struct GitHubCourseAccess: Sendable {
     /// Invites the student with write access, and records that it worked and
     /// which GitHub account it went to.
     func invite(
-        _ row: APIGitHubCourseRepository, login: String, githubUserID: Int64, req: Request
+        _ row: APIGitHubCourseRepository, login: String, githubUserID: Int64, req: any GitHubCallScope
     ) async throws {
         try await call(req) { token in
             try await client.addCollaborator(token, row.repoFullName, login)
@@ -115,7 +115,9 @@ struct GitHubCourseAccess: Sendable {
     /// the earlier account with write access (#2208). A row made before the
     /// invited account was recorded is invited again; the earlier account is
     /// unknown and is not removed.
-    func inviteLinkedAccount(_ row: APIGitHubCourseRepository, link: APIGitHubAccountLink, req: Request) async throws {
+    func inviteLinkedAccount(
+        _ row: APIGitHubCourseRepository, link: APIGitHubAccountLink, req: any GitHubCallScope
+    ) async throws {
         if row.invited, row.invitedGitHubUserID == link.githubUserID { return }
         if row.invited, let previous = row.invitedGitHubUserID {
             let fullName = row.repoFullName
@@ -134,7 +136,7 @@ struct GitHubCourseAccess: Sendable {
     /// every course repository of theirs that still names another account.
     /// Best effort: the link itself has succeeded, and *Make my repository*
     /// runs the same step again for one repository (#2208).
-    static func moveCollaborators(to link: APIGitHubAccountLink, req: Request) async {
+    static func moveCollaborators(to link: APIGitHubAccountLink, req: any GitHubCallScope) async {
         do {
             let rows = try await APIGitHubCourseRepository.query(on: req.db)
                 .filter(\.$userID == link.userID)
@@ -159,7 +161,7 @@ struct GitHubCourseAccess: Sendable {
         }
     }
 
-    func archive(_ row: APIGitHubCourseRepository, req: Request) async throws {
+    func archive(_ row: APIGitHubCourseRepository, req: any GitHubCallScope) async throws {
         try await call(req) { token in try await client.archive(token, row.repoFullName) }
         row.archivedAt = Date()
         try await row.save(on: req.db)

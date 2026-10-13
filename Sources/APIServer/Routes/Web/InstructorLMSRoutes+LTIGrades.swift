@@ -92,7 +92,7 @@ extension InstructorLMSRoutes {
         struct TransportForm: Content {
             let transport: String
         }
-        guard let transport = LTIGradeTransport(rawValue: try req.content.decode(TransportForm.self).transport)
+        guard let transport = LTIGradeTransport(rawValue: try await req.decodeContent(TransportForm.self).transport)
         else { throw Abort(.badRequest, reason: "Choose a grade route.") }
         if transport == .ags {
             guard course.ltiPlatformID != nil, course.ltiLineItemsURL != nil else {

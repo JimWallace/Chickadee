@@ -91,7 +91,7 @@ import VaporTesting
         _ dispatcher: AdminMCPDispatcher, tool: String, subject: String, app: Application
     ) async throws -> CallResult {
         let context = AdminToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: subject,
             grantedScopes: Set(DiagnosticScope.allCases))
         let request = JSONRPCRequest(

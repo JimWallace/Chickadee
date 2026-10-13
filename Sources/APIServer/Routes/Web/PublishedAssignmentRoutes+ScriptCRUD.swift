@@ -46,7 +46,7 @@ extension PublishedAssignmentRoutes {
         let filename = try safeScriptFilename(from: req)
 
         struct UpdateBody: Content { var content: String }
-        let body = try req.content.decode(UpdateBody.self)
+        let body = try await req.decodeContent(UpdateBody.self)
 
         // Verify the file exists before writing.
         guard await listZipEntries(zipPath: setup.zipPath).contains(filename) else {
@@ -102,7 +102,7 @@ extension PublishedAssignmentRoutes {
     func createScript(req: Request) async throws -> Response {
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let idStr = assignment.publicID
-        let body = try req.content.decode(CreateScriptBody.self)
+        let body = try await req.decodeContent(CreateScriptBody.self)
 
         let result = try await createScriptInSetup(
             setup: setup, body: body,

@@ -27,7 +27,7 @@ import VaporTesting
         return app
     }
 
-    private func scopesSupported(_ res: TestingHTTPResponse) -> [String]? {
+    private func scopesSupported(_ res: TestResponse) -> [String]? {
         let object =
             (try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8))) as? [String: Any]
         return object?["scopes_supported"] as? [String]
@@ -35,7 +35,7 @@ import VaporTesting
 
     @Test func protectedResourceMetadataAdvertisesServerAndScopes() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/.well-known/oauth-protected-resource") { res async in
+            try await app.asyncTest(.GET, "/.well-known/oauth-protected-resource") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.contentType == .json)
                 let body = String(buffer: res.body)
@@ -53,7 +53,7 @@ import VaporTesting
     /// request a scope the server then refused, breaking the connect flow.
     @Test func protectedResourceMetadataReadOnlyAdvertisesOnlyRead() async throws {
         try await withApp(try await makeApp(advertisedScopes: MCPMode.readOnly.advertisedScopes)) { app in
-            try await app.testing().test(.GET, "/.well-known/oauth-protected-resource") { res async in
+            try await app.asyncTest(.GET, "/.well-known/oauth-protected-resource") { res async in
                 #expect(res.status == .ok)
                 #expect(self.scopesSupported(res) == ["content:read", "feedback:read"])
             }
@@ -62,7 +62,7 @@ import VaporTesting
 
     @Test func authorizationServerMetadataAdvertisesEndpoints() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/.well-known/oauth-authorization-server") { res async in
+            try await app.asyncTest(.GET, "/.well-known/oauth-authorization-server") { res async in
                 #expect(res.status == .ok)
                 // Decode rather than substring-match: Linux's JSONEncoder escapes
                 // "/" as "\/", so a raw `contains("/oauth/authorize")` would miss.
@@ -88,7 +88,7 @@ import VaporTesting
     /// advertises only `content:read`.
     @Test func authorizationServerMetadataReadOnlyAdvertisesOnlyRead() async throws {
         try await withApp(try await makeApp(advertisedScopes: MCPMode.readOnly.advertisedScopes)) { app in
-            try await app.testing().test(.GET, "/.well-known/oauth-authorization-server") { res async in
+            try await app.asyncTest(.GET, "/.well-known/oauth-authorization-server") { res async in
                 #expect(res.status == .ok)
                 #expect(self.scopesSupported(res) == ["content:read", "feedback:read"])
             }
@@ -97,7 +97,7 @@ import VaporTesting
 
     @Test func jwksExportsTheSigningKey() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/.well-known/jwks.json") { res async in
+            try await app.asyncTest(.GET, "/.well-known/jwks.json") { res async in
                 #expect(res.status == .ok)
                 let body = String(buffer: res.body)
                 #expect(body.contains("\"kty\":\"EC\""))
@@ -117,7 +117,7 @@ import VaporTesting
                     advertisedScopes: MCPMode.readWrite.advertisedScopes))
         }
         try await withApp(app) { app in
-            try await app.testing().test(.GET, "/.well-known/jwks.json") { res async in
+            try await app.asyncTest(.GET, "/.well-known/jwks.json") { res async in
                 #expect(res.status == .ok)
                 #expect(String(buffer: res.body).contains("\"keys\":[]"))
             }

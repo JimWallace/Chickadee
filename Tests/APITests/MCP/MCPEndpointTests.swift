@@ -36,7 +36,7 @@ import VaporTesting
     @Test func postInitializeReturnsJSONResult() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .ok)
@@ -49,7 +49,7 @@ import VaporTesting
     @Test func postNotificationReturns202WithNoBody() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .accepted)
@@ -60,7 +60,7 @@ import VaporTesting
 
     @Test func unparseableBodyReturns400ParseError() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: jsonHeaders, body: ByteBuffer(string: "not json")
             ) { res async in
                 #expect(res.status == .badRequest)
@@ -71,7 +71,7 @@ import VaporTesting
 
     @Test func getReturns405() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/mcp") { res async in
+            try await app.asyncTest(.GET, "/mcp") { res async in
                 #expect(res.status == .methodNotAllowed)
             }
         }
@@ -83,7 +83,7 @@ import VaporTesting
                 var headers = jsonHeaders
                 headers.add(name: "MCP-Protocol-Version", value: version)
                 let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-                try await app.testing().test(
+                try await app.asyncTest(
                     .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
                 ) { res async in
                     #expect(res.status == .ok)
@@ -102,7 +102,7 @@ import VaporTesting
             var headers = jsonHeaders
             headers.add(name: "MCP-Protocol-Version", value: "1999-01-01")
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .badRequest)
@@ -124,7 +124,7 @@ import VaporTesting
                 "Origin": "https://some-client.example",
             ]
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .ok)
@@ -140,7 +140,7 @@ import VaporTesting
                 "Origin": "https://evil.example",
             ]
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .forbidden)

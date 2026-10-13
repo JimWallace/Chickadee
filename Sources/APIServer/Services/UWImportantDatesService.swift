@@ -42,8 +42,7 @@ actor UWImportantDatesCache {
                 logger.warning("UW important dates fetch returned HTTP \(response.status.code)")
                 return cached
             }
-            var body = response.body ?? ByteBuffer()
-            let text = body.readString(length: body.readableBytes) ?? ""
+            let text = response.bodyText ?? ""
             let parsed = parseICSEvents(text).filter { isRelevantUWEvent($0.title) }
             cached = parsed
             cachedAt = Date()

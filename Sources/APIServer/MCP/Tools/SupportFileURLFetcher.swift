@@ -127,7 +127,7 @@ enum SupportFileURLFetcher {
         if BlockedIPClassifier.isIPLiteral(host) {
             addresses = [host]
         } else {
-            addresses = try await runBlocking(on: request) {
+            addresses = try await runBlocking {
                 try resolveHostAddresses(host)
             }
         }
@@ -145,9 +145,9 @@ enum SupportFileURLFetcher {
         let configuration = HTTPClient.Configuration(
             redirectConfiguration: .disallow,
             timeout: .init(connect: connectTimeout, read: readTimeout))
-        let client = HTTPClient(
-            eventLoopGroupProvider: .shared(request.application.eventLoopGroup),
-            configuration: configuration)
+        // The default event-loop group is NIO's shared one, the same group
+        // Vapor 4 serves from; naming no group keeps this Vapor 5-ready.
+        let client = HTTPClient(configuration: configuration)
 
         // Run the request, then shut the dedicated client down exactly once
         // regardless of outcome (a per-call client keeps the no-redirect config

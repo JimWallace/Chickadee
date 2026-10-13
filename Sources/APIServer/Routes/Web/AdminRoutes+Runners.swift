@@ -24,7 +24,7 @@ extension AdminRoutes {
             return try await rows.encodeResponse(for: req)
         }
         let html = WorkerRows(workers: rows.map(AdminRunnerRow.init)).render()
-        return Response.pollFragment(html: ByteBuffer(string: html), for: req)
+        return Response.pollFragment(html: html, for: req)
     }
 
     // MARK: - GET /admin/runners/:runnerID
