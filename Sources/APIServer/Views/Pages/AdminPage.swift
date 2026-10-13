@@ -66,15 +66,14 @@ struct AdminPage: HTML {
                         }
                     }
                 }
-                DiagnosticCard(
-                    card: "jobsProcessed", label: "Jobs Processed", valueID: "diag-jobs-processed",
-                    ariaLabel: "Jobs processed, last 24 hours. Press to change time window.")
-                DiagnosticCard(
-                    card: "load", label: "Max Load", valueID: "diag-max-load",
-                    ariaLabel: "Max load, last 24 hours. Press to change time window.")
-                DiagnosticCard(
-                    card: "queueWaitP95Ms", label: "P95 Wait Time", valueID: "diag-queue-p95",
-                    ariaLabel: "P95 wait time, last 24 hours. Press to change time window.")
+                MetricsDiagnosticCard(
+                    hook: "card", key: "jobsProcessed", label: "Jobs Processed", spoken: "Jobs processed",
+                    valueID: "diag-jobs-processed")
+                MetricsDiagnosticCard(
+                    hook: "card", key: "load", label: "Max Load", spoken: "Max load", valueID: "diag-max-load")
+                MetricsDiagnosticCard(
+                    hook: "card", key: "queueWaitP95Ms", label: "P95 Wait Time", spoken: "P95 wait time",
+                    valueID: "diag-queue-p95")
             }
         }
     }
@@ -208,28 +207,6 @@ struct AdminPage: HTML {
     }
 }
 
-/// One of the three plain diagnostic cards, filled in by admin-dashboard.js.
-private struct DiagnosticCard: HTML {
-    let card: String
-    let label: String
-    let valueID: String
-    let ariaLabel: String
-
-    var body: some HTML {
-        div(
-            .class("diagnostic-card diagnostic-card-cyclable"), .data("card", value: card), .role("button"),
-            .tabindex(0), .ariaLabel(ariaLabel)
-        ) {
-            div(.class("diagnostic-label")) {
-                span(.class("diagnostic-window-chip")) { "24h" }
-                " \(label)"
-            }
-            div(.class("diagnostic-value"), .id(valueID)) { "—" }
-            div(.class("diagnostic-spark"), .ariaHidden) {}
-        }
-    }
-}
-
 /// One active course, with its clone link and its export and archive menu.
 private struct AdminCourseTableRow: HTML {
     let course: AdminCourseRow
@@ -271,31 +248,23 @@ private struct AdminCourseTableRow: HTML {
     }
 
     private var rowMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(course.code)")
-            ) {
-                Icon("i-more")
+        RowMenu(for: course.code) {
+            a(.class("row-menu-item"), .href("/admin/courses/\(course.id)/export"), .role("menuitem")) {
+                Icon("i-download")
+                "Export course bundle"
             }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                a(.class("row-menu-item"), .href("/admin/courses/\(course.id)/export"), .role("menuitem")) {
-                    Icon("i-download")
-                    "Export course bundle"
-                }
-                form(
-                    .method(.post), .action("/admin/courses/\(course.id)/archive"),
-                    .data(
-                        "confirm",
-                        value:
-                            "Archive \(course.code)? \(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back."
-                    )
-                ) {
-                    CSRFField(token: csrfToken)
-                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                        Icon("i-archive")
-                        "Archive course"
-                    }
+            form(
+                .method(.post), .action("/admin/courses/\(course.id)/archive"),
+                .data(
+                    "confirm",
+                    value:
+                        "Archive \(course.code)? \(course.enrollmentCount) students lose access immediately. Submissions, grades and audit records are kept, and Unarchive on the course page puts it back."
+                )
+            ) {
+                CSRFField(token: csrfToken)
+                button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
+                    Icon("i-archive")
+                    "Archive course"
                 }
             }
         }

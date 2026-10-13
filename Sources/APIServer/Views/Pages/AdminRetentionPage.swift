@@ -118,26 +118,18 @@ private struct AdminRetentionCourseRow: HTML {
     }
 
     private var deleteMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(row.code)")
+        RowMenu(for: row.code) {
+            form(
+                .method(.post), .action("/admin/courses/\(row.id)/delete"),
+                .data(
+                    "confirm",
+                    value: "Permanently delete \(row.code)? Its course record, assignments, test suites "
+                        + "and every submission are erased. This cannot be undone.")
             ) {
-                Icon("i-more")
-            }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                form(
-                    .method(.post), .action("/admin/courses/\(row.id)/delete"),
-                    .data(
-                        "confirm",
-                        value: "Permanently delete \(row.code)? Its course record, assignments, test suites "
-                            + "and every submission are erased. This cannot be undone.")
-                ) {
-                    CSRFField(token: csrfToken)
-                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                        Icon("i-trash")
-                        "Delete course permanently"
-                    }
+                CSRFField(token: csrfToken)
+                button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
+                    Icon("i-trash")
+                    "Delete course permanently"
                 }
             }
         }

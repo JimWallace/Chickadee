@@ -329,24 +329,18 @@ private struct AccountGitHubBlock: HTML {
                 div(.class("card section-gap")) {
                     div(.class("toolbar toolbar--end")) {
                         span(.class("tier tier-open")) { "Linked" }
-                        details(.class("ext-details row-menu")) {
-                            summary(
-                                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                                .ariaLabel("More actions for your GitHub link")
-                            ) { Icon("i-more") }
-                            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                                form(.method(.post), .action("/account/github/unlink")) {
-                                    CSRFField(token: page.csrfToken)
+                        RowMenu(for: "your GitHub link") {
+                            form(.method(.post), .action("/account/github/unlink")) {
+                                CSRFField(token: page.csrfToken)
+                                " "
+                                button(
+                                    .class("row-menu-item row-menu-item--danger"), .type(.submit),
+                                    .role("menuitem"),
+                                    .data("confirm", value: "Unlink the GitHub account \(login)?")
+                                ) {
                                     " "
-                                    button(
-                                        .class("row-menu-item row-menu-item--danger"), .type(.submit),
-                                        .role("menuitem"),
-                                        .data("confirm", value: "Unlink the GitHub account \(login)?")
-                                    ) {
-                                        " "
-                                        Icon("i-trash")
-                                        "Unlink"
-                                    }
+                                    Icon("i-trash")
+                                    "Unlink"
                                 }
                             }
                         }
@@ -433,23 +427,17 @@ private struct AccountEnrolledCourseRow: HTML {
     }
 
     private var leaveMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(course.code)")
-            ) { Icon("i-more") }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                form(.method(.post), .action("/account/unenroll/\(course.id)")) {
-                    CSRFField(token: page.csrfToken)
+        RowMenu(for: course.code) {
+            form(.method(.post), .action("/account/unenroll/\(course.id)")) {
+                CSRFField(token: page.csrfToken)
+                " "
+                button(
+                    .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem"),
+                    .data("confirm", value: "Leave \(course.code)?")
+                ) {
                     " "
-                    button(
-                        .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem"),
-                        .data("confirm", value: "Leave \(course.code)?")
-                    ) {
-                        " "
-                        Icon("i-trash")
-                        "Leave course"
-                    }
+                    Icon("i-trash")
+                    "Leave course"
                 }
             }
         }

@@ -230,26 +230,18 @@ private struct StaffRow: HTML {
             td(.class("item-actions-td")) {
                 if !rosterReadOnly {
                     div(.class("assignment-actions-cell")) {
-                        details(.class("ext-details row-menu")) {
-                            summary(
-                                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                                .ariaLabel("More actions for \(staff.displayName)")
+                        RowMenu(for: staff.displayName) {
+                            form(
+                                .method(.post), .action(staff.unenrollURL),
+                                .data("confirm", value: "Remove @\(staff.username) from this course?")
                             ) {
-                                Icon("i-more")
-                            }
-                            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                                form(
-                                    .method(.post), .action(staff.unenrollURL),
-                                    .data("confirm", value: "Remove @\(staff.username) from this course?")
+                                CSRFField(token: csrfToken)
+                                button(
+                                    .class("row-menu-item row-menu-item--danger"), .type(.submit),
+                                    .role("menuitem")
                                 ) {
-                                    CSRFField(token: csrfToken)
-                                    button(
-                                        .class("row-menu-item row-menu-item--danger"), .type(.submit),
-                                        .role("menuitem")
-                                    ) {
-                                        Icon("i-trash")
-                                        "Remove from course"
-                                    }
+                                    Icon("i-trash")
+                                    "Remove from course"
                                 }
                             }
                         }

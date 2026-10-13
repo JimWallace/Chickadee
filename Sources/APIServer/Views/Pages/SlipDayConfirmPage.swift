@@ -30,14 +30,14 @@ struct SlipDayConfirmPage: HTML {
         BaseLayout(title: "Use a slip day", page: page) {
             PageStyle(
                 """
-                .slip-day-confirm-card { max-width: 42rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); }
+                .slip-day-confirm-card { max-width: 42rem; padding: 1rem; }
                 .slip-day-confirm-title { margin: 0 0 .5rem; }
                 .slip-day-confirm-deadline { font-size: var(--text-lg); }
                 .slip-day-confirm-actions { display: flex; gap: .5rem; align-items: center; margin-top: 1rem; }
                 """
             )
             h1 { "Use a slip day" }
-            div(.class("slip-day-confirm-card")) {
+            div(.class("card slip-day-confirm-card")) {
                 h2(.class("slip-day-confirm-title")) { assignmentTitle }
                 if isStacked {
                     p {

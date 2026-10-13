@@ -505,7 +505,8 @@ duplicate.
   on one line, so a ticking time does not change the row height.
 - **`.row-menu`** (with `.row-menu-panel`, `.row-menu-item`,
   `.row-menu-item--danger`) — the trailing ⋯ on a row, and the panel shell of a
-  `+ Add ▾` menu.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so
+  `+ Add ▾` menu.  Write a ⋯ as `RowMenu(for:)` with the items inside; SwiftLint
+  keeps its shell in `RowMenu.swift`.  A ⋯ is an `ext-details` whose panel is a `.popover-panel`, so
   the app.js floater lifts it out of the table's overflow clip; a `+ Add` is a
   `popup-anchor` with the `.suite-section-popup` shell.  Outside click and
   Escape close every such popup, and Escape returns focus to the summary.  The

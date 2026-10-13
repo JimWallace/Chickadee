@@ -61,11 +61,6 @@ struct AdminMCPPage: HTML {
             PageStyle(
                 """
                 .mcp-token-caption { margin: .1rem 0 .5rem; }
-                .mcp-enroll-form {
-                    display: flex;
-                    gap: .3rem;
-                    padding: .3rem;
-                }
                 """
             )
         }
@@ -83,7 +78,7 @@ struct AdminMCPPage: HTML {
             if !enabled {
                 // A page-state banner, not a one-shot flash: it shows on every
                 // load while MCP is off.
-                FlashBanner(.error) {
+                FlashBanner(.warning) {
                     strong { "MCP is inactive." }
                     " Set "
                     code { "MCP_MODE" }
@@ -274,53 +269,45 @@ private struct AdminMCPAccountRowView: HTML {
     }
 
     private var rowMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(account.username)")
-            ) {
-                Icon("i-more")
-            }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                if !account.enrollableCourses.isEmpty {
-                    form(
-                        .method(.post), .action("/admin/mcp/accounts/\(account.id)/enroll"), .class("mcp-enroll-form")
-                    ) {
-                        CSRFField(token: csrfToken)
-                        label(.class("visually-hidden"), .for("enroll-\(account.id)")) {
-                            "Enrol \(account.username) in a course"
-                        }
-                        select(.id("enroll-\(account.id)"), .name("courseID"), .class("form-input")) {
-                            for course in account.enrollableCourses {
-                                option(.value(course.id)) { AdminMCPCourseLabel(course: course) }
-                            }
-                        }
-                        button(.class("btn action-btn"), .type(.submit)) { "Enrol" }
-                    }
-                }
-                for course in account.enrolledCourses {
-                    form(.method(.post), .action("/admin/mcp/accounts/\(account.id)/unenroll")) {
-                        CSRFField(token: csrfToken)
-                        input(.type(.hidden), .name("courseID"), .value(course.id))
-                        button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
-                            "Remove from "
-                            AdminMCPCourseLabel(course: course)
-                        }
-                    }
-                }
+        RowMenu(for: account.username) {
+            if !account.enrollableCourses.isEmpty {
                 form(
-                    .method(.post), .action("/admin/mcp/accounts/\(account.id)/delete"),
-                    .custom(
-                        name: "data-confirm",
-                        value:
-                            "Delete the MCP account \(account.username)? It loses access immediately. Tokens it already minted stay valid until they expire, and the account cannot be restored."
-                    )
+                    .method(.post), .action("/admin/mcp/accounts/\(account.id)/enroll"), .class("field-inline")
                 ) {
                     CSRFField(token: csrfToken)
-                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                        Icon("i-trash")
-                        "Delete account"
+                    label(.class("visually-hidden"), .for("enroll-\(account.id)")) {
+                        "Enrol \(account.username) in a course"
                     }
+                    select(.id("enroll-\(account.id)"), .name("courseID"), .class("form-input")) {
+                        for course in account.enrollableCourses {
+                            option(.value(course.id)) { AdminMCPCourseLabel(course: course) }
+                        }
+                    }
+                    button(.class("btn action-btn"), .type(.submit)) { "Enrol" }
+                }
+            }
+            for course in account.enrolledCourses {
+                form(.method(.post), .action("/admin/mcp/accounts/\(account.id)/unenroll")) {
+                    CSRFField(token: csrfToken)
+                    input(.type(.hidden), .name("courseID"), .value(course.id))
+                    button(.class("row-menu-item"), .type(.submit), .role("menuitem")) {
+                        "Remove from "
+                        AdminMCPCourseLabel(course: course)
+                    }
+                }
+            }
+            form(
+                .method(.post), .action("/admin/mcp/accounts/\(account.id)/delete"),
+                .custom(
+                    name: "data-confirm",
+                    value:
+                        "Delete the MCP account \(account.username)? It loses access immediately. Tokens it already minted stay valid until they expire, and the account cannot be restored."
+                )
+            ) {
+                CSRFField(token: csrfToken)
+                button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
+                    Icon("i-trash")
+                    "Delete account"
                 }
             }
         }
@@ -427,26 +414,18 @@ private struct AdminMCPGrantRow: HTML {
     }
 
     private var revokeMenu: some HTML {
-        details(.class("ext-details row-menu")) {
-            summary(
-                .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                .ariaLabel("More actions for \(grant.agentName)")
+        RowMenu(for: grant.agentName) {
+            form(
+                .method(.post), .action("/agents/\(grant.id)/revoke"),
+                .custom(
+                    name: "data-confirm",
+                    value:
+                        "Revoke this agent? It loses access immediately. The audit record of what it did is kept, and the agent can be authorized again from its client."
+                )
             ) {
-                Icon("i-more")
-            }
-            div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                form(
-                    .method(.post), .action("/agents/\(grant.id)/revoke"),
-                    .custom(
-                        name: "data-confirm",
-                        value:
-                            "Revoke this agent? It loses access immediately. The audit record of what it did is kept, and the agent can be authorized again from its client."
-                    )
-                ) {
-                    CSRFField(token: csrfToken)
-                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                        "Revoke agent"
-                    }
+                CSRFField(token: csrfToken)
+                button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
+                    "Revoke agent"
                 }
             }
         }

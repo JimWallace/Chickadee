@@ -77,23 +77,17 @@ private struct CourseContentItemRow: HTML {
                         .attributes(.target(.blank), .rel("noopener noreferrer"), when: action.opensNewTab)
                     }
                     editPopover
-                    details(.class("ext-details row-menu")) {
-                        summary(
-                            .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                            .ariaLabel("More actions for \(content.title)")
-                        ) { Icon("i-more") }
-                        div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                            form(
-                                .method(.post), .action("/instructor/content-items/\(content.id)/delete"),
-                                .data("confirm", value: "Delete this material?")
+                    RowMenu(for: content.title) {
+                        form(
+                            .method(.post), .action("/instructor/content-items/\(content.id)/delete"),
+                            .data("confirm", value: "Delete this material?")
+                        ) {
+                            CSRFField(token: csrfToken)
+                            button(
+                                .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
                             ) {
-                                CSRFField(token: csrfToken)
-                                button(
-                                    .class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")
-                                ) {
-                                    Icon("i-trash")
-                                    "Delete material"
-                                }
+                                Icon("i-trash")
+                                "Delete material"
                             }
                         }
                     }
@@ -396,21 +390,15 @@ private struct CourseAssignmentItemRow: HTML {
                     button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Create draft" }
                 }
             }
-            details(.class("ext-details row-menu")) {
-                summary(
-                    .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                    .ariaLabel("More actions for unpublished setup \(row.setupID)")
-                ) { Icon("i-more") }
-                div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                    form(
-                        .method(.post), .action("/instructor/setup/\(row.setupID)/delete"),
-                        .data("confirm", value: "Delete this unpublished setup? This cannot be undone.")
-                    ) {
-                        CSRFField(token: csrfToken)
-                        button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                            Icon("i-trash")
-                            "Delete setup"
-                        }
+            RowMenu(for: "unpublished setup \(row.setupID)") {
+                form(
+                    .method(.post), .action("/instructor/setup/\(row.setupID)/delete"),
+                    .data("confirm", value: "Delete this unpublished setup? This cannot be undone.")
+                ) {
+                    CSRFField(token: csrfToken)
+                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
+                        Icon("i-trash")
+                        "Delete setup"
                     }
                 }
             }
@@ -428,33 +416,27 @@ private struct CourseAssignmentItemRow: HTML {
                 .class("btn action-btn action-btn-icon"), .href("/instructor/\(assignmentID)/workbench"),
                 .title("Edit assignment"), .ariaLabel("Edit assignment")
             ) { Icon("i-pencil") }
-            details(.class("ext-details row-menu")) {
-                summary(
-                    .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                    .ariaLabel("More actions for \(row.title ?? "")")
-                ) { Icon("i-more") }
-                div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                    if let leaderboardURL = row.leaderboardURL {
-                        a(.class("row-menu-item"), .href(leaderboardURL), .role("menuitem")) {
-                            Icon("i-award")
-                            "Leaderboard"
-                        }
+            RowMenu(for: row.title ?? "") {
+                if let leaderboardURL = row.leaderboardURL {
+                    a(.class("row-menu-item"), .href(leaderboardURL), .role("menuitem")) {
+                        Icon("i-award")
+                        "Leaderboard"
                     }
-                    menuForm(
-                        action: "/instructor/\(assignmentID)/clone",
-                        confirm:
-                            "Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.",
-                        icon: "i-copy", label: "Duplicate", danger: false)
-                    menuForm(
-                        action: "/instructor/\(assignmentID)/retest",
-                        confirm:
-                            "Retest every submission for this assignment? The worker will re-grade each one against the current test suite.",
-                        icon: "i-refresh", label: "Retest all submissions", danger: false)
-                    menuForm(
-                        action: "/instructor/\(assignmentID)/delete",
-                        confirm: "Delete this assignment? Students will no longer see it.",
-                        icon: "i-trash", label: "Delete assignment", danger: true)
                 }
+                menuForm(
+                    action: "/instructor/\(assignmentID)/clone",
+                    confirm:
+                        "Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.",
+                    icon: "i-copy", label: "Duplicate", danger: false)
+                menuForm(
+                    action: "/instructor/\(assignmentID)/retest",
+                    confirm:
+                        "Retest every submission for this assignment? The worker will re-grade each one against the current test suite.",
+                    icon: "i-refresh", label: "Retest all submissions", danger: false)
+                menuForm(
+                    action: "/instructor/\(assignmentID)/delete",
+                    confirm: "Delete this assignment? Students will no longer see it.",
+                    icon: "i-trash", label: "Delete assignment", danger: true)
             }
         }
     }

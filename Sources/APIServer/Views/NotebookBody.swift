@@ -53,6 +53,9 @@ struct NotebookBody: HTML {
                 .main { max-width: 100%; padding: 0 1rem; margin: .5rem auto 0; }
                 """
             )
+            // The page's one h1. The editor fills the page, so it is not shown.
+            // Embedded, the workbench's edit half has the h1.
+            h1(.class("visually-hidden")) { "Notebook editor" }
         }
         PageStyle(
             """

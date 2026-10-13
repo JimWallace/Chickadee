@@ -214,27 +214,19 @@ private struct LTIPlatformRow: HTML {
             ) {
                 Icon("i-pencil")
             }
-            details(.class("ext-details row-menu")) {
-                summary(
-                    .class("btn action-btn action-btn-icon ext-summary"), .title("More actions"),
-                    .ariaLabel("More actions for \(platform.displayName)")
+            RowMenu(for: platform.displayName) {
+                form(
+                    .method(.post), .action("/admin/lti/platforms/\(platform.id)/delete"),
+                    .custom(
+                        name: "data-confirm",
+                        value:
+                            "Delete the platform \(platform.displayName)? Launches from it stop immediately, and the registration cannot be restored."
+                    )
                 ) {
-                    Icon("i-more")
-                }
-                div(.class("popover-panel row-menu-panel"), .role("menu")) {
-                    form(
-                        .method(.post), .action("/admin/lti/platforms/\(platform.id)/delete"),
-                        .custom(
-                            name: "data-confirm",
-                            value:
-                                "Delete the platform \(platform.displayName)? Launches from it stop immediately, and the registration cannot be restored."
-                        )
-                    ) {
-                        CSRFField(token: csrfToken)
-                        button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
-                            Icon("i-trash")
-                            "Delete platform"
-                        }
+                    CSRFField(token: csrfToken)
+                    button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
+                        Icon("i-trash")
+                        "Delete platform"
                     }
                 }
             }

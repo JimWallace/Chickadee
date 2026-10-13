@@ -48,10 +48,10 @@ struct EnrollmentRoutes: RouteCollection {
             )
         }
 
-        // The page never carried `?error=`, so the none-selected message has
-        // never shown. Kept that way until it is fixed.
+        // `saveEnrollment` redirects back with `?error=none_selected`.
+        let error: String? = req.query["error"]
         return try await HTMLResponse {
-            EnrollPage(page: PageRequestContext(request: req), error: nil, courses: rows)
+            EnrollPage(page: PageRequestContext(request: req), error: error, courses: rows)
         }.encodeResponse(for: req)
     }
 
