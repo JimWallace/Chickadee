@@ -24,18 +24,25 @@ struct CompositeBoardPresentation {
         let tierClass: String
     }
 
+    /// The canvas, drawn outside the polled region.
+    let stage: CompositeStagePresentation
     /// "31 of 48 tiles complete".
     let progressText: String
     /// Every dealt slot, in slot order, then round.
     let holders: [Holder]
 
+    /// The staff board of a class composite, or nil for any other kind.
     static func build(
-        assignmentID: UUID, testSetupID: String, courseID: UUID, spec: CompositeSpec, on db: any Database
-    ) async throws -> CompositeBoardPresentation {
+        setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, on db: any Database
+    ) async throws -> CompositeBoardPresentation? {
+        guard activity.kind == .classComposite, let spec = activity.composite, let assignmentID = assignment?.id,
+            let testSetupID = setup.id
+        else { return nil }
+        let courseID = setup.courseID
         // `since: .max` asks for the states only, with no pixels.
         let snapshot = try await CompositeSnapshot.build(
-            assignmentID: assignmentID, testSetupID: testSetupID, courseID: courseID, spec: spec, since: .max,
-            onlyUserID: nil, includeOwners: false, on: db)
+            .init(assignmentID: assignmentID, testSetupID: testSetupID, courseID: courseID, spec: spec),
+            since: .max, onlyUserID: nil, includeOwners: false, on: db)
         let stateBySlot = Dictionary(snapshot.slots.map { ($0.slot, $0) }) { first, _ in first }
 
         let dealt = try await APICompositeSlot.query(on: db)
@@ -77,6 +84,8 @@ struct CompositeBoardPresentation {
             return Holder(place: place(of: row.slot, in: spec), who: who, stateText: stateText, tierClass: tierClass)
         }
         return CompositeBoardPresentation(
+            stage: .board(
+                spec: spec, testSetupID: testSetupID, present: false, pollUntilISO: activity.window?.closesAtISO),
             progressText: "\(snapshot.complete) of \(snapshot.total) \(spec.compositor.slotNoun) complete",
             holders: holders)
     }

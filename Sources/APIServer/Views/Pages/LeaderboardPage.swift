@@ -54,8 +54,8 @@ struct LeaderboardPage: HTML {
                 }
                 // The canvas stays outside the polled region: a swap would
                 // replace it. It polls its own JSON through table-poll.js.
-                if let stage = board.compositeStage {
-                    CompositeStage(stage: stage)
+                if let composite = board.compositeBoard {
+                    CompositeStage(stage: composite.stage)
                 }
                 div(.id("activity-results")) {
                     LeaderboardBody(board: board)
@@ -70,11 +70,11 @@ struct LeaderboardPage: HTML {
             if board.showFilter {
                 script(.src(page.asset("/list-filter.js"))) {}
             }
-            if board.compositeStage != nil {
+            if board.compositeBoard != nil {
                 script(.src(page.asset("/class-composite-core.js"))) {}
                 script(.src(page.asset("/class-composite.js"))) {}
             }
-            if board.compositeStage != nil {
+            if board.compositeBoard != nil {
                 // The canvas polls through table-poll.js, which then also
                 // runs the region poll this kind declares.
                 script(.src(page.asset("/table-poll.js"))) {}

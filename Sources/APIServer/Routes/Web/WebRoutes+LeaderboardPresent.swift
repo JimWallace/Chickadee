@@ -84,7 +84,8 @@ extension WebRoutes {
                 return place
             }
         }
-        let compositeProgress = try await compositeProgress(setup: setup, activity: activity, assignment: assignment, on: req.db)
+        let compositeProgress = try await compositeProgress(
+            setup: setup, activity: activity, assignment: assignment, on: req.db)
         let podium = PresentPlace.podiumOrder(places)
         let winner = tournament?.winner
 
@@ -149,10 +150,11 @@ extension WebRoutes {
             let setupID = setup.id
         else { return nil }
         let snapshot = try await CompositeSnapshot.build(
-            assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec, since: .max,
-            onlyUserID: nil, includeOwners: false, on: db)
+            .init(assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec),
+            since: .max, onlyUserID: nil, includeOwners: false, on: db)
         let noun = spec.compositor.slotNoun
-        return ("\(noun.prefix(1).uppercased())\(noun.dropFirst()) complete", "\(snapshot.complete) of \(snapshot.total)")
+        let label = "\(noun.prefix(1).uppercased())\(noun.dropFirst()) complete"
+        return (label, "\(snapshot.complete) of \(snapshot.total)")
     }
 
     /// Everyone seeded into the run. A bye is a match with one entrant, so

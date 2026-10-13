@@ -33,7 +33,7 @@ extension WebRoutes {
             try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
         }
         let snapshot = try await CompositeSnapshot.build(
-            assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec,
+            .init(assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec),
             since: req.query[String.self, at: "since"].flatMap { Int64($0) },
             onlyUserID: isStaff ? nil : user.id,
             includeOwners: isStaff && req.query[String.self, at: "present"] != "1",
@@ -42,7 +42,7 @@ extension WebRoutes {
         // can order the same snapshot differently on each call.
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        let json = try String(decoding: encoder.encode(snapshot), as: UTF8.self)
+        let json = String(bytes: try encoder.encode(snapshot), encoding: .utf8) ?? "{}"
         return Response.conditionalJSON(json, for: req)
     }
 }

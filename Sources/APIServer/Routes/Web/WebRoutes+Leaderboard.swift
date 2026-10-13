@@ -38,8 +38,7 @@ extension WebRoutes {
         if req.query[String.self, at: "present"] == "1" {
             // Present mode is for the room, and only staff start it.
             guard isStaff else { throw Abort(.notFound) }
-            return try await leaderboardPresentPage(
-                req: req, user: user, setup: setup, activity: activity)
+            return try await leaderboardPresentPage(req: req, user: user, setup: setup, activity: activity)
         }
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
@@ -59,13 +58,11 @@ extension WebRoutes {
         let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
         let board =
             showsMetricBoard
-            ? try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: showingAll, on: req.db)
+            ? try await buildLeaderboard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : LeaderboardBoard.empty
         let standingsBoard =
             showsStandings
-            ? try await buildStandingsBoard(
-                setup: setup, reader: reader, showAll: showingAll, on: req.db)
+            ? try await buildStandingsBoard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
@@ -80,16 +77,6 @@ extension WebRoutes {
                 setup: setup, reader: reader, showAll: showingAll,
                 allURL: "\(boardURL)?all=1", on: req.db)
             : nil
-
-        // The composite is for the projector: only staff read its board.
-        let compositeBoard: CompositeBoardPresentation? =
-            if isStaff, showsComposite, let spec = activity.composite, let assignmentID = assignment?.id {
-                try await CompositeBoardPresentation.build(
-                    assignmentID: assignmentID, testSetupID: setupID, courseID: setup.courseID, spec: spec,
-                    on: req.db)
-            } else {
-                nil
-            }
 
         let listedCount = showsStandings ? standingsBoard.rankedCount : board.rankedCount
         let session = LiveSessionPresentation.make(activity)
@@ -133,13 +120,10 @@ extension WebRoutes {
                 hasUnion: union != nil,
                 union: union,
                 showsComposite: showsComposite,
-                compositeStage: isStaff && showsComposite
-                    ? activity.composite.map {
-                        CompositeStagePresentation.board(
-                            spec: $0, testSetupID: setupID, present: false,
-                            pollUntilISO: activity.window?.closesAtISO)
-                    } : nil,
-                compositeBoard: compositeBoard,
+                // The composite is for the projector: only staff read its board.
+                compositeBoard: isStaff
+                    ? try await CompositeBoardPresentation.build(
+                        setup: setup, activity: activity, assignment: assignment, on: req.db) : nil,
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page

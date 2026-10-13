@@ -24,7 +24,9 @@ struct CompositeStagePresentation: Encodable {
     var pollUntilISO = ""
 
     /// The staff leaderboard page, or present mode when `present` is true.
-    static func board(spec: CompositeSpec, testSetupID: String, present: Bool, pollUntilISO: String?)
+    static func board(
+        spec: CompositeSpec, testSetupID: String, present: Bool, pollUntilISO: String?
+    )
         -> CompositeStagePresentation
     {
         let url = "/testsetups/\(testSetupID)/composite" + (present ? "?present=1" : "")

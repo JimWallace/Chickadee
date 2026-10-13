@@ -21,14 +21,15 @@ struct CompositeTilePanel: Encodable {
     /// composite, the submission reported no valid contribution, or its
     /// owner holds no slot.
     static func make(
-        submission: APISubmission, collection: TestOutcomeCollection?, props: TestProperties?,
-        assignmentID: UUID?, viewerIsOwner: Bool, on db: any Database
+        for submission: APISubmission, _ collection: TestOutcomeCollection?, _ props: TestProperties?,
+        _ assignment: APIAssignment?, viewer: APIUser, on db: any Database
     ) async throws -> CompositeTilePanel? {
+        let viewerIsOwner = submission.userID == viewer.id
         guard let activity = props?.activity, activity.kind == .classComposite, let spec = activity.composite,
             let outcome = collection?.outcomes.first(where: { $0.composite != nil }),
             let contribution = outcome.composite,
             CompositeContributions.isValid(contribution, for: spec.contribution),
-            let assignmentID, let userID = submission.userID,
+            let assignmentID = assignment?.id, let userID = submission.userID,
             let slot = try await APICompositeSlot.query(on: db)
                 .filter(\.$assignmentID == assignmentID)
                 .filter(\.$userID == userID)

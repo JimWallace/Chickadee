@@ -485,9 +485,7 @@ extension WebRoutes {
                 releasedFeedback: try await ReflectionFeedbackService.releasedFeedback(
                     for: submission, assignment: submissionAssignment, on: req.db),
                 compositeTile: try await CompositeTilePanel.make(
-                    submission: submission, collection: displayCollection, props: setupProps,
-                    assignmentID: submissionAssignment?.id, viewerIsOwner: submission.userID == user.id,
-                    on: req.db)
+                    for: submission, displayCollection, setupProps, submissionAssignment, viewer: user, on: req.db)
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )

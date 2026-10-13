@@ -44,14 +44,24 @@ struct CompositeSnapshot: Content, Equatable {
     let slots: [Slot]
     let pixels: [Pixels]
 
+    /// The assignment a snapshot is of.
+    struct Scope {
+        let assignmentID: UUID
+        let testSetupID: String
+        let courseID: UUID
+        let spec: CompositeSpec
+    }
+
     /// Builds the snapshot of one assignment's composite.
     ///
-    /// `onlyUserID` limits it to one student's own slot: the student view.
-    /// `includeOwners` adds each slot holder's handle, for the staff page.
+    /// `since: .max` returns the states with no pixels. `onlyUserID` limits
+    /// it to one student's own slot: the student view. `includeOwners` adds
+    /// each slot holder's handle, for the staff page.
     static func build(
-        assignmentID: UUID, testSetupID: String, courseID: UUID, spec: CompositeSpec, since: Int64?,
-        onlyUserID: UUID?, includeOwners: Bool, on db: any Database
+        _ scope: Scope, since: Int64?, onlyUserID: UUID?, includeOwners: Bool, on db: any Database
     ) async throws -> CompositeSnapshot {
+        let assignmentID = scope.assignmentID, testSetupID = scope.testSetupID
+        let courseID = scope.courseID, spec = scope.spec
         var rowQuery = APICompositeContribution.query(on: db).filter(\.$assignmentID == assignmentID)
         var slotQuery = APICompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID)
         if let onlyUserID {
@@ -118,7 +128,9 @@ struct CompositeSnapshot: Content, Equatable {
 
     /// The class handle of each student, by user ID. A student with no handle
     /// yet has no entry.
-    private static func handles(of userIDs: [UUID], inCourse courseID: UUID, on db: any Database) async throws
+    private static func handles(
+        of userIDs: [UUID], inCourse courseID: UUID, on db: any Database
+    ) async throws
         -> [UUID: String]
     {
         guard !userIDs.isEmpty else { return [:] }

@@ -258,13 +258,10 @@ enum LeaderboardSamples {
     static func composite(_ spec: CompositeSpec?, holders: Bool, live: Bool) -> LeaderboardPresentation {
         var result = board(.standings, isStaff: true, live: live, sessionWindow: live ? window : nil)
         result.showsComposite = true
-        result.compositeStage = spec.map {
-            .board(spec: $0, testSetupID: "ts1", present: false, pollUntilISO: live ? "2026-10-12T18:50:00Z" : nil)
-        }
-        result.compositeBoard =
-            spec == nil
-            ? nil
-            : CompositeBoardPresentation(
+        result.compositeBoard = spec.map {
+            CompositeBoardPresentation(
+                stage: .board(
+                    spec: $0, testSetupID: "ts1", present: false, pollUntilISO: live ? "2026-10-12T18:50:00Z" : nil),
                 progressText: "2 of 48 tiles complete",
                 holders: holders
                     ? [
@@ -277,6 +274,7 @@ enum LeaderboardSamples {
                         .init(
                             place: "Column 3, row 1", who: "Quiet Cedar", stateText: "No contribution", tierClass: ""),
                     ] : [])
+        }
         return result
     }
 

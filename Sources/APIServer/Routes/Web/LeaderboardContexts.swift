@@ -83,11 +83,8 @@ struct LeaderboardPresentation {
     /// (docs/class-composite.md). Defaulted, so a context built before the
     /// composite existed still compiles and still shows its own board.
     var showsComposite: Bool = false
-    /// The composite's stage, outside the polled region because it polls its
-    /// own JSON; nil on every other kind and for a student.
-    var compositeStage: CompositeStagePresentation?
-    /// The composite's progress and slot holders, inside the polled region;
-    /// nil on every other kind and for a student.
+    /// The composite's canvas, progress and slot holders; nil on every other
+    /// kind and for a student.
     var compositeBoard: CompositeBoardPresentation?
     /// True when the page shows the session's state line. A COPY question
     /// only — whether the page refreshes is `pollsLive`, which answers a

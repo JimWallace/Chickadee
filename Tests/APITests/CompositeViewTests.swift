@@ -81,8 +81,8 @@ import VaporTesting
         _ f: Fixture, spec: CompositeSpec, since: Int64? = nil, onlyUserID: UUID? = nil, on app: Application
     ) async throws -> CompositeSnapshot {
         try await CompositeSnapshot.build(
-            assignmentID: f.assignmentID, testSetupID: f.setupID, courseID: f.courseID, spec: spec, since: since,
-            onlyUserID: onlyUserID, includeOwners: true, on: app.db)
+            .init(assignmentID: f.assignmentID, testSetupID: f.setupID, courseID: f.courseID, spec: spec),
+            since: since, onlyUserID: onlyUserID, includeOwners: true, on: app.db)
     }
 
     // MARK: - The snapshot
@@ -110,7 +110,9 @@ import VaporTesting
             #expect(snap.total == 4)
 
             let hidden = try await snapshot(f, spec: spec(showFailed: false), on: app)
-            #expect(hidden.slots.map(\.state) == ["passed", "empty", "empty"], "with showFailed off, a failed slot is empty")
+            #expect(
+                hidden.slots.map(\.state) == ["passed", "empty", "empty"], "with showFailed off, a failed slot is empty"
+            )
             #expect(hidden.pixels.map(\.slot) == [0])
         }
     }
