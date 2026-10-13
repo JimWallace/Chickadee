@@ -109,8 +109,7 @@ answer "what is this file?" for one of the four.
 ## Corrections after a read of the code
 
 A second, closer read of the code found that three problems are smaller
-than the first review said. Line 1 of this note uses "proposed" for the
-whole plan; the maintainer approved D1, D2 and D4 to D10.
+than the first review said.
 
 - **P4 is mostly solved already.** `NotebookCheckKindHandler`
   (`Sources/APIServer/Utilities/NotebookCheckKindHandler.swift`) gives each
