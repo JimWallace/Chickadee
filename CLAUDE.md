@@ -862,6 +862,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/github-submissions.md` — submitting from GitHub and course repositories, with the "What reaches GitHub" data table
 - `docs/brightspace-setup.md` — BrightSpace grade-sync operator runbook
 - `docs/operational-diagnostics.md` — observability tables, log events, metrics endpoint, ops runbook
+- `docs/load-testing.md` — `chickadee-loadtest`: simulated deadline traffic on the runner poll and the status poll
 - `docs/zero-downtime-deploy.md` — blue-green deploys, the `chickadee-deployer` daemon, read-only deploy oversight
 - `docs/runner-capability-profiles.md` — runner capability matching, the language gate, `minimumRunnerVersion`
 - `docs/swift-toolchain-upgrades.md` — the semi-annual Swift upgrade: where the pins live, its traps, the verification gauntlet

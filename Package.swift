@@ -164,6 +164,22 @@ let package = Package(
             plugins: [.plugin(name: "EmbedRunnerSupport")]
         ),
 
+        // MARK: - Load test executable
+        //
+        // Simulates deadline traffic on the server's hot paths (runner polls,
+        // result-view status polls) and reports the latency. A development
+        // tool: it ships in no image. See docs/load-testing.md.
+        .executableTarget(
+            name: "chickadee-loadtest",
+            dependencies: [
+                .target(name: "Core"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
+            ],
+            path: "Sources/LoadTest",
+            swiftSettings: strictWarnings
+        ),
+
         // MARK: - Build-tool plugins
         .plugin(
             name: "EmbedRunnerSupport",
@@ -223,6 +239,15 @@ let package = Package(
                 .product(name: "Elementary", package: "elementary"),
             ],
             path: "Tests/APITests",
+            swiftSettings: strictWarnings
+        ),
+        .testTarget(
+            name: "LoadTestTests",
+            dependencies: [
+                .target(name: "chickadee-loadtest"),
+                .target(name: "Core"),
+            ],
+            path: "Tests/LoadTestTests",
             swiftSettings: strictWarnings
         ),
         .testTarget(

@@ -270,13 +270,15 @@ jobs:
           # action only, so a new language cannot be forgotten in one lane.
           tools: zip unzip
 
+      # LoadTestTests rides this lane: like CoreTests, it is pure logic with no
+      # database, interpreter or network (docs/load-testing.md).
       - name: Run CoreTests
         run: |
           mkdir -p "${RUNNER_TEMP}/xunit"
           if [ "${{ steps.setup.outputs.cache-hit }}" = "true" ]; then
-            swift test --skip-build --parallel --filter CoreTests --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
+            swift test --skip-build --parallel --filter "CoreTests|LoadTestTests" --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
           else
-            swift test --parallel --filter CoreTests --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
+            swift test --parallel --filter "CoreTests|LoadTestTests" --xunit-output "${RUNNER_TEMP}/xunit/core-tests.xml"
           fi
 
       - name: No test was skipped
