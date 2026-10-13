@@ -1903,3 +1903,56 @@ test('stageOpponent stages nothing without a usable bot', async () => {
     assert.deepEqual(Object.keys(files).filter((k) => k.startsWith('opponent/')), []);
   }
 });
+
+// A projector-arena match: the away entrant's upload is staged under
+// opponent/ as the worker stages a submission opponent — the raw file under
+// its own name, a notebook extracted, and the module hint beside it.
+test('stageOpponentSubmission stages a notebook opponent with its module hint', async () => {
+  const harness = await loadRunnerHarness();
+  const { stageOpponentSubmission } = harness.hooks;
+  const core = {
+    extractPython: (cells) => ({
+      executableModule: 'MODULE:' + cells.map((c) => c.source).join('|'),
+      introspectableSource: 'SOURCE',
+    }),
+  };
+  const notebook = JSON.stringify({
+    metadata: { kernelspec: { name: 'python3' } },
+    cells: [{ cell_type: 'code', source: ['def move():\n', '    return "R"\n'] }],
+  });
+  const bytes = new TextEncoder().encode(notebook);
+  const files = { 'match.py': 'x' };
+  const match = stageOpponentSubmission(files, core, { bytes, filename: 'sub_a.ipynb', seed: 'beef' });
+  assert.equal(match.seed, 'beef');
+  assert.equal(files['opponent/sub_a.ipynb'], bytes);
+  assert.equal(files['opponent/sub_a.py'], 'MODULE:def move():\n    return "R"\n');
+  assert.equal(files['opponent/.chickadee_student_module'], 'sub_a.py');
+  // The challenger's own workspace is untouched.
+  assert.equal(files['.chickadee_student_module'], undefined);
+  assert.equal(files['match.py'], 'x');
+});
+
+test('stageOpponentSubmission stages a script upload under its own name', async () => {
+  const harness = await loadRunnerHarness();
+  const { stageOpponentSubmission } = harness.hooks;
+  const files = {};
+  const bytes = new TextEncoder().encode('def move(): return "P"\n');
+  stageOpponentSubmission(files, {}, { bytes, filename: 'dir/../bot.py', seed: 's' });
+  assert.equal(files['opponent/bot.py'], bytes);
+  assert.equal(files['opponent/.chickadee_student_module'], 'bot.py');
+});
+
+test('stageOpponentSubmission stages nothing without bytes and a seed', async () => {
+  const harness = await loadRunnerHarness();
+  const { stageOpponentSubmission } = harness.hooks;
+  for (const submission of [
+    null,
+    { bytes: 'not bytes', filename: 'a.py', seed: 's' },
+    { bytes: new Uint8Array(1), filename: 'a.py' },
+    { bytes: new Uint8Array(1), filename: 'a.py', seed: '' },
+  ]) {
+    const files = {};
+    assert.equal(stageOpponentSubmission(files, {}, submission), null);
+    assert.deepEqual(Object.keys(files), []);
+  }
+});

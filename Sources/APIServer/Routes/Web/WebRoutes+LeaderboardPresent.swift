@@ -119,7 +119,8 @@ extension WebRoutes {
             pollsLive: tournament?.isComplete != true
                 && (activity.window.map { $0.state(at: Date()) != .afterClose } ?? true),
             pollURL: "\(boardURL)?present=1&fragment=present",
-            boardURL: boardURL)
+            boardURL: boardURL,
+            arenaSetupID: aggregation == .bracket && playsInArena(setup) ? setupID : nil)
 
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
@@ -206,4 +207,7 @@ struct PresentModePresentation {
     let pollsLive: Bool
     let pollURL: String
     let boardURL: String
+    /// The setup the projector arena plays, set on a browser-graded
+    /// tournament only (docs/class-activities.md, "Projector arena").
+    let arenaSetupID: String?
 }

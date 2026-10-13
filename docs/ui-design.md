@@ -412,7 +412,10 @@ duplicate.
   `.present-bracket` (the page's bracket at display scale) under the winner's
   `.champion-card`, gold on this page; a hill holder who is not on the podium
   gets the same card.  A tournament with no session window shows where the
-  run stands in the clock's place.  A `.present-footer` ends the page, with a
+  run stands in the clock's place.  A browser-graded tournament adds the
+  projector arena to the toolbar: a "Play matches" `btn action-btn` and a
+  `.text-quiet` `role="status"` line that names the match it plays by round
+  and position, never by student (`tournament-arena.js`).  A `.present-footer` ends the page, with a
   `.tier-preview` Live tag while it polls.  Display sizes are `em` of one size set for a 1600-pixel screen; the
   page steps by `zoom` (down at 1500 pixels, up at 1900), since the type scale
   forbids a fluid font size.

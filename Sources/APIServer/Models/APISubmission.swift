@@ -8,14 +8,17 @@ import Vapor
 /// The `status` DB column stays a plain string (no migration); this enum is
 /// the authoritative vocabulary for it.  `running` is included because the
 /// diagnostics queries and the MCP validation watcher both recognize it as a
-/// live state, even though the server itself currently writes only the other
-/// four.
+/// live state, even though the server itself never writes it.
 enum SubmissionStatus: String, Sendable {
     case pending
     case assigned
     case running
     case complete
     case failed
+    /// A tournament match on a browser-graded assignment, waiting for the
+    /// projector arena to play it (docs/class-activities.md, "Projector
+    /// arena"). No runner claims it, and no reaper re-queues it.
+    case arena
 }
 
 final class APISubmission: Model, Content, @unchecked Sendable {
