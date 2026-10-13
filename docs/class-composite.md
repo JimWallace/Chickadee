@@ -2,7 +2,7 @@
 
 Design note for a class activity in which each student renders one part of a
 shared image, and the class watches the full image form on the projector while
-the submissions arrive. Slices 1 to 4 are built. See **Status**.
+the submissions arrive. Slices 1 to 5 are built. See **Status**.
 
 The idea came from a sequence of computer-graphics and medical-imaging labs:
 a framebuffer, the painter's algorithm, the z-buffer, ray casting, and CT
@@ -20,8 +20,8 @@ of all parts together.
 | 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | shipped |
 | 3 | Slot dealing, and the slot as a per-student input | shipped |
 | 4 | Ingest: the `composite_contributions` table and the coverage row | shipped |
-| 5 | The composite view on the leaderboard page | planned |
-| 6 | Reference renders and `emptySlots: reference`, spare slots, and the `sum` and `gallery` compositors | planned |
+| 5 | The composite view on the leaderboard page, with all four compositors | shipped |
+| 6 | Reference renders and `emptySlots: reference`, and spare slots | planned |
 
 Slice 5 is the first slice that a class can use. Slices 1 to 4 only supply data
 to it. Run one session with TAs after slice 5, before slice 6.
@@ -264,17 +264,26 @@ cannot read `composite_contributions`.
 
 ### 4. The composite view (slice 5)
 
-The leaderboard page shows the composite body when the aggregation is
-`composite`. The image data comes from a JSON endpoint, so the polled HTML
-region stays small:
+The leaderboard page shows the composite stage when the aggregation is
+`composite` (`CompositeStage`). The image data comes from a JSON endpoint, so
+the HTML stays small and the canvas is never replaced:
 
 ```
 GET /testsetups/:testSetupID/composite?since=<cursor>
 ```
 
-It returns the contributions that changed after the cursor, and a new cursor.
-It uses an ETag. Staff receive every contribution. A student receives only
-their own (see **Student view** below).
+`CompositeSnapshot` returns the state of every slot that is not empty, the
+pixels of each slot that changed at or after the cursor, a new cursor, and the
+count of complete slots. It uses an ETag over the body, with sorted keys, so an
+unchanged poll is one 304. Staff receive every slot, with each holder's class
+handle; present mode passes `present=1` and receives no handles, because the
+room reads the wall. A student receives only their own slot. The page does not
+use the HTML region poll for this kind: `class-composite.js` polls the JSON
+every five seconds instead.
+
+A slot shows its latest passing contribution. With none, it shows its latest
+failed one, unless `showFailed` is off. With two students on one slot, the
+latest passing one wins.
 
 **Slot states.** Each slot has one of four states, so the class can see the
 image while it is rendered:
@@ -287,39 +296,47 @@ image while it is rendered:
 | Passed | The output, animated if it has frames |
 
 The rendering state comes from the submission status that the server already
-stores. No new grading signal is necessary.
+stores (`pending`, `assigned` or `running`). No new grading signal is
+necessary. One cell for each slot lies over the canvas (a grid layout) or in a
+strip under it (`sequence` and `sum`). `class-composite.js` sets each cell's
+state classes, and the stylesheet draws them.
 
-**Live arrival.** A new contribution fades into its slot, so the room sees each
-change.
+**Live arrival.** A slot whose pixels arrive flashes gold once, so the room
+sees each change.
 
-**Playback.** Play, pause and a frame slider. All slots use one clock, so the
-full image moves together at the `frameRate` of the block.
+**Compositors.** `class-composite-core.js` holds the drawing rules and runs
+under node (`class-composite-core.test.mjs`). `tile` places each contribution
+at its grid position. `gallery` uses the same placement. `sequence` shows one
+slot at a time, in slot order. `sum` adds the contributions pixel by pixel and
+scales the brightest sample to 255.
 
-**Present mode.** The existing staff present mode shows the image only, full
-screen, with the progress line under it: "31 of 48 tiles complete".
+**Playback.** Pause and a frame slider, when the view moves. All slots use one
+clock, so the full image moves together at the `frameRate` of the block.
+
+**Present mode.** The stage takes the podium's place, as large as the screen
+permits, with the progress line under it: "31 of 48 tiles complete".
 
 **Staff view.** The leaderboard page is staff-only for this kind. Point at a
-slot to see the owner's handle and the test result.
+slot to see the holder's handle and the test result.
 
 **Student view: their own contribution only.** The full composite is for the
 projector. A student does not see the composite on their own device. Instead,
-the student's result page shows their own contribution, drawn by the same
-`class-composite.js` code at a larger scale, with its slot ("Your tile: column
-3, row 5") and its state. A student sees what they added to the image on the
-screen, and checks it before they look up.
+the result page shows the submission's own contribution (`CompositeTilePanel`),
+drawn by the same `class-composite.js` code at a larger scale, with its place
+("Your tile: column 3, row 5") and its state. The pixels come from the stored
+result, so the panel needs no poll. A student sees what they added to the image
+on the screen, and checks it before they look up.
 
 The leaderboard page is staff-only for this kind: `ActivityAuthoring` refuses
 `leaderboardVisibility: visible` on a class composite
 (`compositeLeaderboardHiddenMessage`), and the edit page shows no visibility
-toggle for it, so the meaning of the switch is not ambiguous. The JSON
-endpoint is staff-only for the full set. A student request returns only that
-student's own contribution.
+toggle for it.
 
-**UI rules.** The page JS goes in `Public/class-composite.js`, with no inline
-script (#1516). JS draws pixels into the `<canvas>`, but it toggles classes for
-the slot states and makes no other styling decision. The body uses the
-component vocabulary in `docs/ui-design.md`. The change needs a
-visual-regression baseline and a `ui-review` pass.
+**UI rules.** The page JS is in `Public/class-composite.js` and
+`Public/class-composite-core.js`, with no inline script (#1516). The JS draws
+pixels into the `<canvas>` and toggles classes for the slot states. It makes no
+other styling decision. The `composite-*` classes are in the component
+vocabulary in `docs/ui-design.md`.
 
 ## Source data and slot count
 
@@ -469,16 +486,16 @@ adds, and keeps every existing assignment on the code path it uses now.
    the first submission, because no slot is dealt before slice 3).
 4. **Ingest.** `composite_contributions`, the payload checks, the coverage row,
    and `deleteCourse`.
-5. **The composite view.** The JSON endpoint, `class-composite.js` with the
-   `tile` and `sequence` compositors, the four slot states, playback, present
-   mode, the student's own-contribution panel on the result page, the node
-   tests, the visual-regression baseline and `ui-review`.
-6. **Reference renders, spare slots, `sum` and `gallery`.** "Prepare
-   reference" is a staff action that renders the reference solution for every
-   slot and stores the results. It is a server-initiated job that waits behind
-   every student submission, with the claim-order rule of the corpus run. The
-   slice also enables `emptySlots: reference`. A spare slot is a second slot
-   that a student who finished can ask for, to fill a hole.
+5. **The composite view.** The JSON endpoint, `class-composite.js` with all
+   four compositors, the four slot states, playback, present mode, the
+   student's own-contribution panel on the result page, the node tests and
+   `ui-review`.
+6. **Reference renders and spare slots.** "Prepare reference" is a staff
+   action that renders the reference solution for every slot and stores the
+   results. It is a server-initiated job that waits behind every student
+   submission, with the claim-order rule of the corpus run. The slice also
+   enables `emptySlots: reference`. A spare slot is a second slot that a
+   student who finished can ask for, to fill a hole.
 
 ## Risks
 
@@ -513,5 +530,5 @@ All open decisions are settled.
 | The class is the GPU: each student shades one tile of an animated scene | `tile` | slice 5 |
 | Cine loop: each student gates one cardiac phase | `sequence` | slice 5 |
 | Class film: each student renders one segment of a fly-through | `sequence` | slice 5 |
-| The class is the CT scanner: each student backprojects one angle | `sum` | slice 6 |
-| Teleradiology race: each student streams one scan over a slow link | `gallery` | slice 6 |
+| The class is the CT scanner: each student backprojects one angle | `sum` | slice 5 |
+| Teleradiology race: each student streams one scan over a slow link | `gallery` | slice 5 |

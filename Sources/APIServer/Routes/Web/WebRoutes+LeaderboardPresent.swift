@@ -57,9 +57,8 @@ extension WebRoutes {
             // A title is a noun phrase; where the run stands goes in the clock's place.
             title = tournament.map { "Tournament · \($0.scheduleName.lowercased())" } ?? "Tournament"
         case .composite:
-            // A composite ranks nobody, so present mode has no podium. The
-            // composed image replaces it with the composite view (slice 5 of
-            // docs/class-composite.md).
+            // A composite ranks nobody: the composed image takes the
+            // podium's place (docs/class-composite.md).
             title = "Class composite"
         case .leaderboard:
             // Named rather than left to a catch-all arm, so a fifth
@@ -116,10 +115,15 @@ extension WebRoutes {
             progressLabel: tournament?.progressLabel ?? "",
             progressValue: tournament?.progressValue ?? "",
             // A finished tournament cannot change, so its wall stops saying Live.
-            pollsLive: tournament?.isComplete != true
+            // A composite's stage polls its own JSON instead.
+            pollsLive: aggregation != .composite && tournament?.isComplete != true
                 && (activity.window.map { $0.state(at: Date()) != .afterClose } ?? true),
             pollURL: "\(boardURL)?present=1&fragment=present",
-            boardURL: boardURL)
+            boardURL: boardURL,
+            compositeStage: aggregation == .composite
+                ? activity.composite.map {
+                    CompositeStagePresentation.board(spec: $0, testSetupID: setupID, present: true)
+                } : nil)
 
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
@@ -206,4 +210,7 @@ struct PresentModePresentation {
     let pollsLive: Bool
     let pollURL: String
     let boardURL: String
+    /// A class composite's stage, in the podium's place; nil on every other
+    /// kind.
+    var compositeStage: CompositeStagePresentation?
 }

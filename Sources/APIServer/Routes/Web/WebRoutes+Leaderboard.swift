@@ -123,6 +123,10 @@ extension WebRoutes {
                 hasUnion: union != nil,
                 union: union,
                 showsComposite: showsComposite,
+                compositeStage: showsComposite
+                    ? activity.composite.map {
+                        CompositeStagePresentation.board(spec: $0, testSetupID: setupID, present: false)
+                    } : nil,
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page
@@ -130,7 +134,9 @@ extension WebRoutes {
                 // just an open assignment and says nothing — while whether it
                 // refreshes is about whether anything can still change, which
                 // an open-ended session emphatically can.
-                pollsLive: activity.window.map { $0.state(at: Date()) != .afterClose } ?? false,
+                // A composite's stage polls its own JSON, and a swap of
+                // the region would replace its canvas.
+                pollsLive: !showsComposite && (activity.window.map { $0.state(at: Date()) != .afterClose } ?? false),
                 hasPollUntil: activity.window?.closesAtISO != nil,
                 pollUntilISO: activity.window?.closesAtISO ?? "")
 

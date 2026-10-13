@@ -9,6 +9,7 @@
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
 //   GET  /testsetups/:id/notebook   → NotebookPage    (JupyterLite in-browser editor)
 //   GET  /testsetups/:id/leaderboard → LeaderboardPage (class activity ranking)
+//   GET  /testsetups/:id/composite  → class composite JSON (slot states, pixels)
 //   GET  /submissions/:id           → SubmissionPage  (live results)
 
 import Core
@@ -25,6 +26,8 @@ struct WebRoutes: RouteCollection {
         // A class activity's ranking (docs/class-activities.md); 404 unless the
         // assignment has one, and for students unless it is published.
         routes.get("testsetups", ":testSetupID", "leaderboard", use: leaderboardPage)
+        // A class composite's slot states and pixels (docs/class-composite.md).
+        routes.get("testsetups", ":testSetupID", "composite", use: compositeSnapshot)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
         // Course-staff-only: persist what the author is editing in JupyterLite

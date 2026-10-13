@@ -65,6 +65,10 @@ struct LeaderboardPage: HTML {
             if board.showFilter {
                 script(.src(page.asset("/list-filter.js"))) {}
             }
+            if board.compositeStage != nil {
+                script(.src(page.asset("/class-composite-core.js"))) {}
+                script(.src(page.asset("/class-composite.js"))) {}
+            }
         }
     }
 
@@ -111,8 +115,8 @@ struct LeaderboardPage: HTML {
             }
         } else if board.showsComposite {
             p(.class("section-intro")) {
-                "Each student renders one slot of a shared image. Nobody is ranked, and the image never "
-                    + "changes a grade."
+                "Each student renders one slot of a shared image. Point at a slot to see its holder. The "
+                    + "image never changes a grade."
             }
         } else if board.showsStandings {
             p(.class("section-intro")) {

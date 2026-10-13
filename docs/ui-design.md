@@ -416,6 +416,18 @@ duplicate.
   `.tier-preview` Live tag while it polls.  Display sizes are `em` of one size set for a 1600-pixel screen; the
   page steps by `zoom` (down at 1500 pixels, up at 1900), since the type scale
   forbids a fluid font size.
+- **`.composite-stage`** (the `composite-*` family) — a class composite
+  (docs/class-composite.md): a `.composite-frame` that holds a pixelated
+  `.composite-canvas`, and one `.composite-slot` cell for each slot. The cells
+  lie over the canvas in a grid (`.composite-slots--overlay`) or make a strip
+  under it (`.composite-slots--strip`). A cell state is
+  `.composite-slot--empty`, `--failed`, `--passed`, `--rendering` (a pulse)
+  or `--arrived` (a gold flash). The view sets `--composite-cols`,
+  `--composite-rows` and `--composite-aspect`. `class-composite.js` sets the
+  cell classes only. A `.composite-scrub` range follows Play in a `.toolbar`.
+  Present mode wraps it in `.present-composite`, which makes it as large as the
+  screen permits. The result page wraps it in `.composite-tile`, which shows
+  one student's contribution.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the Chickadee picker).  Use it for any group

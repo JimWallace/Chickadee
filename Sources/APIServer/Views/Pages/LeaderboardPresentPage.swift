@@ -28,6 +28,10 @@ struct LeaderboardPresentPage: HTML {
                     .data("poll-swap", value: "region"), .data("poll-url", value: board.pollURL),
                     .data("poll-interval", value: "5000"), when: board.pollsLive)
             }
+            if board.compositeStage != nil {
+                script(.src(page.asset("/class-composite-core.js"))) {}
+                script(.src(page.asset("/class-composite.js"))) {}
+            }
         }
     }
 }
