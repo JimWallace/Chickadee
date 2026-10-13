@@ -60,9 +60,11 @@ extension PublishedAssignmentRoutes {
 }
 
 /// Streams the reference solution with its original filename, resolving the
-/// bytes from the same three sources the edit page counts: a `solution.*`
-/// entry in the setup zip, then the linked validation submission, then the
-/// newest validation submission for the setup.  Shared by the staff files
+/// bytes in `SolutionSource` order: the linked validation submission, then the
+/// newest validation submission for the setup, then a `solution.*` entry in
+/// the setup zip. A save stores a validation submission and leaves the zip
+/// alone, so the zip comes last, or a bundled entry would hide every save.
+/// Shared by the staff files
 /// route above and the student-facing reveal download
 /// (`GET /testsetups/:id/solution/download`), so both audiences receive
 /// exactly the same file — for upload-only languages a source file
@@ -71,20 +73,8 @@ extension PublishedAssignmentRoutes {
 func solutionFileDownloadResponse(
     req: Request, assignment: APIAssignment?, setup: APITestSetup
 ) async throws -> Response {
-    // Look for a solution.* entry inside the test setup zip.
-    // Cached entry list + off-thread extraction (#1158): both helpers
-    // spawn serialized unzip subprocesses.
-    let zipPath = setup.zipPath
-    let solutionZipEntry = await req.application.zipEntryListCache.entries(zipPath: zipPath)
-        .first(where: { $0.hasPrefix("solution.") })
-    if let entryName = solutionZipEntry,
-        let data = await extractZipEntry(zipPath: zipPath, entryName: entryName)
-    {
-        return buildFileResponse(data: data, filename: entryName)
-    }
-
-    // Fall back to the most recent validation submission, preserving
-    // the instructor's original filename (e.g. bmi.py, dna.py).
+    // The saved solution, preserving the instructor's original filename
+    // (e.g. bmi.py, dna.py).
     if let validationID = assignment?.validationSubmissionID,
         let validationSubmission = try await APISubmission.find(validationID, on: req.db),
         let response = try await streamedFileResponse(
@@ -105,6 +95,18 @@ func solutionFileDownloadResponse(
             filename: fallbackSubmission.filename ?? "solution.ipynb")
     {
         return response
+    }
+
+    // A solution.* bundled in the setup zip, for a setup with no saved one.
+    // Cached entry list + off-thread extraction (#1158): both helpers
+    // spawn serialized unzip subprocesses.
+    let zipPath = setup.zipPath
+    let solutionZipEntry = await req.application.zipEntryListCache.entries(zipPath: zipPath)
+        .first(where: { $0.hasPrefix("solution.") })
+    if let entryName = solutionZipEntry,
+        let data = await extractZipEntry(zipPath: zipPath, entryName: entryName)
+    {
+        return buildFileResponse(data: data, filename: entryName)
     }
 
     throw WebAssignmentError.notFound(resource: "Solution notebook for this assignment")

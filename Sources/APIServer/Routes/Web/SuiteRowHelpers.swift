@@ -60,15 +60,17 @@ func currentSetupFiles(
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
 
     let archiveFiles = await listZipEntries(zipPath: setup.zipPath)
+    // The saved solution first, in `SolutionSource` order: a save never
+    // touches the zip, so a bundled `solution.*` linked first would hide it.
     let solutionFile: CurrentFileLink? = {
+        if let solutionFilename, !solutionFilename.isEmpty {
+            return CurrentFileLink(name: solutionFilename, url: "/instructor/\(assignmentID)/files/solution")
+        }
         if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }) {
             return CurrentFileLink(
                 name: solutionEntry,
                 url: "/instructor/\(assignmentID)/files/item?name=\(urlEncode(solutionEntry))"
             )
-        }
-        if let solutionFilename, !solutionFilename.isEmpty {
-            return CurrentFileLink(name: solutionFilename, url: "/instructor/\(assignmentID)/files/solution")
         }
         return nil
     }()

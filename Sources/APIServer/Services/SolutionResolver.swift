@@ -16,11 +16,10 @@ import Vapor
 ///
 /// The saved solution comes first. Every save (the editor, MCP
 /// `update_solution`, the edit form) stores a validation submission and never
-/// touches the setup zip, and a solution that arrives in an uploaded zip is
-/// turned into a validation submission when it arrives. A zip entry searched
-/// first would therefore hide every later save from the editor, `get_solution`
-/// and the reveal, while validation went on grading the saved one. The zip is
-/// a fallback for a setup that has no validation submission yet.
+/// touches the setup zip, so a zip entry searched first would hide every later
+/// save from the editor, `get_solution` and the reveal, while validation went
+/// on grading the saved one (`validationRuns`). The zip is the fallback for a
+/// setup that has no validation submission.
 enum SolutionSource: CaseIterable, Sendable {
     /// The validation submission the assignment links to.
     case linkedValidation

@@ -446,9 +446,9 @@ private func applySubstitutions(
 /// The bytes of an assignment's reference solution, from whichever of the four
 /// places one can live (`resolveSolution`, `SolutionSource.any`).
 ///
-/// The order is oldest-authority-first and deliberately unchanged from the
-/// three original sources; the draft is checked last so nothing that resolved
-/// before resolves differently now.
+/// The order is `SolutionSource`'s: the saved solution (the linked, then the
+/// newest, validation submission) before a `solution.*` bundled in the setup
+/// zip, and the draft last.
 ///
 /// The draft branch closes a gap between this function and every *other* place
 /// that decides whether a solution exists.  `hasSolution` on the edit page and

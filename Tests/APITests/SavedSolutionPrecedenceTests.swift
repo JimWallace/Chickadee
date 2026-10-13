@@ -90,6 +90,28 @@ import VaporTesting
         }
     }
 
+    /// The download serves the staff Files panel and, through the same
+    /// function, the student reveal of an upload-only solution.
+    @Test func theSolutionDownloadServesTheSavedSolution() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+            let (assignment, _) = try await assignmentWithBundledSolution(id: "sol_prec_download", on: app)
+            try await saveSolution("saved", for: assignment, on: app)
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(assignment.publicID)/files/solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("saved"))
+                    #expect(res.body.string.contains("bundled") == false)
+                })
+        }
+    }
+
     @Test func anEditFormSaveKeepsTheSavedSolution() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
