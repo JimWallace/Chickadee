@@ -103,7 +103,8 @@ import Testing
     @Test(arguments: roundTripCases)
     func v2RoundTripsExactly(_ manifest: TestProperties) throws {
         let data = try Self.v2Bytes(manifest)
-        #expect(TestProperties.wireVersion(of: String(decoding: data, as: UTF8.self)) == 2)
+        let text = try #require(String(bytes: data, encoding: .utf8))
+        #expect(TestProperties.wireVersion(of: text) == 2)
         let decoded = try ManifestCodec.decoder.decode(TestProperties.self, from: data)
         // In memory, a value read from v2 equals the same value built in code.
         #expect(decoded == manifest)
