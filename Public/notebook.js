@@ -12,7 +12,7 @@
 // "Upload & submit": if a file picker is present, uploaded notebook files are
 // submitted directly to the native runner (no browser-side grading).
 //
-// Loaded on Resources/Views/_notebook-body.leaf after notebook-core.js. That
+// Loaded on the NotebookBody view after notebook-core.js. That
 // file holds the pure rules: the editor readiness probes, the kernel recovery
 // and reseed decisions, and the results formatting. What remains here is the
 // page: the DOM, the iframe, the timers, storage and fetch.
@@ -36,7 +36,7 @@
     const uploadFiles = ['nb-upload-file', 'nb-slow-upload-file']
         .map(function (id) { return document.getElementById(id); })
         .filter(Boolean);
-    // Course-staff authoring control; absent for students (see notebook.leaf).
+    // Course-staff authoring control; absent for students (see NotebookBody).
     const saveAssignmentBtn = document.getElementById('nb-save-assignment');
     // `let`, not `const`: the workbench can switch which notebook is open
     // without reloading the page, which re-reads these off the same iframe
@@ -50,7 +50,7 @@
     let setupID     = null;
     let gradingMode = null;
     // Closed-assignment read-only mode.  Plumbed from the server via
-    // NotebookContext.isClosed → notebook.leaf data-read-only.  Disables
+    // NotebookContext.isClosed → NotebookBody data-read-only.  Disables
     // editing, run shortcuts, and the upload fallback handler.  The submit
     // button is also suppressed server-side (showSubmit=false) when closed.
     let readOnly    = false;
@@ -66,7 +66,7 @@
     if (!frame || !setupID) return;
 
     // ≤640px the page hides the editor behind a "larger screen" notice and
-    // an inline guard in notebook.leaf aborts the iframe's eager navigation.
+    // an inline guard in the notebook page aborts the iframe's eager navigation.
     // Don't run the preflight, watchdog, or editor mount for a surface the
     // student can't see; if the viewport grows past the breakpoint
     // (rotation, window resize) reload so the page boots normally.

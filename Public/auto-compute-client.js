@@ -19,7 +19,7 @@
 // Loading: classic script. Needs Public/authoring-language.js
 // (ChickadeeLanguage) before it, because the seed decides where a call runs.
 // A <script> tag loads it before pattern-family-editor.js on both authoring
-// pages (assignment-new.leaf, _assignment-edit-body.leaf).
+// pages (AssignmentNewPage, AssignmentEditBody).
 // Exposes exactly one global: ChickadeeAutoCompute.
 //
 // Tested with a fake Worker in

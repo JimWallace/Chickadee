@@ -19,7 +19,7 @@
 // the page — the iframe loads normally and the watchdog is silently armed
 // by notebook.js.
 //
-// Loaded before notebook.js on Resources/Views/notebook.leaf, after
+// Loaded before notebook.js by NotebookBody (Views/NotebookBody.swift), after
 // notebook-preflight-core.js, which holds the decisions (which capabilities
 // are missing, the diagnostic body, the fallback copy, the error-report
 // budget). What remains here is the browser: the probes, the DOM and fetch.

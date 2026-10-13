@@ -17,7 +17,7 @@
 // tables it needs by `makeGradingExecutors`, which the runner calls once.
 //
 // Loading: classic script, before browser-runner.js on the notebook page
-// (_notebook-body.leaf). No worker imports it. Exposes exactly one global,
+// (NotebookBody). No worker imports it. Exposes exactly one global,
 // ChickadeeGradingExecutors.
 //
 // Tested through the runner's test hooks in

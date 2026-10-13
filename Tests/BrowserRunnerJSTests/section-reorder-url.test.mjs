@@ -103,7 +103,7 @@ test('both authoring pages wire the suite write path', async () => {
 });
 
 test('the create page no longer binds its own section handlers', async () => {
-  const template = await fs.readFile(path.resolve('Resources/Views/assignment-new.leaf'), 'utf8');
+  const template = await fs.readFile(path.resolve('Sources/APIServer/Views/Pages/AssignmentNewPage.swift'), 'utf8');
   const wiring = await fs.readFile(path.resolve('Public/assignment-new-page.js'), 'utf8');
   // suite-table.js owns all three; the page used to bind duplicates on top.
   for (const src of [template, wiring]) {

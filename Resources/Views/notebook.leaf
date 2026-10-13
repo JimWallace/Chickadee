@@ -1,8 +1,0 @@
-#extend("base"):
-#export("title"):
-Notebook
-#endexport
-#export("content"):
-#extend("_notebook-body")
-#endexport
-#endextend

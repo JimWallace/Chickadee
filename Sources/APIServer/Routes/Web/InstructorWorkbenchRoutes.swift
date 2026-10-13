@@ -1,34 +1,22 @@
 // APIServer/Routes/Web/InstructorWorkbenchRoutes.swift
 //
-//   GET /instructor/:assignmentID/workbench  → workbench.leaf (one document)
+//   GET /instructor/:assignmentID/workbench  → `WorkbenchPage` (one document)
 //
 // The assignment workbench puts the instructor edit page and the notebook
 // editor side by side, so an author can read and change variables, suite
-// entries and deadlines while a Pyodide kernel boots or a validation run
-// finishes.  Before it, every hop between the two cost a full editor cold
-// boot, and switching from the starter notebook to the reference solution
-// cost a third.
+// entries and deadlines while a kernel boots or a validation run finishes.
+// Before it, every hop between the two cost a full editor cold boot, and
+// switching from the starter notebook to the reference solution cost a third.
 //
-// **#1266: this is now a single document.**  It renders both halves inline:
+// **#1266: this is a single document.**  It renders both halves inline:
 //
-//   left  → #extend("_assignment-edit-body", edit)
-//   right → #extend("_notebook-body", notebook)
+//   left  → `AssignmentEditBody`, the body of the standalone edit page
+//   right → `NotebookBody`, the body of the standalone notebook page
 //
-// Each partial is the *same file* the corresponding standalone page extends,
-// bound against a sub-context, so there is one copy of each body's markup and
-// the panes cannot drift from the pages they mirror.
-//
-// It used to compose the two as same-origin iframes.  Both reasons that
-// design gave for composing-not-merging are gone:
-//
-//   1. "A merged Leaf template is not available to us" — LeafKit 1.14.2 was
-//      said to fail with `extend only supports one or two parameters` on a
-//      second inline `#extend`.  On 1.14.3 it does not; a spike added a probe
-//      partial, asserted it rendered, and confirmed the assertion goes red
-//      when the extend is removed.
-//   2. "`notebook.js` is a single-instance IIFE bound to `#jl-frame`" — still
-//      true, and still respected: the merged page has exactly **one**
-//      `#jl-frame`.  Only the two *wrapper* iframes went away.
+// Each body is the *same view* the corresponding standalone page renders, so
+// there is one copy of each body's markup and the panes cannot drift from the
+// pages they mirror. `notebook.js` is a single-instance IIFE bound to
+// `#jl-frame`, and the page has exactly **one** `#jl-frame`.
 //
 // See `InstructorWorkbenchRoutes+COEP` note in `COEPMiddleware`: this route
 // must be cross-origin isolated, or the editor iframe silently loses
@@ -55,7 +43,7 @@ struct InstructorWorkbenchRoutes: RouteCollection {
     // MARK: - GET /instructor/:assignmentID/workbench
 
     @Sendable
-    func workbenchPage(req: Request) async throws -> View {
+    func workbenchPage(req: Request) async throws -> HTMLResponse<WorkbenchPage> {
         let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let setupID = assignment.testSetupID
 
@@ -122,7 +110,7 @@ struct InstructorWorkbenchRoutes: RouteCollection {
 
         let user = try req.auth.require(APIUser.self)
         // A missing notebook degrades the right pane rather than failing the
-        // page — see `AssignmentWorkbenchContext.notebook`.  Scoped to
+        // page — see `WorkbenchPage.notebook`.  Scoped to
         // `NotebookLookupError`: a permission or database failure is still an error,
         // not an empty pane.
         var notebookCtx: NotebookContext?
@@ -145,20 +133,20 @@ struct InstructorWorkbenchRoutes: RouteCollection {
             req: req, embedded: true)
 
         let title = assignment.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ctx = AssignmentWorkbenchContext(
-            currentUser: req.currentUserContext,
-            assignmentID: assignment.publicID,
-            testSetupID: setupID,
-            assignmentTitle: title.isEmpty ? "Assignment" : title,
-            edit: editCtx,
-            notebook: notebookCtx,
-            notebookPaneURLsJSON: urlsJSON,
-            hasSolution: hasSolution,
-            assignmentHasTemplateView: assignmentHasTemplate,
-            solutionHasTemplateView: solutionHasTemplate,
-            standaloneEditURL: "/instructor/\(assignment.publicID)/edit"
-        )
-        return try await req.view.render("workbench", ctx)
+        let page = PageRequestContext(request: req)
+        return HTMLResponse {
+            WorkbenchPage(
+                page: page,
+                assignmentID: assignment.publicID,
+                testSetupID: setupID,
+                assignmentTitle: title.isEmpty ? "Assignment" : title,
+                edit: editCtx,
+                notebook: notebookCtx.map { NotebookBody($0, appVersion: page.appVersion) },
+                notebookPaneURLsJSON: urlsJSON,
+                assignmentHasTemplateView: assignmentHasTemplate,
+                solutionHasTemplateView: solutionHasTemplate
+            )
+        }
     }
 
     /// True when the notebook still holds `{{name}}` placeholders.  Unreadable

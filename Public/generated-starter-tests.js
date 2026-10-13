@@ -4,7 +4,7 @@
 // checkboxes, and writes one generated test script per checked function into
 // the draft suite.
 //
-// WHY IT LIVES HERE. It was ~90 lines of inline JS in `assignment-new.leaf`,
+// WHY IT LIVES HERE. It was ~90 lines of inline JS in `AssignmentNewPage`,
 // which is neither linted nor testable, and #1269 already established that the
 // create page's inline copies are where this codebase's stale forks accumulate.
 // `applyScanPayload` had been moved into `pattern-family-editor.js` for exactly

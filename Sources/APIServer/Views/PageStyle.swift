@@ -9,13 +9,13 @@
 import Elementary
 
 struct PageStyle: HTML {
-    let css: StaticString
+    let css: String
 
     init(_ css: StaticString) {
-        self.css = css
+        self.css = css.description
     }
 
     var body: some HTML {
-        style { HTMLRaw(css.description) }
+        style { HTMLRaw(css) }
     }
 }

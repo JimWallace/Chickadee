@@ -17,7 +17,7 @@ extension DraftAssignmentRoutes {
     // MARK: - Notebook context
 
     /// Builds the assignment-notebook block (filename + edit URL) shown at
-    /// the top of `assignment-new.leaf`.  Returns `nil` when no draft setup
+    /// the top of `AssignmentNewPage`.  Returns `nil` when no draft setup
     /// exists yet, or when the setup has no `notebookPath`.
     func newAssignmentNotebookContext(
         setup: APITestSetup?,

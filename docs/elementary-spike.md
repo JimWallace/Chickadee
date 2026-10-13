@@ -177,7 +177,7 @@ no fixture reaches.
 | Hover text at most 20 words | `check-ui-vocabulary.sh` rule 3 (skips interpolated titles) | rendered-page test, every title | Done, stricter |
 | Heading levels form a spine | `PageArchetypeTests` | rendered-page test | Done |
 | Archetype shape | `PageArchetypeTests` | the same rules, applied to the rendered `<main>` | Done for the titlebar and auth-box exemplars; the tabbed and shim rules read Leaf partials and need adapting first |
-| Raw HTML only where escaping is handled | none | SwiftLint `HTMLRaw(` ban outside `BaseLayout` (with `Doctype`), `AvatarSprite` and `PageStyle` (checked by hand: a planted use fails lint) | Done |
+| Raw HTML only where escaping is handled | none | SwiftLint `HTMLRaw(` ban outside `BaseLayout` (with `Doctype`), `AvatarSprite`, `JSONIsland` and `PageStyle` (checked by hand: a planted use fails lint) | Done |
 | `ui-review` runs on a view change | workflow path filter | `Sources/APIServer/Views/**` added | Done |
 | Design tokens in page CSS | `check-design-tokens.sh` | the same script reads `PageStyle` blocks (`scripts/lib/css.sh`) | Done |
 | Page `<style>` total ratchet, duplicate and shadowed selectors | `check-styles.sh` rules 4 and 4b | the same rules count `PageStyle` blocks | Done |

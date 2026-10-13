@@ -123,7 +123,7 @@ them is the answer.
 | **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | — |
 | **Plain student page** | `<h1>` → content | `account.leaf` | — |
 | **Auth box** | `.auth-box` centred card | `register.leaf` | — |
-| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | notebook |
+| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | — |
 | **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
 
 Why each exemplar won its row: `alerts.leaf` carries no page script and the
@@ -149,18 +149,28 @@ names only Leaf templates. `PageArchetypeTests` resolves each name to a
 - Instructor tabbed: `AssignmentsPage` and every `Instructor*Page` that opens
   with `InstructorTabs`.
 - Titlebar page: `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`,
-  `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`.
+  `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`,
+  and, as the nearest fit, `AssignmentNewPage` (its `.editor-titlebar` holds
+  the name input, not an `<h1>` in a `.page-titlebar`).
 - Auth box: `LoginPage`, `OAuthConsentPage`.
 - Plain student page: `SubmitPage`, `EnrollPage`, `IndexPage`, `AccountPage`,
   `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`.
-- Full-bleed app (nearest; it owns the viewport through its own
-  `PresentLayout`, not the `fullBleed` flag): `LeaderboardPresentPage`.
+- Full-bleed app: `WorkbenchPage` (`BaseLayout` with `fullBleed`, around
+  `AssignmentEditBody` and `NotebookBody`), and, as the nearest fit,
+  `LeaderboardPresentPage` (it owns the viewport through its own
+  `PresentLayout`, not the `fullBleed` flag).
+- Body-partial shim: `NotebookPage` (`BaseLayout` plus `NotebookBody`) and
+  `AssignmentEditPage` (`BaseLayout` plus `AssignmentEditBody`).
 
 The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
-`instructor-mcp.leaf` and `account.leaf` now render `AdminUserPage`,
-`RegisterPage`, `AlertsPage`, `InstructorMCPPage` and `AccountPage`. The five
-templates are not served. They stay only because the test reads them as
-exemplars.
+`instructor-mcp.leaf`, `account.leaf`, `assignment-edit.leaf` and
+`workbench.leaf` now render `AdminUserPage`, `RegisterPage`, `AlertsPage`,
+`InstructorMCPPage`, `AccountPage`, `AssignmentEditPage` and `WorkbenchPage`.
+The seven templates are not served. They stay only because the test reads them
+as exemplars. Five partials are not served either. They stay because the
+exemplars extend them: `_assignment-edit-body.leaf`, `_notebook-body.leaf`,
+and through the first, `_family-editor-body.leaf`, `_suite-sections.leaf` and
+`_value-cue-note.leaf`.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each

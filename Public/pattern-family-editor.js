@@ -6,7 +6,7 @@
 // pages render from a single copy instead of two copies that drift on
 // every polish release.
 //
-// The form HTML lives in Resources/Views/_family-editor-body.leaf (included
+// The form HTML lives in FamilyEditorBody (Sources/APIServer/Views/, rendered
 // by both pages); this file owns every event listener, fetch, and piece
 // of state that hangs off those DOM IDs.  DOM IDs are stable:
 //   family-editor-body, family-editor-status, family-id, family-name,
@@ -628,7 +628,7 @@
         var variablesBody  = document.getElementById('family-variables-body');
         var variablesEmpty = document.getElementById('family-variables-empty');
         var addVariableBtn = document.getElementById('add-family-variable-btn');
-        // The note that links the amber-cue explanation (_value-cue-note.leaf).
+        // The note that links the amber-cue explanation (ValueCueNote).
         var variablesCueNote = bodyEl ? bodyEl.querySelector('.js-value-cue-note') : null;
 
         /// Is `s` a name the SERVER will accept for a family variable or
@@ -1939,7 +1939,7 @@
     /// Applies a scan response to the create page's status line and function
     /// checklist.
     ///
-    /// Lives here rather than inline in `assignment-new.leaf` for the reason
+    /// Lives here rather than inline in `AssignmentNewPage` for the reason
     /// the inline-script guard exists: template JS is neither linted nor
     /// tested, and this page's inline copy is exactly the fork that went stale
     /// three ways in #1269. `els` carries the three elements it touches.

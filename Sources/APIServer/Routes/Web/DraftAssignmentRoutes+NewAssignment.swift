@@ -14,7 +14,7 @@ extension DraftAssignmentRoutes {
     // MARK: - GET /instructor/new
 
     @Sendable
-    func newAssignmentPage(req: Request) async throws -> View {
+    func newAssignmentPage(req: Request) async throws -> Response {
         struct NewQuery: Content {
             var assignmentName: String?
             var dueAt: String?
@@ -68,53 +68,47 @@ extension DraftAssignmentRoutes {
         let startsAt = q?.startsAt ?? storedState.startsAt
         let selectedSectionID = q?.sectionID ?? storedState.sectionID
 
-        let ctx = await NewAssignmentContext(
-            currentUser: req.currentUserContext,
-            assignmentName: assignmentName,
-            dueAt: dueAt,
-            startsAt: startsAt,
-            sections: sections,
-            preselectedSectionID: selectedSectionID,
-            draftID: setup?.id,
-            draftIDJSON: newAssignmentDraftIDJSON(setup: setup),
-            assignmentNotebook: assignmentNotebook,
-            solutionNotebook: solutionNotebook,
-            suiteRows: suiteRows,
-            hasSuiteRows: !suiteRows.isEmpty,
-            supportFileRows: supportFileRows,
-            patternFamiliesJSON: newAssignmentPatternFamiliesJSON(setup: setup),
-            notebookChecksJSON: newAssignmentNotebookChecksJSON(setup: setup),
-            checkSchemaJSON: notebookCheckFormSchemaJSON(language: resolvedLanguage),
-            // Same seed as the edit page, so the two authoring surfaces
-            // cannot disagree about the language. A draft with no setup yet
-            // has no language, which is the honest answer — its facts say so
-            // and the editor omits the language-specific hints.
-            assignmentLanguageJSON: authoringLanguageFactsJSON(resolvedLanguage),
-            suiteStateJSON: newAssignmentSuiteStateSeedJSON(setup: setup),
-            suiteSectionRows: newAssignmentSuiteSectionShellRows(setup: setup),
-            sectionActionBase: "/instructor/new/draft/suite-sections",
-            sectionActionQuery: "?draftID=\(setup?.id ?? "")",
-            // The create page is never rendered inside a workbench pane, so its
-            // section forms keep a plain redirect.
-            sectionFormsInPlace: false,
-            requiredPlatform: storedState.requiredPlatform,
-            requiredArchitecture: storedState.requiredArchitecture,
-            requiredLanguagesCSV: storedState.requiredLanguagesCSV.isEmpty
-                ? detected.languages.joined(separator: ", ")
-                : storedState.requiredLanguagesCSV,
-            requiredCapabilitiesCSV: storedState.requiredCapabilitiesCSV.isEmpty
-                ? detected.capabilities.joined(separator: ", ")
-                : storedState.requiredCapabilitiesCSV,
-            detectedLanguages: detected.languages,
-            detectedCapabilities: detected.capabilities,
-            assignmentLanguageOptions: AssignmentLanguageOption.options(
-                recorded: setup.flatMap { currentManifestLanguage($0.manifest) }),
-            detectedLanguagesCSV: detected.languages.joined(separator: ", "),
-            detectedCapabilitiesCSV: detected.capabilities.joined(separator: ", "),
-            notice: q?.notice,
-            error: q?.error
-        )
-        return try await req.view.render("assignment-new", ctx)
+        let page = PageRequestContext(request: req)
+        let checkSchemaJSON = notebookCheckFormSchemaJSON(language: resolvedLanguage)
+        // Same seed as the edit page, so the two authoring surfaces cannot
+        // disagree about the language. A draft with no setup yet has no
+        // language, which is the honest answer — its facts say so and the
+        // editor omits the language-specific hints.
+        let assignmentLanguageJSON = authoringLanguageFactsJSON(resolvedLanguage)
+        let suiteStateJSON = await newAssignmentSuiteStateSeedJSON(setup: setup)
+        return try await HTMLResponse {
+            AssignmentNewPage(
+                page: page,
+                flash: FlashMessages(notice: q?.notice),
+                error: q?.error,
+                assignmentName: assignmentName,
+                startsAt: startsAt,
+                dueAt: dueAt,
+                sections: sections,
+                preselectedSectionID: selectedSectionID,
+                draftID: setup?.id,
+                draftIDJSON: newAssignmentDraftIDJSON(setup: setup),
+                assignmentLanguageOptions: AssignmentLanguageOption.options(
+                    recorded: setup.flatMap { currentManifestLanguage($0.manifest) }),
+                assignmentNotebook: assignmentNotebook,
+                solutionNotebook: solutionNotebook,
+                supportFileRows: supportFileRows,
+                detectedLanguages: detected.languages,
+                detectedCapabilities: detected.capabilities,
+                requiredLanguagesCSV: storedState.requiredLanguagesCSV.isEmpty
+                    ? detected.languages.joined(separator: ", ")
+                    : storedState.requiredLanguagesCSV,
+                requiredCapabilitiesCSV: storedState.requiredCapabilitiesCSV.isEmpty
+                    ? detected.capabilities.joined(separator: ", ")
+                    : storedState.requiredCapabilitiesCSV,
+                suiteSectionRows: newAssignmentSuiteSectionShellRows(setup: setup),
+                suiteStateJSON: suiteStateJSON,
+                patternFamiliesJSON: newAssignmentPatternFamiliesJSON(setup: setup),
+                notebookChecksJSON: newAssignmentNotebookChecksJSON(setup: setup),
+                checkSchemaJSON: checkSchemaJSON,
+                assignmentLanguageJSON: assignmentLanguageJSON
+            )
+        }.encodeResponse(for: req)
     }
 
     // updateNewAssignmentDraft is the dispatcher for the new-assignment

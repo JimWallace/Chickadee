@@ -30,7 +30,7 @@
     var wiredForms = new WeakMap();
     var wiredAddButtons = new WeakSet();
 
-    /// Shows the form's amber-cue note (_value-cue-note.leaf) only while its
+    /// Shows the form's amber-cue note (ValueCueNote) only while its
     /// table has a row, since the cue it explains is drawn on a row (#1996).
     function syncCueNote(form, tbody) {
         var note = form.querySelector('.js-value-cue-note');

@@ -42,7 +42,7 @@
     if (statusEl) statusEl.hidden = false;
 
     // Public/grading-shared.js is a <script> tag before this file on the
-    // notebook page (see _notebook-body.leaf).  The grading workers use it;
+    // notebook page (see NotebookBody).  The grading workers use it;
     // this file does not call into it.  The exit-code mapping is only
     // re-exported on the test hooks below.  Throws loudly here if the tag is
     // missing.
@@ -54,7 +54,7 @@
     // The per-student inputs file renderers for R, Lua and Octave.  Each comes
     // from that language's grading-shared.js, which its grading worker also
     // loads.  Loaded by <script> tags alongside grading-shared.js (see
-    // _notebook-body.leaf).
+    // NotebookBody).
     const { personalizationInputsSourceR } = ChickadeeRGradingShared;
     const { personalizationInputsSourceLua } = ChickadeeLuaGradingShared;
     const { personalizationInputsSourceOctave } = ChickadeeOctaveGradingShared;
@@ -63,7 +63,7 @@
     // file in Tools/runner-support/ that the native runner compiles in, byte
     // for byte. scripts/generate-js-constants.sh writes
     // Public/runner-support-sources.js, and a <script> tag loads it before
-    // this file (see _notebook-body.leaf). Throws loudly here if the tag is
+    // this file (see NotebookBody). Throws loudly here if the tag is
     // missing.
     const RUNTIME_HELPER_SOURCES = ChickadeeRunnerSupportSources;
 

@@ -25,7 +25,7 @@ struct BaseLayout<Content: HTML>: HTML {
     let title: String
     let page: PageRequestContext
     let flash: FlashMessages
-    /// The page owns the viewport (`workbench.leaf`).
+    /// The page owns the viewport (`WorkbenchPage`).
     let fullBleed: Bool
     /// Rendered inside a pane of the workbench or an LMS frame: no site chrome.
     let embedded: Bool

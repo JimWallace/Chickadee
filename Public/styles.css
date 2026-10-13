@@ -520,7 +520,7 @@ h2 { font-size: var(--text-md);   margin-bottom: .4rem; }
    shadow/padding/size specifics that make it feel like a floating menu
    rather than a page-level card.  Shared between the instructor
    dashboard (`AssignmentsPage`) and the suite editor
-   (`assignment-edit.leaf`). */
+   (`AssignmentEditBody`). */
 .add-section-popup {
     background: var(--surface);
     color: var(--gray-900);
@@ -1474,7 +1474,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
     margin-bottom: .75rem;
 }
 
-/* ── Inline "+ Section" popup (AssignmentsPage + assignment-edit.leaf) ──
+/* ── Inline "+ Section" popup (AssignmentsPage + AssignmentEditBody) ──
    Identical rules formerly duplicated in both views' embedded <style>
    blocks; consolidated here (v0.4.x UI audit). */
 .add-section-details { margin: 0; padding: 0; }
@@ -2640,7 +2640,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* ── Assignment editor: header + suite editor (new + edit pages) ─────────
    Shared component classes replacing inline styles duplicated across
-   assignment-new.leaf and assignment-edit.leaf (UI audit).  display:* is
+   AssignmentNewPage and AssignmentEditBody (UI audit).  display:* is
    intentionally left inline on JS-toggled elements (a class display rule
    would collide with scripts that clear style.display via ''). */
 .editor-titlebar {
@@ -3090,7 +3090,7 @@ td.pf-var-locked-value { font-family: var(--font-mono); font-size: var(--text-sm
     font-size: var(--text-base);
 }
 
-/* ── Suite editor drag/drop (assignment-new.leaf + assignment-edit.leaf) ──
+/* ── Suite editor drag/drop (AssignmentNewPage + AssignmentEditBody) ──
    Consolidated from two duplicated embedded <style> blocks (UI audit). */
 .suite-drag-handle { cursor: grab; user-select: none; color: var(--gray-500); padding: 0 .3rem; }
 .suite-drag-handle:active { cursor: grabbing; }
