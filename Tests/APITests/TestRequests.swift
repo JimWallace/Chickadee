@@ -1,13 +1,34 @@
 // Tests/APITests/TestRequests.swift
 //
 // Sends requests to a test application and reads the CSRF token from a page.
+//
+// This file is the one place the tests touch VaporTesting's request API and
+// build a `Request` on an event loop. Vapor 5 rewrites VaporTesting and has
+// no event loops, so the move changes this file, not the tests that call it
+// (docs/vapor-5-migration.md). `scripts/check-vapor5-readiness.sh` fails
+// `format-lint` on a direct use elsewhere under Tests/.
 
 import Foundation
 import Testing
 import VaporTesting
 
+/// The request a test edits before it is sent.
+typealias TestRequest = TestingHTTPRequest
+
+/// The response a test reads.
+typealias TestResponse = TestingHTTPResponse
+
+/// A bare request against `app`, for code under test that takes a `Request`.
+func makeTestRequest(
+    on app: Application,
+    method: HTTPMethod = .GET,
+    url: URI = "/",
+    headers: HTTPHeaders = [:]
+) -> Request {
+    Request(application: app, method: method, url: url, headers: headers, on: app.eventLoopGroup.any())
+}
+
 extension Application {
-    @discardableResult
     func asyncTest(
         method runnerMethod: Method = .inMemory,
         _ method: HTTPMethod,
@@ -18,8 +39,8 @@ extension Application {
         filePath: String = #filePath,
         line: Int = #line,
         column: Int = #column,
-        afterResponse: (TestingHTTPResponse) throws -> Void
-    ) async throws -> TestingApplicationTester {
+        afterResponse: (TestResponse) async throws -> Void
+    ) async throws {
         try await self.asyncTest(
             method: runnerMethod,
             method,
@@ -35,7 +56,6 @@ extension Application {
         )
     }
 
-    @discardableResult
     func asyncTest(
         method runnerMethod: Method = .inMemory,
         _ method: HTTPMethod,
@@ -46,11 +66,15 @@ extension Application {
         filePath: String = #filePath,
         line: Int = #line,
         column: Int = #column,
-        beforeRequest: (inout TestingHTTPRequest) throws -> Void = { _ in },
-        afterResponse: (TestingHTTPResponse) throws -> Void = { _ in }
-    ) async throws -> TestingApplicationTester {
+        beforeRequest: (inout TestRequest) async throws -> Void = { _ in },
+        afterResponse: (TestResponse) async throws -> Void = { _ in }
+    ) async throws {
+        // Boot through the async path first. `testing()` boots with the
+        // synchronous `boot()`, which runs no async lifecycle hook; Vapor 5
+        // boots its test apps async too. A booted app is not booted again.
+        try await self.asyncBoot()
         let tester = try self.testing(method: runnerMethod)
-        return try await tester.test(
+        _ = try await tester.test(
             method,
             path,
             headers: headers,
@@ -60,10 +84,10 @@ extension Application {
             line: line,
             column: column,
             beforeRequest: { request async throws in
-                try beforeRequest(&request)
+                try await beforeRequest(&request)
             },
             afterResponse: { response async throws in
-                try afterResponse(response)
+                try await afterResponse(response)
             }
         )
     }
@@ -75,9 +99,9 @@ extension Application {
         _ path: String,
         headers: HTTPHeaders = [:],
         body: ByteBuffer? = nil,
-        beforeRequest: (inout TestingHTTPRequest) throws -> Void = { _ in }
-    ) async throws -> TestingHTTPResponse {
-        var captured: TestingHTTPResponse?
+        beforeRequest: (inout TestRequest) async throws -> Void = { _ in }
+    ) async throws -> TestResponse {
+        var captured: TestResponse?
         try await self.asyncTest(
             method, path,
             headers: headers,

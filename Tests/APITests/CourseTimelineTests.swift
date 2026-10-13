@@ -274,7 +274,7 @@ import VaporTesting
     @Test func courseScopeIsDerivedFromMetadataWhenNotPassed() async throws {
         try await withApp(app) { app in
             let courseID = try await makeCourse(app, code: "ACTMETA")
-            let request = Request(application: app, on: app.eventLoopGroup.any())
+            let request = makeTestRequest(on: app)
 
             await AuditLogger.record(
                 action: .enrollmentRoleChanged,
@@ -301,7 +301,7 @@ import VaporTesting
             let courseID = try await makeCourse(app, code: "ACTLIFE")
             let (assignment, _) = try await makeAssignment(
                 app, courseID: courseID, title: "Lifecycle lab")
-            let request = Request(application: app, on: app.eventLoopGroup.any())
+            let request = makeTestRequest(on: app)
 
             await AuditLogger.recordAssignmentLifecycle(
                 .assignmentDeleted, assignment: assignment,

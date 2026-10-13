@@ -130,7 +130,7 @@ import VaporTesting
     /// POSTs the picker with `publicIDs` chosen and `ticket`, with no cookie
     /// and no CSRF token: inside the LMS frame the browser sends neither.
     private func choose(
-        _ publicIDs: [String], ticket: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ publicIDs: [String], ticket: String, _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         let body =
             (publicIDs.map { "assignments%5B%5D=\($0)" } + [
@@ -262,7 +262,7 @@ import VaporTesting
 
     /// POSTs the course choice with `token`, with no cookie and no CSRF token.
     private func bind(
-        token: String, courseID: String?, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        token: String, courseID: String?, _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         var fields = ["token=\(token.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")"]
         if let courseID { fields.append("courseID=\(courseID)") }

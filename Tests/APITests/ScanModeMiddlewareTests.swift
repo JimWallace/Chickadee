@@ -39,7 +39,7 @@ import VaporTesting
                 (.POST, "/testsetups/setup_42/submit"),
             ]
             for (method, path) in gated {
-                try await app.testing().test(method, path) { res async in
+                try await app.asyncTest(method, path) { res async in
                     #expect(
                         res.status == .serviceUnavailable,
                         "expected 503 for \(method.rawValue) \(path), got \(res.status)"
@@ -52,10 +52,10 @@ import VaporTesting
 
     @Test func nonGatedRoutesStillWorkWhenEnabled() async throws {
         try await withApp(try await makeApp(scanEnabled: true)) { app in
-            try await app.testing().test(.POST, "/login") { res async in
+            try await app.asyncTest(.POST, "/login") { res async in
                 #expect(res.status == .ok)
             }
-            try await app.testing().test(.GET, "/dashboard") { res async in
+            try await app.asyncTest(.GET, "/dashboard") { res async in
                 #expect(res.status == .ok)
             }
         }
@@ -63,10 +63,10 @@ import VaporTesting
 
     @Test func gatedRoutesPassThroughWhenDisabled() async throws {
         try await withApp(try await makeApp(scanEnabled: false)) { app in
-            try await app.testing().test(.POST, "/api/v1/submissions") { res async in
+            try await app.asyncTest(.POST, "/api/v1/submissions") { res async in
                 #expect(res.status == .ok)
             }
-            try await app.testing().test(.POST, "/admin/users/x/delete") { res async in
+            try await app.asyncTest(.POST, "/admin/users/x/delete") { res async in
                 #expect(res.status == .ok)
             }
         }

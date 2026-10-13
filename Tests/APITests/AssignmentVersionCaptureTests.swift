@@ -234,7 +234,7 @@ import VaporTesting
                 on: app, testSetupID: setupID, courseID: courseID, title: "MCP Lab")
 
             let context = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "vmcp",
                 grantedScopes: [.read, .write])
 

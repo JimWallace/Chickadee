@@ -195,7 +195,7 @@ import VaporTesting
     }
 
     private func request(_ app: Application) -> Request {
-        Request(application: app, on: app.eventLoopGroup.any())
+        makeTestRequest(on: app)
     }
 
     /// Before the window opens and after it closes a submission is refused,

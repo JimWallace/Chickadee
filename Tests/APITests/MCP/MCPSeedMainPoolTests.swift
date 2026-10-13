@@ -140,7 +140,7 @@ import Vapor
             app.usesDedicatedMCPDatabase = true
 
             let context = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "tester",
                 grantedScopes: [.write])
 

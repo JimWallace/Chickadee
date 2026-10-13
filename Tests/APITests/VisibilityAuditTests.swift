@@ -119,7 +119,7 @@ import VaporTesting
         try await withApp(app) { app in
             let fixture = try await fixture(isOpen: true)
             let context = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "visaud_inst", grantedScopes: [.write])
 
             #expect(try await closeOpenAssignmentForContentEdit(fixture.assignment, context: context))

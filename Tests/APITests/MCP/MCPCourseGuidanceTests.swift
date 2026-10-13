@@ -189,7 +189,7 @@ import Vapor
 
     private func toolContext(_ app: Application, subject: String) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: subject,
             grantedScopes: [.read, .write])
     }

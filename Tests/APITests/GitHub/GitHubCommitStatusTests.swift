@@ -168,7 +168,7 @@ import VaporTesting
     }
 
     private func post(_ submission: APISubmission) async {
-        let req = Request(application: app, on: app.eventLoopGroup.any())
+        let req = makeTestRequest(on: app)
         let collection = TestOutcomeCollection(
             submissionID: "sub_gh", testSetupID: "gh_setup", attemptNumber: 1, buildStatus: .passed,
             compilerOutput: nil,
@@ -215,7 +215,7 @@ import VaporTesting
             })
         try await withApp(app) { _ in
             let submission = try await submission()
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             let collection = TestOutcomeCollection(
                 submissionID: "sub_gh", testSetupID: "gh_setup", attemptNumber: 1, buildStatus: .passed,
                 compilerOutput: nil, outcomes: [wrMakeOutcome(name: "a")],

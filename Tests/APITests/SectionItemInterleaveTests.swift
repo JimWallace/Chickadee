@@ -228,7 +228,7 @@ import VaporTesting
             try await makeTestEnrollment(
                 on: app, userID: tester.requireID(), courseID: courseID)
             let context = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "mcp_tester", grantedScopes: [.write])
 
             let out = try await ReorderSectionItemsTool().execute(

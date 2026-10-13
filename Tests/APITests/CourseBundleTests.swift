@@ -1420,7 +1420,7 @@ import VaporTesting
             let bytes = Data("SLIDE-DECK-BYTES".utf8)
             let attachment = try await ContentAttachmentStore.store(
                 bytes: bytes, originalName: "week1.pdf", label: "Week 1", sortOrder: 1,
-                itemID: itemID, on: Request(application: app, on: app.eventLoopGroup.any()))
+                itemID: itemID, on: makeTestRequest(on: app))
             item.attachments = [attachment]
             try await item.save(on: app.db)
 

@@ -98,7 +98,8 @@ import VaporTesting
         try await withApp(app) { app in
             app.http.server.configuration.responseCompression = .enabledForCompressibleTypes
             try await makePlatform(on: app)
-            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.asyncTest(
+                method: .running(hostname: "localhost", port: 0),
                 .GET, "/lti/jwks",
                 headers: ["Accept-Encoding": "gzip, deflate"]
             ) { res async in

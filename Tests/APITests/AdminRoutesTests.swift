@@ -1131,9 +1131,7 @@ private struct PassthroughResponder: AsyncResponder {
             let passthrough = PassthroughResponder()
 
             // A poll carrying the header must leave last_seen_at untouched.
-            let pollReq = Request(
-                application: app, method: .GET, url: URI(path: "/admin/users-data"),
-                on: app.eventLoopGroup.next())
+            let pollReq = makeTestRequest(on: app, method: .GET, url: URI(path: "/admin/users-data"))
             pollReq.headers.add(name: UserActivityMiddleware.backgroundRefreshHeader, value: "1")
             pollReq.auth.login(try #require(try await APIUser.find(userID, on: app.db)))
             _ = try await middleware.respond(to: pollReq, chainingTo: passthrough)
@@ -1143,9 +1141,7 @@ private struct PassthroughResponder: AsyncResponder {
                 "background-refresh poll must not refresh last_seen_at")
 
             // A normal request (no header) past the debounce must refresh it.
-            let normalReq = Request(
-                application: app, method: .GET, url: URI(path: "/admin/users"),
-                on: app.eventLoopGroup.next())
+            let normalReq = makeTestRequest(on: app, method: .GET, url: URI(path: "/admin/users"))
             normalReq.auth.login(try #require(try await APIUser.find(userID, on: app.db)))
             _ = try await middleware.respond(to: normalReq, chainingTo: passthrough)
             let afterNormal = try #require(try await APIUser.find(userID, on: app.db))

@@ -95,7 +95,7 @@ import VaporTesting
 
     @Test func discoverAdvertisesVersionsCapabilitiesAndInstructions() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "server/discover"),
                 body: ByteBuffer(string: modernBody(method: "server/discover"))
             ) { res async throws in
@@ -133,7 +133,7 @@ import VaporTesting
 
     @Test func modernResultsCarryResultTypeAndServerInfo() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "ping"),
                 body: ByteBuffer(string: modernBody(method: "ping"))
             ) { res async throws in
@@ -158,7 +158,7 @@ import VaporTesting
         // before — no resultType, no server _meta.
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: ["Content-Type": "application/json"],
                 body: ByteBuffer(string: body)
             ) { res async throws in
@@ -178,7 +178,7 @@ import VaporTesting
                 {"jsonrpc":"2.0","id":1,"method":"initialize","params":\
                 {"protocolVersion":"\(MCPProtocol.modernVersion)"}}
                 """
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: ["Content-Type": "application/json"],
                 body: ByteBuffer(string: body)
             ) { res async throws in
@@ -192,7 +192,7 @@ import VaporTesting
 
     @Test func unsupportedModernVersionListsSupportedVersions() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "ping", version: "1900-01-01"),
                 body: ByteBuffer(string: modernBody(method: "ping", version: "1900-01-01"))
             ) { res async throws in
@@ -215,7 +215,7 @@ import VaporTesting
 
     @Test func mismatchedMethodHeaderIsRejected() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "tools/list"),
                 body: ByteBuffer(string: modernBody(method: "ping"))
             ) { res async throws in
@@ -229,7 +229,7 @@ import VaporTesting
         try await withApp(try await makeApp()) { app in
             var headers: HTTPHeaders = ["Content-Type": "application/json"]
             headers.add(name: MCPHeader.protocolVersion, value: MCPProtocol.modernVersion)
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: headers,
                 body: ByteBuffer(string: modernBody(method: "ping"))
             ) { res async throws in
@@ -243,7 +243,7 @@ import VaporTesting
         try await withApp(try await makeApp()) { app in
             let body = modernBody(method: "tools/call", extraParams: #""name":"list_courses","arguments":{},"#)
             // Wrong name in the header → rejected before the tool ever runs.
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "tools/call", name: "get_suite"),
                 body: ByteBuffer(string: body)
             ) { res async throws in
@@ -251,7 +251,7 @@ import VaporTesting
                 #expect(try errorFields(res.body.string)["code"] == .int(JSONRPCError.headerMismatchCode))
             }
             // Absent name header → equally a mismatch (it is required here).
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "tools/call"),
                 body: ByteBuffer(string: body)
             ) { res async throws in
@@ -277,7 +277,7 @@ import VaporTesting
             let body = modernBody(method: "tools/call", extraParams: #""name":"café_tool","arguments":{},"#)
             let encodedName = "=?base64?" + Data(toolName.utf8).base64EncodedString() + "?="
 
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "tools/call", name: encodedName),
                 body: ByteBuffer(string: body)
             ) { res async throws in
@@ -290,7 +290,7 @@ import VaporTesting
             // untouched, matching the body the same way.
             let plainBody = modernBody(
                 method: "tools/call", extraParams: #""name":"plain_tool","arguments":{},"#)
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "tools/call", name: "plain_tool"),
                 body: ByteBuffer(string: plainBody)
             ) { res async throws in
@@ -304,7 +304,7 @@ import VaporTesting
         // fields are missing, so this is invalid params, not a legacy request.
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "ping"),
                 body: ByteBuffer(string: body)
             ) { res async throws in
@@ -320,7 +320,7 @@ import VaporTesting
                 {"jsonrpc":"2.0","id":1,"method":"ping","params":{"_meta":{\
                 "\(MCPMetaKey.protocolVersion)":"\(MCPProtocol.modernVersion)"}}}
                 """
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "ping"),
                 body: ByteBuffer(string: body)
             ) { res async throws in
@@ -336,7 +336,7 @@ import VaporTesting
         // How a modern client distinguishes "this server does not implement
         // that method" from a legacy server with no modern endpoint at all.
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: modernHeaders(method: "frobnicate"),
                 body: ByteBuffer(string: modernBody(method: "frobnicate"))
             ) { res async throws in
@@ -349,7 +349,7 @@ import VaporTesting
     @Test func unknownLegacyMethodStaysA200WithAnErrorBody() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","id":1,"method":"frobnicate"}"#
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/mcp", headers: ["Content-Type": "application/json"],
                 body: ByteBuffer(string: body)
             ) { res async throws in

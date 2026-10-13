@@ -61,14 +61,14 @@ import VaporTesting
         return app
     }
 
-    private func configData(_ res: TestingHTTPResponse) -> [String: Any] {
+    private func configData(_ res: TestResponse) -> [String: Any] {
         let obj = (try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8))) as? [String: Any]
         return (obj?["jupyter-config-data"] as? [String: Any]) ?? [:]
     }
 
     @Test func injectsFlagIntoRootConfig() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/jupyter-lite.json") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/jupyter-lite.json") { res async in
                 #expect(res.status == .ok)
                 let cfg = self.configData(res)
                 #expect(cfg["exposeAppInBrowser"] as? String == "true")
@@ -79,7 +79,7 @@ import VaporTesting
 
     @Test func injectsFlagIntoPerAppConfig() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/notebooks/jupyter-lite.json") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/notebooks/jupyter-lite.json") { res async in
                 #expect(res.status == .ok)
                 let cfg = self.configData(res)
                 #expect(cfg["exposeAppInBrowser"] as? String == "true")
@@ -90,7 +90,7 @@ import VaporTesting
 
     @Test func doesNotOverrideExistingValue() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/already/jupyter-lite.json") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/already/jupyter-lite.json") { res async in
                 #expect(res.status == .ok)
                 #expect(self.configData(res)["exposeAppInBrowser"] as? String == "false")  // left as-is
             }
@@ -100,7 +100,7 @@ import VaporTesting
     @Test func fallsThroughWhenNoConfigData() async throws {
         try await withApp(try await makeApp()) { app in
             // No jupyter-config-data → served as-is by FileMiddleware, never a 500.
-            try await app.testing().test(.GET, "/jupyterlite/weird/jupyter-lite.json") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/weird/jupyter-lite.json") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string.contains("no-config-here"))
                 #expect(res.body.string.contains("exposeAppInBrowser") == false)
@@ -110,7 +110,7 @@ import VaporTesting
 
     @Test func leavesNonJupyterLiteJsonUntouched() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/other.json") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/other.json") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string.contains("exposeAppInBrowser") == false)
             }
@@ -128,7 +128,7 @@ import VaporTesting
 
     @Test func webKitRequestEnablesTheServiceWorker() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/jupyterlite/sw/jupyter-lite.json",
                 headers: ["User-Agent": Self.safariUA]
             ) { res async in
@@ -144,7 +144,7 @@ import VaporTesting
 
     @Test func nonWebKitKeepsTheServiceWorkerDisabled() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/jupyterlite/sw/jupyter-lite.json",
                 headers: ["User-Agent": Self.chromeUA]
             ) { res async in

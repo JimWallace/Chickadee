@@ -12,7 +12,7 @@ import Vapor
 @Suite struct CreatePatternFamilyToolTests {
     private func context(_ app: Application) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: "tester",
             grantedScopes: [.write]
         )
@@ -215,7 +215,7 @@ import Vapor
 
             // get_suite surfaces the values on the returned family spec.
             let readCtx = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "tester", grantedScopes: [.read])
             let suite = try await GetSuiteTool().execute(
                 GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)

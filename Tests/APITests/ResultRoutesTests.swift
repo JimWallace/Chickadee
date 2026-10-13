@@ -358,7 +358,8 @@ import VaporTesting
             try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
             let body = try bodyData(for: collection)
 
-            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.asyncTest(
+                method: .running(hostname: "localhost", port: 0),
                 .POST,
                 self.resultsPath,
                 headers: workerHMACHeaders(

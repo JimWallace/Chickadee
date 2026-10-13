@@ -31,7 +31,7 @@ import VaporTesting
     private func fetch(_ path: String, on app: Application) async throws -> (body: String, cookie: String) {
         var body = ""
         var cookie = ""
-        try await app.testing().test(.GET, path) { res in
+        try await app.asyncTest(.GET, path) { res in
             body = res.body.string
             let setCookie = try #require(res.headers.first(name: .setCookie))
             cookie = String(setCookie.prefix { $0 != ";" })
@@ -43,7 +43,7 @@ import VaporTesting
         token: String?, asFormField: Bool = false, cookie: String, on app: Application
     ) async throws -> (status: HTTPStatus, body: String) {
         var result: (HTTPStatus, String) = (.ok, "")
-        try await app.testing().test(
+        try await app.asyncTest(
             .POST, "write",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
@@ -60,7 +60,7 @@ import VaporTesting
 
     @Test func aSafeMethodNeedsNoToken() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "read") { res in
+            try await app.asyncTest(.GET, "read") { res in
                 #expect(res.status == .ok)
                 #expect(res.body.string == "read")
             }

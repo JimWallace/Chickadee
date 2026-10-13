@@ -34,14 +34,14 @@ import VaporTesting
     }
 
     private func get(
-        _ app: Application, _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ app: Application, _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         try check(try await getResponse(path, cookie: cookie, on: app))
     }
 
     private func post(
         _ app: Application, _ path: String, _ fields: [String: String], cookie: String,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws {
         let (token, boundCookie) = try await csrfFields(for: "/instructor/lti-grades", cookie: cookie, on: app)
         var body = fields

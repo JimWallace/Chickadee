@@ -11,7 +11,7 @@ import Vapor
 @Suite struct ListAssignmentsToolTests {
     private func context(_ app: Application) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: "tester",
             grantedScopes: [.read, .write]
         )
@@ -171,7 +171,7 @@ import Vapor
             // A read-only caller invoking the content:write tool is rejected
             // before the tool runs (no database mutation occurs).
             let readOnly = ToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "tester", grantedScopes: [.read])
             let request = JSONRPCRequest(
                 jsonrpc: "2.0", id: .number(4), method: "tools/call",

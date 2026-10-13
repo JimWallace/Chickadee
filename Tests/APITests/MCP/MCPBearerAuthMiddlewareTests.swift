@@ -39,7 +39,7 @@ import VaporTesting
     @Test func missingTokenReturns401WithChallenge() async throws {
         let (app, _) = try await makeGuardedApp()
         try await withApp(app) { app in
-            try await app.testing().test(.GET, "/guarded") { res async in
+            try await app.asyncTest(.GET, "/guarded") { res async in
                 #expect(res.status == .unauthorized)
                 #expect(res.headers.first(name: .wwwAuthenticate)?.contains("resource_metadata=") == true)
             }
@@ -52,7 +52,7 @@ import VaporTesting
             let token = try await authority.mint(
                 subject: "agent", scopes: [.read, .write],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/guarded", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .ok)
@@ -67,7 +67,7 @@ import VaporTesting
             let token = try await authority.mint(
                 subject: "a", scopes: [.read],
                 issuer: issuer, audience: "https://evil.example/mcp", ttlSeconds: 3600)
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/guarded", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .unauthorized)
@@ -81,7 +81,7 @@ import VaporTesting
             let token = try await authority.mint(
                 subject: "a", scopes: [],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/guarded", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .forbidden)

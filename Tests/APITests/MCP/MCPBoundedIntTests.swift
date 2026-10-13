@@ -37,7 +37,7 @@ import Vapor
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "ql-admin", role: "admin")
             let context = AdminToolContext(
-                request: Request(application: app, on: app.eventLoopGroup.any()),
+                request: makeTestRequest(on: app),
                 subject: "ql-admin", grantedScopes: [.read])
             await #expect(throws: MCPToolError.self) {
                 _ = try await QueryLogsTool().execute(.init(minLevel: "warn"), context)

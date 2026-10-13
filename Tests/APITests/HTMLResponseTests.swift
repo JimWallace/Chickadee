@@ -13,12 +13,12 @@ import VaporTesting
         app.get("page") { _ in HTMLResponse { p { "Hi & bye" } } }
         app.get("gone") { _ in HTMLResponse(status: .notFound) { p { "Gone" } } }
         try await withApp(app) { app in
-            try await app.testing().test(.GET, "page") { res in
+            try await app.asyncTest(.GET, "page") { res in
                 #expect(res.status == .ok)
                 #expect(res.headers.contentType == .html)
                 #expect(res.body.string == "<p>Hi &amp; bye</p>")
             }
-            try await app.testing().test(.GET, "gone") { res in
+            try await app.asyncTest(.GET, "gone") { res in
                 #expect(res.status == .notFound)
             }
         }

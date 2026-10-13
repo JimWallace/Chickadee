@@ -12,7 +12,7 @@ import Vapor
 @Suite struct GetSolutionToolTests {
     private func context(_ app: Application, scopes: Set<ContentScope> = [.read]) -> ToolContext {
         ToolContext(
-            request: Request(application: app, on: app.eventLoopGroup.any()),
+            request: makeTestRequest(on: app),
             subject: "tester",
             grantedScopes: scopes)
     }

@@ -29,7 +29,7 @@ import VaporTesting
 
     private func post(
         _ app: Application, body: String, token: String, accept: String
-    ) async throws -> TestingHTTPResponse {
+    ) async throws -> TestResponse {
         try await app.asyncSendRequest(
             .POST, "/mcp",
             headers: [

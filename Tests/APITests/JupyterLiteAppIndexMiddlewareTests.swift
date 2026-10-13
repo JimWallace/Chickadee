@@ -22,7 +22,7 @@ import VaporTesting
 
     @Test func bareNotebooksDirReturnsSelfClosingPage() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/jupyterlite/notebooks?path=users%2Fx%2Fassignment.ipynb"
             ) { res async in
                 #expect(res.status == .ok)
@@ -35,7 +35,7 @@ import VaporTesting
 
     @Test func trailingSlashAlsoSelfCloses() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/lab/") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/lab/") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string.contains("window.close()"))
                 #expect(res.headers.first(name: "Location") == nil)
@@ -45,7 +45,7 @@ import VaporTesting
 
     @Test func indexHtmlPassesThrough() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/notebooks/index.html") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string == "NOTEBOOKS_INDEX")
             }
@@ -56,7 +56,7 @@ import VaporTesting
         try await withApp(try await makeApp()) { app in
             // e.g. /jupyterlite/notebooks/api/contents/… — more than two
             // components, so it is NOT a bare app dir and must fall through.
-            try await app.testing().test(.GET, "/jupyterlite/notebooks/api/contents/x") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/notebooks/api/contents/x") { res async in
                 #expect(res.status == .notFound)  // no route → 404, NOT a redirect
             }
         }
@@ -65,7 +65,7 @@ import VaporTesting
     @Test func nonAppDirPassesThrough() async throws {
         try await withApp(try await makeApp()) { app in
             // /jupyterlite/build/… is a vendored asset tree, not an app dir.
-            try await app.testing().test(.GET, "/jupyterlite/build/100.abc.js") { res async in
+            try await app.asyncTest(.GET, "/jupyterlite/build/100.abc.js") { res async in
                 #expect(res.status == .notFound)
             }
         }

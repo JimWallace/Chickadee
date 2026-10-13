@@ -15,7 +15,7 @@ import VaporTesting
     @Test func theTwoSurfacesKeepSeparateSlots() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let req = makeTestRequest(on: app)
             #expect(req.mcpPrincipal == nil)
             #expect(req.adminMcpPrincipal == nil)
 

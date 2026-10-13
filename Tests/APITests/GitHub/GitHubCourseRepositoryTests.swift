@@ -178,7 +178,7 @@ import VaporTesting
     }
 
     private func get(
-        _ path: String, cookie: String, _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ path: String, cookie: String, _ check: @escaping (TestResponse) throws -> Void
     )
         async throws
     {
@@ -189,7 +189,7 @@ import VaporTesting
     @discardableResult
     private func post(
         _ path: String, form: [String: String] = [:], cookie: String,
-        _ check: @escaping (TestingHTTPResponse) throws -> Void
+        _ check: @escaping (TestResponse) throws -> Void
     ) async throws -> String {
         let (token, bound) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         var next = bound
@@ -658,7 +658,7 @@ import VaporTesting
             let link = try #require(try await APIGitHubAccountLink.query(on: app.db).first())
 
             await GitHubCourseAccess.moveCollaborators(
-                to: link, req: Request(application: app, on: app.eventLoopGroup.any()))
+                to: link, req: makeTestRequest(on: app))
             #expect(seen("remove:") == ["remove:\(Self.made.fullName):classmate"])
             #expect(seen("invite:") == ["invite:\(Self.made.fullName):octo-student"])
             #expect(

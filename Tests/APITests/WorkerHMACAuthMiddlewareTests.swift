@@ -55,7 +55,7 @@ import VaporTesting
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -69,7 +69,7 @@ import VaporTesting
 
     @Test func rejectsMissingHeaders() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, "/internal/worker/ping",
                 beforeRequest: { req async in
                     req.headers.contentType = .json
@@ -94,7 +94,7 @@ import VaporTesting
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -120,7 +120,7 @@ import VaporTesting
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -130,7 +130,7 @@ import VaporTesting
                     #expect(res.status == .ok)
                 })
 
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -156,7 +156,7 @@ import VaporTesting
         headers.replaceOrAdd(name: "X-Worker-Signature", value: "deadbeef")
 
         try await withApp(try await makeApp()) { app in
-            try await app.testing().test(
+            try await app.asyncTest(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -184,7 +184,8 @@ import VaporTesting
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.asyncTest(
+                method: .running(hostname: "localhost", port: 0),
                 .POST,
                 path,
                 headers: headers,
@@ -209,7 +210,8 @@ import VaporTesting
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.asyncTest(
+                method: .running(hostname: "localhost", port: 0),
                 .POST,
                 path,
                 headers: headers,

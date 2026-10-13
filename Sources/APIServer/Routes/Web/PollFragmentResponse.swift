@@ -77,16 +77,4 @@ extension Response {
         let hex = digest.map { String(format: "%02x", $0) }.joined()
         return "W/\"\(hex.prefix(32))\""
     }
-
-    // The `ByteBuffer` forms forward to the `String` forms. Only the tests
-    // call them; they go when those tests pass a `String`
-    // (docs/vapor-5-migration.md).
-
-    static func pollFragment(html: ByteBuffer, csrfToken: String? = nil, for req: Request) -> Response {
-        pollFragment(html: String(buffer: html), csrfToken: csrfToken, for: req)
-    }
-
-    static func weakETag(for buffer: ByteBuffer, ignoring csrfToken: String? = nil) -> String {
-        weakETag(for: String(buffer: buffer), ignoring: csrfToken)
-    }
 }

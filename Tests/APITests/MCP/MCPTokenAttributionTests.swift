@@ -42,7 +42,7 @@ import VaporTesting
                 subject: "instructor-jane", scopes: [.read, .write],
                 issuer: issuer, audience: resource, ttlSeconds: 3600,
                 clientID: "agent-xyz", agentName: "Claude Course Bot")
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/whoami", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .ok)
@@ -57,7 +57,7 @@ import VaporTesting
             let token = try await authority.mint(
                 subject: "service-bot", scopes: [.read],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
-            try await app.testing().test(
+            try await app.asyncTest(
                 .GET, "/whoami", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .ok)

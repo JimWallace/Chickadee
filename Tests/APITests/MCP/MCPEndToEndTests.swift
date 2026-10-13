@@ -29,7 +29,7 @@ import VaporTesting
         return (app, authority)
     }
 
-    private func post(_ app: Application, body: String, token: String) async throws -> TestingHTTPResponse {
+    private func post(_ app: Application, body: String, token: String) async throws -> TestResponse {
         try await app.asyncSendRequest(
             .POST, "/mcp",
             headers: ["Content-Type": "application/json", "Authorization": "Bearer \(token)"],
@@ -154,7 +154,7 @@ import VaporTesting
     @Test func discoveryMetadataIsReachableWithoutAToken() async throws {
         let (app, _) = try await makeMCPApp()
         try await withApp(app) { app in
-            try await app.testing().test(.GET, "/.well-known/oauth-protected-resource") { res async in
+            try await app.asyncTest(.GET, "/.well-known/oauth-protected-resource") { res async in
                 #expect(res.status == .ok)
                 let body = String(buffer: res.body)
                 #expect(body.contains("\"resource\""))

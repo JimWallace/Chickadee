@@ -46,8 +46,11 @@ Each step is safe on Vapor 4 and does not change behaviour.
 | Lifecycle hooks are async | `Services/PeriodicSweepMonitor.swift`, `Services/ServerHealthAlertService.swift` | Rename `didBootAsync` to `didBoot` and `shutdownAsync` to `shutdown`. The synchronous `boot()` does not run async hooks, so boot with `execute()` or `asyncBoot()`. |
 | One request-body decode | `Helpers/Request+DecodeContent.swift` | Add `await` inside this one helper. Every call site already awaits it. |
 | One client-body read and decode | `Helpers/ClientResponse+Body.swift` | Change this one file for the new client body. Every decode already awaits it. |
-| Poll fragments take a `String` | `Routes/Web/PollFragmentResponse.swift` | No `ByteBuffer` at the call sites. |
-| A guard keeps it so | `scripts/check-vapor5-readiness.sh` | `format-lint` fails on new event-loop API or on `content.decode` outside the two helpers. |
+| Poll fragments take a `String` | `Routes/Web/PollFragmentResponse.swift` | No `ByteBuffer` in its API. |
+| One test seam | `Tests/APITests/TestRequests.swift` | Re-implement its names on the Vapor 5 `TestClient` (see "The tests"). |
+| Poll fragments in the tests | `PollFragmentResponseTests`, `PollFragmentCSRFTests` | They pass a `String`. |
+| The macOS floor | `Package.swift` | It is `.macOS("26.2")`, the Vapor 5 minimum. No change. |
+| A guard keeps it so | `scripts/check-vapor5-readiness.sh` | `format-lint` fails on new event-loop API, on `content.decode` outside the two helpers, and on a test that uses VaporTesting or builds a `Request` outside the seam. |
 
 ---
 
@@ -86,8 +89,26 @@ a change now would be done again at the move.
 
 ### The tests
 
-`Tests/APITests/TestApp.swift` holds the test helpers. Chickadee's own
-`withApp(_:_:)` and the Vapor 5 `withApp(configure:_:)` have different
-signatures. Tests that build a `Request` on an event loop, and the
-`ByteBuffer` forms of `Response.pollFragment` and `Response.weakETag`, change
-at the move.
+The test target reaches VaporTesting through one file,
+`Tests/APITests/TestRequests.swift`:
+
+- `app.asyncTest` and `app.asyncSendRequest` send every request. Their
+  closures are async, as in Vapor 5.
+- `TestRequest` and `TestResponse` name the request and response types.
+- `makeTestRequest(on:method:url:headers:)` builds the `Request` that code under
+  test takes, which is the only place a test names an event loop.
+- `asyncTest` boots with `asyncBoot()`, so the async lifecycle hooks run in
+  tests as they do in production and in Vapor 5.
+
+At the move, re-implement those names on the Vapor 5 `TestClient`. The guard
+fails on a direct use under `Tests/` elsewhere.
+
+Left for the move:
+
+- Chickadee's own `withApp(_:_:)` and the Vapor 5 `withApp(configure:_:)` have
+  different signatures, so they do not collide. Keep both names.
+- Three Vapor `Client` stand-ins (`BrightSpaceVerbDispatchTests`,
+  `GitHub/ScriptedGitHubClient`, `GitHub/GitHubTransportTests`) and two Fluent
+  `Database` stand-ins (`CourseCloneCleanupTests`,
+  `CourseBundleImportCleanupTests`) return futures. They implement the Vapor 4
+  and Fluent 4 protocols, so they change with those protocols.
