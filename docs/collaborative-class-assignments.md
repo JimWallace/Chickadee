@@ -138,8 +138,9 @@ Two platform constraints bind here:
   `gradingMode: browser` combined with a non-empty `graderOnlyFiles` is refused
   at all three authoring doors — the zip upload
   (`TestSetupRoutes.swift`), MCP `set_grading_mode`, and MCP `author_script` —
-  with the streaming filter and `manifestWithGraderOnlyFilesStripped` as
-  backstops for setups predating the rule. So an instructor marks the variant
+  with the streaming filter and the browser manifest endpoint, which serves
+  only the runner contract (`browserRunnerManifestJSON`), as backstops for
+  setups predating the rule. So an instructor marks the variant
   implementations `graderOnly` and browser grading becomes unavailable by
   construction. Nothing to build; the constraint is an authoring instruction.
   Worker grading is safe on the other side too: `GET /api/v1/testsetups/:id/download`

@@ -361,17 +361,15 @@ Phase 3 must ship in a release before phase 4 (constraint 2).
   `TestProperties.encode(to:)` must stay the v1 writer:
   `RunnerManifest.encode` uses it, and that is what keeps the runner wire v1.
 - These read the stored text and pass it on without a decode, so each must
-  serve v1 or accept v2 on purpose: `manifestWithGraderOnlyFilesStripped`
-  (returns the stored text when there is nothing to strip), the MCP manifest
+  serve v1 or accept v2 on purpose: the MCP manifest
   resource (`MCPResourceProvider`, whose description names v1 keys), bundle
   export, and version snapshots with `RestoreAssignmentVersionTool`.
   `mutateManifestJSON` compares bytes only, so it needs no change.
-- `GET /api/v1/browser-runner/testsetups/:id/manifest` serves the stored text
-  to `Public/browser-runner.js`, which reads `testSuites`, `sections` and
-  `timeLimitSeconds`. It must serve the v1 form. The endpoint now strips only
-  `graderOnlyFiles`, so it also sends expression source and other authoring
-  data to the student's browser. Serving the `RunnerManifest` form would fix
-  both, if the browser needs no other field.
+- `GET /api/v1/browser-runner/testsetups/:id/manifest` serves the
+  `RunnerManifest` form (`browserRunnerManifestJSON`), so it is v1 whatever
+  is stored. It used to serve the stored text with only `graderOnlyFiles`
+  removed, which sent expression source and other authoring data to the
+  student's browser; that was fixed on its own, outside these phases.
 - `BackfillDeclaredLanguage` edits manifest JSON as a dictionary. It needs no
   change: a migration runs once per database, it has run on every existing
   database, and a fresh database has no manifests when it runs.
