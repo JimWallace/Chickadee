@@ -180,6 +180,16 @@ func workingCopyMtimeEpoch(absolutePath: String) -> Int {
     return Int(mtime.timeIntervalSince1970)
 }
 
+/// Returns `userID`'s working copy at `relativePath`, seeding it on first use.
+///
+/// An existing copy is returned untouched, which is what keeps a student's
+/// work across visits. With `refreshFromSeed`, the copy is instead rebuilt
+/// from the seed on every call and rewritten only when its bytes differ, so
+/// the viewer always opens the stored notebook as it is now. Course staff open
+/// the starter and the solution this way: their copy is a view of the stored
+/// notebook, and a stale one would be saved back over a newer version. An
+/// unchanged copy keeps its mtime, so the editor keeps the in-browser edits it
+/// holds; a rewritten one moves the mtime, and the editor reloads it.
 func ensureUserNotebookWorkingCopy(
     setupID: String,
     userID: UUID,
@@ -187,6 +197,7 @@ func ensureUserNotebookWorkingCopy(
     relativePath: String? = nil,
     defaultData: Data? = nil,
     overwriteWith: Data? = nil,
+    refreshFromSeed: Bool = false,
     viewMode: NotebookViewMode = .personalized,
     on db: any Database,
     application: Application,
@@ -222,7 +233,7 @@ func ensureUserNotebookWorkingCopy(
         else { return nil }
         return data
     }
-    if let existingData = existingWorkingCopy {
+    if let existingData = existingWorkingCopy, !refreshFromSeed {
         // Symlinks are idempotent — run on every visit so existing working copies
         // also pick up support files when the feature is first deployed.
         await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
@@ -274,6 +285,16 @@ func ensureUserNotebookWorkingCopy(
         case .template:
             seedData
         }
+
+    if let existingData = existingWorkingCopy {
+        if existingData == processedData {
+            await createSupportFileSymlinks(setup: fallbackSetup, studentDir: workingCopyDir, application: application)
+            await writeDatasetFiles(
+                setup: fallbackSetup, userID: userID, studentDir: workingCopyDir, on: db, application: application)
+            return existingData
+        }
+        logger.info("working_copy_refreshed setup=\(setupID) user=\(userID.uuidString) path=\(resolvedRelativePath)")
+    }
 
     try await runBlocking(app: application) {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
