@@ -261,6 +261,10 @@ public struct PersonalizationExpression: Codable, Equatable, Sendable {
 
 /// Top-level manifest describing how to build and test a submission.
 public struct TestProperties: Codable, Equatable, Sendable {
+    /// The `schemaVersion` that the v1 form carries.  `ManifestV2` holds v2.
+    public static let v1SchemaVersion = 1
+    /// The version this value was read from: 1 or 2.  The v1 encoder writes
+    /// 1 whatever this holds.
     public var schemaVersion: Int
     public var gradingMode: GradingMode
     /// How students hand work in — see `SubmissionMode`. `.uploadOnly`
@@ -609,6 +613,12 @@ public struct TestProperties: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        // The v2 form has its own shape (docs/manifest-format-v2.md).  Every
+        // other version is read as v1, as it always was.
+        if schemaVersion == ManifestV2.schemaVersion {
+            self = try ManifestV2(from: decoder).testProperties
+            return
+        }
         gradingMode = try c.decodeIfPresent(GradingMode.self, forKey: .gradingMode) ?? .worker
         // Absent on every manifest written before the field existed; those all
         // predate upload-only assignments, so they are notebook assignments.
@@ -692,7 +702,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(schemaVersion, forKey: .schemaVersion)
+        // Always 1: this is the v1 form, whatever version the value was read
+        // from.  A value read from v2 and written here must read back as v1.
+        try c.encode(Self.v1SchemaVersion, forKey: .schemaVersion)
         try c.encode(gradingMode, forKey: .gradingMode)
         try c.encode(submissionMode, forKey: .submissionMode)
         if githubSubmission {

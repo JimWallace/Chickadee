@@ -325,6 +325,57 @@ import VaporTesting
         }
     }
 
+    /// Phase 3 of docs/manifest-format-v2.md: the upload accepts a v2
+    /// manifest.  This one gets past the version gate and is refused by the
+    /// minimum-runner-version check after it, which proves that the gate let
+    /// version 2 through.  Version 3 is refused at the gate.
+    @Test(arguments: [
+        (2, "minimumRunnerVersion"),
+        (3, "Unsupported schemaVersion 3"),
+    ])
+    func uploadVersionGateAcceptsVersionTwo(version: Int, expectedReason: String) async throws {
+        try await withApp(app) { _ in
+            let fx = try await setupInstructorWithBothCourses(
+                activeCode: "LCV\(version)", archivedCode: "LCW\(version)")
+
+            let boundary = "LCVersion"
+            let manifest =
+                #"{"schemaVersion":"# + String(version)
+                + #","gradingMode":"worker","testSuites":[{"tier":"public","script":"t.sh"}],"minimumRunnerVersion":"not-a-version"}"#
+            var body = ByteBufferAllocator().buffer(capacity: 512)
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
+            body.writeString(fx.csrf)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"manifest\"\r\n\r\n")
+            body.writeString(manifest)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"courseID\"\r\n\r\n")
+            body.writeString(fx.active.courseID.uuidString)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString(
+                "Content-Disposition: form-data; name=\"files\"; filename=\"setup.zip\"\r\n"
+                    + "Content-Type: application/zip\r\n\r\n")
+            body.writeString("PK")
+            body.writeString("\r\n--\(boundary)--\r\n")
+
+            try await app.asyncTest(
+                .POST, "/api/v1/testsetups",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
+                    req.body = .init(buffer: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .unprocessableEntity)
+                    #expect(
+                        res.body.string.contains(expectedReason),
+                        "schemaVersion \(version) should be refused for \(expectedReason), got: \(res.body.string)")
+                })
+        }
+    }
+
     // MARK: - updateNewAssignmentDraft — a foreign/archived course's draft by draftID
 
     @Test func updateNewAssignmentDraftBlockedForArchivedCourseDraft() async throws {
