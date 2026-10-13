@@ -1,6 +1,6 @@
 <!-- Icon sprite: every icon in the UI, once (UI audit S4).
 
-     Rendered inline at the top of the body by base.leaf. A call site is a
+     Rendered inline at the top of the body by BaseLayout. A call site is a
      svg carrying class "icon" wrapping a use element whose href is a same-page
      fragment naming one of the symbol ids below; copy a live one rather than
      working from this description. Same-document use is deliberate: an external

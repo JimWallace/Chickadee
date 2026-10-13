@@ -5,9 +5,6 @@
 // renders it as the whole page, and `WorkbenchPage` renders it in its
 // right-hand pane. It takes plain values and no request.
 //
-// `_notebook-body.leaf` is no longer served. It stays only because the
-// exemplar `workbench.leaf` extends it.
-//
 // Every id, data attribute, iframe attribute and script tag here is read by
 // `Public/notebook*.js`, `Public/browser-runner.js` and the isolation
 // middleware. Change none of them without changing their readers.
@@ -88,8 +85,8 @@ struct NotebookBody: HTML {
                     .tabindex(-1)
                 ) {}
                 div(.class("notebook-actions")) {
-                    // Leaf put each control on its own line; the " " after
-                    // each one keeps the spaces between them.
+                    // The " " after each control keeps the spaces between
+                    // them.
                     headerNotice
                     " "
                     if let viewToggleURL, !embedded {

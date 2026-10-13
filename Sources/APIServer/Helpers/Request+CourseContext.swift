@@ -1,7 +1,7 @@
 // APIServer/Helpers/Request+CourseContext.swift
 //
 // The per-request resolution of the user's active course and the
-// Leaf-encodable user context built from it.
+// user context built from it.
 
 import Core
 import Fluent
@@ -25,7 +25,7 @@ private struct ResolvedCourseStateStorageKey: StorageKey {
 }
 
 extension Request {
-    /// Returns a Leaf-encodable snapshot of the current user for view contexts.
+    /// Returns an encodable snapshot of the current user for view contexts.
     ///
     /// Prefers the course-aware context resolved once per request by
     /// `NavCourseContextMiddleware`, so the nav's Instructor link and course

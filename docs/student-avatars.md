@@ -304,10 +304,11 @@ the change.
 The repo's UI guards decide the mechanism here, and they decide it well.
 
 `check-styles.sh` guard S4 fails on raw SVG path data in any template or in
-`Public/*.js` — every icon lives once in the `_icons.leaf` sprite and call sites
-reference it. So the chickadee parts go in a sprite as symbols (a separate
-`_avatar-sprite.leaf`, included by the pages that render avatars rather than by
-`base.leaf`, since most pages need none of it), and one avatar is a stack of
+`Public/*.js` — every icon lives once in the `Resources/Sprites/icons.svg`
+sprite and call sites reference it. So the chickadee parts go in a sprite as
+symbols (a separate `Resources/Sprites/avatar-sprite.svg`, included by the
+pages that render avatars rather than by the layout, since most pages need
+none of it), and one avatar is a stack of
 about eight `use` elements.
 
 Colour comes from CSS custom properties set on the wrapping element —
@@ -326,9 +327,8 @@ What this buys, concretely: no image pipeline, no PNG generation, no cache, no
 CDN, no new bytes per student. Rendering is a table lookup and string
 concatenation. Recolouring for dark mode is free and happens in CSS.
 
-Swift builds the layer list and the custom-property string; `_avatar.leaf` takes
-it as a sub-context (the bare-second-parameter `extend` form, not the labelled
-`with:` form, which does not lex) and loops. Leaf makes no decisions.
+Swift builds the layer list and the custom-property string; the `Avatar` view
+takes it as an `AvatarPresentation` and loops. The view makes no decisions.
 
 **Sizes.** The account page gets 3rem; a dense row gets `.avatar-sm` at
 1.5rem. (Five sizes exist now; `AvatarSize` and `docs/ui-design.md` list them.)
@@ -420,7 +420,7 @@ written and expensive afterwards, once students are wearing the results.
 
 ### 7. What drawing it actually taught
 
-The art for the colour slots exists (`Resources/Views/_avatar-sprite.leaf`,
+The art for the colour slots exists (`Resources/Sprites/avatar-sprite.svg`,
 the `--avatar-*` palette in `Public/styles.css`, and
 `Tools/avatar-preview/preview.mjs`, which renders a contact sheet from those two
 files rather than from a copy of them). What follows is what the drawing changed, since
@@ -541,7 +541,7 @@ every later read.
 ### 8. Seed to bird, bird to page
 
 `Core/AvatarSpec.swift`, `Core/AvatarHandle.swift` and `Core/AvatarMarkup.swift`
-are the model; `AvatarStore` materializes; `_avatar.leaf` renders.
+are the model; `AvatarStore` materializes; the `Avatar` view renders.
 
 ```swift
 let spec = AvatarSpec.drawn()                    // first use, system RNG
@@ -700,7 +700,7 @@ exists.
 
 The art is expected to move. What that costs, and what it cannot break:
 
-1. **Edit `Resources/Views/_avatar-sprite.leaf`.** It is the only file with
+1. **Edit `Resources/Sprites/avatar-sprite.svg`.** It is the only file with
    geometry. The body is a circle of radius 22 at (32, 35) in a 64×64 viewBox
    and every boundary is computed against it, so a change to the body means
    recomputing the cap, wing and belly edges rather than nudging them by eye.
@@ -747,7 +747,7 @@ Each slice is independently mergeable and independently useful.
 - **S2 — the account page, colour slots only.** The drawing half is **done**:
   eleven symbols, the `--avatar-*` tokens with dark mirrors, the
   component-vocabulary entry, and the contact-sheet tool. 92,160 birds. What
-  the wiring is done too: `_avatar.leaf` takes an `AvatarPresentation`
+  the wiring is done too: the `Avatar` view takes an `AvatarPresentation`
   sub-context and the monogram is gone — the helper, the CSS, its
   component-vocabulary entry and its tests with it. The visual-regression
   baseline (`student-account--light.png` and its dark twin) is committed.

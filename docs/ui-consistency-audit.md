@@ -1,5 +1,9 @@
 # UI Consistency Audit — the widget layer (2026-08)
 
+> Status: a dated audit. The `.leaf` file and line citations are from August
+> 2026. The templates are now deleted, and every page is a Swift view under
+> `Sources/APIServer/Views/`.
+
 An audit of the web UI one level above the design tokens: interactive
 widgets, page skeletons, and the JavaScript behaviours behind them. The
 token layer (colour / type / radius / spacing) is already guarded by

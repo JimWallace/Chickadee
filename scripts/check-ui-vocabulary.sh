@@ -40,8 +40,12 @@ set -euo pipefail
 #      docs, and the guard's job is to make that trade visible at the moment
 #      it is made.
 #
-# Scope: Public/styles.css + Resources/Views/*.leaf.  Rule 2 also reads page
-# <style> blocks, since an idiom hides just as well in one.
+# Scope: rules 1 and 2 read Public/styles.css, and rule 2 also reads the
+# Elementary views' PageStyle blocks, since an idiom hides just as well in one.
+# Rule 3 reads the HTML strings that first-party Public/*.js builds; the title
+# of a page rendered from Swift is held to the same cap on the rendered markup
+# by ElementaryPageGuardTests.hoverTextStaysShort, which a source scan cannot
+# match (it sees every title, interpolated or not).
 #
 # The three of these together would have failed the change that prompted
 # them; see docs/ui-design.md "Interaction idioms" and "UI copy".
@@ -245,7 +249,6 @@ line-through:a superseded value
 none:strip an underline the browser added"
 
 style_sources=("$sheet")
-while IFS= read -r f; do style_sources+=("$f"); done < <(ls Resources/Views/*.leaf 2>/dev/null || true)
 # Elementary views with page CSS (scripts/lib/css.sh).
 while IFS= read -r f; do style_sources+=("$f"); done < <(swift_page_style_files)
 
@@ -302,26 +305,31 @@ check_affordance "text-decoration" "$TEXT_DECORATION_REGISTRY" "text-decoration"
 # about any particular string.
 TITLE_WORD_CAP=20
 
+# Two spellings of one attribute: `title="…"` in an HTML string that
+# Public/*.js builds, and `.title("…")` in an Elementary view. The rendered
+# check (ElementaryPageGuardTests.hoverTextStaysShort) sees only the branches
+# its fixtures reach; this sees every literal in the source. A value built
+# from data (a JS concatenation or template slot, a Swift interpolation)
+# renders to unknown length, and the budget is on the prose an author wrote,
+# so it is out of scope here and in scope for the rendered check.
+title_sources=(Public/*.js)
+while IFS= read -r f; do title_sources+=("$f"); done < <(swift_view_files)
 long_titles="$(
   awk -v cap="$TITLE_WORD_CAP" '
-    FNR == 1 { inscript = 0 }
-    /<script/ { inscript = 1 } /<\/script>/ { inscript = 0 }
-    inscript { next }
     {
       line = $0
-      while (match(line, /title="[^"]*"/)) {
-        t = substr(line, RSTART + 7, RLENGTH - 8)
+      while (match(line, /(title="[^"]*"|\.title\("[^"]*"\))/)) {
+        t = substr(line, RSTART, RLENGTH)
         line = substr(line, RSTART + RLENGTH)
-        # Leaf interpolation renders to unknown length; the budget is on the
-        # prose an author wrote, so a value-bearing title is out of scope.
-        if (t ~ /#\(/) continue
+        sub(/^(\.title\(|title=)"/, "", t); sub(/"\)?$/, "", t)
+        if (t ~ /\$\{|\\\(|'"'"' *\+|\+ *'"'"'/) continue
         n = split(t, w, /[ \t]+/)
         words = 0
         for (i = 1; i <= n; i++) if (w[i] != "") words++
         if (words > cap) printf "%s:%d  (%d words)  %s\n", FILENAME, FNR, words, t
       }
     }
-  ' Resources/Views/*.leaf 2>/dev/null || true
+  ' "${title_sources[@]}" 2>/dev/null || true
 )"
 
 if [ -n "$long_titles" ]; then

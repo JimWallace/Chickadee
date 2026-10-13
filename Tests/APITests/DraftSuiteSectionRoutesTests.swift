@@ -440,7 +440,7 @@ import VaporTesting
         }
     }
 
-    /// The suite-section shells are one partial (`_suite-sections.leaf`)
+    /// The suite-section shells are one view (`SuiteSections`)
     /// shared with the assignment edit body. The two surfaces differ only in
     /// where the per-section forms post and whether they carry
     /// `data-ck-inplace`, so this asserts the create page's *URLs*, not merely

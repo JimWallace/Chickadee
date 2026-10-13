@@ -420,7 +420,7 @@ import VaporTesting
                     req.headers.add(name: .cookie, value: cookie)
                 },
                 afterResponse: { res in
-                    // 500 is expected — Leaf not configured in tests — but middleware passed.
+                    // The middleware passed; the page itself is not under test here.
                     #expect(res.status != .unauthorized)
                     #expect(res.status != .forbidden)
                     #expect(res.status != .notFound)

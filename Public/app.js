@@ -1,5 +1,5 @@
 // CSRF tokens: use ChickadeeUI.getCsrfToken() (Public/chickadee-ui.js,
-// loaded from base.leaf's <head>, so it is available everywhere).  The old
+// loaded from the layout's <head>, so it is available everywhere).  The old
 // bare-global alias that lived here was retired in the 0.5 cleanup once the
 // last callers moved to the namespaced form.
 

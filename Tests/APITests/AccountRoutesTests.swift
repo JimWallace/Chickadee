@@ -135,8 +135,8 @@ import VaporTesting
     /// The bird reaches the page, from the sprite through the partial.
     ///
     /// Worth an end-to-end assertion rather than trusting the unit tests: a
-    /// Leaf partial that fails to resolve, or an interpolation that lexes
-    /// differently than it reads, produces a page that still returns 200. The
+    /// view that drops a layer, or a value emitted literally instead of
+    /// interpolated, produces a page that still returns 200. The
     /// specific things checked are the ones that would be silently wrong — the
     /// sprite present, the five layers stacked, the wing fragment actually
     /// interpolated (not emitted literally), and the palette assigned as

@@ -1,10 +1,12 @@
 # UI Design Principles
 
 How Chickadee's web UI stays visually consistent, and how that consistency is
-*enforced* rather than remembered.  The web UI is Leaf templates + one global
-stylesheet (`Public/styles.css`); the render tests only prove pages render, so
-every rule here is backed by a static guard that runs in the `format-lint` CI
-job.  If a rule matters and has no guard, the history of this codebase says it
+*enforced* rather than remembered.  The web UI is Elementary views
+(`Sources/APIServer/Views/`) + one global stylesheet (`Public/styles.css`);
+the render tests only prove pages render, so every rule here is backed by a
+guard: a static check in the `format-lint` CI job, a SwiftLint rule, or
+`ElementaryPageGuardTests`, which applies the markup rules to every rendered
+page.  If a rule matters and has no guard, the history of this codebase says it
 will drift — 26 distinct font sizes and 18 distinct border radii had
 accumulated before the token pass consolidated them.
 
@@ -103,7 +105,7 @@ is black in both schemes).
 
 ## Page archetypes
 
-Every page extends `base.leaf` (nav, colour bar, course tabs, `main.main`)
+Every page renders inside `BaseLayout` (nav, colour bar, course tabs, `main.main`)
 and then follows ONE of these skeletons.  Don't invent an eighth shape —
 pick the archetype, and reuse its components.
 
@@ -118,87 +120,64 @@ them is the answer.
 
 | Archetype | Skeleton | Copy this | Also |
 |-----------|----------|-----------|------|
-| **Admin tabbed** | `.admin-version-banner` → the `_admin-tabs` partial → `.page-section` blocks, headings starting at `<h2>` | `alerts.leaf` | — |
-| **Instructor tabbed** | the `_instructor-tabs` partial → `.page-section` blocks | `instructor-mcp.leaf` | — |
-| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `admin-user.leaf` | — |
-| **Plain student page** | `<h1>` → content | `account.leaf` | — |
-| **Auth box** | `.auth-box` centred card | `register.leaf` | — |
-| **Body-partial shim** | an extend of a shared body partial, no markup of its own | `assignment-edit.leaf` | — |
-| **Full-bleed app** | `fullBleed` context flag; owns the viewport | `workbench.leaf` | — |
+| **Admin tabbed** | `AdminTabs` (the `.admin-version-banner`, the hidden `<h1>`, the tab bar) → `.page-section` blocks, headings starting at `<h2>` | `AlertsPage` | `AdminPage`, `AdminUsersPage`, `AdminAuditPage`, `AdminBrightspacePage`, `AdminGitHubPage`, `AdminLTIPage`, `AdminMCPPage`, `AdminRetentionPage`, `AdminStoragePage` |
+| **Instructor tabbed** | `InstructorTabs` → `.page-section` blocks | `InstructorMCPPage` | `AssignmentsPage`, `InstructorActivityPage`, `InstructorBrightspacePage`, `InstructorGitHubPage`, `InstructorLTIGradesPage`, `InstructorNewTermPage`, `InstructorSlipDaysPage`, `InstructorStudentsPage` |
+| **Titlebar page** | `.page-titlebar` (`<h1>` left, actions right) → optional `.page-subtitle` → content | `AdminUserPage` | `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`, `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`, `AssignmentNewPage` |
+| **Plain student page** | `<h1>` → content | `AccountPage` | `SubmitPage`, `EnrollPage`, `IndexPage`, `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage` |
+| **Auth box** | `.auth-box` centred card | `RegisterPage` | `LoginPage`, `OAuthConsentPage` |
+| **Body-partial shim** | `BaseLayout` around one shared body view, no markup of its own | `AssignmentEditPage` | `NotebookPage` |
+| **Full-bleed app** | `BaseLayout(fullBleed: true)`; owns the viewport | `WorkbenchPage` | `LeaderboardPresentPage` |
 
-Why each exemplar won its row: `alerts.leaf` carries no page script and the
+Why each exemplar won its row: `AlertsPage` carries no page script and the
 least page CSS of any admin page while still showing the whole skeleton;
-`instructor-mcp.leaf` uses no page-private class name at all;
-`admin-user.leaf` is the only page in its row that demonstrates the optional
-`.page-subtitle`; `account.leaf` is the only plain student page that groups
-its content in sections at all; `register.leaf` ties `login` on page CSS and
-private names and wins on having nothing auth-provider-specific to strip out;
-`assignment-edit.leaf` *is* its archetype in eight lines.  `workbench.leaf`
-is the sole full-bleed page and therefore its exemplar by default — it is
-also the least copyable file here, which is the honest reading of an
-archetype with one member.
+`InstructorMCPPage` uses no page-private class name at all;
+`AdminUserPage` is the only page in its row that demonstrates the optional
+`.page-subtitle`; `AccountPage` is the only plain student page that groups
+its content in sections at all; `RegisterPage` ties `LoginPage` on page CSS
+and private names and wins on having nothing auth-provider-specific to strip
+out; `AssignmentEditPage` *is* its archetype: `BaseLayout` around
+`AssignmentEditBody`.  `WorkbenchPage` is the sole page that uses the
+`fullBleed` flag and therefore its exemplar by default — it is also the least
+copyable page here, which is the honest reading of an archetype with one
+member.
 
 The pages in the **Also** column are the archetype too; they are just not
-the reference.
-
-During the Elementary migration (`docs/elementary-spike.md`), the column
-names only Leaf templates. `PageArchetypeTests` resolves each name to a
-`.leaf` file. These ported pages also follow an archetype:
-
-- Admin tabbed: `AlertsPage` and every `Admin*Page` that opens with `AdminTabs`.
-- Instructor tabbed: `AssignmentsPage` and every `Instructor*Page` that opens
-  with `InstructorTabs`.
-- Titlebar page: `AdminCoursePage`, `AdminRunnerPage`, `AssignmentFeedbackPage`,
-  `AssignmentSubmissionsPage`, `CourseStudentSubmissionsPage`, `InstructorEnrollCSVPage`,
-  and, as the nearest fit, `AssignmentNewPage` (its `.editor-titlebar` holds
-  the name input, not an `<h1>` in a `.page-titlebar`).
-- Auth box: `LoginPage`, `OAuthConsentPage`.
-- Plain student page: `SubmitPage`, `EnrollPage`, `IndexPage`, `AccountPage`,
-  `SubmissionPage`, `GitHubSubmitPage`, `LeaderboardPage`.
-- Full-bleed app: `WorkbenchPage` (`BaseLayout` with `fullBleed`, around
-  `AssignmentEditBody` and `NotebookBody`), and, as the nearest fit,
-  `LeaderboardPresentPage` (it owns the viewport through its own
-  `PresentLayout`, not the `fullBleed` flag).
-- Body-partial shim: `NotebookPage` (`BaseLayout` plus `NotebookBody`) and
-  `AssignmentEditPage` (`BaseLayout` plus `AssignmentEditBody`).
-
-The routes for `admin-user.leaf`, `register.leaf`, `alerts.leaf`,
-`instructor-mcp.leaf`, `account.leaf`, `assignment-edit.leaf` and
-`workbench.leaf` now render `AdminUserPage`, `RegisterPage`, `AlertsPage`,
-`InstructorMCPPage`, `AccountPage`, `AssignmentEditPage` and `WorkbenchPage`.
-The seven templates are not served. They stay only because the test reads them
-as exemplars. Five partials are not served either. They stay because the
-exemplars extend them: `_assignment-edit-body.leaf`, `_notebook-body.leaf`,
-and through the first, `_family-editor-body.leaf`, `_suite-sections.leaf` and
-`_value-cue-note.leaf`.
+the reference.  Two of them are the nearest fit rather than an exact one:
+`AssignmentNewPage`'s `.editor-titlebar` holds the name input, not an `<h1>`
+in a `.page-titlebar`, and `LeaderboardPresentPage` owns the viewport through
+its own `PresentLayout`, not the `fullBleed` flag.  The shim's body view is
+the page's whole content: `NotebookPage` is `BaseLayout` around `NotebookBody`,
+and the workbench renders `AssignmentEditBody` and `NotebookBody` in its two
+panes.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
-exemplar against its own row on every run.  It checks the exemplars and
-nothing else: no page fails for not being one.  It does hold them to
+exemplar against its own row on every run.  It reads each exemplar's renders
+in `ElementaryPageFixtures`, where the exemplar fixtures are marked
+`isExemplar`, and it fails when the flags and the table disagree.  A rule
+that names a page's own markup subtracts the shared body views the page
+embeds, so the shim and the workbench are judged on what they write, not on
+what `AssignmentEditBody` and `NotebookBody` write.  It checks the exemplars
+and nothing else: no page fails for not being one.  It does hold them to
 slightly more than the skeleton column asks of the archetype at large —
-`account.leaf` must keep grouping its content in `.page-section` blocks,
-though a one-form page like `submit` is a perfectly good plain student page
-without them.  That asymmetry is the point.  The archetype is the floor; the
-exemplar is the reference, and a reference that has quietly stopped
+`AccountPage` must keep grouping its content in `.page-section` blocks,
+though a one-form page like `SubmitPage` is a perfectly good plain student
+page without them.  That asymmetry is the point.  The archetype is the floor;
+the exemplar is the reference, and a reference that has quietly stopped
 demonstrating the full shape is worse than no reference, because it is still
-the file everyone copies.
+the page everyone copies.
 
 Anatomy rules that hold across archetypes:
 
-- **Flash banners render through the `_flash` partial** — never hand-rolled.
-  It emits `.flash-success role="status"` / `.flash-error role="alert"` from
-  the `flashSuccess` / `flashError` / `notice` context values.  Static state
-  banners use `.flash-neutral` / `.flash-warning` with `role="status"`.  In a
-  Swift view, pass `FlashMessages` to `BaseLayout` for the one-shot messages,
-  and write a state banner as `FlashBanner(.warning)` or
-  `FlashBanner(.neutral)`.  SwiftLint keeps the `flash-` classes in
+- **Flash banners render through `BaseLayout`** — never hand-rolled.  Pass
+  `FlashMessages` to `BaseLayout` for the one-shot messages.  It emits
+  `.flash-success role="status"` / `.flash-error role="alert"`.  Write a
+  static state banner as `FlashBanner(.warning)` or `FlashBanner(.neutral)`,
+  which carries `role="status"`.  SwiftLint keeps the `flash-` classes in
   `BaseLayout.swift`.
-- **Tab bars are the `_admin-tabs` / `_instructor-tabs` partials.**  The
-  active tab rides `activeAdminTab` / `activeInstructorTab`.  A Swift admin
-  page opens with `AdminTabs(active:page:)` instead, which also renders the
-  version banner, and a Swift instructor page opens with
-  `InstructorTabs(active:)`.
+- **Tab bars are the `AdminTabs` / `InstructorTabs` views.**  An admin page
+  opens with `AdminTabs(active:page:)`, which also renders the version
+  banner.  An instructor page opens with `InstructorTabs(active:)`.
 - **Headings are structural:** tabbed pages start their sections at `<h2>`
   (the tab bar is the page title); every other page has exactly one `<h1>`.
   Don't restyle a heading to fake a different level.
@@ -255,7 +234,7 @@ duplicate.
   `data-confirm` seam cancels the interaction, asks, and replays it on
   yes.  Never call the native one: `check-styles.sh` holds it at zero,
   as it does for native alerting.
-- **`_flash` partial** + `.flash-*` — see page anatomy above.
+- **`FlashMessages` / `FlashBanner`** + `.flash-*` — see page anatomy above.
 - **`.page-titlebar`** (+ `--baseline`), **`.page-subtitle`** — the page
   header row and its secondary line.  Cluster multiple left/right items
   inside with `.toolbar`.
@@ -360,11 +339,11 @@ duplicate.
   line is omitted when it would merely repeat the name.
 - **`.avatar`** and the `.av-*` part classes — the generated student chickadee.
   One `<svg>` carrying the size class wraps seven `<use>` elements naming
-  symbols in `_avatar-sprite.leaf`: backdrop, then — inside one group that
+  symbols in `Resources/Sprites/avatar-sprite.svg`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
   last, on top and untilted, the ring.
-  **A page that renders `_avatar` (Swift: `Avatar`) must also include
-  `_avatar-sprite` (Swift: `AvatarSprite`), once per page** — forget it and the page still returns 200 and shows an empty circle,
+  **A page that renders `Avatar` must also include `AvatarSprite`, once per
+  page** — forget it and the page still returns 200 and shows an empty circle,
   which no guard can catch.  Five colours are per-student
   (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
   assigned inline, which is the sanctioned form); `--av-border` colours a solid
@@ -594,7 +573,7 @@ duplicate.
   forms.  `.popover-panel` is the same shape for a row-anchored panel that
   is not a set/clear form; `app.js` floats both.
 - **`.nav`**, `.nav-brand`, `.nav-brand-logo`, `.nav-link` — the site header
-  in `base.leaf`, on every page.  `.nav-user`, `.nav-username`,
+  in `BaseLayout` (`SiteNav`), on every page.  `.nav-user`, `.nav-username`,
   `.nav-dropdown`, `.nav-dropdown-toggle`, `.nav-dropdown-caret`,
   `.nav-dropdown-menu`, `.nav-dropdown-item`, `.nav-dropdown-item-active` —
   the account menu; `app.js` toggles `.open` on the `.nav-dropdown`, and the
@@ -663,8 +642,9 @@ duplicate.
   inside `.page-titlebar`.  `.section-gap` adds the standard gap between
   stacked sections.
 - **`.icon`** — every inline stroked SVG icon, referencing a `<symbol>` in
-  `_icons.leaf` by `<use href="#i-…">`.  Geometry may appear in exactly two
-  files: that sprite, and `_avatar-sprite.leaf` for the avatar parts.
+  `Resources/Sprites/icons.svg` by `<use href="#i-…">`.  Geometry may appear
+  in exactly two files: that sprite, and `Resources/Sprites/avatar-sprite.svg`
+  for the avatar parts.
 - **`.textarea-mono`**, `.form-stack` — a monospace textarea and
   the stacked form column that usually holds one.
 
@@ -716,7 +696,7 @@ no second poller:
 
 | Attribute | What it says |
 |---|---|
-| `data-poll-url` | the server endpoint rendering the replacement, from the SAME partial or Swift view the page rendered inline |
+| `data-poll-url` | the server endpoint rendering the replacement, from the SAME view the page rendered inline |
 | `data-poll-interval` | milliseconds between polls (default 5000) |
 | `data-poll-swap` | `region` replaces the element's own contents; omitted replaces its `<tbody>` |
 | `data-poll-until` | an instant after which the poll stops for good; omitted polls while the tab is open |
@@ -786,7 +766,7 @@ Two renderings, chosen by what the reader is asking (UI audit S8):
 - **Human activity** — "last seen", "authorized", "last used", "fired",
   "completed", an activity feed — renders **relative** via
   `<td class="js-relative-time" data-iso="…">`, which
-  `Public/relative-time.js` (loaded from `base.leaf`) rewrites to "3 hours
+  `Public/relative-time.js` (loaded by `BaseLayout`) rewrites to "3 hours
   ago" and gives an absolute `title`.  The reader wants recency, and a
   relative value answers that at a glance.  A **countdown** (a token's
   expiry) is the same case: "in 3 days" beats a date.  The component
@@ -822,7 +802,7 @@ variants that exist nowhere and silently rendered as unstyled text.
 - **Behaviour-only hooks take the `js-` prefix** (`js-relative-time` is the
   house example) — the guard exempts them.  Pre-existing hooks are listed in
   `scripts/class-resolution-allowlist.txt`, which only shrinks.
-- **Leaf-interpolated class families** (`status-#{…}`-style names built from
+- **Interpolated class families** (`status-…`-style names built from
   enum values) are outside the grep's reach; they are pinned by
   `Tests/APITests/StatusClassStylesheetTests.swift`, which iterates the enum
   (`CaseIterable`) and asserts each minted selector exists.  A new
@@ -845,11 +825,11 @@ variants that exist nowhere and silently rendered as unstyled text.
 Page behaviour belongs in a **`Public/*.js` file**, loaded with
 `<script src>` — there it is ESLint-checked and unit-testable
 (`Tests/BrowserRunnerJSTests`).  Inline `<script>` blocks in templates are
-invisible to every tool (ESLint can't parse Leaf-interpolated JS), so the
-rule is **absolute** (guard 3b in `scripts/check-styles.sh`): no template
-may open a multi-line `<script>` body.  The 2026-08 conversion moved every
-page's blocks out, and #1516 retired the last holdout — `base.leaf`'s
-multipart-CSRF interceptor, now `/multipart-forms.js` — so the rule has no
+invisible to every tool (ESLint can't parse template-interpolated JS), so the
+rule is **absolute** (the CSP forbids inline script, and the render test
+fails on one): no page may open a multi-line `<script>` body.  The 2026-08
+conversion moved every page's blocks out, and #1516 retired the last
+holdout — the old base template's multipart-CSRF interceptor, now `/multipart-forms.js` — so the rule has no
 allowed file and no ratchet.
 
 The extraction pattern: the template carries page data — `data-*`
@@ -971,9 +951,6 @@ That one entry point runs, in order:
    document does not name is a shrink-only ratchet, `cursor` and
    `text-decoration` values come from the affordance registry, and hover text
    in a template stays within 20 words.
-7. `scripts/check-leaf-semantics.sh` — no Swift property access on a
-   collection (`rows.isEmpty`) and no `#//` line comment in a template; both
-   render without an error and resolve wrong.
 
 Interpolated class families are pinned by the Swift side instead:
 `swift test --filter StatusClassStylesheetTests`.
@@ -1004,7 +981,7 @@ The `ui-review` agent (`.claude/agents/ui-review.md`) reviews the layer
 above the guards: a construct that duplicates the vocabulary under another
 name, an idiom heavier than the cheapest that fits, copy over house length,
 a page that steps outside its archetype.  Run it from a Claude Code session
-on any change touching `Resources/Views/`, `Public/styles.css` or a
+on any change touching `Sources/APIServer/Views/`, `Public/styles.css` or a
 page-wiring `Public/*.js`; CI runs the same brief on every such pull request
 (`.github/workflows/ui-review.yml`) and fails the job on a `changes
 requested` verdict.

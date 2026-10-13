@@ -8,7 +8,7 @@
 // `<script id="check-schema">` seed; the browser engine in
 // `Public/notebook-check-editor.js` renders the form generically from it,
 // so the field definitions live in exactly one place instead of being
-// hand-coded a fourth time across two Leaf templates and the JS
+// hand-coded a fourth time across two templates and the JS
 // reset/populate/build switches.
 //
 // `formFields(for:)` is an exhaustive switch over `NotebookCheckKind`: a new

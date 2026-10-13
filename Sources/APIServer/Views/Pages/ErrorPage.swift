@@ -1,6 +1,6 @@
 // APIServer/Views/Pages/ErrorPage.swift
 //
-// The branded error page LeafErrorMiddleware renders for every browser route
+// The branded error page ErrorPageMiddleware renders for every browser route
 // that throws. It reads nothing from disk and cannot throw, so it still
 // renders when the rest of the app is broken.
 

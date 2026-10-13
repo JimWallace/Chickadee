@@ -228,9 +228,9 @@ struct LTIDeepLinkRoutes: RouteCollection {
     /// CSRF token. The frame carries no session cookie, and the forms carry the
     /// ticket or the bind token instead. Minting a CSRF token would write a
     /// secret to a new session and send a session cookie into the frame, which
-    /// a deep-linking launch must not do. The Leaf pages did, through the
-    /// `csrfToken` tag in `base.leaf`; the test app registers no such tag, so
-    /// the test that forbids the cookie could not see it.
+    /// a deep-linking launch must not do. The old Leaf pages did, through a
+    /// template tag the test app never registered, so the test that forbids
+    /// the cookie could not see it.
     private static func framedPage(_ req: Request) -> PageRequestContext {
         let security = req.application.securityConfiguration
         return PageRequestContext(

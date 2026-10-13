@@ -1,14 +1,13 @@
 // APIServer/Views/InstructorTabs.swift
 //
-// The instructor-area chrome from `_instructor-tabs.leaf`: the page's hidden
+// The instructor-area chrome: the page's hidden
 // h1 and the tab bar. Every instructor tabbed page opens with
 // `InstructorTabs`, and no other view writes the `instructor-tab` classes
 // (SwiftLint `elementary_tabs_only_in_component`).
 
 import Elementary
 
-/// One instructor page. The raw value is the `activeInstructorTab` value the
-/// Leaf pages set, so a Leaf page and a Swift page name a tab the same way.
+/// One instructor page. The raw value is the tab's name in the markup.
 enum InstructorTab: String, CaseIterable, Sendable {
     case overview, activity, students
     case slipDays = "slip-days"

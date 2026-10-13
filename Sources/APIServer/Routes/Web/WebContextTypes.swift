@@ -1,6 +1,6 @@
 // APIServer/Routes/Web/WebContextTypes.swift
 //
-// View-context structs used as Leaf template data for WebRoutes views.
+// View-context structs for the WebRoutes pages.
 // Extracted from WebRoutes.swift — no behaviour changes.
 
 import Core
@@ -68,7 +68,7 @@ struct TestSetupRow: Encodable {
     /// deadline passed inside the claim window, the viewer is a student with
     /// balance, and no staff extension stands in the way.
     /// The three per-row action gates.  These live here rather than as
-    /// conditions spelled out in Leaf because the Actions cell also needs to
+    /// conditions spelled out in the view because the Actions cell also needs to
     /// know whether it is offering *anything* (`hasAnyAction`), and two copies
     /// of the same four conditions would eventually disagree — rendering a
     /// dash beside live buttons, or buttons beside a dash.
@@ -77,7 +77,7 @@ struct TestSetupRow: Encodable {
     let showResetNotebookAction: Bool
     /// The OR of the three gates above plus `slipDayAvailable`.  Stored rather
     /// than computed because `Encodable` synthesis only encodes stored
-    /// properties, so a computed one would never reach Leaf; the builder
+    /// properties, so a computed one would not be encoded; the builder
     /// derives it from the gates rather than respelling their conditions.
     let hasAnyAction: Bool
     let slipDayAvailable: Bool
@@ -339,7 +339,7 @@ struct NotebookContext: Encodable {
     let workingCopyMtime: Int
     let currentUser: CurrentUserContext?
     /// True when this page is being rendered into a pane of the assignment
-    /// workbench rather than as a top-level document.  `base.leaf` reads it to
+    /// workbench rather than as a top-level document.  The layout reads it to
     /// suppress the site chrome (nav, colour bar, course tabs); the notebook
     /// page reads it to let the editor iframe fill the pane.  `nil` on every
     /// standalone render, which is what keeps the existing page byte-identical.
@@ -379,8 +379,7 @@ struct OutcomeRow: Encodable {
     let hint: String?  // instructor "💡 Hint" callout, present only on failing tests
     /// True on the FIRST non-passing row that has output, so its panel renders
     /// open while the rest stay closed.  A reader lands on the first thing to
-    /// fix without five stack traces unrolling at once, and Leaf cannot decide
-    /// "first" on its own — it has no state across a loop.
+    /// fix without five stack traces unrolling at once.
     var isFirstFailureOutput: Bool = false
 }
 
@@ -494,8 +493,7 @@ struct SubmissionContext: Encodable {
     let classGoals: [ClassGoalView]
     /// True iff `classGoals` is non-empty.  The template gates the "Class goals"
     /// heading on this explicit Swift-computed flag rather than
-    /// `!classGoals.isEmpty` in Leaf, so an empty goal list never leaks a bare
-    /// heading regardless of how the Leaf encoder represents an empty array.
+    /// `!classGoals.isEmpty` in the view (kept from the Leaf templates).
     let hasClassGoals: Bool
     /// True when this viewer may spend their secret-reveal token here:
     /// toggle on, manifest has secret tests, viewer is the (non-staff)

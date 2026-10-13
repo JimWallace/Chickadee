@@ -1,10 +1,12 @@
 # The same selector in two page blocks is a shared rule that belongs in
 # styles.css, where review sees it next to the component it may duplicate.
 guard="scripts/check-styles.sh"
-files="Resources/Views/_flash.leaf Resources/Views/base.leaf"
-description="the same selector in two page style blocks"
+files="Sources/APIServer/Views/SiteNav.swift Sources/APIServer/Views/BaseLayout.swift"
+description="the same selector in two Elementary PageStyle blocks"
 expect="defined in more than one page <style> block"
 apply() {
-    printf '<style>\n.guard-fixture-twin { padding: 1rem; }\n</style>\n' >> Resources/Views/_flash.leaf
-    printf '<style>\n.guard-fixture-twin { padding: 1rem; }\n</style>\n' >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = PageStyle("""\n    .guard-fixture-twin { padding: 1rem; }\n    """)\n' \
+        >> Sources/APIServer/Views/SiteNav.swift
+    printf 'let ckGuardFixture = PageStyle("""\n    .guard-fixture-twin { padding: 1rem; }\n    """)\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
 }

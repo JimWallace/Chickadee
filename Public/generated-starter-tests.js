@@ -18,9 +18,9 @@
 //     assignment and then reported "N test file(s) added to suite." from the
 //     count of files it had NOT written.
 //
-// Config is passed in rather than read from globals, so the page's Leaf
+// Config is passed in rather than read from globals, so the page's
 // conditionals (is there a draft? is there a solution notebook?) stay in the
-// template where they belong:
+// server-rendered view where they belong:
 //
 //   csrfToken          string
 //   draftID            string | null   — null before the first notebook upload

@@ -1,7 +1,7 @@
 // Tests/APITests/FailureDetailOptionCoverageTests.swift
 //
 // The two hand-written option lists in the browser editors — the family
-// editor's default select in `_family-editor-body.leaf` and the script
+// editor's default select in `FamilyEditorBody` (read from its render) and the script
 // editor's `FAILURE_DETAIL_OPTIONS` — must offer exactly the non-default
 // `FailureDetail` cases. A level added to the enum without an option here
 // would be settable only through MCP; an option here the enum lacks would be
@@ -10,6 +10,8 @@
 import Core
 import Foundation
 import Testing
+
+@testable import APIServer
 
 @Suite struct FailureDetailOptionCoverageTests {
 
@@ -27,14 +29,13 @@ import Testing
     }
 
     @Test func familyEditorSelectOffersEveryNonDefaultLevel() throws {
-        let leaf = try String(contentsOfFile: "Resources/Views/_family-editor-body.leaf", encoding: .utf8)
-        guard let start = leaf.range(of: "id=\"family-default-failure-detail\""),
-            let end = leaf.range(of: "</select>", range: start.upperBound..<leaf.endIndex)
-        else {
-            Issue.record("the family editor has no failure-detail select")
-            return
-        }
-        let block = String(leaf[start.lowerBound..<end.lowerBound])
+        let html = FamilyEditorBody().render()
+        let start = try #require(
+            html.range(of: "id=\"family-default-failure-detail\""), "the family editor has no failure-detail select")
+        let end = try #require(
+            html.range(of: "</select>", range: start.upperBound..<html.endIndex),
+            "the family editor's failure-detail select is never closed")
+        let block = String(html[start.lowerBound..<end.lowerBound])
         #expect(try tokens(in: block, pattern: #"<option value="([A-Za-z]*)""#) == expectedTokens)
     }
 

@@ -96,11 +96,14 @@ test('the failure-detail list stays in the renderer, where the Swift coverage te
 });
 
 test('both authoring pages load the classic core before the module renderer', async () => {
-  for (const file of ['Resources/Views/_assignment-edit-body.leaf', 'Sources/APIServer/Views/Pages/AssignmentNewPage.swift']) {
+  for (const file of ['Sources/APIServer/Views/AssignmentEditBody.swift', 'Sources/APIServer/Views/Pages/AssignmentNewPage.swift']) {
     const src = await fs.readFile(path.resolve(file), 'utf8');
     const core = src.indexOf('/test-renderer-script-core.js');
     const wiring = src.indexOf('/test-renderer-script.js');
     assert.ok(core >= 0 && wiring >= 0 && core < wiring, file + ' must load the core before test-renderer-script.js');
-    assert.ok(!src.includes('type="module" src="/test-renderer-script-core.js'), 'the core is a classic script, not a module');
+    assert.ok(
+      !/\.type\(\.module\),\s*\.src\([^)]*"\/test-renderer-script-core\.js"/.test(src),
+      'the core is a classic script, not a module',
+    );
   }
 });

@@ -7,8 +7,9 @@ Type=simple
 User=chickadee
 WorkingDirectory=/opt/chickadee
 # --env production is load-bearing, not decoration: Vapor defaults to
-# `development`, which disables Leaf's template cache, so every page render
-# re-reads and re-parses the templates from disk. The Docker entrypoint already
+# `development`, and the production-only checks then never run (the MCP
+# transport, for one, refuses to mount with its DNS-rebinding guards unset only
+# in production). The Docker entrypoint already
 # passes it; this unit did not, so a bare-metal deploy silently ran a
 # development-mode server.
 ExecStart=/opt/chickadee/.build/release/chickadee-server serve --env production --hostname 127.0.0.1 --port 8080

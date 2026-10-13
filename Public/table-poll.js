@@ -5,8 +5,8 @@
 //          data-poll-interval="5000">
 //
 // Every interval the table's <tbody> is replaced with freshly rendered rows
-// fetched from `data-poll-url` — HTML the SERVER renders from the same Leaf
-// partial the page itself used. Before this, three pages each rebuilt every
+// fetched from `data-poll-url` — HTML the SERVER renders from the same view
+// the page itself used. Before this, three pages each rebuilt every
 // row by concatenating HTML strings in an inline script, duplicating the
 // markup (role <select>s, CSRF fields, icon SVGs, a whole register-student
 // popover) in a second place that could drift from the template silently, and

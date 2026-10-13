@@ -775,7 +775,7 @@ import VaporTesting
             let boundary = "Boundary-BrowserFmt"
             let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
 
-            // Exact JSON that syncConfig() produces in assignment-new.leaf:
+            // Exact JSON that syncConfig() produces on the Create Assignment page:
             // extra fields (source, isIncluded) must be silently ignored by SuiteConfigRow.
             let suiteConfig = """
                 [

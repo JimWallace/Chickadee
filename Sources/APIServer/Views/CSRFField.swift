@@ -5,7 +5,7 @@
 
 import Elementary
 
-/// The hidden CSRF form field (`#csrfFormField()` in Leaf).
+/// The hidden CSRF form field.
 struct CSRFField: HTML {
     let token: String
 

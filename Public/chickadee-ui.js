@@ -11,7 +11,7 @@
 //   ChickadeeUI.getCsrfToken()  — reads <meta name="csrf-token">, falling
 //                                 back to the hidden _csrf form field
 //
-// Loaded from the <head> of base.leaf, so it is available to inline page
+// Loaded from the <head> of the layout (BaseLayout), so it is available to inline page
 // scripts and template-loaded modules, which execute during document parse
 // — BEFORE the scripts included at the end of <body> (app.js et al).
 //
@@ -204,7 +204,7 @@
     //
     // One error-message extractor for failed fetch bodies (#1126 — two
     // divergent copies used to flow through the same renderer ctx slot:
-    // one parsed JSON, the other scraped the Leaf error page).  Order:
+    // one parsed JSON, the other scraped the HTML error page).  Order:
     // JSON `{reason|error|message}` (the API endpoints), then the error
     // page's `<p class="error-message">`, else the (truncated) raw text.
     function extractErrorMessage(text) {

@@ -17,7 +17,7 @@
 services:
 
   # ----------------------------------------------------------------
-  # Server — Vapor API + Leaf web UI
+  # Server — Vapor API + web UI
   # ----------------------------------------------------------------
   server:
     build: .                              # used by `docker compose up --build` (local dev)

@@ -1,5 +1,5 @@
 // Unit tests for the core of Public/chickadee-ui.js — the module loaded from
-// base.leaf on EVERY page, and the one with the fewest tests relative to its
+// BaseLayout on EVERY page, and the one with the fewest tests relative to its
 // reach.
 //
 // This covers the utilities the rest of the frontend is built on: escaping,

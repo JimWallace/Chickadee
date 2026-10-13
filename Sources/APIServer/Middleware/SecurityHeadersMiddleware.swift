@@ -142,7 +142,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     ///   - 'unsafe-inline' is GONE from script-src (#1516, an AppScan High).
     ///     Chickadee's templates carry no executable inline script and no
     ///     inline event handler: the multipart interceptor that lived at the
-    ///     foot of `base.leaf` is now `/multipart-forms.js`, and the twelve
+    ///     foot of the old base template is now `/multipart-forms.js`, and the twelve
     ///     `onclick=` / `onchange=` one-liners became data attributes read by
     ///     delegated listeners in `app.js`.  `<script type="application/json">`
     ///     seeds are data blocks, which `script-src` does not govern.  Adding

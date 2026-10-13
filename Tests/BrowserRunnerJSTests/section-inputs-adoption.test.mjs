@@ -1,6 +1,6 @@
 // Guards the create page's adoption of the shared inputs modules.
 //
-// Until v0.5.x, Resources/Views/assignment-new.leaf carried its own
+// Until v0.5.x, the Create Assignment page's template carried its own
 // pre-v0.4.160 inline copy of the section-inputs editor. That copy's value
 // parser had no `=` branch, so a per-student expression typed into a section
 // input on the Create Assignment page was classified as a bare string and
@@ -8,7 +8,7 @@
 // `expressions` key entirely, which the draft endpoint coalesces to []. The
 // same keystrokes on the edit page created a real expression.
 //
-// These assertions fail against the pre-adoption template.
+// These assertions fail against the pre-adoption page.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,7 +26,7 @@ const Core = require('../../Public/inputs-editor-core.js');
 // Both authoring surfaces must reach section inputs through the same modules.
 const SECTION_INPUT_PAGES = [
   'Sources/APIServer/Views/Pages/AssignmentNewPage.swift',
-  'Resources/Views/_assignment-edit-body.leaf',
+  'Sources/APIServer/Views/AssignmentEditBody.swift',
 ];
 
 test('both authoring pages load the shared inputs modules', async () => {

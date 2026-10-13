@@ -48,7 +48,7 @@ The system has three responsibilities:
 │   executable       │        │  daemon process     │
 │                    │        │                     │
 │ REST API           │◄───────┤ polls /worker/      │
-│ Leaf web UI        │        │ request             │
+│ Web UI (Elementary)│        │ request             │
 │ Auth / sessions    │───────►│ receives Job        │
 │ DB (Fluent)        │        │ runs test scripts   │
 │ File storage       │◄───────┤ POST /worker/       │
@@ -107,7 +107,8 @@ Sources/
                             AssignmentLanguage, SlipDayPolicy, …
   APIServer/                Server library (tests link this, not the executable)
     Routes/                 REST + web route handlers
-      Web/                  Leaf-rendered instructor/admin/student pages
+      Web/                  Instructor/admin/student page routes
+    Views/                  Elementary views: layout, components, Pages/
     Middleware/             Auth, CSRF, HTTPS redirect, security headers, …
     Models/                 Fluent model classes (DB-mapped)
     Migrations/             Ordered migration chain
@@ -146,8 +147,8 @@ Each of those directories has one job, so a file goes where its imports say:
   a database module (#1730). The authoring validators throw
   `AuthoringValidationError`, so no file there imports Vapor (#1929).
 - `Helpers/` holds code that works with a `Request` or a database driver type.
-  The same script fails when a file there imports none of Vapor, Fluent and
-  Leaf and names no model, because such a file is pure (#2144).
+  The same script fails when a file there imports none of Vapor and Fluent
+  and names no model, because such a file is pure (#2144).
 - `Services/` holds code over models, a database and the application.
 - `Bootstrap/` holds app setup: the database configuration and the migration
   registry, the session driver, and the legacy migration-namespace guard.
@@ -208,7 +209,7 @@ ResultRoutes
       │
       ▼
 Student browser
-  GET /results/:id  →  Leaf-rendered result view
+  GET /results/:id  →  server-rendered result view (Elementary)
 ```
 
 Browser-graded assignments run the *same* `executeSuites` loop, compiled to

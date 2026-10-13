@@ -1,9 +1,9 @@
 # Live list filtering is Public/list-filter.js. A page-local filter function is
-# the idiom it replaced.
+# the idiom it replaced, and page JS lives in Public/*.js.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="a page-local list-filter function in a template"
+files="Public/app.js"
+description="a page-local list-filter function in first-party JS"
 expect="re-implements the shared list-filter idiom"
 apply() {
-    printf 'function applyGuardFixtureFilter(rows) {}\n' >> Resources/Views/base.leaf
+    printf '\nfunction applyGuardFixtureFilter(rows) { return rows; }\n' >> Public/app.js
 }

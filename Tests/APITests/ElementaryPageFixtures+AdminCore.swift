@@ -163,7 +163,8 @@ extension ElementaryPageFixtures {
                     enabled: true, fromEnvironment: true,
                     lastDelivery: (iso: "2026-10-01T10:00:00Z", result: "Delivery failed"), days: days,
                     flash: FlashMessages(success: "Test alert sent.")),
-            ]
+            ],
+            isExemplar: true
         )
     }
 }

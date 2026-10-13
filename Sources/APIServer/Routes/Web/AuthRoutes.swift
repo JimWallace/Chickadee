@@ -4,7 +4,7 @@
 //
 // Error handling uses Post/Redirect/Get: on validation failure,
 // POST handlers redirect back to the form with an ?error= query param.
-// This prevents form resubmission on refresh and avoids Leaf rendering
+// This prevents form resubmission on refresh and avoids rendering a page
 // inside the POST handler (which simplifies testing).
 //
 //   GET  /login      → LoginPage (local form and/or SSO button by AUTH_MODE)

@@ -1,9 +1,10 @@
 # A page block re-defining a global selector forks the component: the page
 # and the sheet drift apart and only one of them is reviewed.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="a page style block re-defining a global selector"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="a PageStyle block re-defining a global selector"
 expect="re-defines a selector from the global sheet"
 apply() {
-    printf '<style>\n.btn { padding: 1rem; }\n</style>\n' >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = PageStyle("""\n    .btn { padding: 1rem; }\n    """)\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
 }

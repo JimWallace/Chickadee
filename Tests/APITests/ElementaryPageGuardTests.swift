@@ -1,11 +1,12 @@
 // Tests/APITests/ElementaryPageGuardTests.swift
 //
-// The UI guards for Elementary views. The shell guards read only
-// Resources/Views/*.leaf, so a page rendered from Swift is invisible to them
-// (docs/elementary-spike.md, "Guards"). This suite renders every page in
-// ElementaryPageFixtures and holds the HTML to the same rules.
+// The UI guards for Elementary views, on rendered markup. The shell guards
+// read the view sources; this suite renders every page in
+// ElementaryPageFixtures and holds the HTML to the rules that need the
+// rendered page (docs/elementary-spike.md, "Guards").
 
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 
@@ -67,6 +68,35 @@ import Testing
         }
     }
 
+    /// An inline custom property carries a per-datum value only. The list is
+    /// check-styles.sh's, and it must name every per-student avatar property.
+    @Test func inlineCustomPropertiesArePerDatum() throws {
+        let allowed = try RenderedMarkupRules.perDatumInlineProperties()
+        #expect(allowed.contains("--bar-h"), "the list was not read from scripts/check-styles.sh")
+        let avatar = AvatarPresentation(
+            for: AvatarSpec.drawn(fromSeed: 1), size: .standard, accessibility: .decorative, isStaff: false)
+        for property in avatar.inlineProperties {
+            #expect(allowed.contains(property.name), "\(property.name) is missing from PER_DATUM_INLINE_PROPS")
+        }
+        #expect(
+            Self.renders.contains { $0.html.contains(" style=\"--") },
+            "no fixture renders an inline custom property, so this rule reads nothing")
+        for (page, html) in Self.renders {
+            let broken = RenderedMarkupRules.perPageInlinePropertyViolations(in: html, allowed: allowed)
+            #expect(broken.isEmpty, "\(page): \(broken)")
+        }
+    }
+
+    @Test func everySortableHeaderCarriesTheSharedButton() {
+        #expect(
+            Self.renders.contains { $0.html.contains(" data-sort-type=\"") },
+            "no fixture renders a sortable header, so this rule reads nothing")
+        for (page, html) in Self.renders {
+            let broken = RenderedMarkupRules.orphanSortHeaderViolations(in: html)
+            #expect(broken.isEmpty, "\(page): \(broken)")
+        }
+    }
+
     @Test func scriptsCarryNoInlineCodeAndNoHandlers() {
         for (page, html) in Self.renders {
             let broken = RenderedMarkupRules.scriptViolations(in: html)
@@ -102,7 +132,7 @@ import Testing
     @Test func headingLevelsFormASpine() throws {
         for (page, html) in Self.renders {
             let main = try #require(RenderedMarkupRules.mainContent(of: html))
-            let levels = LeafMarkupScanner.headingLevels(in: main)
+            let levels = MarkupScanner.headingLevels(in: main)
             if let first = levels.first {
                 #expect(first <= 2, "\(page) starts at h\(first)")
             }
@@ -112,23 +142,20 @@ import Testing
         }
     }
 
-    /// The per-archetype rules from `PageArchetypeTests`, applied to `<main>`.
-    /// Its universal rules are not applied: they read the Leaf source (the
-    /// base extend, the export slots, the flash partial). The heading spine is
-    /// checked above; the flash rule is still open (docs/elementary-spike.md).
-    /// The tabbed and shim archetypes read Leaf partials too, and need their
-    /// rules adapted before a page of that shape moves to Swift.
+    /// The per-archetype rules from `PageArchetypeTests`, applied to every
+    /// render of every exemplar. The exemplars must cover all seven
+    /// archetypes, so no shape goes unchecked.
     ///
     /// Only exemplars are checked, as `PageArchetypeTests` checks only the
-    /// exemplar templates: a page that predates the rulebook may fit no
-    /// archetype exactly, and the port keeps its markup unchanged.
+    /// exemplars: a page that predates the rulebook may fit no archetype
+    /// exactly, and the port keeps its markup unchanged.
     @Test func everyExemplarMatchesItsArchetype() throws {
         let exemplars = Self.fixtures.filter(\.isExemplar)
-        #expect(!exemplars.isEmpty, "no fixture is marked as an exemplar, so this test checks nothing")
+        #expect(
+            Set(exemplars.map(\.archetype)) == Set(PageArchetypeTests.Archetype.allCases),
+            "the fixtures marked as exemplars do not cover every archetype")
         for fixture in exemplars {
-            for html in fixture.renders {
-                let main = try #require(RenderedMarkupRules.mainContent(of: html))
-                let page = PageArchetypeTests.Page(file: fixture.typeName, markup: main, source: "")
+            for page in PageArchetypeTests.pages(of: fixture) {
                 let broken = PageArchetypeTests.violations(of: fixture.archetype, in: page)
                 #expect(broken.isEmpty, "\(fixture.typeName): \(broken)")
             }
@@ -228,5 +255,24 @@ import Testing
 
         let longTitle = Array(repeating: "word", count: RenderedMarkupRules.titleWordCap + 1).joined(separator: " ")
         #expect(RenderedMarkupRules.longTitles(in: "<b title=\"\(longTitle)\">x</b>").count == 1)
+    }
+
+    /// The per-datum and sortable-header rules, which moved here from
+    /// check-styles.sh when the Leaf templates went, each fire on their defect.
+    @Test func theRulesMovedFromCheckStylesRejectAPageThatBreaksThem() throws {
+        let allowed = try RenderedMarkupRules.perDatumInlineProperties()
+        let perPage = RenderedMarkupRules.perPageInlinePropertyViolations
+        #expect(perPage(#"<div style="--filter-width:220px"></div>"#, allowed).count == 1)
+        #expect(perPage(#"<div style="display:none; --filter-width:220px"></div>"#, allowed).count == 1)
+        #expect(perPage(#"<div style="--bar-h:40%; --filter-width:220px"></div>"#, allowed).count == 1)
+        #expect(perPage(#"<div style="--bar-h:40%"></div>"#, allowed).isEmpty)
+        #expect(perPage(#"<i style="--av-cap: var(--avatar-cap-plum); --av-border: var(--x)"></i>"#, allowed).isEmpty)
+
+        let orphan = RenderedMarkupRules.orphanSortHeaderViolations
+        #expect(orphan(#"<table><tr><th data-sort-type="text">User</th></tr></table>"#).count == 1)
+        #expect(orphan(#"<th data-sort-type="text"><span class="sort-icon"></span>User</th>"#).count == 1)
+        let wired = #"<th data-sort-type="text"><button class="sort-header" type="button">U</button></th>"#
+        #expect(orphan(wired).isEmpty)
+        #expect(orphan(#"<th class="col-hide-phone">Plain</th>"#).isEmpty)
     }
 }

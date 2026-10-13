@@ -1,8 +1,7 @@
 // APIServer/Views/Pages/AdminUserPage.swift
 //
 // GET /admin/users/:userID: one user's course enrollments, with remove and
-// add actions. The Elementary port of `admin-user.leaf`, the exemplar of the
-// titlebar archetype (docs/ui-design.md).
+// add actions. The exemplar of the titlebar archetype (docs/ui-design.md).
 
 import Elementary
 

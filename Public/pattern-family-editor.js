@@ -2,7 +2,7 @@
 //
 // Browser-side module that drives the pattern-family modal on the
 // instructor assignment authoring pages.  Factored out of
-// Resources/Views/assignment-edit.leaf in v0.4.90 so the edit and create
+// the assignment-edit template in v0.4.90 so the edit and create
 // pages render from a single copy instead of two copies that drift on
 // every polish release.
 //
@@ -270,7 +270,7 @@
         // static markup reads "Value (JSON or literal)" so the page is honest
         // before this runs; it said "Python literal" to R, Lua, Octave, C++ and
         // Racket authors, the same defect the "Python default" placeholder
-        // below had — missed because this instance lives in Leaf, not here.
+        // below had — missed because this instance lives in the server view, not here.
         (function () {
             var valueHeader = document.getElementById('family-variable-value-header');
             if (valueHeader && languageLabel()) {
@@ -1451,7 +1451,7 @@
                 familyVariables = [];
                 // New family: pull section context from the per-section
                 // "+ New Family" toolbar's stashed target id (set in
-                // assignment-edit.leaf's IIFE before the global button
+                // the assignment editor's script before the global button
                 // is click()ed).  v0.4.106 — previously this branch
                 // unconditionally cleared the read-only block, so a
                 // section's $patients-style shared input wasn't visible

@@ -242,7 +242,7 @@ private struct SubmissionSectionBlock: HTML {
     var body: some HTML {
         section(.class("submission-section-block")) {
             if let name = block.sectionName {
-                h3(.class("submission-section-heading")) { name }
+                h2(.class("submission-section-heading")) { name }
             }
             if !block.outcomes.isEmpty {
                 div(.class("table-scroll")) {

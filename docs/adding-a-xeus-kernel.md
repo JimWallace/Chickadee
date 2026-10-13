@@ -896,7 +896,7 @@ which the Swift compiler can see, and all of which the Lua run had to touch:
 | the inputs writer | `personalizationInputsSource<X>` in `<lang>-grading-shared.js` | every per-student value missing, silently |
 | the language's entry in `INPUTS_WRITERS` | `browser-runner.js` | Python's writer used for your language |
 | notebook extraction routing | `browser-runner.js` `extractNotebookToMap` | a `.py` file made from your notebook |
-| the page `<script>` tag | `Resources/Views/_notebook-body.leaf` | `ReferenceError` at runner load — for EVERY language |
+| the page `<script>` tag | `Sources/APIServer/Views/NotebookBody.swift` | `ReferenceError` at runner load — for EVERY language |
 | each JS test harness's vm context | `Tests/BrowserRunnerJSTests/*.mjs` that build a context | the same `ReferenceError`, in tests only |
 
 That last pair is the enumeration trap again: `browser-runner.js` destructures

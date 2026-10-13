@@ -13,7 +13,7 @@
 // another tbody moves the item (per-type section endpoint), reorders the
 // destination to the dropped position, and reloads.
 //
-// Runs after chickadee-ui.js (base.leaf) — uses ChickadeeUI.getCsrfToken().
+// Runs after chickadee-ui.js (loaded by the layout) — uses ChickadeeUI.getCsrfToken().
 // Decoupled from the section-reorder DnD (still inline) by that handler's
 // stopPropagation on the section header.
 (function () {

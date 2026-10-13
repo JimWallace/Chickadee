@@ -31,7 +31,7 @@ commands meant to be pasted into a terminal — in chat or in `docs/` runbooks:
 
 Swift targets share a clean dependency boundary:
 
-- **`APIServer` / `chickadee-server`** — Vapor app. REST API + Leaf web UI.
+- **`APIServer` / `chickadee-server`** — Vapor app. REST API + web UI (Elementary views).
   Handles auth, assignment management, submission intake, result storage, the
   JupyterLite notebook workflow, and the MCP server (see below).
 - **`Worker` / `chickadee-runner`** — Daemon process. Polls for jobs, runs
@@ -449,7 +449,7 @@ POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLi
                                           (?file=assignment|solution)
 ```
 
-Web routes (Leaf-rendered, session auth required) live under `/` and handle
+Web routes (Elementary views, session auth required) live under `/` and handle
 login, registration, the student dashboard, assignment pages, submission
 history, instructor assignment CRUD, and the admin panel.
 
@@ -614,13 +614,13 @@ greeting. The example below does so in R."
 
 ## UI / Stylesheet Conventions
 
-The web UI is Leaf templates and one stylesheet (`Public/styles.css`). The
-render tests prove that a page renders, not how it looks, so
-`scripts/check-styles.sh` enforces these rules statically in `format-lint`. The
-rules, the token tables, the component vocabulary and the page archetypes are
-in [docs/ui-design.md](docs/ui-design.md).
+The web UI is Elementary views (`Sources/APIServer/Views/`) and one stylesheet
+(`Public/styles.css`). The render tests prove that a page renders, not how it
+looks, so `ElementaryPageGuardTests`, SwiftLint and `scripts/check-styles.sh`
+enforce these rules. The rules, the token tables, the component vocabulary
+and the page archetypes are in [docs/ui-design.md](docs/ui-design.md).
 
-- No inline `style=""` in a template, except a JS-toggled `display:none` or a
+- No inline `style=""` in a view, except a JS-toggled `display:none` or a
   custom-property assignment.
 - Shared styling goes in `styles.css`. Page-unique styling goes in a page
   `<style>` block with role-named classes. The page `<style>` total is a
@@ -640,12 +640,11 @@ in [docs/ui-design.md](docs/ui-design.md).
   links there. No native `alert()`.
 - The nginx maintenance page mirrors the palette by value
   (`check-maintenance-palette.sh`).
-- **Elementary views are guarded by a test, not by the shell scripts.** The
-  scripts read only `.leaf` files. `ElementaryPageGuardTests` renders every
-  page in `ElementaryPageFixtures` and applies most of the same rules (the
-  open ones are listed in the doc); a page type without a fixture fails it. Two SwiftLint rules forbid `.style(` and
-  `HTMLRaw(` in views. See `docs/elementary-spike.md` §"Guards".
-- **Run the `ui-review` agent on any change touching `Resources/Views/`,
+- **The views are guarded mostly by a render test.** `ElementaryPageGuardTests`
+  renders every page in `ElementaryPageFixtures` and applies the markup rules
+  to the HTML; a page type without a fixture fails it. SwiftLint rules forbid
+  `.style(` and `HTMLRaw(` in views. See `docs/elementary-spike.md` §"Guards".
+- **Run the `ui-review` agent on any change touching
   `Sources/APIServer/Views/`, `Public/styles.css`, or a page-wiring
   `Public/*.js`.** It reviews the layer
   the guards structurally cannot: whether a construct duplicates the
@@ -678,7 +677,7 @@ capture in the same PR.
 
 The subagents are in `.claude/agents/`. Each one reports and does not edit.
 - After a code change, run `test-runner`. It reports only the failing tests.
-- After a change to a Leaf template, an Elementary view, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
+- After a change to an Elementary view, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
 - Before a commit, run `diff-reviewer` on the uncommitted diff. Before a push, run `lint-guard`.
 
 ---
@@ -810,24 +809,15 @@ Instructor validation is a `kind == .validation` submission, graded by the
 **native worker** (`WorkerJobRoutes.collectClaimCandidates`). It never runs a
 kernel. There is no `assignment-validate.js`.
 
-**Leaf templates: rules that fail silently.** A render test proves that a
-template resolves, not that it resolves right. The evidence is in
-`docs/leaf-decomposition-review.md` §0. `scripts/check-leaf-semantics.sh`
-enforces the first three rules.
+**Every page is an Elementary view; nothing renders Leaf.** A page is an
+`HTML` type under `Sources/APIServer/Views/Pages/`, returned as
+`HTMLResponse { ... }`, with `PageRequestContext` for the CSRF token, version
+and sprites. The two SVG sprites live in `Resources/Sprites/`. A page type
+needs a fixture in `ElementaryPageFixtures`, or `ElementaryPageGuardTests`
+fails. Split a large page into small `HTML` structs, because type-check time
+grows with the size of one builder closure. The traps and guards are in
+`docs/elementary-spike.md`.
 
-- **No Leaf tag syntax in a template comment or in template prose.** Leaf's
-  lexer has no notion of an HTML comment. In a comment, a bare structural tag
-  name fails at render (`extend only supports one or two parameters []`), a
-  field interpolation prints the real value, and a complete include resolves.
-  Commenting a tag out does not disable it. Write "the extend" instead.
-- **Leaf has no line-comment syntax.** A `#` followed by a slash is raw text,
-  so the "comment" prints into the page. Use an HTML comment.
-- **Use the `count` tag, not `.isEmpty`.** Leaf resolves no Swift properties,
-  so `rows.isEmpty` on an array is nil: the plain form never fires and the
-  negated form always fires. Write `#if(count(rows) == 0)` or
-  `#if(count(rows) > 0)`. Two struct properties are allowlisted in the script.
-- **The sub-context include takes a bare second parameter:**
-  `extend("_partial", subObject)`. The labelled `with:` form does not lex.
 - **A scanner that cannot tell markup from prose about markup matches its own
   documentation.** This shipped twice in drift guards. Parse structure, and
   describe forbidden syntax instead of quoting it.
@@ -915,7 +905,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
 - `docs/ci-flakiness.md` — CI flake families; start here before chasing a red check on an unrelated PR
 - `docs/abstraction-survey.md` — the 2026-10 survey of parallel code paths that need a shared abstraction (#2259)
-- `docs/elementary-spike.md` — the Leaf-to-Elementary spike on one page: parity, compile cost, traps, the guards a migration must replace first
+- `docs/elementary-spike.md` — the finished Leaf-to-Elementary migration: where the views live, the traps, the guards, the known remainder
 - `docs/grading-integrity.md` — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)
 - `docs/archive/` — finished-era documents; nothing there describes current behaviour
 - `CHANGELOG.md` — release history from 0.5.0; `CHANGELOG-0.4.md` — the 0.1.0–0.4.x history

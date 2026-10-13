@@ -1,11 +1,11 @@
 // Core/AvatarMarkup.swift
 //
-// What a Leaf template needs in order to draw an AvatarSpec.
+// What a view needs in order to draw an AvatarSpec.
 //
 // Holds NO geometry, NO colour and NO markup: the paths live once in
-// Resources/Views/_avatar-sprite.leaf, the hex values live once in
+// Resources/Sprites/avatar-sprite.svg, the hex values live once in
 // Public/styles.css, and the element is assembled once in
-// Resources/Views/_avatar.leaf.  This file only names things.
+// Sources/APIServer/Views/Avatar.swift.  This file only names things.
 //
 // It emits TOKEN NAMES rather than a finished style attribute for a specific
 // reason.  check-styles.sh permits an inline style only when every declaration
@@ -62,12 +62,10 @@ public enum AvatarAccessibility: Sendable, Equatable {
     case labelled(String)
 }
 
-/// Everything `_avatar.leaf` needs, and nothing it does not.
+/// Everything the `Avatar` view needs, and nothing it does not.
 ///
-/// `Encodable` so it can be a Leaf sub-context; every field is a plain string
-/// or bool because Leaf resolves no Swift properties (see the LeafKit note in
-/// CLAUDE.md — `isEmpty` on an array silently resolves to nil, and a bare
-/// optional in a conditional is worse).
+/// `Encodable`, with every field a plain string or bool: a shape kept from the
+/// Leaf templates, which resolved no Swift properties.
 public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// Palette token names, e.g. "--avatar-slate-cap". The partial wraps each
     /// in `var(…)`.
@@ -87,8 +85,8 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// Fragment references for the symbols a spec varies, e.g.
     /// "#av-wing-barred" — WITH the leading marker, so the template never has
     /// to write one next to an interpolation. A template writing a literal
-    /// marker immediately before an interpolation is exactly the Leaf lexing
-    /// shape that has cost this codebase before.
+    /// marker immediately before an interpolation is a lexing shape that has
+    /// cost this codebase before.
     public let tuftSymbolRef: String
     public let wingSymbolRef: String
     public let expressionSymbolRef: String
@@ -100,8 +98,7 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// "avatar" plus the size modifier, e.g. "avatar avatar-md".
     public private(set) var sizeClass: String
     /// Whether to announce the bird. An explicit Bool rather than testing the
-    /// optional label in the template: Leaf's truthiness rules make a bare
-    /// optional in a conditional unreliable.
+    /// optional label (kept from the Leaf templates).
     public let isLabelled: Bool
     /// The handle to announce; empty when decorative.
     public let label: String
@@ -141,9 +138,9 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         }
     }
 
-    /// Every per-student custom property `_avatar.leaf` assigns, paired with
+    /// Every per-student custom property the `Avatar` view assigns, paired with
     /// the field it reads and the token it carries. The one list: `tokens`
-    /// derives from it, and the partial test asserts each entry is assigned in
+    /// derives from it, and a test asserts each entry is assigned in
     /// both announce branches, so a token added here cannot reach the page
     /// unassigned, and a property assigned there cannot be absent here (#1761).
     public var inlineProperties: [AvatarInlineProperty] {

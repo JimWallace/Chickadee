@@ -399,7 +399,7 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let body = res.body.string
                     // Anchored to the auth logo, not merely to "some chickadee
-                    // image": base.leaf renders the nav brand mark on this page
+                    // image": BaseLayout renders the nav brand mark on this page
                     // too, so a bare /images/chickadee- substring would pass
                     // with the auth logo deleted. Image-name-agnostic so a
                     // future mascot swap needs no test edit.

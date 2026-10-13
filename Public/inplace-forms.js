@@ -17,12 +17,12 @@
 // changes — same endpoint, same encoding, same fields — only where the browser
 // goes afterwards.
 //
-// Loaded by base.leaf only for embedded panes, so the standalone `/edit` page
+// Loaded by the layout (BaseLayout) only for embedded panes, so the standalone `/edit` page
 // never sees it and keeps its native submit-and-redirect behaviour exactly.
 //
 // A form opts in with `data-ck-inplace`. The attribute is unconditional in the
-// template (harmless where this script is not loaded), so the two renderings of
-// `assignment-edit.leaf` stay byte-identical apart from the parts that must
+// view (harmless where this script is not loaded), so the two renderings of
+// the assignment editor stay byte-identical apart from the parts that must
 // differ.
 
 (function () {
@@ -35,7 +35,7 @@
     if (!document.getElementById('wb-shell')) return;
 
     // ── Error surface ────────────────────────────────────────────────────────
-    // Same inline banner base.leaf uses for a failed multipart upload, for the
+    // Same inline banner multipart-forms.js uses for a failed multipart upload, for the
     // same reason: a native dialog inside a pane is a modal over one third of
     // the screen with no indication of which half raised it.
     function showError(form, msg) {
@@ -62,7 +62,7 @@
     // `application/x-www-form-urlencoded` today; switching them to multipart
     // would be a live change to how their handlers parse, made silently, for
     // no reason. CSRF rides the header either way — the multipart body is not
-    // buffered before the middleware runs, which is why base.leaf's handler
+    // buffered before the middleware runs, which is why multipart-forms.js
     // sends the header too.
     function requestFor(form) {
         var fd = new FormData(form);
@@ -131,8 +131,8 @@
 
     // ── Wiring ───────────────────────────────────────────────────────────────
 
-    // Registered from base.leaf's embedded block, which runs before the inline
-    // multipart handler further down that file. That handler already bails on
+    // The layout loads this script before multipart-forms.js, so this
+    // listener runs before the multipart handler. That handler already bails on
     // `e.defaultPrevented`, so preventing here is all it takes to keep the two
     // from both firing.
     document.addEventListener('submit', function (e) {

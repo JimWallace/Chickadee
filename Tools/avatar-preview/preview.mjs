@@ -1,6 +1,6 @@
 // Avatar contact sheet.
 //
-// Renders every drawn part in Resources/Views/_avatar-sprite.leaf across the
+// Renders every drawn part in Resources/Sprites/avatar-sprite.svg across the
 // palette in Public/styles.css, so the art can be looked at without booting
 // the server or wiring a route.  It reads both files rather than holding its
 // own copy of either: a preview that carries its own paths would keep looking
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const sprite = readFileSync(`${root}/Resources/Views/_avatar-sprite.leaf`, 'utf8')
+const sprite = readFileSync(`${root}/Resources/Sprites/avatar-sprite.svg`, 'utf8')
 const css = readFileSync(`${root}/Public/styles.css`, 'utf8')
 
 // A Set because the dark-mode block redeclares every backdrop: without it the

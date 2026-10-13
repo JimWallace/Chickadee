@@ -22,8 +22,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 css_files=(Public/*.css)
-usage_files=(Resources/Views/*.leaf Public/*.css Public/*.js)
+usage_files=(Public/*.css Public/*.js)
 # Elementary views: a var() can appear in a PageStyle block or a style value.
+# Every page is one of these (the Leaf templates are gone).
 while IFS= read -r f; do usage_files+=("$f"); done < <(find Sources/APIServer/Views -name '*.swift' | LC_ALL=C sort)
 
 # Declared properties: `--name:` only ever appears as a declaration — var()

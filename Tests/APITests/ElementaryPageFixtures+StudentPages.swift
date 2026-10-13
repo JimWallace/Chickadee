@@ -350,7 +350,8 @@ extension ElementaryPageFixtures {
                 render(
                     staff: true, enrolled: [], available: accountAvailableCourses, status: "failed",
                     github: (false, nil), notices: (nil, nil, nil)),
-            ]
+            ],
+            isExemplar: true
         )
     }
 
@@ -358,16 +359,13 @@ extension ElementaryPageFixtures {
         func render(_ options: SubmissionOptions) -> String {
             SubmissionPage(page: page(currentUser: signedInAdmin), result: submissionResult(options)).render()
         }
-        // Every render here has an h2 before the section tables. A finished
-        // submission with no class goals and no warnings goes from the h1
-        // straight to the section h3, as the Leaf page did; the heading guard
-        // would fail that render, so it is not one of these.
         return ElementaryPageFixture(
             typeName: "SubmissionPage",
             archetype: .plainStudentPage,
             renders: [
                 render(SubmissionOptions()),
                 render(SubmissionOptions(pending: true, extras: false)),
+                render(SubmissionOptions(extras: false)),
                 render(SubmissionOptions(buildFailed: true, overridden: true)),
                 render(
                     SubmissionOptions(

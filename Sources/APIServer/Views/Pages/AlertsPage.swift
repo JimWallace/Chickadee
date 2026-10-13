@@ -1,8 +1,7 @@
 // APIServer/Views/Pages/AlertsPage.swift
 //
 // GET /admin/alerts: the health-alert webhook, the rules and the recent
-// firings. The port of `alerts.leaf`, the admin tabbed exemplar
-// (docs/ui-design.md). The template stays while PageArchetypeTests reads it.
+// firings. The admin tabbed exemplar (docs/ui-design.md).
 
 import Elementary
 

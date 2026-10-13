@@ -74,7 +74,7 @@ struct AssignmentsPage: HTML {
                     cursor: default;
                 }
                 /* .add-section-details* and .section-block.section-dragging now live in the
-                   global stylesheet (shared with assignment-edit.leaf). */
+                   global stylesheet (shared with the assignment editor). */
                 """
             )
             script(.src(page.asset("/section-items-dnd.js"))) {}

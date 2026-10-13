@@ -307,7 +307,7 @@ import VaporTesting
                     req.headers.add(name: .cookie, value: cookie)
                 },
                 afterResponse: { res in
-                    // 500 expected because Leaf is not configured in tests — but middleware passed (not 401/403).
+                    // The middleware passed (not 401/403); the page itself is not under test here.
                     #expect(res.status != .unauthorized)
                     #expect(res.status != .forbidden)
                 })
@@ -495,7 +495,7 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
 
-                    // The leaf template renders the badge as
+                    // The page renders the badge as
                     //   <span title="<X> / <Y> students submitted"><X> / <Y></span>
                     // We assert against the title (a unique, structural attribute)
                     // so the test doesn't depend on layout cosmetics.
@@ -523,8 +523,8 @@ import VaporTesting
 
     /// Regression guard for the "Session refreshed" delete bug.  The three
     /// assignment delete forms in the Ungrouped table (the `closed` / `open` /
-    /// preview-`#else` branches in assignments.leaf) were missing
-    /// `#csrfFormField()`, so `POST /instructor/:id/delete` arrived with no
+    /// preview branches of the then-template assignments page) were missing
+    /// the CSRF field, so `POST /instructor/:id/delete` arrived with no
     /// `_csrf` token and the CSRF middleware 403'd it — rendering the
     /// "Session refreshed" error page instead of deleting.  With no course
     /// sections defined, every assignment renders in that Ungrouped table, so

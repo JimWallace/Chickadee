@@ -117,8 +117,7 @@ extension AvatarPickerContext {
     }
 }
 
-/// One swatch. Plain strings and Bools, because Leaf resolves no Swift
-/// properties and treats a bare optional unreliably.
+/// One swatch. Plain strings and Bools, a shape kept from the Leaf templates.
 struct AvatarPickerOption: Encodable {
     let value: String
     let label: String

@@ -124,7 +124,9 @@ import Testing
     /// derivation is indistinguishable from a correct one — the lesson the
     /// kernel-vendoring guard learned the expensive way.
     @Test func spriteAndSlotsAgree() throws {
-        let sprite = try Self.contents(of: "Resources/Views/_avatar-sprite.leaf")
+        // The sprite is static SVG the server inlines raw, kept beside the
+        // icon sprite in Resources/Sprites.
+        let sprite = try Self.contents(of: "Resources/Sprites/avatar-sprite.svg")
         let declared = Set(Self.attributeValues(in: sprite, attribute: "id"))
 
         for wing in AvatarWing.allCases {
@@ -153,71 +155,75 @@ import Testing
         }
     }
 
-    /// The partial draws the layers the model says it draws, in order.
+    /// The `Avatar` view draws the layers the model says it draws, in order.
     ///
-    /// The five `use` elements are hard-coded in `_avatar.leaf` — a template
-    /// cannot loop them, since four are literal fragments and one is an
-    /// interpolation — so this is what stops the template and `layerRefs`
-    /// drifting apart.
-    @Test func partialStacksTheModelsLayers() throws {
-        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let refs = Self.attributeValues(in: partial, attribute: "href")
+    /// The `use` elements are written one by one in `Avatar.swift` — the two
+    /// fixed layers are literal fragments and the varying ones are
+    /// presentation fields — so this is what stops the view and `layerRefs`
+    /// drifting apart. Read from the view's source, in its Swift spelling.
+    @Test func avatarViewStacksTheModelsLayers() throws {
+        let view = try Self.contents(of: "Sources/APIServer/Views/Avatar.swift")
+        let refs = view.matches(of: /\.href\(([^)]*)\)/).map { String($0.1) }
         let spec = AvatarSpec(
             cap: .ink, wing: .plain, expression: .bright, accessory: .none, accent: .ember,
             backdrop: .sky)
         let presentation = AvatarPresentation(
             for: spec, size: .standard, accessibility: .decorative, isStaff: false)
-        // The four varying layers are interpolated; the two fixed ones are
+        // The varying layers are presentation fields; the two fixed ones are
         // literal fragments.
         let expected = [
-            "#av-backdrop", "#(tuftSymbolRef)", "#av-plumage", "#(wingSymbolRef)",
-            "#(expressionSymbolRef)", "#(accessorySymbolRef)", "#(ringSymbolRef)",
+            "\"#av-backdrop\"", "avatar.tuftSymbolRef", "\"#av-plumage\"", "avatar.wingSymbolRef",
+            "avatar.expressionSymbolRef", "avatar.accessorySymbolRef", "avatar.ringSymbolRef",
         ]
-        #expect(refs == expected, "partial layers \(refs) do not match the model's")
+        #expect(refs == expected, "Avatar layers \(refs) do not match the model's")
         // And the interpolated one really is the wing, marker included.
         #expect(presentation.layerRefs.count == 7)
         #expect(presentation.layerRefs[3] == "#av-wing-plain")
         #expect(presentation.wingSymbolRef == "#av-wing-plain")
     }
 
-    /// Every `--av-*` the partial assigns is one the presentation supplies, and
-    /// every one the presentation supplies is assigned — in BOTH branches.
+    /// Every `--av-*` the `Avatar` view assigns is one the presentation
+    /// supplies, and every one the presentation supplies is assigned — in BOTH
+    /// branches.
     ///
     /// The list is `AvatarPresentation.inlineProperties`, not a copy of it: a
     /// sixth per-student token added there is asserted here the same day, and
-    /// a property the partial assigns that the list does not name fails the
+    /// a property the view assigns that the list does not name fails the
     /// count (#1761).
     ///
-    /// The decorative and labelled branches carry byte-identical style
+    /// The decorative and labelled branches must carry identical style
     /// attributes and differ only in how the bird is announced, so an edit that
-    /// touches one renders a partially black bird through the other. Counting
-    /// distinct names could not see that: it has to be an occurrence count, or
-    /// the guard passes on exactly the drift it exists to catch.
-    @Test func partialAssignsEveryPresentationPropertyInBothBranches() throws {
-        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
+    /// touches one renders a partially black bird through the other. The view
+    /// writes the assignments once, in `customProperties`, and each branch
+    /// must use that one string: so each assignment occurs once, and the style
+    /// attribute reads `customProperties` exactly once per branch. Counting
+    /// occurrences rather than distinct names is what catches a second,
+    /// drifting copy.
+    @Test func avatarViewAssignsEveryPresentationPropertyInBothBranches() throws {
+        let view = try Self.contents(of: "Sources/APIServer/Views/Avatar.swift")
         let spec = AvatarSpec(
             cap: .plum, wing: .barred, expression: .wink, accessory: .scarf, accent: .ember,
             backdrop: .sky)
         let properties =
             AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
             .inlineProperties
-        let branches = partial.components(separatedBy: "#else:")
-        #expect(branches.count == 2, "the partial no longer has two announce branches")
-        for property in properties {
-            // Flat field names, not `avatar.capToken`: the sub-context form
-            // makes the presentation this partial's root. Qualifying them
-            // resolves to empty, silently — a bird with no colours that still
-            // returns 200.
-            let assignment = "\(property.name): var(#(\(property.field)))"
-            let occurrences = partial.components(separatedBy: assignment).count - 1
-            #expect(occurrences == 2, "\(property.name) is assigned \(occurrences)x, expected once per branch")
+        let branches = view.components(separatedBy: "} else {")
+        #expect(branches.count == 2, "the view no longer has two announce branches")
+        let styleUse = #".custom(name: "style", value: customProperties)"#
+        for branch in branches {
             #expect(
-                !partial.contains("avatar.\(property.field)"), "\(property.field) is qualified; it will resolve empty")
+                branch.components(separatedBy: styleUse).count - 1 == 1,
+                "an announce branch does not take its style from customProperties exactly once")
         }
-        let assigned = partial.components(separatedBy: "--av-").count - 1
+        for property in properties {
+            let assignment = "\(property.name): var(\\(avatar.\(property.field)))"
+            let occurrences = view.components(separatedBy: assignment).count - 1
+            #expect(occurrences == 1, "\(property.name) is assigned \(occurrences)x, expected once for both branches")
+        }
+        let assigned = view.components(separatedBy: "--av-").count - 1
         #expect(
-            assigned == properties.count * 2,
-            "the partial assigns \(assigned) --av- properties; the list names \(properties.count) per branch")
+            assigned == properties.count,
+            "the view assigns \(assigned) --av- properties; the list names \(properties.count)")
     }
 
     /// The palette the renderer names and the palette the stylesheet declares

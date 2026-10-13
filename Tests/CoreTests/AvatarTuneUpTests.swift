@@ -123,7 +123,7 @@ import Testing
     }
 
     /// The tuft reference and the tilt transform are never empty, including
-    /// for the two "nothing" values — Leaf gives an empty value no warning.
+    /// for the two "nothing" values — an empty value renders with no warning.
     @Test(arguments: AvatarTuft.allCases)
     func tuftRefAndTiltTransformAreNeverEmpty(tuft: AvatarTuft) {
         for tilt in AvatarTilt.allCases {
@@ -148,7 +148,9 @@ import Testing
     /// The sprite's symbols without its header comment, which names the
     /// forbidden constructs in prose.
     private static func spriteMarkup() throws -> String {
-        let sprite = try contents(of: "Resources/Views/_avatar-sprite.leaf")
+        // The sprite is static SVG the server inlines raw, kept beside the
+        // icon sprite in Resources/Sprites.
+        let sprite = try contents(of: "Resources/Sprites/avatar-sprite.svg")
         guard let end = sprite.range(of: "-->") else { return sprite }
         return String(sprite[end.upperBound...])
     }
@@ -214,22 +216,28 @@ import Testing
         #expect(!markup.contains(" fill=\"#"), "a literal fill colour in the sprite")
     }
 
-    /// The tilt group wraps every layer but the backdrop, and sits after the
-    /// announce branches close — so it applies to BOTH of them.
-    @Test func partialTiltsEveryLayerButTheBackdropInBothBranches() throws {
-        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let body = try #require(partial.components(separatedBy: "#endif").last)
-        #expect(partial.components(separatedBy: "#(tiltTransform)").count - 1 == 1)
-        let backdrop = try #require(body.range(of: "<use href=\"#av-backdrop\"/>"))
-        let group = try #require(body.range(of: "<g transform=\"#(tiltTransform)\">"))
-        let close = try #require(body.range(of: "</g>"))
+    /// The tilt group wraps every layer but the backdrop, and sits in the
+    /// `parts` block both announce branches draw — so it applies to BOTH of
+    /// them. Read from the `Avatar` view's source, in its Swift spelling.
+    @Test func avatarViewTiltsEveryLayerButTheBackdropInBothBranches() throws {
+        let view = try Self.contents(of: "Sources/APIServer/Views/Avatar.swift")
+        #expect(view.components(separatedBy: "avatar.tiltTransform").count - 1 == 1)
+        // Both branches draw `parts`, and nothing else draws a layer.
+        #expect(view.components(separatedBy: "                parts\n").count - 1 == 2)
+        let partsStart = try #require(view.range(of: "private var parts"), "Avatar has no parts block")
+        let body = view[partsStart.upperBound...]
+        let backdrop = try #require(body.range(of: ##"SVG.use(.href("#av-backdrop")) {}"##))
+        let group = try #require(body.range(of: "SVG.g(.transform(avatar.tiltTransform)) {"))
+        let close = try #require(body.range(of: "\n        }\n", range: group.upperBound..<body.endIndex))
         #expect(backdrop.upperBound <= group.lowerBound, "the backdrop must not tilt")
         for layer in [
-            "#(tuftSymbolRef)", "#av-plumage", "#(wingSymbolRef)", "#(expressionSymbolRef)",
-            "#(accessorySymbolRef)",
+            "avatar.tuftSymbolRef", "\"#av-plumage\"", "avatar.wingSymbolRef", "avatar.expressionSymbolRef",
+            "avatar.accessorySymbolRef",
         ] {
-            let use = try #require(body.range(of: "<use href=\"\(layer)\"/>"), "no \(layer) layer")
-            #expect(use.lowerBound > group.upperBound && use.upperBound < close.lowerBound)
+            let use = try #require(body.range(of: "SVG.use(.href(\(layer))) {}"), "no \(layer) layer")
+            #expect(
+                use.lowerBound > group.upperBound && use.upperBound <= close.lowerBound,
+                "\(layer) is outside the tilt group")
         }
     }
 }

@@ -6,8 +6,7 @@
 // is opened. The Variables table has four columns (valid / name / value /
 // action) to match the rows that script builds.
 //
-// Keep in step with `_family-editor-body.leaf` while both exist. The coverage
-// tests read the kind and failure-detail options from that file.
+// The coverage tests check the kind and failure-detail options it lists.
 
 import Elementary
 

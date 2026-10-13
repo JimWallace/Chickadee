@@ -18,8 +18,6 @@
 //
 // An ungrouped block has no header to host the inline buttons, so it gets a
 // slim per-section toolbar instead.
-//
-// Keep in step with `_suite-sections.leaf` while both exist.
 
 import Elementary
 

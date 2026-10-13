@@ -113,9 +113,28 @@ import Testing
         return try String(contentsOf: url.appendingPathComponent(path), encoding: .utf8)
     }
 
+    /// The text of the brace block that opens at the first `{` at or after
+    /// `start`, braces included.
+    private static func braceBlock(in source: String, from start: String.Index) -> Range<String.Index>? {
+        guard let open = source[start...].firstIndex(of: "{") else { return nil }
+        var depth = 0
+        var cursor = open
+        while cursor < source.endIndex {
+            if source[cursor] == "{" { depth += 1 }
+            if source[cursor] == "}" {
+                depth -= 1
+                if depth == 0 { return open..<source.index(after: cursor) }
+            }
+            cursor = source.index(after: cursor)
+        }
+        return nil
+    }
+
     /// Both directions: every ring has art, and every ring symbol has a case.
     @Test func spriteRingsMatchTheEnum() throws {
-        let sprite = try Self.contents(of: "Resources/Views/_avatar-sprite.leaf")
+        // The sprite is static SVG the server inlines raw, kept beside the
+        // icon sprite in Resources/Sprites.
+        let sprite = try Self.contents(of: "Resources/Sprites/avatar-sprite.svg")
         var found: Set<String> = []
         var rest = Substring(sprite)
         while let start = rest.range(of: "id=\"av-ring-") {
@@ -127,14 +146,20 @@ import Testing
     }
 
     /// The ring is the last layer, outside the tilt group, and carries the hook
-    /// the live preview swaps.
-    @Test func partialDrawsTheRingLastAndUntilted() throws {
-        let partial = try Self.contents(of: "Resources/Views/_avatar.leaf")
-        let body = try #require(partial.components(separatedBy: "#endif").last)
-        let close = try #require(body.range(of: "</g>"))
-        let ring = try #require(body.range(of: "<use href=\"#(ringSymbolRef)\" data-av-ring/>"))
-        let end = try #require(body.range(of: "</svg>"))
-        #expect(ring.lowerBound > close.upperBound && ring.upperBound <= end.lowerBound)
+    /// the live preview swaps. Read from the `Avatar` view's source: the layers
+    /// are its `parts` block, and the tilt group is the `SVG.g` block in it.
+    @Test func avatarViewDrawsTheRingLastAndUntilted() throws {
+        let view = try Self.contents(of: "Sources/APIServer/Views/Avatar.swift")
+        let partsStart = try #require(view.range(of: "private var parts"), "Avatar has no parts block")
+        let parts = try #require(Self.braceBlock(in: view, from: partsStart.upperBound))
+        let groupStart = try #require(view.range(of: "SVG.g(", range: parts), "Avatar has no tilt group")
+        let group = try #require(Self.braceBlock(in: view, from: groupStart.upperBound))
+        let ring = try #require(
+            view.range(of: #"SVG.use(.href(avatar.ringSymbolRef), .dataFlag("av-ring")) {}"#, range: parts),
+            "the ring layer is not drawn, or lost its data-av-ring hook")
+        let lastLayer = try #require(view[parts].range(of: "SVG.use(", options: .backwards))
+        #expect(ring.lowerBound > group.upperBound, "the ring is inside the tilt group, or before it")
+        #expect(ring.lowerBound == lastLayer.lowerBound, "the ring is not the last layer")
     }
 
     /// The staff colour is none of the student ring colours, and it has a

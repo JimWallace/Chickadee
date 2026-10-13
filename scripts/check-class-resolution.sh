@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Class-resolution guard (invoked from check-styles.sh).
 #
-# Every class name a template or first-party script ASSIGNS must resolve to a
+# Every class name a view or first-party script ASSIGNS must resolve to a
 # stylesheet rule, a `js-` behaviour-hook prefix, or the allowlist — because a
 # class that resolves to nothing is indistinguishable from a working one in
 # every existing check. Two shipped bugs motivated this: suite-table.js
@@ -13,16 +13,21 @@ set -euo pipefail
 #
 # What counts as a REFERENCE (assignment sites only — querySelector reads are
 # deliberately out of scope, they follow the assignments):
-#   * class="…" attribute values in Resources/Views/*.leaf
+#   * the string literals of every `.class(…)` call in an Elementary view
+#     (Sources/APIServer/Views/**/*.swift), including the literals of a
+#     ternary inside the call or inside an interpolation
 #   * class="…" attribute values inside strings in top-level Public/*.js
 #   * classList.add('…', …) and className = '…' in top-level Public/*.js
 #
 # What counts as DEFINED: any `.name` class token appearing in Public/*.css or
-# in a template <style> block.
+# in a view's PageStyle block.
+#
+# ElementaryPageGuardTests applies the same rule to rendered pages, which
+# sees a name built from a value; this sees every branch, rendered or not.
 #
 # Escapes, by design:
-#   * tokens containing Leaf syntax (anything not [a-z0-9-]) are skipped —
-#     interpolated families like status-#(…) are covered by the Swift
+#   * a name glued to an interpolation (`status-\(s)`) is skipped —
+#     interpolated families like that are covered by the Swift
 #     exhaustiveness test (StatusClassStylesheetTests), not this guard;
 #   * names starting with js- are behaviour hooks, never styled, always OK;
 #   * scripts/class-resolution-allowlist.txt lists the pre-existing
@@ -40,17 +45,17 @@ cd "$repo_root"
 # shellcheck source=lib/css.sh
 . "scripts/lib/css.sh"
 
-views=(Resources/Views/*.leaf)
 allowlist_file="scripts/class-resolution-allowlist.txt"
+swift_views=()
+while IFS= read -r f; do swift_views+=("$f"); done < <(swift_view_files)
+style_views=()
+while IFS= read -r f; do style_views+=("$f"); done < <(swift_page_style_files)
 
 # ── Defined classes ──────────────────────────────────────────────────────────
 defined="$(
   {
     cat Public/*.css
-    page_style_blocks "${views[@]}"
-    # Elementary page CSS; the classes those views assign are checked on the
-    # rendered HTML by ElementaryPageGuardTests.
-    page_style_blocks $(swift_page_style_files)
+    page_style_blocks "${style_views[@]}"
   } \
     | strip_css_comments \
     | grep -oE '\.[a-z][a-z0-9-]*' \
@@ -58,16 +63,20 @@ defined="$(
 )"
 
 # ── Referenced classes ───────────────────────────────────────────────────────
-# 1. class="…" values in templates and first-party JS (the JS hits are
-#    class attributes inside generated-HTML strings). Leaf tags are removed
-#    before the split, so a name written directly against one
-#    (`row#if(x): row-pending#endif`) is still checked (#2402). An
-#    interpolation becomes `_`, which no class name holds, so a name built
-#    from a value (`status-#(s)`) stays out of reach, as it was.
+# 1. The string literals of each `.class(…)` call in a Swift view. The walk
+#    tracks strings, interpolations and parentheses, so it reads a call that
+#    spans lines, every literal of a ternary (`.class(open ? "a b" : "a")`),
+#    and a literal inside an interpolation (`"card \(open ? "is-open" : "")"`).
+#    An interpolation becomes `_` in the literal around it, which no class
+#    name holds, so a name glued to one (`status-\(s)`) stays out of reach;
+#    the rendered-page test reads that one.
+swift_refs="$(swift_call_literals '.class(' ' ' "${swift_views[@]}" | cut -f2 | tr ' ' '\n')"
+
+# 2. class="…" values in first-party JS: class attributes inside
+#    generated-HTML strings.
 attr_refs="$(
-  grep -rhoE 'class="[^"]*"' "${views[@]}" Public/*.js 2>/dev/null \
+  grep -rhoE 'class="[^"]*"' Public/*.js 2>/dev/null \
     | sed -E 's/^class="//; s/"$//' \
-    | sed -E 's/#(if|elseif)\([^:]*\):/ /g; s/#else:/ /g; s/#endif/ /g; s/#\([^)]*\)/_/g' \
     | tr ' ' '\n'
 )"
 
@@ -90,14 +99,14 @@ clsname_refs="$(
 )"
 
 referenced="$(
-  printf '%s\n%s\n%s\n' "$attr_refs" "$clsadd_refs" "$clsname_refs" \
+  printf '%s\n%s\n%s\n%s\n' "$swift_refs" "$attr_refs" "$clsadd_refs" "$clsname_refs" \
     | grep -E '^[a-z][a-z0-9-]*$' \
     | sort -u
 )"
 
 # ── Completeness self-check ──────────────────────────────────────────────────
-if [ -z "$defined" ] || [ -z "$referenced" ]; then
-  echo "ERROR: check-class-resolution extracted nothing (defined or referenced set is empty)."
+if [ -z "$defined" ] || [ -z "$referenced" ] || [ -z "$(grep -E '^[a-z][a-z0-9-]*$' <<< "$swift_refs" || true)" ]; then
+  echo "ERROR: check-class-resolution extracted nothing (defined, referenced or Swift view set is empty)."
   echo "       The extractor is broken; fix it rather than trusting a vacuous pass."
   exit 1
 fi
@@ -119,7 +128,7 @@ done <<< "$referenced"
 
 if [ -n "$unresolved" ]; then
   status=1
-  echo "ERROR: class name(s) assigned in a template or Public/*.js resolve to no stylesheet rule."
+  echo "ERROR: class name(s) assigned in a Swift view or Public/*.js resolve to no stylesheet rule."
   echo "       Style the class, rename a behaviour-only hook with the js- prefix,"
   echo "       or (pre-existing hooks only) keep it in ${allowlist_file}."
   printf '%s' "$unresolved"

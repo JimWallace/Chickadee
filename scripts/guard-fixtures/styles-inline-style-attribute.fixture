@@ -1,10 +1,12 @@
 # An inline style= bypasses every token guard: the value never routes through
 # the palette or the scales. Only display:none and custom-prop assignments
-# are allowed.
+# are allowed. The value here spans two lines and is concatenated, which the
+# source scan has to join to read.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="an inline style attribute in a template"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="an inline style attribute in a Swift view"
 expect="disallowed inline style"
 apply() {
-    printf '<p style="margin-top: 3px">guard fixture</p>\n' >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = p(.custom(\n    name: "style",\n    value: "display:none; "\n        + "margin-top: 3px")) { "guard fixture" }\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
 }

@@ -420,7 +420,7 @@ test("no seed falls back to Python, which is the previous behaviour", () => {
 });
 
 // The shared scan-payload readers. They live in this linted module rather than
-// inline in assignment-new.leaf because template JS is neither linted nor
+// inline in the create page because page-inline JS is neither linted nor
 // tested — and the create page's inline copy is exactly the fork that went
 // stale three ways in #1269.
 test("the scan-payload readers handle both response shapes", () => {

@@ -77,7 +77,7 @@ public enum AvatarBackdrop: String, CaseIterable, Codable, Sendable {
 /// The wing pattern — the one slot that is geometry rather than colour, and
 /// the cheapest of those because all six share a single wing outline.
 ///
-/// A raw value names a `<symbol>` in `Resources/Views/_avatar-sprite.leaf`
+/// A raw value names a `<symbol>` in `Resources/Sprites/avatar-sprite.svg`
 /// (`av-wing-<rawValue>`); `AvatarSpriteDriftTests` asserts the two sets match
 /// in BOTH directions, so neither a case without art nor art without a case
 /// can ship.

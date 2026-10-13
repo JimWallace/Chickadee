@@ -21,7 +21,7 @@ struct HTMLResponse<Content: HTML>: AsyncResponseEncodable {
     }
 
     func encodeResponse(for request: Request) async throws -> Response {
-        // Same content type a Leaf `View` sets. SecurityHeadersMiddleware keys
+        // `text/html; charset=utf-8`. SecurityHeadersMiddleware keys
         // its no-store and no-compression rules on the `text/html` prefix.
         var headers = HTTPHeaders()
         headers.contentType = .html

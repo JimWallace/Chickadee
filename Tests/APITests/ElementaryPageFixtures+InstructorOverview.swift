@@ -195,7 +195,8 @@ extension ElementaryPageFixtures {
                     access: agentAccess(
                         feedbackOn: true, assignments: true, canAttest: true, attestedAtISO: "2026-10-01T00:00:00Z")),
                 render(customized: true, canEdit: true, access: agentAccess(feedbackOn: true, assignments: true)),
-            ]
+            ],
+            isExemplar: true
         )
     }
 }

@@ -3,8 +3,8 @@ name: ui-review
 description: >
   Reviews a UI change against the design system in docs/ui-design.md, at the
   layer the mechanical guards cannot see. Use it on any change that touches
-  Resources/Views/, Sources/APIServer/Views/, Public/styles.css or a
-  page-wiring Public/*.js file.
+  Sources/APIServer/Views/, Public/styles.css or a page-wiring Public/*.js
+  file.
   Read-only: it reports, it does not edit.
 tools: Read, Grep, Glob, Bash
 ---
@@ -21,8 +21,8 @@ Every style regression in this repository so far was mechanically legal.
    "Page archetypes".
 2. The diff you are given. When no diff is given, run `git diff origin/main`
    (or `gh pr diff` when a PR number is given) and limit yourself to
-   `Resources/Views/`, `Sources/APIServer/Views/` (the Elementary views, which
-   are templates written in Swift), `Public/styles.css` and first-party
+   `Sources/APIServer/Views/` (the Elementary views, which are templates
+   written in Swift), `Public/styles.css` and first-party
    `Public/*.js`.
    Vendored code under `Public/vendor/` and `Public/jupyterlite/` is out of
    scope.
@@ -47,8 +47,8 @@ For each construct the change adds or edits, answer these four questions.
    `title` is one phrase. A note under a control is one sentence. Anything
    longer belongs in `docs/` with the UI linking there. Copy assembled in Swift
    or JS counts, and the template guard cannot see it.
-4. **Does the page follow its archetype?** Tab bars come from the shared
-   partials, flash banners from the `_flash` partial, sections are
+4. **Does the page follow its archetype?** Tab bars come from `AdminTabs`
+   and `InstructorTabs`, flash banners from `BaseLayout`, sections are
    `.page-section`, headers are `.page-titlebar`. A private re-implementation
    of a shared concept is a finding even when the ratchet let it through.
 
@@ -68,7 +68,7 @@ Write one report with these three parts, in this order.
    smaller. `pass` means you looked and found nothing; say what you looked at.
 2. **Findings.** One per construct, each with the file and line, the rule from
    `docs/ui-design.md` it breaks, and the construct the UI already has for
-   that concept. Quote the existing class or partial by name so the author can
+   that concept. Quote the existing class or view by name so the author can
    go straight to it. Do not pad: a change with no findings gets none.
 3. **What you did not check.** A page you could not render, a string
    assembled at runtime you could not trace, a visual property only a

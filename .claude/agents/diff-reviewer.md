@@ -36,8 +36,9 @@ You review one uncommitted change to Chickadee against the project rules.
 - Course rules: no code-only course lookup.
 - Coding conventions: no force unwraps outside tests, explicit error enums,
   one primary type per file, file name matches the type.
-- Leaf rules: no tag syntax in comments or prose, the `count` tag instead of
-  `.isEmpty`, no inline `<script>` or `on*=` attributes (the CSP blocks them).
+- View rules: no inline `<script>` or `on*=` attributes (the CSP blocks
+  them), no `.style(` or `HTMLRaw(` in an Elementary view, and a fixture in
+  `ElementaryPageFixtures` for every new page type.
 - UI rules: no inline `style=""` except the allowed cases, design tokens,
   chrome text of one sentence or less.
 - Testing rules: Swift Testing only, no skips with `Issue.record`, time

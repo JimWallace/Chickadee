@@ -1,7 +1,7 @@
 # APIServer
 
 The Vapor application behind `chickadee-server`: the REST API the runner and
-instructors use, the Leaf web UI, authentication (local accounts, OIDC SSO and
+instructors use, the web UI (Elementary views), authentication (local accounts, OIDC SSO and
 LTI 1.3), course and assignment management, submission intake and results, the
 embedded JupyterLite editor routes, the MCP authoring and admin-diagnostics
 servers, the BrightSpace and GitHub integrations, and the background sweeps.

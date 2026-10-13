@@ -5,8 +5,6 @@
 // so the wording and the link have one source. It renders hidden; each editor
 // script shows it while its table has a row, because the cue it explains is
 // drawn by that script.
-//
-// Keep in step with `_value-cue-note.leaf` while both exist.
 
 import Elementary
 

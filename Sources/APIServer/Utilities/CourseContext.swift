@@ -1,12 +1,12 @@
 // APIServer/Utilities/CourseContext.swift
 //
-// Course info safe to embed in Leaf view contexts, and the resolved
+// Course info safe to embed in view contexts, and the resolved
 // active-course state built from it.
 
 import Core
 import Foundation
 
-/// Lightweight course info safe to embed in Leaf view contexts.
+/// Lightweight course info safe to embed in view contexts.
 struct CourseContext: Encodable {
     let id: String
     let code: String

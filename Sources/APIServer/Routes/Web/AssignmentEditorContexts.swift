@@ -104,7 +104,7 @@ struct EditAssignmentContext: Encodable {
     let githubSubmission: GitHubSubmissionSetting?
     /// The Language select's options, in `AssignmentLanguage.allCases` order
     /// behind the "detect automatically" entry. Built from `allCases` rather
-    /// than written out in the template so a sixth language needs no Leaf edit —
+    /// than written out in the view so a new language needs no view edit —
     /// the same discovered-not-enumerated rule the kernel-alias generator and
     /// the runner's capability probe follow.
     let assignmentLanguageOptions: [SelectOption]
@@ -138,8 +138,8 @@ struct EditAssignmentContext: Encodable {
     let error: String?
     /// True when this page is being rendered into the left pane of the
     /// assignment workbench (`GET /instructor/:assignmentID/workbench`)
-    /// rather than as the standalone edit page.  `base.leaf` reads it to
-    /// suppress the site chrome, and the template reads it to drop the
+    /// rather than as the standalone edit page.  The layout reads it to
+    /// suppress the site chrome, and the editor reads it to drop the
     /// "Open workbench" link (the workbench must not link to itself).
     /// `nil` on the standalone `/edit` render.
     let embedded: Bool?
@@ -178,7 +178,7 @@ enum AssignmentLanguageOption {
 
 /// The edit page's class-activity facts (docs/class-activities.md), nested
 /// under one key so the page context stays within its body budget. Every
-/// field is a plain value because Leaf resolves no Swift properties.
+/// field is a plain value, a shape kept from the Leaf templates.
 struct ActivityEditFacts: Encodable {
     /// The "Class activity" select's options: "None" first, then every
     /// `ActivityKind` in `allCases` order — derived, never written out.
@@ -187,7 +187,7 @@ struct ActivityEditFacts: Encodable {
     /// fine print says why (`ActivityAuthoring.kindLockedMessage`'s rule).
     let locked: Bool
     /// True when the manifest carries an activity block; gates the Activity
-    /// section. Explicit Bool, as every Leaf gate here is.
+    /// section.
     let isSet: Bool
     let kindLabel: String
     let summary: String

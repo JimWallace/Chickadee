@@ -118,7 +118,7 @@ import Testing
         #expect(AvatarCustomization.options(for: .border) == AvatarBorder.allCases.map(\.rawValue))
     }
 
-    // MARK: - The partial
+    // MARK: - The stylesheet
 
     private static func contents(of path: String) throws -> String {
         let url = repositoryRoot
@@ -126,7 +126,7 @@ import Testing
     }
 
     /// The ring is a sprite layer; a solid ring is coloured by the property the
-    /// partial assigns.
+    /// avatar view assigns.
     @Test func stylesheetDrawsTheRingFromTheBorderProperty() throws {
         let css = try Self.contents(of: "Public/styles.css")
         #expect(css.contains(".av-ring { fill: var(--av-border); }"))

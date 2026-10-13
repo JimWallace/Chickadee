@@ -2,9 +2,10 @@
 # action-btn-icon already did. A name with no rule is caught by
 # check-class-resolution; a name someone re-adds a rule for is caught here.
 guard="scripts/check-styles.sh"
-files="Resources/Views/base.leaf"
-description="a retired button size modifier"
+files="Sources/APIServer/Views/BaseLayout.swift"
+description="a retired button size modifier in a Swift view"
 expect="retired button size modifier"
 apply() {
-    printf '<button type="button" class="btn btn-tiny">guard fixture</button>\n' >> Resources/Views/base.leaf
+    printf 'let ckGuardFixture = button(.type(.button), .class("btn btn-tiny")) { "guard fixture" }\n' \
+        >> Sources/APIServer/Views/BaseLayout.swift
 }

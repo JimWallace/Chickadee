@@ -121,7 +121,7 @@ same way it is already *visibility*-scoped to a course.
 | Enrollment | `Sources/APIServer/Models/APICourseEnrollment.swift` | Join row `(user_id, course_id)`. As of Phase 1 it also carries a per-course `role` (`CourseRole`), seeded behaviour-preservingly from the global role and **not yet read** — the global role still governs capability until Phases 2–4 wire this in. |
 | Access policy | `Sources/APIServer/Helpers/CourseAccessHelpers.swift` — `requireCourseEnrollment`, `userIsEnrolled`, `enrolledCourses` | The single chokepoint both the web routes and MCP tools resolve course access through. Admin is the one bypass. |
 | Active-course resolution | `APIUser.swift` — `resolveActiveCourse`, `CourseContext`, `ResolvedCourseState` | Picks the active course from session/DB, auto-enrolls `.auto` courses, returns the enrolled set. |
-| View context | `APIUser.swift` — `CurrentUserContext` | Carries `isAdmin`, `isInstructor`, `activeCourse`, `enrolledCourses` into Leaf. The nav (`Resources/Views/base.leaf`) reads these. |
+| View context | `APIUser.swift` — `CurrentUserContext` | Carries `isAdmin`, `isInstructor`, `activeCourse`, `enrolledCourses` into the views. The nav (`Sources/APIServer/Views/SiteNav.swift`, inside `BaseLayout`) reads these. |
 | Route gating | `Sources/APIServer/Middleware/RoleMiddleware.swift`; groups in `Sources/APIServer/routes.swift` (`.authenticated` / `.instructor` / `.admin`) | Coarse, **global**-role gates at the group level. |
 | Agent scope | `Sources/APIServer/MCP/Tools/ToolContext.swift` — `authorizeCourseAccess` | Enrollment-scoped, so agent scope ⊆ human scope. |
 
@@ -183,7 +183,7 @@ representable and creatable.
   `enrolledCoursesWithRoles` resolver (the enrollment row is already loaded —
   no extra query). `enrolledCourses` is now defined in terms of it, so the
   role-free MCP visibility set can't drift from the web one.
-- `CurrentUserContext` exposes `isStaffInActiveCourse`, and `base.leaf`
+- `CurrentUserContext` exposes `isStaffInActiveCourse`, and `SiteNav`
   keys the Instructor tab off *that* instead of the global `isInstructor`. It
   is `true` when the active course's role is `.instructor` **or** (a
   transitional fallback) the user is a global instructor/admin — so today's

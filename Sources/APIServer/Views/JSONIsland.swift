@@ -1,8 +1,7 @@
 // APIServer/Views/JSONIsland.swift
 //
 // A `<script type="application/json">` data island: server-made JSON that a
-// page script reads with `JSON.parse(el.textContent)`. The Elementary port of
-// the Leaf `rawJSON` tag.
+// page script reads with `JSON.parse(el.textContent)`.
 //
 // Elementary escapes text inside a script element, which would break the
 // JSON, so the island writes it raw. The JSON can carry text an author wrote
