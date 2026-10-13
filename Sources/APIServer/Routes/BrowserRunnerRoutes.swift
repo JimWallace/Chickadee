@@ -200,6 +200,14 @@ struct BrowserRunnerRoutes: RouteCollection {
                 manifest: manifest, seedHex: seed,
                 supportFilesDirectory: sharedDir,
                 language: resolved)
+            // The class composite's slot, as the worker sends it. Staff get
+            // the reference slot 0 and are never dealt one
+            // (`CompositeSlots.gradingInputs` decides, for both paths).
+            personalizedInputs = CompositeSlots.merged(
+                personalizedInputs,
+                with: await CompositeSlots.gradingInputs(
+                    manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID,
+                    userID: userID, usesReferenceSlot: false, on: req.db))
             // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
             // the manifest declares no datasets, which is the common case.
             personalizedFiles = DatasetResolver.resolve(

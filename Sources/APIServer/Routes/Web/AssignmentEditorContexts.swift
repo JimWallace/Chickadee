@@ -232,7 +232,7 @@ struct ActivityEditFacts: Encodable {
             composite = CompositeEditFacts.make(
                 spec: spec,
                 enrolledStudents: try await enrolledStudentCount(forCourse: setup.courseID, on: db),
-                locked: locked)
+                locked: try await ActivityAuthoring.compositeStructureLocked(setup: setup, on: db))
         }
         return ActivityEditFacts(
             kindOptions: ActivityKindOption.options(current: activity?.kind),

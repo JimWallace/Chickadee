@@ -329,7 +329,7 @@ struct WorkerJobRoutes: RouteCollection {
         // `gradingInputs` so the two grading paths resolve identically. For a
         // pre-materialized validation submission we use the cached values
         // (no re-eval on this hot path); otherwise we resolve live.
-        let personalizedInputs: [String: String]?
+        var personalizedInputs: [String: String]?
         if let materialization {
             personalizedInputs = materialization.inputs.isEmpty ? nil : materialization.inputs
         } else {
@@ -338,6 +338,16 @@ struct WorkerJobRoutes: RouteCollection {
                 manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir,
                 language: language)
         }
+        // A class composite's slot travels with the inputs
+        // (docs/class-composite.md): slot 0 for a validation run, the
+        // student's dealt slot otherwise.
+        personalizedInputs = CompositeSlots.merged(
+            personalizedInputs,
+            with: await CompositeSlots.gradingInputs(
+                manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
+                // Only a student's own submission is dealt a slot.
+                userID: submission.kind == APISubmission.Kind.student ? submission.userID : nil,
+                usesReferenceSlot: submission.kind == APISubmission.Kind.validation, on: req.db))
 
         // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
         // Cheap and deterministic (a file read + in-memory sample, no

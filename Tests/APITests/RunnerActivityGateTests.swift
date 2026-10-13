@@ -30,16 +30,20 @@ import Testing
     }
 
     /// Every kind answers through its opponent source: a kind with none is
-    /// claimable by an old build, a kind with one is not.
+    /// claimable by an old build, a kind with one is not. A class composite
+    /// stages no opponent but needs `activity-composite` for its contribution.
     @Test(arguments: ActivityKind.allCases)
     func aProfileWithoutTheCapabilityIsRefusedExactlyWhenTheKindStagesAnOpponent(kind: ActivityKind) throws {
         let result = RunnerActivityGate.evaluate(
             runnerProfile: profile(capabilities: ["shell-bash"]),
             manifest: manifest(ClassActivity(kind: kind, opponentFile: "bot.py")))
-        #expect(result.isCompatible == !kind.opponentSource.stagesAnOpponent)
+        let isComposite = kind.aggregation == .composite
+        #expect(result.isCompatible == (!kind.opponentSource.stagesAnOpponent && !isComposite))
         if !result.isCompatible {
             #expect(result.reasons.count == 1)
-            let token = try #require(kind.opponentSource.requiredRunnerCapability?.name)
+            let required =
+                isComposite ? RunnerCapability.activityComposite : kind.opponentSource.requiredRunnerCapability
+            let token = try #require(required?.name)
             #expect(result.reasons.first?.contains(token) == true)
         }
     }
