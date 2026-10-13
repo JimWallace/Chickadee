@@ -2,9 +2,9 @@
 //
 // Cross-site request forgery protection for the session-backed web routes.
 //
-// This replaces the `vapor-community/CSRF` package, which pulled Leaf into the
-// build for a form-field tag that Chickadee never used. The token scheme is the
-// package's, unchanged, so a page rendered before a deploy still validates
+// This replaces the `vapor-community/CSRF` package (v3.1.1, revision
+// 7ca62d39), which pulled Leaf into the build for a form-field tag that
+// Chickadee never used. The token scheme is the package's, unchanged, so a page rendered before a deploy still validates
 // after it:
 //
 // - The session holds a random 16-byte hex secret under `CSRFSecret`.
@@ -52,7 +52,12 @@ struct CSRFMiddleware: AsyncMiddleware {
         guard let salt = token.split(separator: "-", omittingEmptySubsequences: false).first else {
             return false
         }
-        return token == Self.token(salt: String(salt), secret: secret)
+        let expected = Array(Self.token(salt: String(salt), secret: secret).utf8)
+        let given = Array(token.utf8)
+        // Compare in constant time, so the time taken tells nothing about how
+        // much of the token matched.
+        guard given.count == expected.count else { return false }
+        return zip(given, expected).reduce(0) { $0 | ($1.0 ^ $1.1) } == 0
     }
 
     private static func secret(for request: Request) -> String {
