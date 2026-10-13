@@ -50,6 +50,18 @@ export interface JSScriptOutput {
     timedOut: boolean;
 }
 /**
+ * A class-composite contribution, with the footer's field names (`w`, `h`)
+ * so the browser posts the same keys that `CompositeContribution`'s `Codable`
+ * conformance reads on the server.
+ */
+export interface JSCompositeContribution {
+    w: number;
+    h: number;
+    frames: number;
+    format: string;
+    data: string;
+}
+/**
  * The canonical `TestOutcome` shape, field for field, with the enums as
  * their raw strings — what the browser POSTs and the server decodes.
  */
@@ -63,6 +75,7 @@ export interface JSTestOutcome {
     score: number;
     points: number;
     metric: number | null;
+    composite: JSCompositeContribution | null;
     executionTimeMs: number;
     memoryUsageBytes: number | null;
     attemptNumber: number;
@@ -98,6 +111,9 @@ export type Exports = {
      * and resolves with one canonical outcome per executed-or-skipped entry.
      */
     executeSuites(suites: JSSuiteItem[], timeLimitSeconds: number, attemptNumber: number, scriptExists: (arg0: string) => boolean, run: (arg0: string, arg1: number) => Promise<JSScriptOutput>): Promise<JSTestOutcome[]>;
+    JSCompositeContribution: {
+        init(w: number, h: number, frames: number, format: string, data: string): JSCompositeContribution;
+    },
     JSExtractedPython: {
         init(executableModule: string, introspectableSource: string, codeCellCount: number): JSExtractedPython;
     },
@@ -114,7 +130,7 @@ export type Exports = {
         init(script: string, tier: string, displayName: string | null, dependsOn: string[], points: number): JSSuiteItem;
     },
     JSTestOutcome: {
-        init(testName: string, testClass: string | null, tier: string, status: string, shortResult: string, longResult: string | null, score: number, points: number, metric: number | null, executionTimeMs: number, memoryUsageBytes: number | null, attemptNumber: number, isFirstPassSuccess: boolean): JSTestOutcome;
+        init(testName: string, testClass: string | null, tier: string, status: string, shortResult: string, longResult: string | null, score: number, points: number, metric: number | null, composite: JSCompositeContribution | null, executionTimeMs: number, memoryUsageBytes: number | null, attemptNumber: number, isFirstPassSuccess: boolean): JSTestOutcome;
     },
 }
 export type Imports = {

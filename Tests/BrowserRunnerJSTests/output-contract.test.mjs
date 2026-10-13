@@ -88,6 +88,12 @@ test('browser wasm interprets output identically to the native worker (shared fi
         assert.equal(outcome.metric ?? null, c.native.metric ?? null,
           `metric mismatch for case '${c.name}'`);
       }
+      // `composite` follows the same once-present rule. Its keys are the
+      // footer's (`w`, `h`, `frames`, `format`, `data`), on both sides.
+      if (outcome.composite !== undefined) {
+        assert.deepEqual(outcome.composite ?? null, c.native.composite ?? null,
+          `composite mismatch for case '${c.name}'`);
+      }
     }
 
     assert.ok(!leaksEnvelope(outcome.shortResult),

@@ -407,6 +407,7 @@ struct BrowserResultRoutes: RouteCollection {
                 score: o.score,
                 points: o.points,
                 metric: o.metric,
+                composite: o.composite,
                 executionTimeMs: o.executionTimeMs,
                 memoryUsageBytes: o.memoryUsageBytes,
                 attemptNumber: attemptNumber,
