@@ -23,7 +23,7 @@ struct JobWorkspacePaths {
 /// later phases need to assemble the result collection.
 struct JobPreparedWorkspace {
     let testSetupDir: URL
-    let manifest: TestProperties
+    let manifest: RunnerManifest
     let normalizationWarnings: [String]
     /// The staged opponent for a match job (`stageOpponentWorkspace`); nil
     /// for an ordinary run.

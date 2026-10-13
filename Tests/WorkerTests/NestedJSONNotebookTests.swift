@@ -37,7 +37,7 @@ import Testing
         try notebook.write(
             to: submission.appendingPathComponent("labs/work.json"), atomically: true, encoding: .utf8)
         let manifest = try JSONDecoder().decode(
-            TestProperties.self,
+            RunnerManifest.self,
             from: Data(
                 #"""
                 {"schemaVersion": 1, "gradingMode": "worker", "requiredFiles": [],

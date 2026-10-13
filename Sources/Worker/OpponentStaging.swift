@@ -66,7 +66,7 @@ func stageOpponentWorkspace(
 /// Stages one opponent — a matrix job's, by index, or the single one — into
 /// `opponentDir`. The rules are `stageOpponentWorkspace`'s.
 func stageOpponent(
-    _ opponent: JobOpponent, manifest: TestProperties, into opponentDir: URL, testSetupDir: URL,
+    _ opponent: JobOpponent, manifest: RunnerManifest, into opponentDir: URL, testSetupDir: URL,
     downloadedSubmission: URL?
 ) async throws -> URL {
     let fileManager = FileManager.default
@@ -99,7 +99,7 @@ func stageOpponent(
 /// The submission half of `stageOpponentWorkspace`: the zip is extracted with
 /// the same helper the daemon uses for the challenger.
 private func stageOpponentSubmission(
-    opponent: JobOpponent, downloaded: URL, into opponentDir: URL, manifest: TestProperties
+    opponent: JobOpponent, downloaded: URL, into opponentDir: URL, manifest: RunnerManifest
 ) async throws {
     let fileManager = FileManager.default
     if let filename = opponent.submissionFilename {

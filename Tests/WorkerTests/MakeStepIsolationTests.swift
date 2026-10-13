@@ -19,11 +19,12 @@ import Testing
 
 @Suite struct MakefileProtectionTests {
 
-    private static func manifest(makefile: MakefileConfig?) -> TestProperties {
+    private static func manifest(makefile: MakefileConfig?) -> RunnerManifest {
         TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "test_build.sh")],
             makefile: makefile,
-            language: .cpp)
+            language: .cpp
+        ).runnerManifest()
     }
 
     @Test func withAMakeStepEveryMakefileNameIsProtected() {

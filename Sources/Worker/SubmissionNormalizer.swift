@@ -59,7 +59,7 @@ struct SubmissionNormalizer {
     private let notebookExtractor = NotebookExtractor()
 
     func normalizePythonSubmission(
-        manifest: TestProperties,
+        manifest: RunnerManifest,
         submissionDirectory: URL,
         workspaceDirectory: URL,
         submissionFilename: String?
@@ -321,7 +321,7 @@ struct SubmissionNormalizer {
     }
 
     private func applyCompatibilityCopyIfNeeded(
-        manifest: TestProperties,
+        manifest: RunnerManifest,
         workspaceDirectory: URL,
         progress: inout NormalizationProgress
     ) throws {
@@ -449,7 +449,7 @@ struct SubmissionNormalizer {
         }
     }
 
-    private func singleExpectedPythonFilename(from manifest: TestProperties) -> String? {
+    private func singleExpectedPythonFilename(from manifest: RunnerManifest) -> String? {
         let pythonFiles = manifest.requiredFiles.filter {
             ($0 as NSString).pathExtension.lowercased() == "py"
         }

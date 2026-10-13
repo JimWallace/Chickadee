@@ -136,7 +136,7 @@ import Testing
     /// ProtectedWorkspaceFilenameTests.
     @Test func theProtectedSetKeepsTheStudentModuleDotfiles() throws {
         let names = protectedWorkspaceFilenames(
-            manifest: try Self.manifest(withScript: "test_public.py"))
+            manifest: try Self.manifest(withScript: "test_public.py").runnerManifest())
 
         #expect(names.contains(".chickadee_student_source"))
         #expect(names.contains(".chickadee_student_module"))

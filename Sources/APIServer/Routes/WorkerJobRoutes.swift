@@ -359,7 +359,7 @@ struct WorkerJobRoutes: RouteCollection {
             attemptNumber: submission.attemptNumber ?? 1,
             submissionURL: submissionURL,
             testSetupURL: testSetupURL,
-            manifest: claimed.manifest.runnerSanitized(),
+            manifest: claimed.manifest.runnerManifest(),
             submissionFilename: submission.filename,
             assignmentSeed: assignmentSeed,
             personalizedInputs: personalizedInputs,

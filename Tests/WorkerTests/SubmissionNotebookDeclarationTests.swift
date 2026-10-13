@@ -78,7 +78,7 @@ import Testing
     @Test func aDeclaredNonPythonNotebookIsExtractedInItsOwnLanguage() throws {
         try Self.rNotebook.write(
             to: directory.appendingPathComponent("solution.ipynb"), atomically: true, encoding: .utf8)
-        let manifest = try JSONDecoder().decode(TestProperties.self, from: Data(Self.shellOnlyManifest.utf8))
+        let manifest = try JSONDecoder().decode(RunnerManifest.self, from: Data(Self.shellOnlyManifest.utf8))
         #expect(
             submissionNormalization(
                 manifest: manifest, submissionFilename: "solution.ipynb", submissionDirectory: directory)

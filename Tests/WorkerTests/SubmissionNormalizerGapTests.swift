@@ -40,7 +40,7 @@ import Testing
         try? FileManager.default.removeItem(at: rootDir)
     }
 
-    private func makeManifest(requiredFiles: [String] = []) throws -> TestProperties {
+    private func makeManifest(requiredFiles: [String] = []) throws -> RunnerManifest {
         let jsonObject: [String: Any] = [
             "schemaVersion": 1,
             "gradingMode": "worker",
@@ -50,7 +50,7 @@ import Testing
             "makefile": NSNull(),
         ]
         let data = try JSONSerialization.data(withJSONObject: jsonObject)
-        return try JSONDecoder().decode(TestProperties.self, from: data)
+        return try JSONDecoder().decode(RunnerManifest.self, from: data)
     }
 
     @discardableResult
@@ -72,7 +72,7 @@ import Testing
     }
 
     private func normalize(
-        manifest: TestProperties, submissionFilename: String?
+        manifest: RunnerManifest, submissionFilename: String?
     ) async throws
         -> NormalizationResult
     {
