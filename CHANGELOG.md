@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.625] - 2026-10-13
+
+### Added
+
+- **In-memory counts for the hot-path routes.** The idle runner poll, the runner heartbeat and the submission status poll do not persist a `request_metrics` row on success, so they had no count and no latency. The server now counts every request on these routes in memory, with a fixed-bucket latency histogram since the process started and per minute over the last 60 minutes. `/admin/metrics` and the admin MCP tool `get_metrics_snapshot` report it as `hotPaths`. See `docs/operational-diagnostics.md` §"Hot-path counts".
+
+### Changed
+
+- **Manifest model views (manifest v2, phase 1).** `TestSuiteEntry.origin`, `TestProperties.languageDeclaration` and `TestSettings` state the real states of fields that the manifest stores in pairs or in four places. Call sites switch over them. The stored JSON does not change. See `docs/manifest-format-v2.md`.
+
+
 ## [0.5.624] - 2026-10-13
 
 ### Fixed
