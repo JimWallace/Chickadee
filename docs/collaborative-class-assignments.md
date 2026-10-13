@@ -41,7 +41,8 @@ not been retired — the thing to watch for in the first offering is whether the
 assembled corpus grades as one artifact at all, since name collisions between
 contributors are resolved by the language and not by Chickadee (see the traps
 below). The rest of the phase-4 worry list was answerable without an offering:
-the retention story is `deleteCourse` reaching `class_coverage_runs`, and the
+the retention story is `deleteCourse` reaching `class_coverage_runs` and
+`class_item_coverage`, and the
 "results sink" is one row rather than the side table the note predicted.
 
 One thing left to the instructor's hand for now: **a slot is declared by
