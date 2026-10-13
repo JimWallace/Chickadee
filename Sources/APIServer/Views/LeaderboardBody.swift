@@ -57,7 +57,9 @@ struct LeaderboardBody: HTML {
             if let composite = board.compositeBoard {
                 CompositeHolders(composite: composite)
             } else {
-                p(.class("empty")) { "The class composite is shown on the projector." }
+                // Only staff reach this board (`ActivityAuthoring` keeps it
+                // hidden), so a missing board means a missing composite.
+                p(.class("empty")) { "No composite is set up." }
             }
         } else if board.showsStandings {
             if board.standings.isEmpty {

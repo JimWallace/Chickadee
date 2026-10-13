@@ -74,7 +74,9 @@ struct LeaderboardPage: HTML {
                 script(.src(page.asset("/class-composite-core.js"))) {}
                 script(.src(page.asset("/class-composite.js"))) {}
             }
-            if board.pollsLive || board.compositeStage != nil {
+            if board.compositeStage != nil {
+                // The canvas polls through table-poll.js, which then also
+                // runs the region poll this kind declares.
                 script(.src(page.asset("/table-poll.js"))) {}
             }
         }
