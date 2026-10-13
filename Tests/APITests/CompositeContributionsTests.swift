@@ -90,6 +90,9 @@ import VaporTesting
         let threeBytes = Data([1, 2, 3]).base64EncodedString()
         #expect(!CompositeContributions.isValid(contribution(threeBytes), for: shape), "a wrong length")
         #expect(!CompositeContributions.isValid(contribution("not base64!"), for: shape))
+        #expect(!CompositeContributions.isValid(contribution("CsgA"), for: shape), "three bytes in four characters")
+        #expect(!CompositeContributions.isValid(contribution("Csg"), for: shape), "unpadded")
+        #expect(!CompositeContributions.isValid(contribution("Cs g="), for: shape), "whitespace")
     }
 
     // MARK: - Recording
@@ -177,6 +180,36 @@ import VaporTesting
             #expect(rows.first?.submissionID == "sub_new")
             #expect(rows.first?.data == other)
             #expect(try await APIClassItemCoverage.query(on: app.db).all().map(\.submissionID) == ["sub_old"])
+        }
+    }
+
+    /// Two results for one student at once: the newer submission is the one
+    /// left stored, in either order.
+    @Test func concurrentResultsLeaveTheNewerSubmission() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let f = try await fixture(on: app)
+            let id = try await student("cc_race", f, on: app)
+            let now = Date()
+            let old = try await submission("sub_race_old", by: id, f, at: now.addingTimeInterval(-60), on: app)
+            let new = try await submission("sub_race_new", by: id, f, at: now, on: app)
+            let setupID = f.setupID
+            let first = contribution()
+            // Rounds after the first exercise the update, not the insert.
+            for _ in 0..<5 {
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    for (sub, subID) in [(old, "sub_race_old"), (new, "sub_race_new")] {
+                        group.addTask {
+                            try await CompositeContributions.record(
+                                submission: sub, collection: collection(subID, setupID: setupID, composite: first),
+                                on: app.db)
+                        }
+                    }
+                    try await group.waitForAll()
+                }
+                let rows = try await APICompositeContribution.query(on: app.db).all()
+                #expect(rows.map(\.submissionID) == ["sub_race_new"])
+            }
         }
     }
 

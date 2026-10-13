@@ -74,8 +74,10 @@ enum CompositeContributions {
 
         let passed = outcome.status == .pass
         let stored = try await upsert(
-            assignmentID: assignmentID, userID: userID, slot: slot, submissionID: submissionID,
-            submittedAt: submission.submittedAt ?? Date(), contribution: contribution, passed: passed, on: db)
+            APICompositeContribution(
+                assignmentID: assignmentID, userID: userID, slot: slot, submissionID: submissionID,
+                submittedAt: submission.submittedAt ?? .distantPast, contribution: contribution, passed: passed),
+            on: db)
         guard stored else { return .superseded }
 
         if passed {
@@ -89,45 +91,58 @@ enum CompositeContributions {
     }
 
     /// Whether a contribution can fill a slot of this composite: the shape is
-    /// the assignment's, and `data` is valid base64 of exactly the right
-    /// length, at most `CompositeContribution.maxPayloadBytes`.
+    /// the assignment's, and `data` is standard padded base64 of exactly the
+    /// right length, at most `CompositeContribution.maxPayloadBytes`.
     static func isValid(_ contribution: CompositeContribution, for shape: CompositeContributionShape) -> Bool {
         guard contribution.width == shape.width, contribution.height == shape.height,
-            contribution.frames == shape.frames, contribution.format == shape.format,
+            contribution.frames == shape.frames, contribution.format == shape.format
+        else { return false }
+        // The shape is bounded at save, so this cannot overflow. Standard
+        // padded base64 of n bytes is exactly 4 × ceil(n / 3) characters, so
+        // the length check refuses unpadded text before anything is decoded.
+        let byteCount = contribution.expectedByteCount
+        guard byteCount <= CompositeContribution.maxPayloadBytes,
+            contribution.data.utf8.count == (byteCount + 2) / 3 * 4,
             let bytes = Data(base64Encoded: contribution.data)
         else { return false }
-        return bytes.count == contribution.expectedByteCount
-            && bytes.count <= CompositeContribution.maxPayloadBytes
+        return bytes.count == byteCount
     }
 
     // MARK: - Private
 
-    /// Inserts or replaces the student's row. Returns false when the stored
-    /// row came from a newer submission. No insert runs inside a transaction:
-    /// a second result for the same student can race this one, and the loser
-    /// of the insert reads the winner's row and compares again.
-    private static func upsert(
-        assignmentID: UUID, userID: UUID, slot: Int, submissionID: String, submittedAt: Date,
-        contribution: CompositeContribution, passed: Bool, on db: any Database
-    ) async throws -> Bool {
+    /// Inserts `row` or replaces the student's stored row. Returns false when the stored
+    /// row came from a newer submission.
+    ///
+    /// Safe under a race. The replace is one conditional UPDATE, so of two
+    /// results for one student the newer submission is the one left stored,
+    /// in either order. A loser of the insert reads the winner's row and
+    /// tries the update. No insert runs inside a transaction: on Postgres a
+    /// failed insert aborts the transaction.
+    private static func upsert(_ row: APICompositeContribution, on db: any Database) async throws -> Bool {
+        func studentRow() -> QueryBuilder<APICompositeContribution> {
+            APICompositeContribution.query(on: db)
+                .filter(\.$assignmentID == row.assignmentID)
+                .filter(\.$userID == row.userID)
+        }
         for _ in 0..<2 {
-            if let existing = try await APICompositeContribution.query(on: db)
-                .filter(\.$assignmentID == assignmentID)
-                .filter(\.$userID == userID)
-                .first()
-            {
-                guard submittedAt >= existing.submittedAt else { return false }
-                existing.replace(
-                    slot: slot, submissionID: submissionID, submittedAt: submittedAt,
-                    contribution: contribution, passed: passed)
-                try await existing.save(on: db)
-                return true
+            if try await studentRow().count() > 0 {
+                try await studentRow()
+                    .filter(\.$submittedAt <= row.submittedAt)
+                    .set(\.$slot, to: row.slot)
+                    .set(\.$submissionID, to: row.submissionID)
+                    .set(\.$submittedAt, to: row.submittedAt)
+                    .set(\.$width, to: row.width)
+                    .set(\.$height, to: row.height)
+                    .set(\.$frames, to: row.frames)
+                    .set(\.$format, to: row.format)
+                    .set(\.$data, to: row.data)
+                    .set(\.$passed, to: row.passed)
+                    .set(\.$updatedAt, to: Date())
+                    .update()
+                return try await studentRow().first()?.submissionID == row.submissionID
             }
             do {
-                try await APICompositeContribution(
-                    assignmentID: assignmentID, userID: userID, slot: slot, submissionID: submissionID,
-                    submittedAt: submittedAt, contribution: contribution, passed: passed
-                ).create(on: db)
+                try await row.create(on: db)
                 return true
             } catch let error where isInsertConflict(error) {
                 continue

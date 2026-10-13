@@ -11,7 +11,7 @@ import Core
 import Fluent
 import Vapor
 
-final class APICompositeContribution: Model, Content, @unchecked Sendable {
+final class APICompositeContribution: Model, @unchecked Sendable {
     // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "composite_contributions"
 
@@ -69,15 +69,6 @@ final class APICompositeContribution: Model, Content, @unchecked Sendable {
     ) {
         self.assignmentID = assignmentID
         self.userID = userID
-        replace(
-            slot: slot, submissionID: submissionID, submittedAt: submittedAt,
-            contribution: contribution, passed: passed)
-    }
-
-    /// Replaces the stored contribution with a newer one.
-    func replace(
-        slot: Int, submissionID: String, submittedAt: Date, contribution: CompositeContribution, passed: Bool
-    ) {
         self.slot = slot
         self.submissionID = submissionID
         self.submittedAt = submittedAt

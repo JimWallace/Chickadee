@@ -25,10 +25,10 @@ import Testing
         #expect(CompositeSpec.coverageItem(forSlot: 7) == "slot-7")
     }
 
-    @Test func anUnscopedGoalCountsTheSlotsAndTheSuite() {
+    @Test func anUnscopedGoalCountsTheSlots() {
         let props = manifest(ClassActivity(kind: .classComposite, composite: spec))
         #expect(props.compositeCoverageItems == spec.coverageItems)
-        #expect(props.coveredItemNames(inScopeOf: nil) == ["tile.py", "slot-0", "slot-1", "slot-2", "slot-3"])
+        #expect(props.coveredItemNames(inScopeOf: nil) == ["slot-0", "slot-1", "slot-2", "slot-3"])
     }
 
     @Test func aSectionScopeHasNoSlots() {
