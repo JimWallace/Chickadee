@@ -23,7 +23,12 @@ import Vapor
 /// `SessionIdleTimeoutMiddleware`, not against this one. So a session that is
 /// read and not modified is, on disk, already exactly what the write would
 /// have produced.
-struct UnchangedSessionSkippingDriver: SessionDriver {
+///
+/// The wrapper is async; the wrapped driver stays `any SessionDriver`, because
+/// Fluent's session driver is still future-based, so each call bridges with
+/// `.get()`. `AsyncSessionDriver` supplies the future-based methods that
+/// `SessionsMiddleware` calls.
+struct UnchangedSessionSkippingDriver: AsyncSessionDriver {
     /// The payload `readSession` handed back for this request, so the write
     /// side can tell an untouched session from a modified one. Request storage
     /// is the right scope: it lives exactly as long as the comparison is valid.
@@ -33,31 +38,30 @@ struct UnchangedSessionSkippingDriver: SessionDriver {
 
     let base: any SessionDriver
 
-    func createSession(_ data: SessionData, for request: Request) -> EventLoopFuture<SessionID> {
-        base.createSession(data, for: request)
+    func createSession(_ data: SessionData, for request: Request) async throws -> SessionID {
+        try await base.createSession(data, for: request).get()
     }
 
-    func readSession(_ sessionID: SessionID, for request: Request) -> EventLoopFuture<SessionData?> {
-        base.readSession(sessionID, for: request).map { data in
-            if let data {
-                request.storage[LoadedSessionDataKey.self] = data
-            }
-            return data
+    func readSession(_ sessionID: SessionID, for request: Request) async throws -> SessionData? {
+        let data = try await base.readSession(sessionID, for: request).get()
+        if let data {
+            request.storage[LoadedSessionDataKey.self] = data
         }
+        return data
     }
 
     func updateSession(
         _ sessionID: SessionID,
         to data: SessionData,
         for request: Request
-    ) -> EventLoopFuture<SessionID> {
+    ) async throws -> SessionID {
         if let loaded = request.storage[LoadedSessionDataKey.self], loaded == data {
-            return request.eventLoop.makeSucceededFuture(sessionID)
+            return sessionID
         }
-        return base.updateSession(sessionID, to: data, for: request)
+        return try await base.updateSession(sessionID, to: data, for: request).get()
     }
 
-    func deleteSession(_ sessionID: SessionID, for request: Request) -> EventLoopFuture<Void> {
-        base.deleteSession(sessionID, for: request)
+    func deleteSession(_ sessionID: SessionID, for request: Request) async throws {
+        try await base.deleteSession(sessionID, for: request).get()
     }
 }
