@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.636] - 2026-10-13
+
+### Fixed
+
+- **Course staff always open the current starter and solution.** A staff member's editor copy of an assignment's starter or solution notebook was made on their first visit and never refreshed, so a later change (an MCP edit, another author's save, a version restore) did not reach it, and saving that copy wrote the old notebook back over the new one. Staff copies now refresh from the stored notebook whenever its content differs; an unchanged copy is left alone, so in-browser edits survive a reload. Student copies, which hold their own work, are unchanged. A staff member who submits an open assignment as a student also opens the current starter on the next visit, not that work; it stays in their submission history.
+
+
 ## [0.5.635] - 2026-10-13
 
 ### Changed
