@@ -3,13 +3,13 @@
 // A notebook check is an instructor-authored single-shot assertion about a
 // student's notebook submission.  Distinct from `PatternFamily`, which
 // exercises a function with a table of cases.  Each NotebookCheck expands
-// into exactly one generated Python test script at manifest-save time.
+// into exactly one generated test script, in the assignment's language, at
+// manifest-save time.
 //
 // Where families ask "does `classify_bmi(18.49)` return `\"underweight\"`?",
 // checks ask "is the student's `df` a (250, 13) DataFrame?", "did the
-// student produce ≥ 2 figures under section 'Exercise 4'?", "is the
-// markdown after Exercise 6 filled in?", etc.  v1 ships only
-// `.dataFrameShape`.
+// student produce ≥ 2 figures?", etc.  `NotebookCheckKind` lists the ten
+// kinds that ship.
 //
 // The generated script is a `TestSuiteEntry` whose `generatedByCheck` field
 // points back at `NotebookCheck.id`.  Raw-script-edit endpoints refuse to
@@ -17,8 +17,7 @@
 
 import Foundation
 
-/// Kind discriminator.  Future kinds (`.figureCount`, `.markdownPresent`,
-/// `.cellContains`) slot in alongside.  Each kind is rendered by a
+/// Kind discriminator.  Each kind is rendered by a
 /// dedicated renderer; the validator enforces that the kind-specific
 /// fields below are present and well-formed.
 public enum NotebookCheckKind: String, Codable, Sendable, Equatable, CaseIterable {
@@ -112,9 +111,11 @@ public enum ColumnMatchMode: String, Codable, Sendable, Equatable, CaseIterable 
 }
 
 /// Canonical specification for a notebook check.  Stored in
-/// `TestProperties.notebookChecks` as the source of truth; rendering
-/// produces one `.py` file and one matching `TestSuiteEntry` per check
-/// at save time.
+/// `TestProperties.testItems` as the source of truth; rendering produces
+/// one test script in the assignment's language and one matching
+/// `TestSuiteEntry` per check at save time.  The kind comments below name
+/// the Python implementation; each language has its own renderer, and
+/// `docs/authoring-parity.md` lists the kinds each language refuses.
 ///
 /// Per-kind config fields are loose-typed (`Optional`) so the JSON shape
 /// stays flat and adding new kinds doesn't churn the manifest schema.

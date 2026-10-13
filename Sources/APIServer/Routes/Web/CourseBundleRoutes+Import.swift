@@ -528,7 +528,7 @@ private func importBundledTestSetups(
         // The notebook is already on disk above, so resolution can consult its
         // kernel; an assignment nothing identifies is declared as having no
         // language, which is the truthful answer for a shell-script suite.
-        if let imported = setup.decodedManifest(), imported.languageDeclared != true {
+        if let imported = setup.decodedManifest(), imported.languageDeclaration == .undeclared {
             try await declareManifestLanguage(
                 setup: setup,
                 to: AssignmentLanguage.derivedDeclaration(

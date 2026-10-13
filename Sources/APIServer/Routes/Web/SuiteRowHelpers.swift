@@ -215,14 +215,15 @@ func authoredSuiteItemsFromDraftManifest(
     var seenChecks: Set<String> = []
     var seenScripts: Set<String> = []
     for entry in draftProps.testSuites {
-        if let fid = entry.generatedBy {
+        switch entry.origin {
+        case .family(let fid):
             guard !seenFamilies.contains(fid) else { continue }
             seenFamilies.insert(fid)
             // v0.4.134: propagate sectionID from the draft's family-generated
             // entry so families published from the create page keep their
             // section assignment instead of falling into Ungrouped.
             items.append(.family(id: fid, sectionID: entry.sectionID))
-        } else if let cid = entry.generatedByCheck {
+        case .check(let cid):
             // v0.4.134: same fix for notebook checks — without this the
             // check-generated entries fall through to applyPatternFamilies'
             // "checks not in authoredItems" branch which appends them at
@@ -230,7 +231,7 @@ func authoredSuiteItemsFromDraftManifest(
             guard !seenChecks.contains(cid) else { continue }
             seenChecks.insert(cid)
             items.append(.check(id: cid, sectionID: entry.sectionID))
-        } else {
+        case .handWritten:
             guard let newEntry = newByScript[entry.script] else { continue }
             seenScripts.insert(entry.script)
             items.append(
