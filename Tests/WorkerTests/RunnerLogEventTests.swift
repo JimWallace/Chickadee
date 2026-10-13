@@ -195,7 +195,7 @@ import Testing
             .write(to: submission.appendingPathComponent("picture.png"))
 
         let manifest = try JSONDecoder().decode(
-            TestProperties.self,
+            RunnerManifest.self,
             from: Data(
                 #"""
                 {"schemaVersion": 1, "gradingMode": "worker", "requiredFiles": [],

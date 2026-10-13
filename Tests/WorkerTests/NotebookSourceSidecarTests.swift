@@ -39,7 +39,7 @@ import Testing
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Self.notebook.write(to: url, atomically: true, encoding: .utf8)
         let manifest = try JSONDecoder().decode(
-            TestProperties.self,
+            RunnerManifest.self,
             from: Data(
                 #"""
                 {"schemaVersion": 1, "gradingMode": "worker", "requiredFiles": [],

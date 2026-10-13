@@ -167,6 +167,14 @@ the same fields, so an old runner decodes it without a change.
 A new `TestProperties` field is then server-only unless a person adds it to
 `RunnerManifest`. The compiler shows the decision.
 
+Implemented in phase 2 (`Sources/Core/RunnerManifest.swift`).
+`RunnerManifest` encodes and decodes through the `TestProperties` codec, so
+its bytes are the bytes that `runnerSanitized()` produced before.
+`RunnerManifestTests` keeps the old `runnerSanitized()` body as a fixed point
+and checks the bytes against it. `runnerSanitized()` remains, built on
+`RunnerManifest`. The worker functions take a `RunnerManifest`, and `Job`
+keeps an initializer that takes a `TestProperties`.
+
 ### D2. Use one shared settings type (P5)
 
 Implemented in phase 1 (`Sources/Core/TestSettings.swift`).

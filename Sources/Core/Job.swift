@@ -16,8 +16,10 @@ public struct Job: Codable, Sendable {
     public let submissionURL: URL
     /// URL the worker should GET to download the test-setup zip.
     public let testSetupURL: URL
-    /// Parsed manifest — avoids a second round-trip to fetch it separately.
-    public let manifest: TestProperties
+    /// The runner contract of the manifest — avoids a second round-trip to
+    /// fetch it separately.  On the wire it is a `TestProperties` with the
+    /// server-only fields at their defaults (see `RunnerManifest`).
+    public let manifest: RunnerManifest
     /// Non-nil when the submission is a raw file (not a zip).
     /// The worker copies it into the test directory under this filename.
     public let submissionFilename: String?
@@ -82,7 +84,7 @@ public struct Job: Codable, Sendable {
         attemptNumber: Int,
         submissionURL: URL,
         testSetupURL: URL,
-        manifest: TestProperties,
+        manifest: RunnerManifest,
         submissionFilename: String? = nil,
         assignmentSeed: String? = nil,
         personalizedInputs: [String: String]? = nil,
@@ -104,5 +106,31 @@ public struct Job: Codable, Sendable {
         self.language = language
         self.opponent = opponent
         self.opponents = opponents
+    }
+
+    /// Builds a job from a full manifest.  It keeps only the runner contract
+    /// (`TestProperties.runnerManifest()`).
+    public init(
+        submissionID: String,
+        testSetupID: String,
+        attemptNumber: Int,
+        submissionURL: URL,
+        testSetupURL: URL,
+        manifest: TestProperties,
+        submissionFilename: String? = nil,
+        assignmentSeed: String? = nil,
+        personalizedInputs: [String: String]? = nil,
+        personalizedFiles: [String: String]? = nil,
+        language: AssignmentLanguage?,
+        opponent: JobOpponent? = nil,
+        opponents: [JobOpponent]? = nil
+    ) {
+        self.init(
+            submissionID: submissionID, testSetupID: testSetupID, attemptNumber: attemptNumber,
+            submissionURL: submissionURL, testSetupURL: testSetupURL,
+            manifest: manifest.runnerManifest(), submissionFilename: submissionFilename,
+            assignmentSeed: assignmentSeed, personalizedInputs: personalizedInputs,
+            personalizedFiles: personalizedFiles, language: language,
+            opponent: opponent, opponents: opponents)
     }
 }

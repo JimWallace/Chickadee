@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.629] - 2026-10-13
+
+### Changed
+
+- **The session driver wrapper is async.** `UnchangedSessionSkippingDriver` now conforms to `AsyncSessionDriver` and has no `EventLoopFuture` code. Behaviour does not change: an untouched session still skips its write. This removes the last future-based code from the server sources, which prepares for Vapor 5.
+
+
+## [0.5.628] - 2026-10-13
+
+### Changed
+
+- **Claude Code reads less and checks more.** The root `CLAUDE.md` keeps the rules for the whole repository. The rules for one area move to a `CLAUDE.md` in that area (`Sources/APIServer/`, `Sources/APIServer/MCP/`, `Sources/APIServer/Views/`, `Sources/Worker/`, `Tools/jupyterlite/`), which Claude Code loads only when it works there. New hooks format each edited Swift file and run `scripts/format-lint.sh` before a push. The test-edit hook now also asks before a shell command changes an existing test. `scripts/format-lint.sh` reads its steps from the CI `format-lint` job, so the local check and CI cannot drift, and `scripts/test-claude-hooks.py` tests the hooks in CI. The `test-runner` agent runs only the affected suites unless asked for a full run. The project settings now allow every tool call except a change to an existing test, which still asks.
+
+
+## [0.5.627] - 2026-10-13
+
+### Changed
+
+- **Runner manifest type (manifest v2, phase 2).** `Job.manifest` is now a `RunnerManifest`, which holds only the fields a runner reads. A worker read of a server-only manifest field no longer compiles, and a new manifest field reaches a runner only when it is added to `RunnerManifest`. The wire bytes are unchanged, so older runners and the runner's test-setup cache key are not affected. See `docs/manifest-format-v2.md`.
+
+
 ## [0.5.626] - 2026-10-13
 
 ### Added

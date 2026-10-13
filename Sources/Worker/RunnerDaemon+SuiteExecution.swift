@@ -18,7 +18,7 @@ extension WorkerDaemon {
     /// supplies its substrate (`NativeScriptExecutor`) and its structured
     /// logging via the event sink.
     func executeTestSuites(
-        manifest: TestProperties,
+        manifest: RunnerManifest,
         testSetupDir: URL,
         opponentDir: URL?,
         opponentDirs: [URL],
@@ -57,7 +57,7 @@ extension WorkerDaemon {
     /// One pass of the shared suite loop with `env` — the whole of what an
     /// ordinary job does, and one match of a matrix job.
     func runSuite(
-        manifest: TestProperties, testSetupDir: URL, env scriptEnv: [String: String], job: Job
+        manifest: RunnerManifest, testSetupDir: URL, env scriptEnv: [String: String], job: Job
     ) async -> [TestOutcome] {
 
         // Per-student file materialization (`_ck_inputs.py` + dataset slices)

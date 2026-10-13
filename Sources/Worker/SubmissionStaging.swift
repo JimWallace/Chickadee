@@ -70,7 +70,7 @@ func directorySizeBytes(at directory: URL) -> Int? {
 /// The runtime helpers and `_ck_inputs.*` are included even though the prepare
 /// phase rewrites them after the merge. That ordering is what currently makes
 /// them safe, and it is not a property this function should have to depend on.
-func protectedWorkspaceFilenames(manifest: TestProperties) -> Set<String> {
+func protectedWorkspaceFilenames(manifest: RunnerManifest) -> Set<String> {
     var names = Set(manifest.testSuites.map(\.script))
     names.formUnion(allRuntimeHelperFiles().keys)
     names.formUnion(AssignmentLanguage.allCases.map(\.inputsFileName))
@@ -314,7 +314,7 @@ enum SubmissionNormalization: Equatable, Sendable {
 /// Generalised from `manifestTargetsRSubmission`, which asked the same question
 /// about R alone. Iterating `allCases` is what makes a new language an owner
 /// the day its case exists, rather than silently falling through to Python.
-func manifestOwningLanguage(_ manifest: TestProperties) -> AssignmentLanguage? {
+func manifestOwningLanguage(_ manifest: RunnerManifest) -> AssignmentLanguage? {
     // The RECORDED language is the strongest ownership signal, and for C++ it
     // is the only one: a C++ suite's generated scripts are `.sh` wrappers, so
     // there is no extension to sniff — exactly the "suite made up only of
@@ -357,7 +357,7 @@ func manifestOwningLanguage(_ manifest: TestProperties) -> AssignmentLanguage? {
 /// 6 are Python answering "is this mine?"; steps 2 and 3 are another language
 /// answering the same question. Nothing asks "is it R?" any more.
 func submissionNormalization(
-    manifest: TestProperties,
+    manifest: RunnerManifest,
     submissionFilename: String?,
     submissionDirectory: URL
 ) -> SubmissionNormalization {
@@ -453,7 +453,7 @@ func testSetupCacheKey(for job: Job) -> String {
         // fixed fallback would make two such jobs collide on id and URL alone:
         // a wrong hit, not a miss. A fresh digest is a key nothing else can
         // produce, so the setup is fetched again. Unreachable today, since
-        // every TestProperties encodes, but silent if it ever were not.
+        // every RunnerManifest encodes, but silent if it ever were not.
         let fresh = sha256HexDigest(Data(UUID().uuidString.utf8))
         return "\(job.testSetupID)-\(fresh.prefix(16))"
     }

@@ -17,16 +17,21 @@ public struct InterpretedScriptResult: Equatable, Sendable {
     /// leaderboard's sort key), never for credit. Nil when the footer carries
     /// none or the value is not a number.
     public let metric: Double?
+    /// The footer's optional `composite`: this test's contribution to a class
+    /// composite. Nil when the footer carries none or its shape is invalid. It
+    /// is a display, never credit (`docs/class-composite.md`).
+    public let composite: CompositeContribution?
 
     public init(
         status: TestStatus, shortResult: String, longResult: String?, score: Double,
-        metric: Double? = nil
+        metric: Double? = nil, composite: CompositeContribution? = nil
     ) {
         self.status = status
         self.shortResult = shortResult
         self.longResult = longResult
         self.score = score
         self.metric = metric
+        self.composite = composite
     }
 }
 
@@ -117,7 +122,8 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     return InterpretedScriptResult(
         status: status, shortResult: shortResult, longResult: longResult,
         score: partialCreditScore(footer: footer, status: status),
-        metric: rankingMetric(footer: footer))
+        metric: rankingMetric(footer: footer),
+        composite: footer?["composite"].flatMap(CompositeContribution.init(footer:)))
 }
 
 /// The footer's `metric`, unclamped, or nil. Deliberately NOT derived from the

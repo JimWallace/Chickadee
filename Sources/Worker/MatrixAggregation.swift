@@ -63,6 +63,8 @@ func aggregateMatrixRuns(_ runs: [MatrixRun]) -> [TestOutcome] {
             score: meanScore,
             points: lead.points,
             metric: metrics.isEmpty ? nil : metrics.reduce(0, +),
+            // No `composite`: a match aggregate is not one rendering, and a
+            // class composite stages no opponent, so no matrix run carries one.
             executionTimeMs: samples.map(\.1.executionTimeMs).reduce(0, +),
             memoryUsageBytes: nil,
             attemptNumber: lead.attemptNumber,
