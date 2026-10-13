@@ -1,0 +1,9 @@
+# Vapor 5 makes the request-body decode async. A direct call compiles on
+# Vapor 4 and bypasses the one helper that the migration changes.
+guard="scripts/check-vapor5-readiness.sh"
+files="Sources/APIServer/Helpers/BlockingWork.swift"
+description="a bare content.decode inside a Request extension"
+expect="a body is decoded directly"
+apply() {
+    printf '\nimport Vapor\n\nextension Request {\n    func guardFixture() throws -> String {\n    try content.decode(String.self)\n    }\n}\n' >> Sources/APIServer/Helpers/BlockingWork.swift
+}

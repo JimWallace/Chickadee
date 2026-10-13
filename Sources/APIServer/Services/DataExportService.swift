@@ -188,14 +188,14 @@ private func buildDataExport(exportID: UUID, userID: UUID, app: Application) asy
     }
 
     let logger = app.logger
-    try await runBlocking(app: app) {
+    try await runBlocking {
         try writeDataExportStaging(
             stagingDir: stagingDir, files: files, copies: copies, logger: logger)
     }
     try Task.checkCancellation()
     try await createZipArchive(sourceDir: stagingDir, outputPath: tempZipPath)
     try Task.checkCancellation()
-    let fileSize = try await runBlocking(app: app) {
+    let fileSize = try await runBlocking {
         try installDataExportZip(tempZipPath: tempZipPath, finalZipPath: finalZipPath)
     }
 

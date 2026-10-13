@@ -55,7 +55,7 @@ extension AdminRoutes {
             /// Optional: the username of the course's first instructor.
             var instructor: String?
         }
-        let body = try req.content.decode(CourseBody.self)
+        let body = try await req.decodeContent(CourseBody.self)
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let instructor = (body.instructor ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -135,7 +135,7 @@ extension AdminRoutes {
         guard !course.isArchived else { throw Abort(.conflict) }
 
         let back = "/admin/courses/\(idString)"
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         let identifier = (body?.identifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard let role = CourseRole(rawValue: body?.role ?? ""), role >= .ta else {
             return req.redirect(to: "\(back)?staffError=\(StaffFormError.role.rawValue)#add-staff-panel")
@@ -203,7 +203,7 @@ extension AdminRoutes {
         else {
             throw Abort(.notFound)
         }
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
@@ -226,7 +226,7 @@ extension AdminRoutes {
         else {
             throw Abort(.notFound)
         }
-        let enabled = (try? req.content.decode(Body.self))?.enabled == "on"
+        let enabled = (try? await req.decodeContent(Body.self))?.enabled == "on"
         course.aiFeedbackEnabled = enabled
         try await course.save(on: req.db)
         await AuditLogger.record(
@@ -279,7 +279,7 @@ extension AdminRoutes {
         else {
             throw Abort(.notFound)
         }
-        let body = try req.content.decode(CloneBody.self)
+        let body = try await req.decodeContent(CloneBody.self)
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let back = "/admin/courses/\(idString)"
@@ -456,7 +456,7 @@ extension AdminRoutes {
             throw Abort(.notFound)
         }
 
-        let body = try req.content.decode(EditCourseBody.self)
+        let body = try await req.decodeContent(EditCourseBody.self)
         let rawCode = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let rawName = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         // Fall back to the existing value if the field was submitted blank.
@@ -566,7 +566,7 @@ extension AdminRoutes {
         }
 
         struct Body: Content { var role: String? }
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         guard let newRole = CourseRole(rawValue: body?.role ?? "") else {
             throw Abort(.badRequest, reason: "Unknown per-course role.")
         }
@@ -658,7 +658,7 @@ extension AdminRoutes {
         }
 
         struct EnrollBody: Content { var courseID: String }
-        let body = try req.content.decode(EnrollBody.self)
+        let body = try await req.decodeContent(EnrollBody.self)
 
         guard
             let courseID = UUID(uuidString: body.courseID),
@@ -718,7 +718,7 @@ extension AdminRoutes {
             throw AppError.badRequest(reason: "Invalid or archived course.")
         }
 
-        let form = try req.content.decode(BulkEnrollForm.self)
+        let form = try await req.decodeContent(BulkEnrollForm.self)
 
         let rawUsernames = parseUsernamesFromCSV(form.file)
         let result = try await enrollUsernamesInCourse(

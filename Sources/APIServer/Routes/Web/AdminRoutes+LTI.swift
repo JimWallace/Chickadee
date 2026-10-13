@@ -46,7 +46,7 @@ extension AdminRoutes {
 
     @Sendable
     func createLTIPlatform(req: Request) async throws -> Response {
-        let form = try req.content.decode(LTIPlatformForm.self)
+        let form = try await req.decodeContent(LTIPlatformForm.self)
         do {
             let valid = try form.validated()
             try await ensureUniqueLTIPlatform(valid, excluding: nil, on: req.db)
@@ -71,7 +71,7 @@ extension AdminRoutes {
     @Sendable
     func updateLTIPlatform(req: Request) async throws -> Response {
         let platform = try await findLTIPlatform(req)
-        let form = try req.content.decode(LTIPlatformForm.self)
+        let form = try await req.decodeContent(LTIPlatformForm.self)
         do {
             let valid = try form.validated()
             try await ensureUniqueLTIPlatform(valid, excluding: platform.id, on: req.db)
@@ -101,7 +101,7 @@ extension AdminRoutes {
     func setLTIPlatformEnabled(req: Request) async throws -> Response {
         struct Body: Content { var enabled: Bool }
         let platform = try await findLTIPlatform(req)
-        let enabled = try req.content.decode(Body.self).enabled
+        let enabled = try await req.decodeContent(Body.self).enabled
         platform.enabled = enabled
         try await platform.save(on: req.db)
         await AuditLogger.record(

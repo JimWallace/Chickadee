@@ -24,7 +24,7 @@ extension MCPOAuthRoutes {
         // (the surface comes from the code's / grant's stored scope), so a
         // content code mints a content token and an admin code mints an admin
         // token from the right key + audience.
-        let form = try req.content.decode(TokenForm.self)
+        let form = try await req.decodeContent(TokenForm.self)
         switch form.grantType {
         case "authorization_code":
             return try await exchangeCode(req, form: form)

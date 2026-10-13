@@ -6,23 +6,15 @@
 // of them, and a burst of such requests (a lab section opening a notebook)
 // starves every other request. Wrap the blocking section instead.
 
-import NIOCore
-import Vapor
+import NIOPosix
 
-/// Runs `body` on the application's NIOThreadPool, keeping the request's
-/// event loop free. Use for synchronous file I/O, zip subprocess helpers,
-/// and anything else that blocks.
-func runBlocking<T: Sendable>(
-    on req: Request,
-    _ body: @escaping @Sendable () throws -> T
-) async throws -> T {
-    try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop, body).get()
-}
-
-/// Application-scoped variant for call sites without a `Request`.
-func runBlocking<T: Sendable>(
-    app: Application,
-    _ body: @escaping @Sendable () throws -> T
-) async throws -> T {
-    try await app.threadPool.runIfActive(eventLoop: app.eventLoopGroup.next(), body).get()
+/// Runs `body` on NIO's shared blocking thread pool, keeping the cooperative
+/// pool free. Use for synchronous file I/O, zip subprocess helpers, and
+/// anything else that blocks.
+///
+/// This is the pool Vapor 4 hands out as `application.threadPool`, so the
+/// behaviour is unchanged. It is reached directly, without an event loop,
+/// because Vapor 5 has neither (docs/vapor-5-migration.md).
+func runBlocking<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
+    try await NIOThreadPool.singleton.runIfActive(body)
 }

@@ -79,7 +79,7 @@ extension WebRoutes {
         struct SpendBody: Content {
             var submissionID: String?
         }
-        let body = try? req.content.decode(SpendBody.self)
+        let body = try? await req.decodeContent(SpendBody.self)
         if let submissionID = body?.submissionID,
             let submission = try await APISubmission.find(submissionID, on: req.db),
             submission.testSetupID == setupID,

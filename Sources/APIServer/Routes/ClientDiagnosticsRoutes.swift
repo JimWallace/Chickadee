@@ -45,7 +45,7 @@ struct ClientDiagnosticsRoutes: RouteCollection {
             throw AppError.internalFailure(reason: "Authenticated user has no ID")
         }
 
-        let body = try req.content.decode(ClientDiagnosticBody.self)
+        let body = try await req.decodeContent(ClientDiagnosticBody.self)
 
         // "submit_phase" / "submit_error" are breadcrumbs from the browser
         // grading/submission flow (source = phase name, message = "elapsed_ms=…").

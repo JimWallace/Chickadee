@@ -172,7 +172,7 @@ struct AdminRoutes: RouteCollection {
         }
         let csrfToken = PageRequestContext(request: req).csrfToken
         let html = UserRows(users: rows, csrfToken: csrfToken).render()
-        return Response.pollFragment(html: ByteBuffer(string: html), csrfToken: csrfToken, for: req)
+        return Response.pollFragment(html: html, csrfToken: csrfToken, for: req)
     }
 
     /// Loads every user, ordered most-recently-seen first (NULL last_seen
@@ -262,7 +262,7 @@ struct AdminRoutes: RouteCollection {
             throw AppError.forbidden(action: "change your own role")
         }
 
-        let body = try req.content.decode(RoleBody.self)
+        let body = try await req.decodeContent(RoleBody.self)
         // The deployment role is user|admin now (#417 Slice G2); `mcp` is set only
         // at agent provisioning, never toggled here, and the retired
         // student/instructor roles are no longer assignable.
@@ -297,7 +297,7 @@ struct AdminRoutes: RouteCollection {
             var localRunnerAutoStart: String?
         }
 
-        let body = try req.content.decode(AutoStartBody.self)
+        let body = try await req.decodeContent(AutoStartBody.self)
         let enabled = (body.localRunnerAutoStart == "on")
         await req.application.localRunnerAutoStartStore.setEnabled(enabled)
         writeLocalRunnerAutoStartToDisk(
@@ -364,7 +364,7 @@ struct AdminRoutes: RouteCollection {
     @Sendable
     func updateAlertsConfig(req: Request) async throws -> Response {
         struct AlertsConfigBody: Content { var webhookURL: String? }
-        let body = try req.content.decode(AlertsConfigBody.self)
+        let body = try await req.decodeContent(AlertsConfigBody.self)
         let trimmed = (body.webhookURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !trimmed.isEmpty {

@@ -44,7 +44,7 @@ extension PublishedAssignmentRoutes {
         let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
 
         let body: SuitePayload
-        do { body = try req.content.decode(SuitePayload.self) } catch {
+        do { body = try await req.decodeContent(SuitePayload.self) } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
@@ -80,7 +80,7 @@ extension PublishedAssignmentRoutes {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
 
         let body: TimeLimitPayload
-        do { body = try req.content.decode(TimeLimitPayload.self) } catch {
+        do { body = try await req.decodeContent(TimeLimitPayload.self) } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid time-limit payload: \(error.localizedDescription)")

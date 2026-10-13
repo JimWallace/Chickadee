@@ -21,7 +21,7 @@ struct SubmissionRoutes: RouteCollection {
     @Sendable
     func createSubmission(req: Request) async throws -> SubmissionCreatedResponse {
         let caller = try req.auth.require(APIUser.self)
-        let body = try req.content.decode(CreateSubmissionBody.self)
+        let body = try await req.decodeContent(CreateSubmissionBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
@@ -69,7 +69,7 @@ struct SubmissionRoutes: RouteCollection {
     @Sendable
     func createSubmissionFile(req: Request) async throws -> SubmissionCreatedResponse {
         let caller = try req.auth.require(APIUser.self)
-        let body = try req.content.decode(SubmitFileBody.self)
+        let body = try await req.decodeContent(SubmitFileBody.self)
         let submittedFilename = submissionFilenameForStorage(
             uploadedName: body.filename,
             fallback: "submission.bin"
@@ -103,7 +103,7 @@ struct SubmissionRoutes: RouteCollection {
             let instructorData = try? await req.application.notebookBytesCache.notebookData(
                 for: source)
             if let instructorData {
-                fileData = try await runBlocking(on: req) {
+                fileData = try await runBlocking {
                     mergeNotebook(student: studentBytes, instructor: instructorData)
                 }
             } else {

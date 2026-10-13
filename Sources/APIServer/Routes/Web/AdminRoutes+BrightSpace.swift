@@ -213,7 +213,7 @@ extension AdminRoutes {
             let userID: String
             let userKey: String
         }
-        let form = try req.content.decode(CredentialForm.self)
+        let form = try await req.decodeContent(CredentialForm.self)
         let userID = form.userID.trimmingCharacters(in: .whitespacesAndNewlines)
         let userKey = form.userKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userID.isEmpty, !userKey.isEmpty else {

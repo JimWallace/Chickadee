@@ -100,7 +100,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
             var token: String?
             var courseID: String?
         }
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         guard let raw = body?.token,
             let token = try? await req.application.ltiToolKeyAuthority().verify(raw, as: LTIDeepLinkBindToken.self),
             let userID = token.userID,
@@ -149,7 +149,7 @@ struct LTIDeepLinkRoutes: RouteCollection {
 
     @Sendable
     func returnSelection(req: Request) async throws -> Response {
-        let body = try? req.content.decode(SelectionBody.self)
+        let body = try? await req.decodeContent(SelectionBody.self)
         let pending = try await Self.pending(ticket: body?.ticket, req: req)
         let request = pending.row.request
         let chosen = Set(body?.assignments ?? [])

@@ -28,6 +28,11 @@ let package = Package(
         // explicitly so the MCP support-file fetcher can build a dedicated,
         // no-redirect HTTPClient (the shared Vapor client follows redirects).
         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.34.0"),
+        // Already in the resolved graph via Vapor; declared explicitly so
+        // `runBlocking` can reach NIO's shared blocking thread pool without an
+        // event loop. Vapor 5 removes event loops and stops re-exporting NIO
+        // (docs/vapor-5-migration.md).
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
         // SwiftLint via SimplyDanny's plugin distribution: ships a pre-built
         // binary so CI / fresh checkouts don't pay a SwiftLint-from-source build.
         // Invoked on demand via `scripts/swiftlint.sh`; no `plugins:` entry on
@@ -106,6 +111,7 @@ let package = Package(
                 // load an RSA key but cannot create one.
                 .product(name: "CryptoExtras", package: "swift-crypto"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
+                .product(name: "NIOPosix", package: "swift-nio"),
                 // The server's own interpreter spawn (PersonalizationEvaluator)
                 // runs from the multithreaded Vapor process — the shape
                 // Foundation's Process deadlocked in (#1139), which is why the

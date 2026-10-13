@@ -23,7 +23,7 @@ extension InstructorDashboardRoutes {
             var statusChecks: String?
             var starterRepository: String?
         }
-        let body = try? req.content.decode(ToggleBody.self)
+        let body = try? await req.decodeContent(ToggleBody.self)
         let enabled = body?.enabled != nil
         let statusChecks = enabled && body?.statusChecks != nil
         let editURL = "/instructor/\(assignment.publicID)/edit"

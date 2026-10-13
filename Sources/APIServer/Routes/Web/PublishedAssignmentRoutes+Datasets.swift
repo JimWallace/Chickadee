@@ -34,7 +34,7 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func putDatasets(req: Request) async throws -> DatasetsResponse {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
-        let body = try req.content.decode(DatasetsBody.self)
+        let body = try await req.decodeContent(DatasetsBody.self)
         try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
         // Read back rather than echoing the request: the response is what the
         // Files panel renders its controls from, so it has to be the state the

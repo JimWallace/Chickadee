@@ -59,7 +59,7 @@ extension InstructorDashboardRoutes {
             .appendingPathComponent("chickadee-submissions-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: stagingDir) }
         let logger = req.logger
-        try await runBlocking(on: req) {
+        try await runBlocking {
             try writeSubmissionsStaging(stagingDir: stagingDir, entries: entries, logger: logger)
         }
 

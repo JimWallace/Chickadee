@@ -43,7 +43,7 @@ extension CourseAdminRoutes {
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing content items")
         try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
 
-        let body = try req.content.decode(ContentItemFormBody.self)
+        let body = try await req.decodeContent(ContentItemFormBody.self)
         let title = body.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
             throw WebAssignmentError.invalidParameter(name: "title", reason: "Title must not be empty.")
@@ -75,7 +75,7 @@ extension CourseAdminRoutes {
     @Sendable
     func updateContentItem(req: Request) async throws -> Response {
         let item = try await loadContentItemForWrite(req)
-        let body = try req.content.decode(ContentItemFormBody.self)
+        let body = try await req.decodeContent(ContentItemFormBody.self)
         let title = body.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
             throw WebAssignmentError.invalidParameter(name: "title", reason: "Title must not be empty.")
@@ -104,7 +104,7 @@ extension CourseAdminRoutes {
     @Sendable
     func setContentItemVisibility(req: Request) async throws -> Response {
         let item = try await loadContentItemForWrite(req)
-        let body = try req.content.decode(ContentItemVisibilityBody.self)
+        let body = try await req.decodeContent(ContentItemVisibilityBody.self)
         guard body.isPublished == "true" || body.isPublished == "false" else {
             throw WebAssignmentError.invalidParameter(
                 name: "isPublished", reason: "Must be true or false.")
@@ -159,7 +159,7 @@ extension CourseAdminRoutes {
         guard let courseID = courseState.activeCourseUUID else { return .ok }
         try await requireCourseWriteAccess(caller: user, courseID: courseID, atLeast: .ta, db: req.db)
 
-        let body = try req.content.decode(ReorderBody.self)
+        let body = try await req.decodeContent(ReorderBody.self)
         let uuids = body.itemIDs.compactMap { UUID(uuidString: $0) }
         guard uuids.count == body.itemIDs.count else {
             throw WebAssignmentError.invalidParameter(
@@ -199,7 +199,7 @@ extension CourseAdminRoutes {
             var sectionID: String?  // UUID string, or "" / absent = ungrouped
         }
         let item = try await loadContentItemForWrite(req)
-        let body = try? req.content.decode(MoveBody.self)
+        let body = try? await req.decodeContent(MoveBody.self)
         let newSectionID = try await resolveSectionID(
             body?.sectionID, courseID: item.courseID, db: req.db)
         item.sectionID = newSectionID

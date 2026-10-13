@@ -16,7 +16,7 @@ struct WorkerJobRoutes: RouteCollection {
 
     @Sendable
     func requestJob(req: Request) async throws -> Response {
-        let body = try req.content.decode(WorkerActivityPayload.self)
+        let body = try await req.decodeContent(WorkerActivityPayload.self)
         let seenAt = Date()
 
         if let conflict = try await rejectIfWorkerIDConflicts(req: req, body: body) {
@@ -606,7 +606,7 @@ struct WorkerJobRoutes: RouteCollection {
 
     @Sendable
     func heartbeat(req: Request) async throws -> HTTPStatus {
-        let body = try req.content.decode(WorkerActivityPayload.self)
+        let body = try await req.decodeContent(WorkerActivityPayload.self)
         _ = try await recordRunnerCheckIn(req: req, body: body, seenAt: Date(), reason: .heartbeat)
         return .ok
     }
@@ -701,7 +701,7 @@ private func testSetupDownloadVersion(for setup: APITestSetup, req: Request) asy
     // download caches) carry across the change.
     let prefix = Data(manifest.utf8) + Data("|zip=".utf8)
     let digest =
-        (try? await runBlocking(on: req) {
+        (try? await runBlocking {
             sha256HexDigest(prefix: prefix, contentsOfFile: zipPath)
         }).flatMap { $0 }
     let version = String((digest ?? sha256HexDigest(Data(manifest.utf8))).prefix(16))

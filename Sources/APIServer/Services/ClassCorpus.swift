@@ -82,11 +82,9 @@ func assembleClassCorpus(
     for userID in latestByUser.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
         guard let submission = latestByUser[userID],
             submission.filename?.lowercased().hasSuffix(".ipynb") == true,
-            let data = try? await runBlocking(
-                app: app,
-                {
-                    try Data(contentsOf: URL(fileURLWithPath: submission.zipPath))
-                }),
+            let data = try? await runBlocking({
+                try Data(contentsOf: URL(fileURLWithPath: submission.zipPath))
+            }),
             let cells = NotebookCellSources.cells(from: data)
         else { continue }
         // The stored notebook is the MERGED one, so its non-test cells are
@@ -148,7 +146,7 @@ func scheduleClassCorpusRun(
         let subID = freshShortID(prefix: "sub")
         let filePath = app.submissionsDirectory + "\(subID).ipynb"
         let notebook = corpus.notebook
-        try await runBlocking(app: app) {
+        try await runBlocking {
             try notebook.write(to: URL(fileURLWithPath: filePath))
         }
 

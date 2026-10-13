@@ -33,7 +33,7 @@ extension PublishedAssignmentRoutes {
         struct Body: Content { var name: String }
 
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
         try await createSuiteSectionCore(setup: setup, name: body.name, on: req.db)
         return redirectToEdit(req: req)
     }
@@ -48,7 +48,7 @@ extension PublishedAssignmentRoutes {
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
         try await renameSuiteSectionCore(setup: setup, sectionID: sectionID, name: body.name, on: req.db)
         return redirectToEdit(req: req)
     }
@@ -88,7 +88,7 @@ extension PublishedAssignmentRoutes {
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
 
         // The save-time eval runs against the acting instructor's own seed.
         let actingUserID = (try? req.auth.require(APIUser.self))?.id
@@ -118,7 +118,7 @@ extension PublishedAssignmentRoutes {
         struct Body: Content { var sectionIDs: [String] }
 
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
         try await reorderSuiteSectionsCore(setup: setup, sectionIDs: body.sectionIDs, on: req.db)
         return .ok
     }

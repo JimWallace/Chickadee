@@ -36,7 +36,7 @@ extension DraftAssignmentRoutes {
         struct Body: Content { var name: String }
 
         let setup = try await loadDraftSetupForWrite(req)
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
         try await createSuiteSectionCore(setup: setup, name: body.name, on: req.db)
         return redirectToDraft(req: req, setup: setup)
     }
@@ -51,7 +51,7 @@ extension DraftAssignmentRoutes {
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
         try await renameSuiteSectionCore(setup: setup, sectionID: sectionID, name: body.name, on: req.db)
         return redirectToDraft(req: req, setup: setup)
     }
@@ -93,7 +93,7 @@ extension DraftAssignmentRoutes {
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
         let actingUserID = (try? req.auth.require(APIUser.self))?.id
 
         try await SectionInputsService.apply(
@@ -121,7 +121,7 @@ extension DraftAssignmentRoutes {
         struct Body: Content { var sectionIDs: [String] }
 
         let setup = try await loadDraftSetupForWrite(req)
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
         try await reorderSuiteSectionsCore(setup: setup, sectionIDs: body.sectionIDs, on: req.db)
         return .ok
     }

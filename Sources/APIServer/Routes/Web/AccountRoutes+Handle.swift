@@ -140,7 +140,7 @@ extension AccountRoutes {
         else { throw Abort(.badRequest) }
 
         struct Body: Content { var handle: String }
-        let body = try req.content.decode(Body.self)
+        let body = try await req.decodeContent(Body.self)
 
         guard
             let enrollment = try await APICourseEnrollment.query(on: req.db)

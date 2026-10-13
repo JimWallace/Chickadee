@@ -65,7 +65,7 @@ enum GitHubAppRegistration {
     }
 
     /// Reads the row and the file together.
-    static func state(req: Request) async throws -> State {
+    static func state(req: any GitHubCallScope) async throws -> State {
         guard let app = try await APIGitHubApp.query(on: req.db).first() else { return .none }
         let path = req.application.githubAppSecretsFilePath
         do {
@@ -81,7 +81,7 @@ enum GitHubAppRegistration {
     /// The App and its secrets, or nil when no App is registered or its
     /// secrets cannot be read. A secrets problem is logged at error level,
     /// so a lost file shows in the log rather than only as a 404.
-    static func resolve(req: Request) async throws -> (app: APIGitHubApp, secrets: GitHubAppSecrets)? {
+    static func resolve(req: any GitHubCallScope) async throws -> (app: APIGitHubApp, secrets: GitHubAppSecrets)? {
         switch try await state(req: req) {
         case .none:
             return nil

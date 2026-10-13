@@ -39,7 +39,7 @@ extension CourseAdminRoutes {
         let courseID = try await req.requireActiveCourseID(for: user, action: "managing sections")
         try await requireCourseWriteAccess(
             caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
-        let body = try req.content.decode(CreateSectionBody.self)
+        let body = try await req.decodeContent(CreateSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
@@ -71,7 +71,7 @@ extension CourseAdminRoutes {
         guard let courseID = courseState.activeCourseUUID else { return .ok }
         try await requireCourseWriteAccess(
             caller: user, courseID: courseID, atLeast: .instructor, db: req.db)
-        let body = try req.content.decode(ReorderBody.self)
+        let body = try await req.decodeContent(ReorderBody.self)
         let uuids = body.sectionIDs.compactMap { UUID(uuidString: $0) }
         guard uuids.count == body.sectionIDs.count, !uuids.isEmpty else {
             throw WebAssignmentError.invalidParameter(
@@ -120,7 +120,7 @@ extension CourseAdminRoutes {
         }
         try await requireCourseWriteAccess(
             caller: user, courseID: section.courseID, atLeast: .instructor, db: req.db)
-        let body = try req.content.decode(RenameSectionBody.self)
+        let body = try await req.decodeContent(RenameSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
@@ -177,7 +177,7 @@ extension CourseAdminRoutes {
         // is course structure, so the floor matches `set_assignment_course_section`.
         try await requireCourseWriteAccess(
             caller: user, courseID: assignment.courseID, atLeast: .instructor, db: req.db)
-        let body = (try? req.content.decode(MoveBody.self))
+        let body = (try? await req.decodeContent(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         assignment.sectionID = newSectionID
         // Append to the destination lane's shared (assignment + content) order so

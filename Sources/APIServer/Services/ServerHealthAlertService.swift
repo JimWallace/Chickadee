@@ -821,8 +821,10 @@ private func writeAlertWebhookURLToDisk(value: String, filePath: String) {
 
 /// Not the generic `PeriodicSweepLifecycleHandler`: boot is gated on the
 /// alerts-enabled flag (with its own log line when disabled).
+/// Its hooks are async, like `PeriodicSweepLifecycleHandler`'s: the
+/// synchronous `boot()` does not run them.
 struct ServerHealthAlertLifecycleHandler: LifecycleHandler {
-    func didBoot(_ application: Application) throws {
+    func didBootAsync(_ application: Application) async throws {
         // Stamp the boot time unconditionally (before the enabled-guard) so the
         // runner-version-skew deploy grace is accurate even when paging is off
         // and only the read-only `get_health_alerts` view evaluates the rule.
@@ -890,7 +892,7 @@ extension Application {
 
     /// When this server process booted — used by the runner-version-skew alert's
     /// deploy grace (see `decideRunnerVersionSkew`). Set explicitly at boot by
-    /// `ServerHealthAlertLifecycleHandler.didBoot`; the lazy fallback captures the
+    /// `ServerHealthAlertLifecycleHandler.didBootAsync`; the lazy fallback captures the
     /// first read for paths that never ran the handler (e.g. a test app that
     /// evaluates rules directly), so the value is always populated and stable.
     var serverStartedAt: Date {

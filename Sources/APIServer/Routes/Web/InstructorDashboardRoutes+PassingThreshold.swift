@@ -26,7 +26,7 @@ extension InstructorDashboardRoutes {
         struct ThresholdBody: Content {
             var passingThresholdPercent: String?
         }
-        let raw = ((try? req.content.decode(ThresholdBody.self))?.passingThresholdPercent ?? "")
+        let raw = ((try? await req.decodeContent(ThresholdBody.self))?.passingThresholdPercent ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let update: PassingThresholdUpdate
         if raw.isEmpty {

@@ -51,7 +51,7 @@ extension DraftAssignmentRoutes {
         let setup = try await loadDraftSetupForWrite(req)
 
         let body: SuitePayload
-        do { body = try req.content.decode(SuitePayload.self) } catch {
+        do { body = try await req.decodeContent(SuitePayload.self) } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
@@ -75,7 +75,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func createDraftScript(req: Request) async throws -> Response {
         let setup = try await loadDraftSetupForWrite(req)
-        let body = try req.content.decode(CreateScriptBody.self)
+        let body = try await req.decodeContent(CreateScriptBody.self)
         let result = try await createScriptInSetup(
             setup: setup, body: body,
             kernelEnvironments: req.application.kernelEnvironments, on: req.db)
@@ -127,7 +127,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func putDraftDatasets(req: Request) async throws -> DatasetsResponse {
         let setup = try await loadDraftSetupForWrite(req)
-        let body = try req.content.decode(DatasetsBody.self)
+        let body = try await req.decodeContent(DatasetsBody.self)
         try await applyDatasetsEdit(setup: setup, datasets: body.datasets, on: req.db)
         return try await datasetsPanelResponse(req: req, setup: setup)
     }

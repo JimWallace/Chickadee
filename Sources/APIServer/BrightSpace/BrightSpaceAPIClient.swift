@@ -187,7 +187,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 let latestVersion: String
                 enum CodingKeys: String, CodingKey { case latestVersion = "LatestVersion" }
             }
-            let latest = try response.content.decode(ProductVersions.self)
+            let latest = try await response.decodeContent(ProductVersions.self)
                 .latestVersion.trimmingCharacters(in: .whitespaces)
             let resolved = latest.isEmpty ? fallback : latest
             negotiatedVersions[product] = resolved
@@ -212,7 +212,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         for _ in 0..<10_000 {
             let response = try await sendSigned(method: "GET", rawURL: url, on: app)
             guard response.status == .ok else { throw failure(Int(response.status.code)) }
-            let page = try response.content.decode(ValencePagedEnvelope<Element>.self)
+            let page = try await response.decodeContent(ValencePagedEnvelope<Element>.self)
             collected.append(contentsOf: page.elements)
             guard
                 let next = valenceNextPageURL(
@@ -329,7 +329,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             let items: [UserItem]
             enum CodingKeys: String, CodingKey { case items = "Items" }
         }
-        let decoded = try response.content.decode(UserListResponse.self)
+        let decoded = try await response.decodeContent(UserListResponse.self)
         guard let first = decoded.items.first else { return nil }
         return String(first.userId)
     }
@@ -360,7 +360,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 case uniqueName = "UniqueName"
             }
         }
-        let decoded = try response.content.decode(WhoAmIResponse.self)
+        let decoded = try await response.decodeContent(WhoAmIResponse.self)
         let display = [decoded.firstName, decoded.lastName]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
@@ -399,7 +399,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 case code = "Code"
             }
         }
-        let decoded = try response.content.decode(OrgUnitResponse.self)
+        let decoded = try await response.decodeContent(OrgUnitResponse.self)
         return BrightSpaceOrgUnitInfo(
             identifier: decoded.identifier, name: decoded.name, code: decoded.code)
     }
@@ -419,7 +419,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             throw BrightSpaceSyncError.gradeObjectsFetchFailed(
                 orgUnitID: orgUnitID, status: Int(response.status.code))
         }
-        let decoded = try response.content.decode([GradeObjectJSON].self)
+        let decoded = try await response.decodeContent([GradeObjectJSON].self)
         return decoded.map { $0.asGradeObject }
     }
 
@@ -441,7 +441,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             throw BrightSpaceSyncError.gradeObjectsFetchFailed(
                 orgUnitID: orgUnitID, status: Int(response.status.code))
         }
-        return try response.content.decode(GradeObjectJSON.self).asGradeObject
+        return try await response.decodeContent(GradeObjectJSON.self).asGradeObject
     }
 
     // MARK: - Classlist (roster reconciliation)

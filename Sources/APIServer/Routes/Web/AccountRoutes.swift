@@ -165,7 +165,7 @@ struct AccountRoutes: RouteCollection {
         guard let userID = user.id else { throw Abort(.internalServerError) }
 
         struct JoinBody: Content { var courseID: String }
-        let body = try req.content.decode(JoinBody.self)
+        let body = try await req.decodeContent(JoinBody.self)
 
         guard let courseID = UUID(uuidString: body.courseID),
             let course = try await APICourse.find(courseID, on: req.db),

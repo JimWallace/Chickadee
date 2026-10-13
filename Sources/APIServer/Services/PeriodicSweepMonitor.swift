@@ -134,10 +134,15 @@ final class PeriodicSweepMonitor: Sendable {
     }
 }
 
-/// Generic lifecycle registration for a `PeriodicSweepMonitor`: didBoot
-/// starts the monitor returned by `monitor`, shutdown stops it and waits for
-/// it.  Services whose boot needs extra gating (e.g. the health-alert enabled
+/// Generic lifecycle registration for a `PeriodicSweepMonitor`: boot starts
+/// the monitor returned by `monitor`, shutdown stops it and waits for it.
+/// Services whose boot needs extra gating (e.g. the health-alert enabled
 /// check) keep their own handler.
+///
+/// The hooks are the async ones, which `Application.execute()` and
+/// `asyncBoot()` run. The synchronous `boot()` does not run them, so do not
+/// boot an app with it. Vapor 5 has only async hooks
+/// (docs/vapor-5-migration.md).
 ///
 /// Vapor runs `shutdownAsync` handlers in reverse registration order, and
 /// `bootstrapAppServices` registers these after Fluent, so the wait happens
@@ -149,7 +154,7 @@ struct PeriodicSweepLifecycleHandler: LifecycleHandler {
         self.monitor = monitor
     }
 
-    func didBoot(_ application: Application) throws {
+    func didBootAsync(_ application: Application) async throws {
         monitor(application).start(application: application)
     }
 

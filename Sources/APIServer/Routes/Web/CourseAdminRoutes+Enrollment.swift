@@ -54,7 +54,7 @@ extension CourseAdminRoutes {
         }
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
         return req.redirect(to: "/instructor")
@@ -86,7 +86,7 @@ extension CourseAdminRoutes {
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
-        let form = try req.content.decode(BulkEnrollForm.self)
+        let form = try await req.decodeContent(BulkEnrollForm.self)
 
         var rawUsernames: [String] = []
         if let file = form.file, !file.isEmpty {
@@ -293,7 +293,7 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.notFound(resource: "Pre-enrollment")
         }
 
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         let username = preEnrollment.username
 
         // Reuse an existing account with this username (e.g. the student
@@ -373,7 +373,7 @@ extension CourseAdminRoutes {
         try await requireCourseWriteAccess(
             caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         let identifier = (body?.identifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Only staff roles may be added here; students enrol via CSV / self-serve.
@@ -415,7 +415,7 @@ extension CourseAdminRoutes {
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         struct Body: Content { var role: String? }
-        let body = try? req.content.decode(Body.self)
+        let body = try? await req.decodeContent(Body.self)
         guard let newRole = CourseRole(rawValue: body?.role ?? "") else {
             throw WebAssignmentError.invalidParameter(name: "role", reason: "Unknown per-course role.")
         }
