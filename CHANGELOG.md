@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.630] - 2026-10-13
+
+### Added
+
+- **Class composite: the `composite` footer field (slice 1 of `docs/class-composite.md`).** A test script can report a small image or a short run of frames as its contribution to a class composite. RunnerCore checks the shape without decoding the pixels, both runners carry it on the test outcome, and the shared output contract pins it. Nothing displays it yet, and it never changes a grade.
+
+
 ## [0.5.629] - 2026-10-13
 
 ### Changed
