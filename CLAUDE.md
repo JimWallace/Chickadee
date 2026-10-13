@@ -424,11 +424,10 @@ The hooks in `.claude/hooks/` do three jobs, so you need not:
 - `format-swift.py` runs `swift-format` on each Swift file that you edit.
 - `pre-push-format-lint.py` runs `scripts/format-lint.sh` (every step of the CI
   `format-lint` job) before `git push`, and stops the push when a step fails.
-  `lint-guard` runs the same script when you want the report earlier. When
-  `.claude/settings.json` does not register this hook, run `lint-guard`
-  before each push.
+  `lint-guard` runs the same script when you want the report earlier.
 - `ask-before-test-edit.py` asks the maintainer before any change to an
-  existing file under `Tests/`, by an edit tool or by a shell command.
+  existing file under `Tests/`, by an edit tool or by a shell command. The
+  project settings allow every other tool call, so this is the only prompt.
   `scripts/test-claude-hooks.py` tests all three hooks in CI.
 
 ---

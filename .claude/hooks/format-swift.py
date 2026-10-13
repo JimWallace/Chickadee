@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from toolchain_path import environment_with_toolchain  # noqa: E402
 
