@@ -104,12 +104,10 @@ import Testing
     @Test func presentationIsDecorativeOrLabelledButNeverBoth() {
         let spec = AvatarSpec.drawn(fromSeed: 3)
         let plain = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
-        #expect(plain.isLabelled == false)
-        #expect(plain.label.isEmpty)
+        #expect(plain.label == nil)
 
         let named = AvatarPresentation(
             for: spec, size: .standard, accessibility: .labelled("Quiet Cedar"), isStaff: false)
-        #expect(named.isLabelled)
         #expect(named.label == "Quiet Cedar")
     }
 

@@ -463,7 +463,7 @@ private struct AdminCourseUserRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                if user.hasAvatar, let avatar = user.avatar { Avatar(avatar: avatar) }
+                if let avatar = user.avatar { Avatar(avatar: avatar) }
             }
             td(.class("item-main")) {
                 div(.class("item-title")) { user.displayName ?? user.username }

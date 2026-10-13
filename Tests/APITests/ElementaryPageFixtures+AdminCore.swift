@@ -44,7 +44,6 @@ extension ElementaryPageFixtures {
             row.avatar = AvatarPresentation(
                 for: AvatarSpec.drawn(fromSeed: UInt64(id.count)), size: .roster, accessibility: avatar,
                 isStaff: role == "admin")
-            row.hasAvatar = true
         }
         return row
     }

@@ -313,7 +313,6 @@ func buildTournamentPresentation(
             handle: identity?.handle ?? "Seed \(entrant.seed)",
             name: identity?.name ?? "",
             isViewer: entrant.userID == viewerID,
-            hasAvatar: identity != nil,
             avatar: identity?.avatar)
     }
     func entrant(_ seed: Int?) -> TournamentEntrantPresentation? { seed.flatMap { bySeed[$0] } }

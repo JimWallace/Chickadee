@@ -104,6 +104,7 @@ extension OperationalDiagnosticsService {
         }
 
         let compatibilitySnapshot = await compatibilityCounters.snapshot()
+        let hotPathSnapshot = await hotPathStats.snapshot(now: now)
 
         return InternalMetricsResponse(
             generatedAt: now,
@@ -122,7 +123,8 @@ extension OperationalDiagnosticsService {
             },
             queueWait: durationSummary(for: queueWaitValues),
             execution: durationSummary(for: executionValues),
-            compatibility: compatibilitySnapshot
+            compatibility: compatibilitySnapshot,
+            hotPaths: hotPathSnapshot
         )
     }
 
@@ -194,6 +196,14 @@ extension OperationalDiagnosticsService {
         logger: Logger
     ) async {
         guard configuration.enabled else { return }
+        if let route = HotPathRoute(method: metric.method, path: metric.path) {
+            await hotPathStats.record(
+                route: route,
+                durationMs: metric.durationMs,
+                statusCode: metric.statusCode,
+                at: metric.finishedAt
+            )
+        }
         guard
             shouldCaptureRequest(
                 method: metric.method,
@@ -234,33 +244,16 @@ extension OperationalDiagnosticsService {
         // for each would be a DB INSERT per poll — the write amplification
         // the 2026-07 audit flagged on this exact path. Real dispatches
         // (200), result writebacks, and any error status still record.
-        if isIdleWorkerCheckIn(path: path, statusCode: statusCode) { return false }
-        if isSubmissionStatusPoll(method: method, path: path, statusCode: statusCode) { return false }
+        //
+        // The result view's status poll is the same amplification from the
+        // other side: `Public/app.js` polls `GET /api/v1/submissions/<id>`
+        // every two seconds while a submission is pending, which during a
+        // deadline is the highest-frequency request the server takes.
+        // `HotPathRequestStats` still counts all three routes in memory.
+        if let route = HotPathRoute(method: method, path: path), route.isRoutineSuccess(statusCode: statusCode) {
+            return false
+        }
         return shouldAlwaysLogRequest(path: path)
-    }
-
-    /// The student result view polls `GET /api/v1/submissions/<id>` every two
-    /// seconds for as long as its submission is pending (`Public/app.js`).
-    /// During a deadline that is the highest-frequency request the server
-    /// takes, and persisting a row for each turns a cheap read into a write at
-    /// the moment the database is busiest — the same amplification already
-    /// excluded for idle runner check-ins, arriving from the other side.
-    ///
-    /// Scoped to the bare status route: `/results`, `/download` and the
-    /// collection route keep recording. Errors record too, so a poll that
-    /// starts failing or slowing into 5xx stays visible.
-    private func isSubmissionStatusPoll(method: String, path: String, statusCode: Int) -> Bool {
-        guard method == "GET", statusCode < 400 else { return false }
-        let prefix = "/api/v1/submissions/"
-        guard path.hasPrefix(prefix) else { return false }
-        let remainder = path.dropFirst(prefix.count)
-        return !remainder.isEmpty && !remainder.contains("/")
-    }
-
-    private func isIdleWorkerCheckIn(path: String, statusCode: Int) -> Bool {
-        if path == "/api/v1/worker/request" { return statusCode == 204 }
-        if path == "/api/v1/worker/heartbeat" { return statusCode < 400 }
-        return false
     }
 
     private func shouldAlwaysLogRequest(path: String) -> Bool {

@@ -177,8 +177,7 @@ enum AssignmentLanguageOption {
 }
 
 /// The edit page's class-activity facts (docs/class-activities.md), nested
-/// under one key so the page context stays within its body budget. Every
-/// field is a plain value, a shape kept from the Leaf templates.
+/// under one key so the page context stays within its body budget.
 struct ActivityEditFacts: Encodable {
     /// The "Class activity" select's options: "None" first, then every
     /// `ActivityKind` in `allCases` order — derived, never written out.

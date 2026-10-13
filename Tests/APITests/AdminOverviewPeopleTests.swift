@@ -128,7 +128,7 @@ import VaporTesting
                 maxConcurrentJobs: 2, activeJobs: 0,
                 at: Date().addingTimeInterval(-10 * 60))
             let html = try await getHTML("/admin/runners?fragment=rows", cookie: cookie, on: app)
-            #expect(html.contains("runner-row-offline"))
+            #expect(html.contains("class=\"row-muted\""))
             #expect(html.contains(">Offline<"))
             #expect(!html.contains("class=\"pip\""))
         }

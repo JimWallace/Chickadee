@@ -186,10 +186,10 @@ private struct InstructorBrightspaceConnection: HTML {
             } else {
                 p(.class("bs-conn-line")) { "Your LEARN account is not connected." }
             }
-            if model.syncIdentity.hasName {
+            if let name = model.syncIdentity.name {
                 p(.class("bs-conn-line")) {
                     "This course pushes grades as "
-                    strong { model.syncIdentity.name ?? "" }
+                    strong { name }
                     "."
                 }
             }
@@ -285,7 +285,7 @@ private struct InstructorBrightspaceMapping: HTML {
                     }
                 }
             }
-            if !model.hasAssignments {
+            if model.assignmentRows.isEmpty {
                 p(.class("empty")) { "No assignments in this course yet." }
             } else {
                 datalist(.id("bs-grade-objects"), .data("do-not-sync-token", value: model.doNotSyncToken)) {}
@@ -360,7 +360,7 @@ private struct InstructorBrightspaceMappingRow: HTML {
                         strong(.title("Synced to LEARN")) { String(row.syncedCount) }
                         " synced"
                     }
-                    div(.class(row.hasErrored ? "item-details chip-err" : "item-details")) {
+                    div(.class(row.erroredCount > 0 ? "item-details chip-err" : "item-details")) {
                         span(.title("Failed to push")) { String(row.erroredCount) }
                         " failed"
                     }
@@ -418,7 +418,7 @@ private struct InstructorBrightspaceRoster: HTML {
                 }
             }
             if model.courseLinked {
-                if model.hasUnreachable {
+                if !model.unreachableStudents.isEmpty {
                     p(.class("section-note")) { model.readinessSummary }
                     table(.class("results-table section-items section-items--manage")) {
                         colgroup {

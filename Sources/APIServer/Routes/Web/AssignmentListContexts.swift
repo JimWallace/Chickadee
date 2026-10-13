@@ -23,8 +23,7 @@ struct AssignmentRow: Encodable {
     let validationSubmissionID: String?
     /// Multi-variant validation rollup for the validation cell: "none" (the
     /// assignment does not vary by student, or no batch has run yet) |
-    /// "pending" | "failed" | "passed".  A flat discriminator plus
-    /// pre-rendered text, a shape kept from the Leaf templates.
+    /// "pending" | "failed" | "passed".
     let variantState: String
     let variantSummaryText: String  // e.g. "1 of 4 variants failed"; "" when none
     /// The lowest-index failed variant's submission id, for the results link.
@@ -150,9 +149,6 @@ struct EnrolledStudentRow: Content {
     /// Filled by the Students-tab loaders only; the Overview's count-only
     /// roster never draws one.
     var avatar: AvatarPresentation?
-    /// Explicit flag the view gates on instead of `avatar` (kept from the Leaf
-    /// templates).
-    var hasAvatar: Bool = false
     /// The badge when LEARN cannot receive this student's grade ("Not on
     /// LEARN"), read from the readiness sweep's stored status.  Nil when the
     /// course is not linked, the student is confirmed, or the sweep has not

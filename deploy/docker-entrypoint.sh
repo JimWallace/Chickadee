@@ -59,6 +59,11 @@ for asset in Public Resources docs; do
     mv -T "${tmp}" "${link}"
 done
 
+# Notebook working copies. The image links Public/jupyterlite/files to
+# /data/jupyterlite-files (see the Dockerfile), so the link target is fixed at
+# /data whatever DATA_DIR says.
+mkdir -p /data/jupyterlite-files
+
 echo "[entrypoint] Starting chickadee-server ..."
 cd "${DATA_DIR}"
 exec /app/chickadee-server serve \

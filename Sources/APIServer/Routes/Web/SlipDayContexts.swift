@@ -19,9 +19,6 @@ struct SlipDayLedgerSpendRow: Encodable {
     let extensionDueAtText: String
     let isRefunded: Bool
     let refundedAtText: String
-    /// Precomputed `!isRefunded && canManageLedger` (kept from the Leaf
-    /// templates, which could not evaluate compound conditions).
-    let canRefund: Bool
 }
 
 /// One student-role enrollment on the Slip days roster ledger.
@@ -35,8 +32,6 @@ struct SlipDayStudentRow: Encodable {
     let remaining: Int
     let total: Int
     let adjustment: Int
-    /// Precomputed `!spends.isEmpty` (kept from the Leaf templates).
-    let hasSpends: Bool
     let spends: [SlipDayLedgerSpendRow]
     /// The student's own seeded avatar, at the roster size.
     let avatar: AvatarPresentation
@@ -47,9 +42,9 @@ struct SlipDayStudentRow: Encodable {
     let leftText: String
     /// "+2 granted" / "−1 removed", empty when the adjustment is zero.
     let adjustmentText: String
-    /// The refundable spends, for the row menu. Empty means no menu at all.
+    /// The refundable spends, for the row menu: none when the ledger is read
+    /// only. Empty means no menu at all.
     let refundableSpends: [SlipDayLedgerSpendRow]
-    let hasRefundable: Bool
 }
 
 /// One day in a student's budget, drawn as a pip. `state` is "used", "left" or

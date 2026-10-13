@@ -26,7 +26,7 @@ import Testing
                 usesServiceAccount: usesServiceAccount,
                 syncEnabled: syncEnabled,
                 syncIdentity: InstructorBrightspaceContext.SyncIdentityPanel(
-                    name: identity.name, hasName: identity.name != nil, isMe: identity.isMe,
+                    name: identity.name, isMe: identity.isMe,
                     connected: identity.connected, needsReconnect: needsReconnect),
                 identity: identity,
                 accountConnected: accountConnected,
