@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.633] - 2026-10-13
+
+### Changed
+
+- **Kernel packages are cached immutably.** The tarball that the build rewrites (`pyodide-http`) now carries its content hash in its name, so every name in a vendored `kernel_packages/` tree maps to one set of bytes. The server now serves those tarballs as immutable, so a warm kernel boot asks for no package, where it sent about 50 conditional requests before. For 150 students who join a lecture activity at once, that is about 7,200 fewer requests. `check-xeus-vendored.sh` asserts the naming. See `docs/kernel-boot-cost.md` §"Caching".
+
+### Added
+
+- **Per-statement database timing.** The new admin MCP tool `get_query_stats` reports the top database statements from the Postgres extension `pg_stat_statements`: calls, total / mean / max time, rows, cache hit rate and share of total time. The server creates the extension at startup when Postgres has loaded the library; until then the tool says which step is missing. Turning it on in production needs one host-side change and one `db` restart: see `docs/operational-diagnostics.md` §"Database statement timing".
+
+
 ## [0.5.632] - 2026-10-13
 
 ### Changed
