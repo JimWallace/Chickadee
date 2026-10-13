@@ -217,6 +217,12 @@ COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 # picked up on redeploy without re-copying ~586 MB into the volume every boot.
 COPY Public     ./Public
 COPY Resources  ./Resources
+# Notebook working copies are runtime data. The server writes them under
+# Public/jupyterlite/files, which would otherwise be in /app, owned by root. So
+# that path is a link into the data volume: the server can write the copies,
+# and they survive a redeploy. The entrypoint creates the target.
+RUN rm -rf ./Public/jupyterlite/files \
+    && ln -s /data/jupyterlite-files ./Public/jupyterlite/files
 # Authoring guides served as MCP resources (see MCPResourceProvider).
 COPY docs       ./docs
 

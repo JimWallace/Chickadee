@@ -371,6 +371,15 @@ jobs:
           fi
           echo "no path under /app is writable by the application user"
 
+          # The one runtime write under Public/: the notebook working copies.
+          # Public/jupyterlite/files links into the data volume, so the server
+          # can create a working copy although /app belongs to root. Without
+          # the link, the notebook page and the workbench answer 500.
+          echo "----- notebook working copies -----"
+          docker run --rm --entrypoint sh "$IMAGE" -c \
+            'mkdir -p /data/jupyterlite-files && mkdir -p /app/Public/jupyterlite/files/users/probe && touch /app/Public/jupyterlite/files/users/probe/notebook.ipynb'
+          echo "the application user can write a notebook working copy"
+
           # A worker-graded R test can load the tidyverse core, as a
           # browser-graded one can in the xeus-r kernel. Without a package in
           # the image, such a test passes in the browser and fails on the worker.
