@@ -1277,15 +1277,18 @@ import VaporTesting
             let cookie = try await staffCookie(username: "notebook_staff_reader")
             let otherAuthor = try await staffCookie(username: "notebook_staff_author")
 
+            // The solution lives in a validation submission, as an editor or
+            // MCP save stores it. A `solution.*` bundled in the setup zip takes
+            // precedence over every save, so it would hide the change under test.
             let setupID = "setup_nb_staff_solution"
-            _ = try await insertSetup(
-                id: setupID,
-                notebookJSON: notebookJSON(markdown: "Assignment"),
-                zipEntries: [
-                    ("assignment.ipynb", notebookJSON(markdown: "Assignment")),
-                    ("solution.ipynb", notebookJSON(markdown: "First solution")),
-                ])
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Assignment"))
             _ = try await insertAssignment(testSetupID: setupID, title: "Solution Follow Lab", isOpen: false)
+            try await postNotebookSave(
+                setupID: setupID, cookie: otherAuthor, file: "solution",
+                body: notebookJSON(markdown: "First solution")
+            ) { res in
+                #expect(res.status == .ok)
+            }
 
             try await app.asyncTest(
                 .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
@@ -1352,13 +1355,7 @@ import VaporTesting
                 try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_own_save").first())
 
             let setupID = "setup_nb_staff_own_save"
-            _ = try await insertSetup(
-                id: setupID,
-                notebookJSON: notebookJSON(markdown: "Assignment"),
-                zipEntries: [
-                    ("assignment.ipynb", notebookJSON(markdown: "Assignment")),
-                    ("solution.ipynb", notebookJSON(markdown: "First solution")),
-                ])
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Assignment"))
             _ = try await insertAssignment(testSetupID: setupID, title: "Own Save Lab", isOpen: false)
 
             try await postNotebookSave(
