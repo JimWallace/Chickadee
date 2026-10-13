@@ -33,7 +33,7 @@ struct SubmissionPage: HTML {
                 .data("pending", value: String(result.isPending))
             ) {
                 header
-                if result.hasClassGoals {
+                if !result.classGoals.isEmpty {
                     section(.class("class-goals-block")) {
                         h2(.class("class-goals-heading")) { "Class goals" }
                         for goal in result.classGoals {

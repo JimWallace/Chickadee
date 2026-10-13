@@ -24,15 +24,6 @@ struct AdminPage: HTML {
             diagnosticsSection
             runnersSection
             coursesSection
-            PageStyle(
-                """
-                /* Clickable diagnostic-card + sparkline styles are global (styles.css),
-                   shared with the instructor dashboard. */
-                tr.runner-row-offline {
-                    opacity: .5;
-                }
-                """
-            )
             script(.src(page.asset("/sortable-table.js"))) {}
             script(.src(page.asset("/list-filter.js"))) {}
             script(.src(page.asset("/table-poll.js"))) {}

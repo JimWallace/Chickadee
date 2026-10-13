@@ -216,7 +216,6 @@ extension AdminRoutes {
         if let user, let userID = user.id {
             row.avatar = try await AvatarStore.rosterAvatar(
                 for: user, isStaff: staffIDs.contains(userID), on: db)
-            row.hasAvatar = true
         }
         let status = Self.statusPill(for: row.finalStatus)
         row.statusLabel = status.label

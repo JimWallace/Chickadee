@@ -105,7 +105,6 @@ enum BrightSpacePagePresenter {
         let identity = try await syncIdentity(course: course, user: user, on: db, application: application)
         let syncIdentity = InstructorBrightspaceContext.SyncIdentityPanel(
             name: identity.name,
-            hasName: identity.name != nil,
             isMe: identity.isMe,
             connected: identity.connected,
             needsReconnect: identity.name != nil && !identity.connected)
@@ -144,9 +143,9 @@ enum BrightSpacePagePresenter {
             flashSuccess: flashes.success, flashError: flashes.error,
             canSyncNow: syncEnabled && !course.isArchived && !course.usesLTIGrades,
             doNotSyncToken: BrightspaceSync.doNotSyncToken,
-            assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
+            assignmentRows: assignmentRows,
             canReconcile: courseLinked && !course.isArchived,
-            unreachableStudents: unreachableStudents, hasUnreachable: !unreachableStudents.isEmpty,
+            unreachableStudents: unreachableStudents,
             showLTIGradesLink: course.ltiPlatformID != nil,
             usesLTIGrades: course.usesLTIGrades,
             usesServiceAccount: facts.usesServiceAccount,
@@ -178,9 +177,9 @@ enum BrightSpacePagePresenter {
             showIdentityActions: false, showUseMyIdentity: false,
             flashSuccess: flashes.success, flashError: flashes.error,
             canSyncNow: false, doNotSyncToken: BrightspaceSync.doNotSyncToken,
-            assignmentRows: [], hasAssignments: false,
+            assignmentRows: [],
             canReconcile: false,
-            unreachableStudents: [], hasUnreachable: false)
+            unreachableStudents: [])
     }
 
     /// Resolves how the active course's grade-sync identity is shown.
@@ -302,9 +301,6 @@ enum BrightSpacePagePresenter {
                 syncedCount: counts.synced,
                 pendingCount: counts.pending,
                 erroredCount: counts.errored,
-                hasSyncActivity: counts.synced + counts.pending + counts.errored > 0,
-                hasPending: counts.pending > 0,
-                hasErrored: counts.errored > 0,
                 isMapped: !gradeFieldValue.isEmpty && gradeFieldValue != BrightspaceSync.doNotSyncToken,
                 syncDetailText: syncDetailText(
                     status: last?.status ?? "none", detail: last?.detail,
@@ -507,8 +503,7 @@ enum BrightSpacePagePresenter {
                         detail: enrollment.brightspaceSyncDetail ?? "Not on the LEARN classlist.",
                         userID: uid,
                         unenrollURL: "/courses/\(courseUUID.uuidString)/unenroll/\(uid)",
-                        avatar: avatar,
-                        hasAvatar: true))
+                        avatar: avatar))
             }
         }
         unreachable.sort { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }

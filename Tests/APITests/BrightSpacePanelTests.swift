@@ -490,7 +490,7 @@ import VaporTesting
                 .GET, "/instructor/brightspace",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
-                    // The override-only row contributes to hasSyncActivity — the
+                    // The override-only row counts as sync activity — the
                     // assignment row appears in the mapping table.
                     #expect(res.status == .ok)
                     #expect(res.body.string.contains("Override Lab"))

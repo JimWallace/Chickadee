@@ -18,8 +18,7 @@ struct InstructorBrightspaceContext: Encodable {
         let connected: Bool
         /// The connected LEARN identity (whoami display), when connected.
         let identity: String?
-        /// Pre-rendered " (since …)" suffix (empty when nil) so the template
-        /// interpolates it directly (a shape kept from the Leaf template).
+        /// The " (since …)" suffix after the identity, when the date is known.
         let since: String?
     }
 
@@ -28,21 +27,17 @@ struct InstructorBrightspaceContext: Encodable {
     struct SyncIdentityPanel: Encodable {
         /// Display name; nil = no identity connected anywhere.
         let name: String?
-        /// Precomputed `name != nil` so the template branches on a flat bool.
-        let hasName: Bool
         /// True when the designated sync identity is the requesting user.
         let isMe: Bool
         /// False when the course names a designated instructor who no longer
         /// has a stored key (disconnected) — grades defer until reconnect.
         let connected: Bool
         /// True when there's a designated identity but it's disconnected (the
-        /// "needs reconnect" / grades-paused state). Pre-computed so the
-        /// view can branch with flat sibling conditionals (kept from the Leaf
-        /// template).
+        /// "needs reconnect" / grades-paused state).
         let needsReconnect: Bool
 
         static let empty = SyncIdentityPanel(
-            name: nil, hasName: false, isMe: false, connected: false, needsReconnect: false)
+            name: nil, isMe: false, connected: false, needsReconnect: false)
     }
 
     let hasActiveCourse: Bool
@@ -58,8 +53,7 @@ struct InstructorBrightspaceContext: Encodable {
     let orgUnitFieldValue: String
     let account: AccountPanel
     let syncIdentity: SyncIdentityPanel
-    /// Gates for the Connection panel's forms, precomputed flat (kept from the
-    /// Leaf template): connect form when configured
+    /// Gates for the Connection panel's forms: connect form when configured
     /// but not yet connected; identity actions (test / take-over / disconnect
     /// / link) when connected with a non-archived active course; take-over
     /// only when someone else is (or nobody is) the designated identity.
@@ -69,24 +63,20 @@ struct InstructorBrightspaceContext: Encodable {
     let flashSuccess: String?
     let flashError: String?
     /// True when BrightSpace is configured and the active course isn't archived —
-    /// gates the top-bar "Sync now" button. Precomputed so the view branches
-    /// on a flat bool (kept from the Leaf template).
+    /// gates the top-bar "Sync now" button.
     let canSyncNow: Bool
     /// The reserved value the grade-item dropdown submits for the "Do not sync"
     /// option (`BrightspaceSync.doNotSyncToken`), surfaced so the page JS uses
     /// the one server-side source of truth instead of a duplicated literal.
     let doNotSyncToken: String
     let assignmentRows: [BrightspaceAssignmentRow]
-    let hasAssignments: Bool
     /// True when the course is linked to a LEARN org unit and not archived —
-    /// gates the "Reconcile now" button. Precomputed so the view branches on
-    /// a flat bool (kept from the Leaf template).
+    /// gates the "Reconcile now" button.
     let canReconcile: Bool
     /// Students we can't currently deliver a grade to (not on the LEARN
     /// classlist, or no key to match) — the authoritative replacement for the
     /// old log-heuristic "unmapped students" list.
     let unreachableStudents: [BrightspaceReadinessRow]
-    let hasUnreachable: Bool
     /// True when the course is linked to an LTI platform, so the page links
     /// to the LMS grades page. False on every deployment with no platform.
     var showLTIGradesLink = false
@@ -145,11 +135,8 @@ struct BrightspaceAssignmentRow: Encodable {
     let syncedCount: Int
     let pendingCount: Int
     let erroredCount: Int
-    /// Precomputed visibility flags the rollup chips gate on instead of `> 0`
-    /// (kept from the Leaf template).
-    let hasSyncActivity: Bool
-    let hasPending: Bool
-    let hasErrored: Bool
+    /// True when any row of the assignment has synced, is pending or errored.
+    var hasSyncActivity: Bool { syncedCount + pendingCount + erroredCount > 0 }
     /// A real grade item is chosen (not empty, not "do not sync"): the state
     /// dot is teal.
     var isMapped = false
@@ -186,5 +173,4 @@ struct BrightspaceReadinessRow: Encodable {
     let unenrollURL: String
     /// The student's own seeded avatar at the roster size.
     var avatar: AvatarPresentation?
-    var hasAvatar = false
 }

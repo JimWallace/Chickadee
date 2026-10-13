@@ -21,19 +21,17 @@ extension ElementaryPageFixtures {
     static var instructorBrightspacePage: ElementaryPageFixture {
         var mapped = BrightspaceAssignmentRow(
             assignmentID: "A1B2C3", title: "Lab 1", gradeFieldValue: "123", lastSyncText: "Sep 3",
-            lastSyncStatus: "error", lastSyncDetail: "HTTP 500", syncedCount: 20, pendingCount: 1, erroredCount: 2,
-            hasSyncActivity: true, hasPending: true, hasErrored: true)
+            lastSyncStatus: "error", lastSyncDetail: "HTTP 500", syncedCount: 20, pendingCount: 1, erroredCount: 2)
         mapped.isMapped = true
         mapped.syncDetailText = "HTTP 500"
         mapped.hasSyncError = true
         var unmapped = BrightspaceAssignmentRow(
             assignmentID: "D4E5F6", title: "Lab 2", gradeFieldValue: "", lastSyncText: "—", lastSyncStatus: "none",
-            lastSyncDetail: nil, syncedCount: 0, pendingCount: 0, erroredCount: 0, hasSyncActivity: false,
-            hasPending: false, hasErrored: false)
+            lastSyncDetail: nil, syncedCount: 0, pendingCount: 0, erroredCount: 0)
         unmapped.syncDetailText = "Not synced yet"
         let student = BrightspaceReadinessRow(
             username: "ada", displayName: "Ada Lovelace", detail: "Not on the LEARN classlist.", userID: "u-1",
-            unenrollURL: "/courses/c1/unenroll/u-1", avatar: rosterAvatar(9), hasAvatar: true)
+            unenrollURL: "/courses/c1/unenroll/u-1", avatar: rosterAvatar(9))
 
         func render(
             enabled: Bool, hasCourse: Bool, archived: Bool = false, linked: Bool = true, connected: Bool = true,
@@ -48,14 +46,14 @@ extension ElementaryPageFixtures {
                     connected: connected, identity: connected ? "Ada Lovelace" : nil,
                     since: connected ? " (since Sep 1, 9:00 AM)" : nil),
                 syncIdentity: .init(
-                    name: connected ? "Ada Lovelace" : nil, hasName: connected, isMe: connected,
+                    name: connected ? "Ada Lovelace" : nil, isMe: connected,
                     connected: healthy, needsReconnect: !healthy),
                 showConnectForm: enabled && !connected && !archived,
                 showIdentityActions: connected && !archived, showUseMyIdentity: false,
                 flashSuccess: connected ? "LEARN account connected." : nil, flashError: nil,
                 canSyncNow: enabled && !archived && !lti, doNotSyncToken: BrightspaceSync.doNotSyncToken,
-                assignmentRows: rows, hasAssignments: !rows.isEmpty, canReconcile: linked && !archived,
-                unreachableStudents: unreachable, hasUnreachable: !unreachable.isEmpty)
+                assignmentRows: rows, canReconcile: linked && !archived,
+                unreachableStudents: unreachable)
             model.showLTIGradesLink = lti
             model.usesLTIGrades = lti
             model.usesServiceAccount = serviceAccount
@@ -177,21 +175,21 @@ extension ElementaryPageFixtures {
     static var instructorSlipDaysPage: ElementaryPageFixture {
         let spend = SlipDayLedgerSpendRow(
             id: "s1", assignmentTitle: "Lab 1", spentAtText: "Sep 1", extensionDueAtText: "Sep 3, 2:00 PM",
-            isRefunded: false, refundedAtText: "", canRefund: true)
+            isRefunded: false, refundedAtText: "")
         let refunded = SlipDayLedgerSpendRow(
             id: "s2", assignmentTitle: "Lab 2", spentAtText: "Sep 4", extensionDueAtText: "Sep 6, 2:00 PM",
-            isRefunded: true, refundedAtText: "Sep 5", canRefund: false)
+            isRefunded: true, refundedAtText: "Sep 5")
         let students = [
             SlipDayStudentRow(
                 userID: "u1", displayName: "Ada Lovelace", username: "ada", used: 1, remaining: 3, total: 4,
-                adjustment: 1, hasSpends: true, spends: [spend, refunded], avatar: rosterAvatar(3),
+                adjustment: 1, spends: [spend, refunded], avatar: rosterAvatar(3),
                 pips: SlipDayPip.pips(total: 4, used: 1, extra: 1), leftText: "3 of 4 left",
-                adjustmentText: "+1 granted", refundableSpends: [spend], hasRefundable: true),
+                adjustmentText: "+1 granted", refundableSpends: [spend]),
             SlipDayStudentRow(
                 userID: "u2", displayName: "Bo", username: "bo", used: 0, remaining: 3, total: 3, adjustment: 0,
-                hasSpends: false, spends: [], avatar: rosterAvatar(5),
+                spends: [], avatar: rosterAvatar(5),
                 pips: SlipDayPip.pips(total: 3, used: 0, extra: 0), leftText: "3 of 3 left", adjustmentText: "",
-                refundableSpends: [], hasRefundable: false),
+                refundableSpends: []),
         ]
         func render(
             hasCourse: Bool = true, enabled: Bool = true, canEdit: Bool = true, canManage: Bool = true,

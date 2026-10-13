@@ -259,7 +259,6 @@ struct TournamentEntrantPresentation: Encodable {
     /// Staff only; empty for a student viewer.
     let name: String
     let isViewer: Bool
-    let hasAvatar: Bool
     let avatar: AvatarPresentation?
 }
 

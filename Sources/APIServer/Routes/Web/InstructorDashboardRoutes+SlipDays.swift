@@ -311,12 +311,11 @@ extension InstructorDashboardRoutes {
                     spentAtText: spend.spentAt.map { fmt.string(from: $0) } ?? "—",
                     extensionDueAtText: fmt.string(from: spend.extensionDueAt),
                     isRefunded: spend.refundedAt != nil,
-                    refundedAtText: spend.refundedAt.map { fmt.string(from: $0) } ?? "",
-                    canRefund: spend.refundedAt == nil && canManageLedger)
+                    refundedAtText: spend.refundedAt.map { fmt.string(from: $0) } ?? "")
             }
             // A students-only ledger: staff hold no slip days.
             let avatar = try await AvatarStore.rosterAvatar(for: user, isStaff: false, on: db)
-            let refundable = spendRows.filter(\.canRefund)
+            let refundable = canManageLedger ? spendRows.filter { !$0.isRefunded } : []
             rows.append(
                 SlipDayStudentRow(
                     userID: enrollment.userID.uuidString,
@@ -326,15 +325,13 @@ extension InstructorDashboardRoutes {
                     remaining: total - used,
                     total: total,
                     adjustment: adjustment,
-                    hasSpends: !spendRows.isEmpty,
                     spends: spendRows,
                     avatar: avatar,
                     pips: SlipDayPip.pips(total: total, used: used, extra: adjustment),
                     leftText: "\(max(total - used, 0)) of \(max(total, 0)) left",
                     adjustmentText: adjustment > 0
                         ? "+\(adjustment) granted" : (adjustment < 0 ? "−\(-adjustment) removed" : ""),
-                    refundableSpends: refundable,
-                    hasRefundable: !refundable.isEmpty))
+                    refundableSpends: refundable))
         }
         // Most used first, then by name: the students who need attention lead.
         return rows.sorted { lhs, rhs in

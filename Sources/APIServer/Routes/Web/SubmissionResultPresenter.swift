@@ -504,7 +504,6 @@ extension WebRoutes {
             deltaHeaderText: delta.headerText,
             badges: badges,
             classGoals: decorations.classGoals,
-            hasClassGoals: !decorations.classGoals.isEmpty,
             secretRevealAvailable: secretReveal.available,
             secretRevealActive: secretReveal.active,
             solutionURL: decorations.solutionURL,

@@ -62,6 +62,6 @@ struct WorkerRow: HTML {
                 }
             }
         }
-        .attributes(.class("runner-row-offline"), when: worker.isOffline)
+        .attributes(.class("row-muted"), when: worker.isOffline)
     }
 }

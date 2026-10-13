@@ -9,6 +9,45 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.626] - 2026-10-13
+
+### Added
+
+- **Load-test tool for the hot paths.** `chickadee-loadtest` simulates deadline traffic: runner slots that poll `POST /api/v1/worker/request` and result views that poll `GET /api/v1/submissions/:id`. It reports the request rate, the status counts and the p50 / p95 / p99 latency of each stream. It refuses a host that is not on this machine unless `--allow-remote` is given. See `docs/load-testing.md`.
+
+
+## [0.5.625] - 2026-10-13
+
+### Added
+
+- **In-memory counts for the hot-path routes.** The idle runner poll, the runner heartbeat and the submission status poll do not persist a `request_metrics` row on success, so they had no count and no latency. The server now counts every request on these routes in memory, with a fixed-bucket latency histogram since the process started and per minute over the last 60 minutes. `/admin/metrics` and the admin MCP tool `get_metrics_snapshot` report it as `hotPaths`. See `docs/operational-diagnostics.md` §"Hot-path counts".
+
+### Changed
+
+- **Manifest model views (manifest v2, phase 1).** `TestSuiteEntry.origin`, `TestProperties.languageDeclaration` and `TestSettings` state the real states of fields that the manifest stores in pairs or in four places. Call sites switch over them. The stored JSON does not change. See `docs/manifest-format-v2.md`.
+
+
+## [0.5.624] - 2026-10-13
+
+### Fixed
+
+- **The notebook page and the workbench open again in the Docker deployment.** The server writes each notebook working copy under `Public/jupyterlite/files`. Since `/app` became owned by root (#2222), the server could not create that folder, and the page answered 500. The image now links `Public/jupyterlite/files` to `/data/jupyterlite-files` on the data volume, which the entrypoint creates. The working copies also survive a redeploy now. `docker-build.yml` checks that the application user can write one.
+
+
+## [0.5.623] - 2026-10-13
+
+### Changed
+
+- **The view contexts no longer carry flags that repeat another field.** `hasAvatar`, `hasSpends`, `canRefund`, `hasClassGoals`, `AvatarPresentation.isLabelled` and five BrightSpace panel flags existed only because Leaf could not test an optional, an empty list or a compound condition. The views now read the field itself. An offline runner row uses the shared `.row-muted` class in place of `.runner-row-offline`. The pages render the same, except that an offline runner row is slightly less faded.
+
+
+## [0.5.622] - 2026-10-13
+
+### Added
+
+- **Manifest format v2 design note.** `docs/manifest-format-v2.md` reviews the `TestProperties` manifest and proposes a phased move to a v2 envelope that keeps old runners and rollback working.
+
+
 ## [0.5.621] - 2026-10-13
 
 ### Fixed

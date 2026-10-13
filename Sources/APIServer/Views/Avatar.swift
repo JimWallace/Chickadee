@@ -27,11 +27,11 @@ struct Avatar: HTML {
     }
 
     var body: some HTML {
-        if avatar.isLabelled {
+        if let label = avatar.label {
             SVG.svg(
                 .class(avatar.sizeClass), .custom(name: "viewBox", value: "0 0 64 64"),
                 .custom(name: "role", value: "img"),
-                .ariaLabel(avatar.label), .custom(name: "style", value: customProperties)
+                .ariaLabel(label), .custom(name: "style", value: customProperties)
             ) {
                 parts
             }

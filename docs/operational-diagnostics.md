@@ -106,6 +106,30 @@ Captured fields include:
 This makes it possible to inspect server-side latency for worker dispatch,
 result write-back, and general API traffic over time.
 
+### Hot-path counts (in memory)
+
+Three routes do not persist a `request_metrics` row for a routine success,
+because one INSERT per poll is too much write load:
+
+- `POST /api/v1/worker/request` when the response is 204 (no job)
+- `POST /api/v1/worker/heartbeat`
+- `GET /api/v1/submissions/:id` (the result view polls it every 2 s)
+
+`HotPathRequestStats` counts every request on these routes in memory, with
+all status codes. It keeps a fixed-bucket latency histogram since the process
+started, and one per minute for the last 60 minutes. `/admin/metrics` and the
+admin MCP tool `get_metrics_snapshot` report it as `hotPaths`: for each route,
+the count, the error count (status 400 or more), p50 / p95 / p99, the maximum,
+and the peak requests per minute in the window.
+
+A percentile is the upper bound of its histogram bucket (1, 2, 5, 10, 25, 50,
+100, 250, 500, 1000, 2500, 5000 or 10000 ms), capped at the maximum seen. It
+can be a little higher than a percentile that is calculated from the exact
+`request_metrics` durations. The
+counts are per process. They start again at zero when the process restarts,
+for example at each blue-green deploy. `countingSince` tells when this process
+started to count.
+
 ## Structured Logs
 
 Server-side structured log events include:
@@ -213,6 +237,8 @@ The response is JSON and includes:
   - `compatibleAssignmentAttempts`
   - `incompatibleAssignmentAttempts`
   - `jobsBlockedNoCompatibleRunner`
+- `hotPaths`: in-memory counts and latency for the hot-path routes (see
+  "Hot-path counts" above)
 
 This route is protected by the existing admin session auth. It is not exposed as
 a public dashboard route.
