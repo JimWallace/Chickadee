@@ -3,7 +3,7 @@
      The second sprite in the codebase, and deliberately not part of the icon
      one: icons are stroked 24x24 Feather glyphs inlined on every page, while
      these are flat-filled 64x64 plumage parts wanted only by the pages that
-     show an avatar. Include this partial from those pages, ONCE per page; a
+     show an avatar. Those pages render the AvatarSprite view, ONCE per page; a
      call site is one svg carrying class "avatar" wrapping seven use elements,
      each with an href that is a same-page fragment naming a symbol below. Copy
      a live call site rather than working from this description.

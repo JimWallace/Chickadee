@@ -1,11 +1,10 @@
 // APIServer/routes.swift
 
-import CSRF
 import Vapor
 
 func routes(_ app: Application) throws {
     let sessionAuth = UserSessionAuthenticator()
-    let csrf = CSRF(tokenRetrieval: chickadeeCSRFTokenRetrieval)
+    let csrf = CSRFMiddleware()
 
     // MARK: - Public routes (no auth required)
 

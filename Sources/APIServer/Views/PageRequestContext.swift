@@ -4,7 +4,6 @@
 // request: the CSRF token, the app version, the idle-timeout settings and the
 // static sprites.
 
-import CSRF
 import Core
 import Vapor
 
@@ -31,7 +30,7 @@ struct PageRequestContext: Sendable {
 
 extension PageRequestContext {
     init(request req: Request) {
-        self.init(request: req, csrfToken: CSRF.createToken(from: req))
+        self.init(request: req, csrfToken: CSRFMiddleware.createToken(from: req))
     }
 
     /// The context for a page that shows the course tabs. The course-aware
@@ -48,7 +47,7 @@ extension PageRequestContext {
     /// debug build, so the token is minted only when a session exists. With
     /// no session there is no signed-in user, so no form on the page needs one.
     init(errorPageRequest req: Request) {
-        self.init(request: req, csrfToken: req.hasSession ? CSRF.createToken(from: req) : "")
+        self.init(request: req, csrfToken: req.hasSession ? CSRFMiddleware.createToken(from: req) : "")
     }
 
     private init(request req: Request, csrfToken: String) {

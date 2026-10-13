@@ -1,6 +1,5 @@
 // APIServer/APIServerApp.swift
 
-import CSRF
 import ConsoleKit
 import Core
 import Fluent
