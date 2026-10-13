@@ -204,14 +204,20 @@ cannot collide with an instructor's own inputs; on a clash, the composite's
 value wins. The worker job and the browser seed endpoint both merge them in, so
 the two grading paths read the same values.
 
+**The grading deal ignores the window.** It is the backstop, so a student
+whose first submission comes after the window (under an extension, say) is
+still dealt a slot.
+
 **No language, no composite.** An assignment with no declared language has no
 inputs file, so `ActivityAuthoring` refuses a class composite on it
 (`compositeNeedsLanguageMessage`). If the language is later changed to none,
 grading still runs and leaves the slot inputs out: grading never fails.
 
-**Staff.** A validation run, and a staff member who grades in the browser, get
-the reference slot (slot 0) and are never dealt a slot: a dealt slot is a
-student's. Opening the page as staff deals nothing.
+**Staff.** A validation run, and any run by course staff or an admin, get the
+reference slot (slot 0) and are never dealt a slot: a dealt slot is a
+student's. A staff member's own submission is stored as a student submission,
+so `CompositeSlots.gradingInputs` checks the course role on both grading paths.
+Opening the page as staff deals nothing.
 
 **The MCP lock reads the owner pool.** The least-privilege MCP database role
 cannot read `composite_slots` (it maps students to slots), and it reads

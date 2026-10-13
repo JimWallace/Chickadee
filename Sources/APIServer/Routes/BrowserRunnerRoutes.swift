@@ -201,14 +201,14 @@ struct BrowserRunnerRoutes: RouteCollection {
                 supportFilesDirectory: sharedDir,
                 language: resolved)
             // The class composite's slot, as the worker sends it. Staff get
-            // the reference slot 0, as a validation run does, and are never
-            // dealt one: a dealt slot would be a student's.
-            let isStaff = try await req.cachedIsCourseStaff(caller, inCourse: setup.courseID)
+            // the reference slot 0 and are never dealt one
+            // (`CompositeSlots.gradingInputs` decides, for both paths).
             personalizedInputs = CompositeSlots.merged(
                 personalizedInputs,
                 with: await CompositeSlots.gradingInputs(
-                    manifest: manifest, language: resolved, assignmentID: assignmentID, userID: userID,
-                    usesReferenceSlot: isStaff, logger: req.logger, on: req.db))
+                    manifest: manifest, language: resolved, courseID: setup.courseID,
+                    assignmentID: assignmentID, userID: userID, usesReferenceSlot: false,
+                    logger: req.logger, on: req.db))
             // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
             // the manifest declares no datasets, which is the common case.
             personalizedFiles = DatasetResolver.resolve(

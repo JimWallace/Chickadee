@@ -81,30 +81,39 @@ enum CompositeSlots {
     /// The composite inputs for one grading run, rendered in `language`, or
     /// nil when the assignment is not a class composite or has no language.
     ///
-    /// A run that `usesReferenceSlot` (a validation run, or staff grading in
-    /// the browser) gets slot 0 and deals nothing: a dealt slot is a
-    /// student's. A student run gets the student's dealt slot, dealing one if
-    /// needed.
-    /// Never fails grading: a dealing error is logged, and the run grades
-    /// without the inputs (the test script then fails closed on its own).
+    /// A validation run (`usesReferenceSlot`) and any run by course staff or
+    /// an admin get slot 0 and deal nothing: a dealt slot is a student's, and
+    /// a staff member's submission is stored as a student one. A student's
+    /// run gets their dealt slot, dealing one if needed. This is the backstop
+    /// deal, so it ignores the session window: a first submission after the
+    /// window (under an extension, say) is still dealt a slot.
+    ///
+    /// Never fails grading: an error is logged, and the run grades without
+    /// the inputs (the test script then fails closed on its own).
     static func gradingInputs(
-        manifest: TestProperties, language: AssignmentLanguage?, assignmentID: UUID?, userID: UUID?,
-        usesReferenceSlot: Bool, logger: Logger, on db: any Database
+        manifest: TestProperties, language: AssignmentLanguage?, courseID: UUID, assignmentID: UUID?,
+        userID: UUID?, usesReferenceSlot: Bool, logger: Logger, on db: any Database
     ) async -> [String: String]? {
         guard let activity = manifest.activity, activity.kind == .classComposite,
             let spec = activity.composite, let language
         else { return nil }
         let slot: Int
-        if usesReferenceSlot {
-            slot = 0
-        } else {
-            guard let assignmentID, let userID else { return nil }
-            do {
-                slot = try await Self.slot(assignmentID: assignmentID, userID: userID, spec: spec, on: db)
-            } catch {
-                logger.error("composite: dealing a slot for grading failed: \(error)")
-                return nil
+        do {
+            if usesReferenceSlot {
+                slot = 0
+            } else {
+                guard let assignmentID, let userID else { return nil }
+                if let user = try await APIUser.find(userID, on: db),
+                    try await isCourseStaff(user, inCourse: courseID, db: db)
+                {
+                    slot = 0
+                } else {
+                    slot = try await Self.slot(assignmentID: assignmentID, userID: userID, spec: spec, on: db)
+                }
             }
+        } catch {
+            logger.error("composite: resolving a slot for grading failed: \(error)")
+            return nil
         }
         return spec.inputs(forSlot: slot).mapValues(language.literal)
     }

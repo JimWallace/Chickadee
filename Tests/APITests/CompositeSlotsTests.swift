@@ -189,7 +189,7 @@ import VaporTesting
             }
             let manifest = try #require(f.setup.decodedManifest())
             let inputs = await CompositeSlots.gradingInputs(
-                manifest: manifest, language: .python, assignmentID: f.assignmentID, userID: ids[4],
+                manifest: manifest, language: .python, courseID: f.courseID, assignmentID: f.assignmentID, userID: ids[4],
                 usesReferenceSlot: false, logger: app.logger, on: app.db)
             #expect(inputs == ["composite_slot": "4", "composite_col": "1", "composite_row": "1"])
         }
@@ -201,7 +201,7 @@ import VaporTesting
             let f = try await fixture(spec(), on: app)
             let manifest = try #require(f.setup.decodedManifest())
             let inputs = await CompositeSlots.gradingInputs(
-                manifest: manifest, language: .python, assignmentID: f.assignmentID, userID: nil,
+                manifest: manifest, language: .python, courseID: f.courseID, assignmentID: f.assignmentID, userID: nil,
                 usesReferenceSlot: true, logger: app.logger, on: app.db)
             #expect(inputs?["composite_slot"] == "0")
             #expect(try await APICompositeSlot.query(on: app.db).count() == 0)
@@ -218,14 +218,32 @@ import VaporTesting
             let id = try await students(1, on: app)[0]
             #expect(
                 await CompositeSlots.gradingInputs(
-                    manifest: manifest, language: nil, assignmentID: f.assignmentID, userID: id,
+                    manifest: manifest, language: nil, courseID: f.courseID, assignmentID: f.assignmentID, userID: id,
                     usesReferenceSlot: false, logger: app.logger, on: app.db) == nil)
             var other = manifest
             other.activity = ClassActivity(kind: .bestMetric)
             #expect(
                 await CompositeSlots.gradingInputs(
-                    manifest: other, language: .python, assignmentID: f.assignmentID, userID: id,
+                    manifest: other, language: .python, courseID: f.courseID, assignmentID: f.assignmentID, userID: id,
                     usesReferenceSlot: false, logger: app.logger, on: app.db) == nil)
+        }
+    }
+
+    /// A staff member's own submission is stored as a student one; grading
+    /// gives it the reference slot and deals nothing.
+    @Test func aStaffSubmissionGetsSlotZeroAndIsNotDealt() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let f = try await fixture(spec(), on: app)
+            // A global "instructor" is seeded as course staff on enrolment.
+            let ta = try await makeTestUser(on: app, username: "slot_staff", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: ta.requireID(), courseID: f.courseID)
+            let manifest = try #require(f.setup.decodedManifest())
+            let inputs = await CompositeSlots.gradingInputs(
+                manifest: manifest, language: .python, courseID: f.courseID, assignmentID: f.assignmentID,
+                userID: try ta.requireID(), usesReferenceSlot: false, logger: app.logger, on: app.db)
+            #expect(inputs?["composite_slot"] == "0")
+            #expect(try await APICompositeSlot.query(on: app.db).count() == 0)
         }
     }
 
