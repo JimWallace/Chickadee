@@ -57,7 +57,7 @@
       "version": "0.2.2",
       "build": "pyhcf101f3_0",
       "filename_stem": "pyodide-http-0.2.2-pyhcf101f3_0",
-      "filename": "pyodide-http-0.2.2-pyhcf101f3_0.tar.gz",
+      "filename": "pyodide-http-0.2.2-pyhcf101f3_0.chickadee.d559a3a226f3.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.10",

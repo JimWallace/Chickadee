@@ -238,14 +238,37 @@ middlewares for the requests that bring the app up.
 `kernelStartupJSONStaysOnTheNormalChain` asserts that in both directions so a
 well-meaning prefix widening fails in CI.
 
-Still open: those files are stamped `no-cache`, so a warm boot issues ~50
-conditional GETs. Every tarball but one is a pristine upstream conda artifact
-under a `name-version-build` filename, immutable by conda convention; the sole
-exception is `pyodide-http`, which `patch-xeus-python-http.py` rewrites in place
-under the same name. Giving that one a content-addressed filename would make the
-whole tree safe to cache immutably — `filename_stem` is unused by mambajs, only
-`filename` is read, so the rename is confined to the patch script and
-`empack_env_meta.json`.
+**Kernel packages are cached immutably (2026-10).** Every tarball but one is a
+pristine upstream conda artifact under a `name-version-build` filename, immutable
+by conda convention. The exception was `pyodide-http`, which
+`patch-xeus-python-http.py` rewrites. The script now renames each archive it
+rewrites to carry its content hash (`<name>.chickadee.<12 hex>.tar.gz`) and points
+`empack_env_meta.json` at the new name. Every reader fetches
+`kernel_packages/<filename>` from that metadata (mambajs in the editor,
+`xeus-kernel-shared.js` in grading), so each name now maps to one set of bytes,
+and `EditorAssetFastPathMiddleware.isImmutableKernelPackage` serves the tarballs
+with `Cache-Control: public, max-age=31536000, immutable`. The metadata itself
+still revalidates, so a re-vendor reaches students on the next load under new
+names. `check-xeus-vendored.sh` section 9 asserts the naming, and
+`check-kernel-currency.py` ignores the suffix when it compares builds.
+
+A warm boot now asks the server for no package at all, where it used to send
+~50 conditional GETs. For one student that removes latency, not bytes. For a
+class of 150 that joins a lecture activity at once it removes 48 × 150 = 7,200
+requests.
+
+What the naming does not cover: an upstream artifact rebuilt with new bytes
+under the same `name-version-build`. Conda channels do not do that, and nothing
+here checks it, because `empack_env_meta.json` records no checksum. If it ever
+happens, the students who have the old bytes keep them.
+
+One cutover case: during a blue-green deploy that changes a rewritten archive, a
+browser can read the metadata from one color and ask the other color for the
+package. The old name is then missing on the new color, and that one boot fails
+until the page reloads. This needs a re-vendor that changes a patched archive,
+during the seconds of a cutover. Do not re-vendor in the week before a lecture
+activity, for this reason and because a re-vendor makes every student download
+the changed packages again.
 
 Keep that win in proportion, though: ~50 conditional GETs returning 304,
 multiplexed over one HTTP/2 connection. It removes latency, not bytes, and does

@@ -14,7 +14,8 @@ import VaporTesting
 ///      fast path must not serve student working copies to anonymous
 ///      callers just because they live under /jupyterlite/.
 ///   2. Immutable cache headers land only on content-hashed bundle
-///      filenames; everything else gets an explicit `no-cache` so a
+///      filenames and kernel package tarballs (each name maps to one set of
+///      bytes); everything else gets an explicit `no-cache` so a
 ///      re-vendor that rewrites bytes in place is picked up on the next load
 ///      (an ETag alone lets the browser cache heuristically and skip the check).
 @Suite final class EditorAssetFastPathMiddlewareTests {
@@ -127,15 +128,15 @@ import VaporTesting
     }
 
     // The kernel packages are the volume — up to 51 requests per boot — so they
-    // take the fast path. Unhashed conda filenames keep revalidating: a
-    // re-vendor rewrites those bytes under the same name.
+    // take the fast path, and are cached immutably: each name maps to one set
+    // of bytes (KernelPackageCachePolicyTests).
     @Test func kernelPackagesAreFastPathed() async throws {
         try await withApp(try await makeApp(crossOriginIsolation: true)) { app in
             try await app.testing().test(
                 .GET, "/jupyterlite/xeus/chickadee-python/kernel_packages/numpy-2.5.1-py313h.tar.gz"
             ) { res async in
                 #expect(res.status == .ok)
-                #expect(res.headers.first(name: .cacheControl) == "no-cache")
+                #expect(res.headers.first(name: .cacheControl) == "public, max-age=31536000, immutable")
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
             }
         }
