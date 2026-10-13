@@ -69,7 +69,6 @@ extension AdminRoutes {
             // Each person's own seeded bird, as on the admin users list. The
             // staff ring follows this course's role.
             row.avatar = try await AvatarStore.rosterAvatar(for: user, isStaff: role >= .ta, on: db)
-            row.hasAvatar = true
             row.roleSelect = RoleSelectCell(
                 userID: row.id,
                 action: "/admin/courses/\(courseID.uuidString)/role/\(row.id)",

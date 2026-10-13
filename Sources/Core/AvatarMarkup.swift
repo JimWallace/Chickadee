@@ -63,9 +63,6 @@ public enum AvatarAccessibility: Sendable, Equatable {
 }
 
 /// Everything the `Avatar` view needs, and nothing it does not.
-///
-/// `Encodable`, with every field a plain string or bool: a shape kept from the
-/// Leaf templates, which resolved no Swift properties.
 public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// Palette token names, e.g. "--avatar-slate-cap". The partial wraps each
     /// in `var(…)`.
@@ -97,11 +94,8 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     public let tiltTransform: String
     /// "avatar" plus the size modifier, e.g. "avatar avatar-md".
     public private(set) var sizeClass: String
-    /// Whether to announce the bird. An explicit Bool rather than testing the
-    /// optional label (kept from the Leaf templates).
-    public let isLabelled: Bool
-    /// The handle to announce; empty when decorative.
-    public let label: String
+    /// The handle to announce; nil when the bird is decorative.
+    public let label: String?
 
     /// `isStaff` draws the reserved staff ring in place of the chosen one. The
     /// caller decides it from the course role of the person drawn, for the course
@@ -129,12 +123,8 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         self.tiltTransform = "rotate(\(spec.tilt.degrees) 32 34)"
         self.sizeClass = size.cssClass
         switch accessibility {
-        case .decorative:
-            self.isLabelled = false
-            self.label = ""
-        case .labelled(let name):
-            self.isLabelled = true
-            self.label = name
+        case .decorative: self.label = nil
+        case .labelled(let name): self.label = name
         }
     }
 

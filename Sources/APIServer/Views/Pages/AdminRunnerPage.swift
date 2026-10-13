@@ -269,7 +269,7 @@ private struct RunnerJobRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                if job.hasAvatar, let avatar = job.avatar {
+                if let avatar = job.avatar {
                     Avatar(avatar: avatar)
                 } else {
                     span(.class("item-tile")) { Icon("i-cpu") }

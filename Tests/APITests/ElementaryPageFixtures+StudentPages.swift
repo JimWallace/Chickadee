@@ -217,7 +217,7 @@ extension ElementaryPageFixtures {
                     AchievementBadge(id: "b", label: "🏅 First", tooltip: "First try"),
                     AchievementBadge(id: "c", label: "Two", tooltip: "t"),
                 ] : [],
-            classGoals: extras ? goals : [], hasClassGoals: extras,
+            classGoals: extras ? goals : [],
             secretRevealAvailable: options.revealAvailable, secretRevealActive: options.revealActive,
             solutionURL: extras ? "/testsetups/ts-1/notebook?view=solution" : nil,
             leaderboardURL: extras ? "/testsetups/ts-1/leaderboard" : nil,

@@ -325,9 +325,8 @@ Sources: [Vapor 5 Beta](https://blog.vapor.codes/posts/vapor-5-beta/),
 
 ## Known remainder
 
-- **Leaf-shaped view contexts.** Several context types still carry flat
-  `Bool` flags and pre-rendered strings that existed only because Leaf could
-  not evaluate compound conditions, `.isEmpty` or optionals (for example
-  `hasAvatar`, `hasSpends`, `canRefund`, the BrightSpace panel gates and
-  `AvatarPresentation.isLabelled`). Their comments say "kept from the Leaf
-  templates". A view could compute these directly; that is a follow-up.
+None. The Leaf-shaped flags in the view contexts (`hasAvatar`, `hasSpends`,
+`canRefund`, `hasClassGoals`, `AvatarPresentation.isLabelled` and the
+BrightSpace panel flags that repeated another field) are removed. The views
+read the field itself. The BrightSpace gates that combine several facts, such
+as `canSyncNow`, stay in the presenter, because they are page policy.

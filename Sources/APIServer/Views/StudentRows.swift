@@ -32,7 +32,7 @@ private struct StudentRow: HTML {
     var body: some HTML {
         tr(.class("js-student-row-link"), .data("student-id", value: student.id)) {
             td(.class("item-tile-cell")) {
-                if student.hasAvatar, let avatar = student.avatar {
+                if let avatar = student.avatar {
                     Avatar(avatar: avatar)
                 } else {
                     span(.class("item-tile")) { Icon("i-calendar") }
