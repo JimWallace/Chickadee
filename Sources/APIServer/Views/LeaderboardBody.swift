@@ -180,7 +180,7 @@ private struct WinnerCard: HTML {
 
     var body: some HTML {
         section(.class("champion-card card"), .ariaLabel("Winner")) {
-            if winner.hasAvatar, let avatar = winner.avatar {
+            if let avatar = winner.avatar {
                 Avatar(avatar: avatar)
             }
             div(.class("you-card-who")) {

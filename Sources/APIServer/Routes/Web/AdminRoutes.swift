@@ -221,7 +221,6 @@ struct AdminRoutes: RouteCollection {
             if user.roleValue != .mcp {
                 row.avatar = try await AvatarStore.rosterAvatar(
                     for: user, isStaff: user.id.map(staff.contains) ?? false, on: db)
-                row.hasAvatar = true
             }
             rows.append(row)
         }

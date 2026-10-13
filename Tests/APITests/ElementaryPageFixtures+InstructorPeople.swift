@@ -35,7 +35,6 @@ extension ElementaryPageFixtures {
             row.avatar = AvatarPresentation(
                 for: AvatarSpec.drawn(fromSeed: UInt64(id.count)), size: .roster, accessibility: .decorative,
                 isStaff: role != "student")
-            row.hasAvatar = true
         }
         if learnFlag {
             row.learnFlag = "Not on LEARN"
@@ -92,7 +91,6 @@ extension ElementaryPageFixtures {
         var ta = AdminCourseEnrolledUserRow(id: "u1", username: "ada", displayName: "Ada", role: "ta")
         ta.avatar = AvatarPresentation(
             for: AvatarSpec.drawn(fromSeed: 3), size: .roster, accessibility: .decorative, isStaff: true)
-        ta.hasAvatar = true
         ta.roleSelect = RoleSelectCell(userID: "u1", action: "/admin/courses/c1/role/u1", personName: "ada", role: "ta")
         var student = AdminCourseEnrolledUserRow(id: "u2", username: "bob", displayName: nil, role: "student")
         student.roleSelect = RoleSelectCell(
