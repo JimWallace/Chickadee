@@ -1,3 +1,0 @@
-### Changed
-
-- **The instructor pages render with Elementary.** Overview, Activity, Students, Slip days, LEARN, LMS grades, AI agents, GitHub and New term, and the admin course page, are now type-checked Swift views. One `InstructorTabs` component renders the tab bar for all of them, and the polled student rows are one `StudentRows` view shared by the page and the poll. Each port was compared with its Leaf output, and the markup is the same apart from attribute escaping. The Leaf templates for these pages and their partials are removed, except `instructor-mcp.leaf`, which stays unserved as the instructor tabbed exemplar that `PageArchetypeTests` reads.

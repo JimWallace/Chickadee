@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.618] - 2026-10-13
+
+### Changed
+
+- **The instructor pages render with Elementary.** Overview, Activity, Students, Slip days, LEARN, LMS grades, AI agents, GitHub and New term, and the admin course page, are now type-checked Swift views. One `InstructorTabs` component renders the tab bar for all of them, and the polled student rows are one `StudentRows` view shared by the page and the poll. Each port was compared with its Leaf output, and the markup is the same apart from attribute escaping. The Leaf templates for these pages and their partials are removed, except `instructor-mcp.leaf`, which stays unserved as the instructor tabbed exemplar that `PageArchetypeTests` reads.
+
+### Changed
+
+- **The editors and the workbench render with Elementary.** The assignment editor, the new-assignment page, the notebook page and the assignment workbench are now type-checked Swift views, and no route renders a Leaf template any more. Each port was compared with its Leaf output, including the spaces between inline elements. A few templates (`assignment-edit.leaf`, `workbench.leaf` and the partials they extend) stay unserved as the exemplars that `PageArchetypeTests` reads.
+
+### Security
+
+- **Server-made JSON in a page cannot end its script element.** The editors embed JSON in `<script type="application/json">` elements. The new `JSONIsland` view writes every `<` in that JSON as `\u003c`, so text an author wrote, such as a test name, cannot close or change the element. The page scripts read the same values.
+
+
 ## [0.5.617] - 2026-10-12
 
 ### Changed
