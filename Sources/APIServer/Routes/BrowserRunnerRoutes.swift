@@ -255,23 +255,3 @@ func browserRunnerManifestJSON(_ stored: String) -> String? {
     else { return nil }
     return String(bytes: data, encoding: .utf8)
 }
-
-/// Returns the manifest JSON with `graderOnlyFiles` emptied, so the
-/// student-facing browser manifest endpoint does not leak the *names* of
-/// reserved holdout / answer-key support files (option B — `docs/datasets.md`).
-/// Their contents are already withheld at every download path (#1055); this
-/// closes the residual name leak in the manifest the browser fetches.
-///
-/// Strict no-op — the input is returned byte-for-byte — when there is nothing
-/// to strip: the key is absent, already empty, or the body is not a manifest.
-/// Only when grader-only names are present is the manifest re-encoded, through
-/// the typed `TestProperties` round trip every other manifest write uses
-/// (#1721), so the served bytes carry the one stable encoding; an empty list is
-/// omitted from that encoding, so the key is absent rather than `[]`.
-func manifestWithGraderOnlyFilesStripped(_ manifest: String) -> String {
-    guard var props = decodeManifest(fromJSON: manifest), !props.graderOnlyFiles.isEmpty else {
-        return manifest
-    }
-    props.graderOnlyFiles = []
-    return (try? encodeManifest(props)) ?? manifest
-}
