@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.640] - 2026-10-13
+
+### Fixed
+
+- **Deleting a course removes its class-coverage rows.** `deleteCourse` deleted `class_coverage_runs` but not `class_item_coverage`, which has no foreign key, so a deleted course left behind the record of which student covered each item.
+
+
 ## [0.5.639] - 2026-10-13
 
 ### Added
