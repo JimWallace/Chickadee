@@ -425,16 +425,16 @@ import VaporTesting
         }
     }
 
-    /// A zip-borne manifest pairing browser grading with an activity that
-    /// stages an opponent is refused at upload, beside the grader-only pair:
-    /// only the native worker builds the opponent directory.
+    /// A zip-borne manifest pairing browser grading with an activity whose
+    /// opponent the worker chooses (the hill) is refused at upload, beside the
+    /// grader-only pair: only the native worker can choose and stage it.
     @Test func uploadRejectsAnOpponentActivityWithBrowserGrading() async throws {
         try await withApp(app) { _ in
             let fx = try await setupInstructorWithBothCourses(activeCode: "LCOA", archivedCode: "LCOB")
 
             let boundary = "LCOpponent"
             let manifest =
-                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"activity":{"kind":"beatTheInstructor","opponentFile":"bot.py"}}"#
+                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"activity":{"kind":"kingOfTheHill","opponentFile":"bot.py"}}"#
             var body = ByteBufferAllocator().buffer(capacity: 512)
             body.writeString("--\(boundary)\r\n")
             body.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
@@ -465,7 +465,7 @@ import VaporTesting
                         res.status == .unprocessableEntity,
                         "opponent activity + browser manifest must be rejected, got \(res.status)")
                     #expect(
-                        res.body.string.contains("against an opponent"),
+                        res.body.string.contains("against the submission of a classmate"),
                         "rejection should carry the opponent conflict message, got: \(res.body.string)")
                 })
         }
