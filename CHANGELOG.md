@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.624] - 2026-10-13
+
+### Fixed
+
+- **The notebook page and the workbench open again in the Docker deployment.** The server writes each notebook working copy under `Public/jupyterlite/files`. Since `/app` became owned by root (#2222), the server could not create that folder, and the page answered 500. The image now links `Public/jupyterlite/files` to `/data/jupyterlite-files` on the data volume, which the entrypoint creates. The working copies also survive a redeploy now. `docker-build.yml` checks that the application user can write one.
+
+
+## [0.5.623] - 2026-10-13
+
+### Changed
+
+- **The view contexts no longer carry flags that repeat another field.** `hasAvatar`, `hasSpends`, `canRefund`, `hasClassGoals`, `AvatarPresentation.isLabelled` and five BrightSpace panel flags existed only because Leaf could not test an optional, an empty list or a compound condition. The views now read the field itself. An offline runner row uses the shared `.row-muted` class in place of `.runner-row-offline`. The pages render the same, except that an offline runner row is slightly less faded.
+
+
+## [0.5.622] - 2026-10-13
+
+### Added
+
+- **Manifest format v2 design note.** `docs/manifest-format-v2.md` reviews the `TestProperties` manifest and proposes a phased move to a v2 envelope that keeps old runners and rollback working.
+
+
 ## [0.5.621] - 2026-10-13
 
 ### Fixed

@@ -101,6 +101,7 @@ struct InternalMetricsResponse: Content, Sendable {
     let queueWait: DurationSummaryResponse
     let execution: DurationSummaryResponse
     let compatibility: CompatibilityCountersResponse
+    let hotPaths: HotPathStatsResponse
 }
 
 struct InternalMetricsTimeSeriesResponse: Content, Sendable {
@@ -230,6 +231,7 @@ final class OperationalDiagnosticsService: Sendable {
     let configuration: DiagnosticsConfiguration
     let compatibilityCounters = CompatibilityCounterStore()
     let snapshotSampler = RunnerSnapshotSampleStore()
+    let hotPathStats = HotPathRequestStats()
 
     init(configuration: DiagnosticsConfiguration) {
         self.configuration = configuration

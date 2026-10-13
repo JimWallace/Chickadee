@@ -166,7 +166,6 @@ extension InstructorDashboardRoutes {
             // THIS course.
             rows[index].avatar = try await AvatarStore.rosterAvatar(
                 for: user, isStaff: (rolesByUserID[userID] ?? .student) >= .ta, on: req.db)
-            rows[index].hasAvatar = true
             if let reason = Self.learnFlag(for: enrollmentsByUserID[userID]) {
                 rows[index].learnFlag = reason.badge
                 rows[index].learnFlagReason = reason.reason

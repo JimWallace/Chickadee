@@ -117,7 +117,7 @@ extension AvatarPickerContext {
     }
 }
 
-/// One swatch. Plain strings and Bools, a shape kept from the Leaf templates.
+/// One swatch in the avatar picker.
 struct AvatarPickerOption: Encodable {
     let value: String
     let label: String

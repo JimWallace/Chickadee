@@ -118,7 +118,7 @@ enum LeaderboardSamples {
     {
         TournamentEntrantPresentation(
             seed: seed, handle: hasAvatar ? "Brisk Wren \(seed)" : "", name: named ? "Student \(seed)" : "",
-            isViewer: isViewer, hasAvatar: hasAvatar, avatar: hasAvatar ? avatar(UInt64(seed + 60)) : nil)
+            isViewer: isViewer, avatar: hasAvatar ? avatar(UInt64(seed + 60)) : nil)
     }
 
     static func tournament(named: Bool, viewer: Int?, complete: Bool) -> TournamentPresentation {
@@ -350,7 +350,6 @@ enum LeaderboardSamples {
             totalProcessingFormatted: "3s", workdirPeakBytes: nil, workdirPeakFormatted: nil, completedAt: completedAt)
         if user != nil {
             row.avatar = avatar(UInt64(id.count))
-            row.hasAvatar = true
         }
         let pill = AdminRoutes.statusPill(for: status)
         row.statusLabel = pill.label

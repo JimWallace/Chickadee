@@ -14,10 +14,8 @@ struct AdminUserRow: Content {
     let createdAt: String
     let lastSeenAt: String?
     /// The user's own seeded avatar, at the roster size; nil on the JSON feed's
-    /// decode path for rows that predate it. `hasAvatar` is the flat flag the
-    /// view branches on (kept from the Leaf templates).
+    /// decode path for rows that predate it, and for the MCP service account.
     var avatar: AvatarPresentation?
-    var hasAvatar: Bool = false
     /// True for the row of the admin viewing the list. Its role menu is
     /// disabled, because an admin cannot change their own role.
     var isCurrentUser: Bool = false
@@ -160,7 +158,6 @@ struct AdminRunnerJobRow: Encodable {
     /// The submitting student's own seeded avatar; the row shows a grey tile and
     /// "No user" when the job has no user (a validation run, say).
     var avatar: AvatarPresentation?
-    var hasAvatar: Bool = false
     /// The status as the pill words it, and the pill's class suffix
     /// ("open" passed, "danger" failed or errored, "preview" timed out).
     var statusLabel: String = ""
@@ -255,10 +252,8 @@ struct AdminCourseEnrolledUserRow: Encodable {
     let username: String
     let displayName: String?
     let role: String
-    /// The person's own seeded avatar, at the roster size. `hasAvatar` is the
-    /// flat flag the view branches on (kept from the Leaf templates).
+    /// The person's own seeded avatar, at the roster size.
     var avatar: AvatarPresentation?
-    var hasAvatar: Bool = false
     var roleSelect: RoleSelectCell?
 }
 

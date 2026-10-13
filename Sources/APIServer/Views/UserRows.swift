@@ -37,7 +37,7 @@ struct UserRow: HTML {
     var body: some HTML {
         tr {
             td(.class("item-tile-cell")) {
-                if user.hasAvatar, let avatar = user.avatar {
+                if let avatar = user.avatar {
                     Avatar(avatar: avatar)
                 }
             }

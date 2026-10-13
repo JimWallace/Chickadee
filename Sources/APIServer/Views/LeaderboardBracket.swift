@@ -67,7 +67,7 @@ private struct BracketEntrant: HTML {
 
     var body: some HTML {
         div(.class("bracket-entrant")) {
-            if let entrant, entrant.hasAvatar, let avatar = entrant.avatar {
+            if let avatar = entrant?.avatar {
                 Avatar(avatar: avatar)
                 " "
             }

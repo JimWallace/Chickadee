@@ -491,10 +491,6 @@ struct SubmissionContext: Encodable {
     /// as an "Achievements" section.  Empty when the assignment has no class
     /// goals (or the sweep hasn't produced a snapshot yet).
     let classGoals: [ClassGoalView]
-    /// True iff `classGoals` is non-empty.  The template gates the "Class goals"
-    /// heading on this explicit Swift-computed flag rather than
-    /// `!classGoals.isEmpty` in the view (kept from the Leaf templates).
-    let hasClassGoals: Bool
     /// True when this viewer may spend their secret-reveal token here:
     /// toggle on, manifest has secret tests, viewer is the (non-staff)
     /// owner, token not yet spent.  Renders the offer box + POST form.

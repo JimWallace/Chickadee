@@ -247,7 +247,7 @@ private struct SlipDayLedgerRow: HTML {
                         SlipDayAdjustForm(
                             page: page, userID: student.userID, delta: "1", title: "Grant one extra slip day",
                             label: "Grant \(student.username) one extra slip day", icon: "i-plus")
-                        if student.hasRefundable {
+                        if !student.refundableSpends.isEmpty {
                             refundMenu
                         }
                     }
