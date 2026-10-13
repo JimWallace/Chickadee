@@ -32,7 +32,8 @@ import PackageDescription
 //     not auto-link (JavaScriptKit's string handling needs the Unicode tables).
 let package = Package(
     name: "RunnerWasm",
-    platforms: [.macOS(.v14)],
+    // The same floor as the root package, which this one depends on.
+    platforms: [.macOS("26.2")],
     dependencies: [
         .package(name: "Chickadee", path: ".."),
         .package(url: "https://github.com/swiftwasm/JavaScriptKit.git", from: "0.56.1"),

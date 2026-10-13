@@ -6,7 +6,10 @@ let strictWarnings: [SwiftSetting] = [.treatAllWarnings(as: .error)]
 let package = Package(
     name: "Chickadee",
     platforms: [
-        .macOS(.v15)
+        // Vapor 5 requires macOS 26.2, so the floor is there already and the
+        // move does not change it (docs/vapor-5-migration.md). Linux is not
+        // affected.
+        .macOS("26.2")
     ],
     products: [
         // Exposed so the wasm bridge sub-package (wasm/) can depend on the pure

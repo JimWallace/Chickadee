@@ -71,7 +71,7 @@ Install Swift via [`swiftly`](https://swift.org/install/linux), build release bi
 
 ## Local development
 
-Requires Swift 6 ([swift.org](https://swift.org/download)) and Xcode 16+ on macOS.
+Requires Swift 6.4 ([swift.org](https://swift.org/download)). On macOS, it requires macOS 26.2 or later.
 
 ```bash
 swift build
