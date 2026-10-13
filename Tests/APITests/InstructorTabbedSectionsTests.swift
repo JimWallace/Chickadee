@@ -44,5 +44,8 @@ import Testing
         #expect(Self.looseContent(in: tabs + titlebar + section) == [#"<div class="page-titlebar">"#])
         #expect(Self.looseContent(in: tabs + #"<section class="card page-section"></section>"#).isEmpty)
         #expect(Self.looseContent(in: tabs + #"<script src="/x.js"></script>"#).isEmpty)
+        // An icon inside a section must not hide loose content after it.
+        let icon = ##"<section class="page-section"><svg class="icon"><use href="#i-x"></use></svg></section>"##
+        #expect(Self.looseContent(in: tabs + icon + titlebar) == [#"<div class="page-titlebar">"#])
     }
 }

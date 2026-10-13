@@ -35,16 +35,6 @@ struct InstructorLTIGradesPage: HTML {
     var body: some HTML {
         BaseLayout(title: "LMS grades", page: page, flash: flash) {
             InstructorTabs(active: .brightspace)
-            if canPushAll {
-                section(.class("page-section")) {
-                    div(.class("toolbar toolbar--end section-gap")) {
-                        form(.method(.post), .action("/instructor/lti-grades/push-all"), .class("inline-form")) {
-                            CSRFField(token: page.csrfToken)
-                            button(.class("btn btn-primary"), .type(.submit)) { "Sync now" }
-                        }
-                    }
-                }
-            }
             if !hasActiveCourse {
                 section(.class("page-section")) {
                     p(.class("empty")) { "Select a course to manage its LMS grades." }
@@ -66,7 +56,15 @@ struct InstructorLTIGradesPage: HTML {
 
     private var routeSection: some HTML {
         section(.class("page-section")) {
-            h2 { "LMS grades — \(courseCode)" }
+            div(.class("page-titlebar")) {
+                h2 { "LMS grades — \(courseCode)" }
+                if canPushAll {
+                    form(.method(.post), .action("/instructor/lti-grades/push-all"), .class("inline-form")) {
+                        CSRFField(token: page.csrfToken)
+                        button(.class("btn btn-primary"), .type(.submit)) { "Sync now" }
+                    }
+                }
+            }
             p(.class("section-intro")) {
                 "This course is linked to \(platformName ?? ""). Its grades go to the LMS by one route at a time."
             }

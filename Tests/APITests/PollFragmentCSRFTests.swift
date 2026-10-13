@@ -63,3 +63,34 @@ import VaporTesting
         }
     }
 }
+
+/// The Students poll: a pending student's row carries a register form, and so
+/// a token.
+@Suite(.serialized) struct StudentsPollETagTests {
+
+    @Test func anUnchangedStudentsPollAnswers304() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            try await APIPreEnrollment(courseID: courseID, username: "poll_pending").save(on: app.db)
+            let path = "/instructor/students-data?fragment=rows"
+            let html = try await getHTML(path, cookie: cookie, on: app)
+            #expect(html.contains(#"name="_csrf""#))
+
+            var etag: String?
+            try await app.asyncTest(
+                .GET, path, beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in etag = res.headers.first(name: .eTag) })
+            let tag = try #require(etag)
+            var status: HTTPStatus = .ok
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    req.headers.add(name: .ifNoneMatch, value: tag)
+                },
+                afterResponse: { res in status = res.status })
+            #expect(status == .notModified)
+        }
+    }
+}

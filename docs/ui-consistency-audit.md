@@ -255,7 +255,7 @@ Direct archetype violations (`ui-design.md` "Page archetypes"):
   `.page-section`/h2/`.toolbar--end`/`.page-titlebar`.
 - `admin-runner.leaf:6-9` — the only `/admin/*` page with neither the
   version banner + `_admin-tabs` nor a titlebar; page title is an `<h2>`,
-  no `<h1>` exists; `.runner-header` ≈ the global `.editor-titlebar`.
+  no `<h1>` exists; `.runner-header` ≈ the global `.editor-titlebar` (now `.page-titlebar--top`).
 - `admin-storage.leaf:9/22` — `.storage-bar`(`--end`) ≡
   `.page-titlebar`/`.toolbar--end`.
 - `admin-users.leaf:8`, `admin-brightspace.leaf:8` — `.page-section` with

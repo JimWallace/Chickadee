@@ -32,7 +32,7 @@ struct AssignmentsPage: HTML {
             InstructorTabs(active: .overview)
             section(.class("page-section")) {
                 h2(.class("page-heading")) { heading }
-                section(.class("diagnostics-section")) {
+                div(.class("diagnostics-section")) {
                     div(.class("diagnostics-cards")) {
                         MetricsDiagnosticCard(
                             hook: .instructor, key: "submissions", label: "Submissions", spoken: "Submissions",
@@ -50,8 +50,6 @@ struct AssignmentsPage: HTML {
                             valueID: "idash-browser-errors")
                     }
                 }
-            }
-            section(.class("page-section")) {
                 if showEmptyMessage {
                     p(.class("empty")) {
                         "No assignments yet. "

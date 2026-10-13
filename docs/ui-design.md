@@ -235,7 +235,7 @@ duplicate.
   yes.  Never call the native one: `check-styles.sh` holds it at zero,
   as it does for native alerting.
 - **`FlashMessages` / `FlashBanner`** + `.flash-*` — see page anatomy above.
-- **`.page-titlebar`** (+ `--baseline`, `.page-titlebar--top`), **`.page-subtitle`** — the page
+- **`.page-titlebar`** (+ `.page-titlebar--baseline` to align on the text, `.page-titlebar--top` for a tall title column such as the assignment editors), **`.page-subtitle`** — the page
   header row and its secondary line.  Cluster multiple left/right items
   inside with `.toolbar`.
 - **`.page-section`**, **`.section-intro`**, **`.section-note`** — section

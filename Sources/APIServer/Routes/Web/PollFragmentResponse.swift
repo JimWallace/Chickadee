@@ -21,7 +21,9 @@
 // The rows carry CSRF tokens, and every token has a fresh random salt, so two
 // renders of the same rows never have the same bytes. The ETag is therefore
 // taken over the rows with the request's token removed. On a 304 the client
-// keeps its rows, and their older tokens stay valid for the same session.
+// keeps its rows, and their older tokens stay valid for the same session. A
+// new session secret (a log-in as someone else in another tab) makes them
+// stale; the page is then stale anyway, and a reload fixes both.
 //
 // What this deliberately does NOT save is the server's own work: the rows are
 // queried and rendered before they can be hashed. Skipping that needs a cheap
