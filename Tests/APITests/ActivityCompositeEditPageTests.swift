@@ -121,7 +121,8 @@ import VaporTesting
             #expect(location.contains("notice="))
             let composite = try #require(try await stored("setup_cc3", on: app)?.composite)
             #expect(composite.layout == .grid(columns: 4, rows: 3))
-            #expect(composite.contribution == CompositeContributionShape(width: 16, height: 16, frames: 30, format: .gray8))
+            #expect(
+                composite.contribution == CompositeContributionShape(width: 16, height: 16, frames: 30, format: .gray8))
             #expect(composite.dealOrder == .rowMajor)
             #expect(composite.frameRate == 24)
             #expect(!composite.showFailed, "an unchecked box is posted as absent")
@@ -146,6 +147,14 @@ import VaporTesting
             let composite = try #require(try await stored("setup_cc4", on: app)?.composite)
             #expect(composite.compositor == .sequence)
             #expect(composite.layout == .count(48))
+
+            // The page now shows Slots. A change back to a grid that also
+            // posts a new count reshapes the posted count, not the stored one.
+            _ = try await post(
+                ["compositor": "tile", "count": "36", "frameRate": "12", "showFailed": "on"],
+                to: "/instructor/\(assignment.publicID)/activity/composite", csrf: csrf, cookie: cookie, on: app)
+            let regridded = try #require(try await stored("setup_cc4", on: app)?.composite)
+            #expect(regridded.layout == .grid(columns: 6, rows: 6))
         }
     }
 

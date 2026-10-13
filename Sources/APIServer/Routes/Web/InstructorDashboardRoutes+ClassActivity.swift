@@ -46,10 +46,17 @@ extension InstructorDashboardRoutes {
         case "hidden": visible = false
         default: visible = body?.visible != nil
         }
-        try await ActivityAuthoring.setActivity(
-            setup: setup,
-            to: current.withLeaderboardVisibility(visible ? .visible : .hidden),
-            on: req.db)
+        do {
+            try await ActivityAuthoring.setActivity(
+                setup: setup,
+                to: current.withLeaderboardVisibility(visible ? .visible : .hidden),
+                on: req.db)
+        } catch let error as AppError {
+            // A class composite refuses a visible board; the page offers no
+            // toggle for it, so only a crafted post reaches this.
+            let encoded = error.reason.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            return req.redirect(to: "/instructor/\(assignment.publicID)/edit?error=" + encoded)
+        }
         await AuditLogger.record(
             action: .leaderboardVisibilityChanged,
             targetType: .assignment,

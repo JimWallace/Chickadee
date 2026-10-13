@@ -32,18 +32,20 @@ struct CompositeFormBody: Content {
     /// structural field that is absent.
     func spec(keeping stored: CompositeSpec) throws -> CompositeSpec {
         let compositor = try Self.choice(compositor, CompositeCompositor.self, "compositor") ?? stored.compositor
-        // The page shows only the stored compositor's layout fields. After a
-        // change between a grid and a count, the stored slots are reshaped,
-        // and the next render shows the fields for the new shape.
-        let layout: CompositeLayout
-        switch stored.layout.reshaped(forGrid: compositor.usesGrid) {
+        // The page shows only the stored compositor's layout fields, so the
+        // posted fields apply to the stored shape first. A compositor change
+        // between a grid and a count then reshapes that layout, keeping every
+        // slot, and the next render shows the fields for the new shape.
+        let posted: CompositeLayout
+        switch stored.layout {
         case .grid(let storedColumns, let storedRows):
-            layout = .grid(
+            posted = .grid(
                 columns: try Self.number(cols, "columns") ?? storedColumns,
                 rows: try Self.number(rows, "rows") ?? storedRows)
         case .count(let storedCount):
-            layout = .count(try Self.number(count, "slot count") ?? storedCount)
+            posted = .count(try Self.number(count, "slot count") ?? storedCount)
         }
+        let layout = posted.reshaped(forGrid: compositor.usesGrid)
         let contribution = CompositeContributionShape(
             width: try Self.number(w, "contribution width") ?? stored.contribution.width,
             height: try Self.number(h, "contribution height") ?? stored.contribution.height,

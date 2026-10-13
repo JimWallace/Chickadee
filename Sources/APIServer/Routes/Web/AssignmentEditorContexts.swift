@@ -216,7 +216,11 @@ struct ActivityEditFacts: Encodable {
     let windowClosesAtLocal: String
     /// The class-composite form's facts; nil for any other kind. Defaulted
     /// so a context built before the composite existed still compiles.
-    var composite: CompositeEditFacts? = nil
+    var composite: CompositeEditFacts?
+    /// False for a class composite, whose leaderboard page stays staff-only
+    /// (`ActivityAuthoring.compositeLeaderboardHiddenMessage`). Keyed on the
+    /// kind, not on the block, which `setActivity` always seeds.
+    var showsVisibilityToggle: Bool = true
 
     static func make(setup: APITestSetup, on db: any Database) async throws -> ActivityEditFacts {
         let activity = setup.decodedManifest()?.activity
@@ -247,7 +251,8 @@ struct ActivityEditFacts: Encodable {
                 : [],
             windowOpensAtLocal: dueAtLocalInputString(activity?.window?.opensAt),
             windowClosesAtLocal: dueAtLocalInputString(activity?.window?.closesAt),
-            composite: composite)
+            composite: composite,
+            showsVisibilityToggle: activity?.kind != .classComposite)
     }
 }
 

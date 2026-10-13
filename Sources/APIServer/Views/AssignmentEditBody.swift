@@ -355,7 +355,7 @@ private struct EditActivityBlock: HTML {
             }
             p(.class("field-note field-note--muted")) { activity.summary }
             // A composite's leaderboard page stays staff-only (docs/class-composite.md).
-            if activity.composite == nil {
+            if activity.showsVisibilityToggle {
                 form(.method(.post), .action("/instructor/\(assignmentID)/activity"), .dataFlag("ck-inplace")) {
                     CSRFField(token: csrfToken)
                     " "
@@ -447,21 +447,27 @@ private struct EditActivityBlock: HTML {
             }
             div(.class("toolbar field-gap")) {
                 if composite.usesGrid {
-                    compositeNumber("Columns", name: "cols", value: composite.columns,
+                    compositeNumber(
+                        "Columns", name: "cols", value: composite.columns,
                         max: CompositeEditFacts.maxGridSide, locked: composite.structureLocked)
-                    compositeNumber("Rows", name: "rows", value: composite.rows,
+                    compositeNumber(
+                        "Rows", name: "rows", value: composite.rows,
                         max: CompositeEditFacts.maxGridSide, locked: composite.structureLocked)
                 } else {
-                    compositeNumber("Slots", name: "count", value: composite.count,
+                    compositeNumber(
+                        "Slots", name: "count", value: composite.count,
                         max: CompositeEditFacts.maxSlots, locked: composite.structureLocked)
                 }
             }
             div(.class("toolbar field-gap")) {
-                compositeNumber("Width (px)", name: "w", value: composite.width,
+                compositeNumber(
+                    "Width (px)", name: "w", value: composite.width,
                     max: CompositeEditFacts.maxContributionSide, locked: composite.structureLocked)
-                compositeNumber("Height (px)", name: "h", value: composite.height,
+                compositeNumber(
+                    "Height (px)", name: "h", value: composite.height,
                     max: CompositeEditFacts.maxContributionSide, locked: composite.structureLocked)
-                compositeNumber("Frames", name: "frames", value: composite.frames,
+                compositeNumber(
+                    "Frames", name: "frames", value: composite.frames,
                     max: CompositeEditFacts.maxFrames, locked: composite.structureLocked)
                 label(.class("field-inline")) {
                     "Pixel format "
@@ -486,7 +492,8 @@ private struct EditActivityBlock: HTML {
                 }
             }
             div(.class("toolbar field-gap")) {
-                compositeNumber("Frame rate (fps)", name: "frameRate", value: composite.frameRate,
+                compositeNumber(
+                    "Frame rate (fps)", name: "frameRate", value: composite.frameRate,
                     max: CompositeEditFacts.maxFrameRate, locked: false)
             }
             label(.class("form-label field-gap")) {
