@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.638] - 2026-10-13
+
+### Fixed
+
+- **A saved solution wins over one bundled in the setup zip.** When an instructor's uploaded setup zip carried a `solution.*`, that entry was searched first, so every later solution save (the editor, MCP `update_solution`, the edit form) was stored but never shown: the editor, `get_solution`, the solution download and the student reveal kept the bundled one while validation graded the saved one. Worse, an edit-form save with no solution upload re-validated against the zip's original answer key and linked it, reverting the saved solution. The search order is now the linked validation submission, the newest validation submission, the setup zip, then the draft; the edit form, the solution download and the staff Files panel follow it. The zip is the fallback for a setup with no saved solution.
+
+
 ## [0.5.637] - 2026-10-13
 
 ### Added
