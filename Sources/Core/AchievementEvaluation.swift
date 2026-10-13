@@ -286,7 +286,9 @@ extension TestProperties {
     ///
     /// Names are `runnerOutcomeTestName` — the same form
     /// `recordClassItemCoverage` stores — so the caller can intersect the
-    /// coverage rows against this set directly.
+    /// coverage rows against this set directly. A class composite's slots are
+    /// items too (`compositeCoverageItems`), in the nil scope only: a slot
+    /// belongs to no suite section.
     public func coveredItemNames(inScopeOf scope: AchievementTarget?) -> Set<String> {
         let entries: [TestSuiteEntry]
         switch scope?.kind {
@@ -294,12 +296,20 @@ extension TestProperties {
             guard let ref = scope?.ref else { return [] }
             entries = testSuites.filter { $0.sectionID == ref }
         case .none:
-            entries = testSuites
+            return Set(testSuites.map { runnerOutcomeTestName(displayName: $0.name, script: $0.script) })
+                .union(compositeCoverageItems)
         case .some(.assignmentGrade), .some(.suiteItem), .some(.testPass):
             // Not a set of items; `isSweepEvaluableClassGoal` refuses these
             // shapes, so reaching here means a manifest the sweep skips.
             return []
         }
         return Set(entries.map { runnerOutcomeTestName(displayName: $0.name, script: $0.script) })
+    }
+
+    /// The coverage items of a class composite's slots, in slot order, or
+    /// `[]` for any other assignment (docs/class-composite.md, slice 4).
+    public var compositeCoverageItems: [String] {
+        guard let activity, activity.kind == .classComposite, let spec = activity.composite else { return [] }
+        return spec.coverageItems
     }
 }

@@ -42,10 +42,13 @@ func buildAssignmentCoverageRows(
     // Every item the suite defines, in suite order, so an uncovered item still
     // has a row. A covered item whose suite entry has since been deleted also
     // keeps its row — dropping it would quietly shrink the denominator an
-    // instructor is reading against.
-    var items = (manifest?.testSuites ?? []).map {
-        runnerOutcomeTestName(displayName: $0.name, script: $0.script)
-    }
+    // instructor is reading against. A class composite's items are its
+    // slots, in slot order.
+    let slots = manifest?.compositeCoverageItems ?? []
+    var items =
+        slots.isEmpty
+        ? (manifest?.testSuites ?? []).map { runnerOutcomeTestName(displayName: $0.name, script: $0.script) }
+        : slots
     for item in covered.map(\.item) where !items.contains(item) { items.append(item) }
 
     return items.map { item in

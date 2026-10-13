@@ -135,7 +135,8 @@ struct ResultIngestEffects {
 
     /// The class-level effects of one student's result: the union of covered
     /// items (and the corpus re-run it schedules), the activity leaderboard,
-    /// the activity match, and the class records a 100% earns. Never throws.
+    /// the activity match, the class-composite contribution, and the class
+    /// records a 100% earns. Never throws.
     ///
     /// Two gates, kept visible: coverage, the leaderboard and the match are
     /// per item or per run and need only a build that passed; the records are
@@ -196,6 +197,12 @@ struct ResultIngestEffects {
             try await recordActivityMatch(
                 testSetupID: testSetupID, userID: userID, submissionID: submissionID,
                 outcomes: collection.outcomes, matches: matches, on: db)
+        }
+
+        // Class composite: the student's part of the shared image, and the
+        // slot's coverage row when it passed (docs/class-composite.md).
+        await bestEffort("composite_contribution", submissionID: submissionID) {
+            try await CompositeContributions.record(submission: submission, collection: collection, on: db)
         }
 
         guard !isRetest, gradePercent(from: collection) == 100 else { return }

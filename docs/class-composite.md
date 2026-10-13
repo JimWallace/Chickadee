@@ -2,7 +2,7 @@
 
 Design note for a class activity in which each student renders one part of a
 shared image, and the class watches the full image form on the projector while
-the submissions arrive. Nothing in this note is built yet. See **Status**.
+the submissions arrive. Slices 1 to 4 are built. See **Status**.
 
 The idea came from a sequence of computer-graphics and medical-imaging labs:
 a framebuffer, the painter's algorithm, the z-buffer, ray casting, and CT
@@ -19,7 +19,7 @@ of all parts together.
 | 1 | Output contract: the `composite` footer field in `RunnerCore` | shipped |
 | 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | shipped |
 | 3 | Slot dealing, and the slot as a per-student input | shipped |
-| 4 | Ingest: the `composite_contributions` table and the coverage row | planned |
+| 4 | Ingest: the `composite_contributions` table and the coverage row | shipped |
 | 5 | The composite view on the leaderboard page | planned |
 | 6 | Reference renders and `emptySlots: reference`, spare slots, and the `sum` and `gallery` compositors | planned |
 
@@ -152,10 +152,11 @@ against the native build and the vendored wasm, which slice 1 re-vendored. The
 server still validates every payload at ingest (slice 4), because a
 browser-posted outcome is not trusted.
 
-Slice 4 must also decide how a composite counts against the stored result's
-size budget. `TestOutcomeCollection`'s truncation cuts only `longResult` and
-copies `composite` unchanged, and a contribution can be up to about 87 KB of
-base64.
+**The stored result keeps the contribution (slice 4).** Truncation in
+`TestOutcomeCollection` cuts only `longResult` and copies `composite` unchanged.
+A contribution is at most about 87 KB of base64, well inside the 6 MB result
+budget, so the result keeps it. The composite view reads the
+`composite_contributions` table, not the result.
 
 The contribution is attached to the test outcome, so a script can grade the
 correctness of the contribution in the same run. The exit code and `score` are
@@ -227,21 +228,39 @@ which on the MCP pool saw no student submissions.
 
 ### 3. Ingest (slice 4)
 
-At both ingest paths (the worker results and the browser result routes), for an
-assignment with a `classComposite` activity:
+`CompositeContributions.record` (`Sources/APIServer/Services/`) runs in
+`ResultIngestEffects.apply`, which both ingest paths (the worker report and the
+browser result) call. For a student's graded submission to a `classComposite`
+assignment:
 
-1. Validate the payload: the format is known, the length matches the
-   dimensions, and the size is not more than the cap (64 KB for each
-   contribution). An invalid payload is discarded with a log line. The grade
-   is not changed.
-2. Upsert one row in `composite_contributions`: assignment, slot, student,
-   submission, payload, passed, time. The latest submission for a student
-   replaces that student's earlier row.
-3. If the contribution passed, insert `slot-<n>` into `class_item_coverage`.
-   The unique constraint keeps only the first, so this is idempotent.
+1. Take the first contribution in suite order. A script reports one; a second
+   is ignored.
+2. Check the payload again, because a browser-posted outcome is not trusted:
+   the width, height, frames and format are the assignment's shape, and `data`
+   is valid base64 of exactly the right length, at most 64 KB. An invalid
+   payload is discarded with a log line. The grade does not change.
+3. Upsert one row in `composite_contributions`: assignment, student, slot,
+   submission, submitted-at, the pixels, and whether the test passed. One row
+   for each student. A newer submission replaces the row; an older submission,
+   re-tested later, does not.
+4. If the test passed, insert the coverage item `slot-<n>` into
+   `class_item_coverage`. The unique constraint keeps the first, so this is
+   idempotent, and a later failure does not take the slot back.
 
-`deleteCourse` must delete the rows in both new tables, as it deletes
-`class_coverage_runs`.
+Only a student's own submission records a contribution. Staff render the
+reference slot and hold no dealt slot. A student with no dealt slot (the
+grading deal failed) records nothing, with a log line.
+
+**The class goal.** An unscoped `itemsCovered` goal counts the slot items
+(`TestProperties.compositeCoverageItems`), so "the class fills 40 of 48 tiles"
+is an ordinary union goal. A section-scoped goal does not count them: a slot
+belongs to no section. The instructor's coverage table lists the slots in slot
+order.
+
+**Deletion.** Rows follow their assignment, their student and their submission
+on delete. `deleteCourse` also deletes the slots and the contributions of the
+course explicitly, as it does the coverage rows. The least-privilege MCP role
+cannot read `composite_contributions`.
 
 ### 4. The composite view (slice 5)
 
