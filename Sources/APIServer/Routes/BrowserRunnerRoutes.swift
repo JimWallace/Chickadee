@@ -206,9 +206,8 @@ struct BrowserRunnerRoutes: RouteCollection {
             personalizedInputs = CompositeSlots.merged(
                 personalizedInputs,
                 with: await CompositeSlots.gradingInputs(
-                    manifest: manifest, language: resolved, courseID: setup.courseID,
-                    assignmentID: assignmentID, userID: userID, usesReferenceSlot: false,
-                    logger: req.logger, on: req.db))
+                    manifest: manifest, courseID: setup.courseID, assignmentID: assignmentID,
+                    userID: userID, usesReferenceSlot: false, on: req.db))
             // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
             // the manifest declares no datasets, which is the common case.
             personalizedFiles = DatasetResolver.resolve(

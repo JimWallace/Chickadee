@@ -58,7 +58,7 @@ enum CompositeSlots {
     /// and the grading backstop deals the slot later.
     static func dealOnOpen(
         setup: APITestSetup, assignment: APIAssignment, userID: UUID, now: Date = Date(),
-        logger: Logger, on db: any Database
+        on db: any Database
     ) async {
         guard let assignmentID = assignment.id,
             let activity = setup.decodedManifest()?.activity,
@@ -68,7 +68,7 @@ enum CompositeSlots {
         do {
             _ = try await slot(assignmentID: assignmentID, userID: userID, spec: spec, on: db)
         } catch {
-            logger.error("composite: dealing a slot on open failed: \(error)")
+            db.logger.error("composite: dealing a slot on open failed: \(error)")
         }
     }
 
@@ -78,8 +78,9 @@ enum CompositeSlots {
         try await APICompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID).count() > 0
     }
 
-    /// The composite inputs for one grading run, rendered in `language`, or
-    /// nil when the assignment is not a class composite or has no language.
+    /// The composite inputs for one grading run, rendered in the manifest's
+    /// declared language, or nil when the assignment is not a class
+    /// composite or has no language.
     ///
     /// A validation run (`usesReferenceSlot`) and any run by course staff or
     /// an admin get slot 0 and deal nothing: a dealt slot is a student's, and
@@ -91,11 +92,11 @@ enum CompositeSlots {
     /// Never fails grading: an error is logged, and the run grades without
     /// the inputs (the test script then fails closed on its own).
     static func gradingInputs(
-        manifest: TestProperties, language: AssignmentLanguage?, courseID: UUID, assignmentID: UUID?,
-        userID: UUID?, usesReferenceSlot: Bool, logger: Logger, on db: any Database
+        manifest: TestProperties, courseID: UUID, assignmentID: UUID?, userID: UUID?,
+        usesReferenceSlot: Bool, on db: any Database
     ) async -> [String: String]? {
         guard let activity = manifest.activity, activity.kind == .classComposite,
-            let spec = activity.composite, let language
+            let spec = activity.composite, let language = AssignmentLanguage.resolve(manifest: manifest)
         else { return nil }
         let slot: Int
         do {
@@ -112,7 +113,7 @@ enum CompositeSlots {
                 }
             }
         } catch {
-            logger.error("composite: resolving a slot for grading failed: \(error)")
+            db.logger.error("composite: resolving a slot for grading failed: \(error)")
             return nil
         }
         return spec.inputs(forSlot: slot).mapValues(language.literal)

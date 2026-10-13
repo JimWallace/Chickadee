@@ -109,7 +109,7 @@ extension WebRoutes {
         // session window (docs/class-composite.md). Staff are never dealt one.
         if !isStaff, !isClosed, let assignment {
             await CompositeSlots.dealOnOpen(
-                setup: setup, assignment: assignment, userID: userID, logger: req.logger, on: req.db)
+                setup: setup, assignment: assignment, userID: userID, on: req.db)
         }
 
         let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

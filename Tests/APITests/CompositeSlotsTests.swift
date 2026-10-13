@@ -189,8 +189,8 @@ import VaporTesting
             }
             let manifest = try #require(f.setup.decodedManifest())
             let inputs = await CompositeSlots.gradingInputs(
-                manifest: manifest, language: .python, courseID: f.courseID, assignmentID: f.assignmentID, userID: ids[4],
-                usesReferenceSlot: false, logger: app.logger, on: app.db)
+                manifest: manifest, courseID: f.courseID, assignmentID: f.assignmentID, userID: ids[4],
+                usesReferenceSlot: false, on: app.db)
             #expect(inputs == ["composite_slot": "4", "composite_col": "1", "composite_row": "1"])
         }
     }
@@ -201,8 +201,8 @@ import VaporTesting
             let f = try await fixture(spec(), on: app)
             let manifest = try #require(f.setup.decodedManifest())
             let inputs = await CompositeSlots.gradingInputs(
-                manifest: manifest, language: .python, courseID: f.courseID, assignmentID: f.assignmentID, userID: nil,
-                usesReferenceSlot: true, logger: app.logger, on: app.db)
+                manifest: manifest, courseID: f.courseID, assignmentID: f.assignmentID, userID: nil,
+                usesReferenceSlot: true, on: app.db)
             #expect(inputs?["composite_slot"] == "0")
             #expect(try await APICompositeSlot.query(on: app.db).count() == 0)
         }
@@ -216,16 +216,18 @@ import VaporTesting
             let f = try await fixture(spec(), on: app)
             let manifest = try #require(f.setup.decodedManifest())
             let id = try await students(1, on: app)[0]
+            var noLanguage = manifest
+            noLanguage.language = nil
             #expect(
                 await CompositeSlots.gradingInputs(
-                    manifest: manifest, language: nil, courseID: f.courseID, assignmentID: f.assignmentID, userID: id,
-                    usesReferenceSlot: false, logger: app.logger, on: app.db) == nil)
+                    manifest: noLanguage, courseID: f.courseID, assignmentID: f.assignmentID, userID: id,
+                    usesReferenceSlot: false, on: app.db) == nil)
             var other = manifest
             other.activity = ClassActivity(kind: .bestMetric)
             #expect(
                 await CompositeSlots.gradingInputs(
-                    manifest: other, language: .python, courseID: f.courseID, assignmentID: f.assignmentID, userID: id,
-                    usesReferenceSlot: false, logger: app.logger, on: app.db) == nil)
+                    manifest: other, courseID: f.courseID, assignmentID: f.assignmentID, userID: id,
+                    usesReferenceSlot: false, on: app.db) == nil)
         }
     }
 
@@ -240,8 +242,8 @@ import VaporTesting
             try await makeTestEnrollment(on: app, userID: ta.requireID(), courseID: f.courseID)
             let manifest = try #require(f.setup.decodedManifest())
             let inputs = await CompositeSlots.gradingInputs(
-                manifest: manifest, language: .python, courseID: f.courseID, assignmentID: f.assignmentID,
-                userID: try ta.requireID(), usesReferenceSlot: false, logger: app.logger, on: app.db)
+                manifest: manifest, courseID: f.courseID, assignmentID: f.assignmentID,
+                userID: try ta.requireID(), usesReferenceSlot: false, on: app.db)
             #expect(inputs?["composite_slot"] == "0")
             #expect(try await APICompositeSlot.query(on: app.db).count() == 0)
         }
@@ -272,12 +274,12 @@ import VaporTesting
             f.setup.manifest = try #require(String(data: JSONEncoder().encode(props), encoding: .utf8))
 
             await CompositeSlots.dealOnOpen(
-                setup: f.setup, assignment: f.assignment, userID: id, logger: app.logger, on: app.db)
+                setup: f.setup, assignment: f.assignment, userID: id, on: app.db)
             #expect(try await APICompositeSlot.query(on: app.db).count() == 0, "the window has not opened")
 
             await CompositeSlots.dealOnOpen(
-                setup: f.setup, assignment: f.assignment, userID: id, now: Date(timeIntervalSinceNow: 7_200),
-                logger: app.logger, on: app.db)
+                setup: f.setup, assignment: f.assignment, userID: id, now: Date(timeIntervalSinceNow: 7_200), on: app.db
+            )
             #expect(try await APICompositeSlot.query(on: app.db).count() == 1)
         }
     }

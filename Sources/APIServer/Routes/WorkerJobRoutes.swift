@@ -344,12 +344,10 @@ struct WorkerJobRoutes: RouteCollection {
         personalizedInputs = CompositeSlots.merged(
             personalizedInputs,
             with: await CompositeSlots.gradingInputs(
-                manifest: claimed.manifest, language: language, courseID: setup.courseID,
-                assignmentID: claimed.assignmentID,
+                manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
                 // Only a student's own submission is dealt a slot.
                 userID: submission.kind == APISubmission.Kind.student ? submission.userID : nil,
-                usesReferenceSlot: submission.kind == APISubmission.Kind.validation,
-                logger: req.logger, on: req.db))
+                usesReferenceSlot: submission.kind == APISubmission.Kind.validation, on: req.db))
 
         // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
         // Cheap and deterministic (a file read + in-memory sample, no

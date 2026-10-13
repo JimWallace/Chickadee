@@ -191,7 +191,7 @@ extension WebRoutes {
             // open inside its session window. Staff are never dealt one.
             if !isClosed, !(try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)) {
                 await CompositeSlots.dealOnOpen(
-                    setup: setup, assignment: assignment, userID: userID, logger: req.logger, on: req.db)
+                    setup: setup, assignment: assignment, userID: userID, on: req.db)
             }
         }
         let requiredFiles = manifest?.requiredFiles ?? []
