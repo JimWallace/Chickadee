@@ -256,36 +256,30 @@ change. A future v2 could encode it as one key.
 
 ### D6. Use one input type (P6)
 
-```swift
-public struct Input: Codable, Equatable, Sendable {
-    public var name: String
-    public var value: InputValue
-}
-
-public enum InputValue: Equatable, Sendable {
-    case literal(JSONValue)
-    case expression(String)
-}
+```json
+{ "inputs": [ { "name": "limit", "value": 5 }, { "name": "n", "expression": "seed % 3" } ] }
 ```
 
-v2 stores `inputs: [Input]` at the assignment and on each section. The
-sanitizer removes `.expression` values in one place. `PatternFamily.variables`
+v2 stores `inputs` at the assignment and on each section. Each input has
+exactly one of `value` (a literal, which can be `null`) and `expression`; the
+reader refuses any other input. In memory, the inputs stay in the v1 fields
+(`globalVariables`, `globalExpressions` and the section fields), so readers do
+not change. `PatternFamily.variables`
 stays literal-only, because a family is also a request body (constraint 4).
 
 ### D7. Give each file one role (P7)
 
-```swift
-public struct ManifestFile: Codable, Equatable, Sendable {
-    public var required: Bool
-    public var graderOnly: Bool
-    public var starterNotebook: Bool
-    public var dataset: DatasetSpec?
-}
+```json
+{ "files": [ { "name": "main.py", "required": true },
+             { "name": "pool.csv", "dataset": { "file": "pool.csv", "sampleSize": 5 } } ] }
 ```
 
-v2 stores `files: [String: ManifestFile]`. The computed properties
-`requiredFiles`, `graderOnlyFiles`, `datasets` and `starterNotebook` stay, so
-readers do not change.
+v2 stores `files` as a list, not a map, so the order of each v1 list
+survives. Each entry has a `name` and its roles. The reader refuses a dataset
+whose `file` differs from the entry's `name`, and more than one starter
+notebook. In memory, the roles stay in the v1 fields (`requiredFiles`,
+`graderOnlyFiles`, `datasets` and `starterNotebook`), so readers do not
+change.
 
 ### D8. Group the policy fields (P2, P8)
 
@@ -331,6 +325,56 @@ green.
 | 5 (v0.7) | Stop the write of the legacy `patternFamilies` and `notebookChecks` mirror | Yes | Low |
 
 Phase 3 must ship in a release before phase 4 (constraint 2).
+
+### What phase 3 built
+
+- `Sources/Core/ManifestV2.swift` holds the v2 envelope (D6 to D8, D10).
+  `TestProperties.init(from:)` reads it when `schemaVersion` is 2, and reads
+  every other version as v1, as before.
+- The in-memory `schemaVersion` is 1 for a value read from v1 or from v2,
+  so equal content compares equal whichever form it was stored in. The
+  writer decides the wire version, and `TestProperties.wireVersion(of:)`
+  reads the version of stored text without a full decode. The v1 writer
+  always writes `schemaVersion: 1`.
+- A future version 3, read by this release as v1 and written again, would
+  become version 1 and lose the fields that v1 cannot hold. Before this
+  release, it would also have lost them, but kept its number.
+- `TestProperties.v2Envelope()` returns the v2 form, or nil when the v2 form
+  cannot hold the manifest exactly. It checks through the encoded bytes,
+  because some losses happen only in the encoding. A manifest it refuses
+  stays v1 in phase 4. Known refusals: an entry with both generator fields,
+  a language without its flag, a file name twice in one list, two file lists
+  in a different relative order, and awards without the seeded flag.
+- The REST upload accepts version 1 or 2, and stores the result through
+  `encodeManifest` (v1). Course-bundle import stores a v2 manifest as v1
+  (`storableImportedManifest`), and refuses a v2 manifest that does not
+  decode; a v1 manifest is stored byte-for-byte, as before.
+- The v2 reader refuses a hand-written document whose meaning is not clear
+  (see D6 and D7). This fails only while authoring: nothing stores v2 that
+  has not passed it.
+
+### Work for phase 4
+
+- **Rollback floor.** Once phase 4 is deployed, a rollback must not go to a
+  release before phase 3: no earlier release can read v2.
+- `encodeManifest` writes `v2Envelope()` when it is not nil, else v1.
+  `TestProperties.encode(to:)` must stay the v1 writer:
+  `RunnerManifest.encode` uses it, and that is what keeps the runner wire v1.
+- These read the stored text and pass it on without a decode, so each must
+  serve v1 or accept v2 on purpose: `manifestWithGraderOnlyFilesStripped`
+  (returns the stored text when there is nothing to strip), the MCP manifest
+  resource (`MCPResourceProvider`, whose description names v1 keys), bundle
+  export, and version snapshots with `RestoreAssignmentVersionTool`.
+  `mutateManifestJSON` compares bytes only, so it needs no change.
+- `GET /api/v1/browser-runner/testsetups/:id/manifest` serves the stored text
+  to `Public/browser-runner.js`, which reads `testSuites`, `sections` and
+  `timeLimitSeconds`. It must serve the v1 form. The endpoint now strips only
+  `graderOnlyFiles`, so it also sends expression source and other authoring
+  data to the student's browser. Serving the `RunnerManifest` form would fix
+  both, if the browser needs no other field.
+- `BackfillDeclaredLanguage` edits manifest JSON as a dictionary. It needs no
+  change: a migration runs once per database, it has run on every existing
+  database, and a fresh database has no manifests when it runs.
 
 ### Effect on tests
 

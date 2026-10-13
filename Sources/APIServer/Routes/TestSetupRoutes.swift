@@ -71,8 +71,10 @@ struct TestSetupRoutes: RouteCollection {
         } catch {
             throw AppError.unprocessable(reason: "Invalid manifest JSON: \(error)")
         }
-        guard manifest.schemaVersion == 1 else {
-            throw AppError.unprocessable(reason: "Unsupported schemaVersion \(manifest.schemaVersion); expected 1")
+        let supported = [TestProperties.v1SchemaVersion, ManifestV2.schemaVersion]
+        guard supported.contains(manifest.schemaVersion) else {
+            throw AppError.unprocessable(
+                reason: "Unsupported schemaVersion \(manifest.schemaVersion); expected 1 or 2")
         }
 
         // Reject a malformed minimum-runner-version gate at the authoring seam so

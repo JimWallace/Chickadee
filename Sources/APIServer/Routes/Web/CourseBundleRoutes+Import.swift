@@ -505,7 +505,7 @@ private func importBundledTestSetups(
 
         let setup = APITestSetup(
             id: newSetupID,
-            manifest: bundledSetup.manifest,
+            manifest: try storableImportedManifest(bundledSetup.manifest),
             zipPath: newZipPath,
             notebookPath: notebookPath,
             courseID: courseID
@@ -824,4 +824,23 @@ func bundleEntryURL(extractDir: URL, path: String, directory: String) -> URL? {
     guard !name.isEmpty, name != ".", name != "..", !name.contains("\\"), !name.contains("\0")
     else { return nil }
     return extractDir.appendingPathComponent(directory).appendingPathComponent(name)
+}
+
+/// The manifest text to store for an imported test setup.
+///
+/// A v1 manifest is stored byte-for-byte, as it always was.  A v2 manifest
+/// (docs/manifest-format-v2.md) is re-encoded through `encodeManifest`, the
+/// one writer, so that the database holds only what this release writes.
+/// That matters while a release that cannot read v2 is still a rollback
+/// target.  v1 text that does not decode is stored as it is; the import keeps
+/// its old behaviour for it.  v2 text that does not decode is refused: it
+/// would otherwise reach the database in a form no release reads.
+func storableImportedManifest(_ manifest: String) throws -> String {
+    guard TestProperties.wireVersion(of: manifest) == ManifestV2.schemaVersion else { return manifest }
+    do {
+        let decoded = try ManifestCodec.decoder.decode(TestProperties.self, from: Data(manifest.utf8))
+        return try encodeManifest(decoded)
+    } catch {
+        throw Abort(.badRequest, reason: "A bundled test setup has an invalid version 2 manifest: \(error)")
+    }
 }
