@@ -241,16 +241,19 @@ struct BrowserRunnerSeedResponse: Content {
 /// Their contents are already withheld at every download path (#1055); this
 /// closes the residual name leak in the manifest the browser fetches.
 ///
-/// Strict no-op — the input is returned byte-for-byte — when there is nothing
-/// to strip: the key is absent, already empty, or the body is not a manifest.
+/// Strict no-op for v1 text — the input is returned byte-for-byte — when there
+/// is nothing to strip: the key is absent, already empty, or the body is not
+/// a manifest.  Stored v2 text is always served as v1, because
+/// `browser-runner.js` reads the v1 keys.
 /// Only when grader-only names are present is the manifest re-encoded, through
 /// the typed `TestProperties` round trip every other manifest write uses
 /// (#1721), so the served bytes carry the one stable encoding; an empty list is
 /// omitted from that encoding, so the key is absent rather than `[]`.
 func manifestWithGraderOnlyFilesStripped(_ manifest: String) -> String {
     guard var props = decodeManifest(fromJSON: manifest), !props.graderOnlyFiles.isEmpty else {
-        return manifest
+        return manifestTextAsV1(manifest)
     }
     props.graderOnlyFiles = []
-    return (try? encodeManifest(props)) ?? manifest
+    // v1: `browser-runner.js` reads the v1 keys.
+    return (try? encodeManifestV1(props)) ?? manifest
 }

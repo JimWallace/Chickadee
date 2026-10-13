@@ -86,8 +86,38 @@ func decodeManifest(fromJSON json: String) -> TestProperties? {
 /// `test_setups.manifest`: `ManifestCodec.stableEncoder`, so equal values
 /// store equal bytes and a version snapshot or a runner cache key changes
 /// only when the content does.
+///
+/// It writes the v2 form (docs/manifest-format-v2.md, phase 4) when that form
+/// holds the manifest exactly, and the v1 form otherwise.  A release that
+/// cannot read v2 is therefore not a safe rollback target for a database
+/// this function has written.
 func encodeManifest(_ props: TestProperties) throws -> String {
-    guard let json = String(bytes: try ManifestCodec.stableEncoder.encode(props), encoding: .utf8) else {
+    if let envelope = props.v2Envelope() {
+        return try manifestString(ManifestCodec.stableEncoder.encode(envelope))
+    }
+    return try encodeManifestV1(props)
+}
+
+/// The v1 form of a manifest, for each place that sends a manifest out of
+/// the server: the browser runner, the MCP resource, and bundle export.  A
+/// reader outside the server may predate v2.
+func encodeManifestV1(_ props: TestProperties) throws -> String {
+    try manifestString(ManifestCodec.stableEncoder.encode(props))
+}
+
+/// Stored manifest text in its v1 form, for a path that sends stored text
+/// out of the server.  v1 text is returned byte-for-byte; text that does not
+/// decode is returned as it is, as these paths always did.
+func manifestTextAsV1(_ stored: String) -> String {
+    guard let decoded = decodeManifest(fromJSON: stored),
+        decoded.schemaVersion != TestProperties.v1SchemaVersion,
+        let v1 = try? encodeManifestV1(decoded)
+    else { return stored }
+    return v1
+}
+
+private func manifestString(_ data: Data) throws -> String {
+    guard let json = String(bytes: data, encoding: .utf8) else {
         throw WebAssignmentError.internalFailure(reason: "Failed to encode manifest.")
     }
     return json
