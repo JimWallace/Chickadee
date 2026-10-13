@@ -617,8 +617,8 @@ greeting. The example below does so in R."
 The web UI is Elementary views (`Sources/APIServer/Views/`) and one stylesheet
 (`Public/styles.css`). The render tests prove that a page renders, not how it
 looks, so `ElementaryPageGuardTests`, SwiftLint and `scripts/check-styles.sh`
-enforce these rules. The rules, the token tables, the component vocabulary and the page archetypes are
-in [docs/ui-design.md](docs/ui-design.md).
+enforce these rules. The rules, the token tables, the component vocabulary
+and the page archetypes are in [docs/ui-design.md](docs/ui-design.md).
 
 - No inline `style=""` in a view, except a JS-toggled `display:none` or a
   custom-property assignment.

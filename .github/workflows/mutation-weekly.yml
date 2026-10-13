@@ -39,7 +39,7 @@ name: Mutation testing (weekly)
 # APIServer IS DELIBERATELY EXCLUDED and should stay that way: 94k LOC, ~15,700
 # mutants, and its mutants must be graded by APITests, the slowest suite, so it
 # is ~1,712h serial -- roughly 96% of the cost of the whole tree for its least
-# informative mutants (route wiring, Leaf rendering, Fluent models). Triage cost
+# informative mutants (route wiring, view rendering, Fluent models). Triage cost
 # scales with SURVIVORS, not mutants, and a report nobody can read is worse than
 # no report because it looks like coverage.
 #

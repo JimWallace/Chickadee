@@ -81,7 +81,7 @@ fail() {
 
 # Two paths, both unauthenticated, both reported by the AppScan run: an
 # application page and a static asset. They take different middleware exits
-# (Leaf render vs FileMiddleware short-circuit), which is exactly how a header
+# (page render vs FileMiddleware short-circuit), which is exactly how a header
 # comes to be present on one and absent on the other.
 for path in "/login" "/app.js"; do
     url="${base_url}${path}"

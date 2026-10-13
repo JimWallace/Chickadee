@@ -24,16 +24,19 @@ and what remains. The decision and its order are in "Decisions".
 
 ## What the spike did
 
-- It adds Elementary 0.8 (pinned to the minor, because the package is pre-1.0)
-  to `APIServer`.
-- It ports `base.leaf`, `_flash.leaf` and the titlebar exemplar
+This section is the record of the original spike. The `.leaf` files that it
+names are now deleted.
+
+- It added Elementary 0.8 (pinned to the minor, because the package is
+  pre-1.0) to `APIServer`.
+- It ported `base.leaf`, `_flash.leaf` and the titlebar exemplar
   `admin-user.leaf` to Swift under `Sources/APIServer/Views/`.
-- `GET /admin/users/:userID` returns `HTMLResponse { AdminUserPage(...) }`.
-  The other 79 pages still render through Leaf, through the same base layout
-  markup.
-- `admin-user.leaf` stays in the tree, unused by the route.
-  `PageArchetypeTests` reads it as the titlebar exemplar, and the style guards
-  read it. See "Guards" below for why removing it is a decision, not a cleanup.
+- `GET /admin/users/:userID` returned `HTMLResponse { AdminUserPage(...) }`.
+  The other 79 pages rendered through Leaf at that time.
+- `admin-user.leaf` stayed in the tree, unused by the route, because
+  `PageArchetypeTests` and the style guards read it.
+
+The table gives the Swift file for each Leaf file that the spike ported.
 
 | File | Role |
 |---|---|

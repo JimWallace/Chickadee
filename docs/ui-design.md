@@ -169,19 +169,15 @@ the page everyone copies.
 
 Anatomy rules that hold across archetypes:
 
-- **Flash banners render through the `_flash` partial** — never hand-rolled.
-  It emits `.flash-success role="status"` / `.flash-error role="alert"` from
-  the `flashSuccess` / `flashError` / `notice` context values.  Static state
-  banners use `.flash-neutral` / `.flash-warning` with `role="status"`.  In a
-  Swift view, pass `FlashMessages` to `BaseLayout` for the one-shot messages,
-  and write a state banner as `FlashBanner(.warning)` or
-  `FlashBanner(.neutral)`.  SwiftLint keeps the `flash-` classes in
+- **Flash banners render through `BaseLayout`** — never hand-rolled.  Pass
+  `FlashMessages` to `BaseLayout` for the one-shot messages.  It emits
+  `.flash-success role="status"` / `.flash-error role="alert"`.  Write a
+  static state banner as `FlashBanner(.warning)` or `FlashBanner(.neutral)`,
+  which carries `role="status"`.  SwiftLint keeps the `flash-` classes in
   `BaseLayout.swift`.
-- **Tab bars are the `_admin-tabs` / `_instructor-tabs` partials.**  The
-  active tab rides `activeAdminTab` / `activeInstructorTab`.  A Swift admin
-  page opens with `AdminTabs(active:page:)` instead, which also renders the
-  version banner, and a Swift instructor page opens with
-  `InstructorTabs(active:)`.
+- **Tab bars are the `AdminTabs` / `InstructorTabs` views.**  An admin page
+  opens with `AdminTabs(active:page:)`, which also renders the version
+  banner.  An instructor page opens with `InstructorTabs(active:)`.
 - **Headings are structural:** tabbed pages start their sections at `<h2>`
   (the tab bar is the page title); every other page has exactly one `<h1>`.
   Don't restyle a heading to fake a different level.
@@ -238,7 +234,7 @@ duplicate.
   `data-confirm` seam cancels the interaction, asks, and replays it on
   yes.  Never call the native one: `check-styles.sh` holds it at zero,
   as it does for native alerting.
-- **`_flash` partial** + `.flash-*` — see page anatomy above.
+- **`FlashMessages` / `FlashBanner`** + `.flash-*` — see page anatomy above.
 - **`.page-titlebar`** (+ `--baseline`), **`.page-subtitle`** — the page
   header row and its secondary line.  Cluster multiple left/right items
   inside with `.toolbar`.
@@ -346,8 +342,8 @@ duplicate.
   symbols in `Resources/Sprites/avatar-sprite.svg`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
   last, on top and untilted, the ring.
-  **A page that renders `_avatar` (Swift: `Avatar`) must also include
-  `_avatar-sprite` (Swift: `AvatarSprite`), once per page** — forget it and the page still returns 200 and shows an empty circle,
+  **A page that renders `Avatar` must also include `AvatarSprite`, once per
+  page** — forget it and the page still returns 200 and shows an empty circle,
   which no guard can catch.  Five colours are per-student
   (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
   assigned inline, which is the sanctioned form); `--av-border` colours a solid
@@ -700,7 +696,7 @@ no second poller:
 
 | Attribute | What it says |
 |---|---|
-| `data-poll-url` | the server endpoint rendering the replacement, from the SAME partial or Swift view the page rendered inline |
+| `data-poll-url` | the server endpoint rendering the replacement, from the SAME view the page rendered inline |
 | `data-poll-interval` | milliseconds between polls (default 5000) |
 | `data-poll-swap` | `region` replaces the element's own contents; omitted replaces its `<tbody>` |
 | `data-poll-until` | an instant after which the poll stops for good; omitted polls while the tab is open |
