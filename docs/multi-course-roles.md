@@ -183,7 +183,7 @@ representable and creatable.
   `enrolledCoursesWithRoles` resolver (the enrollment row is already loaded —
   no extra query). `enrolledCourses` is now defined in terms of it, so the
   role-free MCP visibility set can't drift from the web one.
-- `CurrentUserContext` exposes `isStaffInActiveCourse`, and `base.leaf`
+- `CurrentUserContext` exposes `isStaffInActiveCourse`, and `SiteNav`
   keys the Instructor tab off *that* instead of the global `isInstructor`. It
   is `true` when the active course's role is `.instructor` **or** (a
   transitional fallback) the user is a global instructor/admin — so today's

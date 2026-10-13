@@ -985,7 +985,7 @@ The `ui-review` agent (`.claude/agents/ui-review.md`) reviews the layer
 above the guards: a construct that duplicates the vocabulary under another
 name, an idiom heavier than the cheapest that fits, copy over house length,
 a page that steps outside its archetype.  Run it from a Claude Code session
-on any change touching `Resources/Views/`, `Public/styles.css` or a
+on any change touching `Sources/APIServer/Views/`, `Public/styles.css` or a
 page-wiring `Public/*.js`; CI runs the same brief on every such pull request
 (`.github/workflows/ui-review.yml`) and fails the job on a `changes
 requested` verdict.

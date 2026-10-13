@@ -413,7 +413,7 @@ it assembles entirely from the component vocabulary.
 ### Instructor: authoring the goal
 
 **No template or JS changes.** The achievements editor
-(`#achievement-editor-template` in `_assignment-edit-body.leaf`) is already the
+(`#achievement-editor-template` in `AssignmentEditBody`) is already the
 composable shape this needs: a scope dropdown, a list of typed conditions
 combined with all/any, a "Class share ≥ (%)" field and a "Bonus points" field,
 both already gated to `classWide`.
@@ -503,7 +503,7 @@ independently useful to an instructor watching a lab in progress.
   tokens, no native `alert()`), and `check-ui-vocabulary.sh` if any global class
   is added — which the plan above avoids entirely.
 - The `ui-review` agent is **required** on any change touching
-  `Resources/Views/`, `Public/styles.css`, or a page-wiring `Public/*.js`. Green
+  `Sources/APIServer/Views/`, `Public/styles.css`, or a page-wiring `Public/*.js`. Green
   guards are necessary, not sufficient; every style regression so far has been
   mechanically legal.
 - Copy stays at house length: chips and labels are two-or-three-word noun

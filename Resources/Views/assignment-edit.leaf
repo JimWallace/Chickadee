@@ -1,8 +1,0 @@
-#extend("base"):
-#export("title"):
-#(assignmentName)
-#endexport
-#export("content"):
-#extend("_assignment-edit-body")
-#endexport
-#endextend

@@ -338,7 +338,7 @@ Rules:
   that follows a function turning async is not a change to a test.
 - Do not import Vapor in Core.
 - Do not add an environment variable.
-- Run the ui-review agent if you touch Resources/Views, Public/styles.css or a
+- Run the ui-review agent if you touch Sources/APIServer/Views, Public/styles.css or a
   page-wiring Public/*.js file. This scan usually touches none of them.
 
 Commit to branch <BRANCH>. Open a draft pull request. The body must have a
