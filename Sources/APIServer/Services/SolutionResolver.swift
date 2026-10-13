@@ -13,13 +13,20 @@ import Foundation
 import Vapor
 
 /// A place where a reference solution can live, in search order.
+///
+/// The saved solution comes first. Every save (the editor, MCP
+/// `update_solution`, the edit form) stores a validation submission and never
+/// touches the setup zip, so a zip entry searched first would hide every later
+/// save from the editor, `get_solution` and the reveal, while validation went
+/// on grading the saved one (`validationRuns`). The zip is the fallback for a
+/// setup that has no validation submission.
 enum SolutionSource: CaseIterable, Sendable {
-    /// A `solution.*` entry the instructor bundled in the setup zip.
-    case setupZip
     /// The validation submission the assignment links to.
     case linkedValidation
     /// The newest validation submission for the setup.
     case newestValidation
+    /// A `solution.*` entry the instructor bundled in the setup zip.
+    case setupZip
     /// The unvalidated draft written by the editor's "create solution".
     case draft
 
