@@ -259,7 +259,7 @@ enum LeaderboardSamples {
     static func present(
         places count: Int = 0, bracket: TournamentPresentation? = nil, showsBracket: Bool = false,
         window sessionWindow: LiveSessionPresentation? = nil, champion: Int? = nil, championOnPodium: Bool = false,
-        live: Bool = true
+        live: Bool = true, arena: Bool = false
     ) -> PresentModePresentation {
         let places = (0..<count).map { place($0 + 1, champion: championOnPodium && champion == $0 + 1) }
         let podium = PresentPlace.podiumOrder(places)
@@ -276,7 +276,8 @@ enum LeaderboardSamples {
             championOnPodium: championOnPodium, hasWindow: sessionWindow != nil, window: sessionWindow,
             hasProgress: sessionWindow == nil && bracket != nil, progressLabel: bracket?.progressLabel ?? "",
             progressValue: bracket?.progressValue ?? "", pollsLive: live,
-            pollURL: "/testsetups/ts1/leaderboard?present=1&fragment=present", boardURL: "/testsetups/ts1/leaderboard")
+            pollURL: "/testsetups/ts1/leaderboard?present=1&fragment=present", boardURL: "/testsetups/ts1/leaderboard",
+            arenaSetupID: arena ? "ts1" : nil)
     }
 
     static var presentBoards: [(name: String, board: PresentModePresentation)] {
@@ -297,6 +298,11 @@ enum LeaderboardSamples {
                     bracket: tournament(named: false, viewer: nil, complete: false), showsBracket: true, window: window)
             ),
             ("bracket none", present(showsBracket: true)),
+            (
+                "bracket in the arena",
+                present(
+                    bracket: tournament(named: false, viewer: nil, complete: false), showsBracket: true, arena: true)
+            ),
         ]
     }
 

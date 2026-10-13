@@ -26,6 +26,7 @@ assignment on the code path it runs today.
 | 7 | Synthetic class submission (coverage percent): `classAggregate` submissions, `class_coverage_runs`, the `classCoverage` goal signal | shipped |
 | 8 | Live-session controls: the `window` block, the submission refusal, the countdown and the leaderboard's background refresh | shipped |
 | 9 | Browser-graded bot challenges: `/seed` names the bot and a fresh match seed, the browser runner stages them; the refusal narrows to `champion` and `classmates` | shipped |
+| 10 | Projector arena: a browser-graded tournament waits in the `arena` status, and the present page plays its matches (`tournament-arena.js`, `recordArenaMatch`) | shipped |
 
 One thing a reader should not go looking for after slice 4: **the web create
 page has no activity control.** The kind is chosen on the edit page (the "Class
@@ -694,6 +695,49 @@ they already bypass the open/closed gate — and therefore bypass the window too
 The window is exactly as strong as the deadline on that path, which is the
 honest statement; closing it is its own change, since it would alter behaviour
 for existing API callers.
+
+### Projector arena (slice 10)
+
+A tournament on a browser-graded assignment puts no load on the runners. The
+present page plays its matches instead, in the browser of the staff member who
+projects it.
+
+- **Which tournaments.** A round whose setup is browser-graded
+  (`playsInArena`, read through `effectiveGradingMode`) is stored with the
+  `arena` submission status. No runner claims an `arena` match, and no reaper
+  re-queues one. A worker-graded tournament is unchanged. The grading mode is
+  read at each round, so a mode change during a run moves only the later
+  rounds.
+- **The page.** The present page of a browser-graded tournament has a "Play
+  matches" control (`Public/tournament-arena.js`). It loads the same grading
+  stack that a student's submit uses. Each match runs with
+  `BrowserRunner.runScripts`: the home entrant's upload is the submission, and
+  the away entrant's upload is staged under `opponent/` as the worker stages it
+  (the raw file, every notebook extracted, and `.chickadee_student_module`).
+  `CHICKADEE_MATCH_SEED` is the seed a runner would set for the same match. The
+  bracket refreshes from the server every five seconds, as before.
+- **The routes** (course staff only; a student reaches a 404):
+  - `GET /testsetups/:id/arena/next`: the lowest undecided slot of the current
+    round, or 204 when none waits.
+  - `GET /testsetups/:id/arena/submissions/:sid`: one side of a waiting match.
+    Any other submission is a 404.
+  - `POST /testsetups/:id/arena/matches/:sid/result`: the collection.
+    `recordArenaMatch` opens and completes the match row, stores the result
+    (`source: "arena"`), completes the match, and decides the slot through
+    `recordTournamentMatch`, all in one transaction. The transaction starts
+    with one conditional update that claims the match (`claimArenaMatch`), so
+    of two presenters who post one match at once, one lands it and the other
+    gets a 409, on SQLite and Postgres alike. A failure rolls the claim back,
+    so the match waits again and the presenter can replay it.
+- **Limits.** The arena runs in one browser, one match at a time. A bracket of
+  `n` entrants plays `n - 1` matches. The match runs with the presenter's
+  personalization seed, not the home entrant's, so a personalized tournament
+  should keep worker grading. A match that cannot start (a kernel that does not
+  boot) stops the arena and stays waiting; it is never posted as a loss. A
+  run superseded part-way leaves its waiting matches in `arena`; no page, no
+  claim and no alert reads them. The present page is not cross-origin
+  isolated, so its kernels use the transport that WebKit uses on the notebook
+  page.
 
 ## Compatibility rules (every slice)
 
