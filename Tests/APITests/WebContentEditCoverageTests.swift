@@ -65,6 +65,7 @@ import Testing
         "saveActivityLeaderboardSetting",
         "saveActivityOpponentFile",
         "saveActivityWindow",
+        "saveActivityComposite",
         "runTournament",
         // Re-grades on request; it is the effect, not an edit.
         "retestAllSubmissions",
