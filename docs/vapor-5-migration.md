@@ -40,7 +40,7 @@ Each step is safe on Vapor 4 and does not change behaviour.
 | Step | Where | Result at the move |
 |---|---|---|
 | The session driver is async | `Bootstrap/UnchangedSessionSkippingDriver.swift` | Its methods already match the Vapor 5 `SessionDriver`. |
-| Blocking work uses no event loop | `Helpers/BlockingWork.swift` | `runBlocking` calls `NIOThreadPool.singleton`, the pool Vapor 4 uses. No change. |
+| Blocking work uses no event loop | `Utilities/BlockingWork.swift` | `runBlocking` calls `NIOThreadPool.singleton`, the pool Vapor 4 uses. No change. |
 | The support-file client uses no event loop | `MCP/Tools/SupportFileURLFetcher.swift` | No change. |
 | GitHub calls need no `Request` | `GitHub/GitHubCallScope.swift` | The background commit-status post uses `BackgroundGitHubCallScope`. The protocol is the seam for a request without `application`. Its database logs use the application logger, not the request logger. |
 | Lifecycle hooks are async | `Services/PeriodicSweepMonitor.swift`, `Services/ServerHealthAlertService.swift` | Rename `didBootAsync` to `didBoot` and `shutdownAsync` to `shutdown`. The synchronous `boot()` does not run async hooks, so boot with `execute()` or `asyncBoot()`. |

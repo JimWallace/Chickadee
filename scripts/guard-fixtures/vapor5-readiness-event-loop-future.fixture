@@ -1,9 +1,9 @@
 # Vapor 5 has no EventLoopFuture. A new future-returning function compiles on
 # Vapor 4 and would be one more file to rewrite at the migration.
 guard="scripts/check-vapor5-readiness.sh"
-files="Sources/APIServer/Helpers/BlockingWork.swift"
+files="Sources/APIServer/Utilities/BlockingWork.swift"
 description="a function that returns an EventLoopFuture"
 expect="event-loop API in Sources/"
 apply() {
-    printf '\nimport Vapor\n\nfunc guardFixture(_ req: Request) -> EventLoopFuture<Void> {\n    req.eventLoop.makeSucceededVoidFuture()\n}\n' >> Sources/APIServer/Helpers/BlockingWork.swift
+    printf '\nimport Vapor\n\nfunc guardFixture(_ req: Request) -> EventLoopFuture<Void> {\n    req.eventLoop.makeSucceededVoidFuture()\n}\n' >> Sources/APIServer/Utilities/BlockingWork.swift
 }

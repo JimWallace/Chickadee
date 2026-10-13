@@ -15,7 +15,7 @@ set -euo pipefail
 #
 #   1. No event-loop API: `EventLoopFuture`, `EventLoopPromise`, a succeeded or
 #      failed future, `eventLoop`, `eventLoopGroup` or `.threadPool`. Use
-#      async/await, and `runBlocking` (Helpers/BlockingWork.swift) for blocking
+#      async/await, and `runBlocking` (Utilities/BlockingWork.swift) for blocking
 #      work.
 #   2. No direct `content.decode`, on any receiver. Call
 #      `decodeContent(T.self)`: on a request it is in
@@ -54,7 +54,7 @@ if [ -n "$event_loop" ]; then
   echo "$event_loop" | sed 's/^/  /'
   echo
   echo "Write it with async/await. For blocking work, call runBlocking"
-  echo "(Sources/APIServer/Helpers/BlockingWork.swift)."
+  echo "(Sources/APIServer/Utilities/BlockingWork.swift)."
   echo
   status=1
 fi
