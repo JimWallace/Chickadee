@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.628] - 2026-10-13
+
+### Changed
+
+- **Claude Code reads less and checks more.** The root `CLAUDE.md` keeps the rules for the whole repository. The rules for one area move to a `CLAUDE.md` in that area (`Sources/APIServer/`, `Sources/APIServer/MCP/`, `Sources/APIServer/Views/`, `Sources/Worker/`, `Tools/jupyterlite/`), which Claude Code loads only when it works there. New hooks format each edited Swift file and run `scripts/format-lint.sh` before a push. The test-edit hook now also asks before a shell command changes an existing test. `scripts/format-lint.sh` reads its steps from the CI `format-lint` job, so the local check and CI cannot drift, and `scripts/test-claude-hooks.py` tests the hooks in CI. The `test-runner` agent runs only the affected suites unless asked for a full run. The project settings now allow every tool call except a change to an existing test, which still asks.
+
+
 ## [0.5.627] - 2026-10-13
 
 ### Changed
