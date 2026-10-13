@@ -109,7 +109,8 @@ answer "what is this file?" for one of the four.
 ## Corrections after a read of the code
 
 A second, closer read of the code found that three problems are smaller
-than the first review said.
+than the first review said. Line 1 of this note uses "proposed" for the
+whole plan; the maintainer approved D1, D2 and D4 to D10.
 
 - **P4 is mostly solved already.** `NotebookCheckKindHandler`
   (`Sources/APIServer/Utilities/NotebookCheckKindHandler.swift`) gives each
@@ -120,16 +121,16 @@ than the first review said.
   the full manifest undecodable. Thus D3 is withdrawn.
 - **P5 is smaller.** `PatternCase.resolvedTier(defaults:)` and its siblings
   already put the override rules in one place. Only the field declarations
-  and decoders repeat. D2 would move code, not remove a defect. Thus D2 is
-  deferred.
+  and decoders repeat. D2 stays in the plan for the shared declarations, but
+  it removes duplication, not a defect.
 - **P8, the version string, is solved already.** `SetMinimumRunnerVersionTool`
   refuses a string that does not parse, at save. The `SemanticVersion` part of
   D9 is withdrawn.
 
 The v2 envelope (D6 to D8, D10) keeps every current accessor, so its
 benefit is mostly a tidier stored JSON. Its cost is a two-release rollout, a
-risk to rollback and to bundle import, and changes to many tests. It is
-deferred until a feature needs a shape that v1 cannot hold.
+risk to rollback and to bundle import, and changes to some tests. The
+maintainer accepted that cost, so it stays in the plan.
 
 ---
 
@@ -167,7 +168,7 @@ the same fields, so an old runner decodes it without a change.
 A new `TestProperties` field is then server-only unless a person adds it to
 `RunnerManifest`. The compiler shows the decision.
 
-### D2. Use one shared settings type (P5). Deferred: see "Corrections"
+### D2. Use one shared settings type (P5)
 
 ```swift
 public struct TestSettings: Codable, Equatable, Sendable {
@@ -315,18 +316,18 @@ green.
 
 | Phase | Content | Wire change | Risk |
 |---|---|---|---|
-| 1 | D9 comments, D4 `origin` and D5 `languageDeclaration` as computed properties | None | Low |
+| 1 | D9 comments, D2 `TestSettings`, D4 `origin` and D5 `languageDeclaration` as computed properties | None | Low |
 | 2 | D1 `RunnerManifest` for `Job.manifest`, same wire shape | None | Medium: the runner decode path |
-| 3 (deferred) | The v2 decoder (D6 to D8, D10). The server reads v1 and v2, and writes v1 | None written | Low |
-| 4 (deferred) | The server writes v2 to storage and bundles. The runner manifest stays v1 | Yes | Medium |
+| 3 | The v2 decoder (D6 to D8, D10). The server reads v1 and v2, and writes v1 | None written | Low |
+| 4 | The server writes v2 to storage and bundles. The runner manifest stays v1 | Yes | Medium |
 | 5 (v0.7) | Stop the write of the legacy `patternFamilies` and `notebookChecks` mirror | Yes | Low |
 
-If phases 3 and 4 start, phase 3 must ship in a release before phase 4
-(constraint 2).
+Phase 3 must ship in a release before phase 4 (constraint 2).
 
 ### Effect on tests
 
-Phase 1 adds only computed properties, so no existing test changes. Phase 2
+Phase 1 keeps every current initializer and property, so no existing test
+should change. Phase 2
 keeps the wire shape, and `Job` keeps an initializer that takes a
 `TestProperties`. Phases 3 and 4 would change the tests that assert on
 encoded bytes or on a JSON key. Each phase adds new tests: the computed
