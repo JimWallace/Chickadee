@@ -30,40 +30,43 @@ struct AssignmentsPage: HTML {
     var body: some HTML {
         BaseLayout(title: heading, page: page) {
             InstructorTabs(active: .overview)
-            h2(.class("page-heading")) { heading }
-            section(.class("diagnostics-section")) {
-                div(.class("diagnostics-cards")) {
-                    MetricsDiagnosticCard(
-                        hook: .instructor, key: "submissions", label: "Submissions", spoken: "Submissions",
-                        valueID: "idash-submissions")
-                    MetricsDiagnosticCard(
-                        hook: .instructor, key: "activeStudents", label: "Active Students", spoken: "Active students",
-                        valueID: "idash-active-students")
-                    MetricsDiagnosticCard(
-                        hook: .instructor, key: "activeAssignments", label: "Active Assignments",
-                        spoken: "Active assignments",
-                        valueID: "idash-active-assignments")
-                    MetricsDiagnosticCard(
-                        hook: .instructor, key: "browserErrors", label: "Browser Errors", spoken: "Browser errors",
-                        valueID: "idash-browser-errors")
-                }
-            }
-            if showEmptyMessage {
-                p(.class("empty")) {
-                    "No assignments yet. "
-                    a(.href("/instructor/new")) { "Create one to get started." }
-                }
-            } else {
-                div(.id("sections-container")) {
-                    for section in sections {
-                        SectionBlock(
-                            section: section, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken)
+            section(.class("page-section")) {
+                h2(.class("page-heading")) { heading }
+                div(.class("diagnostics-section")) {
+                    div(.class("diagnostics-cards")) {
+                        MetricsDiagnosticCard(
+                            hook: .instructor, key: "submissions", label: "Submissions", spoken: "Submissions",
+                            valueID: "idash-submissions")
+                        MetricsDiagnosticCard(
+                            hook: .instructor, key: "activeStudents", label: "Active Students",
+                            spoken: "Active students",
+                            valueID: "idash-active-students")
+                        MetricsDiagnosticCard(
+                            hook: .instructor, key: "activeAssignments", label: "Active Assignments",
+                            spoken: "Active assignments",
+                            valueID: "idash-active-assignments")
+                        MetricsDiagnosticCard(
+                            hook: .instructor, key: "browserErrors", label: "Browser Errors", spoken: "Browser errors",
+                            valueID: "idash-browser-errors")
                     }
                 }
-            }
-            addSectionToolbar
-            if !showEmptyMessage && showUngroupedBlock {
-                ungroupedBlock
+                if showEmptyMessage {
+                    p(.class("empty")) {
+                        "No assignments yet. "
+                        a(.href("/instructor/new")) { "Create one to get started." }
+                    }
+                } else {
+                    div(.id("sections-container")) {
+                        for section in sections {
+                            SectionBlock(
+                                section: section, enrolledStudentCount: enrolledStudentCount, csrfToken: page.csrfToken)
+                        }
+                    }
+                }
+                addSectionToolbar
+                if !showEmptyMessage && showUngroupedBlock {
+                    ungroupedBlock
+                }
             }
             PageStyle(
                 """

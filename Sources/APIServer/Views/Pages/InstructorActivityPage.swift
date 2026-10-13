@@ -25,32 +25,34 @@ struct InstructorActivityPage: HTML {
                     p(.class("empty")) { "Select a course to see its activity." }
                 }
             } else {
-                div(.class("page-titlebar")) {
-                    h2 { "Recent activity" }
-                    form(.method(.get), .action("/instructor/activity"), .class("form-flush")) {
-                        label(.class("visually-hidden"), .for("activity-actor")) { "Person" }
-                        select(
-                            .id("activity-actor"), .name("actor"), .class("form-input"),
-                            .dataFlag("ck-submit-on-change")
-                        ) {
-                            for option in staffOptions {
-                                Elementary.option(.value(option.username)) { option.displayName }
-                                    .attributes(.selected, when: option.selected)
+                section(.class("page-section")) {
+                    div(.class("page-titlebar")) {
+                        h2 { "Recent activity" }
+                        form(.method(.get), .action("/instructor/activity"), .class("form-flush")) {
+                            label(.class("visually-hidden"), .for("activity-actor")) { "Person" }
+                            select(
+                                .id("activity-actor"), .name("actor"), .class("form-input"),
+                                .dataFlag("ck-submit-on-change")
+                            ) {
+                                for option in staffOptions {
+                                    Elementary.option(.value(option.username)) { option.displayName }
+                                        .attributes(.selected, when: option.selected)
+                                }
                             }
+                            " "
+                            noscript { button(.type(.submit), .class("btn action-btn")) { "Show" } }
                         }
-                        " "
-                        noscript { button(.type(.submit), .class("btn action-btn")) { "Show" } }
                     }
-                }
-                p(.class("section-intro")) {
-                    "Content edits and course events for this course, newest first. "
-                    "Every content edit is a recoverable version of the assignment it names."
-                }
-                if hasRows {
-                    activityTable
-                } else {
-                    p(.class("empty")) {
-                        filtered ? "No activity matches that person." : "No recorded activity for this course yet."
+                    p(.class("section-intro")) {
+                        "Content edits and course events for this course, newest first. "
+                        "Every content edit is a recoverable version of the assignment it names."
+                    }
+                    if hasRows {
+                        activityTable
+                    } else {
+                        p(.class("empty")) {
+                            filtered ? "No activity matches that person." : "No recorded activity for this course yet."
+                        }
                     }
                 }
             }

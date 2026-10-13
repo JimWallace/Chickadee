@@ -98,7 +98,7 @@ private struct EditTitlebar: HTML {
     let edit: EditAssignmentContext
 
     var body: some HTML {
-        div(.class("editor-titlebar")) {
+        div(.class("page-titlebar page-titlebar--top")) {
             div(.class("editor-title-col")) {
                 div(.id("assign-header-view"), .class("assign-header-view")) {
                     h1 { edit.assignmentName }

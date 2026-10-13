@@ -39,20 +39,23 @@ await page.goto("/instructor/students", { waitUntil: "networkidle" });
 // and the fixture course has one student. Enrol enough pending usernames for
 // the box to exist, so "the filter survives the repaint" still runs against the
 // real control rather than passing because it was never there.
-{
-  const html = await page.content();
-  const courseID = /\/courses\/([0-9a-f-]{36})\/enrollment-mode/i.exec(html)?.[1];
-  const csrf =
-    /name=['"]_csrf['"][^>]*value=['"]([^'"]+)['"]/.exec(html)?.[1] ??
-    /value=['"]([^'"]+)['"][^>]*name=['"]_csrf['"]/.exec(html)?.[1];
-  if (courseID && csrf && (await page.$("#enrolled-filter")) === null) {
-    const usernames = Array.from({ length: 8 }, (_, i) => `probe_pending_${i}`).join("\n");
-    await context.request.post(`/courses/${courseID}/enroll-csv`, {
-      form: { usernames, _csrf: csrf },
-      headers: { "x-csrf-token": csrf },
-    });
-    await page.goto("/instructor/students", { waitUntil: "networkidle" });
-  }
+const rosterHTML = await page.content();
+const courseID = /\/courses\/([0-9a-f-]{36})\/enrollment-mode/i.exec(rosterHTML)?.[1];
+const csrf =
+  /name=['"]_csrf['"][^>]*value=['"]([^'"]+)['"]/.exec(rosterHTML)?.[1] ??
+  /value=['"]([^'"]+)['"][^>]*name=['"]_csrf['"]/.exec(rosterHTML)?.[1];
+// Pre-enrols usernames, which adds pending rows to the roster.
+const addPending = async (usernames) => {
+  if (!courseID || !csrf) return false;
+  const res = await context.request.post(`/courses/${courseID}/enroll-csv`, {
+    form: { usernames: usernames.join("\n"), _csrf: csrf },
+    headers: { "x-csrf-token": csrf },
+  });
+  return res.ok();
+};
+if ((await page.$("#enrolled-filter")) === null) {
+  await addPending(Array.from({ length: 8 }, (_, i) => `probe_pending_${i}`));
+  await page.goto("/instructor/students", { waitUntil: "networkidle" });
 }
 
 // An icon-only button must actually paint a glyph. A <use> that resolves to
@@ -137,6 +140,11 @@ check(ariaAfter === "ascending", "aria-sort survives the repaint", String(ariaAf
 await page.click("#enrolled-filter");
 await page.fill("#enrolled-filter", "zzz-no-such-student");
 await page.evaluate(() => document.getElementById("enrolled-filter").blur());
+
+// An unchanged roster answers the poll with 304 and repaints nothing, so add a
+// pending student first: the rows change, and the next poll repaints them.
+// The new name does not match the filter, so it must stay hidden too.
+await addPending(["probe_pending_late"]);
 
 // Same shape as above: assert against a repaint that demonstrably landed,
 // not against elapsed time. If no repaint arrives, that is its own failure —

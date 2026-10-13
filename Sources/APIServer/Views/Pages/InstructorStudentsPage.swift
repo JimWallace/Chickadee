@@ -32,40 +32,42 @@ struct InstructorStudentsPage: HTML {
         BaseLayout(title: "Students", page: page, flash: flash) {
             InstructorTabs(active: .students)
             AvatarSprite(page: page)
-            titlebar
-            if let activeCourseID, !rosterReadOnly {
-                div(.class("add-panel card"), .id("add-staff-panel")) {
-                    form(.method(.post), .action("/courses/\(activeCourseID)/staff"), .class("form-stack")) {
-                        CSRFField(token: page.csrfToken)
-                        StaffFields(form: staffForm)
-                        div(.class("toolbar")) {
-                            button(.class("btn btn-primary"), .type(.submit)) { "Add" }
-                            button(.class("btn action-btn js-add-cancel"), .type(.button)) { "Cancel" }
+            section(.class("page-section")) {
+                titlebar
+                if let activeCourseID, !rosterReadOnly {
+                    div(.class("add-panel card"), .id("add-staff-panel")) {
+                        form(.method(.post), .action("/courses/\(activeCourseID)/staff"), .class("form-stack")) {
+                            CSRFField(token: page.csrfToken)
+                            StaffFields(form: staffForm)
+                            div(.class("toolbar")) {
+                                button(.class("btn btn-primary"), .type(.submit)) { "Add" }
+                                button(.class("btn action-btn js-add-cancel"), .type(.button)) { "Cancel" }
+                            }
+                        }
+                    }
+                    .attributes(.class("is-open"), when: staffForm.error != nil)
+                }
+                if !staffRows.isEmpty {
+                    h3(.class("assignment-section-heading")) { "Course staff" }
+                    staffTable
+                    h3(.class("assignment-section-heading")) { "Students" }
+                }
+                if showStudentFilter {
+                    div(.class("toolbar toolbar--end section-gap")) {
+                        span(.class("filter-group")) {
+                            label(.class("filter-label"), .for("enrolled-filter")) { "Filter" }
+                            input(
+                                .id("enrolled-filter"), .class("form-input filter-input"), .type(.search),
+                                .placeholder("Filter by name or username…"),
+                                .data("list-filter", value: "enrolled-students-table"),
+                                .data("list-filter-empty", value: "No students match this filter."))
                         }
                     }
                 }
-                .attributes(.class("is-open"), when: staffForm.error != nil)
+                studentsTable
+                p(.class("empty"), .id("no-students-msg")) { "No students enrolled yet." }
+                    .attributes(.hidden, when: !students.isEmpty)
             }
-            if !staffRows.isEmpty {
-                h3(.class("assignment-section-heading")) { "Course staff" }
-                staffTable
-                h3(.class("assignment-section-heading")) { "Students" }
-            }
-            if showStudentFilter {
-                div(.class("toolbar toolbar--end section-gap")) {
-                    span(.class("filter-group")) {
-                        label(.class("filter-label"), .for("enrolled-filter")) { "Filter" }
-                        input(
-                            .id("enrolled-filter"), .class("form-input filter-input"), .type(.search),
-                            .placeholder("Filter by name or username…"),
-                            .data("list-filter", value: "enrolled-students-table"),
-                            .data("list-filter-empty", value: "No students match this filter."))
-                    }
-                }
-            }
-            studentsTable
-            p(.class("empty"), .id("no-students-msg")) { "No students enrolled yet." }
-                .attributes(.hidden, when: !students.isEmpty)
             PageStyle(
                 """
                 /* The global .page-titlebar puts the title left and actions right; the roster
