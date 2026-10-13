@@ -59,7 +59,9 @@ enum AdminMCPServerInstructions {
         - Metrics: get_metrics_snapshot (point-in-time), get_metrics_card_series \
         (the dashboard's fixed 24h/7d/30d sparklines), get_metrics_timeseries \
         (a flexible window/bucket, including HTTP request latency), and \
-        get_request_metrics (slowest routes / status-class counts).
+        get_request_metrics (slowest routes / status-class counts). \
+        get_query_stats is the database side: per-statement timing from \
+        Postgres pg_stat_statements, to find the statement behind a slow route.
         - Activity: get_active_users_series (distinct active users per bucket); \
         get_instructor_card_series (one course's submission / active-student / \
         active-assignment / browser-error counts, scoped by an explicit \

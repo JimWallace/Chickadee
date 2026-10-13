@@ -798,7 +798,7 @@ and native worker grading that share one RunnerCore; per-student
 personalization; pattern-generated test families (10 kinds) and notebook checks
 (10 kinds); achievements; student slip days; per-course roles; BrightSpace grade
 sync (awaiting UW IST prod credentials); an MCP authoring surface of 60 tools
-plus a read-only admin-diagnostics MCP of 19 (`MCPToolCatalog.live` in
+plus a read-only admin-diagnostics MCP of 20 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift` is the source of
 truth for the count); OIDC SSO; and zero-downtime auto-deploys. The 0.4 arc is
 summarised at the top of `CHANGELOG-0.4.md`. The 0.5-boundary cleanup is in the
