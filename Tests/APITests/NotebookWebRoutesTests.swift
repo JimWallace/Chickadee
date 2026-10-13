@@ -1341,6 +1341,86 @@ import VaporTesting
         }
     }
 
+    @Test func authorsOwnSolutionSaveDoesNotRefreshTheirCopy() async throws {
+        try await withApp(app) { _ in
+            // The save writes the author's copy and the stored solution as two
+            // separate serializations, and the stored solution is normalized
+            // again on every read. Neither may count as a change, or the next
+            // visit would move the mtime and reload over the author's open tab.
+            let cookie = try await staffCookie(username: "notebook_staff_own_save")
+            let staff = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_own_save").first())
+
+            let setupID = "setup_nb_staff_own_save"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(markdown: "Assignment"),
+                zipEntries: [
+                    ("assignment.ipynb", notebookJSON(markdown: "Assignment")),
+                    ("solution.ipynb", notebookJSON(markdown: "First solution")),
+                ])
+            _ = try await insertAssignment(testSetupID: setupID, title: "Own Save Lab", isOpen: false)
+
+            try await postNotebookSave(
+                setupID: setupID, cookie: cookie, file: "solution",
+                body: notebookJSON(markdown: "Saved solution")
+            ) { res in
+                #expect(res.status == .ok)
+            }
+
+            let copyPath =
+                publicDir + "jupyterlite/files/"
+                + userNotebookWorkingCopyRelativePath(
+                    setupID: setupID, userID: try staff.requireID(), fileKind: .solution, viewMode: .personalized)
+            let earlier = Date(timeIntervalSince1970: 1_600_000_000)
+            try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: copyPath)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?file=solution",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Saved solution")) })
+
+            #expect(workingCopyMtimeEpoch(absolutePath: copyPath) == Int(earlier.timeIntervalSince1970))
+        }
+    }
+
+    @Test func unchangedPersonalizedStaffCopyKeepsItsModificationTime() async throws {
+        try await withApp(app) { _ in
+            // The rendered view is substituted on every read, which re-encodes
+            // the notebook; an unchanged rendering must still leave the copy
+            // alone.
+            let cookie = try await staffCookie(username: "notebook_staff_rendered")
+            let staff = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_staff_rendered").first())
+
+            let setupID = "setup_nb_staff_rendered"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: personalizedManifest)
+            _ = try await insertAssignment(testSetupID: setupID, title: "Rendered Lab", isOpen: false)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Maria")) })
+
+            let copyPath =
+                publicDir + "jupyterlite/files/"
+                + userNotebookWorkingCopyRelativePath(
+                    setupID: setupID, userID: try staff.requireID(), fileKind: .assignment, viewMode: .personalized)
+            let earlier = Date(timeIntervalSince1970: 1_600_000_000)
+            try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: copyPath)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?view=personalized",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.body.string.contains("Maria")) })
+
+            #expect(workingCopyMtimeEpoch(absolutePath: copyPath) == Int(earlier.timeIntervalSince1970))
+        }
+    }
+
     @Test func notebookPageRendersSaveButtonForStaffOnly() async throws {
         try await withApp(app) { _ in
             // The authoring control is rendered server-side, so a student never

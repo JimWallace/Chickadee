@@ -584,10 +584,14 @@ extension WebRoutes {
                 testSetupsDirectory: req.application.testSetupsDirectory)
             return (solution, isStaff)
         case .assignment:
-            guard isStaff, let starter = try? await notebookData(for: setup) else {
+            guard isStaff else { return (nil, false) }
+            do {
+                return (try await notebookData(for: setup), true)
+            } catch {
+                req.logger.warning(
+                    "staff_working_copy_not_refreshed setup=\(setup.id ?? "unknown") reason=\(error)")
                 return (nil, false)
             }
-            return (starter, true)
         }
     }
 

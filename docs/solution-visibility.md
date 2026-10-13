@@ -168,8 +168,9 @@ one reveal token on the assignment to see its secret test results.
 - **The reveal is not versioned.** Students see the current solution; an
   instructor updating it post-reveal updates what students open next. A
   student's already-seeded working copy keeps its bytes until reset. A staff
-  copy does not: it refreshes to the stored solution whenever that has
-  changed, so staff never open, or save back, a superseded answer key.
+  copy does not: it refreshes to the stored solution whenever the stored
+  content differs from it, so staff never open, or save back, a superseded
+  answer key.
 - **Not carried in `.chickadee` course bundles** — matching
   `secretRevealEnabled`, which does not travel either: per-offering display
   policy, re-chosen each term.
