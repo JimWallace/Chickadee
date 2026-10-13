@@ -33,12 +33,12 @@ import Testing
 
     @Test func aSectionScopeHasNoSlots() {
         let props = manifest(ClassActivity(kind: .classComposite, composite: spec))
-        #expect(props.coveredItemNames(inScopeOf: AchievementTarget(kind: .section, ref: "s1")) == ["tile.py"])
+        #expect(props.coveredItemNames(inScopeOf: AchievementTarget(kind: .section, ref: "s1")) == ["tile"])
     }
 
     @Test func anotherKindHasNoSlotItems() {
         let props = manifest(ClassActivity(kind: .bestMetric))
         #expect(props.compositeCoverageItems.isEmpty)
-        #expect(props.coveredItemNames(inScopeOf: nil) == ["tile.py"])
+        #expect(props.coveredItemNames(inScopeOf: nil) == ["tile"])
     }
 }
