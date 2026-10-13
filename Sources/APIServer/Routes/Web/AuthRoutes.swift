@@ -13,7 +13,6 @@
 //   POST /register   → create account (first user becomes admin), redirect to / (local/dual only)
 //   POST /logout     → clear session, redirect to /login
 
-import CSRF
 import Core
 import Fluent
 import Foundation
@@ -21,7 +20,7 @@ import NIOCore
 import Vapor
 
 struct AuthRoutes: RouteCollection {
-    let csrf: CSRF
+    let csrf: CSRFMiddleware
 
     func boot(routes: RoutesBuilder) throws {
         // Login and register are CSRF-protected (defends against login-CSRF).

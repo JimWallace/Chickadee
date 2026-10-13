@@ -19,8 +19,9 @@ and what remains. The decision and its order are in "Decisions".
   `Resources/Sprites/avatar-sprite.svg`, read once at startup by
   `Application.loadSprites()` and inlined by `BaseLayout` and `AvatarSprite`.
 - Errors: `ErrorPageMiddleware` renders `ErrorPage` for browser routes.
-- Leaf is gone from `Package.swift`. See "Known remainder" for why
-  `Package.resolved` still lists it.
+- Leaf is gone from `Package.swift` and `Package.resolved`. CSRF protection is
+  `CSRFMiddleware`, which replaced the `vapor-community/CSRF` package because
+  that package depended on Leaf.
 
 ## What the spike did
 
@@ -267,7 +268,7 @@ text reaches the page.
 
 Checked on 2026-10-10. Recheck before the Vapor 5 move. Since then the
 migration finished, so point 4 below is settled: no page waits on a Vapor 5
-Leaf. Only the transitive dependency in "Known remainder" does.
+Leaf, and no dependency does.
 
 **Vapor 5 is in beta.** 5.0.0-alpha.1 shipped on 11 June 2026, beta.1 on
 15 September and beta.3 on 1 October. The beta announcement calls it
@@ -305,8 +306,8 @@ injection.
 2. With the views on Elementary, the Vapor 5 move for the view layer does not
    wait on Leaf.
 3. Vapor 5 itself is not ready to adopt: it is a beta, its middleware is
-   unfinished, and the community packages in use (`CSRF`, from
-   vapor-community) need their own ports. The order stays: views to
+   unfinished. (The one community package that needed a port, `CSRF` from
+   vapor-community, is now Chickadee's own `CSRFMiddleware`.) The order stays: views to
    Elementary on Vapor 4 now, Vapor 5 after its final release.
 4. The decision point for Leaf is the release of a Vapor 5 Leaf. If pages are
    still on Leaf then, choose between porting those pages to the new Leaf and
@@ -324,12 +325,6 @@ Sources: [Vapor 5 Beta](https://blog.vapor.codes/posts/vapor-5-beta/),
 
 ## Known remainder
 
-- **Leaf is still in `Package.resolved`.** `vapor-community/CSRF` depends on
-  `vapor/leaf` for its own `CSRFFormFieldTag`, so `leaf` and `leaf-kit` stay
-  in the resolved graph and are compiled as part of CSRF. Chickadee imports
-  neither. Dropping them needs a CSRF release without the Leaf tag, or
-  Chickadee's own CSRF middleware. The same package needs a Vapor 5 port
-  anyway (see above).
 - **Leaf-shaped view contexts.** Several context types still carry flat
   `Bool` flags and pre-rendered strings that existed only because Leaf could
   not evaluate compound conditions, `.isEmpty` or optionals (for example

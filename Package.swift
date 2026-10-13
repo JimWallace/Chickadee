@@ -24,7 +24,6 @@ let package = Package(
         .package(url: "https://github.com/vapor/jwt.git", from: "5.1.2"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.0"),
-        .package(url: "https://github.com/vapor-community/CSRF.git", from: "3.1.1"),
         // Already in the resolved graph transitively via Vapor; declared
         // explicitly so the MCP support-file fetcher can build a dedicated,
         // no-redirect HTTPClient (the shared Vapor client follows redirects).
@@ -106,7 +105,6 @@ let package = Package(
                 // RSA key generation for the LTI 1.3 tool key; JWTKit can
                 // load an RSA key but cannot create one.
                 .product(name: "CryptoExtras", package: "swift-crypto"),
-                .product(name: "CSRF", package: "CSRF"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 // The server's own interpreter spawn (PersonalizationEvaluator)
                 // runs from the multithreaded Vapor process — the shape
@@ -222,7 +220,6 @@ let package = Package(
                 .product(name: "VaporTesting", package: "vapor"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
-                .product(name: "CSRF", package: "CSRF"),
                 .product(name: "Elementary", package: "elementary"),
             ],
             path: "Tests/APITests",
