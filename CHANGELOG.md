@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.635] - 2026-10-13
+
+### Changed
+
+- **Manifest model views (manifest v2, phase 1).** `TestSuiteEntry.origin`, `TestProperties.languageDeclaration` and `TestSettings` state the real states of fields that the manifest stores in pairs or in four places. Call sites switch over them. The stored JSON does not change. See `docs/manifest-format-v2.md`.
+
+### Added
+
+- **Manifest v2 reader (manifest v2, phase 3).** The server reads a `schemaVersion: 2` manifest (`ManifestV2`) and still writes only v1. The REST upload accepts version 1 or 2, and bundle import stores an imported v2 manifest as v1. This release must be deployed before any release that writes v2, so that a rollback can always read the stored manifests. See `docs/manifest-format-v2.md`.
+
+### Changed
+
+- **Manifests are stored in the v2 form (manifest v2, phase 4).** `encodeManifest` stores a manifest as `schemaVersion: 2` when that form holds it exactly, and as v1 otherwise. Every path that sends a manifest out of the server still sends v1: the runner job, the browser runner's manifest endpoint, the MCP manifest resource and course-bundle export. After this release is deployed, do not roll back to a release before the phase 3 release, which is the first that reads v2. See `docs/manifest-format-v2.md`.
+
+
 ## [0.5.634] - 2026-10-13
 
 ### Security
