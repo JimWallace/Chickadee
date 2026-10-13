@@ -6,8 +6,8 @@
 //   `v2Envelope()` accepts, through bytes and back;
 // - that `v2Envelope()` refuses each manifest the v2 form cannot hold;
 // - the v2 key shapes that phase 4 will write;
-// - that the v1 writer always writes `schemaVersion: 1`, so a manifest read
-//   from v2 is written back as valid v1;
+// - that a value read from v2 equals the same value built in code, and the
+//   v1 writer writes it back as valid v1;
 // - that a hand-written v2 document decodes.
 
 import Foundation
@@ -102,11 +102,11 @@ import Testing
 
     @Test(arguments: roundTripCases)
     func v2RoundTripsExactly(_ manifest: TestProperties) throws {
-        let decoded = try ManifestCodec.decoder.decode(TestProperties.self, from: Self.v2Bytes(manifest))
-        #expect(decoded.schemaVersion == ManifestV2.schemaVersion)
-        var expected = manifest
-        expected.schemaVersion = ManifestV2.schemaVersion
-        #expect(decoded == expected)
+        let data = try Self.v2Bytes(manifest)
+        #expect(TestProperties.wireVersion(of: String(decoding: data, as: UTF8.self)) == 2)
+        let decoded = try ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        // In memory, a value read from v2 equals the same value built in code.
+        #expect(decoded == manifest)
     }
 
     /// A manifest read from v2 and written by the v1 writer is valid v1 with
@@ -212,7 +212,7 @@ import Testing
              "awards": {}}
             """#
         let p = try ManifestCodec.decoder.decode(TestProperties.self, from: Data(json.utf8))
-        #expect(p.schemaVersion == 2)
+        #expect(p.schemaVersion == 1)
         #expect(p.languageDeclaration == .noLanguage)
         #expect(p.requiredFiles == ["main.py"])
         #expect(p.testSuites.map(\.origin) == [.handWritten, .family(id: "f")])

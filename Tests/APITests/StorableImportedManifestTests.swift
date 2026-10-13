@@ -43,9 +43,7 @@ import Testing
 
         let reread = try #require(decodeManifest(fromJSON: stored))
         let original = try #require(decodeManifest(fromJSON: v2))
-        var expected = original
-        expected.schemaVersion = 1
-        #expect(reread == expected)
+        #expect(reread == original)
     }
 
     /// v2 text that does not decode would reach the database in a form that

@@ -836,10 +836,7 @@ func bundleEntryURL(extractDir: URL, path: String, directory: String) -> URL? {
 /// its old behaviour for it.  v2 text that does not decode is refused: it
 /// would otherwise reach the database in a form no release reads.
 func storableImportedManifest(_ manifest: String) throws -> String {
-    struct VersionOnly: Decodable { let schemaVersion: Int? }
-    let version = (try? ManifestCodec.decoder.decode(VersionOnly.self, from: Data(manifest.utf8)))?
-        .schemaVersion
-    guard version == ManifestV2.schemaVersion else { return manifest }
+    guard TestProperties.wireVersion(of: manifest) == ManifestV2.schemaVersion else { return manifest }
     do {
         let decoded = try ManifestCodec.decoder.decode(TestProperties.self, from: Data(manifest.utf8))
         return try encodeManifest(decoded)

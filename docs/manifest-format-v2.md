@@ -331,12 +331,14 @@ Phase 3 must ship in a release before phase 4 (constraint 2).
 - `Sources/Core/ManifestV2.swift` holds the v2 envelope (D6 to D8, D10).
   `TestProperties.init(from:)` reads it when `schemaVersion` is 2, and reads
   every other version as v1, as before.
-- The v1 writer always writes `schemaVersion: 1`. The in-memory
-  `schemaVersion` records the version that a value was read from, so a value
-  read from v2 and written again is valid v1. A future version 3, read by
-  this release as v1 and written again, would become version 1 and lose the
-  fields that v1 cannot hold. Before that, it would also have lost them, but
-  kept its number.
+- The in-memory `schemaVersion` is 1 for a value read from v1 or from v2,
+  so equal content compares equal whichever form it was stored in. The
+  writer decides the wire version, and `TestProperties.wireVersion(of:)`
+  reads the version of stored text without a full decode. The v1 writer
+  always writes `schemaVersion: 1`.
+- A future version 3, read by this release as v1 and written again, would
+  become version 1 and lose the fields that v1 cannot hold. Before this
+  release, it would also have lost them, but kept its number.
 - `TestProperties.v2Envelope()` returns the v2 form, or nil when the v2 form
   cannot hold the manifest exactly. It checks through the encoded bytes,
   because some losses happen only in the encoding. A manifest it refuses
