@@ -23,7 +23,7 @@ import Vapor
     }
 
     private let workerManifest =
-        #"{"schemaVersion":1,"gradingMode":"worker","testSuites":[],"timeLimitSeconds":10}"#
+        #"{"schemaVersion":1,"gradingMode":"worker","language":"python","testSuites":[],"timeLimitSeconds":10}"#
 
     private func fixture(on app: Application) async throws -> (APIAssignment, UUID) {
         let course = try await makeTestCourse(on: app, code: "CS135", name: "Designing Programs")

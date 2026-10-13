@@ -9,6 +9,31 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.640] - 2026-10-13
+
+### Fixed
+
+- **Deleting a course removes its class-coverage rows.** `deleteCourse` deleted `class_coverage_runs` but not `class_item_coverage`, which has no foreign key, so a deleted course left behind the record of which student covered each item.
+
+
+## [0.5.639] - 2026-10-13
+
+### Added
+
+- **Class composite: slot dealing (slice 3 of `docs/class-composite.md`).** A student is dealt one slot of a class composite when they first open the assignment inside its session window, or when their first submission is graded. The slot reaches the test script as the per-student inputs `composite_slot`, `composite_col` and `composite_row` on both grading paths; a validation run and staff grading in the browser get slot 0. The composite's structure now locks at the first dealt slot as well as the first submission. A class composite needs a declared language, and runners must advertise the new `activity-composite` capability to claim its jobs.
+
+### Fixed
+
+- **MCP `set_activity` lock checks read the owner database pool.** The least-privilege MCP role reads `submissions` filtered to validation runs, so on its own pool the activity-kind lock saw no student submissions.
+
+
+## [0.5.638] - 2026-10-13
+
+### Fixed
+
+- **A saved solution wins over one bundled in the setup zip.** When an instructor's uploaded setup zip carried a `solution.*`, that entry was searched first, so every later solution save (the editor, MCP `update_solution`, the edit form) was stored but never shown: the editor, `get_solution`, the solution download and the student reveal kept the bundled one while validation graded the saved one. Worse, an edit-form save with no solution upload re-validated against the zip's original answer key and linked it, reverting the saved solution. The search order is now the linked validation submission, the newest validation submission, the setup zip, then the draft; the edit form, the solution download and the staff Files panel follow it. The zip is the fallback for a setup with no saved solution.
+
+
 ## [0.5.637] - 2026-10-13
 
 ### Added

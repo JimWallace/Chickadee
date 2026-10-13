@@ -424,8 +424,14 @@ extension PublishedAssignmentRoutes {
         return Data(uploaded.data.readableBytesView)
     }
 
-    /// Resolves solution data + filename: prefer uploaded file, then zip
-    /// entry, then prior validation submission, then draft notebook.
+    /// Resolves solution data + filename: prefer the uploaded file, then the
+    /// saved solution (the validation submissions, then the setup zip, in
+    /// `SolutionSource` order), then the draft notebook.
+    ///
+    /// The form never uploads a new zip, so a zip entry here is the stored one.
+    /// Reading it before the saved solution re-validated against, and linked,
+    /// the zip's original answer key on every form save, reverting any solution
+    /// saved since.
     fileprivate func resolveSolutionForEditedAssignment(
         req: Request,
         user: APIUser,
@@ -434,31 +440,20 @@ extension PublishedAssignmentRoutes {
         uploadedSolution: File?
     ) async throws -> ResolvedSolution {
         var solutionFilename = "solution.ipynb"
-        // Straight-line rather than an immediately-invoked closure: reading the
-        // zip suspends now, and an async closure cannot write `solutionFilename`
-        // in the enclosing scope.
-        var solutionNotebookRaw = Data()
+        var resolvedSolutionNotebookRaw = Data()
         if let uploadedSolution, uploadedSolution.data.readableBytes > 0 {
             solutionFilename = submissionFilenameForStorage(
                 uploadedName: uploadedSolution.filename,
                 fallback: "solution.ipynb"
             )
-            solutionNotebookRaw = Data(uploadedSolution.data.readableBytesView)
-        } else {
-            let archiveFiles = await listZipEntries(zipPath: setup.zipPath)
-            if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }),
-                let data = await extractZipEntry(zipPath: setup.zipPath, entryName: solutionEntry)
-            {
-                solutionFilename = solutionEntry
-                solutionNotebookRaw = data
-            }
-        }
-        var resolvedSolutionNotebookRaw = solutionNotebookRaw
-        if resolvedSolutionNotebookRaw.isEmpty,
-            let existingSolution = try await loadExistingSolution(req: req, assignment: assignment)
+            resolvedSolutionNotebookRaw = Data(uploadedSolution.data.readableBytesView)
+        } else if let saved = try await resolveSolution(
+            at: SolutionLocation(assignment), setup: setup,
+            sources: [.linkedValidation, .newestValidation, .setupZip], db: req.db,
+            testSetupsDirectory: req.application.testSetupsDirectory)
         {
-            resolvedSolutionNotebookRaw = existingSolution.data
-            solutionFilename = existingSolution.filename
+            solutionFilename = saved.filename
+            resolvedSolutionNotebookRaw = saved.data
         }
         if resolvedSolutionNotebookRaw.isEmpty, let userID = user.id,
             let draftData = draftNotebookData(

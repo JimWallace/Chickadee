@@ -584,4 +584,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateReflectionFeedback())
     // The per-staff attestation recorded on the instructor AI agents tab.
     app.migrations.add(AddAIFeedbackAttestation())
+    // Class composite (docs/class-composite.md, slice 3): the dealt slots.
+    app.migrations.add(CreateCompositeSlots())
 }

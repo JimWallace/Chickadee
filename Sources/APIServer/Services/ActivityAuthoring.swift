@@ -52,9 +52,17 @@ enum ActivityAuthoring {
     /// submissions. Separate from `kindLockedMessage`, which names the kind:
     /// here the kind is unchanged and only the slots would move.
     static let compositeLayoutLockedMessage =
-        "This assignment already has student submissions, so the composite's compositor, layout, "
-        + "contribution size and deal order are locked. The frame rate and the empty-slot settings "
-        + "can still change."
+        "This assignment already has student submissions or dealt slots, so the composite's "
+        + "compositor, layout, contribution size and deal order are locked. The frame rate and the "
+        + "empty-slot settings can still change."
+
+    /// The refusal for a class composite on an assignment that declares no
+    /// language. The slot reaches the test script as a per-student input, and
+    /// a suite of hand-written shell scripts has no inputs file to carry it.
+    static let compositeNeedsLanguageMessage =
+        "A class composite needs a declared language: each student's slot reaches the test script "
+        + "as a per-student input, and an assignment with no language has no inputs file. Choose the "
+        + "assignment's language first."
 
     /// The refusal for showing a composite's leaderboard page to students:
     /// the composite is for the projector, and each student sees only their
@@ -103,19 +111,27 @@ enum ActivityAuthoring {
     /// and gets `CompositeSpec.starter` otherwise, so the edit page's kind
     /// select alone makes a valid activity. The block's structure locks with
     /// the kind (`compositeLayoutLockedMessage`); its display settings do not.
+    ///
+    /// `lockDB` answers the two lock questions (a student submission, a dealt
+    /// slot). MCP passes the owner pool: the least-privilege MCP role cannot
+    /// read `composite_slots`, and it reads `submissions` filtered to
+    /// validation runs, so on its own pool both locks would always read as
+    /// open. Every other caller reads on `db`.
     @discardableResult
     static func setActivity(
-        setup: APITestSetup, to requested: ClassActivity?, on db: any Database
+        setup: APITestSetup, to requested: ClassActivity?, on db: any Database,
+        lockDB: (any Database)? = nil
     ) async throws -> ClassActivity? {
+        let lockDB = lockDB ?? db
         let current = currentManifestActivity(setup.manifest)
-        if current?.kind != requested?.kind, try await hasStudentSubmissions(setup: setup, on: db) {
+        if current?.kind != requested?.kind, try await hasStudentSubmissions(setup: setup, on: lockDB) {
             throw AppError.badRequest(reason: kindLockedMessage)
         }
         let activity = try requested.map { try withSeededComposite($0, current: current) }
         if let activity {
             try await validateOpponent(of: activity, setup: setup)
             try validateWindow(of: activity)
-            try await validateComposite(of: activity, current: current, setup: setup, on: db)
+            try await validateComposite(of: activity, current: current, setup: setup, on: lockDB)
         }
         try await setManifestActivity(setup: setup, to: activity, on: db)
         if let activity, activity.kind.aggregation == .leaderboard {
@@ -189,24 +205,35 @@ enum ActivityAuthoring {
         return activity.withComposite(kept ?? .starter)
     }
 
-    /// Refuses a composite block that breaks a `CompositeSpec` rule, and a
-    /// change to its structure once a student has submitted.
-    ///
-    /// Slice 2 locks at the first submission only. Slots are not dealt yet;
-    /// slice 3 extends the lock to the first deal (docs/class-composite.md).
+    /// Refuses a composite on an assignment with no language, a composite
+    /// block that breaks a `CompositeSpec` rule, and a change to its
+    /// structure once a slot is dealt or a student has submitted.
     private static func validateComposite(
-        of activity: ClassActivity, current: ClassActivity?, setup: APITestSetup, on db: any Database
+        of activity: ClassActivity, current: ClassActivity?, setup: APITestSetup, on lockDB: any Database
     ) async throws {
         guard let composite = activity.composite else { return }
+        guard let manifest = setup.decodedManifest(), AssignmentLanguage.resolve(manifest: manifest) != nil else {
+            throw AppError.badRequest(reason: compositeNeedsLanguageMessage)
+        }
         if let problem = composite.problem {
             throw AppError.badRequest(reason: problem.message)
         }
         if current?.kind == .classComposite, let stored = current?.composite,
             !stored.hasSameStructure(as: composite),
-            try await hasStudentSubmissions(setup: setup, on: db)
+            try await compositeStructureLocked(setup: setup, on: lockDB)
         {
             throw AppError.badRequest(reason: compositeLayoutLockedMessage)
         }
+    }
+
+    /// True once a student has submitted or a slot has been dealt: each
+    /// student's slot and the size the grader checks depend on the structure.
+    static func compositeStructureLocked(setup: APITestSetup, on db: any Database) async throws -> Bool {
+        if try await hasStudentSubmissions(setup: setup, on: db) { return true }
+        guard let setupID = setup.id, let assignment = try await assignmentByTestSetupID(setupID, on: db),
+            let assignmentID = assignment.id
+        else { return false }
+        return try await CompositeSlots.hasDealtSlots(assignmentID: assignmentID, on: db)
     }
 
     static let windowBoundsOutOfOrderMessage =
