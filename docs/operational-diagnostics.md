@@ -130,6 +130,57 @@ counts are per process. They start again at zero when the process restarts,
 for example at each blue-green deploy. `countingSince` tells when this process
 started to count.
 
+### Database statement timing (Postgres)
+
+Request timing measures a whole request. To find the database statement behind
+a slow route, the server reads the Postgres extension `pg_stat_statements`. The
+admin MCP tool `get_query_stats` reports the top statements of this database:
+calls, total, mean and maximum time, rows, buffer-cache hit rate and the share
+of total time. It can order them by total time (the default), mean time or
+calls.
+
+Postgres normalizes SELECT, INSERT, UPDATE, DELETE and MERGE statements: it
+replaces every constant with a placeholder (`$1`, `$2`, ...), so the text holds
+table and column names and no values. It does not normalize a utility
+statement (`SET`, `DO`, `COPY` and the like), which keeps its literals. So the
+tool returns only the first kind, and the `db` command also turns utility
+tracking off. The tool cuts the text at 500 characters. If the database role
+cannot read the text of statements that another role ran, Postgres shows
+`<insufficient privilege>`, and the tool says so in its note.
+
+The extension needs two steps:
+
+1. **Load the library when Postgres starts.** This is a host-side setting. Add
+   `-c shared_preload_libraries=pg_stat_statements` to the `db` service command
+   (the commented `db` service in `docker-compose.yml` shows it). Postgres
+   reads this setting only at startup, so the `db` container must restart
+   once. The restart drops the open database connections for a few seconds.
+   Do it outside class time.
+2. **Create the extension in the database.** The server does this at startup
+   (`QueryStatistics.enableIfPreloaded`) when it finds the library loaded. It
+   creates the extension in the `public` schema. If the database user cannot
+   create it, the server logs `pg_stat_statements_enable_failed`; a superuser
+   then runs `CREATE EXTENSION pg_stat_statements SCHEMA public;`.
+
+Until both steps are done, `get_query_stats` returns `available: false` with a
+note that says which step is missing. On SQLite it reports `notPostgres`.
+
+On the host, from the compose directory, after you edit the `db` command:
+
+```sh
+docker compose up -d db
+docker compose exec db psql -U chickadee -d chickadee -c "SHOW shared_preload_libraries"
+```
+
+The second command must print `pg_stat_statements`. The next server start, for
+example the next deploy, creates the extension. The figures cover the time
+since the last reset. To start a fresh measurement, for example before a
+lecture, a superuser runs:
+
+```sh
+docker compose exec db psql -U chickadee -d chickadee -c "SELECT pg_stat_statements_reset()"
+```
+
 ## Structured Logs
 
 Server-side structured log events include:

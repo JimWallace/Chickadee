@@ -22,6 +22,7 @@ enum AdminMCPToolCatalog {
             GetRunnerDetailTool().erased(),
             GetStorageUsageTool().erased(),
             GetRequestMetricsTool().erased(),
+            GetQueryStatsTool().erased(),
             GetHealthAlertsTool().erased(),
             GetBrowserDiagnosticsTool().erased(),
             ListConnectedAgentsTool().erased(),

@@ -11,7 +11,7 @@ walked from the live registry (`MCPToolCatalog.live`,
 tool's handler. As of the 2026-07 refresh (plus `delete_support_file`) the content catalog
 registers **54 tools** (the table below plus the six-tool addendum), and a second,
 admin-only diagnostic surface (`AdminMCPToolCatalog.live`) registers
-**19 read-only tools** — inventoried in the addendum. The registries are the
+**20 read-only tools** — inventoried in the addendum. The registries are the
 source of truth; a census re-count is required whenever either changes
 (remediation P2-3).
 
@@ -160,7 +160,7 @@ a student-data model (enforced by `MCPStudentDataWallTests`, whose scan now
 also covers `Transport/` + `Resources/` and confines identity models to the
 authorization layer — 2026-07 audit F-6).
 
-## Addendum (2026-07): the admin diagnostic surface (19 tools)
+## Addendum (2026-07): the admin diagnostic surface (20 tools; `get_query_stats` added 2026-10)
 
 A second, **read-only** MCP surface at `POST /admin-mcp`
 (`AdminMCPToolCatalog.live`, design record `docs/admin-mcp.md`), mounted with
@@ -183,6 +183,7 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |
 | `get_storage_usage` | storage scan | per-assignment byte/count aggregates |
 | `get_request_metrics` | `request_metrics` | routes normalized to `:id`; prefix filter matches normalized routes (audit F-3) |
+| `get_query_stats` | `pg_stat_statements` (Postgres) | returns only SELECT / INSERT / UPDATE / DELETE / MERGE statements, which Postgres normalizes (every constant becomes a placeholder); utility statements, which keep their literals, are filtered out. Residual risk: a SQL comment inside a statement is kept verbatim; the server writes no comments that hold values |
 | `get_health_alerts` | live rule evaluation | counts/thresholds; runner IDs of runners that stopped polling (operational, as `list_runners`); BrightSpace `last_error` writer-sanitized (audit F-2) |
 | `get_browser_diagnostics` | `client_diagnostics` | `user_id` omitted; samples carry the coarse browser/OS label, never the raw User-Agent (audit F-4); PII-tested |
 | `list_connected_agents` | OAuth grants | owner is the authorizing staff/admin (consent-gated), never a student; no token material |

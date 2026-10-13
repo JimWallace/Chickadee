@@ -13,7 +13,12 @@ You review one uncommitted change to Chickadee against the project rules.
 ## What you read first
 
 1. `CLAUDE.md` at the repository root. Its rules are the standard for this
-   review. Read the documents it links to only when a change touches the area
+   review. For each changed file, also read every `CLAUDE.md` in a directory
+   above it (for example, `Sources/APIServer/CLAUDE.md` and
+   `Sources/APIServer/MCP/CLAUDE.md` for a change under
+   `Sources/APIServer/MCP/`). For a change to `Public/styles.css` or a
+   `Public/*.js` file, read `Sources/APIServer/Views/CLAUDE.md`. Read the
+   documents these files link to only when a change touches the area
    that the document governs (for example, `docs/ui-design.md` for a UI change
    or `docs/language-declaration.md` for a language change).
 2. The diff: run `git diff` and `git diff --staged`. Run `git status --short`

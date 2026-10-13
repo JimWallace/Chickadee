@@ -94,6 +94,7 @@ extension TestOutcomeCollection {
                 score: outcome.score,
                 points: outcome.points,
                 metric: outcome.metric,
+                composite: outcome.composite,
                 executionTimeMs: outcome.executionTimeMs,
                 memoryUsageBytes: outcome.memoryUsageBytes,
                 attemptNumber: outcome.attemptNumber,

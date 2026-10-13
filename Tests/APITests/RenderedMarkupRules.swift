@@ -202,6 +202,34 @@ enum RenderedMarkupRules {
         return values
     }
 
+    /// The opening tags of the elements directly inside `main`, in order. The
+    /// contents of a script or style element are skipped, and a void element
+    /// opens no level.
+    static func topLevelOpenTags(in main: String) -> [String] {
+        // HTML void elements only. Elementary closes every SVG element, `use`
+        // included, so none of them is void here.
+        let voids: Set<String> = ["area", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source"]
+        var depth = 0
+        var tags: [String] = []
+        var rest = main[...]
+        while let match = rest.firstMatch(of: /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)[^>]*?(\/?)>/) {
+            let name = match.2.lowercased()
+            let tag = String(match.0)
+            rest = rest[match.range.upperBound...]
+            if match.1.isEmpty {
+                if depth == 0 { tags.append(tag) }
+                if name == "script" || name == "style", let end = rest.range(of: "</\(name)>") {
+                    rest = rest[end.upperBound...]
+                    continue
+                }
+                if match.3.isEmpty && !voids.contains(name) { depth += 1 }
+            } else {
+                depth -= 1
+            }
+        }
+        return tags
+    }
+
     /// Stops at the first `>`, which is safe on Elementary output: it escapes
     /// `>` inside an attribute value.
     static func openTags(named name: String, in html: String) -> [String] {

@@ -357,3 +357,82 @@ for archive in urllib3_archives:
     print(f"check-xeus-vendored: OK (urllib3 streaming fetcher suppressed in {archive.name}).")
 
 PY
+
+# 9. Every kernel_packages/ name must map to exactly one set of bytes, because
+#    EditorAssetFastPathMiddleware serves the tree as immutable: a browser that
+#    has a name never asks for it again. Upstream conda artifacts keep that
+#    promise by their name-version-build convention. A tarball this build
+#    REWRITES (scripts/patch-xeus-python-http.py) must carry the hash of its own
+#    bytes in its name (`.chickadee.<12 hex>.tar.gz`), or a re-vendor that changed
+#    the patch would ship new bytes under a name that students have cached.
+#    And each env's empack_env_meta.json must name exactly the files on disk,
+#    since every reader fetches `kernel_packages/<filename>` from it.
+python3 - "$BUILD_DIR" "$ROOT_DIR" <<'PY'
+import fnmatch
+import hashlib
+import importlib.util
+import json
+import pathlib
+import re
+import sys
+
+build = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
+suffix = re.compile(r"\.chickadee\.([0-9a-f]{12})\.tar\.gz$")
+
+# The archives the build rewrites come from the patch script itself, so a new
+# target is covered here with no edit. A hand-kept copy of the list would let a
+# new rewritten archive pass this check under a stable name.
+spec = importlib.util.spec_from_file_location(
+    "patch_xeus_python_http", root / "scripts" / "patch-xeus-python-http.py")
+patcher = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(patcher)
+rewritten = [target.archive_glob.rsplit("/", 1)[-1] for target in patcher.TARGETS]
+if not rewritten:
+    print("check-xeus-vendored: patch-xeus-python-http.py lists no TARGETS — the "
+          "rewritten-archive check would cover nothing", file=sys.stderr)
+    sys.exit(1)
+failed = False
+
+for packages in sorted((build / "xeus").glob("*/kernel_packages")):
+    env = packages.parent
+    meta = json.loads((env / "empack_env_meta.json").read_text())
+    named = {p["filename"] for p in meta.get("packages", [])}
+    on_disk = {f.name for f in packages.iterdir() if f.is_file()}
+    for name in sorted(named - on_disk):
+        print(
+            f"check-xeus-vendored: {env.name}/empack_env_meta.json names {name}, "
+            "which is not on disk in kernel_packages/",
+            file=sys.stderr,
+        )
+        failed = True
+    for name in sorted(on_disk - named):
+        print(
+            f"check-xeus-vendored: {env.name}/kernel_packages/{name} is not named in "
+            "empack_env_meta.json",
+            file=sys.stderr,
+        )
+        failed = True
+
+    for archive in sorted(packages.iterdir()):
+        match = suffix.search(archive.name)
+        if any(fnmatch.fnmatch(archive.name, pattern) for pattern in rewritten) and not match:
+            print(
+                f"check-xeus-vendored: {env.name}/kernel_packages/{archive.name} is rewritten "
+                "by the build but carries no content hash in its name — run "
+                "scripts/patch-xeus-python-http.py",
+                file=sys.stderr,
+            )
+            failed = True
+        if match and hashlib.sha256(archive.read_bytes()).hexdigest()[:12] != match.group(1):
+            print(
+                f"check-xeus-vendored: {env.name}/kernel_packages/{archive.name}: the hash "
+                "in the name does not match its bytes — run scripts/patch-xeus-python-http.py",
+                file=sys.stderr,
+            )
+            failed = True
+
+if failed:
+    sys.exit(1)
+print("check-xeus-vendored: OK (every kernel_packages/ name maps to one set of bytes).")
+PY

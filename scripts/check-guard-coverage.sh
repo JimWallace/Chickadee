@@ -47,6 +47,7 @@ scripts/eslint.sh|Runs ESLint. The rules belong to the tool, which has its own t
 scripts/test-chickadee-deployer.sh|A behaviour test suite. Its cases are its assertions.
 scripts/test-chickadee-runner-update.sh|A behaviour test suite. Its cases are its assertions.
 scripts/test-snapshot-retention.sh|A behaviour test suite. Its cases are its assertions.
+scripts/test-claude-hooks.py|A behaviour test suite. Its cases are its assertions.
 scripts/check-kernel-currency.py --self-test|A self-test of the currency check. Its cases are its assertions.
 scripts/check-kernel-currency.py|Asks the emscripten-forge channel for newer kernels, so its answer depends on the network. A scheduled report, not a gate.
 scripts/check-security-headers.sh|Reads the headers of a running server, which the ZAP job starts. A fixture has no server to break.

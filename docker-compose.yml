@@ -248,11 +248,16 @@ services:
   #   # cores): 200 covers a 32-core host with headroom, where the stock 100
   #   # would not. Per-session statement/idle bounds are set by the app
   #   # itself (PostgresSessionBounds in DatabaseConfiguration.swift), not
-  #   # here.
+  #   # here. pg_stat_statements records per-statement timing for the admin
+  #   # MCP tool get_query_stats; Postgres loads it only at startup
+  #   # (docs/operational-diagnostics.md, "Database statement timing").
   #   command: >-
   #     postgres
   #     -c shared_buffers=256MB
   #     -c max_connections=200
+  #     -c shared_preload_libraries=pg_stat_statements
+  #     -c pg_stat_statements.track=top
+  #     -c pg_stat_statements.track_utility=off
   #   environment:
   #     POSTGRES_DB: chickadee
   #     POSTGRES_USER: chickadee

@@ -29,6 +29,9 @@ import Testing
         /// Absent on rows written before ranking metrics existed — same
         /// meaning as an explicit null.
         let metric: Double?
+        /// Absent on rows written before class composites existed — same
+        /// meaning as an explicit null.
+        let composite: CompositeContribution?
     }
 
     private func loadCorpus() throws -> Corpus {
@@ -57,6 +60,9 @@ import Testing
             #expect(
                 result.metric == c.native.metric,
                 "metric mismatch for case '\(c.name)': \(String(describing: result.metric))")
+            #expect(
+                result.composite == c.native.composite,
+                "composite mismatch for case '\(c.name)': \(String(describing: result.composite))")
         }
     }
 }

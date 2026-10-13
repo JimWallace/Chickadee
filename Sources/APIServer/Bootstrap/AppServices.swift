@@ -20,6 +20,9 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws
     try refuseLegacyMigrationNamespace(on: app)
 
     try await app.autoMigrate()
+    // Statement timing for the admin MCP tool get_query_stats. Creates the
+    // extension only when the operator loaded the library; otherwise nothing.
+    await QueryStatistics.enableIfPreloaded(on: app.db, logger: app.logger)
     // Retention for the diagnostics tables, worker nonces and login attempts:
     // leased sweeps, not work inside a student's or a runner's request (#1924).
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.diagnosticsPruneMonitor })

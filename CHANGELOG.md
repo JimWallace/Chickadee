@@ -9,6 +9,68 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.633] - 2026-10-13
+
+### Changed
+
+- **Kernel packages are cached immutably.** The tarball that the build rewrites (`pyodide-http`) now carries its content hash in its name, so every name in a vendored `kernel_packages/` tree maps to one set of bytes. The server now serves those tarballs as immutable, so a warm kernel boot asks for no package, where it sent about 50 conditional requests before. For 150 students who join a lecture activity at once, that is about 7,200 fewer requests. `check-xeus-vendored.sh` asserts the naming. See `docs/kernel-boot-cost.md` §"Caching".
+
+### Added
+
+- **Per-statement database timing.** The new admin MCP tool `get_query_stats` reports the top database statements from the Postgres extension `pg_stat_statements`: calls, total / mean / max time, rows, cache hit rate and share of total time. The server creates the extension at startup when Postgres has loaded the library; until then the tool says which step is missing. Turning it on in production needs one host-side change and one `db` restart: see `docs/operational-diagnostics.md` §"Database statement timing".
+
+
+## [0.5.632] - 2026-10-13
+
+### Changed
+
+- **Manifest model views (manifest v2, phase 1).** `TestSuiteEntry.origin`, `TestProperties.languageDeclaration` and `TestSettings` state the real states of fields that the manifest stores in pairs or in four places. Call sites switch over them. The stored JSON does not change. See `docs/manifest-format-v2.md`.
+
+### Added
+
+- **Manifest v2 reader (manifest v2, phase 3).** The server reads a `schemaVersion: 2` manifest (`ManifestV2`) and still writes only v1. The REST upload accepts version 1 or 2, and bundle import stores an imported v2 manifest as v1. This release must be deployed before any release that writes v2, so that a rollback can always read the stored manifests. See `docs/manifest-format-v2.md`.
+
+
+## [0.5.631] - 2026-10-13
+
+### Changed
+
+- **The instructor tabbed pages keep their content in `.page-section` blocks.** Overview, Activity, Students, Slip days, LEARN and LMS grades no longer put a titlebar, a toolbar or a table straight under the tab bar. A new test, `InstructorTabbedSectionsTests`, keeps every instructor tabbed page that way. The pages gain the section's bottom margin.
+- **The assignment editors use `.page-titlebar`.** `.editor-titlebar` repeated it. The editors now use `.page-titlebar` with the new `.page-titlebar--top` modifier, which holds the actions at the top of a tall title column.
+
+### Fixed
+
+- **The People and Students polls answer 304 when nothing changed.** The rows carry CSRF tokens, and each token has a fresh random salt, so the ETag of the rows changed on every poll and the table repainted every five seconds. The ETag now leaves the token out. The rows a client keeps on a 304 have older tokens, which stay valid for the same session.
+
+
+## [0.5.630] - 2026-10-13
+
+### Added
+
+- **Class composite: the `composite` footer field (slice 1 of `docs/class-composite.md`).** A test script can report a small image or a short run of frames as its contribution to a class composite. RunnerCore checks the shape without decoding the pixels, both runners carry it on the test outcome, and the shared output contract pins it. Nothing displays it yet, and it never changes a grade.
+
+
+## [0.5.629] - 2026-10-13
+
+### Changed
+
+- **The session driver wrapper is async.** `UnchangedSessionSkippingDriver` now conforms to `AsyncSessionDriver` and has no `EventLoopFuture` code. Behaviour does not change: an untouched session still skips its write. This removes the last future-based code from the server sources, which prepares for Vapor 5.
+
+
+## [0.5.628] - 2026-10-13
+
+### Changed
+
+- **Claude Code reads less and checks more.** The root `CLAUDE.md` keeps the rules for the whole repository. The rules for one area move to a `CLAUDE.md` in that area (`Sources/APIServer/`, `Sources/APIServer/MCP/`, `Sources/APIServer/Views/`, `Sources/Worker/`, `Tools/jupyterlite/`), which Claude Code loads only when it works there. New hooks format each edited Swift file and run `scripts/format-lint.sh` before a push. The test-edit hook now also asks before a shell command changes an existing test. `scripts/format-lint.sh` reads its steps from the CI `format-lint` job, so the local check and CI cannot drift, and `scripts/test-claude-hooks.py` tests the hooks in CI. The `test-runner` agent runs only the affected suites unless asked for a full run. The project settings now allow every tool call except a change to an existing test, which still asks.
+
+
+## [0.5.627] - 2026-10-13
+
+### Changed
+
+- **Runner manifest type (manifest v2, phase 2).** `Job.manifest` is now a `RunnerManifest`, which holds only the fields a runner reads. A worker read of a server-only manifest field no longer compiles, and a new manifest field reaches a runner only when it is added to `RunnerManifest`. The wire bytes are unchanged, so older runners and the runner's test-setup cache key are not affected. See `docs/manifest-format-v2.md`.
+
+
 ## [0.5.626] - 2026-10-13
 
 ### Added
