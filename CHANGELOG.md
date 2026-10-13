@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.626] - 2026-10-13
+
+### Added
+
+- **Load-test tool for the hot paths.** `chickadee-loadtest` simulates deadline traffic: runner slots that poll `POST /api/v1/worker/request` and result views that poll `GET /api/v1/submissions/:id`. It reports the request rate, the status counts and the p50 / p95 / p99 latency of each stream. It refuses a host that is not on this machine unless `--allow-remote` is given. See `docs/load-testing.md`.
+
+
 ## [0.5.625] - 2026-10-13
 
 ### Added
