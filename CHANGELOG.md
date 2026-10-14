@@ -9,6 +9,20 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.656] - 2026-10-14
+
+### Changed
+
+- **The product targets use two upcoming language features.**
+  `ExistentialAny` requires `any P` for an existential type, and
+  `MemberImportVisibility` requires each file to import the modules whose
+  members it uses. Both are defaults of a future language mode. The fix-its
+  touch about 320 files and change no behaviour. The test targets do not use
+  the features yet, because their fix-its change existing tests.
+  `scripts/check-runnercore-embedded.sh` compiles RunnerCore with the same
+  features.
+
+
 ## [0.5.655] - 2026-10-14
 
 ### Changed
