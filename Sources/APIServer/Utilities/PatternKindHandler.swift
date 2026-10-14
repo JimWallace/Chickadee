@@ -136,7 +136,7 @@ struct ProgramIOKind: PatternKindHandler {
         if comparison == .regex {
             // A cheap compile check; each language's own engine has the last
             // word, but an unbalanced group is a typo in every dialect.
-            guard (try? NSRegularExpression(pattern: expected)) != nil else {
+            guard (try? Regex(expected)) != nil else {
                 throw AuthoringValidationError.programIOInvalidRegex(familyID: family.id, caseKey: c.key)
             }
         }

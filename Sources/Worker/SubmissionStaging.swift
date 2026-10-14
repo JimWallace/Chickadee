@@ -7,6 +7,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 /// Returns the free space (megabytes) reported by the filesystem holding
 /// `path`. Returns nil only if the OS refuses to answer; callers should
@@ -190,7 +191,7 @@ func preferredStudentModuleFilename(
         // One fact, read from the descriptor. This was a hand-written switch,
         // identical to the one in NotebookExtractor and to a third the server's
         // solution extractor was about to grow.
-        return (submittedName as NSString).deletingPathExtension + "."
+        return FilePath(submittedName).removingExtension.string + "."
             + language.sourceFileExtension
     }
     return nil
@@ -227,7 +228,7 @@ func studentModuleFromSubmittedFiles(
         entries
         .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true }
         .map(\.lastPathComponent)
-        .filter { ($0 as NSString).pathExtension.lowercased() == wanted }
+        .filter { (FilePath($0).extension ?? "").lowercased() == wanted }
         .min()
 }
 

@@ -316,15 +316,16 @@ private func parseDefinition(
 private func parseAssignmentStyleDefinition(
     _ line: String, pattern: String
 ) -> NotebookFunctionInfo? {
-    guard let regex = try? NSRegularExpression(pattern: pattern),
-        let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-        let nameRange = Range(match.range(at: 1), in: line),
-        let paramsRange = Range(match.range(at: 2), in: line)
+    guard let regex = try? Regex(pattern),
+        let match = line.firstMatch(of: regex),
+        match.output.count > 2,
+        let name = match.output[1].substring,
+        let params = match.output[2].substring
     else { return nil }
 
-    let parsedParams = parseParams(from: String(line[paramsRange]))
+    let parsedParams = parseParams(from: String(params))
     return NotebookFunctionInfo(
-        name: String(line[nameRange]),
+        name: String(name),
         paramNames: parsedParams.map(\.name),
         paramTypes: parsedParams.map { _ in nil },
         paramHasDefault: parsedParams.map(\.hasDefault),
@@ -340,15 +341,10 @@ private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFu
     // Pattern: def <identifier>(<anything>)
     // The params may be followed by `-> returnType` and optionally `:`.
     // We capture everything up to the first unmatched `)` for simplicity.
-    let pattern = #"^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
-    guard let regex = try? NSRegularExpression(pattern: pattern),
-        let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-        let nameRange = Range(match.range(at: 1), in: line),
-        let paramsRange = Range(match.range(at: 2), in: line)
-    else { return nil }
+    guard let match = line.firstMatch(of: /^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/) else { return nil }
 
-    let name = String(line[nameRange])
-    let paramsRaw = String(line[paramsRange])
+    let name = String(match.output.1)
+    let paramsRaw = String(match.output.2)
 
     let hasTypeHints = paramsRaw.contains(":") || line.contains("->")
     let parsedParams = parseParams(from: paramsRaw)
@@ -431,12 +427,8 @@ private func parseReturnType(from line: String) -> String? {
     // Look for `)` followed by `->` and capture everything up to a trailing
     // colon (the `def` line's terminator).  Generic types with commas or
     // spaces (`dict[str, int]`) are preserved verbatim.
-    let pattern = #"\)\s*->\s*(.+?)\s*:\s*$"#
-    guard let regex = try? NSRegularExpression(pattern: pattern),
-        let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-        let range = Range(match.range(at: 1), in: line)
-    else { return nil }
-    let t = String(line[range]).trimmingCharacters(in: .whitespaces)
+    guard let match = line.firstMatch(of: /\)\s*->\s*(.+?)\s*:\s*$/) else { return nil }
+    let t = String(match.output.1).trimmingCharacters(in: .whitespaces)
     return t.isEmpty ? nil : t
 }
 

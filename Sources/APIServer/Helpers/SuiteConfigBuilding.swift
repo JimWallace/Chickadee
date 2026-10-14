@@ -11,6 +11,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 import Vapor
 
 // MARK: - Suite config decode/encode types
@@ -166,7 +167,7 @@ func mergeExistingFilesIntoSuiteFiles(
 }
 
 func sanitizeSuiteFilename(_ raw: String) -> String {
-    var name = (raw as NSString).lastPathComponent
+    var name = (FilePath(raw).lastComponent?.string ?? "")
     if name.isEmpty { name = "suite-file" }
     name = name.replacingOccurrences(of: "/", with: "-")
     name = name.replacingOccurrences(of: "\\", with: "-")
@@ -235,17 +236,9 @@ func buildSuiteEntries(
 }
 
 func inferredOrder(from filename: String) -> Int? {
-    let base = (filename as NSString).lastPathComponent
-    let ns = base as NSString
-    let range = NSRange(location: 0, length: ns.length)
-    let regex = try? NSRegularExpression(pattern: #"^([0-9]+)[_-].+$"#)
-    guard let match = regex?.firstMatch(in: base, options: [], range: range),
-        match.numberOfRanges >= 2,
-        let orderRange = Range(match.range(at: 1), in: base)
-    else {
-        return nil
-    }
-    return Int(base[orderRange])
+    let base = FilePath(filename).lastComponent?.string ?? ""
+    guard let match = base.wholeMatch(of: /([0-9]+)[_-].+/) else { return nil }
+    return Int(match.output.1)
 }
 
 func normalizeTier(_ raw: String?, isTest: Bool? = nil) -> String {

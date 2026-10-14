@@ -9,6 +9,7 @@
 // validator, the server-side resolver/writer, and the worker's writer.
 
 import Foundation
+import SystemPackage
 
 public enum FilenameSafety {
 
@@ -17,7 +18,7 @@ public enum FilenameSafety {
     /// The name is returned unchanged (never rewritten), so a nil result is
     /// the only signal a caller needs to reject the value.
     public static func bareFilename(_ raw: String) -> String? {
-        let cleaned = (raw as NSString).lastPathComponent
+        let cleaned = (FilePath(raw).lastComponent?.string ?? "")
         guard cleaned == raw, !cleaned.isEmpty, cleaned != ".", cleaned != ".." else { return nil }
         return cleaned
     }

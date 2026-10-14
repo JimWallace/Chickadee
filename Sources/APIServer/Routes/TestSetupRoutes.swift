@@ -30,6 +30,7 @@ import Core
 import Fluent
 import Foundation
 import NIOFoundationCompat
+import SystemPackage
 import Vapor
 
 // MARK: - Route collection
@@ -341,7 +342,7 @@ struct TestSetupRoutes: RouteCollection {
         var headers = HTTPHeaders()
         headers.contentType =
             HTTPMediaType.fileExtension(
-                (filename as NSString).pathExtension.lowercased()
+                (FilePath(filename).extension ?? "").lowercased()
             ) ?? .binary
         headers.add(
             name: .contentDisposition,

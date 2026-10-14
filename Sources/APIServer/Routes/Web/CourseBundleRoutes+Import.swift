@@ -22,6 +22,7 @@ import Core
 import Elementary
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 extension CourseBundleRoutes {
@@ -196,7 +197,7 @@ extension CourseBundleRoutes {
     /// a UUID), so a hostile `bundleFilename` can't traverse out of the extract
     /// dir. Returns nil for anything else.
     private func safeContentAttachmentSource(extractDir: URL, bundleFilename: String) -> URL? {
-        let name = (bundleFilename as NSString).lastPathComponent
+        let name = (FilePath(bundleFilename).lastComponent?.string ?? "")
         guard UUID(uuidString: name) != nil else { return nil }
         return extractDir.appendingPathComponent("content").appendingPathComponent(name)
     }
@@ -604,7 +605,7 @@ private func importBundledContentItems(
         try FileManager.default.createDirectory(atPath: destDir, withIntermediateDirectories: true)
         var stored: [ContentAttachment] = []
         for att in bundleAtts {
-            let name = (att.bundleFilename as NSString).lastPathComponent
+            let name = (FilePath(att.bundleFilename).lastComponent?.string ?? "")
             guard UUID(uuidString: name) != nil else { continue }
             let src = extractDir.appendingPathComponent("content").appendingPathComponent(name)
             guard FileManager.default.fileExists(atPath: src.path) else { continue }

@@ -27,6 +27,7 @@
 import Core
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 extension DraftAssignmentRoutes {
@@ -146,7 +147,7 @@ extension DraftAssignmentRoutes {
 
         struct FileQuery: Content { let name: String }
         let q = try req.query.decode(FileQuery.self)
-        let fileName = (q.name as NSString).lastPathComponent
+        let fileName = (FilePath(q.name).lastComponent?.string ?? "")
         guard !fileName.isEmpty, fileName == q.name else {
             throw WebAssignmentError.invalidParameter(name: "name", reason: "Invalid file name")
         }

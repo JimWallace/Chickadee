@@ -9,6 +9,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 /// The rendered outputs of every pattern family, keyed by family id —
 /// produced exactly once per apply so the zip write and the manifest rebuild
@@ -82,7 +83,7 @@ func rawScriptOverlayWrites(
         let scriptLanguage: AssignmentLanguage? = {
             guard
                 let language = AssignmentLanguage(
-                    scriptExtension: (filename as NSString).pathExtension),
+                    scriptExtension: (FilePath(filename).extension ?? "")),
                 TestScriptVariablePrepender.supportsRawScriptInlining(language)
             else { return nil }
             return language

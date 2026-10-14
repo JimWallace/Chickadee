@@ -20,6 +20,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 enum TestScriptVariablePrepender {
 
@@ -262,7 +263,7 @@ enum TestScriptVariablePrepender {
     ) -> String {
         guard
             let language = AssignmentLanguage(
-                scriptExtension: (filename as NSString).pathExtension),
+                scriptExtension: (FilePath(filename).extension ?? "")),
             supportsRawScriptInlining(language)
         else { return content }
         let sectionID: String?

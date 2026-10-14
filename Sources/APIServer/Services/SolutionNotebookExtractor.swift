@@ -20,6 +20,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 enum SolutionNotebookExtractor {
 
@@ -107,7 +108,7 @@ enum SolutionNotebookExtractor {
         overwrite: Bool
     ) -> Bool {
         let fm = FileManager.default
-        let target = (sharedDirectory as NSString).appendingPathComponent("solution.py")
+        let target = FilePath(sharedDirectory).appending("solution.py").string
 
         // Don't clobber an instructor-uploaded solution.py unless asked to.
         if fm.fileExists(atPath: target) && !overwrite { return false }
@@ -206,7 +207,7 @@ enum SolutionNotebookExtractor {
             return false
         }
         let fm = FileManager.default
-        let target = (sharedDirectory as NSString).appendingPathComponent(extracted.filename)
+        let target = FilePath(sharedDirectory).appending(extracted.filename).string
         if fm.fileExists(atPath: target) && !overwrite { return false }
         do {
             try fm.createDirectory(atPath: sharedDirectory, withIntermediateDirectories: true)

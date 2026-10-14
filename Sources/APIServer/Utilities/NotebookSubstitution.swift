@@ -49,15 +49,8 @@ enum NotebookSubstitution {
     /// Excluding whitespace is what keeps this safe for existing content:
     /// `{{ some prose }}` stays unmatched exactly as it does today, so only
     /// brace-wrapped single tokens become newly visible.
-    private static let placeholderRegex: NSRegularExpression = {
-        // The pattern is a compile-time string literal that we know parses
-        // successfully — there is no runtime input that could change it.
-        // A `try!` here is safe; the alternative is propagating `throws`
-        // through every call site of `apply(...)`, which would give
-        // callers a failure case that can never actually fire.
-        // swiftlint:disable:next force_try
-        try! NSRegularExpression(pattern: #"\{\{([^\s{}]+)\}\}"#)
-    }()
+    /// `Regex` is not `Sendable`, so this is computed rather than stored.
+    private static var placeholderRegex: Regex<(Substring, Substring)> { /\{\{([^\s{}]+)\}\}/ }
 
     /// Applies `substitutions` to the notebook in `notebookData`.
     /// Returns the rewritten notebook as Data (re-serialised JSON).
@@ -154,17 +147,7 @@ enum NotebookSubstitution {
     /// `PersonalizedCellRestoration` to confirm a canonical cell really is the
     /// template a rendered cell came from.  Deduplicated and sorted.
     static func placeholderNames(inSource source: String) -> [String] {
-        let nsSource = source as NSString
-        let range = NSRange(location: 0, length: nsSource.length)
-        var found = Set<String>()
-        placeholderRegex.enumerateMatches(in: source, options: [], range: range) { match, _, _ in
-            guard let match, match.numberOfRanges >= 2 else { return }
-            let nameRange = match.range(at: 1)
-            if nameRange.location != NSNotFound {
-                found.insert(nsSource.substring(with: nameRange))
-            }
-        }
-        return found.sorted()
+        Set(source.matches(of: placeholderRegex).map { String($0.output.1) }).sorted()
     }
 
     // MARK: - Private helpers
@@ -195,25 +178,28 @@ enum NotebookSubstitution {
         substitutions: [String: String],
         strict: Bool
     ) throws -> (String, Set<String>) {
-        let nsSource = source as NSString
-        let range = NSRange(location: 0, length: nsSource.length)
-        let matches = placeholderRegex.matches(in: source, options: [], range: range)
+        let matches = source.matches(of: placeholderRegex)
         guard !matches.isEmpty else { return (source, []) }
+        // Strict mode names the last unknown placeholder in the cell.
+        if strict, let unknown = matches.last(where: { substitutions[String($0.output.1)] == nil }) {
+            throw NotebookSubstitutionError.unknownPlaceholder(name: String(unknown.output.1))
+        }
 
         var substituted: Set<String> = []
-        // Walk matches in reverse so earlier replacement ranges stay valid.
-        var working = nsSource
-        for match in matches.reversed() {
-            guard match.numberOfRanges >= 2 else { continue }
-            let nameRange = match.range(at: 1)
-            let name = working.substring(with: nameRange)
+        var result = ""
+        var cursor = source.startIndex
+        for match in matches {
+            let name = String(match.output.1)
+            result += source[cursor..<match.range.lowerBound]
             if let literal = substitutions[name] {
-                working = working.replacingCharacters(in: match.range, with: literal) as NSString
+                result += literal
                 substituted.insert(name)
-            } else if strict {
-                throw NotebookSubstitutionError.unknownPlaceholder(name: name)
+            } else {
+                result += source[match.range]
             }
+            cursor = match.range.upperBound
         }
-        return (working as String, substituted)
+        result += source[cursor...]
+        return (result, substituted)
     }
 }

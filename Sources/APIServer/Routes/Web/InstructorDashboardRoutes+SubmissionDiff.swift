@@ -11,6 +11,7 @@ import Core
 import Elementary
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 extension InstructorDashboardRoutes {
@@ -104,7 +105,7 @@ let notebookDiffCellMarker = "── cell ──"
 func submissionDiffSides(_ source: SubmissionDiffSource) async -> SubmissionDiffSides {
     let artifact = URL(fileURLWithPath: source.artifactPath)
     let submittedName = source.submittedFilename ?? artifact.lastPathComponent
-    let ext = (artifact.pathExtension.isEmpty ? (submittedName as NSString).pathExtension : artifact.pathExtension)
+    let ext = (artifact.pathExtension.isEmpty ? (FilePath(submittedName).extension ?? "") : artifact.pathExtension)
         .lowercased()
     guard let bytes = try? Data(contentsOf: artifact) else {
         return SubmissionDiffSides(
@@ -147,7 +148,7 @@ func submissionDiffSides(_ source: SubmissionDiffSource) async -> SubmissionDiff
             unavailableReason: "The submitted file is not UTF-8 text, so it cannot be compared.")
     }
     let starterEntry = await listZipEntries(zipPath: source.setupZipPath).first {
-        ($0 as NSString).lastPathComponent == submittedName
+        (FilePath($0).lastComponent?.string ?? "") == submittedName
     }
     var oldText: String?
     if let starterEntry,

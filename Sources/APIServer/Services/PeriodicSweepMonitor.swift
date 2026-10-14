@@ -40,7 +40,7 @@ final class PeriodicSweepMonitor: Sendable {
     private let running = Mutex<Task<Void, Never>?>(nil)
     /// The lease key and the name in log lines.
     let name: String
-    private let intervalNanoseconds: UInt64
+    private let interval: Duration
     private let leaseTTLSeconds: TimeInterval
     private let sweep: @Sendable (Application) async throws -> Void
 
@@ -59,7 +59,7 @@ final class PeriodicSweepMonitor: Sendable {
     ) {
         self.name = name
         let effectiveInterval = max(interval, minimumInterval)
-        intervalNanoseconds = UInt64(effectiveInterval * 1_000_000_000)
+        self.interval = .seconds(effectiveInterval)
         leaseTTLSeconds = max(effectiveInterval * 2, 120)
         self.sweep = sweep
     }
@@ -110,11 +110,11 @@ final class PeriodicSweepMonitor: Sendable {
     func start(application: Application) {
         running.withLock { running in
             guard running == nil else { return }
-            running = Task { [intervalNanoseconds] in
+            running = Task { [interval] in
                 while !Task.isCancelled {
                     await self.runLeasedSweep(application: application, context: "")
                     do {
-                        try await Task.sleep(nanoseconds: intervalNanoseconds)
+                        try await Task.sleep(for: interval)
                     } catch {
                         break
                     }

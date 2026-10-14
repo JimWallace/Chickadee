@@ -91,6 +91,10 @@ opt_in_rules:
   # Request.decodeContent. Its fix removes `async` from all of them.
   - unhandled_throwing_task
   - unowned_variable_capture
+  # Foundation's Objective-C types where a Swift type exists: NSString path
+  # calls are FilePath calls now. NSNumber stays allowed, because FileManager
+  # attribute values arrive as NSNumber.
+  - legacy_objc_type
   # NOTE: discouraged_optional_boolean and discouraged_optional_collection
   # are intentionally NOT enabled.  They conflict with two well-established
   # patterns in this codebase:
@@ -192,7 +196,29 @@ nesting:
 # the view sources and their PageStyle blocks; ElementaryPageGuardTests checks
 # rendered pages; and these rules catch the same mistakes in source, including
 # branches no fixture reaches.
+legacy_objc_type:
+  allowed_types:
+    - NSNumber
+
 custom_rules:
+  # Legacy Foundation APIs with a modern Swift replacement. Sources/ only:
+  # existing tests still use them, and test edits need the maintainer's
+  # approval. Comments and strings do not match, so prose about an API is
+  # not a finding.
+  legacy_regular_expression:
+    name: "Swift Regex, not NSRegularExpression"
+    included: "Sources/.*\\.swift"
+    regex: "\\bNSRegularExpression\\b"
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "Use a regex literal or Regex(_:). RunnerCore (Embedded Swift) has neither, and it does not use NSRegularExpression either."
+    severity: error
+  legacy_task_sleep_nanoseconds:
+    name: "Task.sleep(for:), not Task.sleep(nanoseconds:)"
+    included: "Sources/.*\\.swift"
+    regex: "Task\\.sleep\\(\\s*nanoseconds:"
+    excluded_match_kinds: [comment, doccomment, string]
+    message: "Use Task.sleep(for: .seconds(n)) or another Duration."
+    severity: error
   elementary_no_inline_style:
     name: "No inline style in a view"
     included: "Sources/APIServer/Views/.*\\.swift"

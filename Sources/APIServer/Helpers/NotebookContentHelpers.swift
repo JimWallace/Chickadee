@@ -10,6 +10,7 @@
 import Core
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 // MARK: - Notebook cell filtering / merging helpers (free functions)
@@ -304,7 +305,7 @@ private func notebookCandidateEntryNames(starterNotebook: String?, entries: [Str
             return
         }
         entries
-            .filter { ($0 as NSString).lastPathComponent == filename }
+            .filter { (FilePath($0).lastComponent?.string ?? "") == filename }
             .forEach(appendCandidate)
     }
 
@@ -344,7 +345,7 @@ func extractNotebookFromZip(zipPath: String) async -> Data? {
     let entries = await listZipEntries(zipPath: zipPath)
     let candidate =
         entries.first {
-            ($0 as NSString).lastPathComponent == "assignment.ipynb"
+            (FilePath($0).lastComponent?.string ?? "") == "assignment.ipynb"
         }
         ?? entries.first {
             URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb"

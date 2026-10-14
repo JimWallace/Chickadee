@@ -13,6 +13,7 @@ import Elementary
 import Fluent
 import Foundation
 import NIOFoundationCompat
+import SystemPackage
 import Vapor
 
 /// The badges one graded submission earns by itself: the per-submission
@@ -666,7 +667,7 @@ extension WebRoutes {
             sections = props.sections
             entries = props.testSuites
             for entry in props.testSuites {
-                let stem = (entry.script as NSString).deletingPathExtension
+                let stem = FilePath(entry.script).removingExtension.string
                 let stemKey = stem.isEmpty ? entry.script : stem
                 if let displayName = entry.name,
                     !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

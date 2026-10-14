@@ -21,3 +21,4 @@ disabled_rules:
   - optional_enum_case_matching
   - superfluous_else
   - legacy_multiple
+  - legacy_objc_type

@@ -64,13 +64,17 @@ enum RLibraryScanner {
             var names: [String] = []
 
             // Qualified references: anywhere on the line, strings blanked.
-            names += captures(of: Self.qualifiedPattern, in: code, group: 1)
+            names += plausible(code.matches(of: Self.qualifiedPattern).map(\.output.1))
 
             // Attachments: column 0 only. `code` is used for the unquoted form
             // and `withoutComments` for the quoted one — see the header.
             if let first = code.first, !first.isWhitespace {
-                names += captures(of: Self.attachUnquotedPattern, in: code, group: 2)
-                names += captures(of: Self.attachQuotedPattern, in: withoutComments, group: 3)
+                names += plausible(code.matches(of: Self.attachUnquotedPattern).map(\.output.2))
+                // `library("dplyr")`: the quote must sit immediately inside the
+                // paren, so prose that mentions a call does not match.
+                let quoted = /\b(library|require|requireNamespace)\s*\(\s*(["'])([A-Za-z][A-Za-z0-9._]*)\2/
+                    .wordBoundaryKind(.simple)
+                names += plausible(withoutComments.matches(of: quoted).map(\.output.3))
             }
 
             for name in names where !seen.contains(name) {
@@ -144,21 +148,8 @@ enum RLibraryScanner {
 
     // MARK: - Matching
 
-    private static func captures(
-        of regex: NSRegularExpression?, in text: String, group: Int
-    ) -> [String] {
-        guard let regex else { return [] }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        var found: [String] = []
-        for match in regex.matches(in: text, range: range) {
-            guard
-                match.numberOfRanges > group,
-                let captured = Range(match.range(at: group), in: text)
-            else { continue }
-            let name = String(text[captured])
-            if isPlausiblePackageName(name) { found.append(name) }
-        }
-        return found
+    private static func plausible(_ captured: [Substring]) -> [String] {
+        captured.map(String.init).filter(isPlausiblePackageName)
     }
 
     /// R package names are letters, digits and dots, and start with a letter —
@@ -175,16 +166,17 @@ enum RLibraryScanner {
         return name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." }
     }
 
+    // `\b` uses the simple word boundary, as the old Foundation regex did.
+    // `Regex` is not `Sendable`, so these are computed rather than stored.
+
     /// `dplyr::filter` / `dplyr:::internal`.
-    private static let qualifiedPattern = try? NSRegularExpression(
-        pattern: #"([A-Za-z][A-Za-z0-9._]*)\s*:::?\s*[A-Za-z._]"#)
+    private static var qualifiedPattern: Regex<(Substring, Substring)> {
+        /([A-Za-z][A-Za-z0-9._]*)\s*:::?\s*[A-Za-z._]/
+    }
 
     /// `library(dplyr)` — unquoted symbol.
-    private static let attachUnquotedPattern = try? NSRegularExpression(
-        pattern: #"\b(library|require|requireNamespace)\s*\(\s*([A-Za-z][A-Za-z0-9._]*)"#)
-
-    /// `library("dplyr")` — the quote must sit immediately inside the paren, so
-    /// prose mentioning a call does not match.
-    private static let attachQuotedPattern = try? NSRegularExpression(
-        pattern: #"\b(library|require|requireNamespace)\s*\(\s*(["'])([A-Za-z][A-Za-z0-9._]*)\2"#)
+    private static var attachUnquotedPattern: Regex<(Substring, Substring, Substring)> {
+        /\b(library|require|requireNamespace)\s*\(\s*([A-Za-z][A-Za-z0-9._]*)/
+            .wordBoundaryKind(.simple)
+    }
 }
