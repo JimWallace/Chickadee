@@ -32,6 +32,6 @@ struct GetMetricsCardSeriesTool: DiagnosticTool {
     static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        return try await context.request.application.diagnostics.metricsCardSeries(on: context.db)
+        try await context.request.application.diagnostics.metricsCardSeries(on: context.db)
     }
 }

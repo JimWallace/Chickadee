@@ -61,8 +61,10 @@ struct CompositeSnapshot: Content, Equatable {
     static func build(
         _ scope: Scope, since: Int64?, onlyUserID: UUID?, includeOwners: Bool, on db: any Database
     ) async throws -> CompositeSnapshot {
-        let assignmentID = scope.assignmentID, testSetupID = scope.testSetupID
-        let courseID = scope.courseID, spec = scope.spec
+        let assignmentID = scope.assignmentID
+        let testSetupID = scope.testSetupID
+        let courseID = scope.courseID
+        let spec = scope.spec
         var rowQuery = APICompositeContribution.query(on: db).filter(\.$assignmentID == assignmentID)
         var slotQuery = APICompositeSlot.query(on: db).filter(\.$assignmentID == assignmentID)
         if let onlyUserID {

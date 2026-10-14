@@ -136,7 +136,8 @@ enum SupportedBrowserMatrix {
         guard let range = ua.range(of: token) else { return nil }
         var digits = ""
         for ch in ua[range.upperBound...] {
-            if ch.isNumber { digits.append(ch) } else { break }
+            guard ch.isNumber else { break }
+            digits.append(ch)
         }
         return Int(digits)
     }

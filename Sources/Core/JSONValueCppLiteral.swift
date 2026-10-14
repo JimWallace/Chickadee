@@ -95,7 +95,10 @@ extension JSONValue {
         case .bool, .int, .double, .string:
             return nil
         case .array(let a):
-            if a.contains(where: { if case .null = $0 { return true } else { return false } }) {
+            if a.contains(where: {
+                guard case .null = $0 else { return false }
+                return true
+            }) {
                 return "an array containing null has no C++ rendering"
             }
             guard cppVectorElementType(a) != nil else {
@@ -104,7 +107,10 @@ extension JSONValue {
             }
             return nil
         case .object(let o):
-            if o.values.contains(where: { if case .null = $0 { return true } else { return false } }) {
+            if o.values.contains(where: {
+                guard case .null = $0 else { return false }
+                return true
+            }) {
                 return "an object containing null has no C++ rendering"
             }
             guard o.isEmpty || cppVectorElementType(Array(o.values)) != nil else {

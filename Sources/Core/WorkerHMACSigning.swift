@@ -143,7 +143,8 @@ public enum WorkerHMACSigning {
     /// length; an early return on length is a deliberate non-secret
     /// leak (the length of an HMAC signature is not sensitive).
     public static func constantTimeEquals(_ lhs: String, _ rhs: String) -> Bool {
-        let left = Array(lhs.utf8), right = Array(rhs.utf8)
+        let left = Array(lhs.utf8)
+        let right = Array(rhs.utf8)
         guard left.count == right.count else { return false }
         var result: UInt8 = 0
         for i in left.indices { result |= left[i] ^ right[i] }

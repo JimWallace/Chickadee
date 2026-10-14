@@ -153,6 +153,9 @@ jobs:
       - name: Check formatting
         run: scripts/lint.sh
 
+      - name: Every swift-format configuration lists every rule
+        run: scripts/check-swift-format-config.sh
+
       - name: Run SwiftLint
         run: scripts/swiftlint.sh
 

@@ -107,11 +107,10 @@ func valencePath(of urlString: String) -> String {
     }
     if let scheme = path.range(of: "://") {
         let afterHost = path[scheme.upperBound...]
-        if let slash = afterHost.firstIndex(of: "/") {
-            path = afterHost[slash...]
-        } else {
+        guard let slash = afterHost.firstIndex(of: "/") else {
             return "/"
         }
+        path = afterHost[slash...]
     }
     let raw = String(path)
     return raw.removingPercentEncoding ?? raw

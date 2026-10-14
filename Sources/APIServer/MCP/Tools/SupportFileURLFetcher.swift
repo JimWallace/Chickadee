@@ -261,7 +261,9 @@ enum BlockedIPClassifier {
 
     static func isBlockedIPv4(_ b: [UInt8]) -> Bool {
         guard b.count == 4 else { return true }
-        let b0 = b[0], b1 = b[1], b2 = b[2]
+        let b0 = b[0]
+        let b1 = b[1]
+        let b2 = b[2]
         if b0 == 0 { return true }  // 0.0.0.0/8 "this host"
         if b0 == 10 { return true }  // 10/8 private
         if b0 == 127 { return true }  // 127/8 loopback

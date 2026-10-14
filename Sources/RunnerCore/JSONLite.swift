@@ -57,7 +57,10 @@ private struct JSONParser {
         pos += 1  // consume '{'
         var dict: [String: FooterValue] = [:]
         skipWhitespace()
-        if current == "}" { pos += 1; return .object(dict) }
+        if current == "}" {
+            pos += 1
+            return .object(dict)
+        }
         while true {
             skipWhitespace()
             guard current == "\"", let key = parseString() else { return nil }
@@ -69,7 +72,9 @@ private struct JSONParser {
             skipWhitespace()
             switch current {
             case ",": pos += 1
-            case "}": pos += 1; return .object(dict)
+            case "}":
+                pos += 1
+                return .object(dict)
             default: return nil
             }
         }
@@ -79,14 +84,19 @@ private struct JSONParser {
         pos += 1  // consume '['
         var items: [FooterValue] = []
         skipWhitespace()
-        if current == "]" { pos += 1; return .array(items) }
+        if current == "]" {
+            pos += 1
+            return .array(items)
+        }
         while true {
             guard let value = parseValue() else { return nil }
             items.append(value)
             skipWhitespace()
             switch current {
             case ",": pos += 1
-            case "]": pos += 1; return .array(items)
+            case "]":
+                pos += 1
+                return .array(items)
             default: return nil
             }
         }

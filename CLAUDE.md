@@ -380,7 +380,11 @@ greeting. The example below does so in R."
 - One type per file unless the types are trivially small and closely related.
 - Formatting is enforced by `swift-format` in CI (`.swift-format` at repo root).
   Run `scripts/format.sh` before committing, or `scripts/lint.sh` to check
-  without modifying.
+  without modifying. Each `.swift-format` names every rule, `true` or `false`:
+  a rule that the file omits is off, not at its default.
+  `scripts/check-swift-format-config.sh` enforces this. `Tests/.swift-format`
+  turns off five rules that have findings in existing tests, until the
+  maintainer approves those test edits.
 - Quality rules (force unwraps, `.filter{}.first` antipatterns, oversized
   functions, etc.) are enforced by SwiftLint (`.swiftlint.yml` at repo root,
   delivered via the `SwiftLintPlugins` SwiftPM dependency — no separate

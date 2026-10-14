@@ -1,0 +1,10 @@
+# A `.swift-format` rules object replaces the defaults, so a rule that it does
+# not name is off. The root file named four rules, and about thirty default
+# rules were silently off.
+guard="scripts/check-swift-format-config.sh"
+files=".swift-format"
+description="a swift-format configuration that does not name one rule"
+expect="does not list the rule UseEarlyExits"
+apply() {
+    sed -i '/"UseEarlyExits"/d' .swift-format
+}

@@ -30,6 +30,6 @@ struct GetStorageUsageTool: DiagnosticTool {
     static let inputSchema: JSONValue = MCPSchema.noArgumentsInput
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
-        return try await StorageUsage.context(app: context.request.application)
+        try await StorageUsage.context(app: context.request.application)
     }
 }
