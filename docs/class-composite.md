@@ -15,7 +15,7 @@ of all parts together.
 
 | slice | what | state |
 |---|---|---|
-| 0 | This design note | proposed |
+| 0 | This design note | shipped |
 | 1 | Output contract: the `composite` footer field in `RunnerCore` | shipped |
 | 2 | The `classComposite` kind, the `composite` block, the layout lock, authoring with the roster ratio, and `set_activity` | shipped |
 | 3 | Slot dealing, and the slot as a per-student input | shipped |
