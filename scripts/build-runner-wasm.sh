@@ -57,7 +57,16 @@ pkg=".build/plugins/PackageToJS/outputs/Package"
 rm -rf "$pkg" .build/plugins/outputs
 
 echo "Building RunnerWasm (Embedded Swift, SDK: $sdk)…"
-swift package --swift-sdk "$sdk" js -c release
+# -disable-incremental-llvm-codegen makes the module depend on its sources
+# only. Without it, swiftc writes an MD5 of each object's LLVM IR into a
+# `.swift_modhash` data segment (816 bytes here) so that a later build can skip
+# unchanged objects. That IR holds the debug info, and the debug info holds the
+# checkout and build paths, so the segment changed with the folder the build
+# ran in. wasm-opt strips the debug info but must keep a data segment. With the
+# flag, the segment is zeros, and two checkouts give the same bytes.
+swift package --swift-sdk "$sdk" \
+    -Xswiftc -Xfrontend -Xswiftc -disable-incremental-llvm-codegen \
+    js -c release
 
 echo "Bundling a self-contained, no-CDN browser ESM with esbuild…"
 ( cd "$pkg" && npm install --silent )
