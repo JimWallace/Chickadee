@@ -436,3 +436,53 @@ if failed:
     sys.exit(1)
 print("check-xeus-vendored: OK (every kernel_packages/ name maps to one set of bytes).")
 PY
+
+# 10. No kernel package may ship a file that no kernel reads at run time:
+#     static archives, headers, manuals, CPython's test suite, or a second copy
+#     of a kernel shared library. A kernel unpacks every package into browser
+#     memory at boot. The rules come from scripts/prune-kernel-packages.py
+#     itself, so this check and the build step cannot disagree.
+python3 - "$BUILD_DIR" "$ROOT_DIR" <<'PY'
+import importlib.util
+import pathlib
+import sys
+import tarfile
+
+build = pathlib.Path(sys.argv[1])
+root = pathlib.Path(sys.argv[2])
+
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location(
+    "prune_kernel_packages", root / "scripts" / "prune-kernel-packages.py")
+pruner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pruner)
+
+failed = False
+checked = 0
+for env in sorted(p for p in (build / "xeus").glob("chickadee-*") if p.is_dir()):
+    shared = pruner.kernel_shared_libraries(env)
+    if shared is None:
+        print(f"check-xeus-vendored: {env.name} has no kernel.json", file=sys.stderr)
+        failed = True
+        continue
+    for archive in sorted((env / "kernel_packages").glob("*.tar.gz")):
+        checked += 1
+        with tarfile.open(archive, "r:gz") as tf:
+            found = [m.name for m in tf.getmembers() if m.isfile() and pruner.prunable(m.name, shared)]
+        if found:
+            print(
+                f"check-xeus-vendored: {env.name}/kernel_packages/{archive.name} holds "
+                f"{len(found)} build-only file(s), for example {found[0]} — run "
+                "scripts/prune-kernel-packages.py",
+                file=sys.stderr,
+            )
+            failed = True
+
+if checked == 0:
+    print("check-xeus-vendored: no kernel package found to check for build-only files",
+          file=sys.stderr)
+    sys.exit(1)
+if failed:
+    sys.exit(1)
+print(f"check-xeus-vendored: OK (no build-only files in {checked} kernel packages).")
+PY

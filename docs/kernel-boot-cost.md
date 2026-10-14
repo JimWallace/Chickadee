@@ -249,7 +249,8 @@ rewrites to carry its content hash (`<name>.chickadee.<12 hex>.tar.gz`) and poin
 and `EditorAssetFastPathMiddleware.isImmutableKernelPackage` serves the tarballs
 with `Cache-Control: public, max-age=31536000, immutable`. The metadata itself
 still revalidates, so a re-vendor reaches students on the next load under new
-names. `check-xeus-vendored.sh` section 9 asserts the naming, and
+names. `prune-kernel-packages.py` rewrites more archives the same way: each one
+that loses a build-only file gets a content-hash name (`docs/jupyterlite.md`). `check-xeus-vendored.sh` section 9 asserts the naming, and
 `check-kernel-currency.py` ignores the suffix when it compares builds.
 
 A warm boot now asks the server for no package at all, where it used to send
