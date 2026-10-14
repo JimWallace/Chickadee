@@ -2,7 +2,7 @@
 
 Design note for a class activity in which each student renders one part of a
 shared image, and the class watches the full image form on the projector while
-the submissions arrive. Slices 1 to 5 and 6a are built. See **Status**.
+the submissions arrive. Slices 1 to 6 are built. See **Status**.
 
 The idea came from a sequence of computer-graphics and medical-imaging labs:
 a framebuffer, the painter's algorithm, the z-buffer, ray casting, and CT
@@ -22,7 +22,7 @@ of all parts together.
 | 4 | Ingest: the `composite_contributions` table and the coverage row | shipped |
 | 5 | The composite view on the leaderboard page, with all four compositors | shipped |
 | 6a | Reference renders and `emptySlots: reference` | shipped |
-| 6b | Spare slots | planned |
+| 6b | Spare slots | shipped |
 
 Slice 5 is the first slice that a class can use. Slices 1 to 4 only supply data
 to it. Run one session with TAs after slice 5, before slice 6.
@@ -408,6 +408,39 @@ render is a visible answer. A render whose length is not the shape of the
 spec is not shown, so a render made before a shape change disappears until
 the instructor prepares it again.
 
+**Spare slots (slice 6b).** A student whose own tile passed can fill a hole.
+The result page shows a "Fill a hole" button while the session is open, none
+of the student's spares is grading, and a hole is left. A hole is a slot with
+no passing contribution and no spare that passed or is grading. A slot that no
+student holds comes first, so a spare does not race a student who may still
+submit. Then come the slots whose holder has not passed. In each group, the
+holes follow the deal order. A slot where the student's own spare failed is
+not offered to them again, because the same code fails there again; it stays
+a hole for the others.
+
+The button grades the student's passing submission again with the inputs of
+the first hole. The job is a `compositeSpare` submission, owned by no student,
+so no listing, grade or attempt count sees it. Its row in `composite_spares`
+names the student, and a user delete removes the job and its copy of the code.
+The job grades the file as the student submitted it, with the student's own
+seed pinned at the request, so it runs with the values their own run had. The
+worker claims it behind every student job, before the corpus run and the
+reference jobs. A spare is grading until its result is recorded; a job that
+no runner can take waits, as a student's own submission would.
+
+A passing result fills the slot and covers it for the student, so it counts
+toward an `itemsCovered` goal. When the slot's holder passes later, their own
+tile takes the coverage back. A failed result leaves the hole open, and the
+next request from another student replaces it. The page offers one spare at a
+time, and there is no cap on how many holes one student fills. Two students
+who ask at the same moment get different holes.
+
+On the projector, a passing spare shows in its slot as a passed tile with the
+name of the student who made it. It replaces a failed contribution there,
+because a classmate has filled that hole. A passing contribution always wins
+over a spare. A student's view of the composite never shows spares; their
+result page lists their own spares, each with its state.
+
 ### Slot count
 
 **The instructor sets the slot count at authoring.** It is `cols × rows` for
@@ -535,7 +568,7 @@ adds, and keeps every existing assignment on the code path it uses now.
    to fill a hole. The student presses "Fill a hole" on the result page. The
    server grades the latest passing submission of the student again with
    the inputs of an empty slot, behind every student job, and the tile is
-   credited to the student.
+   credited to the student. Shipped as 6b.
 
 ## Risks
 
@@ -549,7 +582,7 @@ adds, and keeps every existing assignment on the code path it uses now.
   so it stays well below the 10-second limit.
 - **Attendance.** Dealing at arrival handles absent students. Reference
   renders (slice 6a) fill the holes of a small class, dimmed. Spare slots
-  (slice 6b) will let students fill them with their own work.
+  (slice 6b) let students fill them with their own work.
 
 ## Decisions
 

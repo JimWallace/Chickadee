@@ -10,6 +10,7 @@
 //   GET  /testsetups/:id/notebook   → NotebookPage    (JupyterLite in-browser editor)
 //   GET  /testsetups/:id/leaderboard → LeaderboardPage (class activity ranking)
 //   GET  /testsetups/:id/composite  → class composite JSON (slot states, pixels)
+//   POST /testsetups/:id/composite/spare → "Fill a hole" (a spare slot)
 //   GET  /testsetups/:id/arena/…     → the projector arena's JSON (staff)
 //   GET  /submissions/:id           → SubmissionPage  (live results)
 
@@ -29,6 +30,8 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "leaderboard", use: leaderboardPage)
         // A class composite's slot states and pixels (docs/class-composite.md).
         routes.get("testsetups", ":testSetupID", "composite", use: compositeSnapshot)
+        // "Fill a hole": a student's passing tile, graded again for an empty slot.
+        routes.post("testsetups", ":testSetupID", "composite", "spare", use: requestCompositeSpare)
         // The projector arena plays a browser-graded tournament from the
         // present page (WebRoutes+TournamentArena.swift). Course staff only.
         routes.get("testsetups", ":testSetupID", "arena", "next", use: arenaNextMatch)
