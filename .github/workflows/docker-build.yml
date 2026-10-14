@@ -19,6 +19,8 @@ on:
       - ".github/actions/swift-test-setup/**"
       # build-release runs it before the compile.
       - ".github/actions/restore-git-mtimes/**"
+      # It sets the Public file times that become the ETags.
+      - "scripts/restore-asset-mtimes.py"
       # It decides what reaches the image build context.
       - ".dockerignore"
       # The container smoke test mounts it.
@@ -146,7 +148,23 @@ jobs:
           --health-retries 10
 
     steps:
+      # Full history (without blobs) so the next step can read each file's
+      # last commit.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # The server's ETag for a static file is its mtime plus its size, and
+      # Docker COPY keeps the mtime from the build context. A fresh checkout
+      # stamps every file with the checkout time, so each deploy gave every
+      # vendored file a new ETag, and each browser downloaded the kernel
+      # binaries again (25-70 MB per language) although no byte changed. With
+      # the last-commit time, an ETag changes only when its file changes.
+      # Not the restore-git-mtimes action: on this bare runner it installs a
+      # git-restore-mtime that current git refuses (see the script).
+      - name: Set Public file times to their last commit
+        run: scripts/restore-asset-mtimes.py Public
 
       # The Chickadee image is large (~1.4 GB vendored Pyodide + full distro +
       # static binaries).  The build `load:true`s it into the local Docker
@@ -196,7 +214,7 @@ jobs:
             # :v0.4.1 etc. on version tags
             type=semver,pattern={{version}}
 
-      - name: Build (and push on main/tags)
+      - name: Build and load the image
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -213,6 +231,43 @@ jobs:
           # BuildKit layer cache for the runtime image (apt deps, asset copies).
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Two properties of the Public layers that a green smoke test cannot see.
+      #
+      # 1. Files in the image carry a commit time, not the checkout time. A
+      #    checkout always happens after the HEAD commit, so a time later than
+      #    HEAD means scripts/restore-asset-mtimes.py did not reach the image,
+      #    and each deploy gives every vendored file a new ETag again. One file is
+      #    checked in each Public layer.
+      # 2. The layer for the rest of Public excludes JupyterLite. If the
+      #    exclude stops matching, that layer holds the whole ~400 MB tree a
+      #    second time.
+      - name: Check the Public layers (commit mtimes, JupyterLite split)
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          set -euo pipefail
+          head_time="$(git log -1 --format=%ct HEAD)"
+          for file in Public/jupyterlite/xeus/chickadee-octave/xoctave/liboctave.so Public/styles.css; do
+            file_time="$(docker run --rm --entrypoint stat "$IMAGE" -c %Y "/app/$file")"
+            echo "$file: mtime $file_time, HEAD commit time $head_time"
+            if [ "$file_time" -gt "$head_time" ]; then
+              echo "::error::$file has the checkout time, not a commit time, so each deploy changes its ETag. The layer cache ignores mtimes: if the mtime step ran and this still fails, a cached layer kept bad times. Delete the gha cache entries for this workflow."
+              exit 1
+            fi
+          done
+          docker history --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" | grep -E 'COPY .*Public' || true
+          rest="$(docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" \
+            | grep -E $'\tCOPY (--exclude=[^ ]+ )?Public \\./Public' | cut -f1 | head -n 1 || true)"
+          echo "Rest of Public layer: ${rest:-not found}"
+          case "$rest" in
+            *GB|[0-9][0-9][0-9]MB|[0-9][0-9][0-9].*MB)
+              echo "::error::The Public layer without JupyterLite is $rest. The exclude does not match."
+              exit 1 ;;
+            ""|0B)
+              echo "::error::docker history shows no sized layer for the rest of Public, so the split cannot be checked."
+              exit 1 ;;
+          esac
 
       # THE STEP THAT WOULD HAVE CAUGHT v0.5.65.
       #
@@ -411,6 +466,7 @@ jobs:
           echo "----- container logs (tail 80, for the record) -----"
           docker logs --tail 80 chickadee-smoke 2>&1 || true
           docker rm -f chickadee-smoke >/dev/null 2>&1 || true
+
       # The runner container starts as root for one pre-step,
       # deploy/runner-entrypoint.sh, which delegates a cgroup subtree for the
       # jobs and then starts the runner as uid 999 with no capability. No

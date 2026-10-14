@@ -214,8 +214,17 @@ COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 # Static assets — the server reads these from its working directory at runtime.
 # The entrypoint script symlinks them from the data volume (/data) to these
 # image copies on each startup, so updates to templates or JupyterLite are
-# picked up on redeploy without re-copying ~586 MB into the volume every boot.
-COPY Public     ./Public
+# picked up on redeploy without re-copying ~410 MB into the volume every boot.
+#
+# JupyterLite (~400 MB, changes on a re-vendor only) is its own layer, so a
+# change to the rest of Public ships ~8 MB on a deploy, not the whole tree.
+#
+# Each file keeps the mtime that CI set from its last commit
+# (scripts/restore-asset-mtimes.py), and the server's ETag is mtime plus
+# size. The layer cache ignores mtimes, so a cached layer keeps the times it
+# was built with.
+COPY Public/jupyterlite ./Public/jupyterlite
+COPY --exclude=jupyterlite Public ./Public
 COPY Resources  ./Resources
 # Notebook working copies are runtime data. The server writes them under
 # Public/jupyterlite/files, which would otherwise be in /app, owned by root. So
