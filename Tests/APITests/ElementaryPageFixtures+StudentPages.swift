@@ -371,8 +371,19 @@ extension ElementaryPageFixtures {
                     SubmissionOptions(
                         overridden: true, weighted: true, hasDelta: false, revealAvailable: false,
                         revealActive: true)),
+                compositeTileRender(passed: true),
+                compositeTileRender(passed: false),
             ]
         )
+    }
+
+    /// A class composite's own-tile section (docs/class-composite.md).
+    static func compositeTileRender(passed: Bool) -> String {
+        var result = submissionResult()
+        result.compositeTile = CompositeTilePanel(
+            slotText: "Your tile: column 3, row 5", stateText: passed ? "Passed" : "Did not pass", passed: passed,
+            stage: .ownTile(spec: .starter, pixels: "Csg=", passed: passed))
+        return SubmissionPage(page: page(currentUser: signedInAdmin), result: result).render()
     }
 
     static var gitHubSubmitPage: ElementaryPageFixture {

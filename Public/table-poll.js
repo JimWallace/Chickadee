@@ -16,6 +16,15 @@
 // instead — see `swapTargetFor` for why one page needs that — and
 // `data-poll-until` stops a poll for good once that instant has passed.
 //
+// An element carrying `data-poll-swap="json"` swaps nothing. Its endpoint
+// returns JSON, and each changed body goes to the element as a
+// `chickadee:poll-data` event, with the parsed body as `detail`. It exists for
+// one consumer that draws rather than renders: the class composite's canvas
+// (class-composite.js), whose pixels a region swap would throw away. The poll
+// is the same poll: the suppression rules, the background-refresh header and
+// the conditional request. Its first poll runs at once, because the page holds
+// no initial state for it.
+//
 // After a swap the shared row behaviours are re-applied in a fixed order —
 // relative times, then sort, then filter — because each depends on the last:
 // sorting a date column reads the timestamps, and filtering hides rows the
@@ -104,12 +113,17 @@
             : element.querySelector('tbody');
     }
 
+    function isJSON(element) {
+        return element.getAttribute('data-poll-swap') === 'json';
+    }
+
     function refresh(table) {
         var url = table.getAttribute('data-poll-url');
-        var target = swapTargetFor(table);
+        var json = isJSON(table);
+        var target = json ? table : swapTargetFor(table);
         if (!url || !target) return Promise.resolve(false);
 
-        var headers = { 'Accept': 'text/html', 'X-Background-Refresh': '1' };
+        var headers = { 'Accept': json ? 'application/json' : 'text/html', 'X-Background-Refresh': '1' };
         var known = etags.get(table);
         if (known) headers['If-None-Match'] = known;
 
@@ -131,9 +145,14 @@
             if (!res.ok) return null;
             var etag = res.headers && res.headers.get ? res.headers.get('ETag') : null;
             if (etag) etags.set(table, etag);
-            return res.text();
-        }).then(function (html) {
-            if (html === null || html === undefined) return false;
+            return json ? res.json() : res.text();
+        }).then(function (body) {
+            if (body === null || body === undefined) return false;
+            if (json) {
+                table.dispatchEvent(new CustomEvent('chickadee:poll-data', { detail: body }));
+                return true;
+            }
+            var html = body;
             target.innerHTML = html;
             if (global.ChickadeeRelativeTime) {
                 global.ChickadeeRelativeTime.applyRelativeTimes(target);
@@ -167,6 +186,7 @@
 
     function start(element) {
         var interval = parseInt(element.getAttribute('data-poll-interval'), 10) || DEFAULT_INTERVAL_MS;
+        if (isJSON(element) && !shouldSkip(element)) refresh(element);
         var timer = setInterval(function () {
             if (isFinished(element)) {
                 clearInterval(timer);

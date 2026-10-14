@@ -2103,6 +2103,48 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .present-footer .tier { margin-left: auto; font-size: var(--text-sm); }
 
+/* Class composite (docs/class-composite.md): a canvas scaled to its frame,
+   one cell per slot over it (a grid) or under it (a strip), and the slot
+   states. class-composite.js sets each cell's state classes only. */
+/* The view sets these on the frame and the strip; one slot is the default. */
+.composite-stage { --composite-cols: 1; --composite-rows: 1; --composite-aspect: 1; }
+.composite-stage { display: flex; flex-direction: column; gap: .75rem; }
+.composite-frame {
+    position: relative;
+    width: 100%;
+    max-width: 48rem;
+    aspect-ratio: var(--composite-aspect);
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+}
+.composite-canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.composite-slots {
+    display: grid;
+    grid-template-columns: repeat(var(--composite-cols), 1fr);
+    grid-template-rows: repeat(var(--composite-rows), 1fr);
+}
+.composite-slots--overlay { position: absolute; inset: 0; }
+.composite-slots--strip { max-width: 48rem; height: .6rem; gap: 2px; }
+.composite-slots--overlay .composite-slot--empty { box-shadow: inset 0 0 0 1px var(--border); }
+.composite-slots--overlay .composite-slot--failed { box-shadow: inset 0 0 0 2px var(--red); }
+.composite-slots--strip .composite-slot { background: var(--gray-200); border-radius: var(--radius-sm); }
+.composite-slots--strip .composite-slot--passed { background: var(--green); }
+.composite-slots--strip .composite-slot--failed { background: var(--red); }
+.composite-slot--rendering { animation: composite-pulse 1.2s ease-in-out infinite; }
+.composite-slot--arrived { animation: composite-arrive .8s ease-out; }
+@keyframes composite-pulse { 50% { background-color: var(--open-bg); } }
+@keyframes composite-arrive { from { box-shadow: inset 0 0 0 3px var(--gold); } }
+.composite-scrub { flex: 1; max-width: 32rem; }
+/* The projector shows the image as large as the room's screen allows. */
+.present-composite { flex: 1; }
+.present-composite .composite-frame { max-width: none; width: min(100%, calc(70vh * var(--composite-aspect))); }
+.present-composite .composite-slots--strip { max-width: none; }
+/* A student's own tile, on the result page. */
+.composite-tile .composite-frame { max-width: 16rem; }
+@media (prefers-reduced-motion: reduce) {
+    .composite-slot--rendering, .composite-slot--arrived { animation: none; }
+}
+
 .section-items .leaderboard-rank { width: 3.25rem; text-align: center; }
 /* Under a list: Show all from a student's window, Show my standing back. */
 .leaderboard-more { margin: .75rem 0 1rem; text-align: center; }

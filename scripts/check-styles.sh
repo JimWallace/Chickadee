@@ -507,7 +507,12 @@ fi
 # (ElementaryPageGuardTests.inlineCustomPropertiesArePerDatum) reads the list
 # from this line, and also sees a value held in a variable, such as the
 # avatar's; it asserts every AvatarPresentation.inlineProperties name is here.
-PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border"
+#
+# The class composite's props are the third case: its columns, rows and
+# aspect ratio come from the assignment's composite block, which the
+# instructor sets, so they differ per assignment and no stylesheet can hold
+# them (docs/class-composite.md).
+PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border --composite-cols --composite-rows --composite-aspect"
 # Every custom property in the attribute is checked, wherever it sits: the
 # first one only, in an attribute that starts with `--`, let a second one or
 # one after `display:none;` through (#2404).

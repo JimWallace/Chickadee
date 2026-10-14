@@ -35,7 +35,10 @@ fs.mkdirSync(outDir, { recursive: true });
 const MASKS = [
   ".js-relative-time",     // "3 minutes ago" timestamps (relative-time.js)
   ".admin-version-banner", // vX.Y.Z on the admin page
-  "canvas",                // sparkline charts draw async
+  // Sparkline charts draw async. The class composite's canvas is not
+  // masked: its fixture pixels are fixed, and its first poll lands before
+  // the page is network-idle.
+  "canvas:not(.composite-canvas)",
   // A student's chickadee is DRAWN AT RANDOM and stored, so a fresh fixture
   // run produces a different bird every time — the same category as the
   // diceware secret above. A pixel baseline of it could never be stable, and
@@ -50,14 +53,12 @@ const MASKS = [
 // ---------------------------------------------------------------------------
 async function main() {
   console.log(`Seeding fixture data via ${baseURL} …`);
-  const { setupID, courseID, instructorState, studentState, resultsPath, gradedResultsPath } =
-    await seed(baseURL);
+  const seeded = await seed(baseURL);
+  const { setupID, resultsPath } = seeded;
   console.log(`Seeded setup ${setupID}; results page: ${resultsPath || "(none)"}`);
 
   // Page list is shared with the a11y scan — see pages.mjs.
-  const PAGES = pageList({
-    setupID, courseID, instructorState, studentState, resultsPath, gradedResultsPath,
-  });
+  const PAGES = pageList(seeded);
 
   const browser = await chromium.launch();
   let failures = 0;
