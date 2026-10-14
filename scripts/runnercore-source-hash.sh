@@ -22,9 +22,15 @@ cd "$repo_root"
     find Sources/RunnerCore -type f -name '*.swift'
     find wasm/Sources -type f -name '*.swift'
     find wasm/loader -type f -name '*.js'
+    # Package.swift: RunnerCore's own swiftSettings. wasm-sdk.pin: the
+    # toolchain SDK. .node-version: the Node that runs esbuild and wasm-opt.
+    # Each one changes the bytes, so a change to any of them must re-vendor.
     printf '%s\n' \
+        Package.swift \
         wasm/Package.swift \
         wasm/Package.resolved \
+        wasm/wasm-sdk.pin \
+        .node-version \
         scripts/build-runner-wasm.sh
 } | LC_ALL=C sort -u | while IFS= read -r f; do
     [ -f "$f" ] || continue

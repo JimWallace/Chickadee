@@ -204,7 +204,8 @@ jobs:
           # Use the prebuilt binaries instead of compiling in-image.
           build-args: |
             BINARIES=prebuilt
-          # Always load locally so Trivy can scan it; push separately below.
+          # Load locally so the steps below can boot and scan it. The push
+          # step pushes this same image; it does not build again.
           load: true
           push: false
           tags: ${{ steps.meta.outputs.tags }}
@@ -497,15 +498,18 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL
 
-      - name: Push image
+      # Push the image that the steps above booted and scanned. A second
+      # build-push-action run here rebuilt the image instead, and the gha cache
+      # was the only link between the two. When the cache had evicted a layer
+      # (the apt-get upgrade layer, for example), the pushed digest was not the
+      # digest that was smoke-tested and scanned.
+      - name: Push the tested image
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          build-args: |
-            BINARIES=prebuilt
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            docker push "$tag"
+          done <<< "$TAGS"

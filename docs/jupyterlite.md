@@ -197,15 +197,21 @@ and restoring its CSP allowances.
   then never renders a console. Restoring `'unsafe-eval'` with no other change
   makes the same smoke pass. JupyterLab compiles JSON-schema validators at run
   time. Do not retry without a plan for that.
-- **Kernel packages still revalidate on every boot.** They are `no-cache`
-  because conda filenames are stable across an in-place patch
-  (`patch-xeus-python-http.py` rewrites bytes under the same name), so immutable
-  caching would pin an unpatched copy — the #574 failure class. Making them
-  immutable needs content-addressed filenames, because
-  `empackLockToMambajsLock` builds package URLs as `pkgRootUrl + '/' + filename`
-  inside the vendored bundle, leaving no seam for a `?v=` cache-buster.
-  `/jupyterlite/xeus/` IS now on `EditorAssetFastPathMiddleware`, so those ~50
-  revalidations per boot no longer each cost a Fluent session lookup.
+- **Kernel packages revalidated on every boot. They do not now (#2544).**
+  They were `no-cache` because the build patched a package in place under its
+  upstream name. Now a tarball that the build rewrites carries the hash of its
+  own bytes in its name (`patch-xeus-python-http.py`, checked by
+  `check-xeus-vendored.sh` section 9). So each name maps to one set of bytes,
+  and the tarballs are cached immutably for a year:
+  `EditorAssetFastPathMiddleware.isImmutableKernelPackage` in the app, and the
+  `kernel_packages/` location in `deploy/nginx.conf` on a systemd host. A new
+  version arrives under a new name through `empack_env_meta.json`, which stays
+  `no-cache`.
+- **The kernel `.so` libraries are gzipped by the app.** An Octave boot loads
+  `liboctave.so` and `liboctinterp.so` (about 52 MB) as separate files, and R
+  loads `libR.so`. They are `application/octet-stream`, which no compression
+  allowlist includes, so `KernelLibraryCompressionMiddleware` opts them in. A
+  full `200` GET only: a `206` or a `HEAD` stays identity.
 
 **The waitAsync polyfill patch covers every extension, not one.**
 `scripts/patch-waitasync-worker.py` (was `patch-pyodide-waitasync-worker.py`)

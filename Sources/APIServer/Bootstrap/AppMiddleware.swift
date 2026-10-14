@@ -245,6 +245,9 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // preserving the query, so the app loads. Runs just before FileMiddleware,
     // which would otherwise 404 the bare directory.
     app.middleware.use(JupyterLiteAppIndexMiddleware())
+    // The kernel .so libraries are octet-stream, which the compression
+    // allowlist above skips. They compress about 4x, so they opt in.
+    app.middleware.use(KernelLibraryCompressionMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware(isolateNotebook: true))
 }
