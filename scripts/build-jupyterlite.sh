@@ -107,6 +107,13 @@ if ! command -v micromamba >/dev/null 2>&1 && [[ -d "$OUTPUT_DIR/xeus" ]]; then
 fi
 rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$TEMP_BUILD_DIR"/ "$OUTPUT_DIR"/
 
+# Drop the bundle's source maps (~48 MB in ~270 files under build/). Nothing
+# reads them: a browser fetches a map only when its developer tools are open,
+# and that request then gets a 404. They were served to the public, copied
+# into every image and rewritten by each JupyterLite bump. To debug the bundle
+# with maps, run this build locally and keep its output.
+find "$OUTPUT_DIR/build" -type f -name '*.map' -delete
+
 mkdir -p "$OUTPUT_DIR/files" "$OUTPUT_DIR/lab/files" "$OUTPUT_DIR/notebooks/files"
 
 python3 - "$OUTPUT_DIR/config-utils.js" <<'PY'
