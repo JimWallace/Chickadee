@@ -32,7 +32,7 @@ import VaporTesting
         for (path, contents) in fixtures {
             let absolute = publicDir + path.dropFirst()
             try FileManager.default.createDirectory(
-                atPath: (absolute as NSString).deletingLastPathComponent,
+                at: URL(fileURLWithPath: absolute).deletingLastPathComponent(),
                 withIntermediateDirectories: true)
             try contents.write(toFile: absolute, atomically: true, encoding: .utf8)
         }
