@@ -44,6 +44,11 @@ that name the patch number change: `wasm/wasm-sdk.pin`, the swiftly version in
 `runner-wasm-vendor.yml`, and the SDK identifier in
 `scripts/build-runner-wasm.sh`. There is no feature scan for a patch release.
 
+The swiftly installer itself is a separate pin. `runner-wasm-vendor.yml`
+downloads one swiftly release and checks its SHA-256 for each architecture.
+A toolchain upgrade does not need a new swiftly. Change that pin on its own,
+with the new checksums.
+
 If there is no new release, the Routine stops. It does not open a pull request.
 
 ---
@@ -251,8 +256,9 @@ Run all of this on the new toolchain before you push. The container default
 toolchain cannot read a newer tools-version manifest, so install the new one:
 
 ```
-curl -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
-tar zxf swiftly-x86_64.tar.gz
+curl -O https://download.swift.org/swiftly/linux/swiftly-1.2.0-x86_64.tar.gz
+echo "0b26b568811404374c7d7f07276b6aad4145db5d1893a45f307de6a94ca8d9c3  swiftly-1.2.0-x86_64.tar.gz" | sha256sum --check
+tar zxf swiftly-1.2.0-x86_64.tar.gz
 ./swiftly init -y --skip-install --quiet-shell-followup
 . "$HOME/.local/share/swiftly/env.sh"
 swiftly install 6.5.0
