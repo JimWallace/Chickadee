@@ -246,6 +246,10 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // preserving the query, so the app loads. Runs just before FileMiddleware,
     // which would otherwise 404 the bare directory.
     app.middleware.use(JupyterLiteAppIndexMiddleware())
+    // A large kernel file with a brotli copy from the image build goes out as
+    // that copy. It returns without calling next, so the on-the-fly
+    // compression below never sees it.
+    app.middleware.use(PrecompressedAssetMiddleware(publicDirectory: app.directory.publicDirectory))
     // The kernel .so libraries are octet-stream, which the compression
     // allowlist above skips. They compress about 4x, so they opt in.
     app.middleware.use(KernelLibraryCompressionMiddleware())

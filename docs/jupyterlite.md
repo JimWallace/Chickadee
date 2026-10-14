@@ -207,6 +207,15 @@ and restoring its CSP allowances.
   `kernel_packages/` location in `deploy/nginx.conf` on a systemd host. A new
   version arrives under a new name through `empack_env_meta.json`, which stays
   `no-cache`.
+- **Large kernel files go out as brotli copies made at image build.** The
+  `kernel-assets` stage of the Dockerfile writes `<file>.br` (quality 9) beside
+  each `.wasm`, `.js` and `.so` file over 64 KB under `xeus/`, outside
+  `kernel_packages/`, with the original's mtime. `PrecompressedAssetMiddleware`
+  serves the copy to a browser that accepts `br`, except for a `Range`
+  request. Measured: `liboctinterp.so` 27.2 MB to 5.0 MB, `xpython.wasm`
+  15.0 MB to 4.4 MB, `xoctave.js` 11.5 MB to 0.59 MB. Quality 11 is about 12%
+  smaller again but took ~95 s for one file, against ~5 s. A checkout run
+  without the image build has no copies and falls back to the next rule.
 - **The kernel `.so` libraries are gzipped by the app.** An Octave boot loads
   `liboctave.so` and `liboctinterp.so` (about 52 MB) as separate files, and R
   loads `libR.so`. They are `application/octet-stream`, which no compression
