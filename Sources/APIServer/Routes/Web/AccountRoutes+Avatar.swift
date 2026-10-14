@@ -5,6 +5,9 @@
 //
 //   POST /account/avatar   → apply colourway / backdrop / border → redirect to /account
 //
+// A colourway is a shade within the student's own species. A colourway of
+// another species is refused: only a hatch changes the species.
+//
 // The route never writes a spec field itself: it hands the raw form values to
 // `AvatarCustomization`, the one chokepoint that later also checks unlocks.
 
@@ -19,7 +22,7 @@ extension AccountRoutes {
     struct AvatarChoiceForm: Content {
         var backdrop: String?
         var border: String?
-        /// The colourway, which decides the species.
+        /// The colourway: a shade of the student's own species.
         var cap: String?
 
         var choices: [String: String] {
@@ -52,17 +55,29 @@ extension AccountRoutes {
     }
 }
 
-/// The picker's three groups, built from `AvatarCustomization.options(for:)` so
-/// the page cannot offer an option the chokepoint would refuse, and marking the
-/// ones it would refuse as locked.
+/// The "Your bird" card: the bird itself, and the Colour and Ring groups,
+/// built from `AvatarCustomization.options(for:species:)` so the page cannot
+/// offer an option the chokepoint would refuse. A ring the chokepoint would
+/// refuse is listed apart, as "Not open yet", and is not an input.
 struct AvatarPickerContext: Encodable {
-    /// The colourways, grouped by the species each belongs to, in
-    /// `AvatarSpecies` order. Each option is the student's own bird in that
-    /// colourway, so the sample shows what a save would draw.
-    let birds: [AvatarBirdGroup]
+    /// The student's bird at the podium size, the card's hero and the live
+    /// preview's target.
+    let hero: AvatarPresentation
+    /// "Cardinal".
+    let speciesName: String
+    /// "Three cardinal colourways, plus your backdrop."
+    let colourNote: String
+    /// "Hatched Sep 8, 2026"; empty hides the line.
+    let hatchedText: String
+    /// The colourways of the student's own species, each the student's own
+    /// bird in that colourway, so the sample shows what a save would draw.
+    let feathers: [AvatarBirdOption]
     let backdrops: [AvatarPickerOption]
-    let borders: [AvatarPickerOption]
-    /// Course staff wear the staff ring and cannot choose one: the Border group
+    /// The rings a student may choose now, the worn one always among them.
+    let rings: [AvatarPickerOption]
+    /// The rings that are not open yet: shown, never selectable.
+    let lockedRings: [AvatarPickerOption]
+    /// Course staff wear the staff ring and cannot choose one: the Ring group
     /// becomes a note.
     let isStaff: Bool
     /// The student's own colours, so a ring sample shows the ring they would
@@ -71,26 +86,28 @@ struct AvatarPickerContext: Encodable {
     let accentToken: String
     let capToken: String
 
-    init(for spec: AvatarSpec, isStaff: Bool) {
-        let own = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: isStaff)
+    init(for spec: AvatarSpec, isStaff: Bool, hatchedText: String = "") {
+        hero = AvatarPresentation(for: spec, size: .podium, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
-        self.backdropToken = own.backdropToken
-        self.accentToken = own.accentToken
-        self.capToken = own.capToken
-        let colourways = AvatarCustomization.options(for: .cap).compactMap(AvatarCap.init(rawValue:))
-        birds = AvatarSpecies.allCases.map { species in
-            AvatarBirdGroup(
-                species: species.displayName,
-                options: colourways.filter { AvatarSpecies.of($0) == species }.map { cap in
-                    var preview = spec
-                    preview.cap = cap
-                    return AvatarBirdOption(
-                        value: cap.rawValue,
-                        label: cap.displayName,
-                        checked: cap == spec.cap,
-                        presentation: AvatarPresentation(
-                            for: preview, size: .roster, accessibility: .decorative, isStaff: isStaff))
-                })
+        self.hatchedText = hatchedText
+        self.backdropToken = hero.backdropToken
+        self.accentToken = hero.accentToken
+        self.capToken = hero.capToken
+        speciesName = spec.species.displayName
+        let colourways = AvatarCustomization.options(for: .cap, species: spec.species)
+            .compactMap(AvatarCap.init(rawValue:))
+        colourNote =
+            "\(Self.countWord(colourways.count)) \(spec.species.displayName.lowercased()) colourways, "
+            + "plus your backdrop."
+        feathers = colourways.map { cap in
+            var preview = spec
+            preview.cap = cap
+            return AvatarBirdOption(
+                value: cap.rawValue,
+                label: cap.displayName,
+                checked: cap == spec.cap,
+                presentation: AvatarPresentation(
+                    for: preview, size: .roster, accessibility: .decorative, isStaff: isStaff))
         }
         backdrops = AvatarCustomization.options(for: .backdrop).map { value in
             AvatarPickerOption(
@@ -104,7 +121,7 @@ struct AvatarPickerContext: Encodable {
                 season: "")
         }
         let season = TermSeason.current()
-        borders = AvatarCustomization.options(for: .border).map { value in
+        let borders = AvatarCustomization.options(for: .border).map { value in
             // The same token and ring the presentation would name for this
             // border, so the live preview draws exactly what a save would.
             var preview = spec
@@ -114,7 +131,7 @@ struct AvatarPickerContext: Encodable {
             let drawn = AvatarPresentation(
                 for: preview, size: .standard, accessibility: .decorative, isStaff: false)
             // The ring a student already wears is never locked: a seasonal ring
-            // is kept after its term, and a disabled radio would not be posted.
+            // is kept after its term.
             let isWorn = value == spec.border.rawValue
             let isLocked = !isWorn && !AvatarCustomization.isOpen(value, for: .border, season: season)
             return AvatarPickerOption(
@@ -127,23 +144,30 @@ struct AvatarPickerContext: Encodable {
                 isLocked: isLocked,
                 season: preview.border.season?.rawValue ?? "")
         }
+        rings = borders.filter { !$0.isLocked }
+        lockedRings = borders.filter(\.isLocked)
     }
 }
 
 extension AvatarPickerContext {
-    /// A ring's name. A seasonal ring always names its term ("Maple (Fall)"),
-    /// open or not, so the page reads the same on every date; any other
-    /// locked ring says "locked".
+    /// A ring's name. A seasonal ring always names its term, open or not, so
+    /// the page reads the same on every date: "Maple · Fall" when open,
+    /// "Snowflake · Winter term" when not. Any other locked ring is earned:
+    /// "Two-tone · earned".
     static func borderLabel(_ border: AvatarBorder, isLocked: Bool) -> String {
-        if let season = border.season { return "\(border.displayName) (\(season.displayName))" }
-        return isLocked ? "\(border.displayName) (locked)" : border.displayName
+        if let season = border.season {
+            return isLocked
+                ? "\(border.displayName) · \(season.displayName) term"
+                : "\(border.displayName) · \(season.displayName)"
+        }
+        return isLocked ? "\(border.displayName) · earned" : border.displayName
     }
-}
 
-/// One species' row in the Species group.
-struct AvatarBirdGroup: Encodable {
-    let species: String
-    let options: [AvatarBirdOption]
+    /// "Eight", "Three": the colourway count as a word, as the note reads.
+    static func countWord(_ count: Int) -> String {
+        let words = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
+        return words.indices.contains(count) ? words[count] : "\(count)"
+    }
 }
 
 /// One colourway: the student's own bird drawn in it. The presentation

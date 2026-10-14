@@ -44,8 +44,8 @@ const MASKS = [
   // diceware secret above. A pixel baseline of it could never be stable, and
   // would not be meaningful if it were: what matters is that the layers stack,
   // the palette resolves and no interpolation leaks, which AccountRoutesTests
-  // and AvatarSpecTests assert against the markup instead. Its box is a fixed
-  // 3rem, so unlike the text below it needs no width freezing.
+  // and AvatarSpecTests assert against the markup instead. Each bird's box
+  // has a fixed size, so unlike the text below it needs no width freezing.
   ".avatar",
 ];
 
@@ -188,14 +188,31 @@ async function main() {
           document.querySelectorAll("[data-avatar-handle]").forEach((el) => {
             el.textContent = "Class handle: Aaaaaaa Bbbbbb";
           });
+          // The bird is drawn at random (see the .avatar mask), and its
+          // species decides the species name, the colour note and how many
+          // colourways the Colour group offers: three, or eight for a
+          // chickadee. Keep three swatches and freeze their text, so the
+          // layout is the same for every species.
+          document.querySelectorAll(".bird-card").forEach((card) => {
+            card.querySelectorAll('.swatch:has(input[name="cap"])').forEach((swatch, index) => {
+              if (index >= 3) swatch.remove();
+              else swatch.querySelector(".swatch-name").textContent = "Colour";
+            });
+            card.querySelectorAll(".bird-card-hero strong").forEach((el) => {
+              el.textContent = "Species";
+            });
+            card.querySelectorAll(".bird-card-groups > fieldset:first-of-type > .field-note").forEach((el) => {
+              el.textContent = "Three species colourways, plus your backdrop.";
+            });
+          });
           // Which seasonal ring is open depends on today's Waterloo term, so
-          // one of the three swatches would lose its dimming every January,
-          // May and September. Their names already read the same on every
-          // date; disabling all three pins the dimming too.
+          // one of the three would move from "Not open yet" to the open rings
+          // every January, May and September. Removing all three seasonal
+          // items, open or not, pins the layout on every date.
           document
-            .querySelectorAll('input[data-av-season]:not([data-av-season=""])')
+            .querySelectorAll('[data-av-season]:not([data-av-season=""])')
             .forEach((el) => {
-              el.disabled = true;
+              (el.closest(".swatch") ?? el).remove();
             });
           // The Users table sorts by last seen, and last_seen_at refreshes at
           // most once a minute per user. So which of the two seeded users was

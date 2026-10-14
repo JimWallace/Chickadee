@@ -33,7 +33,8 @@ public enum AvatarSize: String, CaseIterable, Sendable {
     /// 6rem — the leaderboard "you" card and the hill champion card, where one
     /// bird stands for one student.
     case hero
-    /// 10rem — a Present-mode podium place, read across a room. The Present
+    /// 10rem — a Present-mode podium place, read across a room, and the
+    /// account page's bird card. The Present
     /// page alone scales it further (12rem first, 9.5rem second and third);
     /// see "Component vocabulary" in docs/ui-design.md.
     case podium

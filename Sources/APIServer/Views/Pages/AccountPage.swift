@@ -1,7 +1,7 @@
 // APIServer/Views/Pages/AccountPage.swift
 //
-// GET /account: the signed-in user's identity, their bird's species, backdrop
-// and border, the GitHub link, their courses and the courses open to join, and
+// GET /account: the signed-in user's identity, their bird (its colour and
+// ring), the GitHub link, their courses and the courses open to join, and
 // the personal-data export (#557). The plain student page exemplar
 // (docs/ui-design.md).
 
@@ -17,8 +17,6 @@ struct AccountPage: HTML {
     let identityName: String
     /// The username under the heading, nil when the heading already is it.
     let identitySecondary: String?
-    /// The user's own bird, decorative beside their name.
-    let avatar: AvatarPresentation
     let avatarPicker: AvatarPickerContext
     /// A posted avatar choice was refused.
     let avatarInvalid: Bool
@@ -48,7 +46,7 @@ struct AccountPage: HTML {
                 p(.class("form-error"), .role("alert")) { "That course is not available." }
             }
             identitySection
-            AccountAvatarPicker(page: page, picker: avatarPicker, invalid: avatarInvalid)
+            AccountBirdCard(page: page, picker: avatarPicker, invalid: avatarInvalid)
             if showGitHub {
                 AccountGitHubBlock(page: page, login: githubLogin)
             }
@@ -93,7 +91,6 @@ struct AccountPage: HTML {
             h2 { "Account info" }
             div(.class("card section-gap")) {
                 div(.class("account-identity")) {
-                    Avatar(avatar: avatar)
                     div {
                         strong { identityName }
                         if let identitySecondary {
@@ -212,97 +209,178 @@ struct AccountPage: HTML {
     }
 }
 
-/// The species, backdrop and border choices (docs/student-wardrobe.md, W1;
-/// docs/avatar-species.md, A2).
-private struct AccountAvatarPicker: HTML {
+/// The "Your bird" card: the bird, and its Colour and Ring groups
+/// (docs/student-wardrobe.md, W1; docs/avatar-species.md). The species and
+/// markings are drawn, not chosen, so neither has a group.
+private struct AccountBirdCard: HTML {
     let page: PageRequestContext
     let picker: AvatarPickerContext
     let invalid: Bool
 
     var body: some HTML {
-        section(.class("page-section"), .id("chickadee")) {
-            h2 { "Bird" }
+        section(.class("page-section"), .id("bird")) {
+            h2 { "Your bird" }
+            p(.class("section-note")) {
+                "Classmates see your bird beside your class handle on leaderboards and in live sessions. "
+                    + "Only you and course staff can link either one to you."
+            }
             if invalid {
                 p(.class("form-error"), .role("alert")) { "That choice is not available." }
             }
-            // The style attribute sets only custom properties, which the UI
-            // rules allow. The ring samples inherit all three, so they draw
-            // the ring on the previewed backdrop in the previewed colours.
-            form(
-                .method(.post), .action("/account/avatar"),
-                .data("avatar-picker", value: ".account-identity .avatar"),
-                .custom(
-                    name: "style",
-                    value: "--av-backdrop: var(\(picker.backdropToken)); --av-cap: var(\(picker.capToken)); "
-                        + "--av-accent: var(\(picker.accentToken))")
-            ) {
-                CSRFField(token: page.csrfToken)
-                fieldset(.class("fieldset-plain")) {
-                    legend { "Species" }
-                    for group in picker.birds {
-                        fieldset(.class("fieldset-plain fieldset-plain--nested")) {
-                            legend { group.species }
-                            div(.class("swatch-row")) {
-                                for (position, option) in group.options.enumerated() {
-                                    if position > 0 { " " }
-                                    AccountBirdSwatch(option: option)
-                                }
-                            }
-                        }
-                    }
-                    p(.class("field-note")) { "Your handle stays." }
+            // `chickadee` is the card's older anchor; the save redirect still
+            // names it.
+            div(.class("card bird-card"), .id("chickadee")) {
+                div(.class("bird-card-body")) {
+                    AccountBirdHero(picker: picker)
+                    AccountBirdForm(page: page, picker: picker)
                 }
-                fieldset(.class("fieldset-plain")) {
-                    legend { "Backdrop" }
-                    div(.class("swatch-row")) {
-                        for (position, option) in picker.backdrops.enumerated() {
-                            if position > 0 { " " }
-                            label(.class("swatch")) {
-                                " "
-                                input(
-                                    .type(.radio), .name("backdrop"), .value(option.value),
-                                    .data("av-token", value: option.token)
-                                )
-                                .attributes(.checked, when: option.checked)
-                                " "
-                                // A custom property only, as on the form.
-                                span(
-                                    .class("swatch-sample swatch-backdrop"), .ariaHidden,
-                                    .custom(name: "style", value: "--av-backdrop: var(\(option.token))")
-                                ) {}
-                                " "
-                                span(.class("swatch-name")) { option.label }
-                                " "
-                            }
-                        }
-                    }
-                }
-                fieldset(.class("fieldset-plain")) {
-                    legend { "Border" }
-                    if picker.isStaff {
-                        p(.class("field-note")) { "Course staff wear the staff ring." }
-                    } else {
-                        div(.class("swatch-row")) {
-                            for (position, option) in picker.borders.enumerated() {
-                                if position > 0 { " " }
-                                AccountBorderSwatch(picker: picker, option: option)
-                            }
-                        }
-                        p(.class("field-note")) { "Locked rings will be earned through course achievements." }
-                        p(.class("field-note")) { "A seasonal ring can be chosen only during its term." }
-                    }
-                }
-                button(.class("btn btn-primary"), .type(.submit)) { "Save" }
             }
             script(.src(page.asset("/avatar-picker.js"))) {}
         }
     }
 }
 
-/// One colourway choice: the student's own bird drawn in it, at the roster
-/// size so the species reads. The radio carries the six tone tokens and the
-/// three layer references the live preview sets: plumage, tuft or crest, and
-/// the wing, because a species may draw a pattern with its own art.
+/// The bird at the podium size, with its species and when it hatched.
+private struct AccountBirdHero: HTML {
+    let picker: AvatarPickerContext
+
+    var body: some HTML {
+        div(.class("bird-card-hero")) {
+            Avatar(avatar: picker.hero)
+            p { strong { picker.speciesName } }
+            if !picker.hatchedText.isEmpty {
+                p(.class("text-muted")) { picker.hatchedText }
+            }
+        }
+    }
+}
+
+/// The Colour and Ring groups and the Save button. The live preview updates
+/// the hero bird.
+private struct AccountBirdForm: HTML {
+    let page: PageRequestContext
+    let picker: AvatarPickerContext
+
+    var body: some HTML {
+        // The style attribute sets only custom properties, which the UI
+        // rules allow. The ring samples inherit all three, so they draw
+        // the ring on the previewed backdrop in the previewed colours.
+        form(
+            .method(.post), .action("/account/avatar"), .class("bird-card-groups"),
+            .data("avatar-picker", value: ".bird-card .avatar-xl"),
+            .custom(
+                name: "style",
+                value: "--av-backdrop: var(\(picker.backdropToken)); --av-cap: var(\(picker.capToken)); "
+                    + "--av-accent: var(\(picker.accentToken))")
+        ) {
+            CSRFField(token: page.csrfToken)
+            fieldset(.class("fieldset-plain")) {
+                legend { "Colour" }
+                p(.class("field-note field-note--muted")) { picker.colourNote }
+                div(.class("swatch-row")) {
+                    for (position, option) in picker.feathers.enumerated() {
+                        if position > 0 { " " }
+                        AccountBirdSwatch(option: option)
+                    }
+                }
+                fieldset(.class("fieldset-plain fieldset-plain--nested")) {
+                    legend { "Backdrop" }
+                    div(.class("swatch-row")) {
+                        for (position, option) in picker.backdrops.enumerated() {
+                            if position > 0 { " " }
+                            AccountBackdropSwatch(option: option)
+                        }
+                    }
+                }
+            }
+            AccountRingGroup(picker: picker)
+            div(.class("toolbar")) {
+                div(.class("toolbar")) {
+                    button(.class("btn btn-primary"), .type(.submit)) { "Save" }
+                    " "
+                    // avatar-picker.js shows it once a choice changes.
+                    button(.class("btn"), .type(.reset), .hidden) { "Undo changes" }
+                }
+                p(.class("field-note field-note--muted")) { "Species and markings come with your bird." }
+            }
+        }
+    }
+}
+
+/// One backdrop choice: a filled disc. The name is for screen readers; the
+/// colour is the sample.
+private struct AccountBackdropSwatch: HTML {
+    let option: AvatarPickerOption
+
+    var body: some HTML {
+        label(.class("swatch")) {
+            " "
+            input(
+                .type(.radio), .name("backdrop"), .value(option.value),
+                .data("av-token", value: option.token)
+            )
+            .attributes(.checked, when: option.checked)
+            " "
+            // A custom property only, as on the form.
+            span(
+                .class("swatch-sample swatch-backdrop"), .ariaHidden,
+                .custom(name: "style", value: "--av-backdrop: var(\(option.token))")
+            ) {}
+            " "
+            span(.class("visually-hidden")) { option.label }
+            " "
+        }
+    }
+}
+
+/// The Ring group: the open rings as radios, then the rings not open yet as
+/// plain items. Staff see the staff ring and a note instead.
+private struct AccountRingGroup: HTML {
+    let picker: AvatarPickerContext
+
+    var body: some HTML {
+        fieldset(.class("fieldset-plain")) {
+            legend { "Ring" }
+            if picker.isStaff {
+                div(.class("toolbar")) {
+                    AccountRingSample(token: picker.hero.borderToken, ringRef: picker.hero.ringSymbolRef)
+                    p(.class("field-note")) {
+                        "Course staff wear the staff ring in every course, so students can tell who’s staff. "
+                            + "It can’t be changed."
+                    }
+                }
+            } else {
+                p(.class("field-note field-note--muted")) { "Worn around your bird everywhere it appears." }
+                div(.class("swatch-row")) {
+                    for (position, option) in picker.rings.enumerated() {
+                        if position > 0 { " " }
+                        AccountBorderSwatch(option: option)
+                    }
+                }
+                if !picker.lockedRings.isEmpty {
+                    div(.class("bird-locked")) {
+                        p(.class("field-note"), .id("bird-locked-label")) { "Not open yet" }
+                        ul(.custom(name: "aria-labelledby", value: "bird-locked-label")) {
+                            for option in picker.lockedRings {
+                                li(.data("av-season", value: option.season)) {
+                                    AccountRingSample(token: option.token, ringRef: option.ringRef)
+                                    " "
+                                    Icon("i-lock")
+                                    " \(option.label)"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One colourway choice: the student's own bird drawn in it. The radio
+/// carries the six tone tokens and the three layer references the live
+/// preview sets. Every colourway offered is of the student's own species, so
+/// the plumage, tuft and wing references never change the bird's art.
 private struct AccountBirdSwatch: HTML {
     let option: AvatarBirdOption
 
@@ -333,10 +411,9 @@ private struct AccountBirdSwatch: HTML {
     }
 }
 
-/// One border choice: the ring drawn in the student's own colours, which it
-/// inherits from the form.
+/// One open ring choice: the ring drawn in the student's own colours, which
+/// it inherits from the form.
 private struct AccountBorderSwatch: HTML {
-    let picker: AvatarPickerContext
     let option: AvatarPickerOption
 
     var body: some HTML {
@@ -347,24 +424,32 @@ private struct AccountBorderSwatch: HTML {
                 .name("border"), .value(option.value), .data("av-token", value: option.token)
             )
             .attributes(.checked, when: option.checked)
-            .attributes(.disabled, when: option.isLocked)
             " "
             if option.isNone {
                 span(.class("swatch-sample swatch-none"), .ariaHidden) {}
             } else {
-                // A custom property only. The accent, cap and backdrop come
-                // from the form, so the sample follows the preview.
-                SVG.svg(
-                    .class("swatch-sample"), .custom(name: "viewBox", value: "0 0 64 64"), .ariaHidden,
-                    .custom(name: "style", value: "--av-border: var(\(option.token))")
-                ) {
-                    SVG.use(.href("#av-backdrop")) {}
-                    SVG.use(.href(option.ringRef)) {}
-                }
+                AccountRingSample(token: option.token, ringRef: option.ringRef)
             }
             " "
             span(.class("swatch-name")) { option.label }
             " "
+        }
+    }
+}
+
+/// A ring drawn on the backdrop. A custom property only: the accent, cap and
+/// backdrop come from the form, so the sample follows the preview.
+private struct AccountRingSample: HTML {
+    let token: String
+    let ringRef: String
+
+    var body: some HTML {
+        SVG.svg(
+            .class("swatch-sample"), .custom(name: "viewBox", value: "0 0 64 64"), .ariaHidden,
+            .custom(name: "style", value: "--av-border: var(\(token))")
+        ) {
+            SVG.use(.href("#av-backdrop")) {}
+            SVG.use(.href(ringRef)) {}
         }
     }
 }

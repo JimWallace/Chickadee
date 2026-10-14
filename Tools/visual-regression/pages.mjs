@@ -20,12 +20,14 @@
 // markup is covered by the render tests.
 //
 // The pages also captured at 375px: the ones built from the shared
-// `.section-items` list rows, whose phone layout is a single block of CSS.
+// `.section-items` list rows, whose phone layout is a single block of CSS,
+// and the account page, whose bird card stacks its two columns.
 // Their baselines carry a `--w375` suffix before the colour scheme.
 //
 // Keep names stable — they are the baseline filenames.
 export const PHONE_PAGE_NAMES = [
   "student-dashboard",
+  "student-account",
   "instructor-assignments",
   "instructor-students",
   "instructor-slip-days",

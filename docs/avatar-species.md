@@ -18,7 +18,7 @@ paths, and the sizes decide what reads.
 | Prototype render of five species on the current body | done, see "What the prototype showed" |
 | `AvatarSpecies`, derived from the colourway, and per-species colourways | shipped |
 | Sprite symbols for cardinal, robin, blue jay, starling | shipped |
-| Species in the account-page picker | shipped (A2) |
+| Species in the account-page picker | shipped (A2), then removed: the species is drawn (decision 5) |
 | Trait weights: most birds upright, bare-headed, wearing nothing | shipped |
 | The second set: goldfinch, blackbird, waxwing, junco, song sparrow, dove | shipped (A3), each rendered first |
 | House sparrow | dropped: the song sparrow took its place, see finding 2 |
@@ -157,8 +157,9 @@ one slot, the colourway, and the species follows.
 tuft and tilt slots because an unfilled slot split a class into two visible
 cohorts. A species fill would turn a known bird into a different bird, which
 is the reshuffle that decision 2 forbids. The cohort split that remains, old
-accounts are chickadees and new ones are mixed, is closed by the picker
-(decision 5).
+accounts are chickadees and new ones are mixed, was closed by the picker
+(decision 5). That picker is gone (decision 5, superseded), so the split now
+stays until a student draws a new bird.
 
 Append only. A species is never renamed, reordered or removed.
 
@@ -246,6 +247,25 @@ and a body tone that drops within 1.7 of the darkest dark-mode backdrop
 fails too (finding 4).
 
 ### 5. Species is chosen on the account page, like the backdrop
+
+**Superseded.** The species is drawn, not chosen. With the species are drawn
+the markings (wing), the face (expression), the head (tuft or crest), the
+tilt, the hat (accessory) and the accent. A student may change the colour and
+the ring only. The colour is a colourway **of the student's own species** (8
+for a chickadee, 3 for every other species) plus the backdrop. The ring is any
+open ring. `AvatarCustomization` enforces the species rule, not only the page:
+a colourway of another species is refused with
+`AvatarCustomizationError.colourwayChangesSpecies`, and the spec is not
+changed. `options(for: .cap, species:)` offers exactly
+`AvatarSpecies.colourways`, so the page cannot offer a colourway that the
+chokepoint refuses.
+
+A stored bird is never reshuffled. A student who chose a species with the old
+picker keeps that bird, and an older account that is still a chickadee stays
+one. The account page's "Your bird" card replaced the picker
+(`docs/ui-design.md`, `.bird-card`).
+
+The text below records the decision as it first shipped.
 
 `AvatarCustomizableSlot` gained `cap`, the colourway under its stored key,
 and the picker got a **Species** group above Backdrop and Border: one row per
@@ -385,7 +405,7 @@ chickadee it was.
 ## What not to do
 
 - **Do not fill the species of a stored bird.** A chickadee stays a chickadee
-  until its student chooses otherwise.
+  until its student draws a new bird.
 - **Do not reuse a colourway name across species.** The enum is one; a stored
   raw value must mean one thing.
 - **Do not vary the eye positions or the body circle per species.** Every

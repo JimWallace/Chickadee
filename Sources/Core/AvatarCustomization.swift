@@ -4,7 +4,10 @@
 // (docs/student-wardrobe.md, decision 3). A route never writes a spec field
 // itself: it hands the raw form values here and stores what comes back.
 //
-// Every colourway (which decides the species, docs/avatar-species.md), every
+// The species is drawn, not chosen (docs/avatar-species.md, decision 5, as
+// superseded). A colourway is a shade WITHIN the student's own species, so only
+// the colourways of that species are open: a colourway of another species
+// would change the species, which only hatching a new bird may do. Every
 // backdrop and every starter ring is open to every student, and a seasonal
 // ring is open during its term. Earned and special rings exist and
 // are shown locked: `applying` refuses them until unlocks arrive
@@ -14,7 +17,7 @@
 // change their ring.
 
 /// A slot a student may change on the account page. `cap` is the colourway,
-/// under its stored key; choosing one chooses the species.
+/// under its stored key: a shade of the student's own species.
 public enum AvatarCustomizableSlot: String, CaseIterable, Sendable {
     case backdrop, border, cap
 }
@@ -31,30 +34,38 @@ public enum AvatarCustomizationError: Error, Equatable, Sendable {
     case optionLocked(slot: AvatarCustomizableSlot, value: String)
     /// Course staff wear the staff ring, which they cannot change.
     case staffRingIsFixed
+    /// The colourway belongs to another species. Only a hatch changes the
+    /// species.
+    case colourwayChangesSpecies(value: String)
 }
 
 public enum AvatarCustomization {
 
-    /// The raw values a student may choose for `slot`, in display order.
-    public static func options(for slot: AvatarCustomizableSlot) -> [String] {
+    /// The raw values a student of `species` may choose for `slot`, in display
+    /// order. A colourway is open only within a species, so with no species
+    /// the colourway slot offers nothing.
+    public static func options(for slot: AvatarCustomizableSlot, species: AvatarSpecies? = nil) -> [String] {
         switch slot {
         case .backdrop: AvatarBackdrop.allCases.map(\.rawValue)
         case .border: AvatarBorder.allCases.map(\.rawValue)
-        case .cap: AvatarCap.allCases.map(\.rawValue)
+        case .cap: species?.colourways.map(\.rawValue) ?? []
         }
     }
 
-    /// Whether a student may choose `value` for `slot` during `season`. Every
-    /// colourway and every backdrop is open; a ring is open when it is a
-    /// starter ring, or a seasonal ring whose term is `season`.
+    /// Whether a student of `species` may choose `value` for `slot` during
+    /// `season`. A colourway is open when it belongs to `species`; every
+    /// backdrop is open; a ring is open when it is a starter ring, or a
+    /// seasonal ring whose term is `season`.
     public static func isOpen(
-        _ value: String, for slot: AvatarCustomizableSlot, season: TermSeason = .current()
+        _ value: String, for slot: AvatarCustomizableSlot, species: AvatarSpecies? = nil,
+        season: TermSeason = .current()
     ) -> Bool {
         switch slot {
         case .backdrop:
             return AvatarBackdrop(rawValue: value) != nil
         case .cap:
-            return AvatarCap(rawValue: value) != nil
+            guard let cap = AvatarCap(rawValue: value) else { return false }
+            return AvatarSpecies.of(cap) == species
         case .border:
             guard let border = AvatarBorder(rawValue: value) else { return false }
             switch border.availability {
@@ -68,7 +79,8 @@ public enum AvatarCustomization {
     /// `spec` with each chosen slot set, keyed by slot raw value. A slot not in
     /// `choices` is left as it is. Throws, and changes nothing, if any key is
     /// not a customizable slot, any value is not an option of its slot, a
-    /// chosen ring is locked during `season` (other than the ring the student
+    /// chosen colourway belongs to another species than `spec`'s, a chosen
+    /// ring is locked during `season` (other than the ring the student
     /// already wears), or `isStaff` and a ring was chosen at all.
     public static func applying(
         _ choices: [String: String], to spec: AvatarSpec, isStaff: Bool,
@@ -90,6 +102,9 @@ public enum AvatarCustomization {
             case .cap:
                 guard let cap = AvatarCap(rawValue: value) else {
                     throw AvatarCustomizationError.unknownOption(slot: slot, value: value)
+                }
+                guard isOpen(value, for: .cap, species: spec.species) else {
+                    throw AvatarCustomizationError.colourwayChangesSpecies(value: value)
                 }
                 updated.cap = cap
             case .border:

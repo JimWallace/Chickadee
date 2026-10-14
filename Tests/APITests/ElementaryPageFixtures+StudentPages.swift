@@ -324,7 +324,7 @@ extension ElementaryPageFixtures {
             AccountPage(
                 page: page(currentUser: signedInAdmin), flash: flash, username: "ada",
                 preferredName: staff ? nil : "Ada", identityName: staff ? "ada" : "Ada Lovelace",
-                identitySecondary: staff ? nil : "ada", avatar: avatar(3),
+                identitySecondary: staff ? nil : "ada",
                 avatarPicker: AvatarPickerContext(for: spec, isStaff: staff), avatarInvalid: !staff,
                 studentID: staff ? nil : "20123456", email: staff ? nil : "ada@example.com",
                 enrolledCourses: enrolled, availableCourses: available, error: notices.0, exportStatus: status,
