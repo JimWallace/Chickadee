@@ -161,23 +161,25 @@ daemon directly. The alternative, a test that runs a whole job to look at one
 log line, is what let the nine survive for three sweeps.
 
 **A test that sends a signal to its own process waits for the source to
-register, and the `SIG_IGN` in front of the source is observable only before
-that.** `WorkerCommand.drainOnTerminate` ignores SIGTERM and then resumes a
-`DispatchSource`; the registration happens on the manager queue after
-`resume()`, and a signal that arrives before it is dropped by `SIG_IGN`.
-Measured: a `kill` right after `resume()` was lost 3 of 3 times, one 50 ms later
-was delivered 3 of 3. Wait on the source's registration handler, which
-libdispatch invokes at once when the registration already happened, and send
-the signal from a child process (`#expect(processExitsWith:)`), because the
-disposition is process-wide. The first after pass then reported the deleted
-`signal(SIGTERM, SIG_IGN)` as still surviving: on Linux libdispatch installs
-its own handler when the source registers, so after that the process survives
-with or without the ignore. The ignore covers the window before registration,
-where the default action would stop the runner, and the macOS kqueue path for
-as long as the source lives. The test that kills it sends the signal at once,
-before registration, and asks only that the process is still there: against
-correct code it passes whether or not the signal was early, so it cannot fail
-by timing, it can only miss.
+register, and the `SIG_IGN` in front of the source is not observable from
+there.** `WorkerCommand.drainOnTerminate` ignores SIGTERM and then resumes a
+`DispatchSource`. In a cold process the registration happens on the manager
+queue after `resume()`, and a signal that arrives before it is dropped by
+`SIG_IGN`: measured, a `kill` right after `resume()` was lost 3 of 3 times,
+one 50 ms later was delivered 3 of 3. So a test that wants the drain waits on
+the source's registration handler, which libdispatch invokes at once when the
+registration already happened, and sends the signal from a child process
+(`#expect(processExitsWith:)`), because the disposition is process-wide. The
+deleted `signal(SIGTERM, SIG_IGN)` then survived two after passes, and three
+measurements in the child say why: libdispatch installs its own handler when
+the source registers, so after that the process survives with or without the
+ignore; the child inherits SIGTERM blocked, so an early signal stays pending
+until the source reads it; and the child's manager thread is warm, so the
+source has registered before `drainOnTerminate` returns and no signal can be
+sent into the window at all. The ignore covers that window in a cold runner
+and the macOS kqueue path for as long as the source lives. It is pinned where
+it is observable: `terminateSource(draining:)` hands the source back before it
+is resumed, and the test reads the disposition there.
 
 ## What a finished survivor looks like
 
