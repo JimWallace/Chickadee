@@ -36,6 +36,15 @@ public enum TermSeason: String, Codable, Sendable, CaseIterable {
         }
     }
 
+    /// The English name of the month the term starts in: "January".
+    public var startMonthName: String {
+        switch self {
+        case .winter: "January"
+        case .spring: "May"
+        case .fall: "September"
+        }
+    }
+
     /// The month (1–12) in which the term starts.
     public var startMonth: Int {
         switch self {

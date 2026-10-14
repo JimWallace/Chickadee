@@ -24,15 +24,15 @@ import VaporTesting
 
     // MARK: - Labels
 
-    /// A seasonal ring names its term whether or not it is open: "Maple ·
-    /// Fall" among the open rings, "Maple · Fall term" under "Not open yet".
+    /// A seasonal ring is named by its term whether or not it is open: "Fall"
+    /// among the open rings, "Fall · opens in September" under "Not open yet".
     /// Any other locked ring is earned.
     @Test func aSeasonalRingAlwaysNamesItsTerm() {
-        #expect(AvatarPickerContext.borderLabel(.maple, isLocked: true) == "Maple · Fall term")
-        #expect(AvatarPickerContext.borderLabel(.snowflake, isLocked: true) == "Snowflake · Winter term")
-        #expect(AvatarPickerContext.borderLabel(.blossom, isLocked: true) == "Blossom · Spring term")
+        #expect(AvatarPickerContext.borderLabel(.maple, isLocked: true) == "Fall · opens in September")
+        #expect(AvatarPickerContext.borderLabel(.snowflake, isLocked: true) == "Winter · opens in January")
+        #expect(AvatarPickerContext.borderLabel(.blossom, isLocked: true) == "Spring · opens in May")
         #expect(AvatarPickerContext.borderLabel(.spectrum, isLocked: true) == "Spectrum · earned")
-        #expect(AvatarPickerContext.borderLabel(.maple, isLocked: false) == "Maple · Fall")
+        #expect(AvatarPickerContext.borderLabel(.maple, isLocked: false) == "Fall")
         #expect(AvatarPickerContext.borderLabel(.rainbow, isLocked: false) == "Rainbow")
     }
 
@@ -66,11 +66,11 @@ import VaporTesting
             #expect(html.contains("value=\"\(open.rawValue)\""))
             #expect(html.contains(##"data-av-season="\##(try #require(open.season).rawValue)""##))
             #expect(html.contains(##"name="border" value="\##(open.rawValue)""##))
-            #expect(html.contains("\(open.displayName) · \(try #require(open.season).displayName)<"))
+            #expect(html.contains(">\(try #require(open.season).displayName)<"))
             for ring in Self.outOfSeason {
-                let term = try #require(ring.season).displayName
+                let season = try #require(ring.season)
                 #expect(!html.contains(##"name="border" value="\##(ring.rawValue)""##), "\(ring) is an input")
-                #expect(html.contains("\(ring.displayName) · \(term) term"))
+                #expect(html.contains("\(season.displayName) · opens in \(season.startMonthName)"))
             }
         }
     }
@@ -113,7 +113,8 @@ import VaporTesting
 
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.contains(##"value="\##(worn.rawValue)" data-av-token="--avatar-border-none" checked>"##))
-            #expect(!html.contains("\(worn.displayName) · \(try #require(worn.season).displayName) term"))
+            let wornSeason = try #require(worn.season)
+            #expect(!html.contains("\(wornSeason.displayName) · opens in \(wornSeason.startMonthName)"))
 
             #expect(
                 try await post(["border": worn.rawValue], cookie: cookie, on: app)

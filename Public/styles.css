@@ -295,6 +295,35 @@
     --avatar-rainbow-green: #4FA05A;
     --avatar-rainbow-blue: #3F7FC7;
     --avatar-rainbow-violet: #7B55B0;
+    /* The term rings (snowflake, blossom, maple): one colour ramp per term,
+       eight flat steps from light at the top of the ring to deep at the
+       bottom. No dark mirror, like the rainbow. Every step holds at least
+       1.45:1 against every light backdrop and 1.8:1 against every dark one
+       (AvatarTermRingTests). */
+    --avatar-winter-1: #93BCD8;
+    --avatar-winter-2: #7DADD1;
+    --avatar-winter-3: #679DCA;
+    --avatar-winter-4: #5488BE;
+    --avatar-winter-5: #4471AE;
+    --avatar-winter-6: #3F61A3;
+    --avatar-winter-7: #4C5D9F;
+    --avatar-winter-8: #57599C;
+    --avatar-spring-1: #EFA0B4;
+    --avatar-spring-2: #E8A798;
+    --avatar-spring-3: #DFAA75;
+    --avatar-spring-4: #CDB364;
+    --avatar-spring-5: #B2BD5D;
+    --avatar-spring-6: #92BC58;
+    --avatar-spring-7: #6AA353;
+    --avatar-spring-8: #3F8A4C;
+    --avatar-fall-1: #DCAF30;
+    --avatar-fall-2: #DF9E2F;
+    --avatar-fall-3: #E18C2D;
+    --avatar-fall-4: #D9742E;
+    --avatar-fall-5: #CC592E;
+    --avatar-fall-6: #BB4635;
+    --avatar-fall-7: #A74647;
+    --avatar-fall-8: #934555;
     /* The staff ring: a colour no student ring uses, in a double shape no
        student ring has. The one part of the bird with a dark-mode mirror
        beside the backdrop, because it must read against a dark backdrop. */
@@ -4001,6 +4030,30 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-rainbow-green { fill: var(--avatar-rainbow-green); }
 .av-rainbow-blue { fill: var(--avatar-rainbow-blue); }
 .av-rainbow-violet { fill: var(--avatar-rainbow-violet); }
+.av-winter-1 { fill: var(--avatar-winter-1); }
+.av-winter-2 { fill: var(--avatar-winter-2); }
+.av-winter-3 { fill: var(--avatar-winter-3); }
+.av-winter-4 { fill: var(--avatar-winter-4); }
+.av-winter-5 { fill: var(--avatar-winter-5); }
+.av-winter-6 { fill: var(--avatar-winter-6); }
+.av-winter-7 { fill: var(--avatar-winter-7); }
+.av-winter-8 { fill: var(--avatar-winter-8); }
+.av-spring-1 { fill: var(--avatar-spring-1); }
+.av-spring-2 { fill: var(--avatar-spring-2); }
+.av-spring-3 { fill: var(--avatar-spring-3); }
+.av-spring-4 { fill: var(--avatar-spring-4); }
+.av-spring-5 { fill: var(--avatar-spring-5); }
+.av-spring-6 { fill: var(--avatar-spring-6); }
+.av-spring-7 { fill: var(--avatar-spring-7); }
+.av-spring-8 { fill: var(--avatar-spring-8); }
+.av-fall-1 { fill: var(--avatar-fall-1); }
+.av-fall-2 { fill: var(--avatar-fall-2); }
+.av-fall-3 { fill: var(--avatar-fall-3); }
+.av-fall-4 { fill: var(--avatar-fall-4); }
+.av-fall-5 { fill: var(--avatar-fall-5); }
+.av-fall-6 { fill: var(--avatar-fall-6); }
+.av-fall-7 { fill: var(--avatar-fall-7); }
+.av-fall-8 { fill: var(--avatar-fall-8); }
 .av-spectrum-ember { fill: var(--avatar-accent-ember); }
 .av-spectrum-honey { fill: var(--avatar-accent-honey); }
 .av-spectrum-moss { fill: var(--avatar-accent-moss); }

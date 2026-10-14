@@ -353,7 +353,8 @@ duplicate.
   the sanctioned form); `--av-border` colours a solid
   ring (`.av-ring`) and is the transparent `--avatar-border-none` for every
   other ring.  The patterned rings colour themselves by class
-  (`.av-rainbow-*`, `.av-spectrum-*`, or the student's `.av-accent` and
+  (`.av-rainbow-*`, `.av-spectrum-*`, the term ramps `.av-winter-*`,
+  `.av-spring-*` and `.av-fall-*`, or the student's `.av-accent` and
   `.av-cap`), and the **staff ring** (`.av-staff-ring`, a double ring in a
   colour no student ring uses, with a dark-mode mirror) is drawn from a course
   role, never from a stored choice.  `.avatar` sets `forced-color-adjust:
@@ -483,7 +484,7 @@ duplicate.
   `.fieldset-plain--nested` inside the Colour fieldset, a lighter legend over
   the row.  `.bird-locked` lists
   the rings not open yet under a dashed rule: a dimmed sample, a lock icon and
-  "Name · earned" or "Name · Season term".  They are list items, not disabled
+  "Name · earned", or for a term ring "Winter · opens in January".  They are list items, not disabled
   radios, because nothing about them can be chosen.  The ring a student
   already wears is never listed there.  The live preview (`avatar-picker.js`)
   copies the checked option's tokens onto the hero bird and points its ring
