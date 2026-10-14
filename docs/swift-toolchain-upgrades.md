@@ -257,6 +257,7 @@ The gauntlet:
 | `swift build` | 0 warnings, 0 errors, under warnings-as-errors |
 | `swift test` | 0 failures, and the count matches the count before the move |
 | `scripts/lint.sh` | swift-format produces no diff |
+| `scripts/check-swift-format-config.sh` | each `.swift-format` names every rule of the new swift-format. Set a new rule to `true` or `false` on purpose. |
 | `scripts/swiftlint.sh` | 0 violations, under `--strict` |
 | `scripts/check-guards.sh` | every fixture proves its guard |
 | `scripts/mutation-run.sh --check-build-flags` | the sweep's warning demotion still takes effect |

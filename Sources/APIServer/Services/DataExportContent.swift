@@ -535,52 +535,52 @@ func dataExportJSONEncoder() -> JSONEncoder {
 /// The manifest at the root of the zip, explaining each file.  Plain
 /// Markdown, addressed to the account owner.
 func dataExportReadme(username: String, generatedAt: Date) -> String {
-    return """
-        # Your Chickadee data export
+    """
+    # Your Chickadee data export
 
-        Generated for account **\(username)** on \(iso8601String(generatedAt)) \
-        by Chickadee v\(ChickadeeVersion.current).
+    Generated for account **\(username)** on \(iso8601String(generatedAt)) \
+    by Chickadee v\(ChickadeeVersion.current).
 
-        This archive contains a copy of the personal information Chickadee
-        holds about you, provided in support of your right of access under
-        Ontario's FIPPA and Canada's PIPEDA.
+    This archive contains a copy of the personal information Chickadee
+    holds about you, provided in support of your right of access under
+    Ontario's FIPPA and Canada's PIPEDA.
 
-        ## Contents
+    ## Contents
 
-        - `profile.json` — your account profile: username, names, email,
-          student ID, sign-in provider, account timestamps, and the choices
-          behind your generated avatar. Passwords are stored only as one-way
-          hashes and are never included.
-        - `enrollments.json` — the courses you are enrolled in, with each
-          course's term, your role in each, when you enrolled, and the
-          per-course handle reserved for you.
-        - `submissions.json` — an index of every submission you have made:
-          course, assignment, attempt number, timestamps, and where in this
-          archive to find the uploaded file and its grading results.
-        - `submissions/<id>/` — one folder per submission, holding the file
-          you uploaded (under its stored name) and `results.json`, the test
-          outcomes for that submission. Results reflect what is visible to
-          you at export time: details of hidden (secret-tier) tests, and of
-          release-tier tests before their deadline, are not itemized —
-          matching what you see on the site. Aggregate counts and grades
-          always cover every test.
-        - `grading-adjustments.json` — per-student grading records: deadline
-          extensions, grade overrides, secret-test reveal tokens you have
-          spent, and slip days you have spent (with the deadline each one
-          produced and any staff refund).
-        - `audit-log.json` — activity records involving your account.
-          Entries marked `actor` are actions you performed (with the IP
-          address and browser they came from); entries marked `subject` are
-          actions performed about your account (e.g. being enrolled in a
-          course), without the performer's connection details. Audit records
-          are retained for a limited period, so older activity may no longer
-          exist.
+    - `profile.json` — your account profile: username, names, email,
+      student ID, sign-in provider, account timestamps, and the choices
+      behind your generated avatar. Passwords are stored only as one-way
+      hashes and are never included.
+    - `enrollments.json` — the courses you are enrolled in, with each
+      course's term, your role in each, when you enrolled, and the
+      per-course handle reserved for you.
+    - `submissions.json` — an index of every submission you have made:
+      course, assignment, attempt number, timestamps, and where in this
+      archive to find the uploaded file and its grading results.
+    - `submissions/<id>/` — one folder per submission, holding the file
+      you uploaded (under its stored name) and `results.json`, the test
+      outcomes for that submission. Results reflect what is visible to
+      you at export time: details of hidden (secret-tier) tests, and of
+      release-tier tests before their deadline, are not itemized —
+      matching what you see on the site. Aggregate counts and grades
+      always cover every test.
+    - `grading-adjustments.json` — per-student grading records: deadline
+      extensions, grade overrides, secret-test reveal tokens you have
+      spent, and slip days you have spent (with the deadline each one
+      produced and any staff refund).
+    - `audit-log.json` — activity records involving your account.
+      Entries marked `actor` are actions you performed (with the IP
+      address and browser they came from); entries marked `subject` are
+      actions performed about your account (e.g. being enrolled in a
+      course), without the performer's connection details. Audit records
+      are retained for a limited period, so older activity may no longer
+      exist.
 
-        Not included: uploaded files that have since been purged from the
-        server, and code-execution artifacts that are not retained after
-        grading.
+    Not included: uploaded files that have since been purged from the
+    server, and code-execution artifacts that are not retained after
+    grading.
 
-        If anything here looks wrong, contact your course instructor or the
-        service operator.
-        """
+    If anything here looks wrong, contact your course instructor or the
+    service operator.
+    """
 }

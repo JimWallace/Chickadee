@@ -73,7 +73,7 @@ enum AssignmentSeedStore {
     /// and returns them as a lowercase hex string (length = 2 * seedByteCount).
     static func generateSeedHex() -> String {
         var rng = SystemRandomNumberGenerator()
-        var bytes = [UInt8]()
+        var bytes: [UInt8] = []
         bytes.reserveCapacity(seedByteCount)
         // Each call produces 8 random bytes; pull enough to fill the buffer.
         while bytes.count < seedByteCount {

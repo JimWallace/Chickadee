@@ -237,7 +237,9 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         while index != utf8.endIndex {
             let next = utf8.index(after: index)
             switch utf8[index] {
-            case UInt8(ascii: "/"): baseStart = next; lastDot = nil
+            case UInt8(ascii: "/"):
+                baseStart = next
+                lastDot = nil
             case UInt8(ascii: "."): lastDot = index
             default: break
             }

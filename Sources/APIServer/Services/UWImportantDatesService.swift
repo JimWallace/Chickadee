@@ -104,11 +104,10 @@ func extractICSSummary(from block: String) -> String? {
             }
             inSummary = true
         } else if inSummary {
-            if raw.hasPrefix(" ") || raw.hasPrefix("\t") {
-                accumulated += raw.dropFirst()
-            } else {
+            guard raw.hasPrefix(" ") || raw.hasPrefix("\t") else {
                 break
             }
+            accumulated += raw.dropFirst()
         }
     }
     let trimmed = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)

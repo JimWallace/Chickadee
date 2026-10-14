@@ -121,7 +121,10 @@ struct DeleteSuiteItemTool: ContentTool {
             assignmentClosed: finalized.assignmentClosed)
     }
 
-    private struct Target { let kind: String; let id: String }
+    private struct Target {
+        let kind: String
+        let id: String
+    }
 
     /// Validates that exactly one of script / familyID / check is set and
     /// returns the (kind, id) to remove.
