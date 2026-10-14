@@ -258,14 +258,15 @@ jobs:
           done
           docker history --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" | grep -E 'COPY .*Public' || true
           rest="$(docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" \
-            | grep -F -- '--exclude=jupyterlite' | grep -F 'COPY' | cut -f1 | head -n 1 || true)"
+            | grep -E $'\tCOPY (--exclude=[^ ]+ )?Public \\./Public' | cut -f1 | head -n 1 || true)"
           echo "Rest of Public layer: ${rest:-not found}"
           case "$rest" in
             *GB|[0-9][0-9][0-9]MB|[0-9][0-9][0-9].*MB)
               echo "::error::The Public layer without JupyterLite is $rest. The exclude does not match."
               exit 1 ;;
             ""|0B)
-              echo "::warning::docker history shows no sized COPY layer for --exclude=jupyterlite, so the split was not checked." ;;
+              echo "::error::docker history shows no sized layer for the rest of Public, so the split cannot be checked."
+              exit 1 ;;
           esac
 
       # THE STEP THAT WOULD HAVE CAUGHT v0.5.65.
