@@ -46,18 +46,7 @@ extension Response {
     /// of the ETag, so unchanged rows get the same ETag on every poll.
     static func pollFragment(html: String, csrfToken: String? = nil, for req: Request) -> Response {
         let etag = Self.weakETag(for: html, ignoring: csrfToken)
-
-        // A conditional request lists one or more candidates; `*` matches any
-        // existing representation.
-        let candidates = req.headers[.ifNoneMatch]
-            .flatMap { $0.split(separator: ",") }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        if candidates.contains(etag) || candidates.contains("*") {
-            var headers = HTTPHeaders()
-            headers.replaceOrAdd(name: .eTag, value: etag)
-            headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
-            return Response(status: .notModified, headers: headers)
-        }
+        if let notModified = notModified(etag: etag, for: req) { return notModified }
 
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: "text/html; charset=utf-8")
@@ -66,6 +55,21 @@ extension Response {
         // expected to come back with If-None-Match, which is the whole point.
         headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
         return Response(status: .ok, headers: headers, body: .init(string: html))
+    }
+
+    /// A 304 when the request already holds `etag`, else nil. Shared by the
+    /// HTML fragments and the class composite's JSON (`conditionalJSON`).
+    static func notModified(etag: String, for req: Request) -> Response? {
+        // A conditional request lists one or more candidates; `*` matches any
+        // existing representation.
+        let candidates = req.headers[.ifNoneMatch]
+            .flatMap { $0.split(separator: ",") }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard candidates.contains(etag) || candidates.contains("*") else { return nil }
+        var headers = HTTPHeaders()
+        headers.replaceOrAdd(name: .eTag, value: etag)
+        headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
+        return Response(status: .notModified, headers: headers)
     }
 
     static func weakETag(for html: String, ignoring csrfToken: String? = nil) -> String {

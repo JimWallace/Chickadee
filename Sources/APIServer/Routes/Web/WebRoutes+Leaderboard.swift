@@ -38,8 +38,7 @@ extension WebRoutes {
         if req.query[String.self, at: "present"] == "1" {
             // Present mode is for the room, and only staff start it.
             guard isStaff else { throw Abort(.notFound) }
-            return try await leaderboardPresentPage(
-                req: req, user: user, setup: setup, activity: activity)
+            return try await leaderboardPresentPage(req: req, user: user, setup: setup, activity: activity)
         }
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
@@ -59,13 +58,11 @@ extension WebRoutes {
         let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
         let board =
             showsMetricBoard
-            ? try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: showingAll, on: req.db)
+            ? try await buildLeaderboard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : LeaderboardBoard.empty
         let standingsBoard =
             showsStandings
-            ? try await buildStandingsBoard(
-                setup: setup, reader: reader, showAll: showingAll, on: req.db)
+            ? try await buildStandingsBoard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
@@ -123,6 +120,10 @@ extension WebRoutes {
                 hasUnion: union != nil,
                 union: union,
                 showsComposite: showsComposite,
+                // The composite is for the projector: only staff read its board.
+                compositeBoard: isStaff
+                    ? try await CompositeBoardPresentation.build(
+                        setup: setup, activity: activity, assignment: assignment, on: req.db) : nil,
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page

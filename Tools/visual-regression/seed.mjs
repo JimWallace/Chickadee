@@ -160,6 +160,114 @@ const GRADED_OUTCOMES = [
   }),
 ];
 
+// A class composite (docs/class-composite.md): a 4 × 3 grid of still 4 × 4
+// gray tiles, so the leaderboard draws one tile and no playback controls,
+// and nothing on the captured page moves.
+const COMPOSITE_MANIFEST = JSON.stringify({
+  schemaVersion: 1,
+  requiredFiles: [],
+  testSuites: [{ tier: "public", script: "test_tile.py", points: 1 }],
+  timeLimitSeconds: 10,
+  makefile: null,
+  language: "python",
+  activity: {
+    kind: "classComposite",
+    composite: {
+      compositor: "tile",
+      layout: { cols: 4, rows: 3 },
+      contribution: { w: 4, h: 4, frames: 1, format: "gray8" },
+      dealOrder: "rowMajor",
+    },
+  },
+});
+
+async function buildCompositeZip() {
+  const zip = new JSZip();
+  zip.file("assignment.ipynb", NOTEBOOK_JSON);
+  zip.file("test_tile.py", 'print("test ok")\n');
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+// A fixed diagonal gradient, so the baseline shows the tile's pixels and its
+// place in the grid.
+const COMPOSITE_PIXELS = Buffer.from(
+  Array.from({ length: 16 }, (_, i) => ((i % 4) + Math.floor(i / 4)) * 36)
+).toString("base64");
+
+/// Uploads, publishes and opens the composite assignment. Returns its setup ID.
+async function seedCompositeAssignment(instr, courseID) {
+  const zipBuf = await buildCompositeZip();
+  let csrf = await csrfFrom(instr, "/");
+  const setupRes = await expectOK(
+    "upload composite setup",
+    instr.post("/api/v1/testsetups", {
+      multipart: {
+        manifest: COMPOSITE_MANIFEST,
+        courseID,
+        files: { name: "setup.zip", mimeType: "application/zip", buffer: zipBuf },
+      },
+      headers: { "x-csrf-token": csrf },
+    }),
+    [200, 201]
+  );
+  const setupID = JSON.parse(await setupRes.text()).testSetupID;
+  if (!setupID) throw new Error("no testSetupID in composite upload response");
+  csrf = await csrfFrom(instr, "/instructor");
+  const publishRes = await expectOK(
+    "publish composite assignment",
+    instr.post("/instructor", {
+      form: { testSetupID: setupID, title: "Class GPU", dueAt: ASSIGNMENT.dueAt, _csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+      maxRedirects: 0,
+    }),
+    [302, 303]
+  );
+  const pubLoc = publishRes.headers()["location"] || "";
+  const assignmentID = (pubLoc.match(/\/instructor\/([A-Za-z0-9_-]+)\/edit/) || [])[1];
+  if (!assignmentID) throw new Error(`composite publish did not redirect to the editor (location: "${pubLoc}")`);
+  csrf = await csrfFrom(instr, "/instructor");
+  await expectOK(
+    "open composite assignment",
+    instr.post(`/instructor/${assignmentID}/status`, {
+      form: { status: "open", _csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+      maxRedirects: 0,
+    }),
+    [302, 303]
+  );
+  return setupID;
+}
+
+/// The student opens the composite, which deals them slot 0, and posts one
+/// passing tile. Returns the graded submission's path.
+async function seedCompositeContribution(stud, setupID) {
+  await expectOK("open composite notebook", stud.get(`/testsetups/${setupID}/notebook`), [200]);
+  const outcome = {
+    ...gradedOutcome("test_tile.py", "public", "pass", { points: 1, shortResult: "tile ok" }),
+    composite: { w: 4, h: 4, frames: 1, format: "gray8", data: COMPOSITE_PIXELS },
+  };
+  const csrf = await csrfFrom(stud, `/testsetups/${setupID}/submit`);
+  const res = await expectOK(
+    "composite browser submission",
+    stud.post("/api/v1/submissions/browser-result", {
+      multipart: {
+        collection: JSON.stringify(gradedCollection(setupID, [outcome])),
+        testSetupID: setupID,
+        notebook: {
+          name: "assignment.ipynb",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from(NOTEBOOK_JSON),
+        },
+      },
+      headers: { "x-csrf-token": csrf },
+    }),
+    [200, 201]
+  );
+  const id = JSON.parse(await res.text()).submissionID;
+  if (!id) throw new Error("no submissionID in composite browser-result response");
+  return `/submissions/${id}`;
+}
+
 export async function seed(baseURL) {
   const instr = await pwRequest.newContext({ baseURL });
   let csrf = await csrfFrom(instr, "/register");
@@ -252,6 +360,8 @@ export async function seed(baseURL) {
     }),
     [200, 302, 303]
   );
+
+  const compositeSetupID = await seedCompositeAssignment(instr, courseID);
 
   const instructorState = await instr.storageState();
   await instr.dispose();
@@ -365,11 +475,13 @@ export async function seed(baseURL) {
   if (!gradedID) throw new Error("no submissionID in browser-result response");
   const gradedResultsPath = `/submissions/${gradedID}`;
 
+  const compositeResultsPath = await seedCompositeContribution(stud, compositeSetupID);
+
   const studentState = await stud.storageState();
   await stud.dispose();
 
   return {
     setupID, assignmentID, courseID, instructorState, studentState, resultsPath,
-    gradedResultsPath,
+    gradedResultsPath, compositeSetupID, compositeResultsPath,
   };
 }

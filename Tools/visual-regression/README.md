@@ -18,7 +18,7 @@ One representative per page-anatomy family (see "Page archetypes" in
 `submission-pending`, `submission-graded`, `student-account`, `error-404`,
 `instructor-assignments`, `instructor-students`, `instructor-slip-days`,
 `admin-dashboard`, `admin-users`, `admin-alerts`, `admin-course-new`,
-`admin-course` — each
+`admin-course`, `composite-leaderboard`, `composite-tile` — each
 as `--light` and `--dark`. Page names are the baseline filenames; the list
 lives in `pages.mjs`, shared by the capture and the a11y scan so the two
 cannot drift. (`admin-audit` is deliberately excluded: its rows are

@@ -52,6 +52,11 @@ struct LeaderboardPage: HTML {
                         }
                     }
                 }
+                // The canvas stays outside the polled region: a swap would
+                // replace it. It polls its own JSON through table-poll.js.
+                if let composite = board.compositeBoard {
+                    CompositeStage(stage: composite.stage)
+                }
                 div(.id("activity-results")) {
                     LeaderboardBody(board: board)
                 }
@@ -65,9 +70,13 @@ struct LeaderboardPage: HTML {
             if board.showFilter {
                 script(.src(page.asset("/list-filter.js"))) {}
             }
-            // The results region refreshes only through table-poll.js, which
-            // the base layout does not load.
-            if board.pollsLive {
+            if board.compositeBoard != nil {
+                script(.src(page.asset("/class-composite-core.js"))) {}
+                script(.src(page.asset("/class-composite.js"))) {}
+            }
+            // The results region and the composite canvas refresh only
+            // through table-poll.js, which the base layout does not load.
+            if board.pollsLive || board.compositeBoard != nil {
                 script(.src(page.asset("/table-poll.js"))) {}
             }
         }
@@ -116,8 +125,8 @@ struct LeaderboardPage: HTML {
             }
         } else if board.showsComposite {
             p(.class("section-intro")) {
-                "Each student renders one slot of a shared image. Nobody is ranked, and the image never "
-                    + "changes a grade."
+                "Each student renders one slot of a shared image. The slot holders are listed under it. "
+                    + "The image never changes a grade."
             }
         } else if board.showsStandings {
             p(.class("section-intro")) {

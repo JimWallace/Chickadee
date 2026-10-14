@@ -514,6 +514,9 @@ struct SubmissionContext: Encodable {
     /// answers (docs/ai-assisted-feedback.md), as paragraphs; empty when
     /// there is none.
     var releasedFeedback: [String] = []
+    /// This submission's contribution to a class composite
+    /// (docs/class-composite.md); nil on every other assignment.
+    var compositeTile: CompositeTilePanel?
 }
 
 /// The repository and commit a GitHub submission came from
