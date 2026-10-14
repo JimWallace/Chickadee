@@ -3,9 +3,8 @@ import PackageDescription
 
 let strictWarnings: [SwiftSetting] = [.treatAllWarnings(as: .error)]
 
-// Upcoming language features that the product targets use now. Each one is
-// the default in a future language mode. The test targets do not use them
-// yet, because their fix-its change existing tests.
+// Upcoming language features that every target uses now. Each one is the
+// default in a future language mode.
 //
 // - ExistentialAny: an existential type is written `any P`.
 // - MemberImportVisibility: a file uses only the members of the modules that
@@ -245,7 +244,7 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Tests/TestSupport",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - Tests
@@ -256,7 +255,7 @@ let package = Package(
                 .target(name: "ChickadeeTestSupport"),
             ],
             path: "Tests/CoreTests",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
         .testTarget(
             name: "APITests",
@@ -269,7 +268,7 @@ let package = Package(
                 .product(name: "Elementary", package: "elementary"),
             ],
             path: "Tests/APITests",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
         .testTarget(
             name: "LoadTestTests",
@@ -278,7 +277,7 @@ let package = Package(
                 .target(name: "Core"),
             ],
             path: "Tests/LoadTestTests",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
         .testTarget(
             name: "WorkerTests",
@@ -293,7 +292,7 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Tests/WorkerTests",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
     ]
 )

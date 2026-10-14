@@ -4,6 +4,8 @@
 // fresh random salt. The ETag leaves the token out, so a poll of unchanged rows
 // answers 304 instead of repainting the table every five seconds.
 
+import Core
+import Fluent
 import Foundation
 import Testing
 import VaporTesting

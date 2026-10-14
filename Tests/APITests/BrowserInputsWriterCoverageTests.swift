@@ -58,13 +58,7 @@ import Testing
             index = source.index(after: index)
         }
         #expect(depth == 0, "\(name)'s literal is never closed")
-        let pattern = try NSRegularExpression(pattern: #"([a-zA-Z_][a-zA-Z0-9_]*)\s*:"#)
-        let range = NSRange(body.startIndex..., in: body)
-        return Set(
-            pattern.matches(in: body, range: range).compactMap { match -> String? in
-                guard let key = Range(match.range(at: 1), in: body) else { return nil }
-                return String(body[key])
-            })
+        return Set(body.matches(of: /([a-zA-Z_][a-zA-Z0-9_]*)\s*:/).map { String($0.output.1) })
     }
 
     /// The languages a browser can grade: exactly those with a vendored editor

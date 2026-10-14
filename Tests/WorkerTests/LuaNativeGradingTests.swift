@@ -19,6 +19,7 @@
 // Skipped silently when `lua` is absent, matching the conformance matrix.
 
 import ChickadeeTestSupport
+import Core
 import Foundation
 import RunnerCore
 import Testing

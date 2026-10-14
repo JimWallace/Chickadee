@@ -9,9 +9,9 @@ import VaporTesting
 
 @Suite(.serialized) final class NotebookWebRoutesTests {
 
-    private var tmpRoot: String!
-    private var tmpDir: String!
-    private var publicDir: String!
+    private let tmpRoot: String
+    private let tmpDir: String
+    private let publicDir: String
 
     let app: Application
 
@@ -320,13 +320,11 @@ import VaporTesting
                     // working-copy mtime so notebook.js can force-reseed when the
                     // server overwrites the file (instructor "Reset" action).
                     // Extract the value and assert it's a positive integer.
-                    let mtimeRegex = try NSRegularExpression(pattern: #"data-working-copy-mtime="(\d+)""#)
-                    let nsr = NSRange(html.startIndex..., in: html)
-                    guard let match = mtimeRegex.firstMatch(in: html, range: nsr),
-                        let valueRange = Range(match.range(at: 1), in: html),
-                        let mtime = Int(html[valueRange])
+                    guard let match = html.firstMatch(of: /data-working-copy-mtime="(\d+)"/),
+                        let mtime = Int(match.output.1)
                     else {
-                        Issue.record("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
+                        Issue.record("Expected data-working-copy-mtime=\"<int>\" attribute on iframe")
+                        return
                     }
                     #expect(mtime > 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
                 })
@@ -698,7 +696,7 @@ import VaporTesting
         afterResponse: (TestResponse) throws -> Void
     ) async throws {
         let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
-        let params = [file.map { "file=\($0)" }, view.map { "view=\($0)" }].compactMap { $0 }
+        let params = [file.map { "file=\($0)" }, view.map { "view=\($0)" }].compactMap(\.self)
         let query = params.isEmpty ? "" : "?" + params.joined(separator: "&")
         try await app.asyncTest(
             .POST, "/testsetups/\(setupID)/notebook/save\(query)",
@@ -1497,7 +1495,7 @@ import VaporTesting
             // Simulate the student having clobbered their own working copy.
             let copyPath = workingCopyPath(setupID: setupID, userID: userID)
             try FileManager.default.createDirectory(
-                atPath: (copyPath as NSString).deletingLastPathComponent,
+                atPath: URL(fileURLWithPath: copyPath).deletingLastPathComponent().path,
                 withIntermediateDirectories: true)
             try Data(notebookJSON(markdown: "Broken edits").utf8)
                 .write(to: URL(fileURLWithPath: copyPath))
@@ -1547,7 +1545,7 @@ import VaporTesting
             // Simulate the student having clobbered their own working copy.
             let copyPath = workingCopyPath(setupID: setupID, userID: userID)
             try FileManager.default.createDirectory(
-                atPath: (copyPath as NSString).deletingLastPathComponent,
+                atPath: URL(fileURLWithPath: copyPath).deletingLastPathComponent().path,
                 withIntermediateDirectories: true)
             try Data(notebookJSON(markdown: "Broken edits").utf8)
                 .write(to: URL(fileURLWithPath: copyPath))
@@ -1697,7 +1695,7 @@ import VaporTesting
 
             let workingCopy = workingCopyPath(setupID: setupID, userID: try user.requireID())
             try FileManager.default.createDirectory(
-                atPath: (workingCopy as NSString).deletingLastPathComponent,
+                atPath: URL(fileURLWithPath: workingCopy).deletingLastPathComponent().path,
                 withIntermediateDirectories: true
             )
             try Data(notebookJSON(markdown: "Saved working copy").utf8)
@@ -1741,7 +1739,7 @@ import VaporTesting
             // the submission is written to a separate view-{submissionID}.ipynb path.
             let staleCopyPath = workingCopyPath(setupID: setupID, userID: userID)
             try FileManager.default.createDirectory(
-                atPath: (staleCopyPath as NSString).deletingLastPathComponent,
+                atPath: URL(fileURLWithPath: staleCopyPath).deletingLastPathComponent().path,
                 withIntermediateDirectories: true
             )
             try Data(notebookJSON(markdown: "Stale working copy").utf8)
@@ -1819,7 +1817,8 @@ import VaporTesting
                     #expect(res.status == .ok)
                 })
 
-            let studentDir = (workingCopyPath(setupID: setupID, userID: userID) as NSString).deletingLastPathComponent
+            let studentDir = URL(fileURLWithPath: workingCopyPath(setupID: setupID, userID: userID))
+                .deletingLastPathComponent().path
             let supportPath = studentDir + "/bmi.py"
             #expect(FileManager.default.fileExists(atPath: supportPath))
             #expect(try FileManager.default.destinationOfSymbolicLink(atPath: supportPath) == sharedDir + "bmi.py")
@@ -1862,7 +1861,7 @@ import VaporTesting
 
             let workingCopy = workingCopyPath(setupID: setupID, userID: userID)
             try FileManager.default.createDirectory(
-                atPath: (workingCopy as NSString).deletingLastPathComponent,
+                atPath: URL(fileURLWithPath: workingCopy).deletingLastPathComponent().path,
                 withIntermediateDirectories: true
             )
             try Data("not json".utf8).write(to: URL(fileURLWithPath: workingCopy))

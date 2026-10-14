@@ -34,13 +34,13 @@ import Testing
     /// Every renderer, named. Adding one here is the whole cost of keeping a new
     /// language honest about this rule.
     private static let renderers: [(String, @Sendable (JSONValue) -> String)] = [
-        ("python", { $0.pythonLiteral }),
-        ("r", { $0.rLiteral }),
-        ("lua", { $0.luaLiteral }),
-        ("octave", { $0.octaveLiteral }),
-        ("cpp", { $0.cppLiteral }),
-        ("racket", { $0.racketLiteral }),
-        ("java", { $0.javaLiteral }),
+        ("python", \.pythonLiteral),
+        ("r", \.rLiteral),
+        ("lua", \.luaLiteral),
+        ("octave", \.octaveLiteral),
+        ("cpp", \.cppLiteral),
+        ("racket", \.racketLiteral),
+        ("java", \.javaLiteral),
     ]
 
     /// The covered half, kept so the table states the whole rule rather than

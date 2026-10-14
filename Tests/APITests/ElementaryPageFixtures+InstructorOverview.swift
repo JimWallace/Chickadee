@@ -3,6 +3,7 @@
 // The instructor Overview, Activity and AI agents tabs.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

@@ -1317,7 +1317,7 @@ private actor DaemonShutdownFlag {
 /// stderr, so an ignored cancellation produces evidence instead of a
 /// silent still-running task.
 private func awaitCancelledDaemon(
-    _ task: Task<Void, Error>,
+    _ task: Task<Void, any Error>,
     timeoutSeconds: TimeInterval = 30
 ) async -> Bool {
     await WedgeWatchdog.track {
@@ -1351,7 +1351,7 @@ private func awaitCancelledDaemon(
 
 private func waitUntil(
     timeoutSeconds: TimeInterval = 10,
-    pollIntervalNanos: UInt64 = 50_000_000,
+    pollInterval: Duration = .milliseconds(50),
     condition: @escaping @Sendable () async -> Bool
 ) async -> Bool {
     let deadline = Date().addingTimeInterval(timeoutSeconds)
@@ -1363,7 +1363,7 @@ private func waitUntil(
         if await condition() {
             return true
         }
-        try? await Task.sleep(nanoseconds: pollIntervalNanos)
+        try? await Task.sleep(for: pollInterval)
     }
     return await condition()
 }

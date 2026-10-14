@@ -27,10 +27,9 @@ import VaporTesting
         courseID: UUID, sectionID: UUID? = nil, title: String = "Reading",
         kind: ContentItemKind = .document, isPublished: Bool = true
     ) async throws -> APICourseContentItem {
-        let item = APICourseContentItem(
+        APICourseContentItem(
             courseID: courseID, sectionID: sectionID, sortOrder: 1, title: title, kind: kind,
             isPublished: isPublished)
-        return item
     }
 
     /// The text of the first `<tr …data-attr="value"…>` row, tag open to `</tr>`.

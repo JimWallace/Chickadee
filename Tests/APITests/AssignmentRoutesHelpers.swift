@@ -319,7 +319,7 @@ func arSeedStudentWorkingCopy(
     let path =
         app.directory.publicDirectory
         + "jupyterlite/files/users/\(userID.uuidString.lowercased())/\(setupID)/assignment.ipynb"
-    let dir = (path as NSString).deletingLastPathComponent
+    let dir = URL(fileURLWithPath: path).deletingLastPathComponent().path
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     try bytes.write(to: URL(fileURLWithPath: path))
     return path

@@ -4,6 +4,7 @@
 // information (#2399): it takes the alert modifier only when a test failed,
 // so a clean submission does not show a red 0.
 
+import Fluent
 import Testing
 import VaporTesting
 

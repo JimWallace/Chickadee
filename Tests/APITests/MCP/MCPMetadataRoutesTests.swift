@@ -17,14 +17,13 @@ import VaporTesting
     ) async throws -> Application {
         let authority = try await MCPTokenAuthority.make(
             privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "mcp-1")
-        let app = try await makeTestingApplication { app in
+        return try await makeTestingApplication { app in
             app.mcpTokenAuthority = authority
             try app.register(
                 collection: MCPMetadataRoutes(
                     endpoints: MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: issuer),
                     advertisedScopes: advertisedScopes))
         }
-        return app
     }
 
     private func scopesSupported(_ res: TestResponse) -> [String]? {
@@ -43,7 +42,7 @@ import VaporTesting
                 #expect(body.contains("\"authorization_servers\""))
                 #expect(body.contains("chickadee.example"))
                 #expect(
-                    self.scopesSupported(res) == ["content:read", "content:write", "feedback:read", "feedback:write"])
+                    scopesSupported(res) == ["content:read", "content:write", "feedback:read", "feedback:write"])
             }
         }
     }
@@ -55,7 +54,7 @@ import VaporTesting
         try await withApp(try await makeApp(advertisedScopes: MCPMode.readOnly.advertisedScopes)) { app in
             try await app.asyncTest(.GET, "/.well-known/oauth-protected-resource") { res async in
                 #expect(res.status == .ok)
-                #expect(self.scopesSupported(res) == ["content:read", "feedback:read"])
+                #expect(scopesSupported(res) == ["content:read", "feedback:read"])
             }
         }
     }
@@ -90,7 +89,7 @@ import VaporTesting
         try await withApp(try await makeApp(advertisedScopes: MCPMode.readOnly.advertisedScopes)) { app in
             try await app.asyncTest(.GET, "/.well-known/oauth-authorization-server") { res async in
                 #expect(res.status == .ok)
-                #expect(self.scopesSupported(res) == ["content:read", "feedback:read"])
+                #expect(scopesSupported(res) == ["content:read", "feedback:read"])
             }
         }
     }

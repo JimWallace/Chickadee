@@ -6,6 +6,7 @@
 // `Tools/runner-support/test_runtime.R` is a byte-for-byte mirror, so it cannot
 // interpolate the Swift constant — which is exactly why they need a test.
 
+import ChickadeeTestSupport
 import Foundation
 import RunnerCore
 import Testing
@@ -47,15 +48,14 @@ import Testing
             "summary(df)",
             "hist(df$age)",
         ])
-        let regex = try NSRegularExpression(pattern: rCellBoundaryMarkerPattern, options: [])
+        let regex = try Regex(rCellBoundaryMarkerPattern)
         let markerLines = extracted.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { $0.hasPrefix("# ---- chickadee") }
         #expect(markerLines.count == 3)
         for line in markerLines {
             let text = String(line)
-            let range = NSRange(text.startIndex..., in: text)
             #expect(
-                regex.firstMatch(in: text, options: [], range: range) != nil,
+                text.firstMatch(of: regex) != nil,
                 "runtime pattern does not match emitted marker: \(text)")
         }
     }

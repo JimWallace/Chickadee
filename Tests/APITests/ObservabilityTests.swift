@@ -1,6 +1,7 @@
 import Fluent
 import Foundation
 import Logging
+import NIOFoundationCompat
 import Testing
 import VaporTesting
 

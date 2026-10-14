@@ -26,7 +26,7 @@ import VaporTesting
         for path in [Self.kernelLibraryPath, Self.otherLibraryPath] {
             let absolute = publicDir + path.dropFirst()
             try FileManager.default.createDirectory(
-                atPath: (absolute as NSString).deletingLastPathComponent,
+                atPath: URL(fileURLWithPath: absolute).deletingLastPathComponent().path,
                 withIntermediateDirectories: true)
             try library.write(toFile: absolute, atomically: true, encoding: .utf8)
         }

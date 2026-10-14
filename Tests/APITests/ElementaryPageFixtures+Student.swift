@@ -3,6 +3,7 @@
 // The student-facing pages and the error page: one render per branch.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

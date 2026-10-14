@@ -13,8 +13,7 @@ import VaporTesting
 @Suite struct NotebookScanRoutesTests {
 
     private func makeApp() async throws -> Application {
-        let app = try await makeTestApp(prefix: "chickadee-nbscan")
-        return app
+        try await makeTestApp(prefix: "chickadee-nbscan")
     }
 
     // MARK: - Auth helpers

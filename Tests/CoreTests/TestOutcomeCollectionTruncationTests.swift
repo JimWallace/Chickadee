@@ -22,7 +22,7 @@ import Testing
                 testName: "test_\(index)",
                 testClass: nil,
                 tier: .pub,
-                status: index % 2 == 0 ? .pass : .fail,
+                status: index.isMultiple(of: 2) ? .pass : .fail,
                 shortResult: "short \(index)",
                 longResult: longResult,
                 executionTimeMs: 5,

@@ -72,7 +72,7 @@ import Testing
 
     private func listFiles() throws -> Set<String> {
         let items = try fm.contentsOfDirectory(at: workDir, includingPropertiesForKeys: nil)
-        return Set(items.map { $0.lastPathComponent })
+        return Set(items.map(\.lastPathComponent))
     }
 
     /// Simulates the runner's working-directory setup:
@@ -135,7 +135,7 @@ import Testing
             if ext == "py" {
                 try submissionFilename.write(to: hintURL, atomically: true, encoding: .utf8)
             } else if ext == "ipynb" {
-                let pyName = (submissionFilename as NSString).deletingPathExtension + ".py"
+                let pyName = URL(fileURLWithPath: submissionFilename).deletingPathExtension().lastPathComponent + ".py"
                 try pyName.write(to: hintURL, atomically: true, encoding: .utf8)
             }
         }

@@ -2,6 +2,7 @@
 //
 // A once-migrated SQLite database that each test application gets a copy of.
 
+import Fluent
 import Foundation
 import Synchronization
 import VaporTesting
@@ -67,7 +68,7 @@ private actor MigratedSQLiteTemplate {
     /// which is also three times the one-off migration cost. Assigning the task
     /// before the first suspension closes the window; later callers await the
     /// same task and get the same path.
-    private var buildTask: Task<String, Error>?
+    private var buildTask: Task<String, any Error>?
 
     /// Path to the template database, building it on first call.
     func templatePath(logLevel: Logger.Level) async throws -> String {

@@ -16,6 +16,7 @@
 // names a suite, and this is what stops the names going stale silently.
 
 import ChickadeeTestSupport
+import Core
 import Fluent
 import Foundation
 import SQLKit
@@ -71,17 +72,12 @@ import Vapor
     /// suite in the same file), never too narrow, and too coarse fails safe —
     /// it demands a declaration that costs a fresh schema.
     static func schemaMutatingSuites(in source: String) -> Set<String> {
-        let declaration = try? NSRegularExpression(
-            pattern: #"\b(?:struct|final class|class|enum|actor)\s+([A-Za-z_]\w*)"#)
+        let declaration = /\b(?:struct|final class|class|enum|actor)\s+([A-Za-z_]\w*)/.wordBoundaryKind(.simple)
         var current: String?
         var found: Set<String> = []
         for line in source.components(separatedBy: "\n") {
-            if let declaration,
-                let match = declaration.firstMatch(
-                    in: line, options: [], range: NSRange(line.startIndex..., in: line)),
-                let range = Range(match.range(at: 1), in: line)
-            {
-                current = String(line[range])
+            if let match = line.firstMatch(of: declaration) {
+                current = String(match.output.1)
             }
             let executesRawDDL =
                 line.contains(".raw(")
@@ -251,7 +247,7 @@ import Vapor
 
     private func rowCount(_ table: String, on app: Application) async throws -> Int {
         struct CountRow: Decodable { let count: Int }
-        let sql = try #require(app.db as? SQLDatabase)
+        let sql = try #require(app.db as? any SQLDatabase)
         return try await sql.raw("SELECT count(*)::int AS count FROM \(unsafeRaw: table)")
             .first(decoding: CountRow.self)?.count ?? -1
     }
@@ -301,7 +297,7 @@ import Vapor
             let first = try await pool.checkOut(settings: settings, logLevel: .warning)
             var migrationsBefore = 0
             try await withSchemaConnection(first.schemaName, settings: settings) { app in
-                migrationsBefore = try await self.rowCount("_fluent_migrations", on: app)
+                migrationsBefore = try await rowCount("_fluent_migrations", on: app)
                 try await APICourse(code: "POOL101", name: "Pool", enrollmentMode: .open)
                     .save(on: app.db)
             }
@@ -312,8 +308,8 @@ import Vapor
             #expect(second.schemaName == first.schemaName)  // recycled, not rebuilt
 
             try await withSchemaConnection(second.schemaName, settings: settings) { app in
-                let courses = try await self.rowCount("courses", on: app)
-                let migrations = try await self.rowCount("_fluent_migrations", on: app)
+                let courses = try await rowCount("courses", on: app)
+                let migrations = try await rowCount("_fluent_migrations", on: app)
                 #expect(courses == 0)
                 #expect(migrations == migrationsBefore)
             }
@@ -338,7 +334,7 @@ import Vapor
             try await withSchemaConnection(lease.schemaName, settings: settings) { app in
                 // Stands in for the damage the declared suites would do: any
                 // change to the schema's shape or its migration log.
-                let sql = try #require(app.db as? SQLDatabase)
+                let sql = try #require(app.db as? any SQLDatabase)
                 try await sql.raw("CREATE TABLE pool_guard_probe (id text primary key)").run()
             }
 

@@ -6,6 +6,7 @@
 // but the verdict, `.full` is a pass-through.
 
 import Core
+import Foundation
 import Testing
 
 @testable import APIServer

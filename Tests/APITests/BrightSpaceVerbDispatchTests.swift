@@ -27,15 +27,15 @@ private final class CapturingClient: Client, Sendable {
         let url: String
     }
 
-    let eventLoop: EventLoop
+    let eventLoop: any EventLoop
     let sent: NIOLockedValueBox<[Sent]>
 
-    init(eventLoop: EventLoop, sent: NIOLockedValueBox<[Sent]>) {
+    init(eventLoop: any EventLoop, sent: NIOLockedValueBox<[Sent]>) {
         self.eventLoop = eventLoop
         self.sent = sent
     }
 
-    func delegating(to eventLoop: EventLoop) -> Client {
+    func delegating(to eventLoop: any EventLoop) -> any Client {
         CapturingClient(eventLoop: eventLoop, sent: sent)
     }
 

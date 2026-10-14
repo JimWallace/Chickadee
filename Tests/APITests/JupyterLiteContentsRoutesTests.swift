@@ -10,15 +10,15 @@ import VaporTesting
     private struct InjectAuthMiddleware: AsyncMiddleware {
         let user: APIUser
 
-        func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
             request.auth.login(user)
             return try await next.respond(to: request)
         }
     }
 
-    private var tmpRoot: String!
-    private var publicDir: String!
-    private var instructorUser: APIUser!
+    private let tmpRoot: String
+    private let publicDir: String
+    private let instructorUser: APIUser
 
     let app: Application
 

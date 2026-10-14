@@ -5,9 +5,9 @@ import Testing
 @testable import chickadee_runner
 
 @Suite(.timeLimit(.minutes(3))) final class SubmissionNormalizerTests {
-    private var rootDir: URL!
-    private var submissionDir: URL!
-    private var workspaceDir: URL!
+    private let rootDir: URL
+    private let submissionDir: URL
+    private let workspaceDir: URL
 
     init() throws {
         rootDir = FileManager.default.temporaryDirectory

@@ -232,7 +232,7 @@ import VaporTesting
     /// `recordClassItemCoverage`: `ClassItemCoverageTests` owns the writer's
     /// behaviour, and one scenario below needs a row from a student who is no
     /// longer enrolled — which the writer refuses by design.
-    private func cover(_ item: String, by userID: UUID, setupID: String, on db: Database) async throws {
+    private func cover(_ item: String, by userID: UUID, setupID: String, on db: any Database) async throws {
         try await APIClassItemCoverage(
             testSetupID: setupID, item: item, userID: userID,
             submissionID: "\(setupID)_\(item)"

@@ -216,7 +216,7 @@ change is noise in the history, and it makes every later `git blame` longer.
 
 Upcoming features are the exception. An upcoming feature is a default of the
 next language mode, so the code must take it some day, and each upgrade that
-waits makes the move larger. The product targets take each one through
+waits makes the move larger. Every target takes each one through
 `sourceSettings` in `Package.swift`: `ExistentialAny` and
 `MemberImportVisibility` are on. At each upgrade, read the list of upcoming
 features. Turn on the ones that need only fix-its, with

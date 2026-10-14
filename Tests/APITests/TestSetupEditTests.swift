@@ -16,8 +16,7 @@ import VaporTesting
 @Suite struct TestSetupEditTests {
 
     private func makeApp() async throws -> Application {
-        let app = try await makeTestApp(prefix: "chickadee-edit")
-        return app
+        try await makeTestApp(prefix: "chickadee-edit")
     }
 
     // MARK: - Auth helpers

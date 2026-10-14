@@ -57,7 +57,7 @@ import VaporTesting
             let response = Response.pollFragment(html: "<tr>a</tr>", for: req)
             #expect(response.status == .notModified)
             #expect(response.body.data?.isEmpty ?? true)
-            #expect(response.headers.first(name: .eTag) == self.etag("<tr>a</tr>"))
+            #expect(response.headers.first(name: .eTag) == etag("<tr>a</tr>"))
         }
     }
 
@@ -65,7 +65,7 @@ import VaporTesting
         try await withRequest(ifNoneMatch: etag("<tr>a</tr>")) { req in
             let response = Response.pollFragment(html: "<tr>b</tr>", for: req)
             #expect(response.status == .ok)
-            #expect(response.headers.first(name: .eTag) == self.etag("<tr>b</tr>"))
+            #expect(response.headers.first(name: .eTag) == etag("<tr>b</tr>"))
         }
     }
 

@@ -366,7 +366,7 @@ import VaporTesting
                 userID: userID, assignment: assignment, policy: onePolicy, db: db)
             async let secondAttempt = Self.spendSucceeded(
                 userID: userID, assignment: assignment, policy: onePolicy, db: db)
-            let successes = [await firstAttempt, await secondAttempt].filter { $0 }.count
+            let successes = [await firstAttempt, await secondAttempt].filter(\.self).count
 
             let committed = try await SlipDayStore.unrefundedCount(
                 userID: userID, courseID: courseID, on: app.db)

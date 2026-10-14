@@ -54,7 +54,7 @@ import Testing
                 group.addTask {
                     try await cache.context {
                         await counter.bump()
-                        try await Task.sleep(nanoseconds: 50_000_000)
+                        try await Task.sleep(for: .milliseconds(50))
                         return Self.makeContext(total: "coalesced")
                     }.totalFormatted
                 }

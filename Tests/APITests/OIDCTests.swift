@@ -291,7 +291,7 @@ import VaporTesting
             _ = try await OIDCConfiguration.load(from: app)
             Issue.record("Expected OIDCConfiguration.load to throw")
         } catch {
-            #expect((error as? AbortError)?.status == abortStatus)
+            #expect((error as? any AbortError)?.status == abortStatus)
             #expect("\(error)".contains(messageContains))
         }
     }

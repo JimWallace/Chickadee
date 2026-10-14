@@ -37,7 +37,7 @@ import Testing
     /// True when `/usr/bin/env <command>` runs and exits 0 -- the same question
     /// `commandExists` asks, answered independently of the code under test.
     private static func hostHasCommand(_ command: String) async -> Bool {
-        return await toolIsAvailable("which", arguments: [command])
+        await toolIsAvailable("which", arguments: [command])
     }
 
     private static func detectProfile() async throws -> RunnerCapabilityProfile {
@@ -130,6 +130,6 @@ import Testing
     }
 
     private static func hostCanImportPythonModule(_ module: String) async -> Bool {
-        return await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
+        await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
     }
 }

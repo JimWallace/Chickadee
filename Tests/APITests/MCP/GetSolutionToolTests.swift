@@ -63,7 +63,10 @@ import Vapor
 
             #expect(output.cellCount == 2)
             #expect(output.filename == "solution.ipynb")
-            let isObject: Bool = { if case .object = output.notebook { return true } else { return false } }()
+            let isObject: Bool = {
+                guard case .object = output.notebook else { return false }
+                return true
+            }()
             #expect(isObject, "solution must be returned as a JSON object")
         }
     }

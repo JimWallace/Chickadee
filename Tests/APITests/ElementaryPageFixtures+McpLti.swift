@@ -4,6 +4,7 @@
 // binding, the deep-linking picker and its return), for
 // ElementaryPageGuardTests.
 
+import Elementary
 import Foundation
 
 @testable import APIServer

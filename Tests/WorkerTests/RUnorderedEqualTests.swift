@@ -10,6 +10,8 @@
 // that, the element-wise comparison would have failed every correct answer
 // that contains a null.
 
+import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

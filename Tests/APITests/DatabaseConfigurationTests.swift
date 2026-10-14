@@ -1,4 +1,5 @@
 import Fluent
+import FluentSQLiteDriver
 import Foundation
 import Testing
 import Vapor

@@ -11,6 +11,7 @@
 // Also covers the submission path with dependency-skipped outcomes to confirm
 // the full round-trip works after the dependsOn pre-check was added.
 
+import Core
 import Fluent
 import Foundation
 import Testing

@@ -364,7 +364,7 @@ greeting. The example below does so in R."
 
 ## Coding Conventions
 
-- Swift 6, strict concurrency. The product targets also turn on the upcoming
+- Swift 6, strict concurrency. Every target also turns on the upcoming
   features `ExistentialAny` (write `any P`) and `MemberImportVisibility` (import
   each module whose members a file uses), through `sourceSettings` in
   `Package.swift`. Import the umbrella modules `Foundation` and
@@ -378,7 +378,7 @@ greeting. The example below does so in R."
 - Swift APIs over their Foundation predecessors: a regex literal or `Regex`, not
   `NSRegularExpression`; `FilePath`, not `NSString` path calls;
   `Task.sleep(for:)`, not `Task.sleep(nanoseconds:)`. SwiftLint enforces these in
-  `Sources/`. `Regex` is not `Sendable`, so a shared pattern is a computed
+  `Sources/` and `Tests/`. `Regex` is not `Sendable`, so a shared pattern is a computed
   static property, not a stored one.
 - Actors for any shared mutable state (`WorkerSecretStore`, `WorkerActivityStore`,
   `LocalRunnerAutoStartStore`, `LocalRunnerManager`).
@@ -392,9 +392,8 @@ greeting. The example below does so in R."
   Run `scripts/format.sh` before committing, or `scripts/lint.sh` to check
   without modifying. Each `.swift-format` names every rule, `true` or `false`:
   a rule that the file omits is off, not at its default.
-  `scripts/check-swift-format-config.sh` enforces this. `Tests/.swift-format`
-  turns off five rules that have findings in existing tests, until the
-  maintainer approves those test edits.
+  `scripts/check-swift-format-config.sh` enforces this. The same rules apply
+  to `Tests/`.
 - Quality rules (force unwraps, `.filter{}.first` antipatterns, oversized
   functions, etc.) are enforced by SwiftLint (`.swiftlint.yml` at repo root,
   delivered via the `SwiftLintPlugins` SwiftPM dependency — no separate
@@ -402,8 +401,6 @@ greeting. The example below does so in R."
   complementary: swift-format owns formatting, SwiftLint owns correctness;
   overlapping rules are disabled in `.swiftlint.yml`. CI enforces SwiftLint
   as a step in the `format-lint` job (alongside `scripts/lint.sh`).
-  `Tests/.swiftlint.yml` turns off the modern-idiom rules that have findings
-  in existing tests, until the maintainer approves those test edits.
   `scripts/swiftlint.sh` passes `--strict` (every reported issue, warning
   or error, fails the build), keeping the codebase at zero violations
   going forward. If a structural-rule warning threshold (e.g.

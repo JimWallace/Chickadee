@@ -110,7 +110,7 @@ import Testing
     }
 
     private static func pythonModuleAvailable(_ module: String) async -> Bool {
-        return await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
+        await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
     }
 
     // MARK: - variable_exists sees quarantined assignments
