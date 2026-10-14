@@ -1,7 +1,7 @@
 // APIServer/Views/Pages/AccountPage.swift
 //
-// GET /account: the signed-in user's identity, their chickadee's backdrop and
-// border, the GitHub link, their courses and the courses open to join, and
+// GET /account: the signed-in user's identity, their bird's species, backdrop
+// and border, the GitHub link, their courses and the courses open to join, and
 // the personal-data export (#557). The plain student page exemplar
 // (docs/ui-design.md).
 
@@ -17,7 +17,7 @@ struct AccountPage: HTML {
     let identityName: String
     /// The username under the heading, nil when the heading already is it.
     let identitySecondary: String?
-    /// The user's own chickadee, decorative beside their name.
+    /// The user's own bird, decorative beside their name.
     let avatar: AvatarPresentation
     let avatarPicker: AvatarPickerContext
     /// A posted avatar choice was refused.
@@ -212,7 +212,8 @@ struct AccountPage: HTML {
     }
 }
 
-/// The backdrop and border choices (docs/student-wardrobe.md, W1).
+/// The species, backdrop and border choices (docs/student-wardrobe.md, W1;
+/// docs/avatar-species.md, A2).
 private struct AccountAvatarPicker: HTML {
     let page: PageRequestContext
     let picker: AvatarPickerContext
@@ -220,18 +221,37 @@ private struct AccountAvatarPicker: HTML {
 
     var body: some HTML {
         section(.class("page-section"), .id("chickadee")) {
-            h2 { "Chickadee" }
+            h2 { "Bird" }
             if invalid {
                 p(.class("form-error"), .role("alert")) { "That choice is not available." }
             }
-            // The style attribute sets only a custom property, which the UI
-            // rules allow.
+            // The style attribute sets only custom properties, which the UI
+            // rules allow. The ring samples inherit all three, so they draw
+            // the ring on the previewed backdrop in the previewed colours.
             form(
                 .method(.post), .action("/account/avatar"),
                 .data("avatar-picker", value: ".account-identity .avatar"),
-                .custom(name: "style", value: "--av-backdrop: var(\(picker.backdropToken))")
+                .custom(
+                    name: "style",
+                    value: "--av-backdrop: var(\(picker.backdropToken)); --av-cap: var(\(picker.capToken)); "
+                        + "--av-accent: var(\(picker.accentToken))")
             ) {
                 CSRFField(token: page.csrfToken)
+                fieldset(.class("fieldset-plain")) {
+                    legend { "Species" }
+                    for group in picker.birds {
+                        fieldset(.class("fieldset-plain fieldset-plain--nested")) {
+                            legend { group.species }
+                            div(.class("swatch-row")) {
+                                for (position, option) in group.options.enumerated() {
+                                    if position > 0 { " " }
+                                    AccountBirdSwatch(option: option)
+                                }
+                            }
+                        }
+                    }
+                    p(.class("field-note")) { "Your handle stays." }
+                }
                 fieldset(.class("fieldset-plain")) {
                     legend { "Backdrop" }
                     div(.class("swatch-row")) {
@@ -279,7 +299,40 @@ private struct AccountAvatarPicker: HTML {
     }
 }
 
-/// One border choice: the ring drawn in the student's own colours.
+/// One colourway choice: the student's own bird drawn in it, at the roster
+/// size so the species reads. The radio carries the six tone tokens and the
+/// two layer references the live preview sets.
+private struct AccountBirdSwatch: HTML {
+    let option: AvatarBirdOption
+
+    var body: some HTML {
+        label(.class("swatch")) {
+            " "
+            input(
+                .type(.radio), .name("cap"), .value(option.value),
+                .data("av-cap", value: option.presentation.capToken),
+                .data("av-wing", value: option.presentation.wingToken),
+                .data("av-body", value: option.presentation.bodyToken),
+                .data("av-bib", value: option.presentation.bibToken),
+                .data("av-beak", value: option.presentation.beakToken),
+                .data("av-mark", value: option.presentation.markToken),
+                .data("av-plumage", value: option.presentation.plumageSymbolRef),
+                .data("av-tuft", value: option.presentation.tuftSymbolRef)
+            )
+            .attributes(.checked, when: option.checked)
+            " "
+            span(.class("swatch-sample swatch-bird"), .ariaHidden) {
+                Avatar(avatar: option.presentation)
+            }
+            " "
+            span(.class("swatch-name")) { option.label }
+            " "
+        }
+    }
+}
+
+/// One border choice: the ring drawn in the student's own colours, which it
+/// inherits from the form.
 private struct AccountBorderSwatch: HTML {
     let picker: AvatarPickerContext
     let option: AvatarPickerOption
@@ -297,13 +350,11 @@ private struct AccountBorderSwatch: HTML {
             if option.isNone {
                 span(.class("swatch-sample swatch-none"), .ariaHidden) {}
             } else {
-                // Custom properties only.
+                // A custom property only. The accent, cap and backdrop come
+                // from the form, so the sample follows the preview.
                 SVG.svg(
                     .class("swatch-sample"), .custom(name: "viewBox", value: "0 0 64 64"), .ariaHidden,
-                    .custom(
-                        name: "style",
-                        value: "--av-border: var(\(option.token)); --av-accent: var(\(picker.accentToken)); "
-                            + "--av-cap: var(\(picker.capToken))")
+                    .custom(name: "style", value: "--av-border: var(\(option.token))")
                 ) {
                     SVG.use(.href("#av-backdrop")) {}
                     SVG.use(.href(option.ringRef)) {}

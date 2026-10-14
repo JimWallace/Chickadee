@@ -4,17 +4,19 @@
 // (docs/student-wardrobe.md, decision 3). A route never writes a spec field
 // itself: it hands the raw form values here and stores what comes back.
 //
-// Every backdrop and every starter ring is open to every student, and a
-// seasonal ring is open during its term. Earned and special rings exist and
+// Every colourway (which decides the species, docs/avatar-species.md), every
+// backdrop and every starter ring is open to every student, and a seasonal
+// ring is open during its term. Earned and special rings exist and
 // are shown locked: `applying` refuses them until unlocks arrive
 // (docs/student-wardrobe.md, W3), and then only `isOpen` has to learn about a
 // student's unlocks. Re-choosing the ring a student already wears is always
 // allowed, so a seasonal ring is kept after its term. Course staff cannot
 // change their ring.
 
-/// A slot a student may change on the account page.
+/// A slot a student may change on the account page. `cap` is the colourway,
+/// under its stored key; choosing one chooses the species.
 public enum AvatarCustomizableSlot: String, CaseIterable, Sendable {
-    case backdrop, border
+    case backdrop, border, cap
 }
 
 /// Why a choice was refused. The spec is never partly changed: a refused
@@ -38,18 +40,21 @@ public enum AvatarCustomization {
         switch slot {
         case .backdrop: AvatarBackdrop.allCases.map(\.rawValue)
         case .border: AvatarBorder.allCases.map(\.rawValue)
+        case .cap: AvatarCap.allCases.map(\.rawValue)
         }
     }
 
     /// Whether a student may choose `value` for `slot` during `season`. Every
-    /// backdrop is open; a ring is open when it is a starter ring, or a
-    /// seasonal ring whose term is `season`.
+    /// colourway and every backdrop is open; a ring is open when it is a
+    /// starter ring, or a seasonal ring whose term is `season`.
     public static func isOpen(
         _ value: String, for slot: AvatarCustomizableSlot, season: TermSeason = .current()
     ) -> Bool {
         switch slot {
         case .backdrop:
             return AvatarBackdrop(rawValue: value) != nil
+        case .cap:
+            return AvatarCap(rawValue: value) != nil
         case .border:
             guard let border = AvatarBorder(rawValue: value) else { return false }
             switch border.availability {
@@ -82,6 +87,11 @@ public enum AvatarCustomization {
                     throw AvatarCustomizationError.unknownOption(slot: slot, value: value)
                 }
                 updated.backdrop = backdrop
+            case .cap:
+                guard let cap = AvatarCap(rawValue: value) else {
+                    throw AvatarCustomizationError.unknownOption(slot: slot, value: value)
+                }
+                updated.cap = cap
             case .border:
                 guard let border = AvatarBorder(rawValue: value) else {
                     throw AvatarCustomizationError.unknownOption(slot: slot, value: value)

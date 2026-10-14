@@ -1,8 +1,9 @@
 // APIServer/Routes/Web/AccountRoutes+Avatar.swift
 //
-// The student's own chickadee choices (docs/student-wardrobe.md, W1).
+// The student's own bird choices (docs/student-wardrobe.md, W1, and
+// docs/avatar-species.md, A2).
 //
-//   POST /account/avatar   → apply backdrop / border → redirect to /account
+//   POST /account/avatar   → apply colourway / backdrop / border → redirect to /account
 //
 // The route never writes a spec field itself: it hands the raw form values to
 // `AvatarCustomization`, the one chokepoint that later also checks unlocks.
@@ -18,11 +19,14 @@ extension AccountRoutes {
     struct AvatarChoiceForm: Content {
         var backdrop: String?
         var border: String?
+        /// The colourway, which decides the species.
+        var cap: String?
 
         var choices: [String: String] {
             var choices: [String: String] = [:]
             choices[AvatarCustomizableSlot.backdrop.rawValue] = backdrop
             choices[AvatarCustomizableSlot.border.rawValue] = border
+            choices[AvatarCustomizableSlot.cap.rawValue] = cap
             return choices
         }
     }
@@ -48,10 +52,14 @@ extension AccountRoutes {
     }
 }
 
-/// The picker's two groups, built from `AvatarCustomization.options(for:)` so
+/// The picker's three groups, built from `AvatarCustomization.options(for:)` so
 /// the page cannot offer an option the chokepoint would refuse, and marking the
 /// ones it would refuse as locked.
 struct AvatarPickerContext: Encodable {
+    /// The colourways, grouped by the species each belongs to, in
+    /// `AvatarSpecies` order. Each option is the student's own bird in that
+    /// colourway, so the sample shows what a save would draw.
+    let birds: [AvatarBirdGroup]
     let backdrops: [AvatarPickerOption]
     let borders: [AvatarPickerOption]
     /// Course staff wear the staff ring and cannot choose one: the Border group
@@ -69,6 +77,21 @@ struct AvatarPickerContext: Encodable {
         self.backdropToken = own.backdropToken
         self.accentToken = own.accentToken
         self.capToken = own.capToken
+        let colourways = AvatarCustomization.options(for: .cap).compactMap(AvatarCap.init(rawValue:))
+        birds = AvatarSpecies.allCases.map { species in
+            AvatarBirdGroup(
+                species: species.displayName,
+                options: colourways.filter { AvatarSpecies.of($0) == species }.map { cap in
+                    var preview = spec
+                    preview.cap = cap
+                    return AvatarBirdOption(
+                        value: cap.rawValue,
+                        label: cap.displayName,
+                        checked: cap == spec.cap,
+                        presentation: AvatarPresentation(
+                            for: preview, size: .roster, accessibility: .decorative, isStaff: isStaff))
+                })
+        }
         backdrops = AvatarCustomization.options(for: .backdrop).map { value in
             AvatarPickerOption(
                 value: value,
@@ -115,6 +138,22 @@ extension AvatarPickerContext {
         if let season = border.season { return "\(border.displayName) (\(season.displayName))" }
         return isLocked ? "\(border.displayName) (locked)" : border.displayName
     }
+}
+
+/// One species' row in the Species group.
+struct AvatarBirdGroup: Encodable {
+    let species: String
+    let options: [AvatarBirdOption]
+}
+
+/// One colourway: the student's own bird drawn in it. The presentation
+/// carries the six tone tokens, the plumage symbol and the tuft or crest the
+/// live preview sets, so the preview draws exactly what a save would.
+struct AvatarBirdOption: Encodable {
+    let value: String
+    let label: String
+    let checked: Bool
+    let presentation: AvatarPresentation
 }
 
 /// One swatch in the avatar picker.

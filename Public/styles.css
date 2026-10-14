@@ -2477,6 +2477,11 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .enroll-intro { margin-bottom: 1.25rem; color: var(--gray-600); }
 .fieldset-plain { border: none; padding: 0; margin: 0 0 1.5rem; }
 .fieldset-plain > legend { margin-bottom: .75rem; font-weight: 600; }
+/* A group inside a plain fieldset: one row per species in the account page's
+   Species group. A lighter legend and a shorter gap, so the species names
+   read as sub-headings of the group and not as groups of their own. */
+.fieldset-plain--nested { margin-bottom: .75rem; }
+.fieldset-plain--nested > legend { margin-bottom: .5rem; font-size: var(--text-sm); font-weight: 500; }
 .checkbox-list { display: flex; flex-direction: column; gap: .6rem; }
 .checkbox-row { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
 
@@ -3589,7 +3594,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 /* Swatch choice: radio inputs shown as round colour samples with a name
    under each, laid out in a row inside a .fieldset-plain (the account page's
-   Chickadee picker; see docs/ui-design.md). The input is invisible but stays
+   bird picker; see docs/ui-design.md). The input is invisible but stays
    in the tab order, so the group works with the keyboard and with no
    JavaScript. The checked option has a ring AND a bold name, so the state
    does not depend on colour alone. */
@@ -3647,6 +3652,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    ring. A locked ring's input is disabled: it is shown dimmed, and its name
    says so. */
 .swatch-backdrop { background: var(--av-backdrop); }
+
+/* A bird sample is the student's own bird in that colourway, at the roster
+   size (2.25rem) rather than the swatch's 1.75rem, because a species has to
+   read on it. The avatar inside brings its own nine properties. */
+.swatch-bird {
+    width: 2.25rem;
+    height: 2.25rem;
+}
 
 .swatch-none { border: 2px dashed var(--muted); }
 

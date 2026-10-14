@@ -423,7 +423,7 @@ duplicate.
   forbids a fluid font size.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
-  transport, LTI deep linking, the Chickadee picker).  Use it for any group
+  transport, LTI deep linking, the bird picker).  Use it for any group
   of choices rather than restyling a fieldset.
 - **`.swatch-row`**, `.swatch`, `.swatch-sample`, `.swatch-name` — a choice of
   one colour, inside a `.fieldset-plain`: each option is a radio input shown
@@ -436,16 +436,22 @@ duplicate.
   filled disc, `--av-backdrop`), a ring sample (a small `<svg>` drawing the
   backdrop and the ring symbol from the avatar sprite; it inherits
   `--av-backdrop` from the form, so it follows the previewed backdrop) and
-  `.swatch-none` (a dashed ring, for "no border").  An option that exists but
+  `.swatch-none` (a dashed ring, for "no border") and `.swatch-bird` (the
+  student's own bird in a colourway, an `Avatar` at the roster size, so the
+  species reads; it brings its own properties, so it shows the SAVED backdrop
+  and ring, not the previewed ones, while the ring samples follow the preview).  The Species group nests one
+  `.fieldset-plain--nested` per species inside the plain fieldset, a lighter
+  legend over each row.  An option that exists but
   cannot be chosen yet has a `disabled` input, which dims its swatch
   (`.swatch:has(input:disabled)`, the `.row-muted` opacity); its name says
   "(locked)", or names the term of a seasonal ring, and a note under the row
   says how each kind opens, so the state does not rest on the dimming alone.
   The option a student already wears is never disabled.  Used by the account page's
-  Chickadee picker, whose live preview (`avatar-picker.js`) copies the
-  checked option's token onto the avatar and points its ring layer at the
-  checked ring; see
-  [student-wardrobe.md](student-wardrobe.md).
+  bird picker, whose live preview (`avatar-picker.js`) copies the
+  checked option's tokens onto the avatar and points its ring, plumage and
+  tuft layers at the checked symbols; see
+  [student-wardrobe.md](student-wardrobe.md) and
+  [avatar-species.md](avatar-species.md).
 - **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a
   `.section-items` row: the title and details, the state or value, and the cell
   that holds the actions.  They change nothing on a desktop; at 640px and below

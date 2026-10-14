@@ -27,6 +27,9 @@ public enum AvatarCap: String, CaseIterable, Codable, Sendable {
     /// The starling's three, lifted above the dark backdrops
     /// (docs/avatar-species.md, finding 4).
     case emerald, violet, bronze
+
+    /// The name a student reads in the picker.
+    public var displayName: String { rawValue.capitalized }
 }
 
 /// How the bird looks out of the page — the axis that reads first and from

@@ -14,7 +14,7 @@ and the wardrobe is lateral.
 
 ## What this is for
 
-Students get small cosmetic choices for their chickadee. The purpose is to make
+Students get small cosmetic choices for their bird. The purpose is to make
 the platform a little more personal. Nothing here changes a grade, and nothing
 here can.
 
@@ -207,13 +207,15 @@ not a choice, and staff cannot change it.
 
 ---
 
-## The picker (W1)
+## The picker (W1, and the Species group from avatar-species.md A2)
 
-One page section on the account page, "Your chickadee":
+One page section on the account page, "Bird":
 
-- The bird at the standard size, as a preview.
-- Two groups of choices: **Backdrop** (eight) and **Border** (none, the five
-  colours and the seven patterned rings). Each choice is a radio input with a
+- The bird at the standard size, as a preview (the Account info bird).
+- Three groups of choices: **Species** (every colourway, one row per
+  species, each option the student's own bird drawn in that colourway;
+  choosing a colourway chooses the species), **Backdrop** (eight) and
+  **Border** (none, the five colours and the seven patterned rings). Each choice is a radio input with a
   round sample, so the form works with the keyboard and with no JavaScript. A
   ring's sample is the ring itself, drawn from the sprite on the student's
   backdrop. A locked ring is disabled and shown dimmed. Staff see a one-line
@@ -224,13 +226,14 @@ Each choice shows its name under the sample, so a reader who cannot tell two
 colours apart can still choose. The checked choice has a ring and a bold name.
 
 With JavaScript, `Public/avatar-picker.js` updates the bird in the Account
-info section as soon as a choice changes (a live preview). It sets only the two
-custom properties, `--av-backdrop` and `--av-border`, which the UI rules allow
-("JS does not make styling decisions"), and points the ring layer (the `use`
-element marked `data-av-ring`) at the checked ring symbol. Each radio input
-carries the token name and the ring symbol in data attributes, so the script
-holds no palette and no ring list. Nothing is saved until the
-student presses Save.
+info section as soon as a choice changes (a live preview). It sets only
+custom properties, `--av-backdrop`, `--av-border` and the six tones of a
+colourway, which the UI rules allow ("JS does not make styling decisions"),
+and points the ring layer (the `use` element marked `data-av-ring`), the
+plumage layer and the tuft layer at the checked symbols. Each radio input
+carries its token names and symbol references in data attributes, so the
+script holds no palette, no ring list and no species. Nothing is saved until
+the student presses Save.
 
 The style guard counted every `.style.<property>` write, including a
 custom-property write, so the preview first looked impossible. The guard now

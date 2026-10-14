@@ -1,9 +1,10 @@
 # Avatar species — design note
 
-**Status: the first set is built.** Slices A0 and A1 shipped together: the
-model, the six-token palette, the sprite art for the cardinal, the robin, the
-blue jay and the starling, and the guards. The picker (A2) and the second
-set (A3) are next. This note continues
+**Status: the first set is built, and a student can choose.** Slices A0 and
+A1 shipped together: the model, the six-token palette, the sprite art for the
+cardinal, the robin, the blue jay and the starling, and the guards. A2, the
+Species group in the account-page picker, shipped next. The second set (A3)
+and the trait weights are next. This note continues
 [student-avatars.md](student-avatars.md) and
 [student-wardrobe.md](student-wardrobe.md). Read decisions 1, 2 and 7 there
 first: the spec is stored and drawn once, the art is a sprite of flat closed
@@ -14,7 +15,7 @@ paths, and the sizes decide what reads.
 | Prototype render of five species on the current body | done, see "What the prototype showed" |
 | `AvatarSpecies`, derived from the colourway, and per-species colourways | shipped |
 | Sprite symbols for cardinal, robin, blue jay, starling | shipped |
-| Species in the account-page picker | next (A2) |
+| Species in the account-page picker | shipped (A2) |
 | The second set: goldfinch, blackbird, waxwing, junco, sparrow redrawn | next (A3), each rendered first |
 | House sparrow | needs a redraw, see finding 2 |
 
@@ -230,10 +231,11 @@ fails too (finding 4).
 
 ### 5. Species is chosen on the account page, like the backdrop
 
-`AvatarCustomizableSlot` gains `species`, and the picker gets a **Bird**
-group beside Backdrop and Border. Choosing a species shows that species'
-colourways as a second group, and Save posts both. The chokepoint validates
-the pair (decision 2).
+`AvatarCustomizableSlot` gained `cap`, the colourway under its stored key,
+and the picker got a **Species** group above Backdrop and Border: one row per
+species, every colourway as a radio, each drawn as the student's own bird in
+that colourway at the roster size. Choosing a colourway chooses the species,
+so Save posts one value and the chokepoint validates one slot (decision 1).
 
 Why a choice and not only a draw: it closes the cohort split from decision 1,
 it lets a student who wants the mascot keep it, and the wardrobe is lateral,
@@ -242,10 +244,13 @@ the identity. A classmate who recognized a bird by species loses that on a
 change, which is the reroll question already open in student-avatars.md. The
 suggested answer there holds here: allow it, keep the handle fixed.
 
-The live preview in `avatar-picker.js` sets custom properties and points one
-`use` at a symbol. A species change moves nine properties and two symbols
-(plumage and crest). That is the same mechanism, more of it, and still no
-colour in JavaScript.
+The live preview in `avatar-picker.js` sets custom properties and points
+`use` elements at symbols. A colourway change moves six properties and two
+layers (the plumage, and the tuft or crest). Each radio carries them as data
+attributes computed by `AvatarPresentation`, so the script holds no palette
+and no species, and the preview draws exactly what a save would. The ring
+samples inherit the cap, accent and backdrop from the form, so the two-tone
+ring follows a colourway change before it is saved.
 
 ### 6. What does not change
 
@@ -316,7 +321,7 @@ Each needs a prototype render before a decision, by finding 2.
 |---|---|---|
 | A0 | `AvatarSpecies`, the colourway rule, the six-token palette, the four inline properties, the drift tests | shipped |
 | A1 | Cardinal, robin, blue jay and starling: sprite symbols, crests, colourways, `preview.mjs` species rows, a render looked at | shipped |
-| A2 | The Bird group in the picker, with its colourway group and live preview | next |
+| A2 | The Species group in the picker, every colourway by species, with the live preview | shipped |
 | A3 | A second set from the candidates, each rendered first | next |
 
 A0 and A1 shipped as one change. From the day it is live, a new student's
