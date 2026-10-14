@@ -36,7 +36,7 @@ struct CompositeTileSection: HTML {
                     button(.class("btn btn-primary"), .type(.submit)) { "Fill a hole" }
                 }
                 p(.class("field-note field-note--muted")) {
-                    "Grades your passing code again for an empty slot, and the tile counts for you."
+                    "Grades your passing code again for an empty slot, and the tile counts toward the class goal."
                 }
             }
         }

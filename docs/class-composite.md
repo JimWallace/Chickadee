@@ -438,7 +438,8 @@ who ask at the same moment get different holes.
 On the projector, a passing spare shows in its slot as a passed tile with the
 name of the student who made it. It replaces a failed contribution there,
 because a classmate has filled that hole. A passing contribution always wins
-over a spare. The student view never shows spares.
+over a spare. A student's view of the composite never shows spares; their
+result page lists their own spares, each with its state.
 
 ### Slot count
 

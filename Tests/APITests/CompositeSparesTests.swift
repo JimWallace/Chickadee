@@ -415,7 +415,7 @@ import VaporTesting
 
     @Test func aFlashCodeMapsToFixedTextAndAnUnknownCodeToNothing() {
         #expect(SpareFlash.messages(for: "noTile").error == "Your own tile must pass first.")
-        #expect(SpareFlash.messages(for: "noHole").notice == "Every slot is filled or is being filled.")
+        #expect(SpareFlash.messages(for: "noHole").error == "Every slot is filled or is being filled.")
         let unknown = SpareFlash.messages(for: "<b>free text</b>")
         #expect(unknown.success == nil && unknown.notice == nil && unknown.error == nil)
     }

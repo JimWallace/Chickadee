@@ -13,13 +13,13 @@ enum SpareFlash: String {
         case .queued:
             FlashMessages(success: "Your request to fill a hole is queued.")
         case .closed:
-            FlashMessages(notice: "The class session is closed.")
+            FlashMessages(error: "The class session is closed.")
         case .noTile:
             FlashMessages(error: "Your own tile must pass first.")
         case .grading:
-            FlashMessages(notice: "Your last spare tile is still grading.")
+            FlashMessages(error: "Your last spare tile is still grading.")
         case .noHole:
-            FlashMessages(notice: "Every slot is filled or is being filled.")
+            FlashMessages(error: "Every slot is filled or is being filled.")
         case .unavailable:
             FlashMessages(error: "Your code could not be queued, so try again later.")
         case nil:
