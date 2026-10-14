@@ -51,6 +51,10 @@ struct JobArtifactFetch {
     let testSetupAcquireMilliseconds: Int
 }
 
+// The workspace helpers read only the daemon's `workerID` and `config`, both
+// constants, and touch the file system. They are `nonisolated` so a test can
+// call them on a daemon directly, with the `inout` timings and readings that
+// an actor-isolated method could not take across the isolation boundary.
 extension WorkerDaemon {
 
     // MARK: - Setup
@@ -58,7 +62,7 @@ extension WorkerDaemon {
     /// Best-effort workspace removal that leaves a structured breadcrumb on
     /// failure — a silently leaked workdir is a disk leak ops can only find
     /// from this log line. Quiet when the path is already gone.
-    func removeWorkspaceItem(at url: URL, label: String, job: Job) {
+    nonisolated func removeWorkspaceItem(at url: URL, label: String, job: Job) {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             try FileManager.default.removeItem(at: url)
@@ -78,7 +82,7 @@ extension WorkerDaemon {
     /// Throws `insufficientDiskSpace` if the workspace partition is below
     /// the configured floor — early exit so the runner can decline the job
     /// before downloading anything.
-    func ensureSufficientDiskSpace(
+    nonisolated func ensureSufficientDiskSpace(
         tempRoot: URL,
         freeDiskMBAtStart: Int?,
         job: Job
@@ -106,7 +110,7 @@ extension WorkerDaemon {
 
     /// Creates the per-job workspace (workdir + submission subdir) and
     /// records the `workdir_setup` / `submission_dir_setup` stage timings.
-    func setupJobWorkspace(
+    nonisolated func setupJobWorkspace(
         tempRoot: URL,
         job: Job,
         stageTimings: inout JobStageTimings
@@ -141,7 +145,7 @@ extension WorkerDaemon {
     /// skipped, removes the workdir, records the `cleanup` stage timing,
     /// and emits the two structured log events ops uses for capacity
     /// dashboards.
-    func finalizeJobWorkspace(
+    nonisolated func finalizeJobWorkspace(
         job: Job,
         paths: JobWorkspacePaths,
         tempRoot: URL,
@@ -177,7 +181,7 @@ extension WorkerDaemon {
         )
     }
 
-    func emitJobStageTimingsLog(
+    nonisolated func emitJobStageTimingsLog(
         stageTimings: JobStageTimings,
         job: Job,
         totalWallClockMs: Int
@@ -196,7 +200,7 @@ extension WorkerDaemon {
 
     /// Emit a dedicated disk-usage event so ops can answer "are we
     /// close to the floor?" without having to join across log events.
-    func emitJobDiskUsageLog(
+    nonisolated func emitJobDiskUsageLog(
         tempRoot: URL,
         job: Job,
         disk: JobDiskReadings,
