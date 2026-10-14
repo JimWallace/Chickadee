@@ -27,6 +27,8 @@ import Testing
         #expect(html.components(separatedBy: "</script>").count == 2)
         let original = try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
         let parsed = try JSONDecoder().decode(JSONValue.self, from: Data(content.utf8))
+        let originalIsObject = if case .object = original { true } else { false }
+        #expect(originalIsObject)
         #expect(parsed == original)
     }
 

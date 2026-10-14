@@ -135,7 +135,8 @@ import Testing
             if ext == "py" {
                 try submissionFilename.write(to: hintURL, atomically: true, encoding: .utf8)
             } else if ext == "ipynb" {
-                let pyName = URL(fileURLWithPath: submissionFilename).deletingPathExtension().lastPathComponent + ".py"
+                // Remove only the extension and keep any directory part.
+                let pyName = String(submissionFilename.dropLast(ext.count + 1)) + ".py"
                 try pyName.write(to: hintURL, atomically: true, encoding: .utf8)
             }
         }
