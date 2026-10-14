@@ -143,9 +143,12 @@ import Testing
                 inSprite == Set(cases),
                 "sprite \(family)s \(inSprite.sorted()) do not match the enum")
         }
+        // The shared wing symbols only: a species' own art is
+        // av-wing-<species>-<pattern>, pinned by AvatarSpeciesTests.
         let spriteWings = Set(
             declared.filter { $0.hasPrefix("av-wing-") }
-                .map { String($0.dropFirst("av-wing-".count)) })
+                .map { String($0.dropFirst("av-wing-".count)) }
+                .filter { !$0.contains("-") })
         #expect(
             spriteWings == Set(AvatarWing.allCases.map(\.rawValue)),
             "sprite wings \(spriteWings.sorted()) do not match AvatarWing")

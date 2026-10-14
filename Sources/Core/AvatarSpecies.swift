@@ -29,9 +29,9 @@ public enum AvatarSpecies: String, CaseIterable, Codable, Sendable {
         AvatarCap.allCases.filter { AvatarSpecies.of($0) == self }
     }
 
-    /// A crested species draws `av-crest-<species>` in the tuft layer when
-    /// the bird wears no tuft, and a hat hides it like any tuft
-    /// (docs/avatar-species.md, finding 5).
+    /// A crested species wears `av-crest-<species>-<shape>` in the tuft layer,
+    /// the shape chosen by the tuft slot (`AvatarCrestShape`), and a hat hides
+    /// it like any tuft (docs/avatar-species.md, "Trait map").
     public var hasCrest: Bool {
         switch self {
         case .cardinal, .bluejay, .waxwing: true
@@ -64,6 +64,19 @@ public enum AvatarSpecies: String, CaseIterable, Codable, Sendable {
         case .pewter, .graphite, .dusk: .junco
         case .chestnut, .sepia, .hazel: .sparrow
         case .oat, .mauve, .ash: .dove
+        }
+    }
+}
+
+extension AvatarSpecies {
+    /// The wing patterns this species draws with its own art,
+    /// `av-wing-<species>-<pattern>`, instead of the shared symbol
+    /// (docs/avatar-species.md, "Trait map", tier three). The drift test pins
+    /// the set against the sprite in both directions.
+    public var wingArt: Set<AvatarWing> {
+        switch self {
+        case .bluejay, .goldfinch: [.barred]
+        case .chickadee, .cardinal, .robin, .starling, .blackbird, .waxwing, .junco, .sparrow, .dove: []
         }
     }
 }

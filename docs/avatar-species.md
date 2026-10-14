@@ -5,7 +5,9 @@ shipped together: the model, the six-token palette, the sprite art for the
 cardinal, the robin, the blue jay and the starling, and the guards. A2, the
 Species group in the account-page picker, followed. Then the trait weights,
 and A3, the second set: goldfinch, blackbird, waxwing, junco, song sparrow
-and mourning dove. The open question is which traits belong to a species.
+and mourning dove. Then the trait map: species-weighted head, wing and
+expression, three crest shapes per crested species, a beak per species, and
+species-art wings for the jay and the goldfinch.
 This note continues [student-avatars.md](student-avatars.md) and
 [student-wardrobe.md](student-wardrobe.md). Read decisions 1, 2 and 7 there
 first: the spec is stored and drawn once, the art is a sprite of flat closed
@@ -20,6 +22,7 @@ paths, and the sizes decide what reads.
 | Trait weights: most birds upright, bare-headed, wearing nothing | shipped |
 | The second set: goldfinch, blackbird, waxwing, junco, song sparrow, dove | shipped (A3), each rendered first |
 | House sparrow | dropped: the song sparrow took its place, see finding 2 |
+| Trait map: per-species weights, crest shapes, beaks, two species-art wings | shipped |
 
 ---
 
@@ -114,9 +117,12 @@ It is a looking-glass, not repository code. The findings:
    it is orange; the blue jay's sits on a white face, so it is dark. Each
    species sets its beak tone by that rule, not from a field guide.
 
-8. **Beak shape stays fixed.** The `chirp` expression redraws the beak as an
-   open mouth with fixed geometry. A per-species beak shape would fork every
-   expression that touches the beak. Beak colour varies; beak shape does not.
+8. **Beak shape stays fixed.** Superseded by the trait map (below). The
+   prototype kept one beak because `chirp` redrew it, so a per-species shape
+   would have forked that expression. The trait map removed the fork instead:
+   `chirp` opens a mouth and a lower mandible under whatever beak the species
+   has, and the beak's top edge stays at y 34.8 in every plumage symbol, so
+   each species now draws its own closed beak.
 
 The prototype files are not in the repository. `Tools/avatar-preview/preview.mjs`
 now opens with the species rows: every colourway, the species at 36 px beside
@@ -220,12 +226,13 @@ themes, and finding 4 is the constraint that makes that possible.
 ### 4. One plumage symbol per species, and the crest in the tuft layer
 
 `av-plumage` became `av-plumage-<species>`. Each symbol draws the body
-circle, the species' head and face shapes, the two eye discs and the closed
-beak, with the shared classes only. A crested species also has
-`av-crest-<species>`, which the presentation uses in place of `av-tuft-none`
-(finding 5). The layer order did not change. `AvatarSpeciesTests` asserts
-that every plumage symbol contains the four skeleton elements verbatim, so a
-species cannot move an eye.
+circle, the species' head and face shapes, the two eye discs and its own
+closed beak, with the shared classes only. A crested species also has three
+crest symbols, `av-crest-<species>-<shape>`, which the presentation draws in
+the tuft layer (finding 5 and "Trait map"). The layer order did not change.
+`AvatarSpeciesTests` asserts that every plumage symbol contains the body
+circle and the eye discs verbatim, and exactly one beak with its top edge at
+y 34.8, so a species cannot move an eye.
 
 The three sprite rules hold. Every new shape is a closed path computed
 against the body circle, with no clip-path, mask, filter or gradient. The
@@ -286,15 +293,17 @@ person is finding 3, and that is the number that matters.
 
 ## Trait weights
 
-The first-use draw weights three slots, by a `drawWeight` on the case, the
-way `HandleScheme.weight` works. Everything else is uniform. A weight
-changes only the draw, so no stored bird changes, and the species stays
-uniform because diversity in one class is the point.
+The first-use draw weights tilt and accessory by a `drawWeight` on the
+case, the way `HandleScheme.weight` works, and the head, wing and
+expression per species (`SpeciesTraitProfile`, "Trait map"). Colourway,
+accent and backdrop are uniform. A weight changes only the draw, so no
+stored bird changes, and the species stays uniform because diversity in one
+class is the point.
 
 | Slot | Weights | Result |
 |---|---|---|
 | tilt | upright 8, left 1, right 1 | four birds in five stand straight; a roster reads as a few characters leaning, not a crowd |
-| tuft | none 6, each shape 1 | three in five have a bare head, which on a crested species is its own crest |
+| head | per species, see "Trait map" | bare three times in four on an uncrested species; a crest shape, swept two times in three, on a crested one |
 | accessory | none 4, each other starter 1 | about a third wear nothing, which is what "most birds wear nothing" was meant to mean |
 | species, colourway, wing, expression, accent, backdrop | uniform | as before |
 
@@ -302,21 +311,31 @@ uniform because diversity in one class is the point.
 late-axis fill (`fillingMissing`) uses the same weights, so a bird filled
 later is drawn from the same distribution as a new one.
 
-## Next: which traits belong to a species
+## Trait map: which traits belong to a species
 
-A question the maintainer raised while the first set landed. Not built. It
-changes only the draw and the art, so a stored bird never changes.
+Each trait relates to a species in one of four ways, and the table is the
+decision. "Scoped" and "weighted" change only the draw, so no stored bird
+changes; "species-art" changes what an existing value draws, which is a
+redraw and free (student-avatars.md, "Changing the art").
 
-**Species traits against universal traits.** A crest belongs to the cardinal
-and the blue jay. Today the four tuft shapes are still drawn on every
-species, and on a crested bird they read as crest variants. The alternative
-is that some slots are per species (a tuft only where the real bird has
-one, a crest shape only on crested birds, a breast patch only on the robin)
-and others are universal (tilt, expression, accessory, backdrop, ring). The
-cost is that `combinationCount` becomes a sum over species instead of a
-product, and the draw picks the species-scoped slots after the species, the
-way it already picks the colourway. The benefit is that every species gets
-its own silhouette vocabulary instead of a chickadee's.
+| Trait | Relation | How |
+|---|---|---|
+| plumage, beak shape | species-art | one plumage symbol per species, with its own closed beak: a finch cone, a jay bill, a dove's small one. The beak's top edge stays at y 34.8 so the chirp mouth opens under every shape; chirp no longer redraws the upper beak |
+| head | scoped and weighted, species-art for crests | `SpeciesTraitProfile.tuft`. A crested species (cardinal, jay, waxwing) has three crest shapes, swept, raised and relaxed, picked by the tuft slot through `AvatarCrestShape` (`none` and `swoop` swept, `crest` and `pair` raised, `cowlick` relaxed), drawn two in three swept. Every other species is bare three times in four, with a generic tuft as a rare quirk |
+| wing pattern | weighted, species-art for two | `SpeciesTraitProfile.wing`: jay and goldfinch lean barred, starling speckled, waxwing tipped, cardinal, robin, blackbird, junco and dove plain or edged, sparrow barred or speckled. `AvatarSpecies.wingArt` names the patterns a species draws with its own symbol, `av-wing-<species>-<pattern>`: the jay's barred wing with its white patch, the goldfinch's black wing with white bars (the eye-white class, since the goldfinch has no pale tone) |
+| expression | weighted | `SpeciesTraitProfile.expression`: jays keen, doves sleepy, cardinals bright, robins curious; the chickadee has no lean |
+| tilt, accessory, accent, ring, backdrop | universal | posture and wardrobe belong to the student, not the species, and the wardrobe must stay lateral across species |
+
+Two rules held throughout. A stored value always renders: a cardinal with a
+stored `pair` tuft now wears a raised crest instead of a stray feather, which
+is a redraw, not a reshuffle. And no species is "better": the jay's wing art
+and the dove's plain wing are each the correct bird.
+
+`SpeciesTraitProfileTests` asserts that every option is drawn by some
+species, that crested heads draw crest shapes only, and that the draw follows
+the lean. `AvatarSpeciesTests` pins the crest and wing-art symbol sets against
+the sprite in both directions. The same 44 seeded birds were rendered under the old and new
+rules at 36 and 64 px before the decision.
 
 ## The second set
 
@@ -369,8 +388,9 @@ chickadee it was.
   until its student chooses otherwise.
 - **Do not reuse a colourway name across species.** The enum is one; a stored
   raw value must mean one thing.
-- **Do not vary the beak shape, the eye positions or the body circle per
-  species.** Every expression and every accessory is drawn against them.
+- **Do not vary the eye positions or the body circle per species.** Every
+  expression and every accessory is drawn against them. A species' beak may
+  differ in shape, but its top edge stays at y 34.8 (the trait map).
 - **Do not ship a species that has not been rendered beside a chickadee at
   36 px.** Finding 2 is the reason.
 - **Do not let a colourway's body approach the dark backdrops.** Finding 4 is

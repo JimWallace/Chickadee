@@ -3,9 +3,11 @@
 import Core
 import Testing
 
-/// The first-use draw weights three slots (docs/avatar-species.md, "Trait
-/// weights"): most birds upright, bare-headed and wearing nothing. Everything
-/// else stays uniform, and every option stays reachable.
+/// The first-use draw weights the tilt and the accessory by one universal
+/// weight, and the head, the wing and the expression by the species' own
+/// profile (docs/avatar-species.md, "Trait weights" and "Trait map"): most
+/// birds upright, bare-headed and wearing nothing. Colourway, accent and
+/// backdrop stay uniform, and every option stays reachable.
 @Suite struct AvatarDrawWeightTests {
 
     private static let draws = 20_000
@@ -28,11 +30,17 @@ import Testing
         #expect(abs(Self.share { $0.tilt == .left } - 0.1) < 0.02)
     }
 
+    /// The head is weighted per species (SpeciesTraitProfile.tuft): the
+    /// expected bare share is the mean over the species, which the draw
+    /// picks uniformly.
     @Test func mostBirdsHaveABareHead() {
-        let expected = Self.expectedShare(of: .none, among: AvatarTuft.allCases, weight: \.drawWeight)
-        #expect(expected == 0.6)
+        let perSpecies = AvatarSpecies.allCases.map { species -> Double in
+            let table = species.traits.tuft
+            return Double(table[.none] ?? 0) / Double(table.values.reduce(0, +))
+        }
+        let expected = perSpecies.reduce(0, +) / Double(perSpecies.count)
+        #expect(expected > 0.65)
         #expect(abs(Self.share { $0.tuft == .none } - expected) < 0.02)
-        #expect(abs(Self.share { $0.tuft == .swoop } - 0.1) < 0.02)
     }
 
     @Test func aboutAThirdOfBirdsWearNothing() {
@@ -48,8 +56,9 @@ import Testing
         for tilt in AvatarTilt.allCases {
             #expect(Self.share { $0.tilt == tilt } > 0.05, "\(tilt)")
         }
+        // A tuft a crested species never draws is still drawn by the others.
         for tuft in AvatarTuft.allCases {
-            #expect(Self.share { $0.tuft == tuft } > 0.05, "\(tuft)")
+            #expect(Self.share { $0.tuft == tuft } > 0.02, "\(tuft)")
         }
         for accessory in AvatarAccessory.starterCases {
             #expect(Self.share { $0.accessory == accessory } > 0.05, "\(accessory)")
@@ -62,15 +71,29 @@ import Testing
         #expect(Self.share { AvatarExpression.starterCases.contains($0.expression) } == 1)
     }
 
+    /// Accent and backdrop carry no weight. The wing and the expression do
+    /// (per species, SpeciesTraitProfileTests), but the chickadee is the one
+    /// species with no lean, so among chickadees each wing and each starter
+    /// expression is still equally likely.
     @Test func theUniformSlotsStayUniform() {
-        for wing in AvatarWing.allCases {
-            #expect(abs(Self.share { $0.wing == wing } - 1.0 / 6.0) < 0.02, "\(wing)")
-        }
         for backdrop in AvatarBackdrop.allCases {
             #expect(abs(Self.share { $0.backdrop == backdrop } - 1.0 / 8.0) < 0.02, "\(backdrop)")
         }
+        let accents = Double(AvatarAccent.allCases.count)
+        for accent in AvatarAccent.allCases {
+            #expect(abs(Self.share { $0.accent == accent } - 1.0 / accents) < 0.02, "\(accent)")
+        }
+        let chickadees = (0..<UInt64(Self.draws)).map { AvatarSpec.drawn(fromSeed: $0) }
+            .filter { $0.species == .chickadee }
+        #expect(chickadees.count > 1_000)
+        func chickadeeShare(_ matches: (AvatarSpec) -> Bool) -> Double {
+            Double(chickadees.count(where: matches)) / Double(chickadees.count)
+        }
+        for wing in AvatarWing.allCases {
+            #expect(abs(chickadeeShare { $0.wing == wing } - 1.0 / 6.0) < 0.03, "\(wing)")
+        }
         for expression in AvatarExpression.starterCases {
-            #expect(abs(Self.share { $0.expression == expression } - 1.0 / 6.0) < 0.02, "\(expression)")
+            #expect(abs(chickadeeShare { $0.expression == expression } - 1.0 / 6.0) < 0.03, "\(expression)")
         }
     }
 

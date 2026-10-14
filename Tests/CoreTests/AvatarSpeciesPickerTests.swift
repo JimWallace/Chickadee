@@ -52,9 +52,9 @@ import Testing
     }
 
     /// The tuft layer a crested colourway would draw follows the student's
-    /// own tuft and hat: the picker's samples and live preview carry exactly
-    /// what a save would render.
-    @Test func aCrestedColourwayPresentsTheCrestOnlyOnABareHead() {
+    /// own tuft slot (as a crest shape) and hat: the picker's samples and live
+    /// preview carry exactly what a save would render.
+    @Test func aCrestedColourwayPresentsTheCrestShapeOfTheTuftSlot() {
         func tuft(_ cap: AvatarCap, tuft: AvatarTuft, accessory: AvatarAccessory) -> String {
             var spec = Self.base
             spec.cap = cap
@@ -63,8 +63,8 @@ import Testing
             return AvatarPresentation(for: spec, size: .roster, accessibility: .decorative, isStaff: false)
                 .tuftSymbolRef
         }
-        #expect(tuft(.azure, tuft: .none, accessory: .none) == "#av-crest-bluejay")
-        #expect(tuft(.azure, tuft: .crest, accessory: .none) == "#av-tuft-crest")
+        #expect(tuft(.azure, tuft: .none, accessory: .none) == "#av-crest-bluejay-swept")
+        #expect(tuft(.azure, tuft: .crest, accessory: .none) == "#av-crest-bluejay-raised")
         #expect(tuft(.azure, tuft: .none, accessory: .beanie) == "#av-tuft-none")
     }
 }
