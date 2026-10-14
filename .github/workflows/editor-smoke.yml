@@ -67,10 +67,31 @@ jobs:
           label: editor smoke
           pattern: '^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/[a-z0-9]+-(grading|eval)-|Public/grading-shared\.js|Public/eval-protocol-shared\.js|Public/xeus-kernel-shared\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/jupyterlite/|Public/vendor/|Sources/APIServer/Views/Pages/WorkbenchPage\.swift|Sources/APIServer/Views/Pages/NotebookPage\.swift|Sources/APIServer/Views/NotebookBody\.swift|Sources/APIServer/Views/BaseLayout\.swift|Sources/APIServer/Views/AssignmentEditBody\.swift|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml|\.github/actions/changed-paths/)'
 
-  smoke:
+  # One debug build of chickadee-server for both browser legs, which download
+  # it (browser-probe-setup `server-artifact`) instead of each compiling it.
+  server:
     needs: changes
     if: ${{ needs.changes.outputs.editor == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/build-probe-server
+        with:
+          artifact-name: probe-server
+
+  smoke:
+    needs: [changes, server]
+    if: ${{ needs.changes.outputs.editor == 'true' }}
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
     # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
     # shared build cache misses, and it MISSES on every PR that touches
     # Sources/** or Tests/** — the cache key hashes both, and the job that
@@ -114,6 +135,7 @@ jobs:
       - uses: ./.github/actions/browser-probe-setup
         with:
           browser: ${{ matrix.browser }}
+          server-artifact: probe-server
 
       # selftest.sh drives the editor THREE ways against this one build, in the
       # matrix engine (Chromium / WebKit):
@@ -237,17 +259,18 @@ jobs:
   # smoke job killed by its own timeout-minutes still fails the gate — the
   # run survives in that case, so the gate runs and sees result=cancelled.
   editor-smoke-gate:
-    needs: [changes, smoke]
+    needs: [changes, server, smoke]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Gate on editor smoke result
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
+          SERVER_RESULT: ${{ needs.server.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
           EDITOR_CHANGED: ${{ needs.changes.outputs.editor }}
         run: |
-          echo "changes job: ${CHANGES_RESULT}; editor-relevant: ${EDITOR_CHANGED}; smoke: ${SMOKE_RESULT}"
+          echo "changes job: ${CHANGES_RESULT}; editor-relevant: ${EDITOR_CHANGED}; server: ${SERVER_RESULT}; smoke: ${SMOKE_RESULT}"
           # If we couldn't even determine what changed, fail closed.
           if [ "$CHANGES_RESULT" != "success" ]; then
             echo "::error::change-detection job did not succeed (${CHANGES_RESULT}) — failing closed."
@@ -255,6 +278,12 @@ jobs:
           fi
           # smoke is 'skipped' when no editor files changed (pass), 'success'
           # when it ran green, 'failure'/'cancelled' when it broke.
+          # A failed server build leaves the smoke legs skipped, which the
+          # check below would accept.
+          if [ "$SERVER_RESULT" = "failure" ] || [ "$SERVER_RESULT" = "cancelled" ]; then
+            echo "::error::The probe server build failed (${SERVER_RESULT}) — see the server job."
+            exit 1
+          fi
           if [ "$SMOKE_RESULT" = "failure" ] || [ "$SMOKE_RESULT" = "cancelled" ]; then
             echo "::error::Editor smoke test failed — see the smoke job."
             exit 1

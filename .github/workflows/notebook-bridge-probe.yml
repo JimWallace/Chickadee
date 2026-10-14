@@ -35,8 +35,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  bridge:
+  # One debug build of chickadee-server for both browser legs, which download
+  # it (browser-probe-setup `server-artifact`) instead of each compiling it.
+  server:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/build-probe-server
+        with:
+          artifact-name: probe-server
+
+  bridge:
+    needs: server
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
     # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
     # shared build cache misses, and it MISSES on every PR that touches
     # Sources/** or Tests/** — the cache key hashes both, and the job that
@@ -71,6 +91,7 @@ jobs:
       - uses: ./.github/actions/browser-probe-setup
         with:
           browser: ${{ matrix.browser }}
+          server-artifact: probe-server
 
       - name: Drive command-bridge probe (${{ matrix.browser }})
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}

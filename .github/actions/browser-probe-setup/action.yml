@@ -1,11 +1,11 @@
 name: Browser probe setup
 description: >
-  Shared scaffold for the browser probe / smoke / visual jobs: restore the
-  shared Swift build cache, build chickadee-server, and install Node +
-  Playwright (engine download cached). Callers run actions/checkout first,
-  inside the ghcr.io/jimwallace/chickadee/swift container. The build cache
-  below matches exactly or not at all, so no git mtime restore is needed
-  and a shallow checkout is enough.
+  Shared scaffold for the browser probe / smoke / visual jobs: get
+  chickadee-server (download the workflow's one build, or build it here), and
+  install Node + Playwright (engine download cached). Callers run
+  actions/checkout first, inside the ghcr.io/jimwallace/chickadee/swift
+  container. The build cache in build-probe-server matches exactly or not at
+  all, so no git mtime restore is needed and a shallow checkout is enough.
 
 inputs:
   browser:
@@ -15,49 +15,34 @@ inputs:
     description: "Directory holding the npm project (package-lock.json) to install"
     required: false
     default: "Tools/editor-smoke-test"
+  server-artifact:
+    description: >
+      Name of a chickadee-server artifact from the workflow's `server` job
+      (build-probe-server). Empty: build the server in this job.
+    required: false
+    default: ""
 
 runs:
   using: composite
   steps:
-    # Read-only restore of the shared build cache (same exact key as the Swift
-    # Tests `build` job, from the same action). EXACT-MATCH ONLY — a
-    # restore-keys prefix fallback would incrementally build over a mismatched
-    # tree, which is unsound for the mangled-symbol reason documented in
-    # swift-test-setup. On a hit, building the server product is near-no-op;
-    # on a miss it builds cold. No `tools`: the probes need no test
-    # interpreter, and a stale image must not apt-get all of them here.
-    - name: Swift test setup
-      id: swift
-      uses: ./.github/actions/swift-test-setup
-      with:
-        build-cache: restore
-
-    # Fallback cache, owned by the probes, used only when the shared key missed.
-    #
-    # The shared key is written by `build` in swift-tests.yml — a different
-    # workflow, so `needs:` cannot order a probe after it. On any PR touching
-    # Sources/** or Tests/** the key is new, and whether a probe hits it is a
-    # race against that build finishing. Losing the race means a cold Swift
-    # build (~16 min of a 50 min budget), and losing it *repeatedly* is what
-    # made re-running a probe on the same commit cost the same 16 minutes every
-    # time — nothing the probes did ever populated a key they could read back.
-    #
-    # This one they own: same exact-match discipline (no restore-keys prefix
-    # fallback, which would build incrementally over a mismatched tree), same
-    # source hash, different namespace. Deliberately NOT the shared key: a probe
-    # that won that race would publish a `.build` holding only
-    # chickadee-server, and the swift-tests jobs restoring it would have to
-    # rebuild the test targets — trading their time for ours.
-    - name: Restore/save probe build cache
-      if: steps.swift.outputs.cache-hit != 'true'
-      uses: actions/cache@v6
-      with:
-        path: .build
-        key: ${{ runner.os }}-probebuild-v1-${{ steps.swift.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
+    # Without `server-artifact`, build the server here. With it, download the
+    # binary that the workflow's `server` job built once for every leg.
     - name: Build chickadee-server
+      if: inputs.server-artifact == ''
+      uses: ./.github/actions/build-probe-server
+
+    - name: Download chickadee-server
+      if: inputs.server-artifact != ''
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ inputs.server-artifact }}
+        path: .build/debug
+
+    # An artifact does not keep the executable bit.
+    - name: Make chickadee-server executable
+      if: inputs.server-artifact != ''
       shell: bash
-      run: swift build --product chickadee-server
+      run: chmod +x .build/debug/chickadee-server
 
     # Node and npm are baked into the swift-ci image, so the normal path here is
     # to install nothing. The apt fallback stays for two cases that are real:
