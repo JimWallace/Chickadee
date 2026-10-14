@@ -489,7 +489,13 @@ extension AvatarSpec {
         // the accessory and tilt by one universal weight: most birds upright
         // and wearing nothing. Colourway, accent and backdrop are uniform
         // (docs/avatar-species.md, "Trait weights" and "Trait map").
-        let species: AvatarSpecies = pick(using: &generator)
+        drawn(species: pick(using: &generator), using: &generator)
+    }
+
+    /// A fresh bird of `species`, by the same weights as `drawn(using:)`.
+    private static func drawn<G: RandomNumberGenerator>(
+        species: AvatarSpecies, using generator: inout G
+    ) -> AvatarSpec {
         let traits = species.traits
         return AvatarSpec(
             cap: pick(from: species.colourways, using: &generator),
@@ -502,6 +508,34 @@ extension AvatarSpec {
             tuft: pick(weighted: AvatarTuft.allCases, by: { traits.tuft[$0] ?? 0 }, using: &generator),
             tilt: pick(weighted: AvatarTilt.allCases, by: \.drawWeight, using: &generator)
         )
+    }
+
+    /// A hatched bird: drawn like `drawn(using:)`, but the species is one of
+    /// the others than `species`, each equally likely, and the backdrop and
+    /// the ring are `spec`'s. The accent is drawn again: it belongs to the
+    /// hat. See `AvatarHatch`.
+    public static func drawn<G: RandomNumberGenerator>(
+        excluding species: AvatarSpecies, keeping spec: AvatarSpec, using generator: inout G
+    ) -> AvatarSpec {
+        let others = AvatarSpecies.allCases.filter { $0 != species }
+        var hatched = drawn(species: pick(from: others, using: &generator), using: &generator)
+        hatched.backdrop = spec.backdrop
+        hatched.border = spec.border
+        return hatched
+    }
+
+    /// A hatched bird from the system's RNG — the production hatch path.
+    public static func drawn(excluding species: AvatarSpecies, keeping spec: AvatarSpec) -> AvatarSpec {
+        var generator = SystemRandomNumberGenerator()
+        return drawn(excluding: species, keeping: spec, using: &generator)
+    }
+
+    /// A hatched bird reproducible from `seed`, for tests.
+    public static func drawn(
+        excluding species: AvatarSpecies, keeping spec: AvatarSpec, fromSeed seed: UInt64
+    ) -> AvatarSpec {
+        var generator = AvatarSeedGenerator(seed: seed)
+        return drawn(excluding: species, keeping: spec, using: &generator)
     }
 
     /// A fresh bird from the system's RNG — the production first-use path.

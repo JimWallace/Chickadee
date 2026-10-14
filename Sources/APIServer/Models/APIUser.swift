@@ -102,6 +102,12 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "avatar_spec")
     var avatarSpecJSON: String?
 
+    /// The bird before the last "Hatch a new bird", as `AvatarSpec` JSON, so
+    /// the student can go back to it until they hatch again. Nil when there
+    /// is none (AvatarStore+Hatch.swift).
+    @OptionalField(key: "avatar_previous_spec")
+    var avatarPreviousSpecJSON: String?
+
     /// `UserRole` raw value; column stays a string.
     @Field(key: "role")
     var role: String

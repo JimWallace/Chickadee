@@ -228,10 +228,13 @@ private struct AccountBirdCard: HTML {
                 p(.class("form-error"), .role("alert")) { "That choice is not available." }
             }
             // `chickadee` is the card's older anchor; the save redirect still
-            // names it.
+            // names it. The hatch redirects name the section, `bird`.
             div(.class("card bird-card"), .id("chickadee")) {
+                if let hatch = picker.hatch, let strip = hatch.strip {
+                    AccountHatchStrip(page: page, hatch: hatch, strip: strip)
+                }
                 div(.class("bird-card-body")) {
-                    AccountBirdHero(picker: picker)
+                    AccountBirdHero(page: page, picker: picker)
                     AccountBirdForm(page: page, picker: picker)
                 }
             }
@@ -240,16 +243,130 @@ private struct AccountBirdCard: HTML {
     }
 }
 
-/// The bird at the podium size, with its species and when it hatched.
+/// The bird at the podium size, with its species, when it hatched and the
+/// hatch control.
 private struct AccountBirdHero: HTML {
+    let page: PageRequestContext
     let picker: AvatarPickerContext
 
     var body: some HTML {
         div(.class("bird-card-hero")) {
             Avatar(avatar: picker.hero)
-            p { strong { picker.speciesName } }
+            p {
+                strong { picker.speciesName }
+                if picker.hatch?.strip == .hatched {
+                    " "
+                    span(.class("tier")) { "New" }
+                }
+            }
             if !picker.hatchedText.isEmpty {
-                p(.class("text-muted")) { picker.hatchedText }
+                p(.class("text-muted"), .dataFlag("avatar-hatched")) { picker.hatchedText }
+            }
+            if let hatch = picker.hatch {
+                AccountHatchControl(page: page, hatch: hatch)
+            }
+        }
+    }
+}
+
+/// The strip across the top of the bird card: the confirm before a hatch, or
+/// the new bird after one.
+private struct AccountHatchStrip: HTML {
+    let page: PageRequestContext
+    let hatch: AvatarHatchContext
+    let strip: AvatarHatchStrip
+
+    var body: some HTML {
+        switch strip {
+        case .confirm:
+            div(.class("bird-card-strip")) {
+                div(.ariaHidden) {
+                    Avatar(avatar: hatch.current)
+                    " → "
+                    span(.class("swatch-none")) { "?" }
+                }
+                div {
+                    p { strong { "Hatch a new bird?" } }
+                    p {
+                        "You’ll get a different species, with random colours, markings, face and hat. "
+                            + "Your backdrop, ring and class handles stay. "
+                            + "This uses 1 of the \(hatch.left) you have left this term."
+                    }
+                }
+                div(.class("toolbar")) {
+                    form(.method(.post), .action("/account/avatar/hatch")) {
+                        CSRFField(token: page.csrfToken)
+                        " "
+                        button(.class("btn btn-primary"), .type(.submit)) { "Hatch" }
+                    }
+                    a(.class("btn"), .href("/account#bird")) { "Keep my \(hatch.speciesWord)" }
+                }
+            }
+        case .hatched:
+            div(.class("bird-card-strip"), .role("status")) {
+                div {
+                    p { strong { "Meet your new bird: \(hatch.speciesWithArticle)." } }
+                    p {
+                        "Classmates see it beside your class handle from now on. "
+                            + "You can go back to your \(hatch.previousSpeciesWord ?? "") until you hatch again."
+                    }
+                }
+                div(.class("toolbar")) {
+                    AccountRestoreForm(page: page, hatch: hatch, linkStyled: false)
+                    a(.class("btn btn-primary"), .href("/account#bird")) { "Keep it" }
+                }
+            }
+        }
+    }
+}
+
+/// The hatch control under the hero bird: the button, the caption and, while
+/// a previous bird exists, the way back to it. With none left, the button
+/// stays, disabled, and the caption says when more come.
+private struct AccountHatchControl: HTML {
+    let page: PageRequestContext
+    let hatch: AvatarHatchContext
+
+    var body: some HTML {
+        div(.class("bird-card-hatch")) {
+            if hatch.canHatch {
+                a(.class("btn"), .href("/account?hatch=confirm#bird")) {
+                    Icon("i-refresh")
+                    " Hatch a new bird"
+                }
+            } else {
+                button(.class("btn"), .type(.button), .disabled) {
+                    Icon("i-refresh")
+                    " Hatch a new bird"
+                }
+            }
+            p(.class("field-note field-note--muted")) { hatch.caption }
+            if hatch.previous != nil, hatch.strip != .hatched {
+                AccountRestoreForm(page: page, hatch: hatch, linkStyled: true)
+            }
+        }
+    }
+}
+
+/// "Go back to my cardinal": puts the previous bird back.
+private struct AccountRestoreForm: HTML {
+    let page: PageRequestContext
+    let hatch: AvatarHatchContext
+    /// The small link-styled button under the caption, or the strip's button
+    /// with the previous bird in it.
+    let linkStyled: Bool
+
+    var body: some HTML {
+        form(.method(.post), .action("/account/avatar/restore")) {
+            CSRFField(token: page.csrfToken)
+            " "
+            if linkStyled {
+                button(.class("btn-link"), .type(.submit)) { "Go back to my \(hatch.previousSpeciesWord ?? "")" }
+            } else {
+                button(.class("btn"), .type(.submit)) {
+                    if let previous = hatch.previous { Avatar(avatar: previous) }
+                    "Go back to my \(hatch.previousSpeciesWord ?? "")"
+                }
             }
         }
     }

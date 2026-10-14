@@ -41,11 +41,22 @@ struct DataExportProfile: Codable, Sendable {
     /// image. Personal information about them, so it belongs in the export;
     /// nil when they have never had one materialized.
     let avatar: AvatarSpec?
+    /// The bird before the last "Hatch a new bird", while the student can
+    /// still go back to it; nil when there is none.
+    let previousAvatar: AvatarSpec?
+    /// Every "Hatch a new bird", oldest first; nil when there is none.
+    var avatarHatches: [DataExportAvatarHatch]?
     /// The linked GitHub account (docs/github-submissions.md slice 2), or nil
     /// when none is linked.
     let githubAccount: DataExportGitHubAccount?
     /// Course repositories made for the student (slice 4), or nil when none.
     var githubCourseRepositories: [DataExportGitHubCourseRepository]?
+}
+
+struct DataExportAvatarHatch: Codable, Sendable {
+    /// "2026-fall".
+    let term: String
+    let hatchedAt: Date?
 }
 
 struct DataExportGitHubCourseRepository: Codable, Sendable {
@@ -176,6 +187,9 @@ func gatherDataExportContent(
     let auditEntries = try await gatherAuditEntries(for: user, on: db)
     let adjustments = try await gatherGradingAdjustments(userID: userID, on: db)
     let githubLink = try await APIGitHubAccountLink.query(on: db).filter(\.$userID == userID).first()
+    let avatarHatches = try await APIAvatarHatch.query(on: db).filter(\.$userID == userID)
+        .sort(\.$createdAt, .ascending).all()
+        .map { DataExportAvatarHatch(term: $0.termKey, hatchedAt: $0.createdAt) }
     let courseRepositories = try await APIGitHubCourseRepository.query(on: db).filter(\.$userID == userID).all()
         .map {
             DataExportGitHubCourseRepository(
@@ -199,6 +213,8 @@ func gatherDataExportContent(
             lastLoginAt: user.lastLoginAt,
             lastSeenAt: user.lastSeenAt,
             avatar: user.avatarSpecJSON.flatMap(AvatarStore.decode),
+            previousAvatar: user.avatarPreviousSpecJSON.flatMap(AvatarStore.decode),
+            avatarHatches: avatarHatches.isEmpty ? nil : avatarHatches,
             githubAccount: githubLink.map {
                 DataExportGitHubAccount(githubUserID: $0.githubUserID, login: $0.githubLogin, linkedAt: $0.linkedAt)
             },
@@ -548,8 +564,9 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
     ## Contents
 
     - `profile.json` — your account profile: username, names, email,
-      student ID, sign-in provider, account timestamps, and the choices
-      behind your generated avatar. Passwords are stored only as one-way
+      student ID, sign-in provider, account timestamps, the choices
+      behind your generated avatar, the avatar before your last hatch, and
+      when you hatched a new one. Passwords are stored only as one-way
       hashes and are never included.
     - `enrollments.json` — the courses you are enrolled in, with each
       course's term, your role in each, when you enrolled, and the

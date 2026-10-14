@@ -462,11 +462,18 @@ duplicate.
   and ring, not the previewed ones, while the ring samples follow the preview).
   An option that cannot be chosen yet is not a swatch: see `.bird-locked`.
   Used by the account page's `.bird-card`.
-- **`.bird-card`** — the account page's "Your bird" card (a `.card`).
-  `.bird-card-body` is a wrapping flex row of
+- **`.bird-card`** — the account page's "Your bird" card (a `.card`).  An
+  optional `.bird-card-strip` across its top holds a hatch's confirm or its
+  result, tinted `--you-bg`: the birds, the text and a `.toolbar` of actions.
+  The result strip is not a second flash: it carries actions, and the
+  redirect lands at the card, where a flash at the page top is off screen.
+  Under it, `.bird-card-body` is a wrapping flex row of
   two items, so the columns stack on a phone with no media query:
   `.bird-card-hero`, a light panel with the bird at `.avatar-xl` (the
-  `AvatarSize.podium` size, reused) and the species; and
+  `AvatarSize.podium` size, reused), the species, the hatched date and the
+  hatch control, `.bird-card-hatch` (a link to the confirm, or a disabled
+  button with none left, and its caption);
+  and
   `.bird-card-groups`, the form with the Colour and Ring fieldsets and a
   `.toolbar` footer.  Inside the groups every `.swatch` is a 44px hit target;
   a named swatch (a colourway, a ring) shows the checked state on the whole
