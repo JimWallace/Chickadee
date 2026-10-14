@@ -362,8 +362,10 @@ duplicate.
   properties, and the fixed parts — `.av-eyewhite`, `.av-pupil`, `.av-glint`,
   `.av-blush`, `.av-mouth`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
   read the palette directly.  The colourway decides the species (one of eleven,
-  [avatar-species.md](avatar-species.md)); the eyes, the body circle and the
-  beak shape are the same on every species and keep the birds one family.  **Five sizes.**  `.avatar` alone is 3rem: the
+  [avatar-species.md](avatar-species.md)); the eyes and the body circle are
+  the same on every species and keep the birds one family, and each species
+  has its own beak.  `.av-eyewhite` is the fixed white: the eye disc, and a
+  white wing mark where a species' own wing art needs one.  **Five sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
   row where the handle beside it carries the identity — the bracket —
   because below 48px the bird is recognition, not identification, and a row
@@ -463,8 +465,8 @@ duplicate.
   says how each kind opens, so the state does not rest on the dimming alone.
   The option a student already wears is never disabled.  Used by the account page's
   bird picker, whose live preview (`avatar-picker.js`) copies the
-  checked option's tokens onto the avatar and points its ring, plumage and
-  tuft layers at the checked symbols; see
+  checked option's tokens onto the avatar and points its ring, plumage, tuft
+  and wing layers at the checked symbols; see
   [student-wardrobe.md](student-wardrobe.md) and
   [avatar-species.md](avatar-species.md).
 - **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a

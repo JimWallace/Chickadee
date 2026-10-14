@@ -129,18 +129,23 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
             (isStaff ? nil : spec.border.accent).map { "--avatar-accent-\($0.rawValue)" }
             ?? "--avatar-border-none"
         // A hat hides the tuft and the crest alike. Without a hat, a crested
-        // species' bare head is its crest, and the four tuft shapes read as
-        // crest variants on it.
+        // species wears a crest in the shape its tuft slot maps to, and the
+        // other species wear the tuft itself.
         let species = spec.species
         if spec.accessory.hidesTuft {
             self.tuftSymbolRef = "#av-tuft-none"
-        } else if spec.tuft == .none && species.hasCrest {
-            self.tuftSymbolRef = "#av-crest-\(species.rawValue)"
+        } else if species.hasCrest {
+            self.tuftSymbolRef = "#av-crest-\(species.rawValue)-\(AvatarCrestShape(tuft: spec.tuft).rawValue)"
         } else {
             self.tuftSymbolRef = "#av-tuft-\(spec.tuft.rawValue)"
         }
         self.plumageSymbolRef = "#av-plumage-\(species.rawValue)"
-        self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"
+        // A species with its own art for this pattern draws that; the rest
+        // draw the shared symbol.
+        self.wingSymbolRef =
+            species.wingArt.contains(spec.wing)
+            ? "#av-wing-\(species.rawValue)-\(spec.wing.rawValue)"
+            : "#av-wing-\(spec.wing.rawValue)"
         self.expressionSymbolRef = "#av-expression-\(spec.expression.rawValue)"
         self.accessorySymbolRef = "#av-accessory-\(spec.accessory.rawValue)"
         self.tiltTransform = "rotate(\(spec.tilt.degrees) 32 34)"

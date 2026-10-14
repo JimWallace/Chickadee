@@ -301,7 +301,8 @@ private struct AccountAvatarPicker: HTML {
 
 /// One colourway choice: the student's own bird drawn in it, at the roster
 /// size so the species reads. The radio carries the six tone tokens and the
-/// two layer references the live preview sets.
+/// three layer references the live preview sets: plumage, tuft or crest, and
+/// the wing, because a species may draw a pattern with its own art.
 private struct AccountBirdSwatch: HTML {
     let option: AvatarBirdOption
 
@@ -317,7 +318,8 @@ private struct AccountBirdSwatch: HTML {
                 .data("av-beak", value: option.presentation.beakToken),
                 .data("av-mark", value: option.presentation.markToken),
                 .data("av-plumage", value: option.presentation.plumageSymbolRef),
-                .data("av-tuft", value: option.presentation.tuftSymbolRef)
+                .data("av-tuft", value: option.presentation.tuftSymbolRef),
+                .data("av-wing-art", value: option.presentation.wingSymbolRef)
             )
             .attributes(.checked, when: option.checked)
             " "
