@@ -49,10 +49,15 @@ extension WebRoutes {
 
     /// The student's own result page that sent the request, or the dashboard.
     private func spareReturnPath(req: Request, userID: UUID) async throws -> String {
-        guard let submissionID = try? req.content.get(String.self, at: "submissionID"),
+        guard let submissionID = try? await req.decodeContent(SpareForm.self).submissionID,
             let submission = try await APISubmission.find(submissionID, on: req.db),
             submission.userID == userID
         else { return "/" }
         return "/submissions/\(submissionID)"
     }
+}
+
+/// The "Fill a hole" form: the result page it was sent from.
+private struct SpareForm: Decodable {
+    let submissionID: String?
 }
