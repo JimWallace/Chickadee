@@ -112,12 +112,14 @@
        panels.  Dark mode needs a stronger alpha to read at all. */
     --shadow-pop: 0 4px 16px rgba(0, 0, 0, .15);
 
-    /* ── Avatar palette (generated student chickadees) ────
-       Seven axes vary: cap family, wing pattern, expression, accessory,
+    /* ── Avatar palette (generated student birds) ────
+       Seven axes vary: colourway, wing pattern, expression, accessory,
        backdrop, tuft and tilt.  Tuft is drawn in the cap colour and tilt is a
-       transform, so neither adds a colour here.  Everything else is FIXED —
-       body, cheek, beak, bib, eye — and that is deliberate: they are what
-       keeps every bird a chickadee even when the cap goes plum.  Only the
+       transform, so neither adds a colour here.  A colourway is six tones
+       (cap, wing, body, bib, beak, mark) and belongs to one species
+       (Core/AvatarSpecies.swift, docs/avatar-species.md); the eyes are FIXED
+       on every species, and with the shared body circle and beak shape they
+       are what keeps the birds one family.  Only the
        BACKDROPS have dark-mode mirrors; the bird itself must be the same bird
        in both schemes.  An accessory is drawn in one of five accents, so an
        accent is part of the accessory axis, never an axis of its own.
@@ -126,16 +128,66 @@
        at the roster size cap hue is one of the few things that still reads.
        The white eye disc sits on the cap, so every -cap keeps at least 3:1
        against #FFFFFF (WCAG relative luminance): ink 15.1, slate 5.4,
-       teal 4.7 (the lowest), forest 6.0, indigo 6.9, plum 7.0, rust 5.2,
-       umber 6.2. */
+       teal 4.7, forest 6.0, indigo 6.9, plum 7.0, rust 5.2, umber 6.2;
+       scarlet 5.9, crimson 7.6, fawn 3.4 (the lowest), copper 9.5,
+       brick 11.2, apricot 8.1, azure 4.1, cobalt 6.3, powder 3.4,
+       emerald 8.4, violet 9.8, bronze 10.6. AvatarSpeciesTests asserts the
+       rule for every colourway. */
     --avatar-ink-cap: #23262F;      --avatar-ink-wing: #555D74;
+    --avatar-ink-body: #F6EFE2;     --avatar-ink-bib: #3C4250;     --avatar-ink-beak: #E2A33C;     --avatar-ink-mark: #F6EFE2;
     --avatar-slate-cap: #5A6C7E;    --avatar-slate-wing: #8B9DAE;
+    --avatar-slate-body: #F6EFE2;   --avatar-slate-bib: #3C4250;   --avatar-slate-beak: #E2A33C;   --avatar-slate-mark: #F6EFE2;
     --avatar-teal-cap: #15808C;     --avatar-teal-wing: #5BB3BD;
+    --avatar-teal-body: #F6EFE2;    --avatar-teal-bib: #3C4250;    --avatar-teal-beak: #E2A33C;    --avatar-teal-mark: #F6EFE2;
     --avatar-forest-cap: #2E6F47;   --avatar-forest-wing: #67A27B;
+    --avatar-forest-body: #F6EFE2;  --avatar-forest-bib: #3C4250;  --avatar-forest-beak: #E2A33C;  --avatar-forest-mark: #F6EFE2;
     --avatar-indigo-cap: #4452AA;   --avatar-indigo-wing: #7F8AD0;
+    --avatar-indigo-body: #F6EFE2;  --avatar-indigo-bib: #3C4250;  --avatar-indigo-beak: #E2A33C;  --avatar-indigo-mark: #F6EFE2;
     --avatar-plum-cap: #853F79;     --avatar-plum-wing: #B77DAA;
+    --avatar-plum-body: #F6EFE2;    --avatar-plum-bib: #3C4250;    --avatar-plum-beak: #E2A33C;    --avatar-plum-mark: #F6EFE2;
     --avatar-rust-cap: #B14F24;     --avatar-rust-wing: #DB8857;
+    --avatar-rust-body: #F6EFE2;    --avatar-rust-bib: #3C4250;    --avatar-rust-beak: #E2A33C;    --avatar-rust-mark: #F6EFE2;
     --avatar-umber-cap: #7A5C36;    --avatar-umber-wing: #B09464;
+    --avatar-umber-body: #F6EFE2;   --avatar-umber-bib: #3C4250;   --avatar-umber-beak: #E2A33C;   --avatar-umber-mark: #F6EFE2;
+
+    /* The cardinal. The body is the cap colour; the bib is the black mask
+       round the beak, and the beak sits on it. Fawn is the female: buff, with
+       a browner crown, and a red crest and wing (the crest is drawn in the
+       wing tone). */
+    --avatar-scarlet-cap: #C8102E;  --avatar-scarlet-wing: #A50F26;
+    --avatar-scarlet-body: #C8102E; --avatar-scarlet-bib: #1E1A1A; --avatar-scarlet-beak: #E8762E; --avatar-scarlet-mark: #F3B094;
+    --avatar-crimson-cap: #A3152C;  --avatar-crimson-wing: #821022;
+    --avatar-crimson-body: #A3152C; --avatar-crimson-bib: #1E1A1A; --avatar-crimson-beak: #E8762E; --avatar-crimson-mark: #F3B094;
+    --avatar-fawn-cap: #A8865C;     --avatar-fawn-wing: #B0604C;
+    --avatar-fawn-body: #CDB492;    --avatar-fawn-bib: #4A3B33;    --avatar-fawn-beak: #E8762E;    --avatar-fawn-mark: #F6E9D6;
+
+    /* The robin. The cap is a hood down to the breast, the body is the
+       breast, and the bib is unused, so it carries the hood tone. */
+    --avatar-copper-cap: #4E4B50;   --avatar-copper-wing: #6E675F;
+    --avatar-copper-body: #D9742B;  --avatar-copper-bib: #4E4B50;  --avatar-copper-beak: #E6B93C;  --avatar-copper-mark: #F6EFE2;
+    --avatar-brick-cap: #3F3C42;    --avatar-brick-wing: #5F5A55;
+    --avatar-brick-body: #B8552A;   --avatar-brick-bib: #3F3C42;   --avatar-brick-beak: #E6B93C;   --avatar-brick-mark: #F6EFE2;
+    --avatar-apricot-cap: #5C5A60;  --avatar-apricot-wing: #7D776F;
+    --avatar-apricot-body: #E9955A; --avatar-apricot-bib: #5C5A60; --avatar-apricot-beak: #E6B93C; --avatar-apricot-mark: #F6EFE2;
+
+    /* The blue jay. A white face and belly, a black necklace for the bib, and
+       a DARK mark tone, because a jay's wing bars are black. */
+    --avatar-azure-cap: #3F7FC7;    --avatar-azure-wing: #2F5FA0;
+    --avatar-azure-body: #E9EDF1;   --avatar-azure-bib: #1B1B22;   --avatar-azure-beak: #3A3A44;   --avatar-azure-mark: #1B1B22;
+    --avatar-cobalt-cap: #2E5DA8;   --avatar-cobalt-wing: #234784;
+    --avatar-cobalt-body: #E9EDF1;  --avatar-cobalt-bib: #1B1B22;  --avatar-cobalt-beak: #3A3A44;  --avatar-cobalt-mark: #1B1B22;
+    --avatar-powder-cap: #5A8FCB;   --avatar-powder-wing: #4A7FB8;
+    --avatar-powder-body: #EEF1F4;  --avatar-powder-bib: #1B1B22;  --avatar-powder-beak: #3A3A44;  --avatar-powder-mark: #1B1B22;
+
+    /* The starling. A glossy dark bird with cream speckles, lifted well above
+       the dark-mode backdrops: a natural near-black vanished on them
+       (docs/avatar-species.md, finding 4). The bib is unused. */
+    --avatar-emerald-cap: #2B534D;  --avatar-emerald-wing: #557F88;
+    --avatar-emerald-body: #3F6E66; --avatar-emerald-bib: #3F6E66; --avatar-emerald-beak: #E9C440; --avatar-emerald-mark: #EFE3C8;
+    --avatar-violet-cap: #45386A;   --avatar-violet-wing: #7A6B9A;
+    --avatar-violet-body: #5A4A7A;  --avatar-violet-bib: #5A4A7A;  --avatar-violet-beak: #E9C440;  --avatar-violet-mark: #EFE3C8;
+    --avatar-bronze-cap: #533D2C;   --avatar-bronze-wing: #8A6E55;
+    --avatar-bronze-body: #6B4F3A;  --avatar-bronze-bib: #6B4F3A;  --avatar-bronze-beak: #E9C440;  --avatar-bronze-mark: #EFE3C8;
 
     --avatar-accent-ember: #C2523F;
     --avatar-accent-orchid: #7A4A86;
@@ -152,10 +204,10 @@
     --avatar-back-lilac: #E0D8F4;
     --avatar-back-pebble: #E6E6E2;
 
-    /* Fixed, every bird: the chickadee under the variation. */
-    --avatar-body: #F6EFE2;
-    --avatar-bib: #3C4250;
-    --avatar-beak: #E2A33C;
+    /* Fixed, every bird and every species: the eyes, and the bloom's centre.
+       Body, bib, beak and mark tones moved into the colourways with the
+       species (docs/avatar-species.md). */
+    --avatar-bloom-eye: #E2A33C;
     --avatar-eyewhite: #FFFFFF;
     --avatar-eye: #22242C;
     --avatar-glint: #FFFFFF;
@@ -3482,15 +3534,16 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .account-identity .text-muted { font-size: var(--text-sm); }
 
-/* The generated student chickadee.  One svg carrying the size class wraps the
+/* The generated student bird.  One svg carrying the size class wraps the
    seven use elements that stack into a bird (see Resources/Sprites/avatar-sprite.svg); the spec
    picks the varying colours by assigning palette tokens to the --av-* custom
    properties on that element, which is the sanctioned inline form.
 
-   Only five properties are per-student (AvatarPresentation.inlineProperties
-   in Core/AvatarMarkup.swift lists them): the fixed parts of the bird read their
-   colours straight from the palette, because a body or a beak that varied
-   would stop the birds being one species. */
+   Nine properties are per-student (AvatarPresentation.inlineProperties in
+   Core/AvatarMarkup.swift lists them): the six tones of the colourway, the
+   accent, the backdrop and the border. The eyes read the palette directly:
+   they are the same on every species, and with the body circle and the beak
+   shape they are what keeps the birds one family. */
 .avatar {
     display: block;
     flex: none;
@@ -3500,6 +3553,10 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     overflow: hidden;
     --av-cap: var(--avatar-slate-cap);
     --av-wing: var(--avatar-slate-wing);
+    --av-body: var(--avatar-slate-body);
+    --av-bib: var(--avatar-slate-bib);
+    --av-beak: var(--avatar-slate-beak);
+    --av-mark: var(--avatar-slate-mark);
     --av-accent: var(--avatar-accent-ember);
     --av-backdrop: var(--avatar-back-sky);
     /* The colour of a solid ring (docs/student-wardrobe.md, "Rings"). The ring
@@ -3621,14 +3678,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-cap { fill: var(--av-cap); }
 .av-wing { fill: var(--av-wing); }
 .av-accent { fill: var(--av-accent); }
-.av-body { fill: var(--avatar-body); }
-.av-bib { fill: var(--avatar-bib); }
-.av-beak { fill: var(--avatar-beak); }
+.av-body { fill: var(--av-body); }
+.av-bib { fill: var(--av-bib); }
+.av-beak { fill: var(--av-beak); }
 .av-eyewhite { fill: var(--avatar-eyewhite); }
 .av-pupil { fill: var(--avatar-eye); }
 .av-glint { fill: var(--avatar-glint); }
-.av-wing-mark { fill: var(--avatar-body); }
-.av-brow { fill: none; stroke: var(--avatar-body); }
+.av-wing-mark { fill: var(--av-mark); }
+.av-brow { fill: none; stroke: var(--av-mark); }
 .av-blush { fill: var(--avatar-blush); opacity: .85; }
 .av-mouth { fill: var(--avatar-mouth); }
 .av-ring { fill: var(--av-border); }
@@ -3646,7 +3703,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-spectrum-orchid { fill: var(--avatar-accent-orchid); }
 .av-gear { fill: var(--avatar-gear); }
 .av-gear-line { fill: none; stroke: var(--avatar-gear); }
-.av-bloom-eye { fill: var(--avatar-beak); }
+.av-bloom-eye { fill: var(--avatar-bloom-eye); }
 
 /* The drop zone's upload glyph. A descendant selector rather than a class of
    its own: it is one rule serving one existing component, and a new global

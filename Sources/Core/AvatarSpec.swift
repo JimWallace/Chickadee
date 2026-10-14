@@ -1,19 +1,32 @@
 // Core/AvatarSpec.swift
 //
-// What a generated student chickadee IS: seven slot choices, not an image and
+// What a generated student bird IS: seven slot choices, not an image and
 // not a seed.  See docs/student-avatars.md for why the spec is the stored
 // artifact — the short version is that re-deriving from a seed on every render
 // means appending one option to one slot reshuffles every existing avatar.
 
 import Foundation
 
-/// The cap and, via its family, the wing beside it.  The loudest axis, which is
-/// why it carries the least detail.
+/// The colourway: the six tones a bird is painted in (cap, wing, body, bib,
+/// beak and mark), named for the chickadee's cap, which was the one coloured
+/// part when the slot was named. The stored key stays `cap`.
 ///
-/// Body, cheek, beak and bib are NOT axes: they are fixed, and they are what
-/// keeps every bird a chickadee even when the cap goes plum.
+/// Each colourway belongs to exactly one species (`AvatarSpecies.colourways`),
+/// so the colourway decides the species and the species is not stored. Names
+/// are unique across species because the enum is one: a stored raw value must
+/// mean one thing. Append only, and never reuse a name.
 public enum AvatarCap: String, CaseIterable, Codable, Sendable {
+    /// The chickadee's eight.
     case slate, plum, forest, indigo, rust, teal, umber, ink
+    /// The cardinal's three; fawn is the female's buff with a red crest and wing.
+    case scarlet, crimson, fawn
+    /// The robin's three: the breast varies, the hood stays grey-brown.
+    case copper, brick, apricot
+    /// The blue jay's three.
+    case azure, cobalt, powder
+    /// The starling's three, lifted above the dark backdrops
+    /// (docs/avatar-species.md, finding 4).
+    case emerald, violet, bronze
 }
 
 /// How the bird looks out of the page — the axis that reads first and from
@@ -233,6 +246,10 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
     /// Chosen by the student, never drawn. Not part of `combinationCount`.
     public var border: AvatarBorder
 
+    /// Derived from the colourway, never stored (docs/avatar-species.md,
+    /// decision 1).
+    public var species: AvatarSpecies { AvatarSpecies.of(cap) }
+
     public init(
         cap: AvatarCap,
         wing: AvatarWing,
@@ -395,8 +412,12 @@ extension AvatarSpec {
     ///   private.  The stored value is drawn from the system RNG and has no
     ///   connection to who the student is.
     public static func drawn<G: RandomNumberGenerator>(using generator: inout G) -> AvatarSpec {
-        AvatarSpec(
-            cap: pick(using: &generator),
+        // The species first, each equally likely, then a colourway of that
+        // species. A draw over every colourway at once would make a chickadee
+        // eight times as likely as a cardinal, which is not the design.
+        let species: AvatarSpecies = pick(using: &generator)
+        return AvatarSpec(
+            cap: pick(from: species.colourways, using: &generator),
             wing: pick(using: &generator),
             expression: pick(from: AvatarExpression.starterCases, using: &generator),
             accessory: pick(from: AvatarAccessory.starterCases, using: &generator),

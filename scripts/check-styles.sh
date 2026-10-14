@@ -498,8 +498,10 @@ fi
 # The avatar props are the second honest case, and the same shape as --bar-h:
 # every one carries a palette token chosen for the STUDENT the server is
 # rendering, so no stylesheet can hold it and no modifier class could enumerate
-# 9,216 of them. They are a closed set, five today, listed with the field each
-# reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift).
+# millions of them. They are a closed set, nine today, listed with the field each
+# reads by AvatarPresentation.inlineProperties (Core/AvatarMarkup.swift). Four
+# of them (body, bib, beak, mark) arrived with the species: a tone that was
+# fixed while every bird was a chickadee is part of the colourway now.
 #
 # Two halves read this one list. Here, the literal style values of the Swift
 # views (section 2's style_values), so a branch no fixture renders is covered.
@@ -507,7 +509,7 @@ fi
 # (ElementaryPageGuardTests.inlineCustomPropertiesArePerDatum) reads the list
 # from this line, and also sees a value held in a variable, such as the
 # avatar's; it asserts every AvatarPresentation.inlineProperties name is here.
-PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-accent --av-backdrop --av-border"
+PER_DATUM_INLINE_PROPS="--bar-h --share --av-cap --av-wing --av-body --av-bib --av-beak --av-mark --av-accent --av-backdrop --av-border"
 # Every custom property in the attribute is checked, wherever it sits: the
 # first one only, in an attribute that starts with `--`, let a second one or
 # one after `display:none;` through (#2404).

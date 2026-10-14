@@ -43,8 +43,9 @@ import Testing
     }
 
     @Test func starterCombinationCountUsesOnlyStarterExpressions() {
-        #expect(AvatarSpec.starterCombinationCount == 8 * 6 * 6 * 8 * 5 * 8 * 5 * 3)
-        #expect(AvatarSpec.starterCombinationCount == 1_382_400)
+        // 20 colourways since the species (docs/avatar-species.md).
+        #expect(AvatarSpec.starterCombinationCount == 20 * 6 * 6 * 8 * 5 * 8 * 5 * 3)
+        #expect(AvatarSpec.starterCombinationCount == 3_456_000)
     }
 
     // MARK: - Stored specs that predate the axes
@@ -231,7 +232,7 @@ import Testing
         let close = try #require(body.range(of: "\n        }\n", range: group.upperBound..<body.endIndex))
         #expect(backdrop.upperBound <= group.lowerBound, "the backdrop must not tilt")
         for layer in [
-            "avatar.tuftSymbolRef", "\"#av-plumage\"", "avatar.wingSymbolRef", "avatar.expressionSymbolRef",
+            "avatar.tuftSymbolRef", "avatar.plumageSymbolRef", "avatar.wingSymbolRef", "avatar.expressionSymbolRef",
             "avatar.accessorySymbolRef",
         ] {
             let use = try #require(body.range(of: "SVG.use(.href(\(layer))) {}"), "no \(layer) layer")

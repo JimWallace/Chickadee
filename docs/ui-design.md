@@ -339,16 +339,17 @@ duplicate.
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
-- **`.avatar`** and the `.av-*` part classes — the generated student chickadee.
+- **`.avatar`** and the `.av-*` part classes — the generated student bird.
   One `<svg>` carrying the size class wraps seven `<use>` elements naming
   symbols in `Resources/Sprites/avatar-sprite.svg`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
   last, on top and untilted, the ring.
   **A page that renders `Avatar` must also include `AvatarSprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
-  which no guard can catch.  Five colours are per-student
-  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
-  assigned inline, which is the sanctioned form); `--av-border` colours a solid
+  which no guard can catch.  Nine colours are per-student
+  (`--av-cap`, `--av-wing`, `--av-body`, `--av-bib`, `--av-beak`, `--av-mark`,
+  `--av-accent`, `--av-backdrop`, `--av-border`, assigned inline, which is
+  the sanctioned form); `--av-border` colours a solid
   ring (`.av-ring`) and is the transparent `--avatar-border-none` for every
   other ring.  The patterned rings colour themselves by class
   (`.av-rainbow-*`, `.av-spectrum-*`, or the student's `.av-accent` and
@@ -356,12 +357,13 @@ duplicate.
   colour no student ring uses, with a dark-mode mirror) is drawn from a course
   role, never from a stored choice.  `.avatar` sets `forced-color-adjust:
   none`: the bird is decorative, and forced colors would otherwise repaint it;
-  the fixed parts of the bird — `.av-body`,
-  `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
-  `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
-  `.av-gear-line`, `.av-bloom-eye` —
-  read the palette directly, because a body or a beak that varied would stop
-  the birds being one species.  **Five sizes.**  `.avatar` alone is 3rem: the
+  the colourway's six tones (`.av-cap`, `.av-wing`, `.av-body`, `.av-bib`,
+  `.av-beak`, `.av-wing-mark` and `.av-brow`) read the per-student `--av-*`
+  properties, and the fixed parts — `.av-eyewhite`, `.av-pupil`, `.av-glint`,
+  `.av-blush`, `.av-mouth`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
+  read the palette directly.  The colourway decides the species (one of five,
+  [avatar-species.md](avatar-species.md)); the eyes, the body circle and the
+  beak shape are the same on every species and keep the birds one family.  **Five sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
   row where the handle beside it carries the identity — the bracket —
   because below 48px the bird is recognition, not identification, and a row

@@ -618,7 +618,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/unlockable-labs.md` — assignment prerequisites and sticky per-student unlocks
 - `docs/student-wardrobe.md` — cosmetic choices for the avatar, kept apart from earned status
 - `docs/student-avatars.md` — generated avatars and the per-course pseudonymous handle
-- `docs/avatar-species.md` — proposed: one avatar generator per regional bird on the shared skeleton, with the prototype findings; opens with a Status table
+- `docs/avatar-species.md` — five avatar species on one shared skeleton, the colourway decides the species, the prototype findings; opens with a Status table
 - `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
 - `docs/ci-flakiness.md` — CI flake families; start here before chasing a red check on an unrelated PR
 - `docs/abstraction-survey.md` — the 2026-10 survey of parallel code paths that need a shared abstraction (#2259)

@@ -1,6 +1,6 @@
 # Student avatars — design note
 
-**Status: shipped, and in use.** Every student has a chickadee and a per-course
+**Status: shipped, and in use.** Every student has a bird and a per-course
 handle, drawn on first view and stored; the account page renders the bird in
 place of the initials monogram, which is gone, and the wardrobe lets a student
 choose its backdrop and ring (docs/student-wardrobe.md).
@@ -40,6 +40,13 @@ Job 1 comes free once job 2 is solved.
 ---
 
 ## The constraint the art has to respect
+
+> **Since the species (docs/avatar-species.md):** the bird is one of five
+> species, and the colourway decides which. What this section says about the
+> chickadee's markings now holds per species: a species' plumage symbol is
+> fixed, and the variation lives inside it. The silhouette, the eye discs and
+> the beak shape are shared by every species and are what keeps the birds one
+> family. The "cap" slot is the colourway, six tones per name.
 
 The mascot (`Assets/chickadee-icon.png`) is a round, plush black-capped
 chickadee: dark cap and bib, white cheek wrapping under the eye, buff flank,
@@ -333,7 +340,7 @@ takes it as an `AvatarPresentation` and loops. The view makes no decisions.
 **Sizes.** The account page gets 3rem; a dense row gets `.avatar-sm` at
 1.5rem. (Five sizes exist now; `AvatarSize` and `docs/ui-design.md` list them.)
 Drawing the bird settled what this is for, and it is not DOM weight:
-the parts that never vary geometrically are baked into one `av-plumage` symbol,
+the parts that never vary geometrically are baked into one `av-plumage-<species>` symbol,
 so a whole bird is **seven** `use` elements rather than one per feature, and 200
 rows cost 1,400 nodes. The real reason for the small variant is legibility —
 beak, bib and wing marks stop being separable somewhere under 24px — which is

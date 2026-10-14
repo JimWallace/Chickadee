@@ -1,7 +1,7 @@
 // Avatar contact sheet.
 //
 // Renders every drawn part in Resources/Sprites/avatar-sprite.svg across the
-// palette in Public/styles.css, so the art can be looked at without booting
+// palette in Public/styles.css, for every species, so the art can be looked at without booting
 // the server or wiring a route.  It reads both files rather than holding its
 // own copy of either: a preview that carries its own paths would keep looking
 // right after the sprite stopped being.
@@ -25,6 +25,19 @@ const tokens = (prefix, suffix = '') =>
     .map(m => m[1]))]
 
 const caps = tokens('', '-cap')
+// Which colourways belong to which species is a fact of the model, read out
+// of Core/AvatarSpecies.swift the way the handle review reads the word lists,
+// so the sheet groups them as the draw does. The chickadee's eight are first.
+const speciesSource = readFileSync(`${root}/Sources/Core/AvatarSpecies.swift`, 'utf8')
+// AvatarSpecies.of(_:) is one switch: `case .slate, .plum, ...: .chickadee`.
+const speciesColourways = Object.fromEntries(
+  [...speciesSource.matchAll(/case ((?:\.[a-z]+,? ?)+): \.([a-z]+)/g)]
+    .map(m => [m[2], m[1].split(',').map(c => c.trim().replace(/^\./, ''))]))
+const species = Object.keys(speciesColourways)
+const speciesOf = (cap) => species.find(sp => speciesColourways[sp].includes(cap)) ?? 'chickadee'
+// Mirrors AvatarSpecies.hasCrest and AvatarPresentation: a crested species
+// with no tuft wears its crest, and a hat hides both.
+const CRESTED = new Set([...sprite.matchAll(/id="av-crest-([a-z]+)"/g)].map(m => m[1]))
 const accents = tokens('accent-')
 const backs = tokens('back-')
 const sym = (family) =>
@@ -62,16 +75,18 @@ const ringOf = (border) => (accents.includes(border) ? 'solid' : border)
 // A border that is not an accent uses the transparent --avatar-border-none,
 // as AvatarPresentation.borderToken names it.
 const style = (cap, accent, back, border = 'none') =>
-  `--av-cap:var(--avatar-${cap}-cap);--av-wing:var(--avatar-${cap}-wing);` +
+  ['cap', 'wing', 'body', 'bib', 'beak', 'mark'].map(t => `--av-${t}:var(--avatar-${cap}-${t});`).join('') +
   `--av-accent:var(--avatar-accent-${accent});--av-backdrop:var(--avatar-back-${back});` +
   `--av-border:var(${accents.includes(border) ? `--avatar-accent-${border}` : '--avatar-border-none'})`
 
 const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'none', tilt = 0,
                       border = 'none' }) =>
   `<svg class="avatar${size <= 40 ? ' avatar-md' : ''}" style="${style(cap, accent, back, border)};width:${size}px;height:${size}px"
-        viewBox="0 0 64 64" role="img" aria-label="chickadee avatar">
+        viewBox="0 0 64 64" role="img" aria-label="${speciesOf(cap)} avatar">
      <use href="#av-backdrop"/><g transform="rotate(${tilt} 32 34)">
-     <use href="#av-tuft-${TUFT_HIDING_HATS.has(accessory) ? 'none' : tuft}"/><use href="#av-plumage"/><use href="#av-wing-${wing}"/>
+     <use href="${TUFT_HIDING_HATS.has(accessory) ? '#av-tuft-none'
+       : tuft === 'none' && CRESTED.has(speciesOf(cap)) ? `#av-crest-${speciesOf(cap)}` : `#av-tuft-${tuft}`}"/>
+     <use href="#av-plumage-${speciesOf(cap)}"/><use href="#av-wing-${wing}"/>
      <use href="#av-expression-${expression}"/><use href="#av-accessory-${accessory}"/></g>
      <use href="#av-ring-${ringOf(border)}"/></svg>`
 
@@ -81,7 +96,23 @@ const base = { cap: 'teal', wing: 'barred', expression: 'bright', accessory: 'no
                accent: 'ember', back: 'aqua' }
 
 const sections = [
-  ['Cap — the loudest axis, so it carries the least detail', caps.map((cap, i) =>
+  ['Species × colourway — one plumage symbol per species, and the colourway decides the species',
+    species.flatMap(sp => speciesColourways[sp].map((cap, i) =>
+      label(`${sp} ${cap}`, bird(88, { ...base, cap, wing: at(wings, i) }))))],
+  ['Species at 36px — the roster size, beside each other; a new species must separate from the chickadee here',
+    species.flatMap(sp => speciesColourways[sp].slice(0, 3).map((cap, i) =>
+      label(`${sp} ${cap}`, bird(36, { ...base, cap, wing: at(wings, i), back: at(backs, i) }))))],
+  ['Species × expression — the expressions are shared; every lid and brow must read on every species',
+    species.flatMap(sp => starterExpressions.map(expression =>
+      label(`${sp} ${expression}`, bird(64, { ...base, cap: speciesColourways[sp][0], expression, wing: 'plain' }))))],
+  ['Species × hat — the crest goes under the beanie and the gradcap like a tuft',
+    species.flatMap(sp => ['beanie', 'gradcap', 'headphones', 'headband'].map(accessory =>
+      label(`${sp} ${accessory}`, bird(64, { ...base, cap: speciesColourways[sp][0], accessory, back: 'straw' }))))],
+  ['Species on every backdrop — a colourway must keep a lightness step from each (switch the page to dark mode too)',
+    species.flatMap(sp => backs.map(back =>
+      label(`${sp} ${back}`, bird(48, { ...base, cap: speciesColourways[sp][0], back }))))],
+  ['Cap — the chickadee\'s colourways; the loudest axis, so it carries the least detail',
+    speciesColourways.chickadee.map((cap, i) =>
     label(cap, bird(88, { ...base, cap, wing: at(wings, i) })))],
   ['Wing pattern — symmetrical, both flanks from one drawing', wings.map(wing =>
     label(wing, bird(88, { ...base, wing })))],
@@ -133,7 +164,7 @@ process.stdout.write(`<!doctype html><meta charset="utf-8">
  figcaption{margin-top:4px;color:var(--muted);font-size:11px}
 </style>
 ${sprite}
-<h1 style="font-size:16px">Chickadee avatars — ${caps.length} caps &times; ${wings.length} wings
+<h1 style="font-size:16px">Chickadee avatars — ${species.length} species, ${caps.length} colourways &times; ${wings.length} wings
 &times; ${starterExpressions.length} starter expressions &times; ${starterAccessories.length} starter accessories in
 ${accents.length} accents &times; ${backs.length} backdrops &times; ${tufts.length} tufts
 &times; ${tilts.length} tilts =

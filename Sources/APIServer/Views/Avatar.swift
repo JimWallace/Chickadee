@@ -1,6 +1,6 @@
 // APIServer/Views/Avatar.swift
 //
-// One generated student chickadee. It draws from an `AvatarPresentation` (Core/AvatarMarkup.swift), which carries
+// One generated student bird. It draws from an `AvatarPresentation` (Core/AvatarMarkup.swift), which carries
 // palette token names and symbol references, never colours or path data.
 //
 // The symbols live in the avatar sprite. A page that shows a bird must also
@@ -22,6 +22,8 @@ struct Avatar: HTML {
     /// rendered-page guard allows.
     private var customProperties: String {
         "--av-cap: var(\(avatar.capToken)); --av-wing: var(\(avatar.wingToken)); "
+            + "--av-body: var(\(avatar.bodyToken)); --av-bib: var(\(avatar.bibToken)); "
+            + "--av-beak: var(\(avatar.beakToken)); --av-mark: var(\(avatar.markToken)); "
             + "--av-accent: var(\(avatar.accentToken)); --av-backdrop: var(\(avatar.backdropToken)); "
             + "--av-border: var(\(avatar.borderToken))"
     }
@@ -51,7 +53,7 @@ struct Avatar: HTML {
         SVG.use(.href("#av-backdrop")) {}
         SVG.g(.transform(avatar.tiltTransform)) {
             SVG.use(.href(avatar.tuftSymbolRef)) {}
-            SVG.use(.href("#av-plumage")) {}
+            SVG.use(.href(avatar.plumageSymbolRef)) {}
             SVG.use(.href(avatar.wingSymbolRef)) {}
             SVG.use(.href(avatar.expressionSymbolRef)) {}
             SVG.use(.href(avatar.accessorySymbolRef)) {}
