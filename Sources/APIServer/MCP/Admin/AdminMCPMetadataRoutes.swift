@@ -16,7 +16,7 @@ struct AdminMCPMetadataRoutes: RouteCollection {
     /// (the admin surface is read-only); see `adminMCPAdvertisedScopes`.
     let advertisedScopes: [DiagnosticScope]
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.grouped(".well-known", "oauth-protected-resource")
             .get("admin-mcp", use: protectedResourceMetadata)
     }

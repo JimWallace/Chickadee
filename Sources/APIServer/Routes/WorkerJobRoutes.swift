@@ -6,7 +6,7 @@ import SQLKit
 import Vapor
 
 struct WorkerJobRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let worker = routes.grouped("api", "v1", "worker")
         worker.post("request", use: requestJob)
         worker.post("heartbeat", use: heartbeat)
@@ -180,7 +180,7 @@ struct WorkerJobRoutes: RouteCollection {
     func atomicallyClaimSubmission(
         id submissionID: String, req: Request, body: WorkerActivityPayload
     ) async throws -> APISubmission? {
-        if let sql = req.db as? SQLDatabase, sql.dialect.name == "postgresql" {
+        if let sql = req.db as? (any SQLDatabase), sql.dialect.name == "postgresql" {
             return try await claimViaPostgresRowLock(id: submissionID, req: req, body: body)
         }
         return try await req.application.workerClaimQueue.run {
@@ -214,7 +214,7 @@ struct WorkerJobRoutes: RouteCollection {
         id submissionID: String, req: Request, body: WorkerActivityPayload
     ) async throws -> APISubmission? {
         try await req.db.transaction { db in
-            guard let sql = db as? SQLDatabase else {
+            guard let sql = db as? (any SQLDatabase) else {
                 throw WorkerJobError.internalInconsistency(
                     reason: "Postgres claim transaction did not expose SQLDatabase")
             }
@@ -385,7 +385,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// to both builders; each used to call `chooseClassmates` itself, inside
     /// the serialized claim section (#1750).
     static func jobOpponentSet(
-        manifest: TestProperties, submission: APISubmission, base: String, on db: Database
+        manifest: TestProperties, submission: APISubmission, base: String, on db: any Database
     ) async throws(WorkerJobError) -> (opponent: JobOpponent?, opponents: [JobOpponent]?) {
         guard let activity = manifest.activity, activity.stagesAnOpponent, let submissionID = submission.id
         else { return (nil, nil) }
@@ -452,7 +452,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// then too. `classmates` is the list `jobOpponentSet` chose.
     static func jobOpponents(
         activity: ClassActivity, classmates: [ChosenOpponent], submission: APISubmission, base: String,
-        on db: Database
+        on db: any Database
     ) async throws(WorkerJobError) -> [JobOpponent]? {
         guard activity.kind.opponentSource == .classmates, !classmates.isEmpty,
             let submissionID = submission.id
@@ -495,7 +495,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// move the hill, which would read as a loss.
     static func jobOpponent(
         activity: ClassActivity, submission: APISubmission, base: String, classmates: [ChosenOpponent],
-        on db: Database
+        on db: any Database
     ) async throws(WorkerJobError) -> JobOpponent? {
         guard activity.stagesAnOpponent, let submissionID = submission.id else { return nil }
         switch activity.kind.opponentSource {
@@ -568,7 +568,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// student's own submission on such an assignment plays the bundled
     /// bot, if one is chosen, as practice, with no row.
     static func pairedJobOpponent(
-        activity: ClassActivity, submission: APISubmission, base: String, on db: Database
+        activity: ClassActivity, submission: APISubmission, base: String, on db: any Database
     ) async throws(WorkerJobError) -> JobOpponent? {
         guard let submissionID = submission.id else { return nil }
         do {

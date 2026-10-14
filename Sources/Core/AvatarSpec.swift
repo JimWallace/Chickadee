@@ -370,7 +370,7 @@ extension AvatarSpec {
     /// Specs stored before the tuft and tilt axes existed have neither key.
     /// They decode to `.none` / `.upright`; `missingAxes(inStoredJSON:)` is how
     /// the store tells such a spec apart from one that chose those values.
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.cap = try container.decode(AvatarCap.self, forKey: .cap)
         self.wing = try container.decode(AvatarWing.self, forKey: .wing)
@@ -419,7 +419,7 @@ extension AvatarSpec {
 
         private enum CodingKeys: String, CodingKey { case tuft, tilt }
 
-        init(from decoder: Decoder) throws {
+        init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             hasTuft = container.contains(.tuft)
             hasTilt = container.contains(.tilt)

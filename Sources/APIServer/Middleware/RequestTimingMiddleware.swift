@@ -1,8 +1,9 @@
+import Fluent
 import Foundation
 import Vapor
 
 struct RequestTimingMiddleware: AsyncMiddleware {
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let startDate = Date()
         let clock = ContinuousClock()
         let start = clock.now
@@ -20,7 +21,7 @@ struct RequestTimingMiddleware: AsyncMiddleware {
             )
             return response
         } catch {
-            let statusCode = (error as? AbortError)?.status.code ?? HTTPResponseStatus.internalServerError.code
+            let statusCode = (error as? (any AbortError))?.status.code ?? HTTPResponseStatus.internalServerError.code
             await request.application.diagnostics.recordRequestMetric(
                 buildMetric(
                     request: request,

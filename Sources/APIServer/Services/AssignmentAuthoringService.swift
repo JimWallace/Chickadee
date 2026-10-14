@@ -88,7 +88,7 @@ enum AssignmentAuthoringService {
         _ assignment: APIAssignment,
         open: Bool,
         audit: VisibilityAudit,
-        on db: Database,
+        on db: any Database,
         now: Date = Date()
     ) async throws {
         let previous = assignment.visibility
@@ -115,7 +115,7 @@ enum AssignmentAuthoringService {
         solutionVisibility: SolutionVisibility? = nil,
         passingThreshold: PassingThresholdUpdate = .unchanged,
         audit: VisibilityAudit,
-        on db: Database,
+        on db: any Database,
         now: Date = Date()
     ) async throws {
         let previousVisibility = assignment.visibility
@@ -186,7 +186,7 @@ enum AssignmentAuthoringService {
         newTitle: String,
         targetCourseID: UUID,
         directories: AuthoringDirectories,
-        on db: Database
+        on db: any Database
     ) async throws -> AuthoredAssignment {
         let newSetupID = freshShortID(prefix: "setup")
         let fm = FileManager.default
@@ -319,7 +319,7 @@ enum AssignmentAuthoringService {
         from source: APIAssignment,
         toSetupID newSetupID: String,
         submissionsDirectory: String,
-        on db: Database
+        on db: any Database
     ) async throws -> APISubmission? {
         let fm = FileManager.default
         guard
@@ -368,7 +368,7 @@ enum AssignmentAuthoringService {
         title: String,
         notebookData: Data,
         setupsDirectory: String,
-        on db: Database
+        on db: any Database
     ) async throws -> AuthoredAssignment {
         let setupID = freshShortID(prefix: "setup")
         let zipPath = setupsDirectory + "\(setupID).zip"
@@ -422,7 +422,7 @@ enum AssignmentAuthoringService {
         setup: APITestSetup,
         notebookData: Data,
         setupsDirectory: String,
-        on db: Database
+        on db: any Database
     ) async throws {
         let normalized = normalizeNotebookForJupyterLite(notebookData)
         let path =
@@ -453,7 +453,7 @@ enum AssignmentAuthoringService {
         _ assignment: APIAssignment,
         _ visibility: AssignmentVisibility,
         audit: VisibilityAudit,
-        on db: Database,
+        on db: any Database,
         now: Date = Date()
     ) async throws {
         let previous = assignment.visibility

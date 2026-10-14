@@ -7,6 +7,7 @@
 // lives in Services/NotebookWorkingCopyStore.swift.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

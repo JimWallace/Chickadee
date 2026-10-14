@@ -48,7 +48,7 @@ func earnedIndividualBadges(
 /// it: a standings activity that authors an individual badge.  Every other
 /// assignment is skipped, so a page with no such assignment makes no query.
 func standingsBySetupID(
-    propsBySetupID: [String: TestProperties], userID: UUID, on db: Database
+    propsBySetupID: [String: TestProperties], userID: UUID, on db: any Database
 ) async throws -> [String: (standing: Int, matchesWon: Int)] {
     var standings: [String: (standing: Int, matchesWon: Int)] = [:]
     for (setupID, props) in propsBySetupID

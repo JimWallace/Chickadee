@@ -3,6 +3,7 @@
 // POST /admin/courses/import: what a course bundle import created.
 
 import Elementary
+import Foundation
 
 struct AdminImportResultPage: HTML {
     let page: PageRequestContext

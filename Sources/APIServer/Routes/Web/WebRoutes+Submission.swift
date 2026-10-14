@@ -9,8 +9,10 @@
 // lives in SubmissionResultPresenter.swift.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 /// The badges one graded submission earns by itself: the per-submission
@@ -505,7 +507,7 @@ extension WebRoutes {
     /// staff always, a student once the instructor has published it.
     private func studentFacingLinks(
         submission: APISubmission, assignment: APIAssignment?, props: TestProperties?,
-        user: APIUser, isStaff: Bool, on db: Database
+        user: APIUser, isStaff: Bool, on db: any Database
     ) async throws -> (solutionURL: String?, leaderboardURL: String?) {
         var solutionURL: String?
         if !isStaff, submission.userID == user.id, let assignment,
@@ -528,7 +530,7 @@ extension WebRoutes {
         to processed: inout ProcessedCollection,
         setupProps: TestProperties?,
         testSetupID: String,
-        on db: Database
+        on db: any Database
     ) async throws {
         guard processed.totalPoints > 0 else { return }
         let bonus = try await classGoalBonusPoints(
@@ -580,7 +582,7 @@ extension WebRoutes {
     /// result is preferred (official grade); the browser result is the
     /// fallback used for in-page preview while the worker is still queued.
     private func loadPreferredDisplayResult(
-        subID: String, on db: Database
+        subID: String, on db: any Database
     ) async throws -> APIResult? {
         let allResults = try await APIResult.query(on: db)
             .filter(\.$submissionID == subID)
@@ -595,7 +597,7 @@ extension WebRoutes {
     /// result_collections side table and decoded ONCE (#1173) — the presenter
     /// and the individual-badge evaluation share the decoded value.
     private func loadDisplayResultAndCollection(
-        subID: String, decoder: JSONDecoder, on db: Database
+        subID: String, decoder: JSONDecoder, on db: any Database
     ) async throws -> (APIResult?, TestOutcomeCollection?) {
         guard let result = try await loadPreferredDisplayResult(subID: subID, on: db) else {
             return (nil, nil)
@@ -611,7 +613,7 @@ extension WebRoutes {
     /// Comeback Kid badge.  Returns `(outcomeMap: empty, gradePercent: nil)`
     /// when there is no prior attempt or no decodable prior result.
     private func loadPriorAttemptDelta(
-        submission: APISubmission, decoder: JSONDecoder, on db: Database
+        submission: APISubmission, decoder: JSONDecoder, on db: any Database
     ) async throws -> PriorAttemptDelta {
         let currentAttempt = submission.attemptNumber ?? 1
         guard currentAttempt > 1, let userID = submission.userID else {

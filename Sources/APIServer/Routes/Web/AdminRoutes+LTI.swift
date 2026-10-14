@@ -11,6 +11,7 @@
 //   POST /admin/lti/platforms/:platformID/enabled → enable or disable
 //   POST /admin/lti/platforms/:platformID/delete  → delete
 
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -157,7 +158,7 @@ extension AdminRoutes {
     /// Checks the `(issuer, client_id)` uniqueness the table enforces, so the
     /// admin sees a sentence instead of a constraint violation.
     private func ensureUniqueLTIPlatform(
-        _ form: LTIPlatformForm.Validated, excluding id: UUID?, on db: Database
+        _ form: LTIPlatformForm.Validated, excluding id: UUID?, on db: any Database
     ) async throws {
         var query = APILTIPlatform.query(on: db)
             .filter(\.$issuer == form.issuer)

@@ -214,6 +214,17 @@ Adopt a feature for one of these reasons only:
 Do not adopt a feature for style. A change with 19 call sites and no behaviour
 change is noise in the history, and it makes every later `git blame` longer.
 
+Upcoming features are the exception. An upcoming feature is a default of the
+next language mode, so the code must take it some day, and each upgrade that
+waits makes the move larger. The product targets take each one through
+`sourceSettings` in `Package.swift`: `ExistentialAny` and
+`MemberImportVisibility` are on. At each upgrade, read the list of upcoming
+features. Turn on the ones that need only fix-its, with
+`swift package migrate --target <targets> --to-feature <feature>`. Judge the
+ones that change behaviour (for example `NonisolatedNonsendingByDefault`) one
+at a time, with tests. `scripts/check-runnercore-embedded.sh` passes the same
+features, so add a new one there too.
+
 Look in these places first. They are where the last three upgrades found work:
 
 - `Sources/Worker/` — concurrency, cancellation, process spawning

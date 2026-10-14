@@ -15,6 +15,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct PreviewPersonalizationTool: ContentTool {
     struct Input: Decodable, Sendable {

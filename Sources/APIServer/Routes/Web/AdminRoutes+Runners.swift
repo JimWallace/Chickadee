@@ -5,6 +5,7 @@
 // All routes are registered in AdminRoutes.boot().
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import SQLKit
@@ -143,7 +144,7 @@ extension AdminRoutes {
     /// The per-test time limit of each setup a timed-out job ran against, for the
     /// "hit the 10s limit" note. A setup whose manifest will not decode is left
     /// out: the note is a courtesy and must not fail the page.
-    private func timeLimits(for jobs: [JobExecutionMetric], on db: Database) async -> [String: Int] {
+    private func timeLimits(for jobs: [JobExecutionMetric], on db: any Database) async -> [String: Int] {
         let setupIDs = Set(jobs.filter { $0.finalStatus == "timeout" }.map(\.testSetupID))
         guard !setupIDs.isEmpty,
             let setups = try? await APITestSetup.query(on: db).filter(\.$id ~~ Array(setupIDs)).all()
@@ -195,7 +196,7 @@ extension AdminRoutes {
         usersByID: [UUID: APIUser],
         staffIDs: Set<UUID>,
         limitBySetupID: [String: Int],
-        on db: Database
+        on db: any Database
     ) async throws -> AdminRunnerJobRow {
         let user = metric.userID.flatMap { usersByID[$0] }
         var row = AdminRunnerJobRow(

@@ -245,7 +245,7 @@ extension OperationalDiagnosticsService {
     /// Resolved in one query rather than a find-per-ID: the callers pass the
     /// distinct setups behind a pending queue, and issuing a round trip each
     /// put the queue-depth metric's cost on the wrong axis (#1361).
-    func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
+    func workerModeTestSetupIDs(for testSetupIDs: [String], on db: any Database) async throws -> Set<String> {
         let uniqueIDs = Set(testSetupIDs)
         guard !uniqueIDs.isEmpty else { return [] }
 

@@ -1,7 +1,7 @@
 import Fluent
 
 struct CreateRequestMetrics: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("request_metrics")
             .id()
             .field("method", .string, .required)
@@ -16,7 +16,7 @@ struct CreateRequestMetrics: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("request_metrics").delete()
     }
 }

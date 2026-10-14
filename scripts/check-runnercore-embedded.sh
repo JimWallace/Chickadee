@@ -34,8 +34,12 @@ trap 'rm -rf "$out"' EXIT
 sources=()
 while IFS= read -r f; do sources+=("$f"); done < <(find Sources/RunnerCore -name '*.swift' | LC_ALL=C sort)
 
+# The upcoming features match `sourceSettings` in Package.swift, which the wasm
+# build reads through the root package.
 if swiftc -c -O -wmo -parse-as-library -module-name RunnerCore \
     -enable-experimental-feature Embedded \
+    -enable-upcoming-feature ExistentialAny \
+    -enable-upcoming-feature MemberImportVisibility \
     "${sources[@]}" -o "$out/RunnerCore.o" 2>"$out/stderr"; then
     echo "  OK: RunnerCore compiles as Embedded Swift (${#sources[@]} files)."
     exit 0

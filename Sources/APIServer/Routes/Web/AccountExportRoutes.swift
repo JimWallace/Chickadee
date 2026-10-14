@@ -18,7 +18,7 @@ import Foundation
 import Vapor
 
 struct AccountExportRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.post("account", "export", use: requestExport)
         routes.get("account", "export", "status", use: exportStatus)
         routes.get("account", "export", "download", use: downloadExport)

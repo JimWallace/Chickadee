@@ -272,7 +272,7 @@ enum AchievementsEditing {
     /// or close the assignment.
     @discardableResult
     static func apply(
-        rows: [AchievementRow], setup: APITestSetup, on db: Database
+        rows: [AchievementRow], setup: APITestSetup, on db: any Database
     ) async throws -> [AchievementRow] {
         let resolved = try rows.map { try achievement(from: $0) }
             .map { resolvingSectionRefs($0, againstManifest: setup.manifest) }

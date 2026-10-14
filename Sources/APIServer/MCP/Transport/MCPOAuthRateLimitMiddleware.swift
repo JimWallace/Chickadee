@@ -10,6 +10,7 @@
 // ("mcp-oauth:") so the bookkeeping is shared — across processes too, #1154 —
 // matching the /login limiter. POST-only; other methods pass through.
 
+import Fluent
 import Foundation
 import Vapor
 

@@ -34,7 +34,7 @@ import SQLKit
 /// deleted outright (Fluent ignores `_fluent_migrations` rows whose
 /// names are no longer registered).
 struct CreateCourses: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("courses")
             .id()
             .field("code", .string, .required)
@@ -90,7 +90,7 @@ struct CreateCourses: ChickadeeMigration {
         // Folded from ScopeCourseCodeIndexToTerm. The term columns are wrapped
         // in COALESCE because SQL treats two NULLs as distinct: without it, two
         // courses that record no term could share a code.
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             let activePredicate =
                 sql.dialect.name == "postgresql"
                 ? "is_archived = FALSE"
@@ -123,9 +123,9 @@ struct CreateCourses: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("course_sections").delete()
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_courses_code_term_active").run()
         }
         try await database.schema("courses").delete()

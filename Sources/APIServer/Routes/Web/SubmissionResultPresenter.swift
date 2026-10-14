@@ -541,7 +541,7 @@ private func classGoalCoverageSummary(_ row: APIAchievementResult?) -> String? {
 /// section.  Returns `[]` when the manifest carries no class goals.  Takes the
 /// caller's already-decoded manifest (#1128) instead of re-fetching the setup.
 func loadClassGoalViews(
-    testSetupID: String, props: TestProperties?, on db: Database
+    testSetupID: String, props: TestProperties?, on db: any Database
 ) async throws -> [ClassGoalView] {
     guard let props else { return [] }
     let goals = props.achievements.filter(\.isClassGoal)

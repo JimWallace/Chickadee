@@ -27,7 +27,7 @@ func applySuiteEdit(
     setup: APITestSetup,
     body: SuitePayload,
     kernelEnvironments: KernelEnvironments? = nil,
-    on db: Database
+    on db: any Database
 ) async throws {
     var authored: [AuthoredSuiteItem] = []
     var nextFamilies: [PatternFamily] = []

@@ -16,6 +16,7 @@
 // store's job: `SlipDayStore.spend` re-checks atomically.
 
 import Core
+import Elementary
 import Fluent
 import Vapor
 

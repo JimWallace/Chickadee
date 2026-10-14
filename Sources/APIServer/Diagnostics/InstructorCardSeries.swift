@@ -51,7 +51,7 @@ extension OperationalDiagnosticsService {
     func instructorCardSeries(
         setupIDs: [String],
         studentIDs: Set<UUID>,
-        on db: Database,
+        on db: any Database,
         now: Date = Date()
     ) async throws -> InstructorCardSeriesResponse {
         let longestWindow = MetricsCardWindow.allCases.max { $0.totalSeconds < $1.totalSeconds } ?? .month
@@ -81,7 +81,7 @@ extension OperationalDiagnosticsService {
         setupIDs: [String],
         studentIDs: Set<UUID>,
         since outerStart: Date,
-        on db: Database
+        on db: any Database
     ) async throws -> [InstructorSubmissionPoint] {
         guard !setupIDs.isEmpty, !studentIDs.isEmpty else { return [] }
         let submissions = try await APISubmission.query(on: db)
@@ -109,7 +109,7 @@ extension OperationalDiagnosticsService {
         setupIDs: [String],
         studentIDs: Set<UUID>,
         since outerStart: Date,
-        on db: Database
+        on db: any Database
     ) async throws -> [Date] {
         guard !setupIDs.isEmpty, !studentIDs.isEmpty else { return [] }
         return try await APIClientDiagnostic.query(on: db)

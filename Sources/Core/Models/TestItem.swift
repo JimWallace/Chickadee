@@ -95,7 +95,7 @@ public enum TestItem: Codable, Equatable, Sendable {
         case spec
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let type = try c.decode(TestItemType.self, forKey: .type)
         switch type {
@@ -106,7 +106,7 @@ public enum TestItem: Codable, Equatable, Sendable {
         }
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .family(let f):

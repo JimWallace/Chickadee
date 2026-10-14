@@ -28,7 +28,7 @@ enum SweepLeaseCoordinator {
         holder: String,
         ttlSeconds: TimeInterval,
         now: Date = Date(),
-        on db: Database
+        on db: any Database
     ) async throws -> Bool {
         let newExpiry = now.addingTimeInterval(ttlSeconds)
 

@@ -11,7 +11,7 @@ import Fluent
 import SQLKit
 
 struct CreateSlipDaySpends: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("slip_day_spends")
             .id()
             .field(
@@ -42,7 +42,7 @@ struct CreateSlipDaySpends: ChickadeeMigration {
             )
             .create()
 
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             // Balance checks filter on (user, course); the roster ledger scans
             // by course.
             try await sql.raw(
@@ -54,8 +54,8 @@ struct CreateSlipDaySpends: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_slip_day_spends_user_course").run()
             try await sql.raw("DROP INDEX IF EXISTS idx_slip_day_spends_course").run()
         }

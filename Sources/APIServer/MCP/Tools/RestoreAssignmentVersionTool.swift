@@ -25,6 +25,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct RestoreAssignmentVersionTool: ContentTool {
     struct Input: Decodable, Sendable {

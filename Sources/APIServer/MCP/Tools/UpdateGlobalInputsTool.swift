@@ -15,6 +15,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct UpdateGlobalInputsTool: ContentTool {
     struct Input: Decodable, Sendable {

@@ -6,7 +6,7 @@
 import Fluent
 
 struct CreateBrightSpaceCredentials: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("brightspace_credentials")
             .id()
             .field("valence_user_id", .string, .required)
@@ -22,7 +22,7 @@ struct CreateBrightSpaceCredentials: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("brightspace_credentials").delete()
     }
 }

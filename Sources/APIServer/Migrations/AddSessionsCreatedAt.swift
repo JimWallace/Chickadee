@@ -15,15 +15,15 @@ import SQLKit
 /// `TIMESTAMP DEFAULT CURRENT_TIMESTAMP` is portable to both PostgreSQL and
 /// SQLite (SQLite treats TIMESTAMP as a NUMERIC-affinity TEXT column).
 struct AddSessionsCreatedAt: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         try await sql.raw(
             "ALTER TABLE _fluent_sessions ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         // Some older SQLite builds don't support DROP COLUMN; best-effort revert.
         try? await sql.raw("ALTER TABLE _fluent_sessions DROP COLUMN created_at").run()
     }

@@ -295,7 +295,7 @@ extension LTIRoutes {
     /// A URL on a host that the admin did not register for the course's
     /// platform is ignored (docs/compliance/lti-audit-2026-10.md L-1).
     static func recordLaunchServices(
-        launch: LTIValidatedLaunch, course: APICourse, userID: UUID, on db: Database
+        launch: LTIValidatedLaunch, course: APICourse, userID: UUID, on db: any Database
     ) async throws {
         var hosts: Set<String> = []
         if let platformID = course.ltiPlatformID, let platform = try await APILTIPlatform.find(platformID, on: db) {
@@ -328,7 +328,7 @@ extension LTIRoutes {
     /// custom parameter names (set by deep linking) when that assignment is in
     /// the bound course, and the course dashboard otherwise.
     static func resourceLinkDestination(
-        launch: LTIValidatedLaunch, course: APICourse, on db: Database
+        launch: LTIValidatedLaunch, course: APICourse, on db: any Database
     ) async throws -> String {
         guard case .string(let publicID) = launch.custom[LTIPendingDeepLink.assignmentParameter],
             let courseID = course.id,

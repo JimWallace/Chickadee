@@ -20,7 +20,7 @@ struct MultipartFileList: Codable {
         self.files = files
     }
 
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let many = try? container.decode([File].self) {
             self.files = many
@@ -29,7 +29,7 @@ struct MultipartFileList: Codable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(files)
     }

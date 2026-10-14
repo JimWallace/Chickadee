@@ -14,7 +14,7 @@ extension OperationalDiagnosticsService {
     func rollingAverages(
         for runnerIDs: [String],
         sampleSize: Int = 50,
-        on db: Database
+        on db: any Database
     ) async throws -> [String: RunnerAverages] {
         guard !runnerIDs.isEmpty else { return [:] }
         let metrics = try await JobExecutionMetric.query(on: db)
@@ -185,14 +185,14 @@ extension OperationalDiagnosticsService {
         )
     }
 
-    func pruneNow(on db: Database, logger: Logger) async {
+    func pruneNow(on db: any Database, logger: Logger) async {
         guard configuration.enabled else { return }
         await performPrune(on: db, logger: logger, now: Date())
     }
 
     func recordRequestMetric(
         _ metric: APIRequestMetric,
-        on db: Database,
+        on db: any Database,
         logger: Logger
     ) async {
         guard configuration.enabled else { return }

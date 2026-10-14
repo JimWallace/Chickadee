@@ -8,7 +8,7 @@
 import Fluent
 
 struct CreateValidationVariants: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("validation_variants")
             .id()
             .field("test_setup_id", .string, .required)
@@ -23,7 +23,7 @@ struct CreateValidationVariants: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("validation_variants").delete()
     }
 }

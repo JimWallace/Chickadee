@@ -16,11 +16,12 @@
 // named by a URL parameter additionally call `requireCourseRole(atLeast:)` on
 // that target, so they can't be driven against another course by URL.
 
+import Core
 import Fluent
 import Vapor
 
 struct ActiveCourseStaffMiddleware: AsyncMiddleware {
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard let user = request.auth.get(APIUser.self) else {
             if request.wantsBrowserRedirect { return request.redirect(to: "/login") }
             throw Abort(.unauthorized)

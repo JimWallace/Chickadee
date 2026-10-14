@@ -28,6 +28,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 // MARK: - list_assignment_versions
 

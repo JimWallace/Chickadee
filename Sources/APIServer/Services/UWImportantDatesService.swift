@@ -32,7 +32,7 @@ actor UWImportantDatesCache {
     private var cached: [UWImportantDate] = []
     private var cachedAt: Date?
 
-    func fetchDates(client: Client, logger: Logger) async -> [UWImportantDate] {
+    func fetchDates(client: any Client, logger: Logger) async -> [UWImportantDate] {
         if let cachedAt, Date().timeIntervalSince(cachedAt) < cacheDuration {
             return cached
         }

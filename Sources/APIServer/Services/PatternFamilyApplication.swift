@@ -162,7 +162,7 @@ func applyPatternFamilies(
     sections: [TestSuiteSection]? = nil,
     globalVariables: [FamilyVariable]? = nil,
     globalExpressions: [PersonalizationExpression]? = nil,
-    on db: Database
+    on db: any Database
 ) async throws -> PatternFamilyApplyResult {
 
     let oldManifest = setup.manifest

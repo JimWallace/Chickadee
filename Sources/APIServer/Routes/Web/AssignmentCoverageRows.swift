@@ -25,7 +25,7 @@ func buildAssignmentCoverageRows(
     testSetupID: String,
     manifest: TestProperties?,
     formatter: DateFormatter,
-    on db: Database
+    on db: any Database
 ) async throws -> [AssignmentCoverageRow] {
     let covered = try await classItemCoverage(testSetupID: testSetupID, on: db)
     guard !covered.isEmpty else { return [] }

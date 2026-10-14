@@ -14,6 +14,7 @@
 //   POST /logout     → clear session, redirect to /login
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import NIOCore
@@ -22,7 +23,7 @@ import Vapor
 struct AuthRoutes: RouteCollection {
     let csrf: CSRFMiddleware
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         // Login and register are CSRF-protected (defends against login-CSRF).
         // Tight per-endpoint body limits on the public auth POSTs: login and
         // register only carry two short form fields, so 8 KB is generous and

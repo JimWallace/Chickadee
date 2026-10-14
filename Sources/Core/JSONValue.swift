@@ -18,7 +18,7 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
     case array([JSONValue])
     case object([String: JSONValue])
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.singleValueContainer()
         if c.decodeNil() {
             self = .null
@@ -55,7 +55,7 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
         )
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.singleValueContainer()
         switch self {
         case .null: try c.encodeNil()

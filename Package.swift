@@ -3,6 +3,19 @@ import PackageDescription
 
 let strictWarnings: [SwiftSetting] = [.treatAllWarnings(as: .error)]
 
+// Upcoming language features that the product targets use now. Each one is
+// the default in a future language mode. The test targets do not use them
+// yet, because their fix-its change existing tests.
+//
+// - ExistentialAny: an existential type is written `any P`.
+// - MemberImportVisibility: a file uses only the members of the modules that
+//   it imports itself, not those that another file imports.
+let sourceSettings: [SwiftSetting] =
+    strictWarnings + [
+        .enableUpcomingFeature("ExistentialAny"),
+        .enableUpcomingFeature("MemberImportVisibility"),
+    ]
+
 let package = Package(
     name: "Chickadee",
     platforms: [
@@ -73,7 +86,7 @@ let package = Package(
         .target(
             name: "RunnerCore",
             path: "Sources/RunnerCore",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - Core library
@@ -90,7 +103,7 @@ let package = Package(
             ],
             path: "Sources/Core",
             exclude: ["README.md"],
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - API Server library
@@ -115,6 +128,7 @@ let package = Package(
                 .product(name: "CryptoExtras", package: "swift-crypto"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
                 // The server's own interpreter spawn (PersonalizationEvaluator)
                 // runs from the multithreaded Vapor process — the shape
                 // Foundation's Process deadlocked in (#1139), which is why the
@@ -124,7 +138,7 @@ let package = Package(
             ],
             path: "Sources/APIServer",
             exclude: ["README.md", "CLAUDE.md", "MCP/CLAUDE.md", "Views/CLAUDE.md"],
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - API Server executable (thin wrapper)
@@ -140,7 +154,7 @@ let package = Package(
                 .target(name: "CProcessHardening"),
             ],
             path: "Sources/chickadee-server",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - Process hardening (C)
@@ -166,7 +180,7 @@ let package = Package(
             ],
             path: "Sources/Worker",
             exclude: ["README.md", "CLAUDE.md"],
-            swiftSettings: strictWarnings,
+            swiftSettings: sourceSettings,
             // Compiles Tools/runner-support/* into the binary. Replaces 2,223
             // lines of hand-typed string literals that mirrored those files;
             // see the plugin for why this is codegen and not `resources:`.
@@ -184,9 +198,11 @@ let package = Package(
                 .target(name: "Core"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
             ],
             path: "Sources/LoadTest",
-            swiftSettings: strictWarnings
+            swiftSettings: sourceSettings
         ),
 
         // MARK: - Build-tool plugins

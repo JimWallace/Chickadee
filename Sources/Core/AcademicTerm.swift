@@ -116,7 +116,7 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
     private enum CodingKeys: String, CodingKey { case year, season }
 
     /// Decoding applies the same four-digit rule as `init?(year:season:)`.
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let year = try container.decode(Int.self, forKey: .year)
         let season = try container.decode(TermSeason.self, forKey: .season)

@@ -41,7 +41,7 @@ extension MCPOAuthRoutes {
         /// tool call by `authorizeCourseAccess`, which is already
         /// enrollment-scoped, so this coarse gate never widens what an agent can
         /// actually touch (#417).
-        func permits(_ user: APIUser, db: Database) async throws -> Bool {
+        func permits(_ user: APIUser, db: any Database) async throws -> Bool {
             switch surface {
             case .content: return try await isStaffAnywhere(user, db: db)
             case .admin: return user.isAdmin

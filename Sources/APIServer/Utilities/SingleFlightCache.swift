@@ -21,7 +21,7 @@ import Foundation
 actor SingleFlightCache<Value: Sendable> {
     private var cached: Value?
     private var cachedAt: Date?
-    private var inFlight: Task<Value, Error>?
+    private var inFlight: Task<Value, any Error>?
     private let ttl: TimeInterval
 
     init(ttl: TimeInterval = 60) {

@@ -14,6 +14,7 @@
 // resource, and vice versa.
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
 
+import JWT
 import Vapor
 
 struct MCPBearerVerification: Sendable {

@@ -7,7 +7,7 @@
 import Fluent
 
 struct CreateLTIIdentities: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APILTIIdentity.schema)
             .id()
             .field("platform_id", .uuid, .required, .references("lti_platforms", "id", onDelete: .cascade))
@@ -18,7 +18,7 @@ struct CreateLTIIdentities: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APILTIIdentity.schema).delete()
     }
 }

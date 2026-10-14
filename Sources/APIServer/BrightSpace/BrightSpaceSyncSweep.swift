@@ -31,7 +31,7 @@ import Vapor
 /// pushed one is.
 @discardableResult
 func sweepBrightSpaceGradeSync(
-    on db: Database,
+    on db: any Database,
     debounceSecs: TimeInterval,
     resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
     logger: Logger,
@@ -371,7 +371,7 @@ extension GradeSyncSweep {
     /// Deliberately narrow: any other status says nothing about the identity,
     /// so the cached id survives it.
     private func invalidateCachedUserIDOnNotFound(
-        _ error: Error, user: APIUser?, describing context: String
+        _ error: any Error, user: APIUser?, describing context: String
     ) async {
         guard let syncError = error as? BrightSpaceSyncError,
             case .gradePushFailed(let status, _) = syncError,
@@ -446,7 +446,7 @@ extension GradeSyncSweep {
 private func resolvedBrightSpaceUserID(
     for user: APIUser?,
     identityIndex: BrightSpaceIdentityIndex?,
-    db: Database,
+    db: any Database,
     client: any BrightSpaceGrading,
     application: Application
 ) async throws -> String? {
@@ -725,6 +725,6 @@ struct BrightSpaceSyncConfigKey: StorageKey {
 /// column, which those tools deliberately omit (compliance audit F-2). The
 /// error text is safe to embed because `BrightSpaceSyncError.description`
 /// omits the orgDefinedId and truncates D2L bodies.
-func brightspacePushRejectionDetail(itemName: String, maxPoints: String, error: Error) -> String {
+func brightspacePushRejectionDetail(itemName: String, maxPoints: String, error: any Error) -> String {
     "Grade push to '\(itemName)' (max \(maxPoints)) rejected: \(error.localizedDescription)"
 }

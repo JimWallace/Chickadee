@@ -45,7 +45,7 @@ enum TournamentStartError: Error {
 /// than two entrants.
 @discardableResult
 func startTournament(
-    setup: APITestSetup, schedule: TournamentSchedule, startedBy: UUID?, on db: Database
+    setup: APITestSetup, schedule: TournamentSchedule, startedBy: UUID?, on db: any Database
 ) async throws -> APITournamentRun {
     guard let setupID = setup.id, setup.decodedManifest()?.activity?.kind.aggregation == .bracket else {
         throw TournamentStartError.notATournamentKind
@@ -79,7 +79,7 @@ func startTournament(
 /// one `latestStudentSubmissionsByUser` states for the classmate chooser and
 /// the union read model; only the seeding order is the tournament's own
 /// (#1751).
-private func snapshotEntrants(setup: APITestSetup, on db: Database) async throws -> [TournamentEntrant] {
+private func snapshotEntrants(setup: APITestSetup, on db: any Database) async throws -> [TournamentEntrant] {
     let latestByUser = try await latestStudentSubmissionsByUser(setup: setup, on: db)
     return latestByUser.values
         .sorted { a, b in
@@ -106,7 +106,7 @@ func playsInArena(_ setup: APITestSetup?) -> Bool {
 /// for a runner, or a match that waits for the arena. A bye is stored
 /// already won, with no match.
 private func enqueueRound(
-    run: APITournamentRun, slots: [TournamentSlot], inArena: Bool, on db: Database
+    run: APITournamentRun, slots: [TournamentSlot], inArena: Bool, on db: any Database
 ) async throws {
     let runID = try run.requireID()
     let entrants = run.entrants
@@ -138,7 +138,7 @@ private func enqueueRound(
 /// submission, with the slot it plays. Nil when the submission is not a
 /// tournament match still waiting for its result.
 func pairedOpponent(
-    for submission: APISubmission, on db: Database
+    for submission: APISubmission, on db: any Database
 ) async throws -> (slot: APITournamentMatch, run: APITournamentRun, away: APISubmission)? {
     guard submission.kind == APISubmission.Kind.tournamentMatch, let submissionID = submission.id,
         let slot = try await APITournamentMatch.query(on: db)
@@ -161,7 +161,7 @@ func pairedOpponent(
 /// can finish it (#2184). A slot of a superseded run is decided but moves
 /// nothing.
 func recordTournamentMatch(
-    submission: APISubmission, collection: TestOutcomeCollection, on db: Database
+    submission: APISubmission, collection: TestOutcomeCollection, on db: any Database
 ) async throws {
     guard submission.kind == APISubmission.Kind.tournamentMatch, let submissionID = submission.id,
         let slot = try await APITournamentMatch.query(on: db)
@@ -178,7 +178,7 @@ func recordTournamentMatch(
 /// Completes the match row the claim opened and records the slot's winner.
 private func decideSlot(
     _ slot: APITournamentMatch, awaySeed: Int, submissionID: String, collection: TestOutcomeCollection,
-    on db: Database
+    on db: any Database
 ) async throws {
     let entry = collection.buildStatus == .passed ? matchOutcome(from: collection.outcomes) : nil
     let homeWon = entry?.status == .pass
@@ -210,7 +210,7 @@ private func decideSlot(
 /// the run it had loaded before it decided its slot, so the last two matches
 /// of a round could see the next round's undecided slots and complete the
 /// run with no winner.
-func advanceTournamentIfRoundComplete(runID: UUID, on db: Database) async throws {
+func advanceTournamentIfRoundComplete(runID: UUID, on db: any Database) async throws {
     try await db.transaction { tx in
         guard let run = try await APITournamentRun.find(runID, on: tx),
             run.status == APITournamentRun.Status.running,
@@ -263,9 +263,9 @@ private enum TournamentStep {
 /// Postgres (the `SingleUseRecord` pattern). True when this caller's update
 /// landed. False when another ingest claimed the step first.
 private func claimTournamentStep(
-    runID: UUID, round: Int, to step: TournamentStep, on db: Database
+    runID: UUID, round: Int, to step: TournamentStep, on db: any Database
 ) async throws -> Bool {
-    guard let sql = db as? SQLDatabase else { return true }
+    guard let sql = db as? (any SQLDatabase) else { return true }
     let assignment: SQLQueryString
     switch step {
     case .nextRound: assignment = "current_round = \(bind: round + 1)"
@@ -284,7 +284,7 @@ private func claimTournamentStep(
 /// The most recent run for the setup, any status, with its slots in round
 /// and position order — what the bracket page and the run control show.
 func latestTournament(
-    testSetupID: String, on db: Database
+    testSetupID: String, on db: any Database
 ) async throws -> (run: APITournamentRun, slots: [APITournamentMatch])? {
     guard
         let run = try await APITournamentRun.query(on: db)

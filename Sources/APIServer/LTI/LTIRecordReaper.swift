@@ -27,7 +27,7 @@ private let ltiRecordReaperInterval: TimeInterval = 3600
 /// covers `consumed`, so the OR scanned the whole table. Each delete here is
 /// a range on the `expires_at` index (#1804). The second range holds only
 /// live rows, which last at most 30 minutes (#2279).
-func reapExpiredLTIRecords(on db: Database, logger: Logger, now: Date = Date()) async throws {
+func reapExpiredLTIRecords(on db: any Database, logger: Logger, now: Date = Date()) async throws {
     try await APILTILoginState.query(on: db)
         .filter(\.$expiresAt < now)
         .delete()

@@ -10,7 +10,7 @@ import Fluent
 import SQLKit
 
 struct CreateReflectionFeedback: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APIReflectionFeedback.schema)
             .id()
             .field(
@@ -38,7 +38,7 @@ struct CreateReflectionFeedback: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APIReflectionFeedback.schema).delete()
     }
 }

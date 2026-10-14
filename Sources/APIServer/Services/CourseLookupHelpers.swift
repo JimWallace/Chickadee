@@ -27,7 +27,7 @@ import Vapor
 /// them. Fluent has no case-insensitive comparison that is portable across
 /// SQLite and Postgres, so this fetches the (small) active-course set and
 /// compares in Swift — one place to change if that trade-off ever shifts.
-func findActiveCourse(byKey key: String, viewer: UUID?, on db: Database) async throws -> APICourse? {
+func findActiveCourse(byKey key: String, viewer: UUID?, on db: any Database) async throws -> APICourse? {
     let active = try await APICourse.query(on: db)
         .filter(\.$isArchived == false)
         .all()
@@ -48,7 +48,7 @@ func coursesMatching(key: String, in courses: [APICourse]) -> [APICourse] {
 
 /// The one course among several to use when nothing names a term: the
 /// viewer's enrolled courses first, then the newest term, then code order.
-func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: Database) async throws -> APICourse? {
+func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: any Database) async throws -> APICourse? {
     var pool = candidates
     if let viewer {
         let enrolledIDs = Set(
@@ -76,7 +76,7 @@ func preferredCourse(among candidates: [APICourse], viewer: UUID?, on db: Databa
 /// (#1779). Fetching the active set and comparing in Swift is the same
 /// trade-off `findActiveCourse` makes.
 func activeCourseCodeIsTaken(
-    _ code: String, term: AcademicTerm?, excluding courseID: UUID?, on db: Database
+    _ code: String, term: AcademicTerm?, excluding courseID: UUID?, on db: any Database
 ) async throws -> Bool {
     try await APICourse.query(on: db)
         .filter(\.$isArchived == false)

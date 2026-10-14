@@ -24,11 +24,11 @@ import SQLKit
 func saveSubmissionWithNextAttemptNumber(
     _ submission: APISubmission,
     userID: UUID?,
-    on db: Database
+    on db: any Database
 ) async throws {
     try await withTransientDatabaseLockRetry(on: db) {
         try await withWriteLockedTransaction(on: db) { tx in
-            if let sql = tx as? SQLDatabase, sql.dialect.name == "postgresql" {
+            if let sql = tx as? (any SQLDatabase), sql.dialect.name == "postgresql" {
                 let scope = "chickadee.attempt:\(submission.testSetupID):\(userID?.uuidString ?? "-")"
                 try await sql.raw("SELECT pg_advisory_xact_lock(hashtext(\(bind: scope)))").run()
             }

@@ -31,7 +31,7 @@ func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
     // submissions table grows without bound across terms.
     var assignedByWorkerID: [String: Int] = [:]
     var processedByWorkerID: [String: Int] = [:]
-    if let sql = req.db as? SQLDatabase {
+    if let sql = req.db as? (any SQLDatabase) {
         let counts = try await sql.select()
             .column("worker_id")
             .column("status")

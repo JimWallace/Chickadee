@@ -22,7 +22,7 @@ import Foundation
 struct BackfillSharedSupportFiles: ChickadeeMigration {
     let testSetupsDirectory: String
 
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         // A full model query is safe here because this migration is registered
         // after every migration that adds a column to `test_setups` (#1077).
         // `MigrationOrderTests` checks the order.
@@ -48,5 +48,5 @@ struct BackfillSharedSupportFiles: ChickadeeMigration {
 
     /// A no-op: the extracted files are a copy of what the zip already holds,
     /// and removing them would break the students who now link to them.
-    func revert(on database: Database) async throws {}
+    func revert(on database: any Database) async throws {}
 }

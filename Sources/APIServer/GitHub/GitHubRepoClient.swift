@@ -11,6 +11,7 @@
 import AsyncHTTPClient
 import Foundation
 import NIOCore
+import NIOFoundationCompat
 import Vapor
 
 /// A student's installation of the App.

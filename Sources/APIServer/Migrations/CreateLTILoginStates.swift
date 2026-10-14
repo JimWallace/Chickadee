@@ -7,7 +7,7 @@
 import Fluent
 
 struct CreateLTILoginStates: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APILTILoginState.schema)
             .id()
             .field("state_hash", .string, .required)
@@ -20,7 +20,7 @@ struct CreateLTILoginStates: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APILTILoginState.schema).delete()
     }
 }

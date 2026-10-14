@@ -112,7 +112,7 @@ struct GetAssignmentTool: ContentTool {
         /// unset, for the reason `SetActivityTool.Output` gives: an agent that
         /// set a window must be able to read it back and tell "no window" from
         /// "a server that predates the field" (#1753).
-        func encode(to encoder: Encoder) throws {
+        func encode(to encoder: any Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(kind, forKey: .kind)
             try c.encode(kindDisplayName, forKey: .kindDisplayName)

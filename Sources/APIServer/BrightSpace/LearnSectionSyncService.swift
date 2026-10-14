@@ -38,7 +38,7 @@ func syncCourseSections(
     orgUnitID: String,
     categoryID: String,
     client: any BrightSpaceGrading,
-    on db: Database,
+    on db: any Database,
     application: Application
 ) async throws -> SectionSyncOutcome {
     guard let courseID = course.id else { return SectionSyncOutcome() }
@@ -118,7 +118,7 @@ func syncCourseSections(
 /// Returns the total number of enrollment rows updated across all courses.
 @discardableResult
 func sweepLearnSections(
-    on db: Database,
+    on db: any Database,
     resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
     logger: Logger,
     application: Application

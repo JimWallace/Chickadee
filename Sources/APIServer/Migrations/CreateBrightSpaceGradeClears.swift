@@ -9,7 +9,7 @@ import Fluent
 import SQLKit
 
 struct CreateBrightSpaceGradeClears: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("brightspace_grade_clears")
             .id()
             .field(
@@ -29,7 +29,7 @@ struct CreateBrightSpaceGradeClears: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("brightspace_grade_clears").delete()
     }
 }

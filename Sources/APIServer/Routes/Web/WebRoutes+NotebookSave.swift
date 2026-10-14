@@ -39,6 +39,7 @@
 import Core
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 extension WebRoutes {

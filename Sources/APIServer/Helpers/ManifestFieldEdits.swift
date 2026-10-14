@@ -42,7 +42,7 @@ import SQLKit
 /// the author can retry.
 func mutateManifest(
     setup: APITestSetup,
-    on db: Database,
+    on db: any Database,
     _ mutate: (inout TestProperties) throws -> Void
 ) async throws {
     try await mutateManifestJSON(setup: setup, on: db) { manifest in
@@ -60,7 +60,7 @@ func mutateManifest(
 /// because a lost race applies it again to the newer manifest (#2485).
 func mutateManifestJSON(
     setup: APITestSetup,
-    on db: Database,
+    on db: any Database,
     _ transform: (String) throws -> String?
 ) async throws {
     for _ in 0..<manifestWriteAttempts {
@@ -100,7 +100,7 @@ let concurrentManifestEditMessage =
 ///
 /// Only the manifest is written. A caller that also changed another field of
 /// `setup` must save that field itself.
-func saveManifestReplacing(_ setup: APITestSetup, with manifest: String, on db: Database) async throws {
+func saveManifestReplacing(_ setup: APITestSetup, with manifest: String, on db: any Database) async throws {
     guard try await replaceManifest(of: setup, with: manifest, on: db) else {
         throw AppError.conflict(reason: concurrentManifestEditMessage)
     }
@@ -113,9 +113,9 @@ func saveManifestReplacing(_ setup: APITestSetup, with manifest: String, on db: 
 /// new value as saved, not as a pending change, so a later `save()` of the
 /// same model does not write the manifest again without this check.
 private func replaceManifest(
-    of setup: APITestSetup, with manifest: String, on db: Database
+    of setup: APITestSetup, with manifest: String, on db: any Database
 ) async throws -> Bool {
-    guard let sql = db as? SQLDatabase else {
+    guard let sql = db as? (any SQLDatabase) else {
         setup.manifest = manifest
         try await setup.save(on: db)
         return true

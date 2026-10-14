@@ -19,6 +19,7 @@
 //     not true of any imported assignment.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -212,7 +213,7 @@ extension CourseBundleRoutes {
 
     func performImportTransaction(
         app: Application,
-        db: Database,
+        db: any Database,
         manifest: CourseBundleManifest,
         dirs: BundleImportDirectories
     ) async throws -> ImportTally {
@@ -371,7 +372,7 @@ struct ImportTally: Sendable {
 // so the route struct stays under the swiftlint type_body_length limit.
 
 private func importBundledUsers(
-    manifest: CourseBundleManifest, db: Database, tally: inout ImportTally
+    manifest: CourseBundleManifest, db: any Database, tally: inout ImportTally
 ) async throws -> [String: UUID] {
     var userIDMap: [String: UUID] = [:]
     for bundledUser in manifest.users {
@@ -411,7 +412,7 @@ private func importBundledEnrollments(
     manifest: CourseBundleManifest,
     userIDMap: [String: UUID],
     courseID: UUID,
-    db: Database
+    db: any Database
 ) async throws {
     // A bundle that carries roles (#1740) enrolls each user in the role it
     // held. An older bundle lists only who was enrolled, and the seeded
@@ -453,7 +454,7 @@ private func importBundledTestSetups(
     dirs: BundleImportDirectories,
     courseID: UUID,
     app: Application,
-    db: Database,
+    db: any Database,
     tally: inout ImportTally
 ) async throws -> [String: String] {
     let extractDir = dirs.extractDir
@@ -550,7 +551,7 @@ private func importBundledTestSetups(
 private func importBundledSections(
     manifest: CourseBundleManifest,
     courseID: UUID,
-    db: Database
+    db: any Database
 ) async throws -> [String: UUID] {
     var sectionIDMap: [String: UUID] = [:]
     for bundledSection in manifest.sections ?? [] {
@@ -575,7 +576,7 @@ private func importBundledContentItems(
     sectionIDMap: [String: UUID],
     courseID: UUID,
     dirs: BundleImportDirectories,
-    db: Database,
+    db: any Database,
     tally: inout ImportTally
 ) async throws {
     let extractDir = dirs.extractDir
@@ -630,7 +631,7 @@ private func importBundledAssignments(
     setupIDMap: [String: String],
     sectionIDMap: [String: UUID],
     courseID: UUID,
-    db: Database,
+    db: any Database,
     tally: inout ImportTally
 ) async throws {
     for bundledAssign in manifest.assignments {
@@ -674,7 +675,7 @@ private func importBundledAssignments(
 
 /// Seeds `v1` for every imported setup. Best effort, like the other seeds:
 /// an assignment with no history is what the store already copes with.
-private func seedImportedVersions(setupIDs: some Sequence<String>, setupsDir: String, db: Database) async {
+private func seedImportedVersions(setupIDs: some Sequence<String>, setupsDir: String, db: any Database) async {
     for setupID in setupIDs {
         guard let setup = try? await APITestSetup.find(setupID, on: db) else { continue }
         await AssignmentVersionStore.seedInitialVersion(
@@ -688,7 +689,7 @@ private func importBundledSubmissions(
     extractDir: URL,
     subsDir: String,
     idMaps: ImportIDMaps,
-    db: Database,
+    db: any Database,
     tally: inout ImportTally
 ) async throws -> [String: String] {
     let userIDMap = idMaps.userIDMap
@@ -743,7 +744,7 @@ private func importBundledSubmissions(
 private func linkImportedValidationSubmissions(
     courseID: UUID,
     setupsDir: String,
-    db: Database
+    db: any Database
 ) async throws {
     let assignments = try await APIAssignment.query(on: db)
         .filter(\.$courseID == courseID)
@@ -769,7 +770,7 @@ private func linkImportedValidationSubmissions(
 private func importBundledResults(
     manifest: CourseBundleManifest,
     subIDMap: [String: String],
-    db: Database,
+    db: any Database,
     tally: inout ImportTally
 ) async throws {
     for bundledResult in manifest.results {

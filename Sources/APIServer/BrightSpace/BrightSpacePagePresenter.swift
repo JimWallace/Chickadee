@@ -70,7 +70,7 @@ enum BrightSpacePagePresenter {
         user: APIUser,
         courseState: ResolvedCourseState,
         flashes: Flashes,
-        on db: Database,
+        on db: any Database,
         application: Application
     ) async throws -> InstructorBrightspaceContext {
         // "Enabled" = configured at the app level (URL/App ID/App Key); a user
@@ -184,7 +184,7 @@ enum BrightSpacePagePresenter {
 
     /// Resolves how the active course's grade-sync identity is shown.
     static func syncIdentity(
-        course: APICourse, user: APIUser, on db: Database, application: Application
+        course: APICourse, user: APIUser, on db: any Database, application: Application
     ) async throws -> SyncIdentity {
         let isMe = course.brightspaceSyncUserID != nil && course.brightspaceSyncUserID == user.id
         if let syncUserID = course.brightspaceSyncUserID {
@@ -236,7 +236,7 @@ enum BrightSpacePagePresenter {
     /// The grade-item rows, and the time of the newest sync attempt for the
     /// course, in one pass over the assignments and recent sync log.
     static func assignmentData(
-        courseUUID: UUID, on db: Database, fmt: DateFormatter
+        courseUUID: UUID, on db: any Database, fmt: DateFormatter
     ) async throws -> (rows: [BrightspaceAssignmentRow], newestAttempt: Date?) {
         // Assignments, sorted to match the dashboard ordering.
         let assignments = try await APIAssignment.query(on: db)
@@ -366,7 +366,7 @@ enum BrightSpacePagePresenter {
     static func syncSummary(
         courseUUID: UUID,
         setupIDs: [String],
-        on db: Database
+        on db: any Database
     ) async throws -> (BrightspaceSyncSummary, [String: SetupSyncCounts]) {
         // (setupID, userID) → that student's most-recent sync state.
         struct StudentKey: Hashable {
@@ -455,7 +455,7 @@ enum BrightSpacePagePresenter {
     /// confirmed / unconfirmed / unreachable counts, the last-checked time, and
     /// the list of unreachable students with the reason.
     static func readiness(
-        courseUUID: UUID, on db: Database, fmt: DateFormatter
+        courseUUID: UUID, on db: any Database, fmt: DateFormatter
     ) async throws -> (BrightspaceReadinessSummary, [BrightspaceReadinessRow]) {
         let enrollments = try await APICourseEnrollment.query(on: db)
             .filter(\.$course.$id == courseUUID)

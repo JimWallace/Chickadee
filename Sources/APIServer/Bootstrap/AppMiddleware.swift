@@ -46,6 +46,7 @@
 //
 // Extracted from configure(_:) in #496.
 
+import Fluent
 import Vapor
 
 func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {

@@ -19,6 +19,7 @@
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
 
 import Core
+import Fluent
 import Foundation
 import Vapor
 
@@ -53,7 +54,7 @@ struct MCPRoutes: RouteCollection {
         }
     }
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let group = routes.grouped("mcp")
         group.post(use: handlePost)
         group.on(.GET, use: streamingUnsupported)

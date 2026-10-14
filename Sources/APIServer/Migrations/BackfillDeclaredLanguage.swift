@@ -29,7 +29,7 @@ import Foundation
 /// overwrite an author's later choice with a re-derived one.
 struct BackfillDeclaredLanguage: ChickadeeMigration {
 
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         // A full model query is safe HERE specifically because this migration is
         // in the data block at the end of `registerMigrations`, after every
         // migration that changes `test_setups` — the #1077 hazard is a
@@ -70,7 +70,7 @@ struct BackfillDeclaredLanguage: ChickadeeMigration {
     /// state it was in before — an author may have declared a language through
     /// the edit page since. There is nothing to undo: the flag records that the
     /// question has an answer, and it does.
-    func revert(on database: Database) async throws {}
+    func revert(on database: any Database) async throws {}
 
     /// v1 only: it edits the v1 keys as a dictionary.  It has run on every
     /// database that holds a manifest, and v2 (docs/manifest-format-v2.md)

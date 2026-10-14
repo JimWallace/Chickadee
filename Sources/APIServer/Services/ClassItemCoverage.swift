@@ -47,7 +47,7 @@ func recordClassItemCoverage(
     submissionID: String,
     outcomes: [TestOutcome],
     declaredSlotCount: Int,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard declaredSlotCount > 0 else { return }
     let covered = outcomes.filter { $0.status == .pass }.map(\.testName)
@@ -81,7 +81,7 @@ func recordClassItemCoverage(
 /// Reads the materialised union rather than the stored collections, which is
 /// the whole point of materialising it.
 func classItemCoverage(
-    testSetupID: String, on db: Database
+    testSetupID: String, on db: any Database
 ) async throws -> [APIClassItemCoverage] {
     try await APIClassItemCoverage.query(on: db)
         .filter(\.$testSetupID == testSetupID)
@@ -102,7 +102,7 @@ func classItemCoverage(
 /// the safe direction — a missed row is recoverable by re-testing, whereas
 /// failing a student's result report to record a diagnostic is not.
 func declaredContributionSlotCount(
-    testSetupID: String, app: Application, on db: Database
+    testSetupID: String, app: Application, on db: any Database
 ) async -> Int {
     guard let setup = try? await APITestSetup.find(testSetupID, on: db),
         let data = try? await app.notebookBytesCache.notebookData(for: NotebookSourceRef(setup))

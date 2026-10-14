@@ -9,13 +9,14 @@
 //   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import SQLKit
 import Vapor
 
 struct AdminRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
         admin.get("users", use: usersPage)
@@ -178,7 +179,7 @@ struct AdminRoutes: RouteCollection {
     /// Loads every user, ordered most-recently-seen first (NULL last_seen
     /// rows sink to the bottom, then username, then join date), and maps
     /// them to the wire/template row shape.
-    private func fetchUserRows(on db: Database, viewerID: UUID?) async throws -> [AdminUserRow] {
+    private func fetchUserRows(on db: any Database, viewerID: UUID?) async throws -> [AdminUserRow] {
         let users = try await APIUser.query(on: db)
             .all()
             .sorted { lhs, rhs in
@@ -530,11 +531,11 @@ func adminNoticeRedirect(_ path: String, ok: String? = nil, error: String? = nil
     return pairs.isEmpty ? path : path + "?" + pairs.joined(separator: "&")
 }
 
-func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
+func assignmentCountsByCourse(on db: any Database) async throws -> [UUID: Int] {
     // DB-side grouped COUNT rather than loading every assignment row into
     // memory and tallying in Swift. Falls back to the in-memory tally on the
     // (currently nonexistent) non-SQL driver.
-    guard let sql = db as? SQLDatabase else {
+    guard let sql = db as? (any SQLDatabase) else {
         let assignments = try await APIAssignment.query(on: db).all()
         return assignments.reduce(into: [:]) { $0[$1.courseID, default: 0] += 1 }
     }

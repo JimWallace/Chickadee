@@ -16,7 +16,7 @@ import Foundation
 import Vapor
 
 struct StudentCourseRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get(":courseCode", "students", ":urlToken", "submissions", use: courseStudentSubmissionsPage)
         routes.get(
             ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "history",

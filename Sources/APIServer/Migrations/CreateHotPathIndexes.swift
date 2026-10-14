@@ -6,8 +6,8 @@ import SQLKit
 /// runner dashboard / rolling-average queries. Each runs repeatedly (timers or
 /// dashboard refreshes) against tables that grow without bound across terms.
 struct CreateHotPathIndexes: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         // BrightSpace grade-sync sweep (every 60s): results pending a push,
         // ordered by how long they've been waiting.
@@ -33,8 +33,8 @@ struct CreateHotPathIndexes: ChickadeeMigration {
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw("DROP INDEX IF EXISTS idx_job_execution_metrics_runner_completed_at").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_runner_snapshots_runner_recorded_at").run()

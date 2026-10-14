@@ -9,11 +9,12 @@
 //   POST /account/handle/:courseID     → choose a class handle (AccountRoutes+Handle.swift)
 
 import Core
+import Elementary
 import Fluent
 import Vapor
 
 struct AccountRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("account", use: accountPage)
         routes.post("account", "enroll", use: joinCourse)
         routes.post("account", "unenroll", ":courseID", use: leaveCourse)

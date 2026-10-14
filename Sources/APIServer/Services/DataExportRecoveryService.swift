@@ -48,7 +48,7 @@ private let staleDataExportSweepInterval: TimeInterval = 60
 /// number of rows failed (for tests / logging).
 @discardableResult
 func failStalePendingDataExports(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     maxAge: TimeInterval = dataExportStalePendingAge,
     now: Date = Date()

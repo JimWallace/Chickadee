@@ -8,7 +8,7 @@
 import Fluent
 
 struct CreateLTIDeepLinkRequests: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APILTIDeepLinkRequest.schema)
             .id()
             .field("ticket_hash", .string, .required)
@@ -26,7 +26,7 @@ struct CreateLTIDeepLinkRequests: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APILTIDeepLinkRequest.schema).delete()
     }
 }

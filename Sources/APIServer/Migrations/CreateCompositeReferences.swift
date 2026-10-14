@@ -6,7 +6,7 @@
 import Fluent
 
 struct CreateCompositeReferences: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APICompositeReference.schema)
             .id()
             .field(
@@ -25,7 +25,7 @@ struct CreateCompositeReferences: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APICompositeReference.schema).delete()
     }
 }

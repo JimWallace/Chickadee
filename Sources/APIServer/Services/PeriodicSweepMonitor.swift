@@ -31,6 +31,7 @@
 // cycle. Single-process deployments always hold the lease; the tick cost is
 // one small UPDATE + SELECT.
 
+import Fluent
 import Synchronization
 import Vapor
 

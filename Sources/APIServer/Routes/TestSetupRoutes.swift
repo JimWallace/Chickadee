@@ -29,12 +29,13 @@
 import Core
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 // MARK: - Route collection
 
 struct TestSetupRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let api = routes.grouped("api", "v1", "testsetups")
         // Explicit cap sized to the zip-bomb guard (256 MB uncompressed,
         // TestSetupZipHelpers): the 10 MB global default rejected legitimate

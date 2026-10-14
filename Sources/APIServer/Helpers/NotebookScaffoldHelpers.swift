@@ -58,7 +58,7 @@ func autoScaffoldFromSolutionNotebook(
     setup: APITestSetup,
     notebookData: Data,
     zipPath: String,
-    on db: Database
+    on db: any Database
 ) async throws -> (sections: Int, functions: Int) {
     // Decode the existing manifest so we know whether to scaffold.
     guard let existing = setup.decodedManifest() else { return (0, 0) }

@@ -79,7 +79,7 @@ enum UserActivityChartService {
     /// Builds the activity series for `window`, ending at `now`.
     static func chartData(
         window: ActivityWindow,
-        on db: Database,
+        on db: any Database,
         now: Date = Date()
     ) async throws -> ActivityChartData {
         let windowStart = now.addingTimeInterval(-window.totalSeconds)

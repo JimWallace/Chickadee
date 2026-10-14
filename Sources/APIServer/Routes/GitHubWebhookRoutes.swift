@@ -19,6 +19,7 @@
 
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 struct GitHubWebhookRoutes: RouteCollection {
@@ -26,7 +27,7 @@ struct GitHubWebhookRoutes: RouteCollection {
     /// for two fields, so GitHub records it as a failed delivery.
     static let maxBodySize: ByteCount = "5mb"
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.on(.POST, "github", "webhook", body: .collect(maxSize: Self.maxBodySize), use: receive)
     }
 

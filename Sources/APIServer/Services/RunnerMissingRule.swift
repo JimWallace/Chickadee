@@ -109,9 +109,9 @@ private func formatQuietDuration(_ seconds: TimeInterval) -> String {
 /// The newest `runner_snapshots.recorded_at` per runner, for runners with a
 /// row inside the remember window. Empty when diagnostics are disabled (no
 /// rows are written), which keeps the rule green rather than guessing.
-func loadRunnerLastSeen(on db: Database, now: Date) async throws -> [String: Date] {
+func loadRunnerLastSeen(on db: any Database, now: Date) async throws -> [String: Date] {
     let cutoff = now.addingTimeInterval(-runnerMissingRememberSeconds)
-    guard let sql = db as? SQLDatabase else {
+    guard let sql = db as? (any SQLDatabase) else {
         let rows = try await RunnerSnapshot.query(on: db)
             .filter(\.$recordedAt >= cutoff)
             .all()

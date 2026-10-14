@@ -4,6 +4,7 @@
 // All routes are registered in AdminRoutes.boot().
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -774,7 +775,7 @@ extension AdminRoutes {
 /// The first free `-COPY` code for a copy of `base` in `term`. "Free" is the
 /// rule every other door applies (`activeCourseCodeIsTaken`): case-folded
 /// and per term, so the copy cannot answer the key of an active course (#2229).
-private func uniqueCopyCode(base: String, term: AcademicTerm?, db: Database) async throws -> String {
+private func uniqueCopyCode(base: String, term: AcademicTerm?, db: any Database) async throws -> String {
     let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
     for candidate in candidates {
         let taken = try await activeCourseCodeIsTaken(candidate, term: term, excluding: nil, on: db)

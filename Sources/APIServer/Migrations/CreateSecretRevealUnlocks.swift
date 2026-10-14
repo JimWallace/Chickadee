@@ -9,7 +9,7 @@
 import Fluent
 
 struct CreateSecretRevealUnlocks: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("secret_reveal_unlocks")
             .id()
             .field(
@@ -29,7 +29,7 @@ struct CreateSecretRevealUnlocks: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("secret_reveal_unlocks").delete()
     }
 }

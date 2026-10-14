@@ -26,12 +26,13 @@
 // `workbench-check.mjs` re-proves it.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
 
 struct InstructorWorkbenchRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         // Registered under the same `/instructor` group as the rest of the
         // authoring surface, so `ActiveCourseStaffMiddleware` applies; the
         // per-resource gate is `loadAssignmentAndSetupForStaffRead` inside

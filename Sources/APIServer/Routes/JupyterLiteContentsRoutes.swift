@@ -6,11 +6,12 @@
 // for all expected URL shapes.
 
 import Core
+import Fluent
 import Foundation
 import Vapor
 
 struct JupyterLiteContentsRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("jupyterlite", "api", "contents", use: contentsRoot)
         routes.get("jupyterlite", "api", "contents", "**", use: contentsPath)
 

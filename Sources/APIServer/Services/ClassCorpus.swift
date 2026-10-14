@@ -60,7 +60,7 @@ struct ClassCorpus {
 /// time would reshuffle the corpus every time anybody resubmitted, which makes
 /// two runs incomparable for no gain.
 func assembleClassCorpus(
-    setup: APITestSetup, app: Application, on db: Database
+    setup: APITestSetup, app: Application, on db: any Database
 ) async throws -> ClassCorpus? {
     guard let manifest = setup.decodedManifest(),
         !manifest.variesPerStudent,
@@ -123,7 +123,7 @@ func assembleClassCorpus(
 /// Never throws out. A corpus run is a diagnostic the class reads, and failing
 /// a student's result report to schedule one is not a trade worth making.
 func scheduleClassCorpusRun(
-    setupID: String, app: Application, on db: Database, logger: Logger
+    setupID: String, app: Application, on db: any Database, logger: Logger
 ) async {
     do {
         let inFlight = try await APIClassCoverageRun.query(on: db)
@@ -196,7 +196,7 @@ func scheduleClassCorpusRun(
 /// next contribution arrives. The run still completes, so the debounce
 /// releases and the next contribution tries again.
 func recordClassCoverageRun(
-    submission: APISubmission, collection: TestOutcomeCollection, on db: Database
+    submission: APISubmission, collection: TestOutcomeCollection, on db: any Database
 ) async throws {
     guard submission.kind == APISubmission.Kind.classAggregate,
         let subID = submission.id,
@@ -223,7 +223,7 @@ func recordClassCoverageRun(
 /// would blank a progress bar that freezes into a grade push. The answer to
 /// "the goal reads the latest aggregate only" is this one query.
 func latestClassCoverageRun(
-    testSetupID: String, on db: Database
+    testSetupID: String, on db: any Database
 ) async throws -> APIClassCoverageRun? {
     try await APIClassCoverageRun.query(on: db)
         .filter(\.$testSetupID == testSetupID)

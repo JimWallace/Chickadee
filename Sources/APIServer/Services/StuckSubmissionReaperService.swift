@@ -20,7 +20,7 @@ private let stuckSubmissionSweepInterval: TimeInterval = 60
 
 @discardableResult
 func reapStuckAssignedSubmissions(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     maxAge: TimeInterval = stuckSubmissionDefaultMaxAge,
     now: Date = Date()
@@ -76,7 +76,7 @@ func reapStuckAssignedSubmissions(
 /// long matrix job in a large class was put back to pending while it still
 /// ran, and a second runner played every match again (#2185).
 private func pastOpponentAllowance(
-    _ candidates: [APISubmission], maxAge: TimeInterval, now: Date, on db: Database
+    _ candidates: [APISubmission], maxAge: TimeInterval, now: Date, on db: any Database
 ) async throws -> [APISubmission] {
     let ids = candidates.compactMap(\.id)
     guard !ids.isEmpty else { return [] }

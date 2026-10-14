@@ -12,6 +12,7 @@
 //   GET /instructor/brightspace    → InstructorBrightspacePage
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -163,7 +164,7 @@ extension InstructorDashboardRoutes {
     /// put words in the banner.  The Students table has no handle column, so
     /// this is where staff see what the new handle is.
     static func handleChangedFlash(
-        userIDString: String, courseID: UUID, on db: Database
+        userIDString: String, courseID: UUID, on db: any Database
     ) async throws -> String? {
         guard let userID = UUID(uuidString: userIDString),
             let handle = try await APICourseEnrollment.query(on: db)

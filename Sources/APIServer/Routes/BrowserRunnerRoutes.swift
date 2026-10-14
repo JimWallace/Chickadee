@@ -26,7 +26,7 @@ import Foundation
 import Vapor
 
 struct BrowserRunnerRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let br = routes.grouped("api", "v1", "browser-runner")
         br.get("testsetups", ":testSetupID", "download", use: downloadTestSetup)
         br.get("testsetups", ":testSetupID", "manifest", use: getTestSetupManifest)

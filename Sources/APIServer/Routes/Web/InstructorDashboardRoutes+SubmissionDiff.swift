@@ -8,6 +8,7 @@
 // so a hidden test never appears as an "added" block.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

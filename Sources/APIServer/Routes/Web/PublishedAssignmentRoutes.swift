@@ -25,7 +25,7 @@ import Foundation
 import Vapor
 
 struct PublishedAssignmentRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let r = routes.grouped("instructor")
 
         // Save + file downloads.

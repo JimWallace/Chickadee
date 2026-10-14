@@ -21,7 +21,7 @@ import Foundation
 import Vapor
 
 struct DraftAssignmentRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let r = routes.grouped("instructor")
         r.get("new", use: newAssignmentPage)
         r.post("new", "draft", use: updateNewAssignmentDraft)

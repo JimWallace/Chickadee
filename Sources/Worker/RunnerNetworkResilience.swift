@@ -107,11 +107,11 @@ func classifyPollHTTPRetry(statusCode: Int, body: String) -> RetryDisposition {
 func withRunnerRetry<T>(
     stage: RunnerRetryStage,
     policy: RunnerRetryPolicy,
-    shouldRetry: @escaping @Sendable (Error) -> RetryDisposition,
+    shouldRetry: @escaping @Sendable (any Error) -> RetryDisposition,
     onRetry: @escaping @Sendable (RunnerRetryContext) async -> Void = { _ in },
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    var lastError: Error?
+    var lastError: any Error?
 
     for attempt in 1...max(1, policy.maxAttempts) {
         do {

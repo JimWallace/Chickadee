@@ -319,7 +319,7 @@ extension InstructorDashboardRoutes {
         // submission row and building per-setup sets in Swift — this runs on
         // the instructor landing page and degrades linearly with term volume
         // (June 2026 audit, P1.6; same pattern as the admin runner counts).
-        if let sql = req.db as? SQLDatabase {
+        if let sql = req.db as? (any SQLDatabase) {
             struct SubmitterCountRow: Decodable {
                 let testSetupID: String
                 let submitters: Int

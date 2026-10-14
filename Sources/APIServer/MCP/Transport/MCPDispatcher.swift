@@ -8,6 +8,7 @@
 
 import Core
 import Foundation
+import Vapor
 
 /// Maps a JSON-RPC request to an MCP response.  Returns nil for notifications,
 /// which receive no response per the spec.

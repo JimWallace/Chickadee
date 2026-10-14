@@ -14,7 +14,7 @@ extension OperationalDiagnosticsService {
     func findOrCreateSubmissionDiagnostics(
         submission: APISubmission,
         context: SubmissionDiagnosticsContext,
-        on db: Database
+        on db: any Database
     ) async throws -> APISubmissionDiagnostics {
         if let existing = try await APISubmissionDiagnostics.find(submission.id, on: db) {
             if existing.courseID == nil { existing.courseID = context.courseID }
@@ -38,7 +38,7 @@ extension OperationalDiagnosticsService {
     func findOrCreateJobExecutionMetric(
         submission: APISubmission,
         context: SubmissionDiagnosticsContext,
-        on db: Database
+        on db: any Database
     ) async throws -> JobExecutionMetric {
         if let existing = try await JobExecutionMetric.query(on: db)
             .filter(\.$submissionID == (submission.id ?? ""))
@@ -64,7 +64,7 @@ extension OperationalDiagnosticsService {
     }
 
     func loadSubmissionContext(
-        for submission: APISubmission, on db: Database
+        for submission: APISubmission, on db: any Database
     ) async throws -> SubmissionDiagnosticsContext {
         let courseID = try await APITestSetup.find(submission.testSetupID, on: db)?.courseID
 
@@ -92,7 +92,7 @@ extension OperationalDiagnosticsService {
     /// submission-accept slower exactly as the backlog grew — the wrong
     /// direction under pressure, and unbounded after a retest fan-out flips
     /// tens of thousands of rows back to pending (#1361).
-    func pendingQueueDepth(on db: Database) async throws -> Int {
+    func pendingQueueDepth(on db: any Database) async throws -> Int {
         let pendingValidation = try await APISubmission.query(on: db)
             .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == APISubmission.Kind.validation)
@@ -127,7 +127,7 @@ extension OperationalDiagnosticsService {
         return pendingValidation + pendingWorkerStudents
     }
 
-    func maxQueueDepthSince(windowStart: Date, now: Date, on db: Database) async throws -> Int {
+    func maxQueueDepthSince(windowStart: Date, now: Date, on db: any Database) async throws -> Int {
         let timeline = try await queueDepthTimeline(windowStart: windowStart, now: now, on: db)
         return MetricsCardAccumulators.maxQueueDepth(timeline: timeline)
     }
@@ -139,7 +139,7 @@ extension OperationalDiagnosticsService {
     func queueDepthTimeline(
         windowStart: Date,
         now: Date,
-        on db: Database
+        on db: any Database
     ) async throws -> QueueDepthTimeline {
         var relevantSubmissions: [String: APISubmission] = [:]
 
@@ -211,7 +211,7 @@ extension OperationalDiagnosticsService {
         return QueueDepthTimeline(initialDepth: initialDepth, events: events)
     }
 
-    func inFlightJobCount(on db: Database) async throws -> Int {
+    func inFlightJobCount(on db: any Database) async throws -> Int {
         try await APISubmission.query(on: db)
             .group(.or) { group in
                 group.filter(\.$status == SubmissionStatus.assigned.rawValue)
@@ -250,7 +250,7 @@ extension OperationalDiagnosticsService {
         return String(collapsed.prefix(160))
     }
 
-    func performPrune(on db: Database, logger: Logger, now: Date) async {
+    func performPrune(on db: any Database, logger: Logger, now: Date) async {
         do {
             let jobCutoff = now.addingTimeInterval(Double(-configuration.jobMetricRetentionDays) * 86400)
             let runnerCutoff = now.addingTimeInterval(Double(-configuration.runnerSnapshotRetentionDays) * 86400)

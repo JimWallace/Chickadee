@@ -1,7 +1,7 @@
 import Fluent
 
 struct CreateJobExecutionMetrics: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(JobExecutionMetric.schema)
             .id()
             .field(
@@ -61,7 +61,7 @@ struct CreateJobExecutionMetrics: ChickadeeMigration {
 
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(JobExecutionMetric.schema)
             .delete()
     }

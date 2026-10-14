@@ -18,6 +18,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct UpdateNotebookTool: ContentTool {
     struct Input: Decodable, Sendable {

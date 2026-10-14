@@ -4,7 +4,7 @@ import Vapor
 
 /// Worker-only artifact download routes authenticated by X-Worker-Secret.
 struct WorkerArtifactRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let worker = routes.grouped("api", "v1", "worker")
         worker.get("submissions", ":submissionID", "download", use: downloadSubmission)
         worker.get("testsetups", ":testSetupID", "download", use: downloadTestSetup)

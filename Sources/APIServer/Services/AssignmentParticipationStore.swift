@@ -19,7 +19,7 @@ enum AssignmentParticipationStore {
     static func recordFirstAccess(
         userID: UUID,
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws {
         if try await hasParticipation(userID: userID, assignmentID: assignmentID, on: db) {
             return
@@ -41,7 +41,7 @@ enum AssignmentParticipationStore {
     static func hasParticipation(
         userID: UUID,
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws -> Bool {
         try await APIAssignmentParticipation.query(on: db)
             .filter(\.$userID == userID)

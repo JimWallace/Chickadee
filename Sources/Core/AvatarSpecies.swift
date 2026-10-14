@@ -13,6 +13,8 @@
 /// to exactly one species. So a spec stored before any
 /// species but the chickadee existed names a chickadee colourway and IS a
 /// chickadee, with no key to fill and no migration to run.
+import Foundation
+
 public enum AvatarSpecies: String, CaseIterable, Codable, Sendable {
     case chickadee, cardinal, robin, bluejay, starling
     /// The second set (docs/avatar-species.md, A3): the American goldfinch,

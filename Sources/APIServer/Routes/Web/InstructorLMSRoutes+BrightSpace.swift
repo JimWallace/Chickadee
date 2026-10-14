@@ -18,6 +18,7 @@
 //   POST /instructor/:assignmentID/brightspace/push-all → re-push every grade for one assignment
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

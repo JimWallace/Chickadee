@@ -35,8 +35,8 @@ struct FillLateAvatarAxes: ChickadeeMigration {
         }
     }
 
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         let rows = try await sql.select()
             .columns("id", "avatar_spec")
             .from("users")
@@ -60,5 +60,5 @@ struct FillLateAvatarAxes: ChickadeeMigration {
 
     /// Nothing to undo: the drawn values are indistinguishable from a draw that
     /// happened on the first view.
-    func revert(on database: Database) async throws {}
+    func revert(on database: any Database) async throws {}
 }

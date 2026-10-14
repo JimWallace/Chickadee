@@ -12,6 +12,7 @@
 // The text is cut at QueryStatistics.maximumQueryLength.
 
 import Core
+import Fluent
 import SQLKit
 import Vapor
 
@@ -95,7 +96,7 @@ struct GetQueryStatsTool: DiagnosticTool {
         let db = context.request.db
 
         let availability = try await QueryStatistics.availability(on: db)
-        guard availability == .ready, let sql = db as? SQLDatabase,
+        guard availability == .ready, let sql = db as? (any SQLDatabase),
             let schema = try await QueryStatistics.extensionSchema(on: sql)
         else {
             return Output(

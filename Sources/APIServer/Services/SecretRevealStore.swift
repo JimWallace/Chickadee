@@ -25,7 +25,7 @@ enum SecretRevealStore {
     static func spendToken(
         userID: UUID,
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws {
         if try await hasSpentToken(userID: userID, assignmentID: assignmentID, on: db) {
             return
@@ -47,7 +47,7 @@ enum SecretRevealStore {
     static func hasSpentToken(
         userID: UUID,
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws -> Bool {
         try await APISecretRevealUnlock.query(on: db)
             .filter(\.$userID == userID)
@@ -60,7 +60,7 @@ enum SecretRevealStore {
     static func regrantToken(
         userID: UUID,
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws -> Bool {
         let existing = try await APISecretRevealUnlock.query(on: db)
             .filter(\.$userID == userID)
@@ -75,7 +75,7 @@ enum SecretRevealStore {
     /// instructor roster page).
     static func spentUserIDs(
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws -> Set<UUID> {
         let rows = try await APISecretRevealUnlock.query(on: db)
             .filter(\.$assignmentID == assignmentID)
@@ -112,7 +112,7 @@ struct SecretRevealState: Sendable {
         assignment: APIAssignment?,
         userID: UUID?,
         isStaff: Bool,
-        on db: Database
+        on db: any Database
     ) async throws -> SecretRevealState {
         guard !isStaff, let assignment, let assignmentID = assignment.id, let userID else {
             return .none

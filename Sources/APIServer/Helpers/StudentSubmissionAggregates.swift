@@ -32,10 +32,10 @@ struct StudentSetupSubmissionSummary {
 /// Latest means newest `submitted_at` (ties broken by attempt number), the
 /// same order the pre-aggregate loader sorted by.
 func studentSubmissionSummaryBySetup(
-    userID: UUID, setupIDs: [String], on db: Database
+    userID: UUID, setupIDs: [String], on db: any Database
 ) async throws -> [String: StudentSetupSubmissionSummary] {
     guard !setupIDs.isEmpty else { return [:] }
-    guard let sql = db as? SQLDatabase else {
+    guard let sql = db as? (any SQLDatabase) else {
         return try await studentSubmissionSummaryBySetupViaFluent(
             userID: userID, setupIDs: setupIDs, on: db)
     }
@@ -79,10 +79,10 @@ func studentSubmissionSummaryBySetup(
 /// sentinel, so an all-fail student shows no grade rather than "0%" — kept
 /// bit-for-bit so the rewrite is invisible.
 func studentBestGradePercentBySetup(
-    userID: UUID, setupIDs: [String], on db: Database
+    userID: UUID, setupIDs: [String], on db: any Database
 ) async throws -> [String: Int] {
     guard !setupIDs.isEmpty else { return [:] }
-    guard let sql = db as? SQLDatabase else {
+    guard let sql = db as? (any SQLDatabase) else {
         return try await studentBestGradePercentBySetupViaFluent(
             userID: userID, setupIDs: setupIDs, on: db)
     }
@@ -137,10 +137,10 @@ struct SetupStudentSubmissionSummary {
 }
 
 func submissionSummaryByStudent(
-    setupID: String, studentIDs: [UUID], on db: Database
+    setupID: String, studentIDs: [UUID], on db: any Database
 ) async throws -> [UUID: SetupStudentSubmissionSummary] {
     guard !studentIDs.isEmpty else { return [:] }
-    guard let sql = db as? SQLDatabase else {
+    guard let sql = db as? (any SQLDatabase) else {
         return try await submissionSummaryByStudentViaFluent(
             setupID: setupID, studentIDs: studentIDs, on: db)
     }
@@ -184,10 +184,10 @@ func submissionSummaryByStudent(
 /// instructor rather than no grade. Students with no gradeable result are
 /// absent.
 func bestGradePercentByStudent(
-    setupID: String, studentIDs: [UUID], on db: Database
+    setupID: String, studentIDs: [UUID], on db: any Database
 ) async throws -> [UUID: Int] {
     guard !studentIDs.isEmpty else { return [:] }
-    guard let sql = db as? SQLDatabase else {
+    guard let sql = db as? (any SQLDatabase) else {
         return try await bestGradePercentByStudentViaFluent(
             setupID: setupID, studentIDs: studentIDs, on: db)
     }
@@ -231,7 +231,7 @@ func bestGradePercentByStudent(
 // the identical folds in Swift.
 
 private func studentSubmissionSummaryBySetupViaFluent(
-    userID: UUID, setupIDs: [String], on db: Database
+    userID: UUID, setupIDs: [String], on db: any Database
 ) async throws -> [String: StudentSetupSubmissionSummary] {
     let rows = try await APISubmission.query(on: db)
         .filter(\.$userID == userID)
@@ -258,7 +258,7 @@ private func studentSubmissionSummaryBySetupViaFluent(
 }
 
 private func submissionSummaryByStudentViaFluent(
-    setupID: String, studentIDs: [UUID], on db: Database
+    setupID: String, studentIDs: [UUID], on db: any Database
 ) async throws -> [UUID: SetupStudentSubmissionSummary] {
     let rows = try await APISubmission.query(on: db)
         .filter(\.$testSetupID == setupID)
@@ -285,7 +285,7 @@ private func submissionSummaryByStudentViaFluent(
 }
 
 private func bestGradePercentByStudentViaFluent(
-    setupID: String, studentIDs: [UUID], on db: Database
+    setupID: String, studentIDs: [UUID], on db: any Database
 ) async throws -> [UUID: Int] {
     let submissions = try await APISubmission.query(on: db)
         .filter(\.$testSetupID == setupID)
@@ -314,7 +314,7 @@ private func bestGradePercentByStudentViaFluent(
 }
 
 private func studentBestGradePercentBySetupViaFluent(
-    userID: UUID, setupIDs: [String], on db: Database
+    userID: UUID, setupIDs: [String], on db: any Database
 ) async throws -> [String: Int] {
     let submissions = try await APISubmission.query(on: db)
         .filter(\.$userID == userID)

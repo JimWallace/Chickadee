@@ -6,10 +6,11 @@
 import Core
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 struct ResultRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let api = routes.grouped("api", "v1", "worker")
         api.post("results", use: reportResults)
     }

@@ -11,7 +11,7 @@
 import Fluent
 
 struct CreateLTIPlatforms: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APILTIPlatform.schema)
             .id()
             .field("issuer", .string, .required)
@@ -33,7 +33,7 @@ struct CreateLTIPlatforms: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APILTIPlatform.schema).delete()
     }
 }

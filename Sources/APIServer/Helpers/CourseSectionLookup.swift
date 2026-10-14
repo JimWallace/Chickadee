@@ -12,7 +12,7 @@ import Foundation
 
 /// Validates a sectionID string (UUID) against the given course and returns the UUID if valid.
 /// Returns nil for absent, empty, or "none" values (meaning "ungrouped").
-func resolveSectionID(_ raw: String?, courseID: UUID, db: Database) async throws -> UUID? {
+func resolveSectionID(_ raw: String?, courseID: UUID, db: any Database) async throws -> UUID? {
     guard let raw, !raw.isEmpty, raw.lowercased() != "none" else { return nil }
     guard let uuid = UUID(uuidString: raw) else {
         throw WebAssignmentError.invalidParameter(name: "sectionID", reason: "Invalid sectionID format.")

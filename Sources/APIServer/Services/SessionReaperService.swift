@@ -51,13 +51,13 @@ private let sessionReaperSweepInterval: TimeInterval = 3600
 /// Deletes `_fluent_sessions` rows older than `maxAge`.  Rows with NULL
 /// `created_at` are preserved (the comparison is never true for NULL).
 func reapStaleSessions(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     maxAge: TimeInterval = sessionDefaultMaxAge,
     now: Date = Date()
 ) async throws {
     let cutoff = now.addingTimeInterval(-maxAge)
-    if let sql = db as? SQLDatabase, sql.dialect.name == "sqlite" {
+    if let sql = db as? (any SQLDatabase), sql.dialect.name == "sqlite" {
         // A TEXT value is the column default; anything else is a bound Date
         // (REAL seconds). A NULL matches neither branch's comparison.
         try await sql.raw(

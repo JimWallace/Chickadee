@@ -19,12 +19,13 @@
 // `CourseAdminRoutes` as of v0.4.177.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
 
 struct InstructorDashboardRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         // Course-scoped admin actions (enrollment mode, CSV bulk enroll,
         // unenroll, pre-enroll cancel) and section CRUD live on
         // `CourseAdminRoutes`.  Registered separately in `routes.swift`.

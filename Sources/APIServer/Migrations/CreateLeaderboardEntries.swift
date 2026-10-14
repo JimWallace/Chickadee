@@ -10,7 +10,7 @@
 import Fluent
 
 struct CreateLeaderboardEntries: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("leaderboard_entries")
             .id()
             .field("test_setup_id", .string, .required)
@@ -27,7 +27,7 @@ struct CreateLeaderboardEntries: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("leaderboard_entries").delete()
     }
 }

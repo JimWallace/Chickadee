@@ -18,6 +18,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct GetSolutionTool: ContentTool {
     struct Input: Decodable, Sendable {

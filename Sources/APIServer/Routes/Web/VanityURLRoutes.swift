@@ -15,7 +15,7 @@ import Fluent
 import Vapor
 
 struct VanityURLRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get(":courseCode", ":assignmentSlug", use: vanityRedirect)
         routes.get(":courseCode", ":assignmentSlug", "notebook", use: vanityNotebookRedirect)
         routes.get(":courseCode", ":assignmentSlug", "submit", use: vanitySubmitRedirect)

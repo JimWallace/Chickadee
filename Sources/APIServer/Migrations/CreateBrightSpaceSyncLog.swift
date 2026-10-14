@@ -10,7 +10,7 @@ import Fluent
 import SQLKit
 
 struct CreateBrightSpaceSyncLog: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("brightspace_sync_log")
             .id()
             .field("course_id", .uuid)
@@ -28,7 +28,7 @@ struct CreateBrightSpaceSyncLog: ChickadeeMigration {
 
         // Panel query is "most recent N events for this course" — index the
         // (course, time) access path so it stays cheap as the log grows.
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 """
                 CREATE INDEX IF NOT EXISTS idx_bs_sync_log_course_time
@@ -38,8 +38,8 @@ struct CreateBrightSpaceSyncLog: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_bs_sync_log_course_time").run()
         }
         try await database.schema("brightspace_sync_log").delete()

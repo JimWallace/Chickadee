@@ -37,7 +37,7 @@ extension OperationalDiagnosticsService {
     /// from one trailing fetch of the longest (30-day) window per source, so
     /// the dashboard's poll costs a fixed handful of queries regardless of how
     /// many windows the cards can cycle through.
-    func metricsCardSeries(on db: Database, now: Date = Date()) async throws -> MetricsCardSeriesResponse {
+    func metricsCardSeries(on db: any Database, now: Date = Date()) async throws -> MetricsCardSeriesResponse {
         let longestWindow = MetricsCardWindow.allCases.max { $0.totalSeconds < $1.totalSeconds } ?? .month
         let outerStart = now.addingTimeInterval(-longestWindow.totalSeconds)
 
@@ -172,8 +172,8 @@ extension OperationalDiagnosticsService {
     /// Summed runner load per `loadBucketSeconds` bucket since `outerStart`.
     /// Postgres aggregates server-side; every other driver (SQLite in dev /
     /// tests) aggregates in Swift over the raw rows.
-    func runnerLoadPoints(since outerStart: Date, on db: Database) async throws -> [RunnerLoadPoint] {
-        if let sql = db as? SQLDatabase, sql.dialect.name == "postgresql" {
+    func runnerLoadPoints(since outerStart: Date, on db: any Database) async throws -> [RunnerLoadPoint] {
+        if let sql = db as? (any SQLDatabase), sql.dialect.name == "postgresql" {
             return try await runnerLoadPointsViaPostgres(sql, since: outerStart)
         }
         return try await runnerLoadPointsInSwift(since: outerStart, on: db)
@@ -183,7 +183,7 @@ extension OperationalDiagnosticsService {
     /// across runners per bucket — entirely in the database.  Mirrors the
     /// Swift fallback's semantics.
     private func runnerLoadPointsViaPostgres(
-        _ sql: SQLDatabase,
+        _ sql: any SQLDatabase,
         since outerStart: Date
     ) async throws -> [RunnerLoadPoint] {
         struct LoadRow: Decodable {
@@ -237,7 +237,7 @@ extension OperationalDiagnosticsService {
     /// peak active/capacity, then sum across runners per bucket.
     private func runnerLoadPointsInSwift(
         since outerStart: Date,
-        on db: Database
+        on db: any Database
     ) async throws -> [RunnerLoadPoint] {
         let snapshots = try await RunnerSnapshot.query(on: db)
             .filter(\.$recordedAt >= outerStart)
@@ -279,9 +279,9 @@ extension OperationalDiagnosticsService {
     /// identical summaries (pinned by `runnerTimeseriesSummariesMatchSwift`).
     func runnerTimeseriesSummaries(
         window: BucketWindow,
-        on db: Database
+        on db: any Database
     ) async throws -> [RunnerBucketSummary] {
-        if let sql = db as? SQLDatabase, sql.dialect.name == "postgresql" {
+        if let sql = db as? (any SQLDatabase), sql.dialect.name == "postgresql" {
             return try await runnerTimeseriesSummariesViaPostgres(sql, window: window)
         }
         let snapshots = try await RunnerSnapshot.query(on: db)
@@ -298,7 +298,7 @@ extension OperationalDiagnosticsService {
     /// per display bucket, the per-snapshot utilization is averaged and peaked
     /// in the database, collapsing the scan to one row per bucket.
     private func runnerTimeseriesSummariesViaPostgres(
-        _ sql: SQLDatabase,
+        _ sql: any SQLDatabase,
         window: BucketWindow
     ) async throws -> [RunnerBucketSummary] {
         struct SummaryRow: Decodable {

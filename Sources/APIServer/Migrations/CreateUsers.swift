@@ -4,7 +4,7 @@ import Fluent
 import SQLKit
 
 struct CreateUsers: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("users")
             .id()
             .field("username", .string, .required)
@@ -40,7 +40,7 @@ struct CreateUsers: ChickadeeMigration {
             .create()
 
         // Partial unique index: one SSO identity per provider.
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_auth_provider_external_subject
@@ -60,8 +60,8 @@ struct CreateUsers: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_users_url_token").run()
             try await sql.raw(
                 "DROP INDEX IF EXISTS idx_users_auth_provider_external_subject"

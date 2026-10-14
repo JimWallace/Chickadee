@@ -7,7 +7,7 @@ import SQLKit
 /// deployment. The composite index backs every query the service issues
 /// (count/prune by (scope, key) with an `occurred_at` bound).
 struct CreateLoginAttempts: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(LoginAttempt.schema)
             .id()
             .field("scope", .string, .required)
@@ -15,7 +15,7 @@ struct CreateLoginAttempts: ChickadeeMigration {
             .field("occurred_at", .datetime, .required)
             .create()
 
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "CREATE INDEX IF NOT EXISTS idx_login_attempts_scope_key_time "
                     + "ON login_attempts(scope, attempt_key, occurred_at)"
@@ -23,7 +23,7 @@ struct CreateLoginAttempts: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(LoginAttempt.schema).delete()
     }
 }

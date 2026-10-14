@@ -84,7 +84,7 @@ public struct Achievement: Codable, Equatable, Sendable {
         case kind, threshold, target, attemptThreshold, timeThresholdMs, jumpThresholdPercent
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
@@ -108,7 +108,7 @@ public struct Achievement: Codable, Equatable, Sendable {
         }
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)

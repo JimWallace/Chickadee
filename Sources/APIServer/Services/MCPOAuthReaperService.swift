@@ -22,7 +22,7 @@ private let mcpOAuthReaperSweepInterval: TimeInterval = 3600
 
 /// Deletes expired authorization codes, expired consent requests, and
 /// revoked/expired grants.
-func reapExpiredMCPOAuthRecords(on db: Database, logger: Logger, now: Date = Date()) async throws {
+func reapExpiredMCPOAuthRecords(on db: any Database, logger: Logger, now: Date = Date()) async throws {
     // Auth codes are dead once expired OR consumed — a consumed code can never
     // be redeemed again (the atomic burn blocks it), so there's no reason to
     // keep it around until its 60-second TTL lapses.

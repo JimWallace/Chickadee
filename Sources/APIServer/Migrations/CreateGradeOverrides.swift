@@ -9,7 +9,7 @@ import Fluent
 import SQLKit
 
 struct CreateGradeOverrides: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("grade_overrides")
             .id()
             .field(
@@ -44,15 +44,15 @@ struct CreateGradeOverrides: ChickadeeMigration {
             .unique(on: "test_setup_id", "user_id")
             .create()
 
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "CREATE INDEX IF NOT EXISTS idx_grade_overrides_user ON grade_overrides(user_id)"
             ).run()
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_grade_overrides_user").run()
         }
         try await database.schema("grade_overrides").delete()

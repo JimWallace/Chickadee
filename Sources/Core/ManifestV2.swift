@@ -74,14 +74,14 @@ public struct ManifestV2: Codable, Equatable, Sendable {
 
         private enum CodingKeys: String, CodingKey { case name, value, expression }
 
-        init(from decoder: Decoder) throws {
+        init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             name = try c.decode(String.self, forKey: .name)
             value = c.contains(.value) ? try c.decode(JSONValue.self, forKey: .value) : nil
             expression = try c.decodeIfPresent(String.self, forKey: .expression)
         }
 
-        func encode(to encoder: Encoder) throws {
+        func encode(to encoder: any Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(name, forKey: .name)
             if let value { try c.encode(value, forKey: .value) }
@@ -109,7 +109,7 @@ public struct ManifestV2: Codable, Equatable, Sendable {
 
         init(_ entry: TestSuiteEntry) { self.entry = entry }
 
-        init(from decoder: Decoder) throws {
+        init(from decoder: any Decoder) throws {
             var entry = try TestSuiteEntry(from: decoder)
             let c = try decoder.container(keyedBy: OriginKey.self)
             let origin = try c.decodeIfPresent(Origin.self, forKey: .origin)
@@ -118,7 +118,7 @@ public struct ManifestV2: Codable, Equatable, Sendable {
             self.entry = entry
         }
 
-        func encode(to encoder: Encoder) throws {
+        func encode(to encoder: any Encoder) throws {
             var bare = entry
             bare.generatedBy = nil
             bare.generatedByCheck = nil
@@ -138,7 +138,7 @@ public struct ManifestV2: Codable, Equatable, Sendable {
         case testItems, sections, inputs, awards
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         gradingMode = try c.decodeIfPresent(GradingMode.self, forKey: .gradingMode) ?? .worker
         submissionMode = try c.decodeIfPresent(SubmissionMode.self, forKey: .submissionMode) ?? .notebook
@@ -158,7 +158,7 @@ public struct ManifestV2: Codable, Equatable, Sendable {
 
     /// Writes only what differs from the defaults that `init(from:)` fills
     /// in, as the v1 encoder does.
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(Self.schemaVersion, forKey: .schemaVersion)
         try c.encode(gradingMode, forKey: .gradingMode)

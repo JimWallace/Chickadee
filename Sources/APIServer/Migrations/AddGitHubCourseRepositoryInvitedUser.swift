@@ -10,13 +10,13 @@
 import Fluent
 
 struct AddGitHubCourseRepositoryInvitedUser: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APIGitHubCourseRepository.schema)
             .field("invited_github_user_id", .int64)
             .update()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APIGitHubCourseRepository.schema)
             .deleteField("invited_github_user_id")
             .update()

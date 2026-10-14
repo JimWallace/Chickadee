@@ -59,7 +59,7 @@ struct MCPServerCapabilities: Encodable, Sendable {
         case tools, resources
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(tools, forKey: .tools)
         // Omit `resources` entirely when nil so a tools-only surface doesn't

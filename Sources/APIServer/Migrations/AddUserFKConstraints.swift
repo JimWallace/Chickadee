@@ -31,8 +31,8 @@ import Fluent
 import SQLKit
 
 struct AddUserFKConstraints: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         guard sql.dialect.name == "postgresql" else {
             database.logger.info(
                 "AddUserFKConstraints: skipping on \(sql.dialect.name) — SQLite cannot add FK constraints to existing columns; AdminRoutes.deleteUser enforces the same semantics in application code."
@@ -57,8 +57,8 @@ struct AddUserFKConstraints: ChickadeeMigration {
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         guard sql.dialect.name == "postgresql" else { return }
 
         try? await sql.raw(

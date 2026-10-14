@@ -22,7 +22,7 @@ import Foundation
 import Vapor
 
 struct CourseBundleRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get("courses", ":courseID", "export", use: exportCourse)
         admin.on(
@@ -128,7 +128,7 @@ struct CourseBundleRoutes: RouteCollection {
     // ── 1. Load all course data ────────────────────────────────────────
 
     private func loadExportData(
-        courseUUID: UUID, on db: Database, logger: Logger
+        courseUUID: UUID, on db: any Database, logger: Logger
     ) async throws -> ExportData {
         let testSetups = try await APITestSetup.query(on: db)
             .filter(\.$courseID == courseUUID)

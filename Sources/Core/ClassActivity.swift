@@ -439,7 +439,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         case kind, leaderboardVisibility, opponentFile, window, composite
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kind = try c.decode(ActivityKind.self, forKey: .kind)
         leaderboardVisibility =
@@ -450,7 +450,7 @@ public struct ClassActivity: Codable, Equatable, Sendable {
         composite = try c.decodeIfPresent(CompositeSpec.self, forKey: .composite)
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(kind, forKey: .kind)
         try c.encode(leaderboardVisibility, forKey: .leaderboardVisibility)

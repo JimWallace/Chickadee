@@ -18,15 +18,15 @@ struct AddLTIGradeSyncFailureReasonColumn: ChickadeeMigration {
     /// (#1811).
     static let storedNotLaunchedMessage = "The student has not opened Chickadee from the LMS yet."
 
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("lti_grade_syncs").field("failure_reason", .string).update()
-        guard let sql = database as? SQLDatabase else { return }
+        guard let sql = database as? (any SQLDatabase) else { return }
         try await sql.raw(
             "UPDATE lti_grade_syncs SET failure_reason = \(bind: LTIGradeSyncFailureReason.notLaunched.rawValue) WHERE error = \(bind: Self.storedNotLaunchedMessage)"
         ).run()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("lti_grade_syncs").deleteField("failure_reason").update()
     }
 }

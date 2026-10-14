@@ -11,7 +11,7 @@ import Fluent
 import SQLKit
 
 struct CreateMCPGrants: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("oauth_grants")
             .id()
             .field("user_id", .uuid, .required, .references("users", "id", onDelete: .cascade))
@@ -33,7 +33,7 @@ struct CreateMCPGrants: ChickadeeMigration {
         // rotation theft-detection lookup and the POST /oauth/revoke OR-filter
         // both query this column on every refresh / revoke.
         // (`refresh_token_hash` is already indexed by its UNIQUE constraint.)
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "CREATE INDEX IF NOT EXISTS idx_oauth_grants_previous_refresh_token_hash "
                     + "ON oauth_grants(previous_refresh_token_hash)"
@@ -41,7 +41,7 @@ struct CreateMCPGrants: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         // Dropping the table drops its indexes on both backends.
         try await database.schema("oauth_grants").delete()
     }

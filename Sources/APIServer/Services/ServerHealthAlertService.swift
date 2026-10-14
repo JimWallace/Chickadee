@@ -502,7 +502,7 @@ private func evaluateBrightspaceSyncFailing(
 
 private func evaluateDatabaseUnreachable(on application: Application) async -> RuleEvaluation {
     do {
-        guard let sql = application.db as? SQLDatabase else {
+        guard let sql = application.db as? (any SQLDatabase) else {
             return RuleEvaluation(
                 isFiring: true,
                 summary: "Database does not expose SQL interface",

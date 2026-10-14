@@ -13,6 +13,7 @@
 // authorization spec.
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
 
+import JWT
 import Vapor
 
 struct MCPSurfaceBearerAuthMiddleware<Scope>: AsyncMiddleware
@@ -30,7 +31,7 @@ where Scope: RawRepresentable & CaseIterable & Hashable & Sendable, Scope.RawVal
             resourceMetadataURL: resourceMetadataURL)
     }
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let claims: MCPAccessTokenClaims
         switch try await verification.verify(request) {
         case .rejected(let response):

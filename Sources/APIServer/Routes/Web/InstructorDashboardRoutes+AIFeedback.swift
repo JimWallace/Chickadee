@@ -10,6 +10,7 @@
 //   POST /instructor/:assignmentID/feedback           — save, release or discard (TA+)
 
 import Core
+import Elementary
 import Fluent
 import Vapor
 

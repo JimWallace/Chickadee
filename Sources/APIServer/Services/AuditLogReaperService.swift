@@ -35,7 +35,7 @@ private let auditLogReaperSweepInterval: TimeInterval = 3600
 /// env var without removing the lifecycle handler.  `created_at` is
 /// NOT NULL in the schema, so no null-guard is needed.
 func reapStaleAuditLogEntries(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     maxAge: TimeInterval = auditLogDefaultMaxAge,
     now: Date = Date()

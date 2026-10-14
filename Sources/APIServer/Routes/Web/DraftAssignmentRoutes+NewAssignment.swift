@@ -6,8 +6,10 @@
 // test setup.  Split from AssignmentRoutes.swift for navigability.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 extension DraftAssignmentRoutes {

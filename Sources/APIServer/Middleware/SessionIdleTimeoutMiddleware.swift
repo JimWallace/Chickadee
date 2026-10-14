@@ -31,7 +31,7 @@ import Vapor
 struct SessionIdleTimeoutMiddleware: AsyncMiddleware {
     let idleTimeoutSeconds: TimeInterval
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard idleTimeoutSeconds > 0, let user = request.auth.get(APIUser.self) else {
             return try await next.respond(to: request)
         }

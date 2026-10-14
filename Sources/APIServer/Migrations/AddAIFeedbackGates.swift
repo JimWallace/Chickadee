@@ -8,7 +8,7 @@
 import Fluent
 
 struct AddAIFeedbackGates: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APICourse.schema)
             .field("ai_feedback_enabled", .bool)
             .update()
@@ -17,7 +17,7 @@ struct AddAIFeedbackGates: ChickadeeMigration {
             .update()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APIAssignment.schema)
             .deleteField("ai_feedback_enabled")
             .update()

@@ -82,7 +82,7 @@ public struct TestOutcome: Equatable, Sendable {
 // `points` to 1 for older records.
 #if !hasFeature(Embedded)
 extension TestOutcome: Codable {
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         testName = try c.decode(String.self, forKey: .testName)
         testClass = try c.decodeIfPresent(String.self, forKey: .testClass)

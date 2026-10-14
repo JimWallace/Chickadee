@@ -8,6 +8,8 @@
 // endpoint, like the other Student Options, so a mid-term change does not
 // close or re-validate the assignment.
 
+import Core
+import Fluent
 import Vapor
 
 extension InstructorDashboardRoutes {

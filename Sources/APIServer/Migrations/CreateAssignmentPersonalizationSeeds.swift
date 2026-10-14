@@ -8,7 +8,7 @@
 import Fluent
 
 struct CreateAssignmentPersonalizationSeeds: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("assignment_personalization_seeds")
             .id()
             .field(
@@ -29,7 +29,7 @@ struct CreateAssignmentPersonalizationSeeds: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("assignment_personalization_seeds").delete()
     }
 }

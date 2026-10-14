@@ -31,7 +31,7 @@ enum AssignmentSeedStore {
     static func ensureSeed(
         userID: UUID,
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws -> String {
         if let existing = try await findSeed(userID: userID, assignmentID: assignmentID, on: db) {
             return existing
@@ -60,7 +60,7 @@ enum AssignmentSeedStore {
     private static func findSeed(
         userID: UUID,
         assignmentID: UUID,
-        on db: Database
+        on db: any Database
     ) async throws -> String? {
         try await APIAssignmentPersonalizationSeed.query(on: db)
             .filter(\.$userID == userID)

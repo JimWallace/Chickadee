@@ -7,6 +7,7 @@
 // (MCP tool calls, logins) accumulate.  Filters narrow by action and actor.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

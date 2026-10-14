@@ -55,7 +55,7 @@ struct SSOAuthRoutes: RouteCollection {
     /// URI still reaches the callback handler.
     let configuredCallbackPath: String
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("auth", "sso", "start", use: ssoStart)
         routes.get("auth", "sso", "callback", use: ssoCallback)
         registerConfiguredCallbackRoute(on: routes)
@@ -501,7 +501,7 @@ extension SSOAuthRoutes {
         return nil
     }
 
-    func registerConfiguredCallbackRoute(on routes: RoutesBuilder) {
+    func registerConfiguredCallbackRoute(on routes: any RoutesBuilder) {
         let components =
             configuredCallbackPath
             .split(separator: "/")

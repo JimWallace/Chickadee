@@ -34,7 +34,7 @@ struct GitHubAccountLinkRoutes: RouteCollection {
         }
     }
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.post("account", "github", "link", use: startLink)
         routes.get("github", "link", "callback", use: callback)
         routes.post("account", "github", "unlink", use: unlink)
@@ -149,7 +149,7 @@ struct GitHubAccountLinkRoutes: RouteCollection {
     /// Creates or replaces this user's link. A GitHub account already linked to
     /// another user is refused.
     private static func saveLink(
-        userID: UUID, githubUser: GitHubUser, on db: Database
+        userID: UUID, githubUser: GitHubUser, on db: any Database
     ) async throws -> APIGitHubAccountLink {
         if let other = try await APIGitHubAccountLink.query(on: db)
             .filter(\.$githubUserID == githubUser.id).first(), other.userID != userID

@@ -3,7 +3,7 @@
 import Fluent
 
 struct CreateAchievementResults: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("achievement_results")
             .id()
             .field("test_setup_id", .string, .required)
@@ -26,7 +26,7 @@ struct CreateAchievementResults: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("achievement_results").delete()
     }
 }

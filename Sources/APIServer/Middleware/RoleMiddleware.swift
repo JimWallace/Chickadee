@@ -21,7 +21,7 @@ struct RoleMiddleware: AsyncMiddleware {
 
     let required: Required
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard let user = request.auth.get(APIUser.self) else {
             // Not authenticated.
             if request.prefersBrowser {

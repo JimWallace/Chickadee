@@ -24,7 +24,7 @@ func awardClassBadgesFor100Percent(
     executionTimeMs: Int,
     attemptNumber: Int,
     disabled: Set<String> = [],
-    on db: Database
+    on db: any Database
 ) async throws {
     guard let setup = try await APITestSetup.find(testSetupID, on: db),
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
@@ -71,7 +71,7 @@ func awardHighestMetricRecords(
     userID: UUID,
     submissionID: String,
     metric: Double,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard let setupID = setup.id else { return }
     let records = BuiltInAchievements.classRecordsForAward(
@@ -92,7 +92,7 @@ func awardChampionRecords(
     setup: APITestSetup,
     userID: UUID,
     submissionID: String,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard let setupID = setup.id else { return }
     let records = BuiltInAchievements.classRecordsForAward(
@@ -111,7 +111,7 @@ func awardTournamentWinnerRecords(
     setup: APITestSetup,
     userID: UUID,
     submissionID: String,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard let setupID = setup.id else { return }
     let records = BuiltInAchievements.classRecordsForAward(
@@ -129,7 +129,7 @@ private func setRecordHolder(
     testSetupID: String,
     userID: UUID,
     submissionID: String,
-    on db: Database
+    on db: any Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
         .filter(\.$testSetupID == testSetupID)
@@ -158,7 +158,7 @@ func awardFirstToSubmitRecords(
     setup: APITestSetup,
     userID: UUID,
     submissionID: String,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard let setupID = setup.id,
         try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
@@ -178,7 +178,7 @@ private func awardImmutableBadge(
     testSetupID: String,
     userID: UUID,
     submissionID: String,
-    on db: Database
+    on db: any Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
         .filter(\.$testSetupID == testSetupID)
@@ -203,7 +203,7 @@ private func updateRecordBadge(
     submissionID: String,
     newValue: Double,
     higherWins: Bool = false,
-    on db: Database
+    on db: any Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
         .filter(\.$testSetupID == testSetupID)

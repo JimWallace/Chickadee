@@ -6,7 +6,7 @@
 import Fluent
 
 struct CreateLTIGradeSyncs: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APILTIGradeSync.schema)
             .id()
             .field("user_id", .uuid, .required, .references("users", "id", onDelete: .cascade))
@@ -19,7 +19,7 @@ struct CreateLTIGradeSyncs: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APILTIGradeSync.schema).delete()
     }
 }

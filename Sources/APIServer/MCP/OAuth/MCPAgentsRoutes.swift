@@ -7,12 +7,13 @@
 // lapses within its short TTL.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
 
 struct MCPAgentsRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("agents", use: list)
         routes.post("agents", ":grantID", "revoke", use: revoke)
     }
@@ -37,7 +38,7 @@ struct MCPAgentsRoutes: RouteCollection {
     /// display names, and owner usernames when `includeOwner`. Shared by the
     /// instructor `/agents` page and the admin MCP panel so the two can't drift.
     static func grantRows(
-        _ grants: [MCPGrant], includeOwner: Bool, on db: Database
+        _ grants: [MCPGrant], includeOwner: Bool, on db: any Database
     ) async throws -> [AgentGrantRow] {
         guard !grants.isEmpty else { return [] }
         let clients = try await MCPOAuthClient.query(on: db)
@@ -113,7 +114,7 @@ struct AgentGrantRow: Encodable {
         case isExpired, statusLabel, canRevoke
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(agentName, forKey: .agentName)

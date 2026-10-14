@@ -25,7 +25,7 @@ struct CSRFMiddleware: AsyncMiddleware {
     /// The session key that holds the secret.
     private static let secretKey = "CSRFSecret"
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard !Self.safeMethods.contains(request.method) else {
             return try await next.respond(to: request)
         }

@@ -17,6 +17,7 @@
 // one platform: each would let an LMS user take over an account the LMS
 // does not own.
 
+import Core
 import Crypto
 import Fluent
 import Foundation
@@ -38,7 +39,7 @@ enum LTIIdentityResolver {
         launch: LTIValidatedLaunch,
         platform: APILTIPlatform,
         authMode: AuthMode,
-        on db: Database
+        on db: any Database
     ) async throws -> Resolution {
         let platformID = try platform.requireID()
         // Two first launches of one subject can race: on the (platform,
@@ -61,7 +62,7 @@ enum LTIIdentityResolver {
         platform: APILTIPlatform,
         platformID: UUID,
         authMode: AuthMode,
-        on db: Database
+        on db: any Database
     ) async throws -> Resolution {
         if let user = try await linkedUser(platformID: platformID, subject: launch.subject, on: db) {
             return Resolution(user: user, created: false)
@@ -108,7 +109,7 @@ enum LTIIdentityResolver {
     /// is made: an account can become one later, by a role change or when an
     /// SSO admin adopts a stub that a trusted launch created
     /// (docs/compliance/lti-audit-2026-10.md L-2).
-    private static func linkedUser(platformID: UUID, subject: String, on db: Database) async throws -> APIUser? {
+    private static func linkedUser(platformID: UUID, subject: String, on db: any Database) async throws -> APIUser? {
         guard
             let identity = try await APILTIIdentity.query(on: db)
                 .filter(\.$platformID == platformID)
@@ -141,7 +142,7 @@ enum LTIIdentityResolver {
 
     private static func linkOrCreate(
         username: String, launch: LTIValidatedLaunch, platformID: UUID, authProvider: String,
-        on db: Database
+        on db: any Database
     ) async throws -> Resolution {
         guard let existing = try await APIUser.query(on: db).filter(\.$username == username).first() else {
             return Resolution(
@@ -160,7 +161,7 @@ enum LTIIdentityResolver {
     }
 
     private static func create(
-        username: String, launch: LTIValidatedLaunch, authProvider: String, on db: Database
+        username: String, launch: LTIValidatedLaunch, authProvider: String, on db: any Database
     ) async throws -> APIUser {
         let user = APIUser(
             username: username,

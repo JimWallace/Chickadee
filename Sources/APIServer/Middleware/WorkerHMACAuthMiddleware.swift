@@ -19,7 +19,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         self.nonceTTLSeconds = nonceTTLSeconds
     }
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let sharedSecret = (await request.application.workerSecretStore.effectiveSecret() ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -111,7 +111,7 @@ enum WorkerNonceReplayGuard {
     /// only happens when a client actually reuses a nonce — which is exactly
     /// the thing to reject.
     static func insertIfNew(
-        nonceKey: String, expiresAt: Date, on db: Database
+        nonceKey: String, expiresAt: Date, on db: any Database
     ) async throws -> Bool {
         let row = WorkerNonce(nonceKey: nonceKey, expiresAt: expiresAt)
         do {
@@ -127,7 +127,7 @@ enum WorkerNonceReplayGuard {
 
     /// Deletes expired nonce rows. Runs on `workerNonceReaperMonitor`.
     /// Best-effort: a failed purge only delays cleanup.
-    static func purgeExpired(db: Database, logger: Logger) async {
+    static func purgeExpired(db: any Database, logger: Logger) async {
         do {
             try await WorkerNonce.query(on: db)
                 .filter(\.$expiresAt <= Date())

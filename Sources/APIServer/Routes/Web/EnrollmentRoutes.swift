@@ -7,11 +7,12 @@
 //   POST /courses/:courseID/activate    → switch active course tab → redirect back
 
 import Core
+import Elementary
 import Fluent
 import Vapor
 
 struct EnrollmentRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("enroll", use: enrollPage)
         routes.post("enroll", use: saveEnrollment)
         routes.post("courses", ":courseID", "activate", use: activateCourse)

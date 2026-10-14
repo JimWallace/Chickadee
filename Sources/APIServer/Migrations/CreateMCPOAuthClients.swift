@@ -5,7 +5,7 @@
 import Fluent
 
 struct CreateMCPOAuthClients: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("oauth_clients")
             .id()
             .field("client_id", .string, .required)
@@ -18,7 +18,7 @@ struct CreateMCPOAuthClients: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("oauth_clients").delete()
     }
 }

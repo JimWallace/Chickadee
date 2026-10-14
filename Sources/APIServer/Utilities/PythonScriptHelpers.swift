@@ -6,6 +6,7 @@
 // every generated script's hash and invalidates the runner-side cache.
 
 import Core
+import Foundation
 
 /// Escapes a string for embedding inside a Python double-quoted literal in
 /// rendered source.  Handles the characters that appear in family/check

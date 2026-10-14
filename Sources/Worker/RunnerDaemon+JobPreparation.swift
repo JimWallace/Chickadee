@@ -38,7 +38,7 @@ extension WorkerDaemon {
     /// last waiter detaches (#1233).  What is removed is only the incidental
     /// cancellation one leg's failure used to inflict on the other.
     func fetchJobArtifacts(job: Job, paths: JobWorkspacePaths) async -> JobArtifactFetch {
-        async let submissionDownload: Result<Void, Error> = {
+        async let submissionDownload: Result<Void, any Error> = {
             do {
                 try await download(url: job.submissionURL, to: paths.submissionZip, stage: .downloadSubmission)
                 return .success(())
@@ -49,7 +49,7 @@ extension WorkerDaemon {
 
         let testSetupAcquireStartedAt = Date()
         let cacheKey = testSetupCacheKey(for: job)
-        let testSetup: Result<TestSetupCache.AcquireResult, Error>
+        let testSetup: Result<TestSetupCache.AcquireResult, any Error>
         do {
             testSetup = .success(
                 try await testSetupCache.acquire(testSetupID: cacheKey) {
