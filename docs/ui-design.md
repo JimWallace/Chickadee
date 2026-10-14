@@ -712,9 +712,10 @@ Every poll is conditional (ETag / 304) and carries `X-Background-Refresh: 1`,
 and it is suppressed while the tab is hidden, while focus is inside the
 element, while a `<details>` in it is open, and while its filter box has
 focus. Prefer the default `<tbody>` swap: a region swap destroys the whole
-subtree, so a sortable table inside one loses its click handlers and a filter
-box pointed into it stops finding its target — the file says so at
-`swapTargetFor`. Reach for `region` only when the rows do not move alone, as
+subtree, so a sortable table inside one loses its click handlers — the file
+says so at `swapTargetFor`. A filter box pointed at a table inside a region is
+re-applied after each swap, and its focus defers the poll. A page with a
+polled element must load `table-poll.js`; the base layout does not. Reach for `region` only when the rows do not move alone, as
 on a class activity's leaderboard, where the champion banner, the tournament
 status, the union count and the session countdown all change with the table
 beside them. Whatever the mode, keep a page's fixed chrome — its heading, its

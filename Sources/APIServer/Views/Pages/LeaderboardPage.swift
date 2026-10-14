@@ -65,6 +65,11 @@ struct LeaderboardPage: HTML {
             if board.showFilter {
                 script(.src(page.asset("/list-filter.js"))) {}
             }
+            // The results region refreshes only through table-poll.js, which
+            // the base layout does not load.
+            if board.pollsLive {
+                script(.src(page.asset("/table-poll.js"))) {}
+            }
         }
     }
 
