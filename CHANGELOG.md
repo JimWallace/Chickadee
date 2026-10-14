@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.654] - 2026-10-14
+
+### Changed
+
+- **The class composite design note is marked shipped.** All slices are built, so `docs/class-composite.md` and its line in `CLAUDE.md` no longer say "proposed".
+
+
 ## [0.5.653] - 2026-10-14
 
 ### Changed
