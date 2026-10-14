@@ -12,9 +12,11 @@ struct SubmissionPage: HTML {
     let page: PageRequestContext
     /// The view model the presenter builds (`buildSubmissionContext`).
     let result: SubmissionContext
+    /// The answer to a "Fill a hole" request (`SpareFlash`).
+    var flash = FlashMessages()
 
     var body: some HTML {
-        BaseLayout(title: "Submission \(result.submissionID)", page: page) {
+        BaseLayout(title: "Submission \(result.submissionID)", page: page, flash: flash) {
             PageStyle(
                 """
                 .class-goals-block { margin: 1rem 0; }
@@ -42,7 +44,7 @@ struct SubmissionPage: HTML {
                     }
                 }
                 if let tile = result.compositeTile {
-                    CompositeTileSection(tile: tile)
+                    CompositeTileSection(tile: tile, csrfToken: page.csrfToken, submissionID: result.submissionID)
                 }
                 if result.isPending {
                     div(.class("pending-box")) {
