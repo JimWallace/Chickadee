@@ -76,6 +76,31 @@ FROM ${BINARIES} AS binaries
 # Verify both binaries are present — fail fast with a clear message if not.
 RUN ls -lh /out/chickadee-server /out/chickadee-runner
 
+# ── Brotli copies of the large kernel files ─────────────────
+# PrecompressedAssetMiddleware serves `<file>.br` to a browser that accepts br,
+# so the server does not gzip up to 27 MB per request. Only the .br files leave
+# this stage, as one ~30 MB layer. Quality 9: quality 11 is 12% smaller but took
+# ~95 s for one 27 MB file, against ~5 s. Each copy keeps its original's mtime,
+# which CI set from the last commit, so its ETag changes only with the file.
+# The kernel_packages tarballs are gzip already and are excluded.
+FROM ubuntu:26.04 AS kernel-assets
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends brotli \
+    && rm -rf /var/lib/apt/lists/*
+COPY Public/jupyterlite/xeus /src
+RUN cd /src \
+    && find . -type f -size +64k \( -name '*.wasm' -o -name '*.js' -o -name '*.so' \) \
+        ! -path '*/kernel_packages/*' -print0 \
+    | while IFS= read -r -d '' file; do \
+        mkdir -p "/out/$(dirname "$file")" \
+        && brotli -q 9 -o "/out/$file.br" -- "$file" \
+        && touch -r "$file" "/out/$file.br" \
+        || exit 1; \
+    done \
+    && test -n "$(find /out -name '*.br' -print -quit)"
+
 # ============================================================
 # Stage 2 — Runtime
 # Must use the same Ubuntu version as the build stage (resolute).
@@ -224,6 +249,7 @@ COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 # size. The layer cache ignores mtimes, so a cached layer keeps the times it
 # was built with.
 COPY Public/jupyterlite ./Public/jupyterlite
+COPY --from=kernel-assets /out/ ./Public/jupyterlite/xeus/
 COPY --exclude=jupyterlite Public ./Public
 COPY Resources  ./Resources
 # Notebook working copies are runtime data. The server writes them under
