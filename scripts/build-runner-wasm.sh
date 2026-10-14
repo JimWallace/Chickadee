@@ -94,6 +94,11 @@ if npx --yes wasm-opt --version >/dev/null 2>&1; then
     # exported grading functions the JS loader calls are unaffected).
     npx --yes wasm-opt -Oz --converge --strip-debug --strip-producers \
         "$pkg/RunnerWasm.wasm" -o "$opt_wasm"
+elif [ -n "${CI:-}" ]; then
+    # In CI an unstripped module must never be vendored: the vendor job would
+    # commit it to main, and every later pull request would fail the size check.
+    echo "ERROR: wasm-opt unavailable in CI — refusing to vendor an unstripped module." >&2
+    exit 1
 else
     echo "WARNING: wasm-opt unavailable — vendoring the UNOPTIMIZED, UNSTRIPPED module."
     echo "         Expect a ~1.7 MB artifact (~620 KB gzip) that fails the size ceiling."

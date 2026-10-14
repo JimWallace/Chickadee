@@ -41,6 +41,8 @@ on:
       - 'wasm/Package.swift'
       - 'wasm/Package.resolved'
       - 'wasm/wasm-sdk.pin'
+      - 'Package.swift'
+      - '.node-version'
       - 'scripts/build-runner-wasm.sh'
       - 'scripts/runnercore-source-hash.sh'
       - '.github/workflows/runner-wasm-vendor.yml'
@@ -125,6 +127,13 @@ jobs:
           # tracks the new artifact (informational only; it never fails on growth).
           wasm="$(ls Public/runner-wasm/RunnerWasm.*.wasm | head -1)"
           gzip -9 -c "$wasm" | wc -c | tr -d ' ' > runner-size-baseline.txt
+
+      # build-runner-wasm.sh only reports the size check, so a local build can
+      # still vendor. Here it must pass: an unstripped module on main would
+      # fail the size check on every later pull request.
+      - name: Check the size of the re-vendored artifact
+        if: steps.gate.outputs.changed == 'true'
+        run: scripts/check-runner-wasm-size.sh
 
       - name: Commit re-vendored artifact to main
         if: steps.gate.outputs.changed == 'true'
