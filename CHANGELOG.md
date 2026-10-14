@@ -9,6 +9,25 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.648] - 2026-10-14
+
+### Changed
+
+- **The startled expression is now intrigued.** Both brows raised, calm eyes and a closed beak replace the alarmed face, for every bird that had it. Nothing else about a bird changes.
+
+### Added
+
+- **Six more avatar species, and weighted traits.** A new student's bird can now also be a goldfinch, a red-winged blackbird, a cedar waxwing, a dark-eyed junco, a song sparrow or a mourning dove, each with three colourways, on the shared skeleton. The first-use draw now leaves most birds upright, bare-headed and wearing nothing, so a roster reads as a few characters rather than a crowd; the species stays uniform. No stored bird changes.
+
+### Added
+
+- **Choose your bird.** The account page's bird picker has a Species group: every colourway of every species, each drawn as your own bird, above the backdrop and border choices. Choosing one keeps the rest of your bird. Course staff can choose a species too.
+
+### Added
+
+- **Four more avatar species.** A new student's bird is now a chickadee, a cardinal, a robin, a blue jay or a starling, each with its own plumage and three natural colourways, on the shared skeleton: every expression, wing, accessory, tuft, backdrop and ring works on every species. Every stored bird stays the chickadee it was. `docs/avatar-species.md` records the design and what the prototype render showed.
+
+
 ## [0.5.647] - 2026-10-14
 
 ### Fixed
