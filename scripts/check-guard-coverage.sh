@@ -56,7 +56,8 @@ scripts/mutation-run.sh|Not a check. It runs the weekly mutation report.
 scripts/setup-jupyterlite.sh|Not a check. It installs the JupyterLite build tools.
 scripts/build-jupyterlite.sh|Not a check. It builds the vendored bundle.
 scripts/build-runner-wasm.sh|Not a check. It builds the vendored runner wasm.
-scripts/runnercore-source-hash.sh|Not a check. It prints the source hash that the runner wasm vendor records.'
+scripts/runnercore-source-hash.sh|Not a check. It prints the source hash that the runner wasm vendor records.
+scripts/restore-asset-mtimes.py|Not a check. It sets the Public file times before the image build; the next step in docker-build.yml checks the result in the image.'
 
 # Reduces a command line to a guard name: the script path plus its leading
 # `--flag` arguments. It stops at the first other word, which also drops a

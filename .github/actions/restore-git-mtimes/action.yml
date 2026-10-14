@@ -3,20 +3,16 @@ description: >
   Install git-restore-mtime and reset each source file's mtime to its
   last-commit time, so a restored .build/ cache stays valid for unchanged
   files and llbuild recompiles only what new commits touched. Requires a
-  fetch-depth: 0 checkout (filter: blob:none is fine) and apt. It runs in a
-  root container (build-release) and on a bare runner, through sudo
-  (build-and-push, where the times reach the image and its ETags).
+  fetch-depth: 0 checkout (filter: blob:none is fine) and an apt-based
+  container image.
 runs:
   using: composite
   steps:
     - name: Install git-restore-mtime
       shell: bash
       run: |
-        export DEBIAN_FRONTEND=noninteractive
-        sudo=""
-        if [ "$(id -u)" != "0" ]; then sudo="sudo"; fi
         for i in 1 2 3; do
-          $sudo apt-get update -qq && $sudo apt-get install -y --no-install-recommends git-restore-mtime && break
+          apt-get update -qq && apt-get install -y --no-install-recommends git-restore-mtime && break
           echo "apt-get failed (attempt $i), retrying in 15s..."
           sleep 15
         done

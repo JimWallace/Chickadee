@@ -19,6 +19,8 @@ on:
       - ".github/actions/swift-test-setup/**"
       # build-release runs it before the compile.
       - ".github/actions/restore-git-mtimes/**"
+      # It sets the Public file times that become the ETags.
+      - "scripts/restore-asset-mtimes.py"
       # It decides what reaches the image build context.
       - ".dockerignore"
       # The container smoke test mounts it.
@@ -146,8 +148,8 @@ jobs:
           --health-retries 10
 
     steps:
-      # Full history (without blobs) so restore-git-mtimes can read each
-      # file's last commit.
+      # Full history (without blobs) so the next step can read each file's
+      # last commit.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -159,7 +161,10 @@ jobs:
       # vendored file a new ETag, and each browser downloaded the kernel
       # binaries again (25-70 MB per language) although no byte changed. With
       # the last-commit time, an ETag changes only when its file changes.
-      - uses: ./.github/actions/restore-git-mtimes
+      # Not the restore-git-mtimes action: on this bare runner it installs a
+      # git-restore-mtime that current git refuses (see the script).
+      - name: Set Public file times to their last commit
+        run: scripts/restore-asset-mtimes.py Public
 
       # The Chickadee image is large (~1.4 GB vendored Pyodide + full distro +
       # static binaries).  The build `load:true`s it into the local Docker
@@ -231,8 +236,8 @@ jobs:
       #
       # 1. Files in the image carry a commit time, not the checkout time. A
       #    checkout always happens after the HEAD commit, so a time later than
-      #    HEAD means restore-git-mtimes did not reach the image, and each
-      #    deploy gives every vendored file a new ETag again. One file is
+      #    HEAD means scripts/restore-asset-mtimes.py did not reach the image,
+      #    and each deploy gives every vendored file a new ETag again. One file is
       #    checked in each Public layer.
       # 2. The layer for the rest of Public excludes JupyterLite. If the
       #    exclude stops matching, that layer holds the whole ~400 MB tree a
@@ -247,7 +252,7 @@ jobs:
             file_time="$(docker run --rm --entrypoint stat "$IMAGE" -c %Y "/app/$file")"
             echo "$file: mtime $file_time, HEAD commit time $head_time"
             if [ "$file_time" -gt "$head_time" ]; then
-              echo "::error::$file has the checkout time, not a commit time, so each deploy changes its ETag. The layer cache ignores mtimes: if restore-git-mtimes runs and this still fails, a cached layer kept bad times. Delete the gha cache entries for this workflow."
+              echo "::error::$file has the checkout time, not a commit time, so each deploy changes its ETag. The layer cache ignores mtimes: if the mtime step ran and this still fails, a cached layer kept bad times. Delete the gha cache entries for this workflow."
               exit 1
             fi
           done

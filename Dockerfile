@@ -219,9 +219,10 @@ COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 # JupyterLite (~400 MB, changes on a re-vendor only) is its own layer, so a
 # change to the rest of Public ships ~8 MB on a deploy, not the whole tree.
 #
-# Each file keeps the mtime that CI restored from its last commit
-# (restore-git-mtimes), and the server's ETag is mtime plus size. The layer
-# cache ignores mtimes, so a cached layer keeps the times it was built with.
+# Each file keeps the mtime that CI set from its last commit
+# (scripts/restore-asset-mtimes.py), and the server's ETag is mtime plus
+# size. The layer cache ignores mtimes, so a cached layer keeps the times it
+# was built with.
 COPY Public/jupyterlite ./Public/jupyterlite
 COPY --exclude=jupyterlite Public ./Public
 COPY Resources  ./Resources
