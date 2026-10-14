@@ -119,6 +119,23 @@ enum CompositeSlots {
         return spec.inputs(forSlot: slot).mapValues(language.literal)
     }
 
+    /// The composite inputs of one grading job, by its kind: slot 0 for a
+    /// validation run, the reference row's slot for a reference job, and the
+    /// student's dealt slot otherwise.
+    static func jobInputs(
+        manifest: TestProperties, courseID: UUID, assignmentID: UUID?, submission: APISubmission,
+        on db: any Database
+    ) async -> [String: String]? {
+        if submission.kind == APISubmission.Kind.compositeReference {
+            return await CompositeReferences.gradingInputs(manifest: manifest, submissionID: submission.id, on: db)
+        }
+        return await gradingInputs(
+            manifest: manifest, courseID: courseID, assignmentID: assignmentID,
+            // Only a student's own submission is dealt a slot.
+            userID: submission.kind == APISubmission.Kind.student ? submission.userID : nil,
+            usesReferenceSlot: submission.kind == APISubmission.Kind.validation, on: db)
+    }
+
     /// Merges composite inputs over the personalization inputs. The composite
     /// names are reserved (`CompositeSpec.slotInputName` and its siblings),
     /// so the composite's value wins a clash.

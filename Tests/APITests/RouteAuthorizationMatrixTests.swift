@@ -337,6 +337,7 @@ import VaporTesting
         "POST /instructor/:assignmentID/activity/opponent": .instructor,
         "POST /instructor/:assignmentID/activity/window": .instructor,
         "POST /instructor/:assignmentID/activity/composite": .instructor,
+        "POST /instructor/:assignmentID/activity/composite/reference": .instructor,
         "POST /instructor/:assignmentID/tournament/run": .instructor,
         "POST /instructor/setup/:setupID/delete": .instructor,
 

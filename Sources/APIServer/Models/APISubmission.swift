@@ -43,6 +43,11 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         /// grade of record, every listing and every aggregate, all of which
         /// filter on `student`.
         static let classAggregate = "classAggregate"
+        /// One slot of a class composite's reference render
+        /// (docs/class-composite.md, slice 6): the reference solution graded
+        /// with that slot's inputs. Owned by no student, like the corpus run,
+        /// and claimed behind every job a person waits on.
+        static let compositeReference = "compositeReference"
     }
 
     @ID(custom: "id", generatedBy: .user)

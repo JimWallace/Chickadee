@@ -423,6 +423,18 @@ private struct EditActivityBlock: HTML {
                 dd { composite.showFailedLabel }
                 dt { "Empty slots" }
                 dd { composite.emptySlotsLabel }
+                dt { "Reference status" }
+                dd { composite.referenceLabel }
+            }
+            form(
+                .method(.post), .action("/instructor/\(assignmentID)/activity/composite/reference"),
+                .class("inline-form form-flush"), .dataFlag("ck-inplace")
+            ) {
+                CSRFField(token: csrfToken)
+                button(.class("btn action-btn"), .type(.submit)) { "Prepare reference" }
+            }
+            p(.class("field-note field-note--muted")) {
+                "Grades the reference solution once for each slot. The jobs wait until all student work is graded."
             }
             details {
                 summary(.class("disclosure-summary")) {

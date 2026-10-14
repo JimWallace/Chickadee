@@ -30,7 +30,11 @@ struct WorkerArtifactRoutes: RouteCollection {
         // the editor, and re-validation by another user still see the source.
         // When no sidecar exists (non-personalized assignment, or materialization
         // didn't run) we stream the stored file verbatim, exactly as before.
-        if submission.kind == APISubmission.Kind.validation {
+        // A class composite's reference job is a copy of the reference
+        // solution, materialized the same way.
+        if submission.kind == APISubmission.Kind.validation
+            || submission.kind == APISubmission.Kind.compositeReference
+        {
             let gradingCopy = submission.zipPath + ".grading"
             if FileManager.default.fileExists(atPath: gradingCopy) {
                 return try await req.fileio.asyncStreamFile(at: gradingCopy)

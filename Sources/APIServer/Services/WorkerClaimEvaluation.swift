@@ -140,17 +140,22 @@ func collectClaimCandidates(
         candidates.append((validation, valSetup, valManifest))
     }
 
-    // The class corpus run (docs/collaborative-class-assignments.md) goes
-    // LAST, behind everything a human is waiting on. Nobody is watching it
-    // land: it feeds a class progress bar, it is debounced to one run in
-    // flight per assignment, and a deadline spike is exactly when a student's
-    // job must not queue behind it.
-    let pendingAggregates = try await APISubmission.query(on: db)
-        .filter(\.$status == SubmissionStatus.pending.rawValue)
-        .filter(\.$kind == APISubmission.Kind.classAggregate)
-        .sort(\.$submittedAt, .ascending)
-        .limit(claimCandidateScanLimit)
-        .all()
+    // The class corpus run (docs/collaborative-class-assignments.md) and a
+    // class composite's reference jobs (docs/class-composite.md) go LAST,
+    // behind everything a human is waiting on. Nobody is watching them land:
+    // they feed a progress bar or a backdrop, and a deadline spike is exactly
+    // when a student's job must not queue behind them.
+    // The corpus run comes first: one composite can queue more reference
+    // jobs than the scan limit.
+    var pendingAggregates: [APISubmission] = []
+    for kind in [APISubmission.Kind.classAggregate, APISubmission.Kind.compositeReference] {
+        pendingAggregates += try await APISubmission.query(on: db)
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .filter(\.$kind == kind)
+            .sort(\.$submittedAt, .ascending)
+            .limit(claimCandidateScanLimit)
+            .all()
+    }
     for aggregate in pendingAggregates {
         if let cached = resolvedBySetupID[aggregate.testSetupID] {
             candidates.append((aggregate, cached.0, cached.1))

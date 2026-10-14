@@ -340,14 +340,13 @@ struct WorkerJobRoutes: RouteCollection {
         }
         // A class composite's slot travels with the inputs
         // (docs/class-composite.md): slot 0 for a validation run, the
-        // student's dealt slot otherwise.
+        // reference row's slot for a reference job, the student's dealt slot
+        // otherwise.
         personalizedInputs = CompositeSlots.merged(
             personalizedInputs,
-            with: await CompositeSlots.gradingInputs(
+            with: await CompositeSlots.jobInputs(
                 manifest: claimed.manifest, courseID: setup.courseID, assignmentID: claimed.assignmentID,
-                // Only a student's own submission is dealt a slot.
-                userID: submission.kind == APISubmission.Kind.student ? submission.userID : nil,
-                usesReferenceSlot: submission.kind == APISubmission.Kind.validation, on: req.db))
+                submission: submission, on: req.db))
 
         // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
         // Cheap and deterministic (a file read + in-memory sample, no

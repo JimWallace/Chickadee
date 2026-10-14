@@ -224,6 +224,19 @@ struct MaterializedValidationSubmission {
     func saveClaimable(on db: any Database) async throws {
         try await submission.save(on: db)
     }
+
+    /// The same materialization for `other`, a copy of the same solution
+    /// file: the grading sidecar is copied and the cache is shared, so the
+    /// personalization runs once for many jobs (a composite's reference
+    /// render, one job for each slot).
+    func cloned(as other: APISubmission) throws -> MaterializedValidationSubmission {
+        let sidecar = submission.zipPath + ".grading"
+        if FileManager.default.fileExists(atPath: sidecar) {
+            try FileManager.default.copyItem(atPath: sidecar, toPath: other.zipPath + ".grading")
+        }
+        other.materializationJSON = submission.materializationJSON
+        return MaterializedValidationSubmission(submission: other)
+    }
 }
 
 /// Resolve a validation submission's personalization ONCE, so the worker poll +

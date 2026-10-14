@@ -2,7 +2,7 @@
 
 Design note for a class activity in which each student renders one part of a
 shared image, and the class watches the full image form on the projector while
-the submissions arrive. Slices 1 to 5 are built. See **Status**.
+the submissions arrive. Slices 1 to 5 and 6a are built. See **Status**.
 
 The idea came from a sequence of computer-graphics and medical-imaging labs:
 a framebuffer, the painter's algorithm, the z-buffer, ray casting, and CT
@@ -21,7 +21,8 @@ of all parts together.
 | 3 | Slot dealing, and the slot as a per-student input | shipped |
 | 4 | Ingest: the `composite_contributions` table and the coverage row | shipped |
 | 5 | The composite view on the leaderboard page, with all four compositors | shipped |
-| 6 | Reference renders and `emptySlots: reference`, and spare slots | planned |
+| 6a | Reference renders and `emptySlots: reference` | shipped |
+| 6b | Spare slots | planned |
 
 Slice 5 is the first slice that a class can use. Slices 1 to 4 only supply data
 to it. Run one session with TAs after slice 5, before slice 6.
@@ -300,6 +301,7 @@ image while it is rendered:
 | Rendering: a submission for the slot is queued or grading | A pulse in the slot |
 | Failed: the latest contribution did not pass | The output, with a red outline |
 | Passed | The output, animated if it has frames |
+| Reference: no passing contribution, with `emptySlots: reference` | The reference render, dimmed |
 
 The rendering state comes from the submission status that the server already
 stores (`pending`, `assigned` or `running`). No new grading signal is
@@ -378,6 +380,33 @@ reference tiles than on an empty grid.
 projection angle, and an empty angle is not a hole: it makes the
 reconstruction blurrier, which is the lesson. Filling it with the reference
 angle would hide that lesson.
+
+**How the reference render is made (slice 6a).** The "Prepare reference"
+button is in the composite settings on the edit page. It needs a reference
+solution, and only an instructor can press it. For each slot, it makes one
+`compositeReference` submission of the solution, owned by no student, and one
+row in `composite_references` that names the slot. The worker gives the job
+that slot's inputs, as it does for a student. The job waits behind every job
+that a person waits on, with the class corpus run. When the result arrives,
+the row stores the pixels and whether the run passed. A payload with the
+wrong shape clears the row. A second press deletes the earlier rows, and the
+earlier jobs that no runner holds, and starts again. A job that a runner holds
+finishes and records nothing. Two presses at the same time cannot both save:
+the second one gets an error and the earlier render stays. The edit page shows
+"N of M slots ready".
+
+The render has no student seed, so `=` expressions resolve as they do with no
+seed, and the solution is personalized once for all slots. The render does not
+follow later changes. After a change to the solution, the shape or the
+compositor, press "Prepare reference" again.
+
+The projector shows a render only in a slot that shows no contribution. A
+failed contribution that shows (`showFailed: true`) keeps its slot, so the
+dead pixel stays visible. A render never counts as a completed slot, and it
+never covers anything. The student view never shows a render, because a
+render is a visible answer. A render whose length is not the shape of the
+spec is not shown, so a render made before a shape change disappears until
+the instructor prepares it again.
 
 ### Slot count
 
@@ -501,8 +530,12 @@ adds, and keeps every existing assignment on the code path it uses now.
    action that renders the reference solution for every slot and stores the
    results. It is a server-initiated job that waits behind every student
    submission, with the claim-order rule of the corpus run. The slice also
-   enables `emptySlots: reference`. A spare slot is a second slot that a
-   student who finished can ask for, to fill a hole.
+   enables `emptySlots: reference`. Shipped as 6a.
+   6b. A spare slot is a second slot that a student who finished can ask for,
+   to fill a hole. The student presses "Fill a hole" on the result page. The
+   server grades the latest passing submission of the student again with
+   the inputs of an empty slot, behind every student job, and the tile is
+   credited to the student.
 
 ## Risks
 
@@ -515,8 +548,8 @@ adds, and keeps every existing assignment on the code path it uses now.
 - **Test time.** A test renders only the student's slot, not the full image,
   so it stays well below the 10-second limit.
 - **Attendance.** Dealing at arrival handles absent students. Reference
-  renders and spare slots (slice 6) handle a small class. Until slice 6, a
-  small class sees holes.
+  renders (slice 6a) fill the holes of a small class, dimmed. Spare slots
+  (slice 6b) will let students fill them with their own work.
 
 ## Decisions
 

@@ -193,7 +193,7 @@
     function slotTitle(slot, slotState) {
         var label = 'Slot ' + (slot + 1);
         if (!slotState) { return label + ': empty'; }
-        var words = { passed: 'passed', failed: 'did not pass', empty: 'empty' };
+        var words = { passed: 'passed', failed: 'did not pass', reference: 'reference render', empty: 'empty' };
         var text = label + (slotState.owner ? ' · ' + slotState.owner : '') + ': ' + words[slotState.state];
         return slotState.rendering ? text + ', grading' : text;
     }

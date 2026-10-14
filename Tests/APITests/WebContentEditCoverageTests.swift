@@ -67,6 +67,8 @@ import Testing
         "saveActivityWindow",
         "saveActivityComposite",
         "runTournament",
+        // Grades the reference solution once for each slot; it edits nothing.
+        "prepareCompositeReference",
         // Re-grades on request; it is the effect, not an edit.
         "retestAllSubmissions",
         // Computes a value for the editor and writes nothing.
