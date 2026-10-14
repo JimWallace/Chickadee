@@ -186,7 +186,7 @@ func quotedIdentifier(_ raw: String) -> String {
 }
 
 private func createPostgresTestSchema(_ app: Application, schemaName: String) async throws {
-    guard let sql = app.db as? SQLDatabase else { return }
+    guard let sql = app.db as? any SQLDatabase else { return }
     // CREATE SCHEMA is global and doesn't depend on search_path, so this
     // runs cleanly even though the freshly-configured connection has its
     // search_path pointing at the not-yet-existent schema.
@@ -196,7 +196,7 @@ private func createPostgresTestSchema(_ app: Application, schemaName: String) as
 
 func dropPostgresTestSchema(_ app: Application) async throws {
     guard let schemaName = app.storage[TestPostgresSchemaKey.self] else { return }
-    guard let sql = app.db as? SQLDatabase else { return }
+    guard let sql = app.db as? any SQLDatabase else { return }
     let quoted = quotedIdentifier(schemaName)
     try await sql.raw("DROP SCHEMA IF EXISTS \(unsafeRaw: quoted) CASCADE").run()
 }

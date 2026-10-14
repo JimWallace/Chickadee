@@ -15,20 +15,19 @@ import VaporTesting
     /// the transport can build a ToolContext without a real token.
     private struct StubPrincipalMiddleware: AsyncMiddleware {
         let principal: MCPPrincipal
-        func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
             request.mcpPrincipal = principal
             return try await next.respond(to: request)
         }
     }
 
     private func makeApp(configuration: MCPRoutes.Configuration = .init()) async throws -> Application {
-        let app = try await makeTestingApplication { app in
+        try await makeTestingApplication { app in
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "Chickadee MCP", version: "test"))
             let principal = MCPPrincipal(subject: "tester", grantedScopes: Set(ContentScope.allCases))
             try app.grouped(StubPrincipalMiddleware(principal: principal))
                 .register(collection: MCPRoutes(dispatcher: dispatcher, configuration: configuration))
         }
-        return app
     }
 
     private let jsonHeaders: HTTPHeaders = ["Content-Type": "application/json"]

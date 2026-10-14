@@ -19,6 +19,7 @@ import Testing
 
 #if canImport(Glibc)
 import Glibc
+import SystemPackage
 #endif
 
 @Suite(.timeLimit(.minutes(2))) struct SubprocessSpawnRaceTests {
@@ -47,7 +48,7 @@ import Glibc
         let spawners = (0..<2).map { _ in
             Thread { Self.spawnUntilStopped(stop) }
         }
-        spawners.forEach { $0.start() }
+        for spawner in spawners { spawner.start() }
         defer { stop.isSet.store(true, ordering: .relaxed) }
 
         for _ in 0..<200 {

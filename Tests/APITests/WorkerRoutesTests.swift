@@ -9,6 +9,7 @@ import ChickadeeTestSupport
 import Core
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Testing
 import VaporTesting
 
@@ -375,7 +376,7 @@ import VaporTesting
                 })
 
             // Both submissions should be claimed, each by a different worker.
-            let allIDs = Set([firstJobID, secondJobID].compactMap { $0 })
+            let allIDs = Set([firstJobID, secondJobID].compactMap(\.self))
             #expect(allIDs.count == 2, "Both submissions must be claimed exactly once")
             #expect(allIDs.contains((try workerSub.requireID())))
             #expect(allIDs.contains((try browserSub.requireID())))
@@ -469,7 +470,7 @@ import VaporTesting
                         method: .POST, path: path,
                         body: body, workerSecret: secret)
                     group.addTask {
-                        return try await testApp.asyncSendRequest(.POST, path) { req in
+                        try await testApp.asyncSendRequest(.POST, path) { req in
                             req.headers = headers
                             req.body = body
                         }

@@ -9,6 +9,7 @@
 
 import Core
 import Foundation
+import RegexBuilder
 import Testing
 
 @testable import APIServer
@@ -52,10 +53,29 @@ import Testing
     /// `a / b` or `a | b`, with no quotes between them (a JSON `enum` array
     /// quotes every item, and is derived).
     private static func listsAdjacently(_ first: String, _ second: String, in text: String) -> Bool {
-        let pattern =
-            "\\b\(NSRegularExpression.escapedPattern(for: first))\\s*(,|/|\\|)\\s*(and\\s+|or\\s+)?"
-            + "\(NSRegularExpression.escapedPattern(for: second))\\b"
-        return text.range(of: pattern, options: .regularExpression) != nil
+        // String pieces in a RegexBuilder match literally, so a token needs
+        // no escaping.
+        let pattern = Regex {
+            Anchor.wordBoundary
+            first
+            ZeroOrMore(.whitespace)
+            ChoiceOf {
+                ","
+                "/"
+                "|"
+            }
+            ZeroOrMore(.whitespace)
+            Optionally {
+                ChoiceOf {
+                    "and"
+                    "or"
+                }
+                OneOrMore(.whitespace)
+            }
+            second
+            Anchor.wordBoundary
+        }
+        return text.contains(pattern.wordBoundaryKind(.simple))
     }
 
     /// No hand-typed list of notebook-check kinds survives. Every such list

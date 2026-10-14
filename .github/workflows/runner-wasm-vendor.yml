@@ -95,9 +95,19 @@ jobs:
           # Install swiftly from its binary release (the legacy swiftly-install.sh
           # shell script does not support the Ubuntu release the ubuntu-latest
           # runner provides).
+          # Pinned by version and checksum. The unversioned URL serves
+          # whatever release is newest, unverified.
           arch="$(uname -m)"
-          curl -fsSLO "https://download.swift.org/swiftly/linux/swiftly-${arch}.tar.gz"
-          tar zxf "swiftly-${arch}.tar.gz"
+          swiftly_version=1.2.0
+          case "$arch" in
+            x86_64) swiftly_sha256=0b26b568811404374c7d7f07276b6aad4145db5d1893a45f307de6a94ca8d9c3 ;;
+            aarch64) swiftly_sha256=590d855e03807791f1b84aab77471bf7e31f9e3b22151972526077da296ecf96 ;;
+            *) echo "::error::No swiftly checksum for $arch."; exit 1 ;;
+          esac
+          swiftly_tar="swiftly-${swiftly_version}-${arch}.tar.gz"
+          curl -fsSLO "https://download.swift.org/swiftly/linux/${swiftly_tar}"
+          echo "${swiftly_sha256}  ${swiftly_tar}" | sha256sum --check --strict
+          tar zxf "${swiftly_tar}"
           ./swiftly init -y --skip-install --quiet-shell-followup
           . "$HOME/.local/share/swiftly/env.sh"
           swiftly install 6.4.0

@@ -265,7 +265,7 @@ actor MigratedPostgresSchemaPool {
         let task = maintenanceTask
         maintenanceTask = nil
         guard let app = try? await task?.value else { return }
-        if let sql = app.db as? SQLDatabase {
+        if let sql = app.db as? any SQLDatabase {
             for name in names {
                 try? await sql.raw(
                     "DROP SCHEMA IF EXISTS \(unsafeRaw: quotedIdentifier(name)) CASCADE"
@@ -515,7 +515,7 @@ actor MigratedPostgresSchemaPool {
     /// whose connection died mid-test.
     private func maintenanceSQL() async throws -> any SQLDatabase {
         let app = try await maintenanceApplication()
-        guard let sql = app.db as? SQLDatabase else { throw PostgresSchemaPoolError.noSQLDatabase }
+        guard let sql = app.db as? any SQLDatabase else { throw PostgresSchemaPoolError.noSQLDatabase }
         return sql
     }
 

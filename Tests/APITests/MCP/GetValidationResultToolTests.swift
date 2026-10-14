@@ -225,7 +225,7 @@ import Vapor
         try await withApp(app) { app in
             _ = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await self.run(app, publicID: "zzzzzz")
+                _ = try await run(app, publicID: "zzzzzz")
             }
         }
     }
@@ -243,7 +243,7 @@ import Vapor
             try await assignment.save(on: app.db)
 
             await #expect(throws: MCPToolError.self) {
-                _ = try await self.run(app, publicID: assignment.publicID)
+                _ = try await run(app, publicID: assignment.publicID)
             }
         }
     }

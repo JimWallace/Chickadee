@@ -248,14 +248,13 @@ import Testing
             #expect(!patterns.isEmpty, "\(language.displayName) claims scanning with no patterns")
             for pattern in patterns {
                 #expect(
-                    (try? NSRegularExpression(pattern: pattern)) != nil,
+                    (try? Regex(pattern)) != nil,
                     "\(language.displayName) has an uncompilable definition pattern: \(pattern)")
                 // Group 1 is the name and group 2 the parameter list — the
                 // contract `parseAssignmentStyleDefinition` reads them by.
-                let regex = try? NSRegularExpression(pattern: pattern)
                 #expect(
-                    (regex?.numberOfCaptureGroups ?? 0) >= 2,
-                    "\(language.displayName) pattern needs a name and a params group: \(pattern)")
+                    (try? Regex(pattern, as: (Substring, Substring, Substring).self)) != nil,
+                    "\(language.displayName) pattern needs exactly a name and a params group: \(pattern)")
             }
         case .noSolutionNotebook:
             // Only legitimate for a language with no notebook workflow at all.

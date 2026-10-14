@@ -62,7 +62,7 @@ import Testing
     /// Runs the daemon under a capture until `poll_cycle_start` is logged,
     /// so the run is under way when `stop` is applied, then waits for it.
     private static func runUntilStopped(
-        _ stop: @Sendable (WorkerDaemon, Task<Void, Error>) async -> Void
+        _ stop: @Sendable (WorkerDaemon, Task<Void, any Error>) async -> Void
     ) async
         -> RunnerLogCapture
     {

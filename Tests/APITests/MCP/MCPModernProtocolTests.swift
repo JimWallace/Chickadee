@@ -20,14 +20,14 @@ import VaporTesting
     /// Stands in for MCPBearerAuthMiddleware, as in MCPEndpointTests.
     private struct StubPrincipalMiddleware: AsyncMiddleware {
         let principal: MCPPrincipal
-        func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
             request.mcpPrincipal = principal
             return try await next.respond(to: request)
         }
     }
 
     private func makeApp() async throws -> Application {
-        let app = try await makeTestingApplication { app in
+        try await makeTestingApplication { app in
             let dispatcher = MCPDispatcher(
                 serverInfo: MCPServerInfo(name: "Chickadee MCP", version: "test-9.9.9"),
                 tools: ToolRegistry([]))
@@ -35,7 +35,6 @@ import VaporTesting
             try app.grouped(StubPrincipalMiddleware(principal: principal))
                 .register(collection: MCPRoutes(dispatcher: dispatcher, configuration: .init()))
         }
-        return app
     }
 
     // MARK: - Request builders

@@ -6,6 +6,7 @@
 // rows, and with a live session window.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

@@ -7,6 +7,7 @@
 
 import ChickadeeTestSupport
 import Core
+import Elementary
 import Foundation
 import Testing
 

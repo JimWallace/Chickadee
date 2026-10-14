@@ -107,7 +107,7 @@ import VaporTesting
         let app = try await Application.make(.testing)
         do {
             try configureDatabase(app, settings: .sqliteInMemory())
-            let sql = try #require(app.db as? SQLDatabase)
+            let sql = try #require(app.db as? any SQLDatabase)
 
             // Legacy shape: minimal parents + a results table that still
             // carries collection_json. Only the columns the migration touches

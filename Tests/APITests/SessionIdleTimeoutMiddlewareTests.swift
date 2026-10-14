@@ -21,7 +21,7 @@ import VaporTesting
         user: APIUser,
         idleTimeoutSeconds: TimeInterval
     ) async throws -> Application {
-        let app = try await makeTestingApplication { app in
+        try await makeTestingApplication { app in
             // The middleware-under-test reads `req.session.data` to clear OIDC
             // tokens and calls `req.session.unauthenticate`, both of which need
             // the session middleware to have initialised the session on the
@@ -38,18 +38,16 @@ import VaporTesting
             app.get("page") { _ in "ok" }
             app.get("api", "v1", "thing") { _ in "ok-api" }
         }
-        return app
     }
 
     private func makeUser(lastSeenAt: Date?) -> APIUser {
-        let user = APIUser(
+        APIUser(
             id: UUID(),
             username: "jim",
             passwordHash: "x",
             role: "student",
             lastSeenAt: lastSeenAt
         )
-        return user
     }
 
     // MARK: - Browser path
@@ -129,7 +127,7 @@ import VaporTesting
 private struct PreAuthenticator: AsyncMiddleware {
     let user: APIUser
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         request.auth.login(user)
         return try await next.respond(to: request)
     }

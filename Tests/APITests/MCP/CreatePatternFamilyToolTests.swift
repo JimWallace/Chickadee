@@ -47,7 +47,7 @@ import Vapor
     }
 
     private func reloadFamily(
-        _ assignment: APIAssignment, id: String, on db: Database
+        _ assignment: APIAssignment, id: String, on db: any Database
     ) async throws -> PatternFamily {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
         let items = await buildSuitePayload(fromManifest: reloaded.manifest).items
@@ -282,7 +282,7 @@ import Vapor
                                 argVarRefs: nil, argsProvided: nil, expectedVarRef: nil,
                                 points: nil, tier: nil, enabled: nil)
                         ]),
-                    self.context(app))
+                    context(app))
             }
             _ = try await make()
             await #expect(throws: MCPToolError.self) { _ = try await make() }

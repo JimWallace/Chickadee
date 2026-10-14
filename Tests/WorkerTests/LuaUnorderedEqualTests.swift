@@ -8,6 +8,7 @@
 // inspected, because the defect was a wrong mark, not a compile error.
 
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

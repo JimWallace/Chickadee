@@ -3,6 +3,7 @@
 // The admin Integrations pages (LEARN, GitHub, LTI and MCP), for
 // ElementaryPageGuardTests.
 
+import Elementary
 import Foundation
 
 @testable import APIServer

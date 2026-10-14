@@ -6,6 +6,7 @@
 // and `.full` is never written to the manifest.
 
 import Core
+import Fluent
 import Foundation
 import Testing
 

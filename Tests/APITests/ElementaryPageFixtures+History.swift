@@ -4,6 +4,7 @@
 // Leaf-to-Elementary migration), rendered for ElementaryPageGuardTests.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

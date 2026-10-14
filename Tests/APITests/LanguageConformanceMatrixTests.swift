@@ -355,7 +355,7 @@ import Testing
 
     @Test(arguments: AssignmentLanguage.allCases)
     func theInputsFilenameMatchesTheLanguage(_ language: AssignmentLanguage) {
-        let ext = (language.inputsFileName as NSString).pathExtension
+        let ext = URL(fileURLWithPath: language.inputsFileName).pathExtension
         #expect(
             language.scriptExtensions.contains(ext.lowercased()),
             "\(language.inputsFileName) is not a \(language) source file")
@@ -772,7 +772,7 @@ import Testing
     }
 
     static func isAvailable(_ adapter: Adapter) async -> Bool {
-        return await toolIsAvailable(adapter.interpreter, arguments: adapter.versionArguments)
+        await toolIsAvailable(adapter.interpreter, arguments: adapter.versionArguments)
     }
 
     static func pythonString(_ s: String) -> String { JSONValue.string(s).pythonLiteral }

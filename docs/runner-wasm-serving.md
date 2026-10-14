@@ -22,7 +22,15 @@ the JavaScriptKit runtime and the WASI shim.
 `wasm-opt -Oz --strip-debug` runs in the build via `npx` (binaryen — same
 no-install mechanism as esbuild); if unavailable it falls back to the
 unoptimized, unstripped module with a warning, and that module fails the size
-ceiling. `-Oz` (size) not `-O` (speed), since this is browser-delivered.
+ceiling. In CI the build stops instead, and the vendor job runs the size check
+before it commits. `-Oz` (size) not `-O` (speed), since this is
+browser-delivered.
+
+Both tools are pinned at the top of `scripts/build-runner-wasm.sh`
+(`esbuild@0.28.2`, and `wasm-opt@1.4.0`, which installs binaryen 112), and the
+vendor job pins swiftly by version and SHA-256. An unpinned tool can change the
+bytes, and so the content hash, with no change to the source. Every browser
+then downloads the module again. Change a pin in its own commit.
 
 **Until Swift 6.4 the table above read 1,742,845 → 1,522,732 → 493,864 gzip,
 and ~80 % of that was DWARF.** The release build links with `-g`; the

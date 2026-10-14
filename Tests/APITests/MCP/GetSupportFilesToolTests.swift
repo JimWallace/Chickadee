@@ -124,7 +124,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await self.run(app, publicID: assignment.publicID, filename: "test_a.sh")
+                _ = try await run(app, publicID: assignment.publicID, filename: "test_a.sh")
             }
         }
     }
@@ -134,7 +134,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await self.run(
+                _ = try await run(
                     app, publicID: assignment.publicID, filename: "solution.ipynb")
             }
         }
@@ -145,11 +145,11 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await self.run(app, publicID: assignment.publicID, filename: "missing.csv")
+                _ = try await run(app, publicID: assignment.publicID, filename: "missing.csv")
             }
             // A traversal-shaped name is just "not in the entry list".
             await #expect(throws: MCPToolError.self) {
-                _ = try await self.run(
+                _ = try await run(
                     app, publicID: assignment.publicID, filename: "../../etc/passwd")
             }
         }
@@ -166,7 +166,7 @@ import Vapor
                 on: app, testSetupID: "setup_sf", courseID: courseID, title: "Lab")
 
             await #expect(throws: MCPToolError.self) {
-                _ = try await self.run(app, publicID: assignment.publicID)
+                _ = try await run(app, publicID: assignment.publicID)
             }
         }
     }

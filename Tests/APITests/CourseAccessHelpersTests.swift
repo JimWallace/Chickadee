@@ -6,6 +6,7 @@
 // rows only, archived courses hidden from visibility, no role bypass inside
 // the helpers themselves.
 
+import Core
 import Fluent
 import Testing
 import Vapor

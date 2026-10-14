@@ -84,7 +84,7 @@ private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
         let (cache, _) = makeCache()
 
         let first = try await cache.acquire(testSetupID: "setup-3") {
-            return try makeTestStagingDir(name: "sentinel.sh")
+            try makeTestStagingDir(name: "sentinel.sh")
         }
         defer { try? FileManager.default.removeItem(at: first.directory) }
 
@@ -235,7 +235,8 @@ private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
 
         // Re-access A so LRU order becomes [B, A] (B is now LRU).
         let a2 = try await cache.acquire(testSetupID: "A") {
-            Issue.record("A should still be cached"); return try makeTestStagingDir()
+            Issue.record("A should still be cached")
+            return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: a2.directory) }
 

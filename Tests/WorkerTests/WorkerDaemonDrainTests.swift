@@ -118,7 +118,7 @@ import Testing
 
     /// Whether `run` returns within `seconds`. A run that does not is
     /// cancelled, so a broken drain fails the test rather than hanging it.
-    private func finishes(_ run: Task<Void, Error>, within seconds: Double = 10) async -> Bool {
+    private func finishes(_ run: Task<Void, any Error>, within seconds: Double = 10) async -> Bool {
         let done = Flag()
         Task {
             _ = try? await run.value

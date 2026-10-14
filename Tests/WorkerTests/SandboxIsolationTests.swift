@@ -12,6 +12,7 @@
 
 import ChickadeeTestSupport
 import Foundation
+import RunnerCore
 import Testing
 
 @testable import chickadee_runner

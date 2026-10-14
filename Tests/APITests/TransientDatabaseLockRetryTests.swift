@@ -5,6 +5,7 @@
 // different classifiers; they now share `isTransientDatabaseLockError` and
 // keep their own attempt count and backoff.
 
+import Fluent
 import Testing
 import Vapor
 

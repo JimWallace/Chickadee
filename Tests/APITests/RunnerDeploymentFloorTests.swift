@@ -9,6 +9,7 @@
 import ChickadeeTestSupport
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Testing
 import VaporTesting
 

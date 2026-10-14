@@ -34,7 +34,7 @@ import Vapor
     }
 
     private func reloadCheck(
-        _ assignment: APIAssignment, id: String, on db: Database
+        _ assignment: APIAssignment, id: String, on db: any Database
     ) async throws -> NotebookCheck {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
         let items = await buildSuitePayload(fromManifest: reloaded.manifest).items

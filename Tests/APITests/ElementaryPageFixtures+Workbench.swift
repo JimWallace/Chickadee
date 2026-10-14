@@ -5,6 +5,7 @@
 // stand-in an assignment with no notebook yet shows.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

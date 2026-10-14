@@ -12,7 +12,7 @@ import VaporTesting
     private struct InjectAuthMiddleware: AsyncMiddleware {
         let user: APIUser?
 
-        func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
             if let user {
                 request.auth.login(user)
             }
@@ -25,7 +25,7 @@ import VaporTesting
     }
 
     private func makeNamespaceApp(user: APIUser?) async throws -> Application {
-        let app = try await makeTestingApplication { app in
+        try await makeTestingApplication { app in
             // The namespace guard now resolves per-course staff status through
             // `req.db` (#417 Slice G), so the app needs a database — it used to read
             // the global `caller.isInstructor` off the injected user with no DB.
@@ -39,7 +39,6 @@ import VaporTesting
                 Response(status: .ok, body: .init(string: "notebook"))
             }
         }
-        return app
     }
 
     private func makeSecurityHeadersApp() async throws -> Application {

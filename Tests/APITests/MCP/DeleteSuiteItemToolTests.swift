@@ -55,7 +55,7 @@ import Vapor
             on: app, testSetupID: "setup_del", courseID: courseID, title: "Lab")
     }
 
-    private func reloadItems(_ assignment: APIAssignment, on db: Database) async throws -> [SuiteItemDTO] {
+    private func reloadItems(_ assignment: APIAssignment, on db: any Database) async throws -> [SuiteItemDTO] {
         let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
         return await buildSuitePayload(fromManifest: reloaded.manifest).items
     }

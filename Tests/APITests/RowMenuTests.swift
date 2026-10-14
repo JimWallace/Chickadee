@@ -1,6 +1,7 @@
 // Tests/APITests/RowMenuTests.swift
 
 import Elementary
+import Foundation
 import Testing
 
 @testable import APIServer
