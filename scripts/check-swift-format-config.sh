@@ -18,7 +18,19 @@ cd "$repo_root"
 
 configs=(.swift-format Tests/.swift-format)
 
-defaults="$(swift-format dump-configuration)"
+# Prints the rule names in a configuration, one per line, sorted. A rule name
+# starts with a capital letter; every other key in the file does not. The CI
+# image has no python3 or jq, so this reads the JSON with grep and sed.
+rule_names() {
+  grep -oE '"[A-Z][A-Za-z]+"[[:space:]]*:[[:space:]]*(true|false)' \
+    | sed -E 's/^"([A-Za-z]+)".*/\1/' | LC_ALL=C sort -u
+}
+
+known="$(swift-format dump-configuration | rule_names)"
+if [ -z "$known" ]; then
+  echo "check-swift-format-config: swift-format printed no rules."
+  exit 1
+fi
 
 status=0
 for config in "${configs[@]}"; do
@@ -27,24 +39,17 @@ for config in "${configs[@]}"; do
     status=1
     continue
   fi
-  if ! DEFAULTS="$defaults" python3 - "$config" <<'EOF'
-import json, os, sys
-
-path = sys.argv[1]
-known = set(json.loads(os.environ["DEFAULTS"])["rules"])
-listed = set(json.load(open(path)).get("rules", {}))
-
-missing = sorted(known - listed)
-unknown = sorted(listed - known)
-for rule in missing:
-    print(f"{path}: does not list the rule {rule}. Name it with true or false.")
-for rule in unknown:
-    print(f"{path}: lists the rule {rule}, which swift-format does not know.")
-sys.exit(1 if missing or unknown else 0)
-EOF
-  then
+  listed="$(rule_names <"$config")"
+  while IFS= read -r rule; do
+    [ -z "$rule" ] && continue
+    echo "$config: does not list the rule $rule. Name it with true or false."
     status=1
-  fi
+  done < <(LC_ALL=C comm -23 <(printf '%s\n' "$known") <(printf '%s\n' "$listed"))
+  while IFS= read -r rule; do
+    [ -z "$rule" ] && continue
+    echo "$config: lists the rule $rule, which swift-format does not know."
+    status=1
+  done < <(LC_ALL=C comm -13 <(printf '%s\n' "$known") <(printf '%s\n' "$listed"))
 done
 
 if [ "$status" -eq 0 ]; then
