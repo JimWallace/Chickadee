@@ -61,8 +61,8 @@ opt_in_rules:
   - prefer_zero_over_explicit_init
   - override_in_extension
   - prohibited_super_call
-  # Modern-idiom rules. Each one had few or no
-  # findings in Sources/ when it was turned on. Tests/.swiftlint.yml turns
+  # Modern-idiom rules. Their findings in Sources/ were fixed when they were
+  # turned on, most by `swiftlint --fix`. Tests/.swiftlint.yml turns
   # off the ones that have findings in existing tests, until the maintainer
   # approves those test edits.
   - shorthand_optional_binding
