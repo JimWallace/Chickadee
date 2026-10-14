@@ -394,7 +394,7 @@ extension AdminRoutes {
 
             // 4. Assignments. A class composite's slots and contributions map
             // students to their work, so they go explicitly, not only by the
-            // cascade. Its reference renders go with them.
+            // cascade. Its reference renders and spares go with them.
             let assignmentIDs = try await APIAssignment.query(on: db)
                 .filter(\.$courseID == courseID).all().compactMap(\.id)
             if !assignmentIDs.isEmpty {
@@ -403,6 +403,8 @@ extension AdminRoutes {
                 try await APICompositeSlot.query(on: db)
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
                 try await APICompositeReference.query(on: db)
+                    .filter(\.$assignmentID ~~ assignmentIDs).delete()
+                try await APICompositeSpare.query(on: db)
                     .filter(\.$assignmentID ~~ assignmentIDs).delete()
             }
             try await APIAssignment.query(on: db)

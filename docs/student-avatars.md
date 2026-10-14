@@ -44,9 +44,10 @@ Job 1 comes free once job 2 is solved.
 > **Since the species (docs/avatar-species.md):** the bird is one of eleven
 > species, and the colourway decides which. What this section says about the
 > chickadee's markings now holds per species: a species' plumage symbol is
-> fixed, and the variation lives inside it. The silhouette, the eye discs and
-> the beak shape are shared by every species and are what keeps the birds one
-> family. The "cap" slot is the colourway, six tones per name.
+> fixed, and the variation lives inside it. The silhouette and the eye discs
+> are shared by every species and are what keeps the birds one family; each
+> species has its own beak. The "cap" slot is the colourway, six tones per
+> name.
 
 The mascot (`Assets/chickadee-icon.png`) is a round, plush black-capped
 chickadee: dark cap and bib, white cheek wrapping under the eye, buff flank,

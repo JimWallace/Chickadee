@@ -6,12 +6,12 @@
 // `data-av-token`, and a ring radio the ring symbol it draws in `data-av-ring`.
 // A colourway radio (name "cap") carries the six tone tokens in `data-av-cap`,
 // `data-av-wing`, `data-av-body`, `data-av-bib`, `data-av-beak` and
-// `data-av-mark`, and the two layers a species changes in `data-av-plumage`
-// and `data-av-tuft`. So this file holds no palette, no option list and no
-// species. On a change it sets the per-student custom properties the avatar
-// already reads (the one kind of style write the UI rules allow from script)
-// and points the avatar's ring, plumage and tuft layers at the checked
-// symbols. The backdrop and the cap also go on the form, so the ring samples
+// `data-av-mark`, and the three layers a species changes in `data-av-plumage`,
+// `data-av-tuft` and `data-av-wing-art`. So this file holds no palette, no
+// option list and no species. On a change it sets the per-student custom
+// properties the avatar already reads (the one kind of style write the UI
+// rules allow from script) and points the avatar's ring, plumage, tuft and
+// wing layers at the checked symbols. The backdrop and the cap also go on the form, so the ring samples
 // follow them. Nothing is saved until the form is submitted.
 (function () {
     'use strict';
@@ -52,15 +52,19 @@
         return tones;
     }
 
-    /** The plumage and tuft symbol references of the checked colourway, or
-     *  null each. Only a same-page reference to a plumage symbol, or to a tuft
-     *  or crest symbol, is passed through. */
+    /** The plumage, tuft and wing symbol references of the checked
+     *  colourway, or null each. Only a same-page reference to a plumage
+     *  symbol, to a tuft or crest symbol, or to a wing symbol is passed
+     *  through. The server names the wing symbol because a species may draw
+     *  a pattern with its own art (docs/avatar-species.md, "Trait map"). */
     function previewLayers(checkedAttribute) {
         var plumage = checkedAttribute('plumage');
         var tuft = checkedAttribute('tuft');
+        var wing = checkedAttribute('wing-art');
         return {
             plumage: plumage && plumage.indexOf('#av-plumage-') === 0 ? plumage : null,
-            tuft: tuft && (tuft.indexOf('#av-tuft-') === 0 || tuft.indexOf('#av-crest-') === 0) ? tuft : null
+            tuft: tuft && (tuft.indexOf('#av-tuft-') === 0 || tuft.indexOf('#av-crest-') === 0) ? tuft : null,
+            wing: wing && wing.indexOf('#av-wing-') === 0 ? wing : null
         };
     }
 
@@ -101,6 +105,7 @@
             var layers = previewLayers(checkedColourway);
             if (layers.plumage) pointLayer('use[href^="#av-plumage-"]', layers.plumage);
             if (layers.tuft) pointLayer('use[href^="#av-tuft-"], use[href^="#av-crest-"]', layers.tuft);
+            if (layers.wing) pointLayer('use[href^="#av-wing-"]', layers.wing);
         });
     }
 

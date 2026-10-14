@@ -31,9 +31,11 @@ struct WorkerArtifactRoutes: RouteCollection {
         // When no sidecar exists (non-personalized assignment, or materialization
         // didn't run) we stream the stored file verbatim, exactly as before.
         // A class composite's reference job is a copy of the reference
-        // solution, materialized the same way.
+        // solution, and a spare job a copy of a student's submission, both
+        // materialized the same way.
         if submission.kind == APISubmission.Kind.validation
             || submission.kind == APISubmission.Kind.compositeReference
+            || submission.kind == APISubmission.Kind.compositeSpare
         {
             let gradingCopy = submission.zipPath + ".grading"
             if FileManager.default.fileExists(atPath: gradingCopy) {

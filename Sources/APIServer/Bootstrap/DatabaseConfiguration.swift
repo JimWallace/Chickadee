@@ -590,4 +590,5 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCompositeContributions())
     // Class composite, slice 6: the reference render of each slot.
     app.migrations.add(CreateCompositeReferences())
+    app.migrations.add(CreateCompositeSpares())
 }

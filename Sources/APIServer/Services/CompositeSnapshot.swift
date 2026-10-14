@@ -8,8 +8,10 @@
 // A slot shows its latest passing contribution. With no passing contribution
 // it shows its latest failed one, unless `showFailed` is off. With two
 // students on one slot (a second round), the latest passing one wins. A slot
-// is "rendering" while a submission by its holder waits for a runner or is
-// grading: the submission status the server already stores.
+// with no passing contribution shows a passing spare (slice 6b), and then,
+// with `emptySlots: reference`, its reference render. A slot is "rendering"
+// while a submission by its holder waits for a runner or is grading: the
+// submission status the server already stores.
 
 import Core
 import Fluent
@@ -102,20 +104,23 @@ struct CompositeSnapshot: Content, Equatable {
             shown[slot] = newestFirst.first(where: \.passed) ?? (spec.showFailed ? newestFirst.first : nil)
         }
 
-        // With `emptySlots: reference`, a slot that shows nothing shows its
-        // reference render, dimmed. Never in the student view: a render is a
-        // visible answer.
-        let references =
-            spec.emptySlots == .reference && onlyUserID == nil
-            ? try await shownReferences(assignmentID: assignmentID, spec: spec, excluding: Set(shown.keys), on: db)
-            : [:]
+        let fills = onlyUserID == nil ? try await emptySlotFills(scope, shown: shown, on: db) : Fills()
+        let spares = fills.spares
+        let references = fills.references
+        // A passing spare replaces a failed contribution on show.
+        shown = shown.filter { spares[$0.key] == nil }
 
-        let owners = includeOwners ? try await handles(of: Array(slotByUser.keys), inCourse: courseID, on: db) : [:]
+        let ownerIDs = Array(slotByUser.keys) + spares.values.map(\.userID)
+        let owners = includeOwners ? try await handles(of: ownerIDs, inCourse: courseID, on: db) : [:]
         let listed = Set(shown.keys).union(renderingSlots).union(holderBySlot.keys).union(references.keys)
+            .union(spares.keys)
         let slots = listed.sorted().map { slot in
             let row = shown[slot]
-            let state = row.map { $0.passed ? "passed" : "failed" } ?? (references[slot] == nil ? "empty" : "reference")
-            let ownerID = row?.userID ?? holderBySlot[slot]
+            let state =
+                spares[slot] != nil
+                ? "passed"
+                : row.map { $0.passed ? "passed" : "failed" } ?? (references[slot] == nil ? "empty" : "reference")
+            let ownerID = spares[slot]?.userID ?? row?.userID ?? holderBySlot[slot]
             return Slot(
                 slot: slot, state: state, rendering: renderingSlots.contains(slot),
                 owner: ownerID.flatMap { owners[$0] })
@@ -128,42 +133,58 @@ struct CompositeSnapshot: Content, Equatable {
             guard since.map({ changed >= $0 }) ?? true else { return nil }
             return Pixels(slot: slot, data: row.data)
         }
-        // A reference pixel is sent on every poll that asks for pixels. A
-        // slot can fall back to its render when a contribution is deleted,
-        // and a deleted row moves no cursor, so `since` cannot see it.
+        // A spare or a reference pixel is sent on every poll that asks for
+        // pixels. A slot can fall back to one when a row is deleted, and a
+        // deleted row moves no cursor, so `since` cannot see it.
         if since != .max {
-            pixels += references.keys.sorted().compactMap { slot in
-                references[slot]?.data.map { Pixels(slot: slot, data: $0) }
-            }
+            pixels += spares.compactMap { slot, spare in spare.data.map { Pixels(slot: slot, data: $0) } }
+            pixels += references.compactMap { slot, reference in reference.data.map { Pixels(slot: slot, data: $0) } }
         }
         pixels.sort { $0.slot < $1.slot }
-        let cursor = (rows.map { millis($0.updatedAt) } + references.values.map { millis($0.updatedAt) }).max() ?? 0
+        let changes = rows.map(\.updatedAt) + spares.values.map(\.updatedAt) + references.values.map(\.updatedAt)
+        let cursor = changes.map(millis).max() ?? 0
 
         return CompositeSnapshot(
             cursor: String(cursor),
-            complete: shown.values.filter(\.passed).count,
+            complete: shown.values.filter(\.passed).count + spares.count,
             total: spec.layout.slotCount,
             slots: slots,
             pixels: pixels)
     }
 
-    /// The passing reference renders of the slots in `excluding`'s
-    /// complement, by slot. A render whose length is not the spec's (the
-    /// spec changed after it was prepared) is left out.
-    private static func shownReferences(
-        assignmentID: UUID, spec: CompositeSpec, excluding: Set<Int>, on db: any Database
-    ) async throws -> [Int: APICompositeReference] {
+    /// What fills the slots that show no passing contribution. Never in the
+    /// student view: a student sees only their own slot.
+    struct Fills {
+        var spares: [Int: APICompositeSpare] = [:]
+        var references: [Int: APICompositeReference] = [:]
+    }
+
+    /// A passing spare fills a slot first (docs/class-composite.md,
+    /// slice 6b). With `emptySlots: reference`, a slot that shows nothing
+    /// else shows its reference render, dimmed. A row whose length is not the
+    /// spec's (the spec changed after it was made) is left out.
+    private static func emptySlotFills(
+        _ scope: Scope, shown: [Int: APICompositeContribution], on db: any Database
+    ) async throws -> Fills {
+        let spec = scope.spec
+        let count = spec.layout.slotCount
         let shape = spec.contribution
-        let bytes = shape.width * shape.height * shape.frames * shape.format.channels
-        let base64Length = (bytes + 2) / 3 * 4
-        var result: [Int: APICompositeReference] = [:]
-        for row in try await APICompositeReference.query(on: db).filter(\.$assignmentID == assignmentID).all()
-        where row.passed && !excluding.contains(row.slot) && row.slot < spec.layout.slotCount
-            && row.data?.utf8.count == base64Length
-        {
-            result[row.slot] = row
+        let length = (shape.width * shape.height * shape.frames * shape.format.channels + 2) / 3 * 4
+        func fits(_ slot: Int, _ data: String?) -> Bool { slot < count && data?.utf8.count == length }
+
+        var fills = Fills()
+        let filled = Set(shown.filter(\.value.passed).keys)
+        for row in try await APICompositeSpare.query(on: db).filter(\.$assignmentID == scope.assignmentID).all()
+        where row.passed && !filled.contains(row.slot) && fits(row.slot, row.data) {
+            fills.spares[row.slot] = row
         }
-        return result
+        guard spec.emptySlots == .reference else { return fills }
+        let covered = Set(shown.keys).union(fills.spares.keys)
+        for row in try await APICompositeReference.query(on: db).filter(\.$assignmentID == scope.assignmentID).all()
+        where row.passed && !covered.contains(row.slot) && fits(row.slot, row.data) {
+            fills.references[row.slot] = row
+        }
+        return fills
     }
 
     /// The class handle of each student, by user ID. A student with no handle

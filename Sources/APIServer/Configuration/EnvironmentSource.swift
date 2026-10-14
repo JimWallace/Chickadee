@@ -28,8 +28,17 @@
 // environment and the test sees a wrong VALUE — a visible, debuggable failure —
 // rather than a silent race that kills the process.
 
+//
+// THE READ GOES THROUGH SWIFT CONFIGURATION. `get` asks a `ConfigReader` over an
+// `EnvironmentVariablesProvider`, which is the type and the provider that
+// Vapor 5's `Application` reads its own settings through
+// (docs/vapor-5-migration.md). The provider is built from the environment at
+// each read, not once, so a value Vapor loads from a `.env` file at
+// `Application.make` is seen exactly as before. All reads happen at startup.
+// The variable names do not change, and no variable is added.
+
+import Configuration
 import Foundation
-import Vapor
 
 /// The environment configuration reads from: the real process environment,
 /// unless a test has supplied one for the current task.
@@ -41,8 +50,21 @@ enum EnvironmentSource {
 
     /// One variable, from the override when there is one.
     static func get(_ key: String) -> String? {
-        if let override { return override[key] }
-        return Environment.get(key)
+        reader.string(forKey: configKey(forVariable: key))
+    }
+
+    /// The reader over the current environment (or the test override).
+    static var reader: ConfigReader {
+        ConfigReader(provider: EnvironmentVariablesProvider(environmentVariables: all))
+    }
+
+    /// The configuration key that names the environment variable `name`.
+    ///
+    /// Swift Configuration upper-cases a key's components and joins them with
+    /// `_`, so `oidc.auth.server` names `OIDC_AUTH_SERVER`. Every variable
+    /// Chickadee reads is upper snake case, so the round trip is exact.
+    static func configKey(forVariable name: String) -> ConfigKey {
+        ConfigKey(name.lowercased().split(separator: "_").map(String.init))
     }
 
     /// The whole environment, for the two places that build a CHILD process's

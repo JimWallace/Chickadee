@@ -145,10 +145,15 @@ func collectClaimCandidates(
     // behind everything a human is waiting on. Nobody is watching them land:
     // they feed a progress bar or a backdrop, and a deadline spike is exactly
     // when a student's job must not queue behind them.
-    // The corpus run comes first: one composite can queue more reference
-    // jobs than the scan limit.
+    // Among these, a composite spare comes first: it is the one a student
+    // waits for, though it still waits behind every student job. Then the
+    // corpus run, because one composite can queue more reference jobs than
+    // the scan limit.
     var pendingAggregates: [APISubmission] = []
-    for kind in [APISubmission.Kind.classAggregate, APISubmission.Kind.compositeReference] {
+    let lateKinds = [
+        APISubmission.Kind.compositeSpare, APISubmission.Kind.classAggregate, APISubmission.Kind.compositeReference,
+    ]
+    for kind in lateKinds {
         pendingAggregates += try await APISubmission.query(on: db)
             .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == kind)

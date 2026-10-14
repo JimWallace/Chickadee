@@ -126,6 +126,14 @@ struct ResultRoutes: RouteCollection {
                 }
             }
 
+            // A spare fills its slot for the student its row names. The job
+            // itself belongs to no student, so no grade or attempt changes.
+            if submission.kind == APISubmission.Kind.compositeSpare {
+                await effects.bestEffort("composite_spare", submissionID: collection.submissionID) {
+                    try await CompositeSpares.record(submission: submission, collection: collection, on: req.db)
+                }
+            }
+
             // Coverage, the leaderboard, the match and the class records, best
             // effort: the result is committed, so none of them may fail the
             // report (#1708).

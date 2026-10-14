@@ -17,12 +17,17 @@ set -euo pipefail
 #      failed future, `eventLoop`, `eventLoopGroup` or `.threadPool`. Use
 #      async/await, and `runBlocking` (Utilities/BlockingWork.swift) for blocking
 #      work.
-#   2. No direct `content.decode`, on any receiver. Call
+#   2. No direct `content.decode` or `content.get`, on any receiver
+#      (Vapor 5 has no `content.get(_:at:)`). Call
 #      `decodeContent(T.self)`: on a request it is in
 #      Helpers/Request+DecodeContent.swift, and on a client response it is in
 #      Helpers/ClientResponse+Body.swift. Those two files are the only places
 #      that change when the decode becomes async.
-#   3. Under Tests/, no direct VaporTesting request API and no hand-built
+#   3. No wait on a future: no `).get()` and no `body.collect(max:)`, which
+#      returns one. The two that remain are in Helpers/Request+DecodeContent.swift
+#      (`collectBody`) and Bootstrap/UnchangedSessionSkippingDriver.swift, which
+#      wraps Fluent's future-based session driver until Fluent 5.
+#   4. Under Tests/, no direct VaporTesting request API and no hand-built
 #      `Request`: no `.testing(`, no `TestingHTTPResponse` or
 #      `TestingHTTPRequest`, and no `Request(application:`. Call
 #      `app.asyncTest`, `app.asyncSendRequest` or `makeTestRequest`, and name
@@ -67,7 +72,7 @@ if [ -n "$event_loop" ]; then
   status=1
 fi
 
-direct_decode=$(code_matches Sources/ '\bcontent\.decode\(' \
+direct_decode=$(code_matches Sources/ '\bcontent\.(decode|get)\(' \
   'Sources/APIServer/Helpers/Request+DecodeContent.swift' \
   'Sources/APIServer/Helpers/ClientResponse+Body.swift')
 if [ -n "$direct_decode" ]; then
@@ -77,6 +82,20 @@ if [ -n "$direct_decode" ]; then
   echo
   echo "Call try await decodeContent(T.self) instead (Request+DecodeContent.swift"
   echo "or ClientResponse+Body.swift in Sources/APIServer/Helpers/)."
+  echo
+  status=1
+fi
+
+future_wait=$(code_matches Sources/ '\)\.get\(\)|\.collect\(max:' \
+  'Sources/APIServer/Helpers/Request+DecodeContent.swift' \
+  'Sources/APIServer/Bootstrap/UnchangedSessionSkippingDriver.swift')
+if [ -n "$future_wait" ]; then
+  echo "ERROR: code waits on an EventLoopFuture (Vapor 5 has none)."
+  echo
+  echo "$future_wait" | sed 's/^/  /'
+  echo
+  echo "Call the async API. To collect a request body, call try await"
+  echo "req.collectBody() (Sources/APIServer/Helpers/Request+DecodeContent.swift)."
   echo
   status=1
 fi

@@ -354,12 +354,9 @@ extension WebRoutes {
     func submissionPage(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
 
-        guard
-            let subID = req.parameters.get("submissionID"),
+        guard let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
+        else { throw Abort(.notFound) }
 
         // Per-course staff (TA+ or admin) see instructor-level detail for this
         // submission's course; everyone else may view only their own
@@ -492,7 +489,8 @@ extension WebRoutes {
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         let page = PageRequestContext(request: req)
-        return try await HTMLResponse { SubmissionPage(page: page, result: ctx) }.encodeResponse(for: req)
+        let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
+        return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
     }
 
     // MARK: - submissionPage helpers

@@ -49,6 +49,10 @@ let package = Package(
         // event loop. Vapor 5 removes event loops and stops re-exporting NIO
         // (docs/vapor-5-migration.md).
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.104.0"),
+        // Configuration reads go through its `ConfigReader`, the type Vapor 5's
+        // `Application` takes (docs/vapor-5-migration.md). The default traits
+        // are kept off: only the environment-variable provider is used.
+        .package(url: "https://github.com/apple/swift-configuration.git", from: "1.2.2", traits: []),
         // SwiftLint via SimplyDanny's plugin distribution: ships a pre-built
         // binary so CI / fresh checkouts don't pay a SwiftLint-from-source build.
         // Invoked on demand via `scripts/swiftlint.sh`; no `plugins:` entry on
@@ -129,6 +133,7 @@ let package = Package(
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "Configuration", package: "swift-configuration"),
                 // The server's own interpreter spawn (PersonalizationEvaluator)
                 // runs from the multithreaded Vapor process — the shape
                 // Foundation's Process deadlocked in (#1139), which is why the
