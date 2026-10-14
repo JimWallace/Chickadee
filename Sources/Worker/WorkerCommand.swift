@@ -83,9 +83,9 @@ struct WorkerCommand: AsyncParsableCommand {
         // RUNNER_SHARED_SECRET from /proc/<runner pid>/environ and sign worker
         // API calls, for example to report its own result. `--sandbox` blocks
         // the read too, but only where the host allows user namespaces.
-        let inspectionRefused = chickadee_refuse_process_inspection() == 0
+        let processInspection = Self.processInspectionStatus(chickadee_refuse_process_inspection())
 
-        switch Self.workerSecretFlagUse(flagSet: workerSecret != nil, sandboxed: sandbox) {
+        switch workerSecretFlagUse {
         case .notUsed:
             break
         case .deprecated(let warning):
@@ -187,7 +187,7 @@ struct WorkerCommand: AsyncParsableCommand {
                 "api_base_url": apiBaseURL,
                 "max_jobs": maxJobs,
                 "sandbox_mode": sandboxLabel,
-                "process_inspection": inspectionRefused ? "refused" : "allowed",
+                "process_inspection": processInspection,
                 "test_setup_cache_dir": cacheDirPath,
             ].merging(jobLimitLogFields(sandboxCheck)) { first, _ in first })
         if let runnerProfile {
@@ -206,6 +206,17 @@ struct WorkerCommand: AsyncParsableCommand {
         try await daemon.run()
     }
 
+    /// The `process_inspection` field of the startup log: `refused` when
+    /// `chickadee_refuse_process_inspection()` returned 0, else `allowed`.
+    static func processInspectionStatus(_ returnCode: Int32) -> String {
+        returnCode == 0 ? "refused" : "allowed"
+    }
+
+    /// What the runner does with this command's `--worker-secret`.
+    var workerSecretFlagUse: WorkerSecretFlagUse {
+        Self.workerSecretFlagUse(flagSet: workerSecret != nil, sandboxed: sandbox)
+    }
+
     /// Makes SIGTERM drain the runner rather than stop it (`WorkerDaemon.drain`).
     /// `docker stop`, `docker compose up` on a new image and a host shutdown
     /// all send SIGTERM, then SIGKILL after the container's
@@ -214,10 +225,20 @@ struct WorkerCommand: AsyncParsableCommand {
     /// signal, so before this the runner ignored SIGTERM and was always
     /// killed, with its running jobs, when the grace period ended.
     static func drainOnTerminate(_ daemon: WorkerDaemon) -> any DispatchSourceSignal {
+        let source = terminateSource(draining: daemon)
+        source.resume()
+        return source
+    }
+
+    /// The SIGTERM source for `drainOnTerminate`, not yet resumed. It ignores
+    /// SIGTERM first. Until the source registers, a SIGTERM would otherwise
+    /// take the default action and stop the runner, and on macOS the kqueue
+    /// path needs the signal ignored for as long as the source lives. On
+    /// Linux, libdispatch installs its own handler when the source registers.
+    static func terminateSource(draining daemon: WorkerDaemon) -> any DispatchSourceSignal {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
         source.setEventHandler { Task { await daemon.drain() } }
-        source.resume()
         return source
     }
 
@@ -273,14 +294,25 @@ struct WorkerCommand: AsyncParsableCommand {
             writeToStandardError(warning)
         }
         let (cgroups, cgroupsStatus) = await Self.checkJobCgroups(workRoot: workRoot)
-        if cgroups != nil, let containerLimit = JobMemoryBudget.readContainerLimit(),
-            let warning = JobMemoryBudget(
-                containerLimitBytes: containerLimit, maxJobs: maxJobs, memoryLimitMegabytes: jobMemoryLimit
-            ).warning
+        if let warning = Self.memoryBudgetWarning(
+            cgroups: cgroups, containerLimitBytes: JobMemoryBudget.readContainerLimit(),
+            maxJobs: maxJobs, memoryLimitMegabytes: jobMemoryLimit)
         {
             writeToStandardError(warning)
         }
         return SandboxCheck(processLimitEnforced: enforced, cgroups: cgroups, cgroupsStatus: cgroupsStatus)
+    }
+
+    /// The container memory budget warning, or `nil`. Without the job cgroups
+    /// `--job-memory-limit` is not applied, so there is no budget to check;
+    /// the cgroups warning already says that the limit is off.
+    static func memoryBudgetWarning(
+        cgroups: JobCgroups?, containerLimitBytes: Int?, maxJobs: Int, memoryLimitMegabytes: Int
+    ) -> String? {
+        guard cgroups != nil, let containerLimitBytes else { return nil }
+        return JobMemoryBudget(
+            containerLimitBytes: containerLimitBytes, maxJobs: maxJobs, memoryLimitMegabytes: memoryLimitMegabytes
+        ).warning
     }
 
     /// The job limits as the startup log reports them: each limit, or `none`

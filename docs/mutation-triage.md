@@ -141,6 +141,46 @@ against run 32265903112, two of those three candidates survived the suite and
 both are now killed by `JSONFooterGrammarTests`. An equivalence argument has to
 name the recorded mutation and show THAT one cannot be observed.
 
+**A mutant can survive by disabling the trait that gates its own test.**
+`SandboxedScriptRunner.probe` inverted its exit-code check in the 2026-10-13
+sweep and survived, although `SandboxProbeTests` asserts that the probe passes
+where the sandbox works. That test carries `.requiresSandbox`, and the trait
+asks `sandboxIsAvailable()`, which asks the same `probe`. The mutant made the
+probe fail on the host where the sandbox works, the trait read that as "no
+sandbox", and every sandboxed test skipped, the probe's own test first. A
+survivor in code that a `ConditionTrait` consults is this shape until shown
+otherwise: move the rule into a function the trait does not use and test the
+function (`probeFailure(output:)`), rather than adding another gated test.
+
+**A survivor whose only caller is a running daemon needs the helper, not the
+daemon.** The nine `JobWorkspace.swift` survivors of the same sweep sat in
+helpers that `process(_:)` calls on an actor, with `inout` timings and readings
+that a test cannot pass across the actor boundary. The helpers read only the
+daemon's constants, so they are `nonisolated` now and a test calls them on a
+daemon directly. The alternative, a test that runs a whole job to look at one
+log line, is what let the nine survive for three sweeps.
+
+**A test that sends a signal to its own process waits for the source to
+register, and the `SIG_IGN` in front of the source is not observable from
+there.** `WorkerCommand.drainOnTerminate` ignores SIGTERM and then resumes a
+`DispatchSource`. In a cold process the registration happens on the manager
+queue after `resume()`, and a signal that arrives before it is dropped by
+`SIG_IGN`: measured, a `kill` right after `resume()` was lost 3 of 3 times,
+one 50 ms later was delivered 3 of 3. So a test that wants the drain waits on
+the source's registration handler, which libdispatch invokes at once when the
+registration already happened, and sends the signal from a child process
+(`#expect(processExitsWith:)`), because the disposition is process-wide. The
+deleted `signal(SIGTERM, SIG_IGN)` then survived two after passes, and three
+measurements in the child say why: libdispatch installs its own handler when
+the source registers, so after that the process survives with or without the
+ignore; the child inherits SIGTERM blocked, so an early signal stays pending
+until the source reads it; and the child's manager thread is warm, so the
+source has registered before `drainOnTerminate` returns and no signal can be
+sent into the window at all. The ignore covers that window in a cold runner
+and the macOS kqueue path for as long as the source lives. It is pinned where
+it is observable: `terminateSource(draining:)` hands the source back before it
+is resumed, and the test reads the disposition there.
+
 ## What a finished survivor looks like
 
 Either a test that has been seen to fail under its mutation, or a sentence

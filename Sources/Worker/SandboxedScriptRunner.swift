@@ -268,9 +268,27 @@ extension SandboxedScriptRunner {
             workDir: probeDir,
             timeLimitSeconds: 10,
             launchErrorPrefix: "Failed to launch sandbox probe")
+        return probeFailure(output: output)
+    }
+
+    /// What `probe` reports for the probe command's output: `nil` when it
+    /// passed, else the command's complaint, or its exit code when it said
+    /// nothing.
+    static func probeFailure(output: ScriptOutput) -> String? {
         guard output.exitCode != 0 else { return nil }
         let detail = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         return detail.isEmpty ? "probe exited with code \(output.exitCode)" : detail
+    }
+
+    /// A fresh child directory of `workDir` for a probe to run in, as a job
+    /// runs in a child of the work root, or `nil` when `workDir` cannot be
+    /// written. The caller removes it.
+    static func makeProbeDirectory(in workDir: URL) -> URL? {
+        let probeDir = workDir.appendingPathComponent(
+            "chickadee-sandbox-probe-\(UUID().uuidString)", isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: probeDir, withIntermediateDirectories: false)) != nil
+        else { return nil }
+        return probeDir
     }
 
     /// Checks that the kernel applies `processLimit` to a sandboxed script.
@@ -285,10 +303,7 @@ extension SandboxedScriptRunner {
     /// nothing to warn about that the platform's sandbox could change.
     static func processLimitIsEnforced(workDir: URL) async -> Bool {
         #if os(Linux)
-        let probeDir = workDir.appendingPathComponent(
-            "chickadee-sandbox-probe-\(UUID().uuidString)", isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: probeDir, withIntermediateDirectories: false)) != nil
-        else { return false }
+        guard let probeDir = makeProbeDirectory(in: workDir) else { return false }
         defer { try? FileManager.default.removeItem(at: probeDir) }
         let output = await executeScriptLaunch(
             sandboxWrap(
@@ -325,10 +340,9 @@ extension SandboxedScriptRunner {
     /// reason, and the runner grades without them.
     static func jobCgroupProbe(cgroups: JobCgroups, workDir: URL) async -> String? {
         #if os(Linux)
-        let probeDir = workDir.appendingPathComponent(
-            "chickadee-sandbox-probe-\(UUID().uuidString)", isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: probeDir, withIntermediateDirectories: false)) != nil
-        else { return "cannot write to the work root \(workDir.path)" }
+        guard let probeDir = makeProbeDirectory(in: workDir) else {
+            return "cannot write to the work root \(workDir.path)"
+        }
         defer { try? FileManager.default.removeItem(at: probeDir) }
         let megabytes = 64
         let cgroup: JobCgroup

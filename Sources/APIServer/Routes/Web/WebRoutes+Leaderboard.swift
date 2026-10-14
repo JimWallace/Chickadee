@@ -38,8 +38,7 @@ extension WebRoutes {
         if req.query[String.self, at: "present"] == "1" {
             // Present mode is for the room, and only staff start it.
             guard isStaff else { throw Abort(.notFound) }
-            return try await leaderboardPresentPage(
-                req: req, user: user, setup: setup, activity: activity)
+            return try await leaderboardPresentPage(req: req, user: user, setup: setup, activity: activity)
         }
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
@@ -59,20 +58,17 @@ extension WebRoutes {
         let reader = LeaderboardReader.page(user: user, isStaff: isStaff)
         let board =
             showsMetricBoard
-            ? try await buildLeaderboard(
-                setup: setup, reader: reader, showAll: showingAll, on: req.db)
+            ? try await buildLeaderboard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : LeaderboardBoard.empty
         let standingsBoard =
             showsStandings
-            ? try await buildStandingsBoard(
-                setup: setup, reader: reader, showAll: showingAll, on: req.db)
+            ? try await buildStandingsBoard(setup: setup, reader: reader, showAll: showingAll, on: req.db)
             : StandingsBoard.empty
         let champion = try await buildChampionPresentation(
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
         let tournament =
             showsBracket
-            ? try await buildTournamentPresentation(
-                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+            ? try await buildTournamentPresentation(setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
             : nil
         let union =
             showsUnion
@@ -81,6 +77,7 @@ extension WebRoutes {
                 allURL: "\(boardURL)?all=1", on: req.db)
             : nil
 
+        let pollsLive = activity.window.map { $0.state(at: Date()) != .afterClose } ?? false
         let listedCount = showsStandings ? standingsBoard.rankedCount : board.rankedCount
         let session = LiveSessionPresentation.make(activity)
         let presentation =
@@ -104,7 +101,9 @@ extension WebRoutes {
                 showingAll: showingAll && !isStaff,
                 allURL: "\(boardURL)?all=1",
                 boardURL: boardURL,
-                showFilter: showingAll && listedCount >= LeaderboardBoard.filterThreshold,
+                // A live board grows during the session, so it always has
+                // the box; a still one has it from the threshold up.
+                showFilter: showingAll && (listedCount >= LeaderboardBoard.filterThreshold || pollsLive),
                 filterPlaceholder: isStaff ? "Filter by handle or name…" : "Filter by handle…",
                 pollURL: showingAll && !isStaff
                     ? "\(boardURL)?fragment=body&all=1" : "\(boardURL)?fragment=body",
@@ -123,6 +122,10 @@ extension WebRoutes {
                 hasUnion: union != nil,
                 union: union,
                 showsComposite: showsComposite,
+                // The composite is for the projector: only staff read its board.
+                compositeBoard: isStaff
+                    ? try await CompositeBoardPresentation.build(
+                        setup: setup, activity: activity, assignment: assignment, on: req.db) : nil,
                 hasWindow: session != nil,
                 window: session,
                 // Two decisions, deliberately not one nil. Whether the page
@@ -130,7 +133,7 @@ extension WebRoutes {
                 // just an open assignment and says nothing — while whether it
                 // refreshes is about whether anything can still change, which
                 // an open-ended session emphatically can.
-                pollsLive: activity.window.map { $0.state(at: Date()) != .afterClose } ?? false,
+                pollsLive: pollsLive,
                 hasPollUntil: activity.window?.closesAtISO != nil,
                 pollUntilISO: activity.window?.closesAtISO ?? "")
 

@@ -41,6 +41,9 @@ struct SubmissionPage: HTML {
                         }
                     }
                 }
+                if let tile = result.compositeTile {
+                    CompositeTileSection(tile: tile)
+                }
                 if result.isPending {
                     div(.class("pending-box")) {
                         div(.class("spinner")) {}
@@ -49,6 +52,10 @@ struct SubmissionPage: HTML {
                 } else {
                     results
                 }
+            }
+            if result.compositeTile != nil {
+                script(.src(page.asset("/class-composite-core.js"))) {}
+                script(.src(page.asset("/class-composite.js"))) {}
             }
         }
     }

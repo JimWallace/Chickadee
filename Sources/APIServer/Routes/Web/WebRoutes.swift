@@ -9,6 +9,7 @@
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
 //   GET  /testsetups/:id/notebook   → NotebookPage    (JupyterLite in-browser editor)
 //   GET  /testsetups/:id/leaderboard → LeaderboardPage (class activity ranking)
+//   GET  /testsetups/:id/composite  → class composite JSON (slot states, pixels)
 //   GET  /testsetups/:id/arena/…     → the projector arena's JSON (staff)
 //   GET  /submissions/:id           → SubmissionPage  (live results)
 
@@ -26,6 +27,8 @@ struct WebRoutes: RouteCollection {
         // A class activity's ranking (docs/class-activities.md); 404 unless the
         // assignment has one, and for students unless it is published.
         routes.get("testsetups", ":testSetupID", "leaderboard", use: leaderboardPage)
+        // A class composite's slot states and pixels (docs/class-composite.md).
+        routes.get("testsetups", ":testSetupID", "composite", use: compositeSnapshot)
         // The projector arena plays a browser-graded tournament from the
         // present page (WebRoutes+TournamentArena.swift). Course staff only.
         routes.get("testsetups", ":testSetupID", "arena", "next", use: arenaNextMatch)

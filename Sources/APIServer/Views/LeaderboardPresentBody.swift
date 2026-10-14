@@ -35,7 +35,10 @@ struct LeaderboardPresentBody: HTML {
                 }
             }
         }
-        if board.showsBracket {
+        if board.compositeStage != nil {
+            // The page draws the composite outside this polled region, so a
+            // refresh does not replace its canvas.
+        } else if board.showsBracket {
             if board.hasWinner, let avatar = board.winnerAvatar {
                 PresentCard(label: "Winner", kicker: "Winner", handle: board.winnerHandle, avatar: avatar)
             }
@@ -71,10 +74,26 @@ struct LeaderboardPresentBody: HTML {
                 p(.class("empty")) { "Nobody is on the board yet." }
             }
         }
+        if board.compositeStage == nil {
+            PresentFooter(board: board)
+        }
+    }
+}
+
+/// The wall's last line: who is on the board, and Live while it polls. A
+/// class composite's page draws it under the image instead.
+struct PresentFooter: HTML {
+    let board: PresentModePresentation
+
+    var body: some HTML {
         footer(.class("present-footer")) {
-            strong { "\(board.showsBracket ? board.entrantCount : board.rankedCount) on the board" }
-            " "
-            span { "Find yourself by your bird and handle on your own Leaderboard page" }
+            if board.compositeStage == nil {
+                strong { "\(board.showsBracket ? board.entrantCount : board.rankedCount) on the board" }
+                " "
+                span { "Find yourself by your bird and handle on your own Leaderboard page" }
+            } else {
+                span { "Your own tile is on your submission page" }
+            }
             if board.pollsLive {
                 " "
                 span(.class("tier tier-preview")) { "Live" }

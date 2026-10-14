@@ -152,19 +152,28 @@
     // page declares neither. .filter-status is styled; the message reuses the
     // global .empty look and takes a js- hook, since it adds no styling of its
     // own. JS mints structure only.
+    //
+    // The message sits beside the table, so a polled region that replaces the
+    // table (the leaderboard's) also removes the message. A cached message
+    // that has left the document is minted again beside the new table.
     function chromeFor(input, table) {
         var chrome = chromeCache.get(input);
-        if (chrome) return chrome;
-        chrome = { status: null, message: null };
-        if (typeof document !== 'undefined' && document.createElement) {
-            var group = input.parentNode;
-            if (group && group.appendChild) {
-                chrome.status = document.createElement('span');
-                chrome.status.className = 'filter-status';
-                chrome.status.setAttribute('role', 'status');
-                chrome.status.setAttribute('aria-live', 'polite');
-                group.appendChild(chrome.status);
+        if (chrome && !(chrome.message && chrome.message.isConnected === false)) return chrome;
+        if (!chrome) {
+            chrome = { status: null, message: null };
+            if (typeof document !== 'undefined' && document.createElement) {
+                var group = input.parentNode;
+                if (group && group.appendChild) {
+                    chrome.status = document.createElement('span');
+                    chrome.status.className = 'filter-status';
+                    chrome.status.setAttribute('role', 'status');
+                    chrome.status.setAttribute('aria-live', 'polite');
+                    group.appendChild(chrome.status);
+                }
             }
+        }
+        chrome.message = null;
+        if (typeof document !== 'undefined' && document.createElement) {
             var anchor = (table.closest && table.closest('.table-scroll')) || table;
             if (anchor.parentNode && anchor.parentNode.insertBefore) {
                 chrome.message = document.createElement('p');
@@ -186,7 +195,7 @@
         // flex gap) to a page nobody has filtered.
         var chrome = chromeCache.get(input);
         if (!chrome && !filtering) return;
-        chrome = chrome || chromeFor(input, table);
+        chrome = chromeFor(input, table);
         if (chrome.status) {
             chrome.status.textContent = filtering ? ('Showing ' + shown + ' of ' + total) : '';
         }

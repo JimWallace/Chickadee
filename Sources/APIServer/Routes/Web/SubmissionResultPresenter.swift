@@ -510,7 +510,8 @@ extension WebRoutes {
             leaderboardURL: decorations.leaderboardURL,
             diffURL: decorations.diffURL,
             sourceCommit: SubmissionSourceCommitView(submission: submission),
-            releasedFeedback: decorations.releasedFeedback.map(ProseParagraphs.split) ?? []
+            releasedFeedback: decorations.releasedFeedback.map(ProseParagraphs.split) ?? [],
+            compositeTile: decorations.compositeTile
         )
     }
 }
@@ -811,4 +812,6 @@ struct SubmissionDecorations {
     let diffURL: String?
     /// Released AI-assisted feedback written against this submission.
     var releasedFeedback: String?
+    /// This submission's contribution to a class composite, if any.
+    var compositeTile: CompositeTilePanel?
 }

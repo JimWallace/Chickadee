@@ -483,7 +483,9 @@ extension WebRoutes {
                         "/instructor/\($0.publicID)/submissions/\(subID)/diff"
                     } : nil,
                 releasedFeedback: try await ReflectionFeedbackService.releasedFeedback(
-                    for: submission, assignment: submissionAssignment, on: req.db)
+                    for: submission, assignment: submissionAssignment, on: req.db),
+                compositeTile: try await CompositeTilePanel.make(
+                    for: submission, displayCollection, setupProps, submissionAssignment, viewer: user, on: req.db)
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )

@@ -83,6 +83,9 @@ struct LeaderboardPresentation {
     /// (docs/class-composite.md). Defaulted, so a context built before the
     /// composite existed still compiles and still shows its own board.
     var showsComposite: Bool = false
+    /// The composite's canvas, progress and slot holders; nil on every other
+    /// kind and for a student.
+    var compositeBoard: CompositeBoardPresentation?
     /// True when the page shows the session's state line. A COPY question
     /// only — whether the page refreshes is `pollsLive`, which answers a
     /// different one, and an open-ended session says yes to that and no to
