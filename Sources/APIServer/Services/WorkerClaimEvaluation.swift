@@ -145,12 +145,17 @@ func collectClaimCandidates(
     // behind everything a human is waiting on. Nobody is watching them land:
     // they feed a progress bar or a backdrop, and a deadline spike is exactly
     // when a student's job must not queue behind them.
-    let pendingAggregates = try await APISubmission.query(on: db)
-        .filter(\.$status == SubmissionStatus.pending.rawValue)
-        .filter(\.$kind ~~ [APISubmission.Kind.classAggregate, APISubmission.Kind.compositeReference])
-        .sort(\.$submittedAt, .ascending)
-        .limit(claimCandidateScanLimit)
-        .all()
+    // The corpus run comes first: one composite can queue more reference
+    // jobs than the scan limit.
+    var pendingAggregates: [APISubmission] = []
+    for kind in [APISubmission.Kind.classAggregate, APISubmission.Kind.compositeReference] {
+        pendingAggregates += try await APISubmission.query(on: db)
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .filter(\.$kind == kind)
+            .sort(\.$submittedAt, .ascending)
+            .limit(claimCandidateScanLimit)
+            .all()
+    }
     for aggregate in pendingAggregates {
         if let cached = resolvedBySetupID[aggregate.testSetupID] {
             candidates.append((aggregate, cached.0, cached.1))

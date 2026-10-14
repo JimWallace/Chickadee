@@ -23,16 +23,21 @@ enum CompositeReferences {
         case notComposite
         /// The assignment has no reference solution to render.
         case noSolution
+        /// Another "Prepare reference" for the assignment saved first.
+        case concurrentPrepare
     }
 
     /// Queues one reference job for each slot, replacing any earlier render.
     /// Returns the number of jobs queued.
+    ///
+    /// The solution files are written first. Then one transaction removes the
+    /// earlier render and saves every job with its row, so a runner never
+    /// claims a job before its row names the slot, and a failure leaves the
+    /// earlier render as it was.
     @discardableResult
     static func prepare(
         assignment: APIAssignment, setup: APITestSetup, app: Application, on db: any Database
-    )
-        async throws -> Int
-    {
+    ) async throws -> Int {
         guard let assignmentID = assignment.id, let setupID = setup.id,
             let activity = setup.decodedManifest()?.activity, activity.kind == .classComposite,
             let spec = activity.composite
@@ -43,31 +48,65 @@ enum CompositeReferences {
         else { throw PrepareError.noSolution }
         let solutionData = try Data(contentsOf: URL(fileURLWithPath: solution.zipPath))
 
-        // An earlier render goes, with any of its jobs still waiting: the
-        // submission rows cascade to their reference rows.
-        let earlier = try await APICompositeReference.query(on: db)
-            .filter(\.$assignmentID == assignmentID).all().map(\.submissionID)
-        if !earlier.isEmpty {
-            try await APISubmission.query(on: db).filter(\.$id ~~ earlier).delete()
-        }
-
-        for slot in 0..<spec.layout.slotCount {
-            let copied = try copySubmissionFile(from: solution.zipPath, into: app.submissionsDirectory)
-            let submission = APISubmission(
-                id: copied.id, testSetupID: setupID, zipPath: copied.path, attemptNumber: 1,
-                filename: solution.filename, userID: nil, kind: APISubmission.Kind.compositeReference)
-            let materialized = await materializeValidationGrading(
-                submission: submission, setupID: setupID, templateNotebookData: solutionData,
-                testSetupsDirectory: app.testSetupsDirectory, app: app, on: db)
-            // One transaction: a runner never claims the job before its
-            // reference row names the slot.
-            try await db.transaction { tx in
-                try await materialized.saveClaimable(on: tx)
-                try await APICompositeReference(assignmentID: assignmentID, slot: slot, submissionID: copied.id)
-                    .create(on: tx)
+        var jobs: [(id: String, job: MaterializedValidationSubmission)] = []
+        var written: [String] = []
+        let removed: [String]
+        do {
+            for _ in 0..<spec.layout.slotCount {
+                let copied = try copySubmissionFile(from: solution.zipPath, into: app.submissionsDirectory)
+                written += [copied.path, copied.path + ".grading"]
+                let submission = APISubmission(
+                    id: copied.id, testSetupID: setupID, zipPath: copied.path, attemptNumber: 1,
+                    filename: solution.filename, userID: nil, kind: APISubmission.Kind.compositeReference)
+                // The slot inputs join at claim time (`gradingInputs`), so one
+                // materialization serves every slot.
+                if let first = jobs.first {
+                    jobs.append((copied.id, try first.job.cloned(as: submission)))
+                } else {
+                    let job = await materializeValidationGrading(
+                        submission: submission, setupID: setupID, templateNotebookData: solutionData,
+                        testSetupsDirectory: app.testSetupsDirectory, app: app, on: db)
+                    jobs.append((copied.id, job))
+                }
             }
+            let queued = jobs
+            removed = try await db.transaction { tx in
+                let removed = try await removeEarlier(assignmentID: assignmentID, testSetupID: setupID, on: tx)
+                for (slot, entry) in queued.enumerated() {
+                    try await entry.job.saveClaimable(on: tx)
+                    try await APICompositeReference(assignmentID: assignmentID, slot: slot, submissionID: entry.id)
+                        .create(on: tx)
+                }
+                return removed
+            }
+        } catch {
+            for path in written { try? FileManager.default.removeItem(atPath: path) }
+            if let error = error as? any DatabaseError, error.isConstraintFailure {
+                throw PrepareError.concurrentPrepare
+            }
+            throw error
         }
+        for path in removed { try? FileManager.default.removeItem(atPath: path) }
         return spec.layout.slotCount
+    }
+
+    /// Removes the earlier render: every reference row of the assignment, and
+    /// every reference job that no runner holds. A job that a runner holds
+    /// finishes, finds no row, and records nothing. Returns the files of the
+    /// removed jobs, to delete after the commit.
+    private static func removeEarlier(
+        assignmentID: UUID, testSetupID: String, on db: any Database
+    ) async throws -> [String] {
+        try await APICompositeReference.query(on: db).filter(\.$assignmentID == assignmentID).delete()
+        let held = [SubmissionStatus.assigned, .running].map(\.rawValue)
+        let earlier = try await APISubmission.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$kind == APISubmission.Kind.compositeReference)
+            .filter(\.$status !~ held)
+            .all()
+        guard !earlier.isEmpty else { return [] }
+        try await APISubmission.query(on: db).filter(\.$id ~~ earlier.compactMap(\.id)).delete()
+        return earlier.flatMap { [$0.zipPath, $0.zipPath + ".grading"] }
     }
 
     /// The slot inputs of a reference job: the slot its row names.
@@ -77,11 +116,21 @@ enum CompositeReferences {
         -> [String: String]?
     {
         guard let submissionID, let activity = manifest.activity, let spec = activity.composite,
-            let language = AssignmentLanguage.resolve(manifest: manifest),
-            let slot = try? await APICompositeReference.query(on: db)
-                .filter(\.$submissionID == submissionID).first()?.slot
+            let language = AssignmentLanguage.resolve(manifest: manifest)
         else { return nil }
-        return spec.inputs(forSlot: slot).mapValues(language.literal)
+        let row: APICompositeReference?
+        do {
+            row = try await APICompositeReference.query(on: db).filter(\.$submissionID == submissionID).first()
+        } catch {
+            db.logger.warning("composite: reference row lookup for \(submissionID) failed: \(error)")
+            return nil
+        }
+        guard let row else {
+            // A render replaced while this job waited: the job has no slot.
+            db.logger.warning("composite: reference job \(submissionID) has no reference row")
+            return nil
+        }
+        return spec.inputs(forSlot: row.slot).mapValues(language.literal)
     }
 
     /// Stores what a reference job reported for its slot. A payload that is

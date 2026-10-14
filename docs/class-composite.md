@@ -389,8 +389,16 @@ row in `composite_references` that names the slot. The worker gives the job
 that slot's inputs, as it does for a student. The job waits behind every job
 that a person waits on, with the class corpus run. When the result arrives,
 the row stores the pixels and whether the run passed. A payload with the
-wrong shape clears the row. A second press deletes the earlier jobs and rows
-and starts again. The edit page shows "N of M slots ready".
+wrong shape clears the row. A second press deletes the earlier rows, and the
+earlier jobs that no runner holds, and starts again. A job that a runner holds
+finishes and records nothing. Two presses at the same time cannot both save:
+the second one gets an error and the earlier render stays. The edit page shows
+"N of M slots ready".
+
+The render has no student seed, so `=` expressions resolve as they do with no
+seed, and the solution is personalized once for all slots. The render does not
+follow later changes. After a change to the solution, the shape or the
+compositor, press "Prepare reference" again.
 
 The projector shows a render only in a slot that shows no contribution. A
 failed contribution that shows (`showFailed: true`) keeps its slot, so the

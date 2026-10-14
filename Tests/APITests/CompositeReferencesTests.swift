@@ -294,4 +294,149 @@ import VaporTesting
                 afterResponse: { res in #expect(res.body.string.contains("0 of 4 slots ready")) })
         }
     }
+
+    // MARK: - Review cases
+
+    @Test func aHeldJobSurvivesASecondPrepareAndRecordsNothing() async throws {
+        try await withWebRoutesApp { app in
+            let f = try await fixture("held", on: app)
+            try await CompositeReferences.prepare(
+                assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
+            let heldRow = try #require(try await references(f, on: app).first)
+            let held = try #require(try await APISubmission.find(heldRow.submissionID, on: app.db))
+            held.status = SubmissionStatus.running.rawValue
+            try await held.save(on: app.db)
+            var removedFiles: [String] = []
+            for row in try await references(f, on: app).dropFirst() {
+                removedFiles.append(try #require(try await APISubmission.find(row.submissionID, on: app.db)).zipPath)
+            }
+            #expect(removedFiles.allSatisfy { FileManager.default.fileExists(atPath: $0) })
+
+            try await CompositeReferences.prepare(
+                assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
+            #expect(try await APISubmission.find(heldRow.submissionID, on: app.db) != nil, "a runner holds it")
+            #expect(removedFiles.allSatisfy { !FileManager.default.fileExists(atPath: $0) }, "their files go")
+            try await CompositeReferences.record(
+                submission: held,
+                collection: collection(heldRow.submissionID, setupID: f.setupID, data: referencePixels), on: app.db)
+            #expect(try await references(f, on: app).allSatisfy { $0.data == nil }, "the old job fills no new row")
+            let jobs = try await APISubmission.query(on: app.db)
+                .filter(\.$kind == APISubmission.Kind.compositeReference).count()
+            #expect(jobs == 5, "four new jobs and the held one")
+        }
+    }
+
+    @Test func theCorpusRunIsClaimedBeforeReferenceJobs() async throws {
+        try await withWebRoutesApp { app in
+            let f = try await fixture("corpus", on: app)
+            try await CompositeReferences.prepare(
+                assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
+            let path = app.submissionsDirectory + "corpus.ipynb"
+            try #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#.write(
+                to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+            try await APISubmission(
+                id: "corpus_run", testSetupID: f.setupID, zipPath: path, attemptNumber: 1,
+                filename: "corpus.ipynb", userID: nil, kind: APISubmission.Kind.classAggregate
+            ).save(on: app.db)
+            let kinds = try await collectClaimCandidates(on: app.db).map(\.0.kind)
+            #expect(kinds.firstIndex(of: APISubmission.Kind.classAggregate) == kinds.count - 5)
+        }
+    }
+
+    @Test func aSlotThatLosesItsContributionGetsTheRenderAgain() async throws {
+        try await withWebRoutesApp { app in
+            let f = try await fixture("lost", on: app)
+            try await render(f, data: referencePixels, on: app)
+            let user = try await makeTestStudent(on: app, username: "ref_lost")
+            let userID = try user.requireID()
+            try await wrInsertSubmission(id: "sub_lost", testSetupID: f.setupID, userID: userID, on: app)
+            let row = APICompositeContribution(
+                assignmentID: f.assignmentID, userID: userID, slot: 3, submissionID: "sub_lost", submittedAt: Date(),
+                contribution: CompositeContribution(
+                    width: 2, height: 1, frames: 1, format: .gray8, data: studentPixels),
+                passed: true)
+            try await row.create(on: app.db)
+            let scope = CompositeSnapshot.Scope(
+                assignmentID: f.assignmentID, testSetupID: f.setupID, courseID: f.courseID, spec: spec())
+            let before = try await CompositeSnapshot.build(
+                scope, since: nil, onlyUserID: nil, includeOwners: false, on: app.db)
+            #expect(before.slots.last?.state == "passed")
+
+            let cursor: Int64 = try #require(Int64(before.cursor))
+            try await row.delete(on: app.db)
+            let after = try await CompositeSnapshot.build(
+                scope, since: cursor, onlyUserID: nil, includeOwners: false, on: app.db)
+            #expect(after.slots.last?.state == "reference")
+            #expect(after.pixels.last == CompositeSnapshot.Pixels(slot: 3, data: referencePixels))
+
+            let statesOnly = try await CompositeSnapshot.build(
+                scope, since: .max, onlyUserID: nil, includeOwners: false, on: app.db)
+            #expect(statesOnly.pixels.isEmpty)
+        }
+    }
+
+    @Test func aRenderOfAnotherLengthIsNotShown() async throws {
+        try await withWebRoutesApp { app in
+            let f = try await fixture("length", on: app)
+            try await render(f, data: referencePixels, on: app)
+            let row = try #require(try await references(f, on: app).first)
+            row.data = Data([1, 2, 3, 4, 5, 6]).base64EncodedString()
+            try await row.save(on: app.db)
+            let snapshot = try await CompositeSnapshot.build(
+                .init(assignmentID: f.assignmentID, testSetupID: f.setupID, courseID: f.courseID, spec: spec()),
+                since: nil, onlyUserID: nil, includeOwners: false, on: app.db)
+            #expect(snapshot.slots.map(\.slot) == [1, 2, 3])
+        }
+    }
+
+    @Test func theRouteRefusesWithoutASolution() async throws {
+        try await withWebRoutesApp { app in
+            let instructorCookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+            let f = try await fixture("routenosol", withSolution: false, on: app)
+            let editPath = "/instructor/\(f.assignment.publicID)/edit"
+            let (csrf, cookie) = try await csrfFields(for: editPath, cookie: instructorCookie, on: app)
+            try await app.asyncTest(
+                .POST, "/instructor/\(f.assignment.publicID)/activity/composite/reference",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("error=Save+a+reference+solution") == true)
+                })
+            #expect(try await APICompositeReference.query(on: app.db).count() == 0)
+        }
+    }
+
+    @Test func deletingACourseRemovesTheRenders() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await loginAsAdmin("delete_reference_admin", on: app)
+            let f = try await fixture("delete", on: app)
+            try await render(f, data: referencePixels, on: app)
+            let course = try #require(try await APICourse.find(f.courseID, on: app.db))
+            course.isArchived = true
+            // Past the 365-day retention window, so deletion is permitted.
+            course.archivedAt = Date().addingTimeInterval(-400 * 86_400)
+            try await course.save(on: app.db)
+
+            let path = "/admin/courses/\(f.courseID.uuidString)"
+            let (token, boundCookie) = try await csrfFields(for: path, cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "\(path)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+            #expect(try await APICourse.find(f.courseID, on: app.db) == nil)
+            #expect(try await APICompositeReference.query(on: app.db).count() == 0)
+            #expect(
+                try await APISubmission.query(on: app.db)
+                    .filter(\.$kind == APISubmission.Kind.compositeReference).count() == 0)
+        }
+    }
 }

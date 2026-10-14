@@ -247,6 +247,8 @@ extension InstructorDashboardRoutes {
             return req.redirect(to: editPath + "?error=Choose+the+Class+composite+kind+first.")
         } catch CompositeReferences.PrepareError.noSolution {
             return req.redirect(to: editPath + "?error=Save+a+reference+solution+first.")
+        } catch CompositeReferences.PrepareError.concurrentPrepare {
+            return req.redirect(to: editPath + "?error=Another+reference+render+started+at+the+same+time.+Try+again.")
         }
         await AuditLogger.record(
             action: .activityCompositeChanged,

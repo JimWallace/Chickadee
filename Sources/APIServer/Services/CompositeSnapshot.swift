@@ -126,13 +126,13 @@ struct CompositeSnapshot: Content, Equatable {
             guard since.map({ changed >= $0 }) ?? true else { return nil }
             return Pixels(slot: slot, data: row.data)
         }
-        // A reference pixel is sent again when its render changed, or when
-        // the slot's own contributions changed (one that failed or left).
-        pixels += references.keys.sorted().compactMap { slot -> Pixels? in
-            guard let reference = references[slot], let data = reference.data else { return nil }
-            let changed = ([reference.updatedAt] + bySlot[slot, default: []].map(\.updatedAt)).map(millis).max() ?? 0
-            guard since.map({ changed >= $0 }) ?? true else { return nil }
-            return Pixels(slot: slot, data: data)
+        // A reference pixel is sent on every poll that asks for pixels. A
+        // slot can fall back to its render when a contribution is deleted,
+        // and a deleted row moves no cursor, so `since` cannot see it.
+        if since != .max {
+            pixels += references.keys.sorted().compactMap { slot in
+                references[slot]?.data.map { Pixels(slot: slot, data: $0) }
+            }
         }
         pixels.sort { $0.slot < $1.slot }
         let cursor = (rows.map { millis($0.updatedAt) } + references.values.map { millis($0.updatedAt) }).max() ?? 0
