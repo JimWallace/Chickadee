@@ -2,7 +2,8 @@
 // in the page's fixed chrome can point at a table INSIDE a polled region, as
 // the leaderboard's does. The swap replaces that table, so the poll must find
 // the box by its target, re-apply it after the swap, and wait while it has
-// focus. Before this, a typed filter was undone by the next refresh.
+// focus, and keep each scroll container's horizontal scroll. Before this, a
+// typed filter was undone by the next refresh.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -78,4 +79,17 @@ test('a filter box pointed elsewhere neither defers nor follows the swap', async
   assert.equal(h.TablePoll.shouldSkip(region), false);
   await h.TablePoll.refresh(region);
   assert.ok(!h.applied.includes(filterBox));
+});
+
+test('a region swap keeps the horizontal scroll of each scroll container', async () => {
+  const h = load();
+  const region = makeRegion();
+  let scrollers = [{ scrollLeft: 240 }, { scrollLeft: 0 }];
+  region.querySelectorAll = (sel) => (sel === '.table-scroll' ? scrollers : []);
+  Object.defineProperty(region, 'innerHTML', {
+    set() { scrollers = [{ scrollLeft: 0 }, { scrollLeft: 0 }]; },
+    get() { return ''; },
+  });
+  assert.equal(await h.TablePoll.refresh(region), true);
+  assert.deepEqual(scrollers.map((s) => s.scrollLeft), [240, 0]);
 });

@@ -131,6 +131,21 @@
         return element.getAttribute('data-poll-swap') === 'json';
     }
 
+    function scrollPositions(target) {
+        if (!target.querySelectorAll) return [];
+        return Array.prototype.map.call(target.querySelectorAll('.table-scroll'), function (el) {
+            return el.scrollLeft;
+        });
+    }
+
+    function restoreScrollPositions(target, positions) {
+        if (!positions.length || !target.querySelectorAll) return;
+        var scrollers = target.querySelectorAll('.table-scroll');
+        for (var i = 0; i < scrollers.length && i < positions.length; i += 1) {
+            if (positions[i]) scrollers[i].scrollLeft = positions[i];
+        }
+    }
+
     function refresh(table) {
         var url = table.getAttribute('data-poll-url');
         var json = isJSON(table);
@@ -167,7 +182,12 @@
                 return true;
             }
             var html = body;
+            // A region swap rebuilds every scroll container in it, so the
+            // reader's horizontal place in a wide table (the bracket) is put
+            // back by position.
+            var scrolled = scrollPositions(target);
             target.innerHTML = html;
+            restoreScrollPositions(target, scrolled);
             if (global.ChickadeeRelativeTime) {
                 global.ChickadeeRelativeTime.applyRelativeTimes(target);
             }
@@ -176,7 +196,9 @@
             }
             if (global.ChickadeeListFilter) {
                 global.ChickadeeListFilter.apply(filterInputFor(table));
-                regionFilterInputs(table).forEach(global.ChickadeeListFilter.apply);
+                regionFilterInputs(table).forEach(function (input) {
+                    global.ChickadeeListFilter.apply(input);
+                });
             }
             table.dispatchEvent(new CustomEvent('chickadee:table-repaint', { bubbles: true }));
             return true;
