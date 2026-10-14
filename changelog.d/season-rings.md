@@ -1,3 +1,0 @@
-### Changed
-
-- **Term rings redrawn as colour ramps.** The Winter, Spring and Fall rings drop their snowflakes, blossoms and maple leaves, which broke up into specks at small sizes. Each ring is now one ramp of eight flat steps, light at the top to deep at the bottom. The account page names them "Winter", "Spring" and "Fall", and a ring that is not open yet says when it opens ("Winter · opens in January"). Raw values, availability and the term gating do not change, so a stored ring draws the new art with no migration. Every step holds at least 1.45:1 against each light backdrop and 1.8:1 against each dark one.
