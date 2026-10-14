@@ -65,9 +65,16 @@ public enum AvatarAccessibility: Sendable, Equatable {
 /// Everything the `Avatar` view needs, and nothing it does not.
 public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// Palette token names, e.g. "--avatar-slate-cap". The partial wraps each
-    /// in `var(…)`.
+    /// in `var(…)`. Six per colourway: cap, wing, body, bib, beak and mark.
     public let capToken: String
     public let wingToken: String
+    /// The four tones that were fixed while every bird was a chickadee, now
+    /// part of the colourway (docs/avatar-species.md, decision 3). The mark
+    /// tone draws the wing marks and the brows.
+    public let bodyToken: String
+    public let bibToken: String
+    public let beakToken: String
+    public let markToken: String
     /// The colour an accessory is drawn in — part of the accessory axis, which
     /// is why the design writes it "8 + 5 accents".
     public let accentToken: String
@@ -85,6 +92,8 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     /// marker immediately before an interpolation is a lexing shape that has
     /// cost this codebase before.
     public let tuftSymbolRef: String
+    /// The species' plumage, e.g. "#av-plumage-robin".
+    public let plumageSymbolRef: String
     public let wingSymbolRef: String
     public let expressionSymbolRef: String
     public let accessorySymbolRef: String
@@ -108,6 +117,10 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     ) {
         self.capToken = "--avatar-\(spec.cap.rawValue)-cap"
         self.wingToken = "--avatar-\(spec.cap.rawValue)-wing"
+        self.bodyToken = "--avatar-\(spec.cap.rawValue)-body"
+        self.bibToken = "--avatar-\(spec.cap.rawValue)-bib"
+        self.beakToken = "--avatar-\(spec.cap.rawValue)-beak"
+        self.markToken = "--avatar-\(spec.cap.rawValue)-mark"
         self.accentToken = "--avatar-accent-\(spec.accent.rawValue)"
         self.backdropToken = "--avatar-back-\(spec.backdrop.rawValue)"
         let ring = isStaff ? AvatarRing.staff : spec.border.ring
@@ -115,8 +128,18 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         self.borderToken =
             (isStaff ? nil : spec.border.accent).map { "--avatar-accent-\($0.rawValue)" }
             ?? "--avatar-border-none"
-        let tuft = spec.accessory.hidesTuft ? AvatarTuft.none : spec.tuft
-        self.tuftSymbolRef = "#av-tuft-\(tuft.rawValue)"
+        // A hat hides the tuft and the crest alike. Without a hat, a crested
+        // species' bare head is its crest, and the four tuft shapes read as
+        // crest variants on it.
+        let species = spec.species
+        if spec.accessory.hidesTuft {
+            self.tuftSymbolRef = "#av-tuft-none"
+        } else if spec.tuft == .none && species.hasCrest {
+            self.tuftSymbolRef = "#av-crest-\(species.rawValue)"
+        } else {
+            self.tuftSymbolRef = "#av-tuft-\(spec.tuft.rawValue)"
+        }
+        self.plumageSymbolRef = "#av-plumage-\(species.rawValue)"
         self.wingSymbolRef = "#av-wing-\(spec.wing.rawValue)"
         self.expressionSymbolRef = "#av-expression-\(spec.expression.rawValue)"
         self.accessorySymbolRef = "#av-accessory-\(spec.accessory.rawValue)"
@@ -137,6 +160,10 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
         [
             AvatarInlineProperty(name: "--av-cap", field: "capToken", token: capToken),
             AvatarInlineProperty(name: "--av-wing", field: "wingToken", token: wingToken),
+            AvatarInlineProperty(name: "--av-body", field: "bodyToken", token: bodyToken),
+            AvatarInlineProperty(name: "--av-bib", field: "bibToken", token: bibToken),
+            AvatarInlineProperty(name: "--av-beak", field: "beakToken", token: beakToken),
+            AvatarInlineProperty(name: "--av-mark", field: "markToken", token: markToken),
             AvatarInlineProperty(name: "--av-accent", field: "accentToken", token: accentToken),
             AvatarInlineProperty(name: "--av-backdrop", field: "backdropToken", token: backdropToken),
             AvatarInlineProperty(name: "--av-border", field: "borderToken", token: borderToken),
@@ -158,13 +185,14 @@ public struct AvatarPresentation: Codable, Sendable, Equatable {
     }
 
     /// Every symbol this presentation names, in the order the partial stacks
-    /// them — with the two that never vary. Seven, not one per feature: body,
-    /// cap, cheek, beak and bib never vary, so they are baked into one plumage
-    /// symbol. A slot is split out only when it varies. Tilt is not a layer; it
-    /// is a transform on everything between the backdrop and the ring.
+    /// them — with the one that never varies. Seven, not one per feature: the
+    /// body, cap, cheek, beak and bib of a species never vary, so they are
+    /// baked into one plumage symbol per species. A slot is split out only
+    /// when it varies. Tilt is not a layer; it is a transform on everything
+    /// between the backdrop and the ring.
     public var layerRefs: [String] {
         [
-            "#av-backdrop", tuftSymbolRef, "#av-plumage", wingSymbolRef, expressionSymbolRef,
+            "#av-backdrop", tuftSymbolRef, plumageSymbolRef, wingSymbolRef, expressionSymbolRef,
             accessorySymbolRef, ringSymbolRef,
         ]
     }

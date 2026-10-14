@@ -131,7 +131,7 @@ struct AccountRoutes: RouteCollection {
 
     /// The one-shot success banner after a redirect back to this page.
     private func accountFlashSuccess(req: Request, avatarNotice: String?) -> String? {
-        if avatarNotice == "saved" { return "Chickadee saved." }
+        if avatarNotice == "saved" { return "Bird saved." }
         return req.query[String.self, at: "github"]
             .flatMap(GitHubAccountLinkRoutes.Notice.init(rawValue:))?.message
     }

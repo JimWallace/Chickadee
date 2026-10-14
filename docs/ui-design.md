@@ -339,16 +339,17 @@ duplicate.
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
-- **`.avatar`** and the `.av-*` part classes — the generated student chickadee.
+- **`.avatar`** and the `.av-*` part classes — the generated student bird.
   One `<svg>` carrying the size class wraps seven `<use>` elements naming
   symbols in `Resources/Sprites/avatar-sprite.svg`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
   last, on top and untilted, the ring.
   **A page that renders `Avatar` must also include `AvatarSprite`, once per
   page** — forget it and the page still returns 200 and shows an empty circle,
-  which no guard can catch.  Five colours are per-student
-  (`--av-cap`, `--av-wing`, `--av-accent`, `--av-backdrop`, `--av-border`,
-  assigned inline, which is the sanctioned form); `--av-border` colours a solid
+  which no guard can catch.  Nine colours are per-student
+  (`--av-cap`, `--av-wing`, `--av-body`, `--av-bib`, `--av-beak`, `--av-mark`,
+  `--av-accent`, `--av-backdrop`, `--av-border`, assigned inline, which is
+  the sanctioned form); `--av-border` colours a solid
   ring (`.av-ring`) and is the transparent `--avatar-border-none` for every
   other ring.  The patterned rings colour themselves by class
   (`.av-rainbow-*`, `.av-spectrum-*`, or the student's `.av-accent` and
@@ -356,12 +357,13 @@ duplicate.
   colour no student ring uses, with a dark-mode mirror) is drawn from a course
   role, never from a stored choice.  `.avatar` sets `forced-color-adjust:
   none`: the bird is decorative, and forced colors would otherwise repaint it;
-  the fixed parts of the bird — `.av-body`,
-  `.av-bib`, `.av-beak`, `.av-eyewhite`, `.av-pupil`, `.av-glint`,
-  `.av-wing-mark`, `.av-brow`, `.av-blush`, `.av-mouth`, `.av-gear`,
-  `.av-gear-line`, `.av-bloom-eye` —
-  read the palette directly, because a body or a beak that varied would stop
-  the birds being one species.  **Five sizes.**  `.avatar` alone is 3rem: the
+  the colourway's six tones (`.av-cap`, `.av-wing`, `.av-body`, `.av-bib`,
+  `.av-beak`, `.av-wing-mark` and `.av-brow`) read the per-student `--av-*`
+  properties, and the fixed parts — `.av-eyewhite`, `.av-pupil`, `.av-glint`,
+  `.av-blush`, `.av-mouth`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
+  read the palette directly.  The colourway decides the species (one of eleven,
+  [avatar-species.md](avatar-species.md)); the eyes, the body circle and the
+  beak shape are the same on every species and keep the birds one family.  **Five sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
   row where the handle beside it carries the identity — the bracket —
   because below 48px the bird is recognition, not identification, and a row
@@ -436,7 +438,7 @@ duplicate.
   strip, passed is `--green` and failed is `--red`, the test-status pair.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
-  transport, LTI deep linking, the Chickadee picker).  Use it for any group
+  transport, LTI deep linking, the bird picker).  Use it for any group
   of choices rather than restyling a fieldset.
 - **`.swatch-row`**, `.swatch`, `.swatch-sample`, `.swatch-name` — a choice of
   one colour, inside a `.fieldset-plain`: each option is a radio input shown
@@ -449,16 +451,22 @@ duplicate.
   filled disc, `--av-backdrop`), a ring sample (a small `<svg>` drawing the
   backdrop and the ring symbol from the avatar sprite; it inherits
   `--av-backdrop` from the form, so it follows the previewed backdrop) and
-  `.swatch-none` (a dashed ring, for "no border").  An option that exists but
+  `.swatch-none` (a dashed ring, for "no border") and `.swatch-bird` (the
+  student's own bird in a colourway, an `Avatar` at the roster size, so the
+  species reads; it brings its own properties, so it shows the SAVED backdrop
+  and ring, not the previewed ones, while the ring samples follow the preview).  The Species group nests one
+  `.fieldset-plain--nested` per species inside the plain fieldset, a lighter
+  legend over each row.  An option that exists but
   cannot be chosen yet has a `disabled` input, which dims its swatch
   (`.swatch:has(input:disabled)`, the `.row-muted` opacity); its name says
   "(locked)", or names the term of a seasonal ring, and a note under the row
   says how each kind opens, so the state does not rest on the dimming alone.
   The option a student already wears is never disabled.  Used by the account page's
-  Chickadee picker, whose live preview (`avatar-picker.js`) copies the
-  checked option's token onto the avatar and points its ring layer at the
-  checked ring; see
-  [student-wardrobe.md](student-wardrobe.md).
+  bird picker, whose live preview (`avatar-picker.js`) copies the
+  checked option's tokens onto the avatar and points its ring, plumage and
+  tuft layers at the checked symbols; see
+  [student-wardrobe.md](student-wardrobe.md) and
+  [avatar-species.md](avatar-species.md).
 - **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a
   `.section-items` row: the title and details, the state or value, and the cell
   that holds the actions.  They change nothing on a desktop; at 640px and below

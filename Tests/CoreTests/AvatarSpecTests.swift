@@ -51,12 +51,13 @@ import Testing
     }
 
     @Test func combinationCountMatchesTheSlots() {
-        // 8 caps, 6 wings, 9 expressions (6 starter + 3 unlockable),
+        // 38 colourways (the chickadee's 8 and 3 for each of the ten other
+        // species), 6 wings, 9 expressions (6 starter + 3 unlockable),
         // 9 accessories (8 starter + the gradcap) in 5 accents, 8 backdrops,
         // 5 tufts, 3 tilts. The accent multiplies — it is part of the
         // accessory axis. The border is chosen, not drawn, so it is not counted.
-        #expect(AvatarSpec.combinationCount == 8 * 6 * 9 * 9 * 5 * 8 * 5 * 3)
-        #expect(AvatarSpec.combinationCount == 2_332_800)
+        #expect(AvatarSpec.combinationCount == 38 * 6 * 9 * 9 * 5 * 8 * 5 * 3)
+        #expect(AvatarSpec.combinationCount == 11_080_800)
     }
 
     @Test func specRoundTripsThroughJSON() throws {
@@ -79,7 +80,7 @@ import Testing
         ).layerRefs
         #expect(
             layers == [
-                "#av-backdrop", "#av-tuft-none", "#av-plumage", "#av-wing-barred",
+                "#av-backdrop", "#av-tuft-none", "#av-plumage-chickadee", "#av-wing-barred",
                 "#av-expression-wink", "#av-accessory-scarf", "#av-ring-none",
             ])
     }
@@ -148,7 +149,7 @@ import Testing
         #expect(
             spriteWings == Set(AvatarWing.allCases.map(\.rawValue)),
             "sprite wings \(spriteWings.sorted()) do not match AvatarWing")
-        for symbol in ["av-backdrop", "av-plumage"] {
+        for symbol in ["av-backdrop", "av-plumage-chickadee"] {
             #expect(declared.contains(symbol), "sprite is missing \(symbol)")
         }
     }
@@ -167,10 +168,10 @@ import Testing
             backdrop: .sky)
         let presentation = AvatarPresentation(
             for: spec, size: .standard, accessibility: .decorative, isStaff: false)
-        // The varying layers are presentation fields; the two fixed ones are
-        // literal fragments.
+        // The varying layers are presentation fields; the one fixed layer is
+        // a literal fragment.
         let expected = [
-            "\"#av-backdrop\"", "avatar.tuftSymbolRef", "\"#av-plumage\"", "avatar.wingSymbolRef",
+            "\"#av-backdrop\"", "avatar.tuftSymbolRef", "avatar.plumageSymbolRef", "avatar.wingSymbolRef",
             "avatar.expressionSymbolRef", "avatar.accessorySymbolRef", "avatar.ringSymbolRef",
         ]
         #expect(refs == expected, "Avatar layers \(refs) do not match the model's")
@@ -235,7 +236,7 @@ import Testing
         // slots can produce — not from a hand-written list, which would be a
         // third spelling of the palette and the thing most likely to drift.
         var expected: Set<String> = [
-            "--avatar-body", "--avatar-bib", "--avatar-beak", "--avatar-eyewhite",
+            "--avatar-bloom-eye", "--avatar-eyewhite",
             "--avatar-eye", "--avatar-glint", "--avatar-gear", "--avatar-blush",
             "--avatar-mouth", "--avatar-rainbow-red", "--avatar-rainbow-orange",
             "--avatar-rainbow-yellow", "--avatar-rainbow-green", "--avatar-rainbow-blue",

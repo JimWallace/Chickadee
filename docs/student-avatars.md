@@ -1,6 +1,6 @@
 # Student avatars — design note
 
-**Status: shipped, and in use.** Every student has a chickadee and a per-course
+**Status: shipped, and in use.** Every student has a bird and a per-course
 handle, drawn on first view and stored; the account page renders the bird in
 place of the initials monogram, which is gone, and the wardrobe lets a student
 choose its backdrop and ring (docs/student-wardrobe.md).
@@ -40,6 +40,13 @@ Job 1 comes free once job 2 is solved.
 ---
 
 ## The constraint the art has to respect
+
+> **Since the species (docs/avatar-species.md):** the bird is one of eleven
+> species, and the colourway decides which. What this section says about the
+> chickadee's markings now holds per species: a species' plumage symbol is
+> fixed, and the variation lives inside it. The silhouette, the eye discs and
+> the beak shape are shared by every species and are what keeps the birds one
+> family. The "cap" slot is the colourway, six tones per name.
 
 The mascot (`Assets/chickadee-icon.png`) is a round, plush black-capped
 chickadee: dark cap and bib, white cheek wrapping under the eye, buff flank,
@@ -92,7 +99,7 @@ ship in.
 |---|---|---|
 | `cap` | 8 | ink, slate, teal, forest, indigo, plum, rust, umber — the loudest axis, so it carries the least detail; it also picks the wing colour |
 | `wing` | 6 | plain, barred, tipped, speckled, edged, twotone — symmetrical, both flanks from one drawing |
-| `expression` | 6 + 3 | bright, sleepy, wink, curious, keen, startled — reads first and from furthest away; plus chirp, sly, dreamy, which are unlockables and never drawn at first use |
+| `expression` | 6 + 3 | bright, sleepy, wink, curious, keen, intrigued — reads first and from furthest away; plus chirp, sly, dreamy, which are unlockables and never drawn at first use |
 | `accessory` | 8 + 1, × 5 accents | none, scarf, headphones, beanie, glasses, headband, bowtie, bloom; plus the gradcap, kept for a completion achievement and never drawn ([student-wardrobe.md](student-wardrobe.md), decision 4) |
 | `backdrop` | 8 | sky, aqua, sage, straw, peach, rose, lilac, pebble — all near the same lightness so no bird shouts; drawn at first use, then the student may change it on the account page |
 | `border` | 13 | none, a solid ring in one of the five accents, or one of seven patterned rings — chosen by the student, never drawn, so not counted below ([student-wardrobe.md](student-wardrobe.md)) |
@@ -333,7 +340,7 @@ takes it as an `AvatarPresentation` and loops. The view makes no decisions.
 **Sizes.** The account page gets 3rem; a dense row gets `.avatar-sm` at
 1.5rem. (Five sizes exist now; `AvatarSize` and `docs/ui-design.md` list them.)
 Drawing the bird settled what this is for, and it is not DOM weight:
-the parts that never vary geometrically are baked into one `av-plumage` symbol,
+the parts that never vary geometrically are baked into one `av-plumage-<species>` symbol,
 so a whole bird is **seven** `use` elements rather than one per feature, and 200
 rows cost 1,400 nodes. The real reason for the small variant is legibility —
 beak, bib and wing marks stop being separable somewhere under 24px — which is
@@ -695,6 +702,31 @@ A row with no text beside the bird would want a monogram chip instead, and none
 exists.
 
 ---
+
+## Replacing an expression
+
+`intrigued` replaced `startled` in October 2026 (both brows raised, calm
+eyes, a closed beak; the maintainer did not like the alarmed face). An
+expression is a stored raw value, so a replacement is not a redraw:
+
+1. The new case takes the old one's place in `AvatarExpression`, and the old
+   raw value goes into `AvatarExpression.legacyRawValues`, which the spec
+   decoder consults when a raw value is not a case. A row that says the old
+   name renders as the new expression, and keeps the old name until its
+   student saves the picker, which re-encodes it.
+2. The sprite symbol is renamed and redrawn, and the drift test pins the
+   new name in both directions.
+
+There is deliberately **no migration that rewrites the rows.** Prod deploys
+blue-green, and a binary from before the change cannot decode the new value;
+`AvatarStore.ensureSpec` redraws a bird it cannot decode and saves the
+result, so a rewrite during the overlap, or after a rollback, would cost the
+rewritten students their birds. The alias is the rule, not a safety net. A
+rewrite could run in a later release, once no binary that lacks the new case
+can serve a page, and it would gain nothing a student can see.
+
+This is the one exception to "append only", and it is safe only because the
+old raw value still decodes. Do not remove a case without an alias.
 
 ## Changing the art
 

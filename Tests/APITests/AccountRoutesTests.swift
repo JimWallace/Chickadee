@@ -151,14 +151,14 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("<symbol id=\"av-plumage\""), "sprite missing")
+                    #expect(html.contains("<symbol id=\"av-plumage-chickadee\""), "sprite missing")
                     #expect(html.contains("class=\"avatar\""))
-                    for layer in ["#av-backdrop", "#av-plumage"] {
-                        #expect(html.contains("<use href=\"\(layer)\" />"), "no \(layer) layer")
-                    }
-                    // The three varying layers are interpolated: each must
-                    // appear resolved, and no interpolation may survive as text.
-                    for family in ["#av-wing-", "#av-expression-", "#av-accessory-"] {
+                    #expect(html.contains("<use href=\"#av-backdrop\" />"), "no backdrop layer")
+                    // The varying layers are interpolated: each must appear
+                    // resolved, and no interpolation may survive as text. The
+                    // plumage is one of them since the species: a new user is
+                    // drawn any of the five.
+                    for family in ["#av-plumage-", "#av-wing-", "#av-expression-", "#av-accessory-"] {
                         #expect(html.contains("<use href=\"\(family)"), "\(family) not interpolated")
                     }
                     #expect(!html.contains("SymbolRef"), "interpolation survived as text")

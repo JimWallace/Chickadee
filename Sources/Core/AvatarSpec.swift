@@ -1,19 +1,44 @@
 // Core/AvatarSpec.swift
 //
-// What a generated student chickadee IS: seven slot choices, not an image and
+// What a generated student bird IS: seven slot choices, not an image and
 // not a seed.  See docs/student-avatars.md for why the spec is the stored
 // artifact — the short version is that re-deriving from a seed on every render
 // means appending one option to one slot reshuffles every existing avatar.
 
 import Foundation
 
-/// The cap and, via its family, the wing beside it.  The loudest axis, which is
-/// why it carries the least detail.
+/// The colourway: the six tones a bird is painted in (cap, wing, body, bib,
+/// beak and mark), named for the chickadee's cap, which was the one coloured
+/// part when the slot was named. The stored key stays `cap`.
 ///
-/// Body, cheek, beak and bib are NOT axes: they are fixed, and they are what
-/// keeps every bird a chickadee even when the cap goes plum.
+/// Each colourway belongs to exactly one species (`AvatarSpecies.colourways`),
+/// so the colourway decides the species and the species is not stored. Names
+/// are unique across species because the enum is one: a stored raw value must
+/// mean one thing. Append only, and never reuse a name.
 public enum AvatarCap: String, CaseIterable, Codable, Sendable {
+    /// The chickadee's eight.
     case slate, plum, forest, indigo, rust, teal, umber, ink
+    /// The cardinal's three; fawn is the female's buff with a red crest and wing.
+    case scarlet, crimson, fawn
+    /// The robin's three: the breast varies, the hood stays grey-brown.
+    case copper, brick, apricot
+    /// The blue jay's three.
+    case azure, cobalt, powder
+    /// The starling's three, lifted above the dark backdrops
+    /// (docs/avatar-species.md, finding 4).
+    case emerald, violet, bronze
+    /// The second set, three each: goldfinch (olive is the female), blackbird
+    /// (lifted like the starling), waxwing, junco (dusk is the Oregon form),
+    /// song sparrow and mourning dove.
+    case lemon, saffron, olive
+    case jet, onyx, ebony
+    case cedar, taupe, sand
+    case pewter, graphite, dusk
+    case chestnut, sepia, hazel
+    case oat, mauve, ash
+
+    /// The name a student reads in the picker.
+    public var displayName: String { rawValue.capitalized }
 }
 
 /// How the bird looks out of the page — the axis that reads first and from
@@ -22,7 +47,16 @@ public enum AvatarCap: String, CaseIterable, Codable, Sendable {
 /// Append only: a stored spec names a case by its raw value, so a case that is
 /// renamed, reordered or removed changes or breaks a student's bird.
 public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
-    case bright, sleepy, wink, curious, keen, startled
+    /// `intrigued` (both brows raised, calm eyes, closed beak) replaced
+    /// `startled` in October 2026, name and art: the maintainer did not like
+    /// the alarmed face. Stored rows keep the old raw value, and
+    /// `legacyRawValues` decodes it as the new case, for good. No migration
+    /// rewrites the rows: a binary from before the change could not decode
+    /// the new value, and `AvatarStore.ensureSpec` redraws a bird it cannot
+    /// decode, so a rewrite during a blue-green overlap or after a rollback
+    /// would cost those students their birds. This is the one exception to
+    /// append-only, and it is safe only because the old raw value decodes.
+    case bright, sleepy, wink, curious, keen, intrigued
     /// The first wardrobe unlocks (docs/student-avatars.md, decision 5): new
     /// options arrive as something to earn, so the first-use draw never
     /// yields these three. See `starterCases`.
@@ -31,8 +65,27 @@ public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
     /// The expressions a first-use draw picks from. Every case appended after
     /// the first six is an unlockable and is NOT in this list.
     public static let starterCases: [AvatarExpression] = [
-        .bright, .sleepy, .wink, .curious, .keen, .startled,
+        .bright, .sleepy, .wink, .curious, .keen, .intrigued,
     ]
+
+    /// Raw values a stored spec may carry for a case that was replaced, and
+    /// the case each decodes to. Permanent: a row keeps the value it was
+    /// stored with until its student saves the picker, which re-encodes it.
+    public static let legacyRawValues: [String: AvatarExpression] = ["startled": .intrigued]
+
+    /// The expression a stored raw value names, through `legacyRawValues`.
+    /// Every stored raw value must come through here, not `init(rawValue:)`
+    /// and not the synthesized `Codable`, which know only the current cases.
+    /// `AvatarSpec.init(from:)` is the one decoder today.
+    public init?(storedRawValue: String) {
+        if let current = AvatarExpression(rawValue: storedRawValue) {
+            self = current
+        } else if let replaced = Self.legacyRawValues[storedRawValue] {
+            self = replaced
+        } else {
+            return nil
+        }
+    }
 }
 
 /// Where the personality actually lives.  `none` is a real option, not an
@@ -48,6 +101,14 @@ public enum AvatarAccessory: String, CaseIterable, Codable, Sendable {
     public static let starterCases: [AvatarAccessory] = [
         .none, .scarf, .headphones, .beanie, .glasses, .headband, .bowtie, .bloom,
     ]
+
+    /// How often a first-use draw picks this accessory, relative to the other
+    /// starters (docs/avatar-species.md, "Trait weights"). `none` is a real
+    /// option and most birds should wear nothing, so it weighs four; every
+    /// other starter weighs one, which leaves about a third of the birds bare.
+    public var drawWeight: Int {
+        self == .none ? 4 : 1
+    }
 
     /// A hat that replaces the tuft: a bird wears one or the other, never
     /// both. The gradcap's board let a tuft stick up through it, which looked
@@ -193,12 +254,28 @@ public enum AvatarRing: String, CaseIterable, Sendable {
 /// the same both-directions drift test as `AvatarWing`.
 public enum AvatarTuft: String, CaseIterable, Codable, Sendable {
     case none, cowlick, crest, pair, swoop
+
+    /// How often a first-use draw picks this tuft, relative to the others
+    /// (docs/avatar-species.md, "Trait weights"). `none` weighs six against
+    /// one each for the four shapes, so three birds in five have a bare head,
+    /// which on a crested species is the species' own crest.
+    public var drawWeight: Int {
+        self == .none ? 6 : 1
+    }
 }
 
 /// How far the whole bird leans. Not a symbol: one rotate transform on the
 /// group that holds every layer except the backdrop, about the body centre.
 public enum AvatarTilt: String, CaseIterable, Codable, Sendable {
     case upright, left, right
+
+    /// How often a first-use draw picks this tilt, relative to the others
+    /// (docs/avatar-species.md, "Trait weights"). Upright weighs eight against
+    /// one each way, so four birds in five stand straight and a roster reads
+    /// as a few characters leaning, not a crowd.
+    public var drawWeight: Int {
+        self == .upright ? 8 : 1
+    }
 
     /// Degrees, clockwise positive (the SVG convention).
     public var degrees: Int {
@@ -232,6 +309,10 @@ public struct AvatarSpec: Codable, Sendable, Hashable {
     public var tilt: AvatarTilt
     /// Chosen by the student, never drawn. Not part of `combinationCount`.
     public var border: AvatarBorder
+
+    /// Derived from the colourway, never stored (docs/avatar-species.md,
+    /// decision 1).
+    public var species: AvatarSpecies { AvatarSpecies.of(cap) }
 
     public init(
         cap: AvatarCap,
@@ -293,7 +374,13 @@ extension AvatarSpec {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.cap = try container.decode(AvatarCap.self, forKey: .cap)
         self.wing = try container.decode(AvatarWing.self, forKey: .wing)
-        self.expression = try container.decode(AvatarExpression.self, forKey: .expression)
+        let expressionRawValue = try container.decode(String.self, forKey: .expression)
+        guard let expression = AvatarExpression(storedRawValue: expressionRawValue) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .expression, in: container,
+                debugDescription: "no expression named \(expressionRawValue)")
+        }
+        self.expression = expression
         self.accessory = try container.decode(AvatarAccessory.self, forKey: .accessory)
         self.accent = try container.decode(AvatarAccent.self, forKey: .accent)
         self.backdrop = try container.decode(AvatarBackdrop.self, forKey: .backdrop)
@@ -345,8 +432,12 @@ extension AvatarSpec {
         _ axes: Set<AvatarLateAxis>, using generator: inout G
     ) -> AvatarSpec {
         var filled = self
-        if axes.contains(.tuft) { filled.tuft = Self.pick(using: &generator) }
-        if axes.contains(.tilt) { filled.tilt = Self.pick(using: &generator) }
+        if axes.contains(.tuft) {
+            filled.tuft = Self.pick(weighted: AvatarTuft.allCases, by: \.drawWeight, using: &generator)
+        }
+        if axes.contains(.tilt) {
+            filled.tilt = Self.pick(weighted: AvatarTilt.allCases, by: \.drawWeight, using: &generator)
+        }
         return filled
     }
 
@@ -395,15 +486,23 @@ extension AvatarSpec {
     ///   private.  The stored value is drawn from the system RNG and has no
     ///   connection to who the student is.
     public static func drawn<G: RandomNumberGenerator>(using generator: inout G) -> AvatarSpec {
-        AvatarSpec(
-            cap: pick(using: &generator),
+        // The species first, each equally likely, then a colourway of that
+        // species. A draw over every colourway at once would make a chickadee
+        // eight times as likely as a cardinal, which is not the design.
+        // Three slots are weighted so that a roster reads as a few characters
+        // rather than a crowd: most birds upright, bare-headed and wearing
+        // nothing. Everything else is uniform (docs/avatar-species.md, "Trait
+        // weights").
+        let species: AvatarSpecies = pick(using: &generator)
+        return AvatarSpec(
+            cap: pick(from: species.colourways, using: &generator),
             wing: pick(using: &generator),
             expression: pick(from: AvatarExpression.starterCases, using: &generator),
-            accessory: pick(from: AvatarAccessory.starterCases, using: &generator),
+            accessory: pick(weighted: AvatarAccessory.starterCases, by: \.drawWeight, using: &generator),
             accent: pick(using: &generator),
             backdrop: pick(using: &generator),
-            tuft: pick(using: &generator),
-            tilt: pick(using: &generator)
+            tuft: pick(weighted: AvatarTuft.allCases, by: \.drawWeight, using: &generator),
+            tilt: pick(weighted: AvatarTilt.allCases, by: \.drawWeight, using: &generator)
         )
     }
 
@@ -430,5 +529,20 @@ extension AvatarSpec {
         from options: [T], using generator: inout G
     ) -> T {
         options[Int.random(in: 0..<options.count, using: &generator)]
+    }
+
+    /// One of `options`, each as likely as its `weight` against the sum of
+    /// all weights. One draw from the generator, so a seeded draw stays
+    /// reproducible.
+    fileprivate static func pick<T, G: RandomNumberGenerator>(
+        weighted options: [T], by weight: (T) -> Int, using generator: inout G
+    ) -> T {
+        let total = options.reduce(0) { $0 + weight($1) }
+        var remaining = Int.random(in: 0..<total, using: &generator)
+        for option in options {
+            remaining -= weight(option)
+            if remaining < 0 { return option }
+        }
+        return options[options.count - 1]
     }
 }

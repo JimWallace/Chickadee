@@ -104,7 +104,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("Chickadee saved."))
+                    #expect(html.contains("Bird saved."))
                     #expect(html.contains("--av-border: var(--avatar-accent-orchid)"))
                     #expect(
                         html.contains(
@@ -121,8 +121,8 @@ import VaporTesting
                         let radios = html.components(separatedBy: #"name="\#(slot.rawValue)""#).count - 1
                         #expect(radios == AvatarCustomization.options(for: slot).count, "\(slot)")
                     }
-                    // Exactly one checked radio per group.
-                    #expect(html.components(separatedBy: " checked>").count - 1 == 2)
+                    // Exactly one checked radio per group: species, backdrop, border.
+                    #expect(html.components(separatedBy: " checked>").count - 1 == 3)
                     #expect(!html.contains("var()"), "a swatch token resolved to empty")
                 })
         }
