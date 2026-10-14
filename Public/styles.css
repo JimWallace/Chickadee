@@ -3635,8 +3635,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     .publish-form { min-width: 0; }
 }
 
-/* The account page's identity header: the student's chickadee, their name,
-   their username. One class for the row; the name and username inside it are
+/* The account page's identity header: the student's name and their
+   username. One class for the row; the name and username inside it are
    element selectors rather than two more global classes, since they are one
    rule serving one component and would owe component-vocabulary entries for
    no gain. */
@@ -3646,6 +3646,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     gap: .75rem;
     margin: 0 0 1rem;
 }
+
+/* Inside a card the name lines up with the detail grid under it. */
+.card > .account-identity { margin: 0; padding: 1rem 1.25rem 0; }
 
 .account-identity > div {
     display: flex;
