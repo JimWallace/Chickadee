@@ -10,6 +10,7 @@
 //   GET  /testsetups/:id/notebook   → NotebookPage    (JupyterLite in-browser editor)
 //   GET  /testsetups/:id/leaderboard → LeaderboardPage (class activity ranking)
 //   GET  /testsetups/:id/composite  → class composite JSON (slot states, pixels)
+//   GET  /testsetups/:id/arena/…     → the projector arena's JSON (staff)
 //   GET  /submissions/:id           → SubmissionPage  (live results)
 
 import Core
@@ -28,6 +29,12 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "leaderboard", use: leaderboardPage)
         // A class composite's slot states and pixels (docs/class-composite.md).
         routes.get("testsetups", ":testSetupID", "composite", use: compositeSnapshot)
+        // The projector arena plays a browser-graded tournament from the
+        // present page (WebRoutes+TournamentArena.swift). Course staff only.
+        routes.get("testsetups", ":testSetupID", "arena", "next", use: arenaNextMatch)
+        routes.get("testsetups", ":testSetupID", "arena", "submissions", ":submissionID", use: arenaSubmissionDownload)
+        routes.post(
+            "testsetups", ":testSetupID", "arena", "matches", ":submissionID", "result", use: arenaMatchResult)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
         // Course-staff-only: persist what the author is editing in JupyterLite

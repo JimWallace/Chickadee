@@ -292,7 +292,7 @@
      *
      * @param {Uint8Array} submissionBytes Raw bytes of the submitted solution file.
      * @param {string}     setupID         The test setup ID for this assignment.
-     * @param {{filename?: string}} options
+     * @param {{filename?: string, opponentSubmission?: {bytes: Uint8Array, filename: string, seed: string}}} options
      * @returns {{ outcomes: object[], collection: object }}
      */
     async function runScripts(submissionBytes, setupID, options = {}) {
@@ -450,12 +450,16 @@
             files[INPUTS_FILE_NAMES[language]] = INPUTS_WRITERS[language](personalizedInputs);
         }
 
-        // The bot this run plays, staged the way the native worker stages it
-        // (OpponentStaging): a copy of the setup's file under opponent/, and
-        // the match seed. Nothing is staged when the file is not in the
-        // setup; the match script then reports that no opponent is staged,
-        // as it would on a worker given no bot.
-        const match = stageOpponent(files, opponent);
+        // The opponent this run plays, staged the way the native worker stages
+        // it (OpponentStaging), with the match seed. The projector arena
+        // (tournament-arena.js) passes a classmate's submission; otherwise the
+        // bot from the seed response is a copy of the setup's file under
+        // opponent/. Nothing is staged when the file is not in the setup; the
+        // match script then reports that no opponent is staged, as it would
+        // on a worker given no bot.
+        const match = options.opponentSubmission
+            ? stageOpponentSubmission(files, runnerCore, options.opponentSubmission)
+            : stageOpponent(files, opponent);
 
         // 4. Fetch manifest from server (test.properties.json is not in the zip;
         //    the server serves it directly from the database via the manifest endpoint).
@@ -601,6 +605,31 @@
         if (!Object.prototype.hasOwnProperty.call(files, name)) return null;
         files['opponent/' + name] = files[name];
         return { seed: opponent.matchSeed };
+    }
+
+    // Stage a classmate's submission that a projector-arena match plays
+    // ({ bytes, filename, seed }), as the native worker's
+    // stageOpponentSubmission does: the upload under its own name, a notebook
+    // extracted through RunnerCore, and .chickadee_student_module naming the
+    // opponent's module, all under opponent/. Returns the `match` the kernel
+    // init needs, or null when the submission is not usable.
+    function stageOpponentSubmission(files, core, submission) {
+        if (!submission || !(submission.bytes instanceof Uint8Array)
+            || typeof submission.seed !== 'string' || !submission.seed) {
+            return null;
+        }
+        const name = safeSubmissionFilename(submission.filename);
+        const staged = { [name]: submission.bytes };
+        const lower = name.toLowerCase();
+        if (lower.endsWith('.ipynb')) {
+            extractNotebookToMap(staged, core, name, new TextDecoder().decode(submission.bytes));
+        } else if (GRADED_SCRIPT_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+            staged['.chickadee_student_module'] = name;
+        }
+        for (const [path, content] of Object.entries(staged)) {
+            files['opponent/' + path] = content;
+        }
+        return { seed: submission.seed };
     }
 
     function setRunnerStatus(type, msg) {
@@ -900,6 +929,7 @@
             runAndSubmit,
             runScripts,
             stageOpponent,
+            stageOpponentSubmission,
             scriptExtension,
             loadRunnerCore,
             extractNotebookToMap,

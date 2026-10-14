@@ -38,10 +38,13 @@ struct RunTournamentTool: ContentTool {
         "Start a tournament on a class activity whose kind keeps a bracket (aggregation \"bracket\"), "
         + "by assignment public ID. Snapshots every student's latest complete submission as the "
         + "entrants (seeded in submission order; at least two are needed), enqueues the first round's "
-        + "match jobs on the native worker, and advances rounds on its own as results land; the winner "
+        + "matches, and advances rounds on its own as results land; the winner "
         + "holds the seeded tournament record. schedule is \(MCPActivityProse.scheduleTokens) "
         + "(\(MCPActivityProse.scheduleSummaries)); \"bracket\" when absent. A student who resubmits "
         + "after the start plays with the snapshotted entry. A run already in progress is superseded. "
+        + "On a worker-graded assignment the native worker plays each match. On a browser-graded "
+        + "assignment the matches wait for the projector arena: staff press Play matches on the "
+        + "leaderboard's present page, and no runner is used. "
         + "Never a grade of record. Refused on any other activity kind."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),

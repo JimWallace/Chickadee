@@ -27,6 +27,8 @@ struct PresentLayout<Content: HTML>: HTML {
                 meta(.name(.viewport), .content("width=device-width, initial-scale=1"))
                 meta(.name("color-scheme"), .content("dark"))
                 meta(.name("app-version"), .content(page.appVersion))
+                // The projector arena posts match results (tournament-arena.js).
+                meta(.name("csrf-token"), .content(page.csrfToken))
                 Elementary.title { "\(title) — Chickadee" }
                 // Elementary models neither `sizes` nor `type` on a link.
                 link(

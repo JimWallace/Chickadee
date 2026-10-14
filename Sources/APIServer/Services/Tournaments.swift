@@ -69,7 +69,7 @@ func startTournament(
             testSetupID: setupID, schedule: schedule, startedBy: startedBy, startedAt: Date(), entrants: entrants)
         try await run.save(on: tx)
         let slots = TournamentPairing.firstRound(schedule: schedule, entrantCount: entrants.count)
-        try await enqueueRound(run: run, slots: slots, on: tx)
+        try await enqueueRound(run: run, slots: slots, inArena: playsInArena(setup), on: tx)
         return run
     }
 }
@@ -94,9 +94,20 @@ private func snapshotEntrants(setup: APITestSetup, on db: Database) async throws
         }
 }
 
-/// Stores a round's slots and enqueues one match job per pairing. A bye is
-/// stored already won, with no job.
-private func enqueueRound(run: APITournamentRun, slots: [TournamentSlot], on db: Database) async throws {
+/// True when the setup's matches are played by the projector arena, not by a
+/// runner: a browser-graded assignment puts no load on the runners, and that
+/// includes its tournament (docs/class-activities.md, "Projector arena").
+/// Read at each round, so a round follows the grading mode of its time.
+func playsInArena(_ setup: APITestSetup?) -> Bool {
+    setup?.decodedManifest()?.effectiveGradingMode == .browser
+}
+
+/// Stores a round's slots and enqueues one match per pairing: a pending job
+/// for a runner, or a match that waits for the arena. A bye is stored
+/// already won, with no match.
+private func enqueueRound(
+    run: APITournamentRun, slots: [TournamentSlot], inArena: Bool, on db: Database
+) async throws {
     let runID = try run.requireID()
     let entrants = run.entrants
     for slot in slots {
@@ -109,6 +120,7 @@ private func enqueueRound(run: APITournamentRun, slots: [TournamentSlot], on db:
                 testSetupID: run.testSetupID,
                 zipPath: original.zipPath,
                 attemptNumber: original.attemptNumber ?? 1,
+                status: (inArena ? SubmissionStatus.arena : .pending).rawValue,
                 filename: original.filename,
                 userID: home.userID,
                 kind: APISubmission.Kind.tournamentMatch)
@@ -215,7 +227,8 @@ func advanceTournamentIfRoundComplete(runID: UUID, on db: Database) async throws
         if let next = TournamentPairing.nextRound(schedule: schedule, entrantCount: entrantCount, completed: completed)
         {
             guard try await claimTournamentStep(runID: runID, round: round, to: .nextRound, on: tx) else { return }
-            try await enqueueRound(run: run, slots: next, on: tx)
+            let setup = try await APITestSetup.find(run.testSetupID, on: tx)
+            try await enqueueRound(run: run, slots: next, inArena: playsInArena(setup), on: tx)
             return
         }
         guard try await claimTournamentStep(runID: runID, round: round, to: .complete, on: tx) else { return }

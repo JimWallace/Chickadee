@@ -123,11 +123,8 @@ extension WebRoutes {
                 && (activity.window.map { $0.state(at: Date()) != .afterClose } ?? true),
             pollURL: "\(boardURL)?present=1&fragment=present",
             boardURL: boardURL,
-            compositeStage: aggregation == .composite
-                ? activity.composite.map {
-                    CompositeStagePresentation.board(
-                        spec: $0, testSetupID: setupID, present: true, pollUntilISO: activity.window?.closesAtISO)
-                } : nil)
+            arenaSetupID: aggregation == .bracket && playsInArena(setup) ? setupID : nil,
+            compositeStage: compositeProgress?.stage)
 
         // `?fragment=present` renders the SAME view the page renders inline,
         // so the refresh cannot drift from what it replaces.
@@ -141,11 +138,11 @@ extension WebRoutes {
         return Response.pollFragment(html: html, for: req)
     }
 
-    /// A class composite's progress for the clock's place: "Tiles complete"
-    /// over "31 of 48". Nil on every other kind.
+    /// A class composite's stage, and its progress for the clock's place:
+    /// "Tiles complete" over "31 of 48". Nil on every other kind.
     private func compositeProgress(
         setup: APITestSetup, activity: ClassActivity, assignment: APIAssignment?, on db: any Database
-    ) async throws -> (label: String, value: String)? {
+    ) async throws -> (stage: CompositeStagePresentation, label: String, value: String)? {
         guard activity.kind == .classComposite, let spec = activity.composite, let assignmentID = assignment?.id,
             let setupID = setup.id
         else { return nil }
@@ -154,7 +151,9 @@ extension WebRoutes {
             since: .max, onlyUserID: nil, includeOwners: false, on: db)
         let noun = spec.compositor.slotNoun
         let label = "\(noun.prefix(1).uppercased())\(noun.dropFirst()) complete"
-        return (label, "\(snapshot.complete) of \(snapshot.total)")
+        let stage = CompositeStagePresentation.board(
+            spec: spec, testSetupID: setupID, present: true, pollUntilISO: activity.window?.closesAtISO)
+        return (stage, label, "\(snapshot.complete) of \(snapshot.total)")
     }
 
     /// Everyone seeded into the run. A bye is a match with one entrant, so
@@ -230,6 +229,9 @@ struct PresentModePresentation {
     let pollsLive: Bool
     let pollURL: String
     let boardURL: String
+    /// The setup the projector arena plays, set on a browser-graded
+    /// tournament only (docs/class-activities.md, "Projector arena").
+    let arenaSetupID: String?
     /// A class composite's stage, in the podium's place; nil on every other
     /// kind.
     var compositeStage: CompositeStagePresentation?
