@@ -79,6 +79,13 @@ GET /runner-wasm/runner-core.js
 - `application/wasm` is required for `WebAssembly.instantiateStreaming`; the
   middleware forces it so a future MIME-map change can't silently disable
   streaming.
+- The build is reproducible, so the name changes only when the module does.
+  `build-runner-wasm.sh` passes `-disable-incremental-llvm-codegen`. Without
+  it, swiftc writes a hash of each object's LLVM IR into a 816-byte
+  `.swift_modhash` data segment. That IR holds the debug info with the build
+  paths, so two checkouts in different folders gave different bytes and a new
+  name. Measured with the pinned SDK: two builds in different folders, then
+  `wasm-opt`, gave identical bytes.
 
 ## 3. Streaming instantiation
 
