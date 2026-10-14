@@ -143,7 +143,8 @@ thread, and an environment that *replaces* rather than augments the parent's.
 
 ## Family 2 — webkit grading hang (`grading-probe (webkit)`, `hangs=N/12`) — CONTAINED, root cause open; the result-POST 500 that shares its counter is CLOSED
 
-**Symptom.** The grading-hang probe (`grading-hang-probe.yml`) boots the
+**Symptom.** The grading-hang probe (the `grading-probe` job of `browser-probes.yml`,
+formerly `grading-hang-probe.yml`) boots the
 real server + notebook page 12 times per engine and counts grading hangs;
 webkit intermittently reports `hangs=1/12`. Chromium passes 12/12 in the
 same runs. Failures observed on unrelated branches 2026-06-26 (×3) and
@@ -162,8 +163,9 @@ and the ambient rate stays measured rather than silently absorbed.
 *Correction (2026-09-20):* the probe had **no schedule** when this policy
 was written, and never had one — its only hard-zero runs were dispatches
 nobody made. The 30/30 scheduled hard-zero reading below is `editor-smoke`'s,
-which does have one. `grading-hang-probe.yml` now runs weekly (Monday
-04:17 UTC, ahead of the telemetry tally), so the sentence above is true from
+which does have one. The grading-hang probe now runs weekly (Monday
+04:17 UTC, ahead of the telemetry tally; the `grading-probe` job of
+`browser-probes.yml` since the probe workflows were combined), so the sentence above is true from
 that date on.
 
 **First chromium sighting (2026-08-04, PR #1261, run 30867456697).**
@@ -1589,7 +1591,8 @@ wedge watchdog never run, because the process that dies is SwiftPM.
    Family 2.** The archived trail targeted pyodide-kernel-driver code that
    no longer ships; a new hang starts from the probe's five-way
    classification, and the dispatch/scheduled hard-zero runs of
-   `grading-hang-probe.yml` remain the acceptance test for any fix. The
+   the grading-hang probe (`grading-probe` in `browser-probes.yml`) remain
+   the acceptance test for any fix. The
    findings below are the old era's record, kept because the probe
    forensics they produced (the classifications, the dialog capture, the
    delay experiment's method) survive the substrate they measured.

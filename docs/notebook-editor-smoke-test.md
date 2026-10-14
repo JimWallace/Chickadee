@@ -1,7 +1,7 @@
 # Pre-merge browser smoke test for the notebook editor
 
 Status: **implemented, with an always-reporting gate.** The harness lives in
-`Tools/editor-smoke-test/` and runs in CI via the `Editor smoke test` workflow,
+`Tools/editor-smoke-test/` and runs in CI via the `smoke` job of the `Browser probes` workflow,
 nightly and on every pull request with no path filter. A `changes` job decides
 whether the browser smoke runs, and the `editor-smoke-gate` job reports the one
 status (see "Make it a required gate" below). Companion to the editor telemetry
@@ -44,7 +44,8 @@ no course seeding). The original proposal follows for context.
 
 ## Make it a required gate — IMPLEMENTED (one setting left)
 
-The always-runs gate is now built into `editor-smoke.yml`. The workflow no longer
+The always-runs gate is now built into `browser-probes.yml` (it was
+`editor-smoke.yml` until the probe workflows were combined). The workflow no longer
 path-filters at the trigger; instead:
 
 1. a **`changes`** job decides whether the PR touched the editor/grading/isolation

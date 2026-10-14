@@ -1,0 +1,776 @@
+name: Browser probes
+
+# The headless-browser probes of the notebook editor, in one workflow so that
+# one `server` job builds chickadee-server for all of them. A job can only
+# `need` a job in its own workflow run, so as six workflows they did six
+# builds. The job names are the check names, and they did not change:
+# `editor-smoke-gate` is still the one required gate.
+#
+# Which probes run:
+#   * pull_request — each probe whose paths changed (the `changes` job). The
+#     workflow itself always runs, so `editor-smoke-gate` always reports.
+#   * schedule — the editor smoke daily, the grading-hang probe weekly.
+#   * workflow_dispatch — the probes named in `probes` (default all).
+# The per-probe notes from the old workflow files are above each job.
+
+on:
+  schedule:
+    - cron: "30 7 * * *"
+    - cron: "17 4 * * 1"
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      probes:
+        description: "Probes to run: all, or a comma-separated list of smoke, exec, bridge, lifecycle, reset, grading"
+        default: "all"
+      browser:
+        description: "Engine to drive (chromium | webkit | both)"
+        default: "both"
+      exec_iterations:
+        description: "exec probe: open→idle→execute cycles per engine"
+        default: "8"
+      exec_budget_ms:
+        description: "exec probe: per-cell execute budget in ms (>45000 also trips exec_hang)"
+        default: "60000"
+      exec_delay_ms:
+        description: "exec probe: ms to wait after kernel_idle before running the cell"
+        default: "0"
+      grading_iterations:
+        description: "grading-hang probe: full open -> submit -> grade cycles per engine"
+        default: "12"
+      grading_submit_ms:
+        description: "grading-hang probe: per-grade result budget in ms (a true hang exceeds this)"
+        default: "300000"
+
+concurrency:
+  group: browser-probes-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # One run decision per probe. On a pull request it is the probe's path
+  # pattern (changed-paths fails safe to true). On a schedule it is the probe's
+  # cron, and on a dispatch the `probes` input.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      editor: ${{ steps.decide.outputs.smoke }}
+      exec: ${{ steps.decide.outputs.exec }}
+      bridge: ${{ steps.decide.outputs.bridge }}
+      lifecycle: ${{ steps.decide.outputs.lifecycle }}
+      reset: ${{ steps.decide.outputs.reset }}
+      grading: ${{ steps.decide.outputs.grading }}
+      any: ${{ steps.decide.outputs.any }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: smoke
+        uses: ./.github/actions/changed-paths
+        with:
+          label: editor smoke
+          pattern: '^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/[a-z0-9]+-(grading|eval)-|Public/grading-shared\.js|Public/eval-protocol-shared\.js|Public/xeus-kernel-shared\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/jupyterlite/|Public/vendor/|Sources/APIServer/Views/Pages/WorkbenchPage\.swift|Sources/APIServer/Views/Pages/NotebookPage\.swift|Sources/APIServer/Views/NotebookBody\.swift|Sources/APIServer/Views/BaseLayout\.swift|Sources/APIServer/Views/AssignmentEditBody\.swift|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/changed-paths/|\.github/actions/(browser-probe-setup|build-probe-server)/)'
+      - id: exec
+        uses: ./.github/actions/changed-paths
+        with:
+          label: the exec probe
+          pattern: '^(Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/(browser-probe-setup|build-probe-server|changed-paths)/|Public/notebook[^/]*\.js|Public/jupyterlite/|Public/jl-kernel-diagnostics\.js|Public/browser-runner\.js|Public/runner-support-sources\.js|Public/grading-executors\.js)'
+      - id: bridge
+        uses: ./.github/actions/changed-paths
+        with:
+          label: the bridge probe
+          pattern: '^(Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/(browser-probe-setup|build-probe-server|changed-paths)/|Public/notebook[^/]*\.js|Public/jupyterlite/|Public/vendor/iframe-commands-host\.js)'
+      - id: lifecycle
+        uses: ./.github/actions/changed-paths
+        with:
+          label: the lifecycle probe
+          pattern: '^(Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/(browser-probe-setup|build-probe-server|changed-paths)/|Public/notebook[^/]*\.js|Public/jupyterlite/)'
+      - id: reset
+        uses: ./.github/actions/changed-paths
+        with:
+          label: the reset probe
+          pattern: '^(Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/(browser-probe-setup|build-probe-server|changed-paths)/|Public/notebook[^/]*\.js|Public/jupyterlite/)'
+      - id: grading
+        uses: ./.github/actions/changed-paths
+        with:
+          label: the grading-hang probe
+          pattern: '^(Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/(browser-probe-setup|build-probe-server|changed-paths)/|Public/notebook[^/]*\.js|Public/jupyterlite/|Public/browser-runner\.js|Public/runner-support-sources\.js|Public/grading-executors\.js|Public/[^/]*-grading-worker\.js|Public/[^/]*grading-shared\.js|Public/xeus-kernel-shared\.js)'
+      - id: decide
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          PROBES: ${{ github.event.inputs.probes || 'all' }}
+          SMOKE: ${{ steps.smoke.outputs.relevant }}
+          EXEC: ${{ steps.exec.outputs.relevant }}
+          BRIDGE: ${{ steps.bridge.outputs.relevant }}
+          LIFECYCLE: ${{ steps.lifecycle.outputs.relevant }}
+          RESET: ${{ steps.reset.outputs.relevant }}
+          GRADING: ${{ steps.grading.outputs.relevant }}
+        run: |
+          set -euo pipefail
+          known=",all,smoke,exec,bridge,lifecycle,reset,grading,"
+          if [ "$EVENT" = workflow_dispatch ]; then
+            for name in ${PROBES//,/ }; do
+              case "$known" in
+                *,"$name",*) ;;
+                *) echo "::error::Unknown probe '$name'. Use all, or some of smoke, exec, bridge, lifecycle, reset, grading."; exit 1 ;;
+              esac
+            done
+          fi
+          any=false
+          for probe in smoke exec bridge lifecycle reset grading; do
+            case "$EVENT" in
+              pull_request)
+                var="${probe^^}"
+                run="${!var}" ;;
+              schedule)
+                case "$probe:$SCHEDULE" in
+                  "smoke:30 7 * * *"|"grading:17 4 * * 1") run=true ;;
+                  *) run=false ;;
+                esac ;;
+              *)
+                case ",${PROBES// /}," in
+                  *,all,*|*,"$probe",*) run=true ;;
+                  *) run=false ;;
+                esac ;;
+            esac
+            echo "$probe=$run" >> "$GITHUB_OUTPUT"
+            echo "$probe: $run"
+            if [ "$run" = true ]; then any=true; fi
+          done
+          echo "any=$any" >> "$GITHUB_OUTPUT"
+
+  # One debug build of chickadee-server for every probe leg, which download
+  # it (browser-probe-setup `server-artifact`) instead of each compiling it.
+  server:
+    needs: changes
+    if: ${{ needs.changes.outputs.any == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/build-probe-server
+        with:
+          artifact-name: probe-server
+
+  # ── Editor smoke (the required gate) ────────────────────────────────────
+  # Boots the real chickadee-server and drives the JupyterLite notebook editor in
+  # a headless browser, asserting a xeus kernel comes up and runs a cell.
+  # This is the gate the recent editor breakages slipped through: swift test, the
+  # render tests, and BrowserRunnerJSTests all prove code/templates *resolve* —
+  # none put a browser in front of the editor, so a change that loads the page but
+  # blocks the kernel worker (the COEP cross-origin-isolation attempt) or leaves a
+  # dead kernel ("Kernel Unknown") passes CI and only fails in front of a student.
+  #
+  # Runs the selftest (Tools/editor-smoke-test/selftest.sh) under a matrix of BOTH
+  # engines we ship to — Chromium (Chrome/Edge) and WebKit (Safari) — against one
+  # build. The selftest proves the editor boots cross-origin isolated, stays
+  # healthy with the service worker disabled (SharedArrayBuffer carries stdin), and
+  # still FAILS a deliberately no-sync config (so the freeze detector is real).
+  # Adding WebKit is what catches the Safari-class breakages that a Chromium-only
+  # check shipped blind (spurious phase-1 timeouts; the Atomics.waitAsync
+  # data:-worker blocked under COEP).
+  #
+  # REQUIRED-GATE DESIGN. The trigger is intentionally NOT path-filtered: a path-
+  # filtered workflow is *skipped* on unrelated PRs, and a required status check
+  # that is skipped blocks those merges forever. Instead the workflow runs on every
+  # PR, a `changes` job decides whether the editor surface was touched (fail-safe:
+  # any uncertainty runs the smoke), the expensive `smoke` matrix runs only when it
+  # was, and an always-running `editor-smoke-gate` job reports the single status to
+  # require in branch protection: green when the smoke passed OR was skipped, red
+  # only when it actually failed. To enforce it, mark **editor-smoke-gate** as a
+  # required status check (see docs/notebook-editor-smoke-test.md).
+  smoke:
+    needs: [changes, server]
+    if: ${{ needs.changes.outputs.editor == 'true' }}
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
+    # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
+    # shared build cache misses, and it MISSES on every PR that touches
+    # Sources/** or Tests/** — the cache key hashes both, and the job that
+    # populates it (`build` in swift-tests.yml) is a different workflow, so
+    # `needs:` cannot order this job after it.  Measured on PR #1264: the setup
+    # step alone took 23.2 min on a run that passed and 29.0 min on one that was
+    # killed, against a 30 min budget.  That is 85-97% of the ceiling spent
+    # before the first test runs, so the old value only ever worked on a cache
+    # hit and failed as a *timeout*, which GitHub reports as `cancelled` and the
+    # gate correctly treats as a failure.
+    timeout-minutes: 50
+    # Run the editor against BOTH engines we ship to: Chromium (Chrome/Edge) and
+    # WebKit (the engine behind Safari — every Safari-class editor bug we have
+    # shipped was invisible to a Chromium-only check). fail-fast:false so one
+    # engine's failure still reports the other.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    # Run in the same swift image the other jobs use so the cached server binary
+    # (dynamically linked against this image's Swift runtime) actually runs, and
+    # so the vendored kernels it serves are the exact build CI ships.
+    container:
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Shared scaffold: exact-match build-cache restore,
+      # server build, Node + Playwright install (engine download cached). See
+      # .github/actions/browser-probe-setup/action.yml for the cache-soundness
+      # notes that used to live inline here.
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+          server-artifact: probe-server
+
+      # selftest.sh drives the editor THREE ways against this one build, in the
+      # matrix engine (Chromium / WebKit):
+      #   • default boot — must PASS, crossOriginIsolated=true (SharedArrayBuffer
+      #     path; also the live guard against the COEP kernel-worker block);
+      #   • service worker disabled — must STILL PASS (SAB independent of the SW —
+      #     the "Kernel Unknown" race is gone);
+      #   • no SW and no SAB — must FAIL (proves the freeze detector works).
+      # Running it under WebKit too is what would have caught the Safari-class
+      # editor regressions in CI rather than in front of a student.
+      # webkit only: one bounded, loudly-logged retry. The webkit engine
+      # carries a known ambient exec-hang rate under CI load (~1 failure in 25
+      # gate runs — docs/ci-flakiness.md Family 3), and this job feeds the
+      # REQUIRED editor-smoke-gate, so a single ambient hang should not block
+      # an unrelated merge. Chromium stays strict: a chromium failure is
+      # treated as real, first time. The retry is logged as a ::warning so the
+      # flake rate stays visible in the annotations rather than hidden.
+      - name: Run editor smoke selftest (${{ matrix.browser }}; both sync paths + freeze detector)
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh; then
+            exit 0
+          else
+            rc=$?
+          fi
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
+
+      # The dedicated synchronous-stdin probe.
+      #
+      # This step used to carry a second job: the selftest above ran
+      # `?kernel=python` — the Pyodide kernel — so without this, every
+      # stdin/freeze result described a kernel no student booted. Retiring
+      # Pyodide deleted that kernelspec, and the selftest now defaults to
+      # `xpython` itself, so the two run the same kernel. The step stays because
+      # it asserts something the selftest does not: that `input()` actually
+      # round-trips over each engine's sync transport.
+      #
+      # Both engines have a synchronous-stdin transport, and they are different
+      # ones — which is exactly why this must run on both:
+      #
+      #   Chromium — cross-origin isolated, stdin over SharedArrayBuffer
+      #              (jupyterlite/xeus#217); the SW is disabled as redundant.
+      #   WebKit   — served NON-isolated by COEPMiddleware, so no SAB; stdin
+      #              goes over the service worker (jupyterlite/xeus#212), which
+      #              JupyterLiteConfigFlagMiddleware re-enables per request for
+      #              this engine specifically.
+      #
+      # Measured PASS on both (2026-08). Blocking, because a regression here is
+      # a student-visible `input()` hang and the two transports fail
+      # independently — a change that breaks only the WebKit path would
+      # otherwise ship green.
+      - name: Probe xeus-python stdin on the real kernel (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: SMOKE_BROWSER="$ENGINE" SMOKE_KERNEL=xpython Tools/editor-smoke-test/run-smoke.sh
+
+      # Full authenticated end-to-end against the REAL student notebook page:
+      # seed a browser-graded assignment over the HTTP API, log in as a student,
+      # open /testsetups/:id/notebook (the isolated parent that embeds the editor
+      # iframe AND spawns our grading/freeze workers), and assert it is isolated,
+      # the workers spawn, the editor loads the notebook from the Drive, and a
+      # real Submit grades. This drives the actual page (not /jupyterlite/repl) —
+      # the gap that hid the grading-worker COEP block (#986).
+      - name: Run authenticated notebook-page e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          else
+            rc=$?
+          fi
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit notebook-page e2e failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Families 2+3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
+      # The assignment workbench nests the notebook page one frame deeper than
+      # anything else, and cross-origin isolation is a property of the WHOLE
+      # ancestor chain. COEPMiddlewareTests pins the headers; only a real browser
+      # can confirm the isolation those headers are meant to produce survives two
+      # levels of framing. Without this, a broken chain is silent: the kernel
+      # still boots, just on the service-worker comlink transport instead of
+      # SharedArrayBuffer. Cheaper than the notebook-page e2e — it asserts the
+      # frames and their isolation, and does not wait for a kernel or a submit.
+      - name: Run workbench isolation-chain e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          else
+            rc=$?
+          fi
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit workbench e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
+  # Always-running required status. Green when the smoke passed OR was skipped
+  # (no editor-relevant changes), red only when the smoke actually failed — so
+  # this one check can be marked required without blocking unrelated PRs. Mark
+  # THIS job ("editor-smoke-gate") required in branch protection.
+  # `!cancelled()` is run-scoped: a superseded run (concurrency cancel from a
+  # newer push, or a rerun of an older head entering the shared group) skips
+  # the gate instead of reporting its cancelled smoke jobs as a failure. A
+  # smoke job killed by its own timeout-minutes still fails the gate — the
+  # run survives in that case, so the gate runs and sees result=cancelled.
+  editor-smoke-gate:
+    needs: [changes, server, smoke]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on editor smoke result
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          SERVER_RESULT: ${{ needs.server.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+          EDITOR_CHANGED: ${{ needs.changes.outputs.editor }}
+        run: |
+          echo "changes job: ${CHANGES_RESULT}; editor-relevant: ${EDITOR_CHANGED}; server: ${SERVER_RESULT}; smoke: ${SMOKE_RESULT}"
+          # If we couldn't even determine what changed, fail closed.
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::change-detection job did not succeed (${CHANGES_RESULT}) — failing closed."
+            exit 1
+          fi
+          # smoke is 'skipped' when no editor files changed (pass), 'success'
+          # when it ran green, 'failure'/'cancelled' when it broke.
+          # A failed server build leaves the smoke legs skipped, which the
+          # check below would accept.
+          if [ "$SERVER_RESULT" = "failure" ] || [ "$SERVER_RESULT" = "cancelled" ]; then
+            echo "::error::The probe server build failed (${SERVER_RESULT}) — see the server job."
+            exit 1
+          fi
+          if [ "$SMOKE_RESULT" = "failure" ] || [ "$SMOKE_RESULT" = "cancelled" ]; then
+            echo "::error::Editor smoke test failed — see the smoke job."
+            exit 1
+          fi
+          echo "Editor smoke gate passed (smoke: ${SMOKE_RESULT})."
+
+  # ── Exec probe ──────────────────────────────────────────────────────────
+  # DIAGNOSTIC harness — NOT a required gate. Reproduces the production post-idle
+  # kernel execution hang (`exec_hang`) in CI: it opens the REAL student notebook
+  # page, waits for kernel_idle, then runs an EDITOR cell and asserts its output
+  # renders — the path the required editor-smoke never exercises (that one checks
+  # boot + browser grading, but never an editor-cell execute, which is exactly
+  # where ~1 in 5 students wedge `[*]`-forever). Loops to measure the hang RATE per
+  # engine and, on a hang, prints the in-iframe kernel-diag breadcrumbs (incl.
+  # exec_hang), the execution-indicator status, and console errors.
+  #
+  # Intentionally NOT marked required in branch protection: while the root cause is
+  # open, a reproduced hang is the SIGNAL we want, not a merge blocker. It is the
+  # failing test a fix must turn green; once consistently green it becomes a
+  # regression guard. Runs on PRs that touch the editor/probe surface, and on
+  # demand (workflow_dispatch) with a larger iteration count for a rate sweep.
+  exec-probe:
+    needs: [changes, server]
+    if: ${{ needs.changes.outputs.exec == 'true' }}
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
+    # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
+    # shared build cache misses, and it MISSES on every PR that touches
+    # Sources/** or Tests/** — the cache key hashes both, and the job that
+    # populates it (`build` in swift-tests.yml) is a different workflow, so
+    # `needs:` cannot order this job after it.  Measured on PR #1264: the setup
+    # step alone took 23.2 min on a run that passed and 29.0 min on one that was
+    # killed, against a 30 min budget.  That is 85-97% of the ceiling spent
+    # before the first test runs, so the old value only ever worked on a cache
+    # hit and failed as a *timeout*, which GitHub reports as `cancelled` and the
+    # gate correctly treats as a failure.
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    # Same Swift image as the other jobs so the cached server binary runs and the
+    # vendored kernels it serves are the exact build CI ships.
+    container:
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Shared scaffold: exact-match build-cache restore, server build,
+      # Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+          server-artifact: probe-server
+
+      # Skip the non-selected engine on a single-engine workflow_dispatch; always
+      # run both on a pull_request (inputs are empty there).
+      - name: Probe editor-cell execute (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: editor-exec-check.mjs
+          EXEC_ITER: ${{ github.event.inputs.exec_iterations || '8' }}
+          EXEC_BUDGET_MS: ${{ github.event.inputs.exec_budget_ms || '60000' }}
+          EXEC_DELAY_MS: ${{ github.event.inputs.exec_delay_ms || '0' }}
+        run: Tools/editor-smoke-test/run-smoke.sh
+
+  # ── Notebook command-bridge probe ───────────────────────────────────────
+  # DIAGNOSTIC harness — NOT a required gate. Prototype probe for the
+  # jupyter-iframe-commands command bridge (the supported replacement for
+  # notebook.js's `frame.contentWindow.jupyterapp.commands` cross-frame poking).
+  # On the real student notebook page it boots the editor, types an unsaved marker
+  # into a cell, then — from the PARENT frame — builds the bridge against
+  # iframe#jl-frame using the vendored jupyter-iframe-commands-host bundle, asserts
+  # listCommands() RPCs back "docmanager:save", drives execute("docmanager:save"),
+  # reloads, and asserts the bridge-driven save persisted. Proves both halves of
+  # the bridge (the federated labextension inside the iframe + the host bundle in
+  # the parent) work end-to-end on the JupyterLite 0.8 / Pyodide 314 stack BEFORE
+  # we rewire notebook.js's production save path.
+  #
+  # Runs both engines (Chromium + WebKit). Not wired into branch protection — a
+  # flaky bridge run must not block unrelated merges; it's a confidence signal for
+  # the bridge prototype and an on-demand check.
+  bridge:
+    needs: [changes, server]
+    if: ${{ needs.changes.outputs.bridge == 'true' }}
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
+    # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
+    # shared build cache misses, and it MISSES on every PR that touches
+    # Sources/** or Tests/** — the cache key hashes both, and the job that
+    # populates it (`build` in swift-tests.yml) is a different workflow, so
+    # `needs:` cannot order this job after it.  Measured on PR #1264: the setup
+    # step alone took 23.2 min on a run that passed and 29.0 min on one that was
+    # killed, against a 30 min budget.  That is 85-97% of the ceiling spent
+    # before the first test runs, so the old value only ever worked on a cache
+    # hit and failed as a *timeout*, which GitHub reports as `cancelled` and the
+    # gate correctly treats as a failure.
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    container:
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Shared scaffold: exact-match build-cache restore, server build,
+      # Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+          server-artifact: probe-server
+
+      - name: Drive command-bridge probe (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-bridge-check.mjs
+        run: Tools/editor-smoke-test/run-smoke.sh
+
+  # ── Notebook lifecycle probe ────────────────────────────────────────────
+  # DIAGNOSTIC harness — NOT a required gate. Drives the editor working-copy
+  # lifecycle the required editor-smoke gate doesn't cover (it proves boot + a
+  # Submit grade only): on the real student notebook page it edits a cell, saves
+  # it to the Drive (Ctrl+S), reloads, and asserts the edit persisted — the
+  # keep-local reseed path. Added to confirm the JupyterLite 0.8 / Pyodide 314
+  # upgrade keeps the ContentsManager save / persist / reseed flow healthy (0.8
+  # reworked the Drive wiring). (Student self-reset coverage is a follow-up: it
+  # needs a full published-assignment seed, not the bare test setup used here.)
+  #
+  # Runs both engines (Chromium + WebKit). Not wired into branch protection — a
+  # flaky editor-lifecycle run must not block unrelated merges; it's a confidence
+  # signal for editor / bundle changes and an on-demand check.
+  lifecycle:
+    needs: [changes, server]
+    if: ${{ needs.changes.outputs.lifecycle == 'true' }}
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
+    # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
+    # shared build cache misses, and it MISSES on every PR that touches
+    # Sources/** or Tests/** — the cache key hashes both, and the job that
+    # populates it (`build` in swift-tests.yml) is a different workflow, so
+    # `needs:` cannot order this job after it.  Measured on PR #1264: the setup
+    # step alone took 23.2 min on a run that passed and 29.0 min on one that was
+    # killed, against a 30 min budget.  That is 85-97% of the ceiling spent
+    # before the first test runs, so the old value only ever worked on a cache
+    # hit and failed as a *timeout*, which GitHub reports as `cancelled` and the
+    # gate correctly treats as a failure.
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    container:
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Shared scaffold: exact-match build-cache restore, server build,
+      # Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+          server-artifact: probe-server
+
+      - name: Drive notebook lifecycle (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-lifecycle-check.mjs
+        run: Tools/editor-smoke-test/run-smoke.sh
+
+  # ── Notebook reset probe ────────────────────────────────────────────────
+  # DIAGNOSTIC harness — NOT a required gate. Confirms instructor/self "Reset
+  # notebook" actually takes effect on the JupyterLite 0.8 editor — the regression
+  # fixed in the same PR: 0.8 doesn't expose window.jupyterapp, so the client
+  # reseed silently no-op'd and a reset left the student's stale IndexedDB copy on
+  # screen. Seeds a published, open, no-suite assignment (no runner needed), has
+  # the student edit+save, hits the self-reset endpoint, reloads, and asserts the
+  # edit marker is GONE. Without the fix this FAILS (stale copy survives); with it,
+  # the Drive entry is evicted and the editor re-fetches the reset starter.
+  #
+  # Runs both engines (Chromium + WebKit). Not wired into branch protection — a
+  # flaky reset run must not block unrelated merges; it's a confidence signal for
+  # editor / reseed changes and an on-demand check.
+  reset:
+    needs: [changes, server]
+    if: ${{ needs.changes.outputs.reset == 'true' }}
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
+    # 50, not 30: `browser-probe-setup` cold-builds chickadee-server whenever the
+    # shared build cache misses, and it MISSES on every PR that touches
+    # Sources/** or Tests/** — the cache key hashes both, and the job that
+    # populates it (`build` in swift-tests.yml) is a different workflow, so
+    # `needs:` cannot order this job after it.  Measured on PR #1264: the setup
+    # step alone took 23.2 min on a run that passed and 29.0 min on one that was
+    # killed, against a 30 min budget.  That is 85-97% of the ceiling spent
+    # before the first test runs, so the old value only ever worked on a cache
+    # hit and failed as a *timeout*, which GitHub reports as `cancelled` and the
+    # gate correctly treats as a failure.
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    container:
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Shared scaffold: exact-match build-cache restore, server build,
+      # Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+          server-artifact: probe-server
+
+      - name: Drive notebook reset probe (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-reset-check.mjs
+        run: Tools/editor-smoke-test/run-smoke.sh
+
+  # ── Grading-hang probe ──────────────────────────────────────────────────
+  # DIAGNOSTIC harness — NOT a required gate. Reproduces and MEASURES the
+  # intermittent browser-grading hang seen on JupyterLite 0.8 / Pyodide 314: the
+  # real student notebook page boots the editor kernel's Pyodide AND, on Submit, a
+  # SECOND Pyodide in grading-worker.js under cross-origin isolation, and the grade
+  # intermittently never completes (~1 in 6 on 314; reliable on 0.7.6). The
+  # required editor-smoke gate runs the grading check ONCE per engine, so a 1/6
+  # flake usually slips through; this probe loops it to surface the rate and, on a
+  # hang, prints the grading submit-phase breadcrumbs (grading_init_start/done,
+  # python_kernel_booted, env_configured, suite_started/done) that localize WHERE it
+  # wedged. A reproduced hang is the SIGNAL. Thresholds (docs/ci-flakiness.md,
+  # Family 2): chromium is green only at hangs=0 everywhere; webkit tolerates
+  # hangs<=1 on pull_request runs (with a loud warning — the known ambient
+  # exec-hang under CI load must not fail unrelated PRs) while dispatch and
+  # scheduled runs keep the hard zero, so the probe stays the regression guard
+  # a real fix must turn green.
+  #
+  # Intentionally NOT required in branch protection: a reproduced hang must not
+  # block unrelated PRs. Runs on PRs touching the grading / editor / isolation
+  # surface, on demand (workflow_dispatch) with a larger iteration count, and
+  # once a week on a schedule. The weekly run is the hard-zero datapoint the
+  # gate policy describes: until 2026-09-20 the policy named "scheduled runs"
+  # while no schedule existed, so the only hard-zero runs were dispatches nobody
+  # made. It fires before the Monday flake-telemetry tally (flake-telemetry.yml),
+  # which counts this workflow's red runs and warnings.
+  grading-probe:
+    needs: [changes, server]
+    if: ${{ needs.changes.outputs.grading == 'true' }}
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
+    # 75, not 50: this job pays the same cold `browser-probe-setup` build as the
+    # other probes (23-29 min when the shared cache misses, which it does on any
+    # PR touching Sources/** or Tests/**) and THEN runs 12 grading iterations per
+    # engine on top.  On PR #1264 the webkit leg ran the full 50 min and was
+    # killed before finishing, while chromium — which happened to get a warm
+    # cache — completed the same 12 iterations comfortably.  The old budget was
+    # sized for the warm path only.
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    # Same Swift image as the other editor jobs so the cached server binary runs
+    # and the vendored kernels it serves are the exact build CI ships.
+    container:
+      # swift-ci, not the plain mirror: it bakes in nodejs/npm (and the rest of
+      # the test packages), so the probe harness does not apt-get them at job
+      # start. Toolchain-identical to the mirror, so the shared .build cache
+      # keys still match — see .github/docker/ci-image/Dockerfile.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Shared scaffold: exact-match build-cache restore, server build,
+      # Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+          server-artifact: probe-server
+
+      # Skip the non-selected engine on a single-engine workflow_dispatch; always
+      # run both on a pull_request (inputs are empty there).
+      - name: Probe browser grading rate (${{ matrix.browser }})
+        # Force bash: the container's default `run` shell is `sh` (dash), which
+        # lacks `set -o pipefail` (the loop below otherwise dies with "Illegal
+        # option -o pipefail" before running a single iteration).
+        shell: bash
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-page-check.mjs
+          SMOKE_SUBMIT_MS: ${{ github.event.inputs.grading_submit_ms || '300000' }}
+          ITER: ${{ github.event.inputs.grading_iterations || '12' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+          runs="$ITER"
+          hangs=0
+          for i in $(seq 1 "$runs"); do
+            echo "::group::grading iteration $i/$runs (engine=$SMOKE_BROWSER)"
+            # Distinct port per iteration so a lingering socket from a killed
+            # server can't block the next boot. run-smoke.sh boots a fresh server
+            # (serving the 0.8 bundle), runs ONE full seed -> submit -> grade,
+            # and tears down; the check prints the grading breadcrumb trail.
+            if PORT=$((8100 + i)) Tools/editor-smoke-test/run-smoke.sh; then
+              echo "iter $i: PASS"
+            else
+              rc=$?
+              hangs=$((hangs + 1))
+              echo "iter $i: HANG/FAIL (rc=$rc)"
+            fi
+            echo "::endgroup::"
+          done
+          echo "GRADING-HANG PROBE RESULT — hangs=${hangs}/${runs} engine=${SMOKE_BROWSER}"
+          # Gate policy (docs/ci-flakiness.md, Family 2): chromium is hard-zero
+          # everywhere. webkit carries a known, tracked ambient exec-hang rate
+          # under CI load (docs/archive/exec-hang-investigation.md), so on PR runs a
+          # SINGLE webkit hang warns loudly instead of failing an unrelated PR.
+          # workflow_dispatch / scheduled runs keep the hard zero — the probe
+          # remains the regression guard a real fix must turn green, and the
+          # ambient rate stays visible there rather than silently tolerated.
+          allowed=0
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$SMOKE_BROWSER" = "webkit" ]; then
+            allowed=1
+          fi
+          if [ "$hangs" -gt "$allowed" ]; then
+            echo "::error::grading hangs=${hangs}/${runs} on ${SMOKE_BROWSER} exceeds allowed=${allowed} for event=${EVENT_NAME}"
+            exit 1
+          fi
+          if [ "$hangs" -gt 0 ]; then
+            echo "::warning::AMBIENT FLAKE TOLERATED on PR run: hangs=${hangs}/${runs} on ${SMOKE_BROWSER} (allowed<=${allowed}). The webkit exec-hang is real and tracked — docs/ci-flakiness.md Family 2, docs/archive/exec-hang-investigation.md. Do not treat this warning as noise: if you see it often, the ambient rate is rising."
+          fi
