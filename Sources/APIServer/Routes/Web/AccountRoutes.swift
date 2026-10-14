@@ -6,6 +6,8 @@
 //   POST /account/enroll               → join a course → redirect to /account
 //   POST /account/unenroll/:courseID   → leave a course → redirect to /account
 //   POST /account/avatar               → AccountRoutes+Avatar.swift
+//   POST /account/avatar/hatch         → AccountRoutes+Avatar.swift
+//   POST /account/avatar/restore       → AccountRoutes+Avatar.swift
 //   POST /account/handle/:courseID     → choose a class handle (AccountRoutes+Handle.swift)
 
 import Core
@@ -19,6 +21,8 @@ struct AccountRoutes: RouteCollection {
         routes.post("account", "enroll", use: joinCourse)
         routes.post("account", "unenroll", ":courseID", use: leaveCourse)
         routes.post("account", "avatar", use: saveAvatar)
+        routes.post("account", "avatar", "hatch", use: hatchAvatar)
+        routes.post("account", "avatar", "restore", use: restoreAvatar)
         routes.post("account", "handle", ":courseID", use: chooseHandle)
     }
 
@@ -93,6 +97,8 @@ struct AccountRoutes: RouteCollection {
         let github = try await accountGitHubContext(req: req, userID: userID)
 
         let avatarNotice = req.query[String.self, at: "avatar"]
+        let avatarPicker = try await Self.avatarPickerContext(
+            user: user, spec: spec, isStaff: isStaff, avatarNotice: avatarNotice, req: req)
         let identityName = accountIdentityName(
             displayName: user.displayName,
             preferredName: user.preferredName,
@@ -103,14 +109,16 @@ struct AccountRoutes: RouteCollection {
                 page: page,
                 flash: FlashMessages(
                     success: accountFlashSuccess(req: req, avatarNotice: avatarNotice),
-                    error: req.query[String.self, at: "githubError"]
-                        .flatMap(GitHubLinkError.init(rawValue:))?.message),
+                    error: avatarNotice == "nohatch"
+                        ? "No hatches are left this term."
+                        : req.query[String.self, at: "githubError"]
+                            .flatMap(GitHubLinkError.init(rawValue:))?.message),
                 username: user.username,
                 preferredName: user.preferredName,
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
-                avatarPicker: AvatarPickerContext(for: spec, isStaff: isStaff),
+                avatarPicker: avatarPicker,
                 avatarInvalid: avatarNotice == "invalid",
                 studentID: user.studentID,
                 email: user.email,
@@ -128,9 +136,28 @@ struct AccountRoutes: RouteCollection {
         }.encodeResponse(for: req)
     }
 
+    /// The bird card, with its hatch control. `?hatch=confirm` asks for the
+    /// hatch confirm, and `?avatar=hatched` for the new bird's strip.
+    private static func avatarPickerContext(
+        user: APIUser, spec: AvatarSpec, isStaff: Bool, avatarNotice: String?, req: Request
+    ) async throws -> AvatarPickerContext {
+        guard let term = AcademicTerm.current() else { return AvatarPickerContext(for: spec, isStaff: isStaff) }
+        let status = try await AvatarStore.hatchStatus(for: user, term: term, on: req.db)
+        let requested: AvatarHatchStrip? =
+            avatarNotice == "hatched"
+            ? .hatched : req.query[String.self, at: "hatch"] == "confirm" ? .confirm : nil
+        let hatch = AvatarHatchContext(
+            spec: spec, status: status, nextTerm: term.next, requested: requested, isStaff: isStaff)
+        let formatter = waterlooDateTimeFormatter()
+        formatter.timeStyle = .none
+        let hatchedText = (status.lastHatchedAt ?? user.createdAt).map { "Hatched \(formatter.string(from: $0))" }
+        return AvatarPickerContext(for: spec, isStaff: isStaff, hatchedText: hatchedText ?? "", hatch: hatch)
+    }
+
     /// The one-shot success banner after a redirect back to this page.
     private func accountFlashSuccess(req: Request, avatarNotice: String?) -> String? {
         if avatarNotice == "saved" { return "Bird saved." }
+        if avatarNotice == "restored" { return "Your previous bird is back." }
         return req.query[String.self, at: "github"]
             .flatMap(GitHubAccountLinkRoutes.Notice.init(rawValue:))?.message
     }

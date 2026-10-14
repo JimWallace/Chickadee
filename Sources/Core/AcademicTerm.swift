@@ -140,3 +140,14 @@ public struct AcademicTerm: Codable, Sendable, Hashable, Comparable {
         lhs.ordinal < rhs.ordinal
     }
 }
+
+extension AcademicTerm {
+    /// The term that `date` falls in, on the Waterloo calendar: the season
+    /// from `TermSeason.current(at:)` and the year in the same time zone.
+    /// Nil only past the last four-digit year.
+    public static func current(at date: Date = Date()) -> AcademicTerm? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        return AcademicTerm(year: calendar.component(.year, from: date), season: TermSeason.current(at: date))
+    }
+}

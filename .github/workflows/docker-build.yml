@@ -232,17 +232,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Two properties of the Public layers that a green smoke test cannot see.
+      # Three properties of the Public layers that a green smoke test cannot see.
       #
       # 1. Files in the image carry a commit time, not the checkout time. A
       #    checkout always happens after the HEAD commit, so a time later than
       #    HEAD means scripts/restore-asset-mtimes.py did not reach the image,
       #    and each deploy gives every vendored file a new ETag again. One file is
       #    checked in each Public layer.
-      # 2. The layer for the rest of Public excludes JupyterLite. If the
+      # 2. The large kernel files have brotli copies with the same mtime.
+      # 3. The layer for the rest of Public excludes JupyterLite. If the
       #    exclude stops matching, that layer holds the whole ~400 MB tree a
       #    second time.
-      - name: Check the Public layers (commit mtimes, JupyterLite split)
+      - name: Check the Public layers (commit mtimes, brotli copies, JupyterLite split)
         env:
           IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         run: |
@@ -256,6 +257,15 @@ jobs:
               exit 1
             fi
           done
+          # The kernel-assets stage made a brotli copy with the same mtime,
+          # so PrecompressedAssetMiddleware can serve it with a stable ETag.
+          lib=/app/Public/jupyterlite/xeus/chickadee-octave/xoctave/liboctave.so
+          times="$(docker run --rm --entrypoint stat "$IMAGE" -c %Y "$lib" "$lib.br")" \
+            || { echo "::error::$lib.br is not in the image. Check the kernel-assets stage."; exit 1; }
+          if [ "$(echo "$times" | sort -u | wc -l)" != "1" ]; then
+            echo "::error::$lib.br does not keep the mtime of $lib: $times"
+            exit 1
+          fi
           docker history --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" | grep -E 'COPY .*Public' || true
           rest="$(docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" \
             | grep -E $'\tCOPY (--exclude=[^ ]+ )?Public \\./Public' | cut -f1 | head -n 1 || true)"

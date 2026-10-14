@@ -1,0 +1,70 @@
+name: Build the probe server
+description: >
+  Build the debug chickadee-server for the browser probes, from the shared
+  Swift build cache when it has an exact match, else from the probes' own
+  cache. With `artifact-name`, upload the binary, so the matrix legs of a probe
+  workflow download one build instead of each compiling its own. Callers run
+  actions/checkout first, inside the ghcr.io/jimwallace/chickadee/swift
+  container.
+
+inputs:
+  artifact-name:
+    description: "Upload .build/debug/chickadee-server under this name. Empty: build only."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Read-only restore of the shared build cache (same exact key as the Swift
+    # Tests `build` job, from the same action). EXACT-MATCH ONLY — a
+    # restore-keys prefix fallback would incrementally build over a mismatched
+    # tree, which is unsound for the mangled-symbol reason documented in
+    # swift-test-setup. On a hit, building the server product is near-no-op;
+    # on a miss it builds cold. No `tools`: the probes need no test
+    # interpreter, and a stale image must not apt-get all of them here.
+    - name: Swift test setup
+      id: swift
+      uses: ./.github/actions/swift-test-setup
+      with:
+        build-cache: restore
+
+    # Fallback cache, owned by the probes, used only when the shared key missed.
+    #
+    # The shared key is written by `build` in swift-tests.yml — a different
+    # workflow, so `needs:` cannot order a probe after it. On any PR touching
+    # Sources/** or Tests/** the key is new, and whether a probe hits it is a
+    # race against that build finishing. Losing the race means a cold Swift
+    # build (~16 min of a 50 min budget), and losing it *repeatedly* is what
+    # made re-running a probe on the same commit cost the same 16 minutes every
+    # time — nothing the probes did ever populated a key they could read back.
+    #
+    # This one they own: same exact-match discipline (no restore-keys prefix
+    # fallback, which would build incrementally over a mismatched tree), same
+    # source hash, different namespace. Deliberately NOT the shared key: a probe
+    # that won that race would publish a `.build` holding only
+    # chickadee-server, and the swift-tests jobs restoring it would have to
+    # rebuild the test targets — trading their time for ours.
+    - name: Restore/save probe build cache
+      if: steps.swift.outputs.cache-hit != 'true'
+      uses: actions/cache@v6
+      with:
+        path: .build
+        key: ${{ runner.os }}-probebuild-v1-${{ steps.swift.outputs.toolchain-key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+
+    - name: Build chickadee-server
+      shell: bash
+      run: swift build --product chickadee-server
+
+    # Seven days: "Re-run failed jobs" re-runs only the failed leg, which then
+    # downloads this artifact from the first attempt. "Re-run all jobs"
+    # uploads it again under the same name, hence `overwrite`.
+    - name: Upload chickadee-server for the probe legs
+      if: inputs.artifact-name != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: .build/debug/chickadee-server
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 7

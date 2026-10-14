@@ -13,6 +13,10 @@
 // it to every deployment, and nginx passes a body that is already gzipped
 // through unchanged (`gzip_proxied any`).
 //
+// PrecompressedAssetMiddleware serves the image build's brotli copy first, so
+// this on-the-fly gzip is the fallback: a client without br, or a host that
+// runs from a checkout and has no copies.
+//
 // Registered just OUTSIDE FileMiddleware, which serves these files: a
 // middleware registered after FileMiddleware never sees its responses.
 

@@ -61,8 +61,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  grading-probe:
+  # One debug build of chickadee-server for both browser legs, which download
+  # it (browser-probe-setup `server-artifact`) instead of each compiling it.
+  server:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/build-probe-server
+        with:
+          artifact-name: probe-server
+
+  grading-probe:
+    needs: server
+    runs-on: ubuntu-latest
+    # This budget is from before the `server` job took the build out of this
+    # job. A leg now downloads the binary. Lower it once runs show the times.
+    #
     # 75, not 50: this job pays the same cold `browser-probe-setup` build as the
     # other probes (23-29 min when the shared cache misses, which it does on any
     # PR touching Sources/** or Tests/**) and THEN runs 12 grading iterations per
@@ -96,6 +116,7 @@ jobs:
       - uses: ./.github/actions/browser-probe-setup
         with:
           browser: ${{ matrix.browser }}
+          server-artifact: probe-server
 
       # Skip the non-selected engine on a single-engine workflow_dispatch; always
       # run both on a pull_request (inputs are empty there).

@@ -159,7 +159,7 @@ cohorts. A species fill would turn a known bird into a different bird, which
 is the reshuffle that decision 2 forbids. The cohort split that remains, old
 accounts are chickadees and new ones are mixed, was closed by the picker
 (decision 5). That picker is gone (decision 5, superseded), so the split now
-stays until a student draws a new bird.
+closes one hatch at a time.
 
 Append only. A species is never renamed, reordered or removed.
 
@@ -260,9 +260,15 @@ changed. `options(for: .cap, species:)` offers exactly
 `AvatarSpecies.colourways`, so the page cannot offer a colourway that the
 chokepoint refuses.
 
+Hatching is the one way to a different species. "Hatch a new bird", 3 times
+per term, draws a fresh bird of one of the ten other species
+(`AvatarSpec.drawn(excluding:keeping:)`) and keeps the backdrop, the ring and
+the class handles; the previous bird can be restored until the next hatch
+(student-avatars.md, open question 1).
+
 A stored bird is never reshuffled. A student who chose a species with the old
 picker keeps that bird, and an older account that is still a chickadee stays
-one. The account page's "Your bird" card replaced the picker
+one until its student hatches. The account page's "Your bird" card replaced the picker
 (`docs/ui-design.md`, `.bird-card`).
 
 The text below records the decision as it first shipped.

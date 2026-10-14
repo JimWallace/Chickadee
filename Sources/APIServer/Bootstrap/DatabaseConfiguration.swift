@@ -591,4 +591,8 @@ func registerMigrations(on app: Application) {
     // Class composite, slice 6: the reference render of each slot.
     app.migrations.add(CreateCompositeReferences())
     app.migrations.add(CreateCompositeSpares())
+    // "Hatch a new bird" (Core/AvatarHatch.swift): the per-term hatch rows,
+    // and the bird before the last hatch.
+    app.migrations.add(CreateAvatarHatches())
+    app.migrations.add(AddUserAvatarPreviousSpec())
 }
