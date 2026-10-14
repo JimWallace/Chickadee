@@ -3827,6 +3827,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     min-width: 0;
 }
 
+.bird-card-groups .fieldset-plain--nested { margin: 1rem 0 0; }
+
+/* The staff ring beside its note. */
+.bird-card-groups fieldset > .toolbar { flex-wrap: nowrap; }
+
 .bird-card-groups .swatch {
     justify-content: center;
     min-width: 2.75rem;
