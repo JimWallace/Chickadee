@@ -249,7 +249,7 @@ extension InstructorDashboardRoutes {
         } else {
             let sorted = gradedRows.sorted()
             let mid = sorted.count / 2
-            let median = sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+            let median = sorted.count.isMultiple(of: 2) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
             medianBestGrade = "\(median)%"
         }
         let avgAttempts: String

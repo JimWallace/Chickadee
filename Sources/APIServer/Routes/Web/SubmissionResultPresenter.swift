@@ -403,12 +403,12 @@ extension WebRoutes {
     ) -> [SectionedOutcomes] {
         let visibleEntries = manifestEntries.filter { allowedTiers.contains($0.tier.rawValue) }
         let sectionIDPerOutcome = alignSectionIDs(
-            visibleEntries.map { $0.sectionID }, toCount: outcomes.count)
+            visibleEntries.map(\.sectionID), toCount: outcomes.count)
         // Secret outcomes never appear in `allowedTiers` for students, so they
         // correlate against the secret-tier manifest entries on their own.
         let secretEntries = manifestEntries.filter { $0.tier == .secret }
         let sectionIDPerSecret = alignSectionIDs(
-            secretEntries.map { $0.sectionID }, toCount: secretOutcomes.count)
+            secretEntries.map(\.sectionID), toCount: secretOutcomes.count)
         return groupOutcomesBySection(
             outcomes,
             sections: manifestSections,
@@ -426,7 +426,8 @@ extension WebRoutes {
     private func alignSectionIDs(_ ids: [String?], toCount count: Int) -> [String?] {
         if ids.count < count {
             return ids + Array(repeating: String?.none, count: count - ids.count)
-        } else if ids.count > count {
+        }
+        if ids.count > count {
             return Array(ids.prefix(count))
         }
         return ids
@@ -440,8 +441,8 @@ extension WebRoutes {
         outcomes: [OutcomeRow], hasDelta: Bool, currentAttempt: Int
     ) -> String? {
         guard hasDelta else { return nil }
-        let improved = outcomes.filter { $0.deltaImproved }.count
-        let regressed = outcomes.filter { $0.deltaRegressed }.count
+        let improved = outcomes.filter(\.deltaImproved).count
+        let regressed = outcomes.filter(\.deltaRegressed).count
         var parts: [String] = []
         if improved > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
         if regressed > 0 { parts.append("↓ broke \(regressed) test\(regressed == 1 ? "" : "s")") }
@@ -543,7 +544,7 @@ func loadClassGoalViews(
     testSetupID: String, props: TestProperties?, on db: Database
 ) async throws -> [ClassGoalView] {
     guard let props else { return [] }
-    let goals = props.achievements.filter { $0.isClassGoal }
+    let goals = props.achievements.filter(\.isClassGoal)
     guard !goals.isEmpty else { return [] }
 
     let rows = try await APIAchievementResult.query(on: db)

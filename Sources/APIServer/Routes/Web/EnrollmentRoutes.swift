@@ -33,7 +33,7 @@ struct EnrollmentRoutes: RouteCollection {
         let enrolledIDs = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$userID == userID)
             .all()
-            .compactMap { $0.$course.id }
+            .compactMap(\.$course.id)
 
         let enrolledSet = Set(enrolledIDs)
 

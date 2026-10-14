@@ -179,8 +179,8 @@ struct GetRunnerDetailTool: DiagnosticTool {
 
     private func timingSummary(recentJobs: [JobExecutionMetric]) -> TimingSummary {
         let stageBreakdowns = recentJobs.map(stageBreakdown(for:))
-        let cacheFlagged = recentJobs.compactMap { $0.testSetupCacheHit }
-        let cacheHits = cacheFlagged.filter { $0 }.count
+        let cacheFlagged = recentJobs.compactMap(\.testSetupCacheHit)
+        let cacheHits = cacheFlagged.filter(\.self).count
         var statusCounts: [String: Int] = [:]
         for job in recentJobs {
             guard let status = job.finalStatus else { continue }
@@ -188,8 +188,8 @@ struct GetRunnerDetailTool: DiagnosticTool {
         }
         return TimingSummary(
             sampleSize: recentJobs.count,
-            avgExecutionMs: average(recentJobs.compactMap { $0.executionMs }),
-            avgQueueWaitMs: average(recentJobs.compactMap { $0.queueWaitMs }),
+            avgExecutionMs: average(recentJobs.compactMap(\.executionMs)),
+            avgQueueWaitMs: average(recentJobs.compactMap(\.queueWaitMs)),
             avgOverheadMs: average(recentJobs.compactMap { overheadMs(for: $0) }),
             avgCacheAcquireMs: average(stageBreakdowns.compactMap { $0?.cacheAcquireMs }),
             avgDownloadMs: average(stageBreakdowns.compactMap { $0?.downloadMs }),

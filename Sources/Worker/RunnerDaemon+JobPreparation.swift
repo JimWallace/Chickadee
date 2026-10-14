@@ -40,7 +40,7 @@ extension WorkerDaemon {
     func fetchJobArtifacts(job: Job, paths: JobWorkspacePaths) async -> JobArtifactFetch {
         async let submissionDownload: Result<Void, Error> = {
             do {
-                try await self.download(url: job.submissionURL, to: paths.submissionZip, stage: .downloadSubmission)
+                try await download(url: job.submissionURL, to: paths.submissionZip, stage: .downloadSubmission)
                 return .success(())
             } catch {
                 return .failure(error)

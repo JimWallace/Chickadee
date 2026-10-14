@@ -155,7 +155,7 @@ private func racketPersonalizationPreamble(
     _ c: PatternCase, perStudentNames: Set<String>
 ) -> String {
     var names: [String] = []
-    for ref in c.argVarRefs.compactMap({ $0 }) where perStudentNames.contains(ref) {
+    for ref in c.argVarRefs.compactMap(\.self) where perStudentNames.contains(ref) {
         names.append(ref)
     }
     if let expectedRef = c.expectedVarRef, perStudentNames.contains(expectedRef) {

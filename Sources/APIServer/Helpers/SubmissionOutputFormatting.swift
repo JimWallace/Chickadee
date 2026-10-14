@@ -254,7 +254,7 @@ private func extractStructuredMessages(from value: Any) -> [String]? {
     }
 
     if let array = value as? [Any] {
-        let messages = array.compactMap { extractStructuredMessages(from: $0) }.flatMap { $0 }
+        let messages = array.compactMap { extractStructuredMessages(from: $0) }.flatMap(\.self)
         return messages.isEmpty ? nil : messages
     }
 

@@ -113,7 +113,7 @@ enum AdminAlertsPresentation {
     ) -> (
         iso: String, result: String
     )? {
-        let paged = zip(firings, records).filter { $0.1.paged }
+        let paged = zip(firings, records).filter(\.1.paged)
         guard let latest = paged.max(by: { $0.0.occurredAt < $1.0.occurredAt }) else { return nil }
         return (latest.0.firedAt, latest.0.deliveryFailed ? "Failed" : "Delivered")
     }

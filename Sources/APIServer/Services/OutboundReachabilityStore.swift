@@ -78,10 +78,10 @@ actor OutboundReachabilityStore {
     func snapshot(window: TimeInterval, now: Date = Date()) -> Snapshot {
         let cutoff = now.addingTimeInterval(-window)
         let recent = attempts.filter { $0.at >= cutoff }
-        let failing = Set(recent.filter { !$0.succeeded }.map { $0.destination.humanReadable })
+        let failing = Set(recent.filter { !$0.succeeded }.map(\.destination.humanReadable))
         return Snapshot(
             failuresInWindow: recent.filter { !$0.succeeded }.count,
-            successesInWindow: recent.filter { $0.succeeded }.count,
+            successesInWindow: recent.filter(\.succeeded).count,
             destinationsFailing: failing.sorted(),
             lastSuccessAt: lastSuccessAt
         )

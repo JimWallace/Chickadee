@@ -155,7 +155,7 @@ func valenceServerTimeFromTimestampError(body: String) -> Int? {
     guard body.range(of: "Timestamp out of range", options: .caseInsensitive) != nil else {
         return nil
     }
-    let digits = body.drop(while: { !$0.isNumber }).prefix(while: { $0.isNumber })
+    let digits = body.drop(while: { !$0.isNumber }).prefix(while: \.isNumber)
     return Int(digits)
 }
 

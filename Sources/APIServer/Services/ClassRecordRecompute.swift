@@ -128,7 +128,7 @@ private func recordCandidates(
     var executionTimes: [String: Int] = [:]
     if needsExecutionTime {
         let blobs = try await collectionJSONByResultID(
-            for: latestFullMarks.compactMap { $0.result.id }, on: db)
+            for: latestFullMarks.compactMap(\.result.id), on: db)
         for (resultID, json) in blobs {
             executionTimes[resultID] = decodedCollection(from: json)?.executionTimeMs
         }

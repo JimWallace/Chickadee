@@ -62,7 +62,7 @@ struct StageTimingAggregator: Sendable, Equatable {
             runtimeHelperSetupMs,
             testExecutionMs,
         ]
-        let known = stages.compactMap { $0 }
+        let known = stages.compactMap(\.self)
         guard !known.isEmpty else { return nil }
         return known.reduce(0, +)
     }

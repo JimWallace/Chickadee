@@ -411,7 +411,7 @@ struct AuthorScriptTool: ContentTool {
                 displayName: displayName, dependsOn: input.dependsOn ?? [],
                 content: content, hint: nil,
                 timeLimitSeconds: limitEdit.applied(to: nil),
-                failureDetail: detailUpdate.flatMap { $0 }?.rawValue)
+                failureDetail: detailUpdate.flatMap(\.self)?.rawValue)
             let item = SuiteItemDTO(
                 kind: "script", script: dto, family: nil, check: nil,
                 dependsOn: nil, sectionID: normalizedSection)

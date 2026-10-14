@@ -172,7 +172,7 @@ enum BuiltInAchievements {
     /// `manifestPerSubmission(in:)` over an already-decoded manifest.
     static func manifestPerSubmission(props: TestProperties?) -> [Achievement]? {
         guard let props else { return nil }
-        let perSub = props.achievements.filter { $0.isPerSubmissionBadge }
+        let perSub = props.achievements.filter(\.isPerSubmissionBadge)
         if !perSub.isEmpty { return perSub }
         return props.builtInAchievementsSeeded ? [] : nil
     }
@@ -186,7 +186,7 @@ enum BuiltInAchievements {
         in setup: APITestSetup?, disabled: Set<String>
     ) -> [Achievement] {
         let props = setup?.decodedManifest()
-        let manifest = (props?.achievements ?? []).filter { $0.isClassRecord }
+        let manifest = (props?.achievements ?? []).filter(\.isClassRecord)
         let source: [Achievement]
         if !manifest.isEmpty {
             source = manifest

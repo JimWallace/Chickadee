@@ -164,7 +164,7 @@ enum AvatarStore {
                 .filter(\.$course.$id == courseID)
                 .filter(\.$avatarHandle != nil)
                 .all(\.$avatarHandle)
-                .compactMap { $0 })
+                .compactMap(\.self))
     }
 
     /// Unused handles from the current lists, two by default, for the account

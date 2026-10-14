@@ -45,7 +45,7 @@ extension AdminRoutes {
     static func enrolledUserRows(
         for enrollments: [APICourseEnrollment], courseID: UUID, on db: Database
     ) async throws -> [AdminCourseEnrolledUserRow] {
-        let enrolledUserIDs = enrollments.map { $0.userID }
+        let enrolledUserIDs = enrollments.map(\.userID)
         guard !enrolledUserIDs.isEmpty else { return [] }
         // Per-course role (from the enrollment row), not the global user role —
         // this is what the staff selector reads/writes (#417 Slice B).

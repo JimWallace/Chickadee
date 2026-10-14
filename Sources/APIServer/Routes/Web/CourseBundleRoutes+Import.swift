@@ -218,7 +218,7 @@ extension CourseBundleRoutes {
     ) async throws -> ImportTally {
         let extractDir = dirs.extractDir
         let subsDir = dirs.subsDir
-        return try await db.transaction { (db) -> ImportTally in
+        return try await db.transaction { db -> ImportTally in
             // 6a. Check for course code conflicts (moved inside transaction)
             // Asks for an ACTIVE match: a first-match query could return an
             // archived duplicate, pass, and then fail on the unique index.

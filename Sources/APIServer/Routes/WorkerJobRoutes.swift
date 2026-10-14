@@ -712,7 +712,7 @@ private func testSetupDownloadVersion(for setup: APITestSetup, req: Request) asy
     let digest =
         (try? await runBlocking {
             sha256HexDigest(prefix: prefix, contentsOfFile: zipPath)
-        }).flatMap { $0 }
+        }).flatMap(\.self)
     let version = String((digest ?? sha256HexDigest(Data(manifest.utf8))).prefix(16))
     await TestSetupDownloadVersionCache.shared.store(setupID: setupID, key: key, version: version)
     return version

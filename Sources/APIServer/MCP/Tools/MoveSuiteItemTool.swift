@@ -177,7 +177,7 @@ struct MoveSuiteItemTool: ContentTool {
         let familyID = input.familyID.flatMap { $0.isEmpty ? nil : $0 }
         let check = input.check.flatMap { $0.isEmpty ? nil : $0 }
 
-        let provided = [script, familyID, check].compactMap { $0 }
+        let provided = [script, familyID, check].compactMap(\.self)
         guard provided.count == 1 else {
             throw MCPToolError.invalidArguments(
                 detail: "Provide exactly one of script, familyID, or check to identify the item to move.")

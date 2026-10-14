@@ -183,7 +183,7 @@ private func pythonExistenceGuardSource(
     // (and the function_exists notebook check) already use — `_MISSING`
     // distinguishes "not defined" from "defined as None"; `callable` catches a
     // student who shadowed the name with a non-function value.
-    let source = """
+    return """
         # Test: \(label)
         # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(hash) — edit the family, not this file.
         # Existence guard: the family's cases depend on this test, so a missing
@@ -200,7 +200,6 @@ private func pythonExistenceGuardSource(
             failed(f"`{function_name}` is defined but is not a function (got {type(target).__name__}).")
         passed(f"`{function_name}` is defined")
         """
-    return source
 }
 
 /// Stable filename for one case.  Format:

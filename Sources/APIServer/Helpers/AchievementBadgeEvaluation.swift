@@ -22,7 +22,7 @@ func earnedIndividualBadges(
     standings: (standing: Int, matchesWon: Int)? = nil
 ) -> [AchievementBadge] {
     guard let props else { return [] }
-    let authored = props.achievements.filter { $0.isAuthorableIndividualBadge }
+    let authored = props.achievements.filter(\.isAuthorableIndividualBadge)
     guard !authored.isEmpty else { return [] }
 
     // Grade + test-pass badges read only the grade and the per-test outcomes;

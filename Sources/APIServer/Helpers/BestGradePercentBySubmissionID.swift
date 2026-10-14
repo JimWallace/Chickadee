@@ -245,5 +245,5 @@ func bestGradeResultBySubmissionID(
     on db: Database
 ) async throws -> [String: APIResult] {
     bestGradeResultBySubmissionID(
-        try await allResultsBySubmissionID(for: submissionIDs, on: db).values.flatMap { $0 })
+        try await allResultsBySubmissionID(for: submissionIDs, on: db).values.flatMap(\.self))
 }

@@ -191,7 +191,7 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         kernelSpec["name"] = kernelName
         kernelSpec["display_name"] = kernelDisplayName
         metadata["kernelspec"] = kernelSpec
-        if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
+        if (languageInfo["name"] as? String).map(\.isEmpty) != false {
             // The raw value IS the language_info name (`r`, `lua`, `python`), so
             // the two cannot drift.
             languageInfo["name"] = language.rawValue

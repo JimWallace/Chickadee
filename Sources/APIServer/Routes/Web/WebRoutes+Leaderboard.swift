@@ -84,7 +84,7 @@ extension WebRoutes {
             LeaderboardPresentation(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
-                courseLabel: course.map { [$0.code, $0.term?.shortLabel].compactMap { $0 }.joined(separator: " ") }
+                courseLabel: course.map { [$0.code, $0.term?.shortLabel].compactMap(\.self).joined(separator: " ") }
                     ?? "",
                 assignmentPublicID: assignment?.publicID ?? "",
                 kindLabel: activity.kind.displayName,

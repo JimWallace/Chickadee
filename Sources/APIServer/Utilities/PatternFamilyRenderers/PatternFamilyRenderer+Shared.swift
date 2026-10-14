@@ -183,7 +183,7 @@ func expectedExpression(for c: PatternCase) -> String {
 func perStudentRefsForCase(_ c: PatternCase, perStudentNames: Set<String>) -> [String] {
     guard !perStudentNames.isEmpty else { return [] }
     var names = Set<String>()
-    for ref in c.argVarRefs.compactMap({ $0 }) where perStudentNames.contains(ref) {
+    for ref in c.argVarRefs.compactMap(\.self) where perStudentNames.contains(ref) {
         names.insert(ref)
     }
     if let ref = c.expectedVarRef, perStudentNames.contains(ref) { names.insert(ref) }

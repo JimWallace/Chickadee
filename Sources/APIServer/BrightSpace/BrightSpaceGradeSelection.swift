@@ -73,7 +73,7 @@ func bestGradeForStudent(
         } else {
             total = try await gradeSummariesBySubmissionID(for: submissionIDs, on: db)
                 .values.joined()
-                .compactMap { $0.gradeTotalPointsValue }.max()
+                .compactMap(\.gradeTotalPointsValue).max()
         }
         guard let total, total > 0 else { throw GradeSelectionError.missingPoints }
         return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)

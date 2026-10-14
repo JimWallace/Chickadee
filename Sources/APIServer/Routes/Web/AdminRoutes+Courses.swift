@@ -356,12 +356,12 @@ extension AdminRoutes {
             // 1. Test setups for this course.
             let setups = try await APITestSetup.query(on: db)
                 .filter(\.$courseID == courseID).all()
-            let setupIDs = setups.compactMap { $0.id }
+            let setupIDs = setups.compactMap(\.id)
 
             // 2. Submissions → results → delete.
             let submissions = try await APISubmission.query(on: db)
                 .filter(\.$testSetupID ~~ setupIDs).all()
-            let subIDs = submissions.compactMap { $0.id }
+            let subIDs = submissions.compactMap(\.id)
             if !subIDs.isEmpty {
                 try await APIResult.query(on: db)
                     .filter(\.$submissionID ~~ subIDs).delete()

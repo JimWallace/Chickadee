@@ -191,12 +191,12 @@ func enrollUsernamesInCourse(
     let existingEnrollments = try await APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .all()
-    let alreadyEnrolledUserIDs = Set(existingEnrollments.map { $0.userID })
+    let alreadyEnrolledUserIDs = Set(existingEnrollments.map(\.userID))
 
     let existingPreEnrollments = try await APIPreEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .all()
-    let alreadyPreEnrolledUsernames = Set(existingPreEnrollments.map { $0.username })
+    let alreadyPreEnrolledUsernames = Set(existingPreEnrollments.map(\.username))
 
     var enrolledCount = 0
     var preEnrolledCount = 0
@@ -263,7 +263,7 @@ func resolvePendingPreEnrollments(
         let existing = try await APICourseEnrollment.query(on: db)
             .filter(\.$userID == userID)
             .all()
-        let existingCourseIDs = Set(existing.map { $0.$course.id })
+        let existingCourseIDs = Set(existing.map(\.$course.id))
 
         for row in pending {
             let courseID = row.$course.id

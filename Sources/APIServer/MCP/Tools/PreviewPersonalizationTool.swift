@@ -187,7 +187,7 @@ struct PreviewPersonalizationTool: ContentTool {
         // those too so the audit covers grading, not just the notebook.
         for family in manifest.patternFamilies {
             for c in family.cases {
-                for ref in c.argVarRefs.compactMap({ $0 }) { used.insert(ref) }
+                for ref in c.argVarRefs.compactMap(\.self) { used.insert(ref) }
                 if let expectedRef = c.expectedVarRef, !expectedRef.isEmpty {
                     used.insert(expectedRef)
                 }

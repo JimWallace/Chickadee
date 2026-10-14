@@ -33,8 +33,8 @@ extension AdminRoutes {
         // listing backend-agnostic.
         let archivedCourses = try await APICourse.query(on: req.db)
             .all()
-            .filter { $0.isArchived }
-        let courseIDs = archivedCourses.compactMap { $0.id }
+            .filter(\.isArchived)
+        let courseIDs = archivedCourses.compactMap(\.id)
         let counts = try await SubmissionRetentionService.submissionCountsByCourse(
             courseIDs: courseIDs, on: req.db)
 
