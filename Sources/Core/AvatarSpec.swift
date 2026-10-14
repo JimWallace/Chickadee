@@ -38,7 +38,16 @@ public enum AvatarCap: String, CaseIterable, Codable, Sendable {
 /// Append only: a stored spec names a case by its raw value, so a case that is
 /// renamed, reordered or removed changes or breaks a student's bird.
 public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
-    case bright, sleepy, wink, curious, keen, startled
+    /// `intrigued` (both brows raised, calm eyes, closed beak) replaced
+    /// `startled` in October 2026, name and art: the maintainer did not like
+    /// the alarmed face. Stored rows keep the old raw value, and
+    /// `legacyRawValues` decodes it as the new case, for good. No migration
+    /// rewrites the rows: a binary from before the change could not decode
+    /// the new value, and `AvatarStore.ensureSpec` redraws a bird it cannot
+    /// decode, so a rewrite during a blue-green overlap or after a rollback
+    /// would cost those students their birds. This is the one exception to
+    /// append-only, and it is safe only because the old raw value decodes.
+    case bright, sleepy, wink, curious, keen, intrigued
     /// The first wardrobe unlocks (docs/student-avatars.md, decision 5): new
     /// options arrive as something to earn, so the first-use draw never
     /// yields these three. See `starterCases`.
@@ -47,8 +56,27 @@ public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
     /// The expressions a first-use draw picks from. Every case appended after
     /// the first six is an unlockable and is NOT in this list.
     public static let starterCases: [AvatarExpression] = [
-        .bright, .sleepy, .wink, .curious, .keen, .startled,
+        .bright, .sleepy, .wink, .curious, .keen, .intrigued,
     ]
+
+    /// Raw values a stored spec may carry for a case that was replaced, and
+    /// the case each decodes to. Permanent: a row keeps the value it was
+    /// stored with until its student saves the picker, which re-encodes it.
+    public static let legacyRawValues: [String: AvatarExpression] = ["startled": .intrigued]
+
+    /// The expression a stored raw value names, through `legacyRawValues`.
+    /// Every stored raw value must come through here, not `init(rawValue:)`
+    /// and not the synthesized `Codable`, which know only the current cases.
+    /// `AvatarSpec.init(from:)` is the one decoder today.
+    public init?(storedRawValue: String) {
+        if let current = AvatarExpression(rawValue: storedRawValue) {
+            self = current
+        } else if let replaced = Self.legacyRawValues[storedRawValue] {
+            self = replaced
+        } else {
+            return nil
+        }
+    }
 }
 
 /// Where the personality actually lives.  `none` is a real option, not an
@@ -313,7 +341,13 @@ extension AvatarSpec {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.cap = try container.decode(AvatarCap.self, forKey: .cap)
         self.wing = try container.decode(AvatarWing.self, forKey: .wing)
-        self.expression = try container.decode(AvatarExpression.self, forKey: .expression)
+        let expressionRawValue = try container.decode(String.self, forKey: .expression)
+        guard let expression = AvatarExpression(storedRawValue: expressionRawValue) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .expression, in: container,
+                debugDescription: "no expression named \(expressionRawValue)")
+        }
+        self.expression = expression
         self.accessory = try container.decode(AvatarAccessory.self, forKey: .accessory)
         self.accent = try container.decode(AvatarAccent.self, forKey: .accent)
         self.backdrop = try container.decode(AvatarBackdrop.self, forKey: .backdrop)

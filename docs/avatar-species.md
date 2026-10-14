@@ -112,7 +112,7 @@ It is a looking-glass, not repository code. The findings:
    it is orange; the blue jay's sits on a white face, so it is dark. Each
    species sets its beak tone by that rule, not from a field guide.
 
-8. **Beak shape stays fixed.** The `startled` expression redraws the beak as an
+8. **Beak shape stays fixed.** The `chirp` expression redraws the beak as an
    open mouth with fixed geometry. A per-species beak shape would fork every
    expression that touches the beak. Beak colour varies; beak shape does not.
 

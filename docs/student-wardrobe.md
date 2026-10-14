@@ -114,7 +114,7 @@ or cumulative achievement. It leaves the first-use draw:
 
 The headband is a band across the forehead, tied at the right side. It does
 not hide the tuft. It covers part of the brows on `curious`, `keen` and
-`startled`; those expressions still read, because since the tune-up they
+`intrigued`; those expressions still read, because since the tune-up they
 differ mainly by eye shape.
 
 ### 5. What a student sees on other pages

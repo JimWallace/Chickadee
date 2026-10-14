@@ -228,16 +228,13 @@
             <path class="av-cap" d="M17.9,33.76 A7.6,7.6 0 0 0 30.5,33.76 Z"/>
             <path class="av-cap" d="M33.5,33.76 A7.6,7.6 0 0 0 46.1,33.76 Z"/>
         </symbol>
-        <symbol id="av-expression-startled" viewBox="0 0 64 64">
-            <circle class="av-pupil" cx="24.2" cy="29.8" r="2.3"/>
-            <circle class="av-glint" cx="25.17" cy="28.77" r="0.78"/>
-            <circle class="av-pupil" cx="39.8" cy="29.8" r="2.3"/>
-            <circle class="av-glint" cx="40.77" cy="28.77" r="0.78"/>
+        <symbol id="av-expression-intrigued" viewBox="0 0 64 64">
+            <circle class="av-pupil" cx="24.2" cy="29.5" r="4.2"/>
+            <circle class="av-glint" cx="26.09" cy="27.48" r="1.53"/>
+            <circle class="av-pupil" cx="39.8" cy="29.5" r="4.2"/>
+            <circle class="av-glint" cx="41.69" cy="27.48" r="1.53"/>
             <path class="av-brow" d="M18,19.4 Q24.2,14.4 30.4,19.4" fill="none" stroke-width="2.3" stroke-linecap="round"/>
             <path class="av-brow" d="M33.6,19.4 Q39.8,14.4 46,19.4" fill="none" stroke-width="2.3" stroke-linecap="round"/>
-            <path class="av-mouth" d="M29.3,36.6 L34.7,36.6 L32,42.4 Z"/>
-            <path class="av-beak" d="M28.6,34.8 H35.4 L32,38.6 Z"/>
-            <path class="av-beak" d="M30.3,40.2 L33.7,40.2 L32,43 Z"/>
         </symbol>
         <symbol id="av-expression-chirp" viewBox="0 0 64 64">
             <circle class="av-cap" cx="24.2" cy="29.5" r="7.8"/>
