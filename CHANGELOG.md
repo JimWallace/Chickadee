@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.659] - 2026-10-14
+
+### Fixed
+
+- **`AccountSpeciesPickerTests` no longer fails at random.** A new test user's
+  first bird is a seeded draw, and the draw can pick a hat that hides the
+  crest the test expects. About one run in seven failed. The test now sets
+  the accessory itself and checks the exact crest symbol. A new test checks
+  that a hat hides the crest.
+
+
 ## [0.5.658] - 2026-10-14
 
 ### Changed

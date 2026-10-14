@@ -27,6 +27,18 @@ import VaporTesting
         return try #require(user.avatarSpecJSON.flatMap(AvatarStore.decode))
     }
 
+    /// Sets the stored bird's accessory. A first-use bird is a seeded draw, and
+    /// the draw can pick a hat that hides the crest, so a test that reads the
+    /// crest sets the accessory itself.
+    private func setAccessory(_ accessory: AvatarAccessory, username: String) async throws {
+        let user = try #require(
+            try await APIUser.query(on: app.db).filter(\.$username == username).first())
+        var spec = try #require(user.avatarSpecJSON.flatMap(AvatarStore.decode))
+        spec.accessory = accessory
+        user.avatarSpecJSON = AvatarStore.encode(spec)
+        try await user.save(on: app.db)
+    }
+
     private func postChoices(_ fields: [String: String], cookie: String) async throws -> String? {
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         var body = fields
@@ -108,6 +120,7 @@ import VaporTesting
             let cookie = try await loginUser(
                 username: "species_page", password: "pw", role: "student", on: app)
             _ = try await postChoices(["cap": "scarlet"], cookie: cookie)
+            try await setAccessory(.none, username: "species_page")
             let html = try await accountPage(cookie: cookie)
 
             // One radio per colourway, each carrying the six tone tokens and
@@ -140,10 +153,11 @@ import VaporTesting
             }
             // The chosen colourway is the one checked radio, and its tuft layer
             // is the cardinal crest in the shape the student's own tuft slot
-            // picks (a hat would hide it; a fresh test user wears none).
+            // picks. The bird wears no hat, so nothing hides the crest.
             let scarlet = try capRadio(in: html, value: "scarlet")
             #expect(scarlet.hasSuffix(" checked"))
-            #expect(scarlet.contains("data-av-tuft=\"#av-crest-cardinal-"))
+            let shape = AvatarCrestShape(tuft: try await storedSpec(username: "species_page").tuft)
+            #expect(scarlet.contains("data-av-tuft=\"#av-crest-cardinal-\(shape.rawValue)\""))
             let checkedCaps = html.components(separatedBy: "name=\"cap\"").dropFirst()
                 .filter { $0.prefix { $0 != ">" }.hasSuffix(" checked") }
             #expect(checkedCaps.count == 1)
@@ -156,6 +170,21 @@ import VaporTesting
     }
 
     /// Staff keep their ring note but may choose a species.
+
+    @Test func aHatHidesTheCrestInTheColourwaySample() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(
+                username: "species_hat", password: "pw", role: "student", on: app)
+            _ = try await postChoices(["cap": "scarlet"], cookie: cookie)
+            #expect(AvatarAccessory.beanie.hidesTuft)
+            try await setAccessory(.beanie, username: "species_hat")
+            let html = try await accountPage(cookie: cookie)
+
+            let scarlet = try capRadio(in: html, value: "scarlet")
+            #expect(scarlet.contains("data-av-tuft=\"#av-tuft-none\""))
+            #expect(!scarlet.contains("av-crest-cardinal"))
+        }
+    }
     @Test func staffSeeTheSpeciesGroupAndMayChoose() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginUser(
