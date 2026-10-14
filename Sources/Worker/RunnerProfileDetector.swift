@@ -255,7 +255,7 @@ struct RunnerProfileDetector {
     /// so the hand-rolled CLOEXEC pipes, deadline-bounded drain and
     /// `isRunning` poll loop this replaces have nothing left to do. The 25 ms
     /// poll is gone with them: the run now suspends until the child exits.
-    private func runProbe(
+    func runProbe(
         command: String, arguments: [String], timeoutSeconds: Double = Self.probeTimeoutSeconds
     ) async -> (combined: String, exitCode: Int32)? {
         let run: BoundedRunResult?
