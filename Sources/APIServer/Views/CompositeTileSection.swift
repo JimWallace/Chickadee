@@ -20,7 +20,7 @@ struct CompositeTileSection: HTML {
                 "\(tile.slotText) "
                 span(.class(tile.passed ? "tier tier-open" : "tier tier-danger")) { tile.stateText }
             }
-            div(.class("composite-tile")) {
+            div(.class("composite-tile section-gap")) {
                 CompositeStage(stage: tile.stage)
             }
             for spare in tile.spares {
