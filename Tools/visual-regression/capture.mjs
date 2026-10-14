@@ -191,12 +191,17 @@ async function main() {
           // The bird is drawn at random (see the .avatar mask), and its
           // species decides the species name, the colour note and how many
           // colourways the Colour group offers: three, or eight for a
-          // chickadee. Keep three swatches and freeze their text, so the
-          // layout is the same for every species.
+          // chickadee. Keep three swatches, freeze their text and check the
+          // first, so the layout and the checked tile are the same for every
+          // species and every colourway the draw picked.
           document.querySelectorAll(".bird-card").forEach((card) => {
             card.querySelectorAll('.swatch:has(input[name="cap"])').forEach((swatch, index) => {
-              if (index >= 3) swatch.remove();
-              else swatch.querySelector(".swatch-name").textContent = "Colour";
+              if (index >= 3) {
+                swatch.remove();
+                return;
+              }
+              swatch.querySelector(".swatch-name").textContent = "Colour";
+              swatch.querySelector("input").checked = index === 0;
             });
             card.querySelectorAll(".bird-card-hero strong").forEach((el) => {
               el.textContent = "Species";
