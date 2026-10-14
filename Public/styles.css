@@ -3935,6 +3935,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .bird-card-groups > .toolbar .field-note { margin: 0; }
 
+/* Save before a change, and the hatch button with none left. */
+.bird-card .btn:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
 /* The rings that are not open yet: a dimmed sample, a lock and a name. Not
    inputs, since nothing about them can be chosen. */
 .bird-locked {
