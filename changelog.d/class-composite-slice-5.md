@@ -1,3 +1,0 @@
-### Added
-
-- **Class composite: the composite view (slice 5 of `docs/class-composite.md`).** The leaderboard page and present mode now draw the class composite live. The new JSON endpoint `GET /testsetups/:id/composite` returns each slot's state (empty, rendering, failed or passed) and the pixels that changed, with an ETag. `class-composite.js` draws all four compositors (tile, gallery, sequence and sum), with playback and a progress line. Staff see each slot holder's handle on the leaderboard page; present mode shows no handles. A student sees only their own contribution, on their result page.
