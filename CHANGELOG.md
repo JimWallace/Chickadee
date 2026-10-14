@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.666] - 2026-10-14
+
+### Added
+
+- **Hatch a new bird.** The account page's bird card can draw a fresh bird, 3 times per term. A hatch always gives a different species; the backdrop, the ring and every class handle stay. The previous bird is kept, and "Go back to my …" restores it until the next hatch (a go back does not give the hatch back). With none left, the button stays disabled and says when the next term starts. Each hatch is a row in the new `avatar_hatches` table, and the bird before the last hatch is in `users.avatar_previous_spec`; both are in the data export and go with the account.
+
+### Changed
+
+- **The six browser probe workflows are one workflow, `browser-probes.yml`,
+  with one server build.** A job can only depend on a job in its own workflow
+  run, so the six workflows built `chickadee-server` six times. Now one
+  `server` job builds it for every probe leg. A `changes` job decides which
+  probes run: on a pull request by each probe's own paths, as before; on a
+  schedule by its cron (the editor smoke daily, the grading-hang probe
+  weekly); on a dispatch by a new `probes` input, which runs all six by
+  default and refuses an unknown name. The job names did not
+  change, so `editor-smoke-gate` is still the required check.
+  `flake-telemetry.yml` now reads the combined workflow and counts a red run
+  for a probe only when that probe's own legs failed.
+
+
 ## [0.5.665] - 2026-10-14
 
 ### Changed
