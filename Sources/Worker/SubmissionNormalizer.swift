@@ -417,7 +417,9 @@ struct SubmissionNormalizer {
 
     private func normalizedNotebookOutputRelativePath(relativePath: String) -> String {
         let path = FilePath(relativePath)
-        let withoutExtension = path.removingExtension.string
+        var stemPath = path
+        stemPath.extension = nil
+        let withoutExtension = stemPath.string
         if (path.extension ?? "").lowercased() == "ipynb" {
             return withoutExtension + ".py"
         }

@@ -254,7 +254,6 @@ let package = Package(
             dependencies: [
                 .target(name: "Core"),
                 .target(name: "ChickadeeTestSupport"),
-                .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Tests/CoreTests",
             swiftSettings: strictWarnings

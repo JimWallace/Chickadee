@@ -6,7 +6,6 @@
 
 import Core
 import Foundation
-import SystemPackage
 
 /// One section block's server-rendered shell in the suite editor.  Named
 /// sections carry a non-empty `sectionID` and `name`; the trailing
@@ -139,7 +138,7 @@ struct EditableSuiteRow: Encodable {
     /// Used as the default value of the name input in the assignment editor.
     var displayNameOrStem: String {
         if let n = displayName, !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return n }
-        let stem = FilePath(name).removingExtension.string
+        let stem = runnerScriptStem(name)
         return stem.isEmpty ? name : stem
     }
 

@@ -89,7 +89,7 @@ func attachmentFilename(fromURL urlString: String) -> String {
     guard let comps = URLComponents(string: urlString) else { return "attachment" }
     let last = (FilePath(comps.path).lastComponent?.string ?? "")
     let decoded = last.removingPercentEncoding ?? last
-    return decoded.isEmpty || decoded == "/" ? "attachment" : decoded
+    return decoded.isEmpty ? "attachment" : decoded
 }
 
 /// Fetches each attachment's sourceUrl under the SSRF guard and stores it on the

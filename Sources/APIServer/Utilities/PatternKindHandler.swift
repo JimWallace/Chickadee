@@ -134,8 +134,9 @@ struct ProgramIOKind: PatternKindHandler {
                 familyID: family.id, comparison: comparison, language: language, reason: reason)
         }
         if comparison == .regex {
-            // A cheap compile check; each language's own engine has the last
-            // word, but an unbalanced group is a typo in every dialect.
+            // A cheap compile check with Swift's regex grammar; each language's
+            // own engine has the last word, but an unbalanced group is a typo
+            // in every dialect.
             guard (try? Regex(expected)) != nil else {
                 throw AuthoringValidationError.programIOInvalidRegex(familyID: family.id, caseKey: c.key)
             }

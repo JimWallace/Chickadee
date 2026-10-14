@@ -8,7 +8,6 @@
 import Core
 import Fluent
 import Foundation
-import SystemPackage
 import Vapor
 
 /// Groups a flat outcome list into per-section buckets for the student
@@ -665,7 +664,7 @@ func buildHintByFilename(_ props: TestProperties) -> [String: String] {
         guard let h = hint,
             !h.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return }
-        let stem = FilePath(filename).removingExtension.string
+        let stem = runnerScriptStem(filename)
         map[filename] = h
         map[stem.isEmpty ? filename : stem] = h
     }
@@ -708,7 +707,7 @@ func buildFailureDetailByFilename(_ props: TestProperties) -> [String: FailureDe
     var map: [String: FailureDetail] = [:]
     for entry in props.testSuites {
         guard let detail = entry.failureDetail, detail != .full else { continue }
-        let stem = FilePath(entry.script).removingExtension.string
+        let stem = runnerScriptStem(entry.script)
         map[entry.script] = detail
         map[stem.isEmpty ? entry.script : stem] = detail
     }

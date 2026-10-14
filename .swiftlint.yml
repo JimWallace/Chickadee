@@ -210,7 +210,7 @@ custom_rules:
     included: "Sources/.*\\.swift"
     regex: "\\bNSRegularExpression\\b"
     excluded_match_kinds: [comment, doccomment, string]
-    message: "Use a regex literal or Regex(_:). RunnerCore (Embedded Swift) has neither, and it does not use NSRegularExpression either."
+    message: "Use a regex literal or Regex(_:). Store a shared pattern as a computed static property, because Regex is not Sendable."
     severity: error
   legacy_task_sleep_nanoseconds:
     name: "Task.sleep(for:), not Task.sleep(nanoseconds:)"

@@ -12,7 +12,6 @@
 
 import Core
 import Foundation
-import SystemPackage
 import Vapor
 
 enum ScriptZipError: Error {
@@ -333,7 +332,7 @@ func createRunnerSetupZip(
             finalName = baseName
         } else {
             let ext = URL(fileURLWithPath: baseName).pathExtension
-            let stem = FilePath(baseName).removingExtension.string
+            let stem = runnerScriptStem(baseName)
             var suffix = 2
             var candidate = baseName
             while seenNames.contains(candidate) {

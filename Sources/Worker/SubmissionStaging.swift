@@ -191,7 +191,9 @@ func preferredStudentModuleFilename(
         // One fact, read from the descriptor. This was a hand-written switch,
         // identical to the one in NotebookExtractor and to a third the server's
         // solution extractor was about to grow.
-        return FilePath(submittedName).removingExtension.string + "."
+        var stem = FilePath(submittedName)
+        stem.extension = nil
+        return stem.string + "."
             + language.sourceFileExtension
     }
     return nil
