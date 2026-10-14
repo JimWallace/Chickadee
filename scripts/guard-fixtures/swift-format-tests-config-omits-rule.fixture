@@ -1,0 +1,9 @@
+# The guard reads Tests/.swift-format as well as the root file. A rule that
+# the tests configuration omits is off for every test file.
+guard="scripts/check-swift-format-config.sh"
+files="Tests/.swift-format"
+description="the tests swift-format configuration does not name one rule"
+expect="Tests/.swift-format: does not list the rule GroupNumericLiterals"
+apply() {
+    sed -i '/"GroupNumericLiterals"/d' Tests/.swift-format
+}
