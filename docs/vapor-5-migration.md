@@ -45,12 +45,14 @@ Each step is safe on Vapor 4 and does not change behaviour.
 | GitHub calls need no `Request` | `GitHub/GitHubCallScope.swift` | The background commit-status post uses `BackgroundGitHubCallScope`. The protocol is the seam for a request without `application`. Its database logs use the application logger, not the request logger. |
 | Lifecycle hooks are async | `Services/PeriodicSweepMonitor.swift`, `Services/ServerHealthAlertService.swift` | Rename `didBootAsync` to `didBoot` and `shutdownAsync` to `shutdown`. The synchronous `boot()` does not run async hooks, so boot with `execute()` or `asyncBoot()`. |
 | One request-body decode | `Helpers/Request+DecodeContent.swift` | Add `await` inside this one helper. Every call site already awaits it. |
+| One request-body collect | `Helpers/Request+DecodeContent.swift` (`collectBody`) | Delete it: Vapor 5 decodes from the stream. Its one caller is the CSRF token read, which also reads `_csrf` through `decodeContent`, not `content.get(_:at:)`. |
+| Configuration reads through Swift Configuration | `Configuration/EnvironmentSource.swift` | `EnvironmentSource.get` reads through a `ConfigReader` over an `EnvironmentVariablesProvider`, the type Vapor 5 takes. The dotted key `oidc.auth.server` reads `OIDC_AUTH_SERVER`, so every variable name is the same. The library also reads one optional variable of its own, `CONFIG_ACCESS_LOG_FILE`, which turns on an access log; Vapor 5 brings the same behaviour. |
 | One client-body read and decode | `Helpers/ClientResponse+Body.swift` | Change this one file for the new client body. Every decode already awaits it. |
 | Poll fragments take a `String` | `Routes/Web/PollFragmentResponse.swift` | No `ByteBuffer` in its API. |
 | One test seam | `Tests/APITests/TestRequests.swift` | Re-implement its names on the Vapor 5 `TestClient` (see "The tests"). |
 | Poll fragments in the tests | `PollFragmentResponseTests`, `PollFragmentCSRFTests` | They pass a `String`. |
 | The macOS floor | `Package.swift` | It is `.macOS("26.2")`, the Vapor 5 minimum. No change. |
-| A guard keeps it so | `scripts/check-vapor5-readiness.sh` | `format-lint` fails on new event-loop API, on `content.decode` outside the two helpers, and on a test that uses VaporTesting or builds a `Request` outside the seam. |
+| A guard keeps it so | `scripts/check-vapor5-readiness.sh` | `format-lint` fails on new event-loop API, on a wait on a future (`).get()`, `body.collect(max:)`) outside two named files, on `content.decode` or `content.get` outside the two helpers, and on a test that uses VaporTesting or builds a `Request` outside the seam. |
 
 ---
 
@@ -64,11 +66,11 @@ Each step is safe on Vapor 4 and does not change behaviour.
 - **`req.db` (about 880 uses) and the Fluent models.** Wait for Fluent 5.
 - **Headers and status codes** (about 150 uses of `HTTPHeaders`,
   `replaceOrAdd` and `first(name:)`). This change is mechanical.
-- **`request.content.get(_:at:)`** in `Middleware/CSRFTokenRetrieval.swift`.
-  Vapor 5 removes it.
-- **Configuration.** All environment reads go through `AppConfig`
-  (`Configuration/`), so the move to `ConfigReader` stays in that directory.
-  It adds no environment variable.
+- **Configuration.** Pass a `ConfigReader` with the same
+  `EnvironmentVariablesProvider` to the Vapor 5 `Application`, so Vapor and
+  `AppConfig` read one source. No variable changes.
+- **The session driver bridge.** `UnchangedSessionSkippingDriver` waits on
+  Fluent's future-based session driver with `.get()` until Fluent 5.
 
 ### Uses of `ByteBuffer` that stay
 

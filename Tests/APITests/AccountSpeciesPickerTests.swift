@@ -111,7 +111,7 @@ import VaporTesting
             let html = try await accountPage(cookie: cookie)
 
             // One radio per colourway, each carrying the six tone tokens and
-            // the two layers the live preview sets.
+            // the three layers the live preview sets.
             for cap in AvatarCap.allCases {
                 let species = AvatarSpecies.of(cap)
                 #expect(html.contains(#"name="cap" value="\#(cap.rawValue)""#), "no radio for \(cap)")
@@ -124,6 +124,12 @@ import VaporTesting
                     html.contains("data-av-plumage=\"#av-plumage-\(species.rawValue)\""),
                     "\(cap) radio lacks its plumage")
             }
+            // The wing layer follows the species too: the jay draws the barred
+            // wing with its own art, the robin with the shared symbol.
+            let wing = try await storedSpec(username: "species_page").wing
+            let jayWing = wing == .barred ? "#av-wing-bluejay-barred" : "#av-wing-\(wing.rawValue)"
+            #expect(try capRadio(in: html, value: "azure").contains("data-av-wing-art=\"\(jayWing)\""))
+            #expect(try capRadio(in: html, value: "copper").contains("data-av-wing-art=\"#av-wing-\(wing.rawValue)\""))
             // Grouped under one legend per species, in species order.
             var lastLegend = html.startIndex
             for species in AvatarSpecies.allCases {
@@ -133,11 +139,11 @@ import VaporTesting
                 lastLegend = legend.upperBound
             }
             // The chosen colourway is the one checked radio, and its tuft layer
-            // is the crest or tuft the student's own bird would wear.
+            // is the cardinal crest in the shape the student's own tuft slot
+            // picks (a hat would hide it; a fresh test user wears none).
             let scarlet = try capRadio(in: html, value: "scarlet")
             #expect(scarlet.hasSuffix(" checked"))
-            #expect(
-                scarlet.contains("data-av-tuft=\"#av-crest-cardinal\"") || scarlet.contains("data-av-tuft=\"#av-tuft-"))
+            #expect(scarlet.contains("data-av-tuft=\"#av-crest-cardinal-"))
             let checkedCaps = html.components(separatedBy: "name=\"cap\"").dropFirst()
                 .filter { $0.prefix { $0 != ">" }.hasSuffix(" checked") }
             #expect(checkedCaps.count == 1)

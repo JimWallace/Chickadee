@@ -120,7 +120,7 @@ enum CompositeSlots {
     }
 
     /// The composite inputs of one grading job, by its kind: slot 0 for a
-    /// validation run, the reference row's slot for a reference job, and the
+    /// validation run, the row's slot for a reference or a spare job, and the
     /// student's dealt slot otherwise.
     static func jobInputs(
         manifest: TestProperties, courseID: UUID, assignmentID: UUID?, submission: APISubmission,
@@ -128,6 +128,9 @@ enum CompositeSlots {
     ) async -> [String: String]? {
         if submission.kind == APISubmission.Kind.compositeReference {
             return await CompositeReferences.gradingInputs(manifest: manifest, submissionID: submission.id, on: db)
+        }
+        if submission.kind == APISubmission.Kind.compositeSpare {
+            return await CompositeSpares.gradingInputs(manifest: manifest, submissionID: submission.id, on: db)
         }
         return await gradingInputs(
             manifest: manifest, courseID: courseID, assignmentID: assignmentID,

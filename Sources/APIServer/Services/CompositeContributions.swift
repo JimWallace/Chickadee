@@ -82,10 +82,21 @@ enum CompositeContributions {
 
         if passed {
             // First to cover the slot keeps it, as for every coverage item.
+            let item = CompositeSpec.coverageItem(forSlot: slot)
             try await APIClassItemCoverage(
-                testSetupID: submission.testSetupID, item: CompositeSpec.coverageItem(forSlot: slot),
-                userID: userID, submissionID: submissionID
+                testSetupID: submission.testSetupID, item: item, userID: userID, submissionID: submissionID
             ).createIgnoringConflict(on: db)
+            // But the holder's own tile takes the slot back from a spare
+            // (slice 6b): the spare filled a hole the holder had left.
+            let spareJobs = try await APICompositeSpare.query(on: db)
+                .filter(\.$assignmentID == assignmentID).filter(\.$slot == slot).all().map(\.submissionID)
+            if !spareJobs.isEmpty {
+                try await APIClassItemCoverage.query(on: db)
+                    .filter(\.$testSetupID == submission.testSetupID).filter(\.$item == item)
+                    .filter(\.$submissionID ~~ spareJobs)
+                    .set(\.$userID, to: userID).set(\.$submissionID, to: submissionID)
+                    .update()
+            }
         }
         return .stored(slot: slot, passed: passed)
     }

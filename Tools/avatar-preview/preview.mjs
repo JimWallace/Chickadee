@@ -35,9 +35,13 @@ const speciesColourways = Object.fromEntries(
     .map(m => [m[2], m[1].split(',').map(c => c.trim().replace(/^\./, ''))]))
 const species = Object.keys(speciesColourways)
 const speciesOf = (cap) => species.find(sp => speciesColourways[sp].includes(cap)) ?? 'chickadee'
-// Mirrors AvatarSpecies.hasCrest and AvatarPresentation: a crested species
-// with no tuft wears its crest, and a hat hides both.
-const CRESTED = new Set([...sprite.matchAll(/id="av-crest-([a-z]+)"/g)].map(m => m[1]))
+// Mirrors AvatarSpecies.hasCrest, AvatarCrestShape and AvatarPresentation: a
+// crested species wears a crest in the shape its tuft maps to, and a hat
+// hides it. A species with its own art for a wing pattern draws that.
+const CRESTED = new Set([...sprite.matchAll(/id="av-crest-([a-z]+)-[a-z]+"/g)].map(m => m[1]))
+const crestShape = (tuft) => ({ none: 'swept', swoop: 'swept', crest: 'raised', pair: 'raised', cowlick: 'relaxed' })[tuft]
+const WING_ART = new Set([...sprite.matchAll(/id="av-wing-([a-z]+-[a-z]+)"/g)].map(m => m[1]))
+const wingRef = (sp, wing) => WING_ART.has(`${sp}-${wing}`) ? `#av-wing-${sp}-${wing}` : `#av-wing-${wing}`
 const accents = tokens('accent-')
 const backs = tokens('back-')
 const sym = (family) =>
@@ -85,8 +89,8 @@ const bird = (size, { cap, wing, expression, accessory, accent, back, tuft = 'no
         viewBox="0 0 64 64" role="img" aria-label="${speciesOf(cap)} avatar">
      <use href="#av-backdrop"/><g transform="rotate(${tilt} 32 34)">
      <use href="${TUFT_HIDING_HATS.has(accessory) ? '#av-tuft-none'
-       : tuft === 'none' && CRESTED.has(speciesOf(cap)) ? `#av-crest-${speciesOf(cap)}` : `#av-tuft-${tuft}`}"/>
-     <use href="#av-plumage-${speciesOf(cap)}"/><use href="#av-wing-${wing}"/>
+       : CRESTED.has(speciesOf(cap)) ? `#av-crest-${speciesOf(cap)}-${crestShape(tuft)}` : `#av-tuft-${tuft}`}"/>
+     <use href="#av-plumage-${speciesOf(cap)}"/><use href="${wingRef(speciesOf(cap), wing)}"/>
      <use href="#av-expression-${expression}"/><use href="#av-accessory-${accessory}"/></g>
      <use href="#av-ring-${ringOf(border)}"/></svg>`
 
@@ -102,9 +106,15 @@ const sections = [
   ['Species at 36px — the roster size, beside each other; a new species must separate from the chickadee here',
     species.flatMap(sp => speciesColourways[sp].slice(0, 3).map((cap, i) =>
       label(`${sp} ${cap}`, bird(36, { ...base, cap, wing: at(wings, i), back: at(backs, i) }))))],
-  ['Species × expression — the expressions are shared; every lid and brow must read on every species',
-    species.flatMap(sp => starterExpressions.map(expression =>
+  ['Species × expression — the expressions are shared; every lid and brow must read on every species, and chirp opens under every beak',
+    species.flatMap(sp => [...starterExpressions, 'chirp'].map(expression =>
       label(`${sp} ${expression}`, bird(64, { ...base, cap: speciesColourways[sp][0], expression, wing: 'plain' }))))],
+  ['Species × head — the tuft slot on every species; on a crested one it picks the crest shape',
+    species.flatMap(sp => tufts.map(tuft =>
+      label(`${sp} ${tuft}`, bird(64, { ...base, cap: speciesColourways[sp][0], tuft, back: 'sage' }))))],
+  ['Species × wing — the shared patterns, or the species\' own art where it has one',
+    species.flatMap(sp => wings.map(wing =>
+      label(`${sp} ${wing}`, bird(64, { ...base, cap: speciesColourways[sp][0], wing, back: 'peach' }))))],
   ['Species × hat — the crest goes under the beanie and the gradcap like a tuft',
     species.flatMap(sp => ['beanie', 'gradcap', 'headphones', 'headband'].map(accessory =>
       label(`${sp} ${accessory}`, bird(64, { ...base, cap: speciesColourways[sp][0], accessory, back: 'straw' }))))],

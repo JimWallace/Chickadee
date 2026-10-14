@@ -9,6 +9,40 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.653] - 2026-10-14
+
+### Changed
+
+- **swift-format runs its full rule set.** The `rules` object in
+  `.swift-format` replaces the tool's defaults, so the four rules it named were
+  the only ones that ran. Each configuration now names every rule, and
+  `scripts/check-swift-format-config.sh` fails `format-lint` when one omits a
+  rule. `UseEarlyExits` and `OmitExplicitReturns` are on as well. The findings
+  in `Sources/` are fixed; `Tests/.swift-format` keeps five rules off until the
+  test edits are approved.
+
+
+## [0.5.652] - 2026-10-14
+
+### Added
+
+- **Spare slots for a class composite.** A student whose own tile passed can press "Fill a hole" on the result page. The server grades their passing submission again with the inputs of an empty slot, behind all student work. A passing result fills the slot on the projector and covers it for the student. See `docs/class-composite.md`.
+
+
+## [0.5.651] - 2026-10-14
+
+### Changed
+
+- **More preparation for Vapor 5.** Configuration now reads the environment through a Swift Configuration `ConfigReader`, the type Vapor 5 reads its settings through. Every variable keeps its name, and no variable is added. The CSRF token read collects the body through a `collectBody` helper and reads `_csrf` through `decodeContent`, so it no longer uses `content.get(_:at:)` or waits on a future. `scripts/check-vapor5-readiness.sh` now also blocks `content.get` and waits on a future. Behaviour does not change. See `docs/vapor-5-migration.md`.
+
+
+## [0.5.650] - 2026-10-14
+
+### Changed
+
+- **Each avatar species now leans its own way.** The first-use draw weights the head, wing pattern and expression per species: jays are keen and barred, doves plain and sleepy, starlings speckled. Crested species have three crest shapes, every species has its own beak, and the jay and the goldfinch have their own barred wings. No stored bird is reshuffled; a stored tuft on a crested bird now draws as a crest.
+
+
 ## [0.5.649] - 2026-10-14
 
 ### Added

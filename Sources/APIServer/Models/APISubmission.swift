@@ -48,6 +48,11 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         /// with that slot's inputs. Owned by no student, like the corpus run,
         /// and claimed behind every job a person waits on.
         static let compositeReference = "compositeReference"
+        /// A spare slot of a class composite (docs/class-composite.md,
+        /// slice 6b): a student's passing submission graded again with an
+        /// empty slot's inputs. Owned by no student, so no listing or grade
+        /// sees it; its `composite_spares` row names the student it credits.
+        static let compositeSpare = "compositeSpare"
     }
 
     @ID(custom: "id", generatedBy: .user)

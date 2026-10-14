@@ -500,6 +500,18 @@ struct AdminRoutes: RouteCollection {
             .filter(\.$winnerUserID == uuid)
             .set(\.$winnerUserID, to: nil)
             .update()
+        // A class composite's spare job holds a copy of the student's code
+        // but no user ID (docs/class-composite.md), so the cascade from the
+        // user would leave it. It goes, with its files.
+        let spareJobIDs = try await APICompositeSpare.query(on: req.db)
+            .filter(\.$userID == uuid).all().map(\.submissionID)
+        let spareJobs =
+            spareJobIDs.isEmpty ? [] : try await APISubmission.query(on: req.db).filter(\.$id ~~ spareJobIDs).all()
+        for job in spareJobs {
+            try await job.delete(on: req.db)
+            try? FileManager.default.removeItem(atPath: job.zipPath)
+            try? FileManager.default.removeItem(atPath: job.zipPath + ".grading")
+        }
 
         try await user.delete(on: req.db)
         await AuditLogger.record(

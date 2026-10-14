@@ -109,9 +109,13 @@ import Testing
             return AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: false)
                 .tuftSymbolRef
         }
-        #expect(tuftRef(.scarlet, tuft: .none, accessory: .none) == "#av-crest-cardinal")
-        #expect(tuftRef(.azure, tuft: .none, accessory: .none) == "#av-crest-bluejay")
-        #expect(tuftRef(.scarlet, tuft: .swoop, accessory: .none) == "#av-tuft-swoop")
+        // A crested species wears a crest in the shape its tuft maps to
+        // (AvatarCrestShape): swept by default, raised or relaxed otherwise.
+        #expect(tuftRef(.scarlet, tuft: .none, accessory: .none) == "#av-crest-cardinal-swept")
+        #expect(tuftRef(.azure, tuft: .none, accessory: .none) == "#av-crest-bluejay-swept")
+        #expect(tuftRef(.scarlet, tuft: .swoop, accessory: .none) == "#av-crest-cardinal-swept")
+        #expect(tuftRef(.scarlet, tuft: .crest, accessory: .none) == "#av-crest-cardinal-raised")
+        #expect(tuftRef(.cedar, tuft: .cowlick, accessory: .none) == "#av-crest-waxwing-relaxed")
         #expect(tuftRef(.scarlet, tuft: .none, accessory: .beanie) == "#av-tuft-none")
         #expect(tuftRef(.scarlet, tuft: .crest, accessory: .gradcap) == "#av-tuft-none")
         #expect(tuftRef(.emerald, tuft: .none, accessory: .none) == "#av-tuft-none")
@@ -152,22 +156,33 @@ import Testing
         #expect(
             Self.symbolIDs(in: sprite, prefix: "av-plumage-")
                 == Set(AvatarSpecies.allCases.map(\.rawValue)))
-        #expect(
-            Self.symbolIDs(in: sprite, prefix: "av-crest-")
-                == Set(AvatarSpecies.allCases.filter(\.hasCrest).map(\.rawValue)))
+        // Three crest shapes per crested species, and no crest for any other.
+        let crests = Set(
+            AvatarSpecies.allCases.filter(\.hasCrest).flatMap { species in
+                AvatarCrestShape.allCases.map { "\(species.rawValue)-\($0.rawValue)" }
+            })
+        #expect(Self.symbolIDs(in: sprite, prefix: "av-crest-") == crests)
+        // A species' own wing art exists exactly where the model says it does.
+        let wingArt = Set(
+            AvatarSpecies.allCases.flatMap { species in
+                species.wingArt.map { "\(species.rawValue)-\($0.rawValue)" }
+            })
+        let spriteWingArt = Self.symbolIDs(in: sprite, prefix: "av-wing-").filter { $0.contains("-") }
+        #expect(spriteWingArt == wingArt)
     }
 
     /// Every plumage symbol draws the shared skeleton exactly: the body
-    /// circle, the two eye discs and the closed beak at their fixed
-    /// coordinates, because every expression and accessory is drawn against
-    /// them (docs/avatar-species.md, finding 8).
+    /// circle and the two eye discs at their fixed coordinates, because every
+    /// expression and accessory is drawn against them. The beak is the one
+    /// skeleton part a species shapes (docs/avatar-species.md, "Trait map"):
+    /// exactly one closed beak per plumage, its top edge at y 34.8 between the
+    /// eyes, so the chirp mouth opens under every shape.
     @Test func everyPlumageSymbolKeepsTheSharedSkeleton() throws {
         let sprite = try Self.contents(of: "Resources/Sprites/avatar-sprite.svg")
         let fixed = [
             #"<circle class="av-body" cx="32" cy="34" r="21"/>"#,
             #"<circle class="av-eyewhite" cx="24.2" cy="29.5" r="7.6"/>"#,
             #"<circle class="av-eyewhite" cx="39.8" cy="29.5" r="7.6"/>"#,
-            #"<path class="av-beak" d="M28.6,34.8 H35.4 L32,40.4 Z"/>"#,
         ]
         for species in AvatarSpecies.allCases {
             let start = try #require(
@@ -178,6 +193,13 @@ import Testing
             let symbol = rest[..<end.lowerBound]
             for part in fixed {
                 #expect(symbol.contains(part), "\(species) plumage changes the skeleton: \(part)")
+            }
+            let beaks = symbol.matches(
+                of: /<path class="av-beak" d="M([0-9.]+),([0-9.]+) H([0-9.]+) L32,([0-9.]+) Z"\/>/)
+            #expect(beaks.count == 1, "\(species) plumage draws \(beaks.count) beaks")
+            if let beak = beaks.first {
+                #expect(Double(beak.2).map { abs($0 - 34.8) < 0.3 } == true, "\(species) beak top is at y \(beak.2)")
+                #expect(Double(beak.4).map { $0 > 38 && $0 < 44 } == true, "\(species) beak tip is at y \(beak.4)")
             }
         }
     }
