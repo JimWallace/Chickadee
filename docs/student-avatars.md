@@ -154,7 +154,7 @@ can grow freely afterwards.
 
 So: `avatar_spec` as a JSON column on the user row, materialized the first time
 an avatar is needed, mutated in place by customization. A "reroll" is a fresh
-draw. First-use materialization has the same race as `ensureSeed` and takes the
+draw: "Hatch a new bird" (open question 1). First-use materialization has the same race as `ensureSeed` and takes the
 same shape — and the same warning applies about not doing it inside an enclosing
 transaction.
 
@@ -829,10 +829,16 @@ other.
 
 ## Open questions
 
-1. **Reroll.** Should a student be able to redraw their avatar at will? The
-   handle is the identity, so a reroll costs nothing structurally — but a
-   classmate who learned to recognize a bird loses that. Suggested answer: allow
-   it, rate-limited, and keep the handle fixed across rerolls.
+1. **Reroll.** Answered: allowed, as "Hatch a new bird" on the account page,
+   3 times per Waterloo term (`AvatarHatch.perTerm`). A hatch always gives a
+   different species. The backdrop, the ring and every class handle stay: the
+   handle is the identity. The bird before the last hatch is kept
+   (`users.avatar_previous_spec`), and the student can go back to it until
+   they hatch again; a go back does not give the hatch back. Each hatch is a
+   row in `avatar_hatches` (user, term key such as "2026-fall", date), which
+   the data export includes and an account deletion removes. Nothing else may
+   change a stored bird's species (decision 2). Not built: blocking a hatch
+   while a leaderboard window or a live session is open.
 2. **Handle visibility to the student's own course peers.** Showing "you are
    Quiet Cedar" only to the student is the strict reading; showing handles in a
    discussion context would be a different feature with a different consent

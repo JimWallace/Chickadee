@@ -3795,8 +3795,48 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    hit target at least. A named swatch (a colourway or a ring) shows the
    checked state on the whole tile, a 2px outline and a light fill, and its
    name goes bold; a backdrop keeps the ring around its disc. */
-/* A child's background stays inside the card's rounded edge. */
+/* The strip above the body (a hatch's confirm and result) runs to the
+   card's rounded edge. */
 .bird-card { overflow: hidden; }
+
+/* A hatch's confirm or result across the top of the card, in the you tint:
+   the current bird, an arrow and a dashed "?" disc; the text; the actions. */
+.bird-card-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 1.25rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--you-bg);
+}
+
+.bird-card-strip > div:not(.toolbar) {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
+.bird-card-strip > div:first-child:not(:last-child)[aria-hidden] {
+    flex-direction: row;
+    align-items: center;
+    gap: .5rem;
+    color: var(--muted);
+}
+
+.bird-card-strip > div:nth-last-child(2) { flex: 1 1 18rem; }
+.bird-card-strip p { margin: 0; }
+.bird-card-strip .avatar:not(.avatar-sm) { width: 3.5rem; height: 3.5rem; }
+
+.bird-card-strip .swatch-none {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    font-size: var(--text-lg);
+}
 
 .bird-card-body {
     display: flex;
@@ -3821,6 +3861,34 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .bird-card-hero p { margin: 0; }
 .bird-card-hero strong { font-size: var(--text-lg); }
 .bird-card-hero .avatar-xl { margin-bottom: .75rem; }
+
+/* The hatch control under the species, below a rule. */
+.bird-card-hatch {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .35rem;
+    align-self: stretch;
+    margin-top: .75rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--border);
+}
+
+.bird-card-hatch .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+}
+
+/* Save before a change, and the hatch button with none left. */
+.bird-card .btn:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+.bird-card-hatch .field-note { margin: 0; }
+.bird-card-hatch .btn-link { color: var(--blue); font-size: var(--text-sm); }
 
 .bird-card-groups {
     flex: 999 1 24rem;

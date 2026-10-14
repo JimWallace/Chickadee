@@ -3,7 +3,12 @@
 // The student's own bird choices (docs/student-wardrobe.md, W1, and
 // docs/avatar-species.md, A2).
 //
-//   POST /account/avatar   → apply colourway / backdrop / border → redirect to /account
+//   POST /account/avatar           → apply colourway / backdrop / border → redirect to /account
+//   POST /account/avatar/hatch     → hatch a new bird of another species → ?avatar=hatched#bird,
+//                                    or ?avatar=nohatch#bird when none is left this term
+//   POST /account/avatar/restore   → go back to the bird before the last hatch → ?avatar=restored#bird
+//
+// `GET /account?hatch=confirm#bird` shows the hatch confirm with no script.
 //
 // A colourway is a shade within the student's own species. A colourway of
 // another species is refused: only a hatch changes the species.
@@ -53,6 +58,26 @@ extension AccountRoutes {
         try await user.save(on: req.db)
         return req.redirect(to: "/account?avatar=saved#chickadee")
     }
+
+    /// Draws a bird of another species. The backdrop, the ring and the class
+    /// handles stay; the current bird is kept as the previous one.
+    @Sendable
+    func hatchAvatar(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let term = AcademicTerm.current() else { throw Abort(.internalServerError) }
+        _ = try await AvatarStore.ensureSpec(for: user, on: req.db)
+        let hatched = try await AvatarStore.hatch(for: user, term: term, on: req.db)
+        return req.redirect(to: hatched ? "/account?avatar=hatched#bird" : "/account?avatar=nohatch#bird")
+    }
+
+    /// Puts the bird before the last hatch back. It does not give the hatch
+    /// back. With no previous bird, it only returns to the card.
+    @Sendable
+    func restoreAvatar(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let restored = try await AvatarStore.restorePreviousBird(for: user, on: req.db)
+        return req.redirect(to: restored ? "/account?avatar=restored#bird" : "/account#bird")
+    }
 }
 
 /// The "Your bird" card: the bird itself, and the Colour and Ring groups,
@@ -69,6 +94,8 @@ struct AvatarPickerContext: Encodable {
     let colourNote: String
     /// "Hatched Sep 8, 2026"; empty hides the line.
     let hatchedText: String
+    /// The hatch control and strip; nil shows neither.
+    let hatch: AvatarHatchContext?
     /// The colourways of the student's own species, each the student's own
     /// bird in that colourway, so the sample shows what a save would draw.
     let feathers: [AvatarBirdOption]
@@ -86,10 +113,11 @@ struct AvatarPickerContext: Encodable {
     let accentToken: String
     let capToken: String
 
-    init(for spec: AvatarSpec, isStaff: Bool, hatchedText: String = "") {
+    init(for spec: AvatarSpec, isStaff: Bool, hatchedText: String = "", hatch: AvatarHatchContext? = nil) {
         hero = AvatarPresentation(for: spec, size: .podium, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
         self.hatchedText = hatchedText
+        self.hatch = hatch
         self.backdropToken = hero.backdropToken
         self.accentToken = hero.accentToken
         self.capToken = hero.capToken

@@ -201,6 +201,11 @@ async function main() {
             card.querySelectorAll(".bird-card-hero strong").forEach((el) => {
               el.textContent = "Species";
             });
+            // The account is created by the seed, so the "Hatched" date is
+            // the day of the run.
+            card.querySelectorAll("[data-avatar-hatched]").forEach((el) => {
+              el.textContent = "Hatched Jan 1, 2026";
+            });
             card.querySelectorAll(".bird-card-groups > fieldset:first-of-type > .field-note").forEach((el) => {
               el.textContent = "Three species colourways, plus your backdrop.";
             });

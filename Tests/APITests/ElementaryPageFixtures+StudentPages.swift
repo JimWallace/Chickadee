@@ -319,13 +319,13 @@ extension ElementaryPageFixtures {
         func render(
             staff: Bool, enrolled: [AccountCourseRow], available: [AccountCourseRow], status: String,
             github: (show: Bool, login: String?), notices: (String?, String?, String?),
-            flash: FlashMessages = FlashMessages()
+            flash: FlashMessages = FlashMessages(), picker: AvatarPickerContext? = nil
         ) -> String {
             AccountPage(
                 page: page(currentUser: signedInAdmin), flash: flash, username: "ada",
                 preferredName: staff ? nil : "Ada", identityName: staff ? "ada" : "Ada Lovelace",
                 identitySecondary: staff ? nil : "ada",
-                avatarPicker: AvatarPickerContext(for: spec, isStaff: staff), avatarInvalid: !staff,
+                avatarPicker: picker ?? AvatarPickerContext(for: spec, isStaff: staff), avatarInvalid: !staff,
                 studentID: staff ? nil : "20123456", email: staff ? nil : "ada@example.com",
                 enrolledCourses: enrolled, availableCourses: available, error: notices.0, exportStatus: status,
                 exportRequestedAtDisplay: "Oct 1, 10:00", exportCompletedAtDisplay: "Oct 1, 10:05",
@@ -350,9 +350,36 @@ extension ElementaryPageFixtures {
                 render(
                     staff: true, enrolled: [], available: accountAvailableCourses, status: "failed",
                     github: (false, nil), notices: (nil, nil, nil)),
+                // The hatch states: confirm, just hatched, a previous bird
+                // after "Keep it", and none left.
+                render(
+                    staff: false, enrolled: [], available: [], status: "none", github: (false, nil),
+                    notices: (nil, nil, nil), picker: hatchPicker(spec, used: 0, previous: nil, strip: .confirm)),
+                render(
+                    staff: false, enrolled: [], available: [], status: "none", github: (false, nil),
+                    notices: (nil, nil, nil),
+                    picker: hatchPicker(spec, used: 1, previous: AvatarSpec.drawn(fromSeed: 4), strip: .hatched)),
+                render(
+                    staff: true, enrolled: [], available: [], status: "none", github: (false, nil),
+                    notices: (nil, nil, nil),
+                    picker: hatchPicker(spec, used: 2, previous: AvatarSpec.drawn(fromSeed: 4), strip: nil)),
+                render(
+                    staff: false, enrolled: [], available: [], status: "none", github: (false, nil),
+                    notices: (nil, nil, nil), picker: hatchPicker(spec, used: 3, previous: nil, strip: nil)),
             ],
             isExemplar: true
         )
+    }
+
+    /// The bird card with its hatch control in one state.
+    static func hatchPicker(
+        _ spec: AvatarSpec, used: Int, previous: AvatarSpec?, strip: AvatarHatchStrip?
+    ) -> AvatarPickerContext {
+        let status = AvatarHatchStatus(used: used, lastHatchedAt: nil, previous: previous)
+        let hatch = AvatarHatchContext(
+            spec: spec, status: status, nextTerm: AcademicTerm(year: 2027, season: .winter), requested: strip,
+            isStaff: false)
+        return AvatarPickerContext(for: spec, isStaff: false, hatchedText: "Hatched Sep 8, 2026", hatch: hatch)
     }
 
     static var submissionPage: ElementaryPageFixture {
