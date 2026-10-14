@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.649] - 2026-10-14
+
+### Added
+
+- **Reference renders for a class composite.** A "Prepare reference" button on the edit page grades the reference solution once for each slot, behind all student work. With `emptySlots: reference`, the projector shows each render, dimmed, in a slot that has no contribution. A student never sees a render. See `docs/class-composite.md`.
+
+
 ## [0.5.648] - 2026-10-14
 
 ### Changed
