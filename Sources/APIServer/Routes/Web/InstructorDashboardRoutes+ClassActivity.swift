@@ -7,6 +7,7 @@
 //   POST /instructor/:assignmentID/activity/opponent
 //   POST /instructor/:assignmentID/activity/window
 //   POST /instructor/:assignmentID/activity/composite
+//   POST /instructor/:assignmentID/activity/composite/reference
 //   POST /instructor/:assignmentID/tournament/run
 
 import Core
@@ -226,6 +227,35 @@ extension InstructorDashboardRoutes {
             on: req
         )
         return req.redirect(to: editPath + "?notice=Composite+settings+saved")
+    }
+
+    // MARK: - POST /instructor/:assignmentID/activity/composite/reference
+
+    /// Queues the reference render of a class composite: the reference
+    /// solution graded once for each slot (docs/class-composite.md, slice 6).
+    /// The jobs wait behind every student job. A second press replaces the
+    /// earlier render.
+    @Sendable
+    func prepareCompositeReference(req: Request) async throws -> Response {
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
+        let editPath = "/instructor/\(assignment.publicID)/edit"
+        let queued: Int
+        do {
+            queued = try await CompositeReferences.prepare(
+                assignment: assignment, setup: setup, app: req.application, on: req.db)
+        } catch CompositeReferences.PrepareError.notComposite {
+            return req.redirect(to: editPath + "?error=Choose+the+Class+composite+kind+first.")
+        } catch CompositeReferences.PrepareError.noSolution {
+            return req.redirect(to: editPath + "?error=Save+a+reference+solution+first.")
+        }
+        await AuditLogger.record(
+            action: .activityCompositeChanged,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: ["assignment": assignment.publicID, "referenceJobs": String(queued)],
+            on: req
+        )
+        return req.redirect(to: editPath + "?notice=Reference+render+queued+for+\(queued)+slots")
     }
 
     // MARK: - POST /instructor/:assignmentID/tournament/run

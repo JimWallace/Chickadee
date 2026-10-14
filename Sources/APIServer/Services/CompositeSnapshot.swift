@@ -21,7 +21,8 @@ struct CompositeSnapshot: Content, Equatable {
     /// One slot that is dealt, rendering or showing a contribution.
     struct Slot: Content, Equatable {
         let slot: Int
-        /// `passed`, `failed` or `empty`.
+        /// `passed`, `failed`, `reference` (the dimmed reference render) or
+        /// `empty`.
         let state: String
         let rendering: Bool
         /// The holder's class handle. Staff only, and only on the staff page.
@@ -99,10 +100,19 @@ struct CompositeSnapshot: Content, Equatable {
             shown[slot] = newestFirst.first(where: \.passed) ?? (spec.showFailed ? newestFirst.first : nil)
         }
 
+        // With `emptySlots: reference`, a slot that shows nothing shows its
+        // reference render, dimmed. Never in the student view: a render is a
+        // visible answer.
+        let references =
+            spec.emptySlots == .reference && onlyUserID == nil
+            ? try await shownReferences(assignmentID: assignmentID, spec: spec, excluding: Set(shown.keys), on: db)
+            : [:]
+
         let owners = includeOwners ? try await handles(of: Array(slotByUser.keys), inCourse: courseID, on: db) : [:]
-        let slots = Set(shown.keys).union(renderingSlots).union(holderBySlot.keys).sorted().map { slot in
+        let listed = Set(shown.keys).union(renderingSlots).union(holderBySlot.keys).union(references.keys)
+        let slots = listed.sorted().map { slot in
             let row = shown[slot]
-            let state = row.map { $0.passed ? "passed" : "failed" } ?? "empty"
+            let state = row.map { $0.passed ? "passed" : "failed" } ?? (references[slot] == nil ? "empty" : "reference")
             let ownerID = row?.userID ?? holderBySlot[slot]
             return Slot(
                 slot: slot, state: state, rendering: renderingSlots.contains(slot),
@@ -110,13 +120,22 @@ struct CompositeSnapshot: Content, Equatable {
         }
 
         func millis(_ date: Date?) -> Int64 { Int64(((date ?? .distantPast).timeIntervalSince1970 * 1000).rounded()) }
-        let pixels = shown.keys.sorted().compactMap { slot -> Pixels? in
+        var pixels = shown.keys.sorted().compactMap { slot -> Pixels? in
             guard let row = shown[slot] else { return nil }
             let changed = bySlot[slot, default: []].map { millis($0.updatedAt) }.max() ?? 0
             guard since.map({ changed >= $0 }) ?? true else { return nil }
             return Pixels(slot: slot, data: row.data)
         }
-        let cursor = rows.map { millis($0.updatedAt) }.max() ?? 0
+        // A reference pixel is sent again when its render changed, or when
+        // the slot's own contributions changed (one that failed or left).
+        pixels += references.keys.sorted().compactMap { slot -> Pixels? in
+            guard let reference = references[slot], let data = reference.data else { return nil }
+            let changed = ([reference.updatedAt] + bySlot[slot, default: []].map(\.updatedAt)).map(millis).max() ?? 0
+            guard since.map({ changed >= $0 }) ?? true else { return nil }
+            return Pixels(slot: slot, data: data)
+        }
+        pixels.sort { $0.slot < $1.slot }
+        let cursor = (rows.map { millis($0.updatedAt) } + references.values.map { millis($0.updatedAt) }).max() ?? 0
 
         return CompositeSnapshot(
             cursor: String(cursor),
@@ -124,6 +143,25 @@ struct CompositeSnapshot: Content, Equatable {
             total: spec.layout.slotCount,
             slots: slots,
             pixels: pixels)
+    }
+
+    /// The passing reference renders of the slots in `excluding`'s
+    /// complement, by slot. A render whose length is not the spec's (the
+    /// spec changed after it was prepared) is left out.
+    private static func shownReferences(
+        assignmentID: UUID, spec: CompositeSpec, excluding: Set<Int>, on db: any Database
+    ) async throws -> [Int: APICompositeReference] {
+        let shape = spec.contribution
+        let bytes = shape.width * shape.height * shape.frames * shape.format.channels
+        let base64Length = (bytes + 2) / 3 * 4
+        var result: [Int: APICompositeReference] = [:]
+        for row in try await APICompositeReference.query(on: db).filter(\.$assignmentID == assignmentID).all()
+        where row.passed && !excluding.contains(row.slot) && row.slot < spec.layout.slotCount
+            && row.data?.utf8.count == base64Length
+        {
+            result[row.slot] = row
+        }
+        return result
     }
 
     /// The class handle of each student, by user ID. A student with no handle

@@ -229,10 +229,15 @@ struct ActivityEditFacts: Encodable {
         let locked = try await ActivityAuthoring.hasStudentSubmissions(setup: setup, on: db)
         var composite: CompositeEditFacts?
         if let spec = activity?.composite {
+            var referenceProgress: (ready: Int, total: Int)?
+            if let assignmentID = try await assignmentByTestSetupID(testSetupID, on: db)?.id {
+                referenceProgress = try await CompositeReferences.progress(assignmentID: assignmentID, on: db)
+            }
             composite = CompositeEditFacts.make(
                 spec: spec,
                 enrolledStudents: try await enrolledStudentCount(forCourse: setup.courseID, on: db),
-                locked: try await ActivityAuthoring.compositeStructureLocked(setup: setup, on: db))
+                locked: try await ActivityAuthoring.compositeStructureLocked(setup: setup, on: db),
+                referenceProgress: referenceProgress)
         }
         return ActivityEditFacts(
             kindOptions: ActivityKindOption.options(current: activity?.kind),

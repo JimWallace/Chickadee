@@ -107,6 +107,10 @@
     /* Modal scrim — dims the page behind a blocking dialog.  A black-alpha
        wash reads correctly on both schemes, so no dark-mode override. */
     --overlay-bg: rgba(0, 0, 0, .55);
+    /* The wash over a class composite's reference render, so the room tells
+       it from student work. Black in both themes: it darkens image pixels,
+       not the page. */
+    --composite-reference-dim: rgba(0, 0, 0, .45);
 
     /* The one elevation shadow — pop-out menus, dropdowns, floating
        panels.  Dark mode needs a stronger alpha to read at all. */
@@ -2130,6 +2134,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .composite-slots--strip .composite-slot { background: var(--gray-200); border-radius: var(--radius-sm); }
 .composite-slots--strip .composite-slot--passed { background: var(--green); }
 .composite-slots--strip .composite-slot--failed { background: var(--red); }
+/* A reference render (emptySlots: reference) is shown dimmed until a passing
+   contribution replaces it. */
+.composite-slots--overlay .composite-slot--reference { background: var(--composite-reference-dim); }
+.composite-slots--strip .composite-slot--reference { background: var(--gray-300); }
 .composite-slot--rendering { animation: composite-pulse 1.2s ease-in-out infinite; }
 .composite-slot--arrived { animation: composite-arrive .8s ease-out; }
 @keyframes composite-pulse { 50% { background-color: var(--open-bg); } }

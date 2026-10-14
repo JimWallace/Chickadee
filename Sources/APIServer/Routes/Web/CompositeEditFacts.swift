@@ -54,8 +54,13 @@ struct CompositeEditFacts: Encodable {
     /// "Roster: 62. Slots: 48 (77%)." — the slot count as a share of the
     /// enrolled students. Size the layout for the attendance you expect.
     let rosterLine: String
+    /// "Not prepared", or "31 of 48 slots ready": the reference render
+    /// (docs/class-composite.md, slice 6).
+    var referenceLabel = "Not prepared"
 
-    static func make(spec: CompositeSpec, enrolledStudents: Int, locked: Bool) -> CompositeEditFacts {
+    static func make(
+        spec: CompositeSpec, enrolledStudents: Int, locked: Bool, referenceProgress: (ready: Int, total: Int)? = nil
+    ) -> CompositeEditFacts {
         let shape = spec.contribution
         let columns: Int?
         let rows: Int?
@@ -101,7 +106,8 @@ struct CompositeEditFacts: Encodable {
                 SelectOption(value: $0.rawValue, label: $0.displayName, selected: $0 == spec.emptySlots)
             },
             structureLocked: locked,
-            rosterLine: rosterLine(slots: spec.layout.slotCount, enrolledStudents: enrolledStudents))
+            rosterLine: rosterLine(slots: spec.layout.slotCount, enrolledStudents: enrolledStudents),
+            referenceLabel: referenceProgress.map { "\($0.ready) of \($0.total) slots ready" } ?? "Not prepared")
     }
 
     /// "Roster: 62. Slots: 48 (77%)." With nobody enrolled there is no share

@@ -117,6 +117,14 @@ struct ResultRoutes: RouteCollection {
                     submission: submission, collection: collection, on: req.db)
             }
 
+            // A class composite's reference render fills its slot's row
+            // (docs/class-composite.md). It belongs to no student either.
+            if submission.kind == APISubmission.Kind.compositeReference {
+                await effects.bestEffort("composite_reference", submissionID: collection.submissionID) {
+                    try await CompositeReferences.record(submission: submission, collection: collection, on: req.db)
+                }
+            }
+
             // Coverage, the leaderboard, the match and the class records, best
             // effort: the result is committed, so none of them may fail the
             // report (#1708).

@@ -424,7 +424,8 @@ duplicate.
   `.composite-canvas`, and one `.composite-slot` cell for each slot. The cells
   lie over the canvas in a grid (`.composite-slots--overlay`) or make a strip
   under it (`.composite-slots--strip`). A cell state is
-  `.composite-slot--empty`, `--failed`, `--passed`, `--rendering` (a pulse)
+  `.composite-slot--empty`, `--failed`, `--passed`, `--reference` (a reference
+  render, under the `--composite-reference-dim` wash), `--rendering` (a pulse)
   or `--arrived` (a gold flash). The view sets `--composite-cols`,
   `--composite-rows` and `--composite-aspect`. `class-composite.js` sets the
   cell classes only, and a cell's `title` repeats the holder list on the page.
@@ -433,7 +434,8 @@ duplicate.
   Present mode wraps it in `.present-composite`, which makes it as large as the
   screen permits, and puts the progress in the clock's place. The result page
   wraps it in `.composite-tile`, which shows one student's contribution. In the
-  strip, passed is `--green` and failed is `--red`, the test-status pair.
+  strip, passed is `--green` and failed is `--red`, the test-status pair, and
+  reference is `--gray-300`, between empty and passed in both themes.
 - **`.fieldset-plain`** — the unstyled `<fieldset>` + bold `<legend>` that
   wraps a group of radio or checkbox choices (enroll, the LTI grade
   transport, LTI deep linking, the Chickadee picker).  Use it for any group
