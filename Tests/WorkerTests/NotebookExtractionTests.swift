@@ -226,14 +226,13 @@ import Testing
     @Test func emittedMarkersMatchTheRuntimePattern() throws {
         let result = extractR(
             cells: [code("a <- 1"), code("b <- 2"), code("c <- 3")], filename: "t.ipynb")
-        let regex = try NSRegularExpression(pattern: rCellBoundaryMarkerPattern, options: [])
+        let regex = try Regex(rCellBoundaryMarkerPattern)
         let markerLines = result.source.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { $0.hasPrefix("# ---- chickadee") }
         #expect(markerLines.count == 3)
         for line in markerLines {
             let text = String(line)
-            let range = NSRange(text.startIndex..., in: text)
-            #expect(regex.firstMatch(in: text, options: [], range: range) != nil)
+            #expect(text.firstMatch(of: regex) != nil)
         }
     }
 }

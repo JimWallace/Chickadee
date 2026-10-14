@@ -8,6 +8,7 @@
 // each case, so it gets no guard.
 
 import Core
+import Fluent
 import Foundation
 import Testing
 import Vapor
@@ -92,7 +93,7 @@ import Vapor
         do {
             try validatePatternFamilies([fam], testSuites: [], language: .python)
             Issue.record("Expected the reserved guard case key to be rejected")
-        } catch let abort as AbortError {
+        } catch let abort as any AbortError {
             #expect("\(abort.reason)".contains("reserved"))
         }
     }

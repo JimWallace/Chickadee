@@ -17,11 +17,11 @@ import Testing
 
         _ = try await cache.series(now: base) {
             await counter.increment()
-            return self.emptyResponse()
+            return emptyResponse()
         }
         _ = try await cache.series(now: base.addingTimeInterval(30)) {
             await counter.increment()
-            return self.emptyResponse()
+            return emptyResponse()
         }
 
         #expect(await counter.value == 1)
@@ -35,11 +35,11 @@ import Testing
 
         _ = try await cache.series(now: base) {
             await counter.increment()
-            return self.emptyResponse()
+            return emptyResponse()
         }
         _ = try await cache.series(now: base.addingTimeInterval(61)) {
             await counter.increment()
-            return self.emptyResponse()
+            return emptyResponse()
         }
 
         #expect(await counter.value == 2)
@@ -59,8 +59,8 @@ import Testing
                         await counter.increment()
                         // Hold long enough that all callers pile up behind the
                         // single in-flight task.
-                        try? await Task.sleep(nanoseconds: 50_000_000)
-                        return self.emptyResponse()
+                        try? await Task.sleep(for: .milliseconds(50))
+                        return emptyResponse()
                     }
                 }
             }
@@ -85,7 +85,7 @@ import Testing
         }
         _ = try await cache.series(now: base.addingTimeInterval(1)) {
             await counter.increment()
-            return self.emptyResponse()
+            return emptyResponse()
         }
 
         #expect(await counter.value == 2)

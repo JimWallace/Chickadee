@@ -6,6 +6,7 @@
 // ElementaryPageGuardTests.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

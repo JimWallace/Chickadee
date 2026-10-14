@@ -8,6 +8,7 @@
 // and is out of scope for unit tests.
 
 import ChickadeeTestSupport
+import Core
 import Fluent
 import Foundation
 import JWT
@@ -242,7 +243,7 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
             if revocations.count >= expectedCount {
                 return revocations
             }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            try? await Task.sleep(for: .milliseconds(50))
         }
         return await endpoint.recordedRevocations()
     }

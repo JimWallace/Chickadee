@@ -6,6 +6,7 @@
 // encodes, so none of them rendered. The page is Swift now
 // (`AdminEnrollCSVResultPage`); the checks stay.
 
+import Elementary
 import Testing
 import Vapor
 

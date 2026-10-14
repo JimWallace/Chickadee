@@ -12,8 +12,7 @@ import VaporTesting
 @Suite struct AuthRoutesTests {
 
     private func makeApp() async throws -> Application {
-        let app = try await makeTestApp(prefix: "chickadee-auth")
-        return app
+        try await makeTestApp(prefix: "chickadee-auth")
     }
 
     // MARK: - Registration

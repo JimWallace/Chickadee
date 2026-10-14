@@ -180,7 +180,7 @@ import FoundationNetworking
             MockURLProtocol.reset()
             MockURLProtocol.enqueue(.status(401, body: Data("unauthorized".utf8)))
             let reporter = makeReporter(uploadMaxAttempts: 5)
-            await expectHTTPError(401) { try await reporter.report(self.sampleExecutionReport()) }
+            await expectHTTPError(401) { try await reporter.report(sampleExecutionReport()) }
             #expect(MockURLProtocol.capturedRequests.count == 1)
 
         }
@@ -191,7 +191,7 @@ import FoundationNetworking
             MockURLProtocol.reset()
             MockURLProtocol.enqueue(.status(403))
             let reporter = makeReporter(uploadMaxAttempts: 5)
-            await expectHTTPError(403) { try await reporter.report(self.sampleExecutionReport()) }
+            await expectHTTPError(403) { try await reporter.report(sampleExecutionReport()) }
             #expect(MockURLProtocol.capturedRequests.count == 1)
 
         }
@@ -202,7 +202,7 @@ import FoundationNetworking
             MockURLProtocol.reset()
             MockURLProtocol.enqueue(.status(409))
             let reporter = makeReporter(uploadMaxAttempts: 5)
-            await expectHTTPError(409) { try await reporter.report(self.sampleExecutionReport()) }
+            await expectHTTPError(409) { try await reporter.report(sampleExecutionReport()) }
             #expect(MockURLProtocol.capturedRequests.count == 1)
 
         }
@@ -213,7 +213,7 @@ import FoundationNetworking
             MockURLProtocol.reset()
             MockURLProtocol.enqueue(.status(400))
             let reporter = makeReporter(uploadMaxAttempts: 5)
-            await expectHTTPError(400) { try await reporter.report(self.sampleExecutionReport()) }
+            await expectHTTPError(400) { try await reporter.report(sampleExecutionReport()) }
             #expect(MockURLProtocol.capturedRequests.count == 1)
 
         }
@@ -226,7 +226,7 @@ import FoundationNetworking
             MockURLProtocol.reset()
             for _ in 0..<5 { MockURLProtocol.enqueue(.status(500)) }
             let reporter = makeReporter(uploadMaxAttempts: 3)
-            await expectHTTPError(500) { try await reporter.report(self.sampleExecutionReport()) }
+            await expectHTTPError(500) { try await reporter.report(sampleExecutionReport()) }
             #expect(MockURLProtocol.capturedRequests.count == 3)
 
         }
@@ -295,7 +295,7 @@ import FoundationNetworking
             // heartbeat exhausts at 2 the upload policy was not used.
             for _ in 0..<5 { MockURLProtocol.enqueue(.status(500)) }
             let reporter = makeReporter(heartbeatMaxAttempts: 2, uploadMaxAttempts: 5)
-            await expectHTTPError(500) { try await reporter.heartbeat(self.sampleActivityPayload()) }
+            await expectHTTPError(500) { try await reporter.heartbeat(sampleActivityPayload()) }
             #expect(MockURLProtocol.capturedRequests.count == 2)
 
         }
@@ -306,7 +306,7 @@ import FoundationNetworking
             MockURLProtocol.reset()
             for _ in 0..<5 { MockURLProtocol.enqueue(.status(500)) }
             let reporter = makeReporter(heartbeatMaxAttempts: 5, uploadMaxAttempts: 2)
-            await expectHTTPError(500) { try await reporter.report(self.sampleExecutionReport()) }
+            await expectHTTPError(500) { try await reporter.report(sampleExecutionReport()) }
             #expect(MockURLProtocol.capturedRequests.count == 2)
 
         }

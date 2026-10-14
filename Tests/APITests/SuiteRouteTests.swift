@@ -61,7 +61,7 @@ import VaporTesting
     }
 
     private func csrfPair(for id: String, cookie: String) async throws -> (String, String) {
-        return try await csrfFields(for: "/instructor/\(id)/edit", cookie: cookie, on: app)
+        try await csrfFields(for: "/instructor/\(id)/edit", cookie: cookie, on: app)
     }
 
     // MARK: - GET /suite

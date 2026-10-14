@@ -5,6 +5,8 @@
 // sections, flash banners, the avatar sprite, scripts and styles. A titlebar or
 // a table directly under the tab bar is the drift this rule stops.
 
+import Elementary
+import Foundation
 import Testing
 
 @testable import APIServer

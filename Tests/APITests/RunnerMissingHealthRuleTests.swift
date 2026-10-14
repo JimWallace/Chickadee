@@ -8,6 +8,7 @@
 // runners across restarts by reading `runner_snapshots`, and it ignores the
 // container-derived IDs that change on every compose redeploy.
 
+import Fluent
 import Foundation
 import Testing
 import VaporTesting

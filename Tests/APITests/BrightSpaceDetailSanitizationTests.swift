@@ -9,6 +9,7 @@
 // description, D2L response bodies truncated, and the rejection detail built
 // without the pushed grade value.
 
+import Foundation
 import Testing
 
 @testable import APIServer

@@ -10,6 +10,7 @@
 import Core
 import Fluent
 import Foundation
+import JWT
 import Testing
 import VaporTesting
 
@@ -114,7 +115,7 @@ import VaporTesting
                 let sentState =
                     sendStateCookie
                     ? (stateCookieOverride.map { "\(LTIRoutes.stateCookieName)=\($0)" } ?? stateCookie) : nil
-                let cookies = [sentState, priorSession].compactMap { $0 }.filter { !$0.isEmpty }
+                let cookies = [sentState, priorSession].compactMap(\.self).filter { !$0.isEmpty }
                 if !cookies.isEmpty { req.headers.add(name: .cookie, value: cookies.joined(separator: "; ")) }
                 try req.content.encode(["id_token": token, "state": state], as: .urlEncodedForm)
             },

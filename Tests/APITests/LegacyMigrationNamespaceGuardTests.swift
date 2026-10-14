@@ -14,7 +14,7 @@ import Vapor
 @Suite(.serialized)
 struct LegacyMigrationNamespaceGuardTests {
 
-    private func migrationNames(_ db: Database) async throws -> [String] {
+    private func migrationNames(_ db: any Database) async throws -> [String] {
         try await MigrationLog.query(on: db).all().map(\.name)
     }
 

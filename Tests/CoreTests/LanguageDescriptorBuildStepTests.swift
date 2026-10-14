@@ -12,9 +12,7 @@ import Testing
     /// The languages that build before they run, pinned by name. Both compile;
     /// only C++ produces something the kernel execs.
     @Test func theCompiledLanguagesArePinned() {
-        let compiled = AssignmentLanguage.allCases.filter {
-            $0.descriptor.gradingCompilesBeforeRunning
-        }
+        let compiled = AssignmentLanguage.allCases.filter(\.descriptor.gradingCompilesBeforeRunning)
         #expect(
             compiled == [.cpp, .java],
             """

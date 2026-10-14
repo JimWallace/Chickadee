@@ -32,17 +32,17 @@ private final class RecordingGitHubClient: Client, Sendable {
 
     struct Unreachable: Error {}
 
-    let eventLoop: EventLoop
+    let eventLoop: any EventLoop
     let sent: NIOLockedValueBox<[Sent]>
     let answer: Answer
 
-    init(eventLoop: EventLoop, sent: NIOLockedValueBox<[Sent]>, answer: Answer) {
+    init(eventLoop: any EventLoop, sent: NIOLockedValueBox<[Sent]>, answer: Answer) {
         self.eventLoop = eventLoop
         self.sent = sent
         self.answer = answer
     }
 
-    func delegating(to eventLoop: EventLoop) -> Client {
+    func delegating(to eventLoop: any EventLoop) -> any Client {
         RecordingGitHubClient(eventLoop: eventLoop, sent: sent, answer: answer)
     }
 

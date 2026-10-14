@@ -5,6 +5,7 @@
 // staff controls, and the embedded workbench-pane rendering.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

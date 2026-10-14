@@ -32,17 +32,17 @@ final class ScriptedGitHubClient: Client, Sendable {
     /// the script does not name is answered 500, so a wrong URL fails loudly.
     typealias Script = [String: Answer]
 
-    let eventLoop: EventLoop
+    let eventLoop: any EventLoop
     let sent: NIOLockedValueBox<[Sent]>
     let script: NIOLockedValueBox<Script>
 
-    init(eventLoop: EventLoop, sent: NIOLockedValueBox<[Sent]>, script: NIOLockedValueBox<Script>) {
+    init(eventLoop: any EventLoop, sent: NIOLockedValueBox<[Sent]>, script: NIOLockedValueBox<Script>) {
         self.eventLoop = eventLoop
         self.sent = sent
         self.script = script
     }
 
-    func delegating(to eventLoop: EventLoop) -> Client {
+    func delegating(to eventLoop: any EventLoop) -> any Client {
         ScriptedGitHubClient(eventLoop: eventLoop, sent: sent, script: script)
     }
 

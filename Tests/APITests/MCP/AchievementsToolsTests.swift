@@ -33,7 +33,7 @@ import Vapor
             on: app, testSetupID: "setup_ach", courseID: courseID, title: "Lab")
     }
 
-    private func authored(_ setupID: String, on db: Database) async throws -> [Achievement] {
+    private func authored(_ setupID: String, on db: any Database) async throws -> [Achievement] {
         let setup = try #require(try await APITestSetup.find(setupID, on: db))
         let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
         return props.achievements

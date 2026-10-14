@@ -7,6 +7,7 @@
 // they are the ones to keep adding to.
 
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 
@@ -265,7 +266,7 @@ import Testing
         // is a subset check on purpose — plenty of packages import under a
         // different name (`pillow` → `PIL`, `scikit-learn` → `sklearn`), and the
         // index derives those from the tarballs rather than a name table.
-        for package in packages where package.allSatisfy({ $0.isLetter }) {
+        for package in packages where package.allSatisfy(\.isLetter) {
             guard ["numpy", "pandas", "matplotlib", "packaging", "pytz", "six"].contains(package)
             else { continue }
             #expect(

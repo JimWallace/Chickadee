@@ -49,7 +49,7 @@ import VaporTesting
             {
                 return row
             }
-            try await Task.sleep(nanoseconds: 100_000_000)
+            try await Task.sleep(for: .milliseconds(100))
         }
         throw ExportTimeout()
     }

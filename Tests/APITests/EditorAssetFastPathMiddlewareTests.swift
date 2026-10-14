@@ -41,7 +41,7 @@ import VaporTesting
         ]
         for fixture in fixtures {
             let absolute = publicDir + fixture.relativePath
-            let directory = (absolute as NSString).deletingLastPathComponent
+            let directory = URL(fileURLWithPath: absolute).deletingLastPathComponent().path
             try FileManager.default.createDirectory(
                 atPath: directory, withIntermediateDirectories: true)
             try fixture.contents.write(

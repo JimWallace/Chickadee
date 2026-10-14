@@ -90,31 +90,15 @@ import Testing
         // field the allowlist derives from — so this test now checks that the
         // two derivations agree end to end, rather than that two hand-written
         // lists happen to match.
-        let patterns = [
-            #"(?:new\s+Worker|gradingWorkerFactory)\(\s*['"](/[^'"]+)['"]"#,
-            #"GRADING_WORKER_SCRIPTS\s*=\s*\{([^}]*)\}"#,
-        ]
         var found: Set<String> = []
-        let range = NSRange(code.startIndex..<code.endIndex, in: code)
-        for (index, pattern) in patterns.enumerated() {
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            for match in regex.matches(in: code, range: range) {
-                guard let captured = Range(match.range(at: 1), in: code) else { continue }
-                let text = String(code[captured])
-                if index == 0 {
-                    found.insert(text)
-                } else {
-                    // `{ lua: '/lua-grading-worker.js', … }` — take every quoted
-                    // path in the table body.
-                    guard
-                        let inner = try? NSRegularExpression(pattern: #"['"](/[^'"]+)['"]"#)
-                    else { continue }
-                    let innerRange = NSRange(text.startIndex..<text.endIndex, in: text)
-                    for hit in inner.matches(in: text, range: innerRange) {
-                        guard let r = Range(hit.range(at: 1), in: text) else { continue }
-                        found.insert(String(text[r]))
-                    }
-                }
+        for match in code.matches(of: #/(?:new\s+Worker|gradingWorkerFactory)\(\s*['"](/[^'"]+)['"]/#) {
+            found.insert(String(match.output.1))
+        }
+        for table in code.matches(of: #/GRADING_WORKER_SCRIPTS\s*=\s*\{([^}]*)\}/#) {
+            // `{ lua: '/lua-grading-worker.js', … }`: take every quoted path in
+            // the table body.
+            for hit in table.output.1.matches(of: #/['"](/[^'"]+)['"]/#) {
+                found.insert(String(hit.output.1))
             }
         }
         return found

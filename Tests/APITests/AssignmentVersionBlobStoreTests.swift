@@ -60,7 +60,7 @@ import Testing
 
         #expect(first == second)
         let path = try store.path(for: first)
-        let shard = (path as NSString).deletingLastPathComponent
+        let shard = URL(fileURLWithPath: path).deletingLastPathComponent().path
         let entries = try FileManager.default.contentsOfDirectory(atPath: shard)
         #expect(entries == [first])
     }

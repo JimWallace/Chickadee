@@ -4,6 +4,7 @@
 // tears it down with every piece of temp state it made.
 
 import ChickadeeTestSupport
+import Fluent
 import Foundation
 import SQLKit
 import VaporTesting
@@ -124,7 +125,7 @@ extension Application {
         for id in databases.ids() {
             // Dialect metadata is static — checking it opens no connection, so
             // a registered-but-unreachable Postgres pool costs nothing here.
-            guard let sql = db(id) as? SQLDatabase, sql.dialect.name == "sqlite" else { continue }
+            guard let sql = db(id) as? any SQLDatabase, sql.dialect.name == "sqlite" else { continue }
             guard
                 let rows = try? await sql.raw("PRAGMA database_list")
                     .all(decoding: DatabaseListRow.self)

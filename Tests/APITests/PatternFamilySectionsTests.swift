@@ -251,7 +251,7 @@ import Vapor
                     on: fixture.app.db
                 )
                 Issue.record("Expected non-contiguous section arrangement to throw.")
-            } catch let abort as AbortError {
+            } catch let abort as any AbortError {
                 #expect(abort.status == .unprocessableEntity)
                 #expect(
                     abort.reason.contains("contiguous"),

@@ -164,7 +164,7 @@ import VaporTesting
             ) { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
-                #expect(self.variesOnUserAgent(res))
+                #expect(variesOnUserAgent(res))
             }
         }
     }
@@ -177,7 +177,7 @@ import VaporTesting
             ) { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
-                #expect(self.variesOnUserAgent(res))
+                #expect(variesOnUserAgent(res))
             }
         }
     }

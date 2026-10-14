@@ -288,7 +288,7 @@ import VaporTesting
             let courseIDs = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$userID == student.requireID())
                 .all()
-                .map { $0.$course.id }
+                .map(\.$course.id)
             #expect(!courseIDs.contains(try clone.requireID()))
             #expect(courseIDs.contains(sourceID) == (sourceMode == .auto))
         }

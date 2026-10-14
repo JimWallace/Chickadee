@@ -64,7 +64,7 @@ import Testing
     @Test(arguments: AssignmentLanguage.allCases)
     func scalarTokensAreDistinct(_ language: AssignmentLanguage) {
         let facts = AuthoringLanguageFacts(language)
-        let tokens = [facts.trueLiteral, facts.falseLiteral, facts.nullLiteral].compactMap { $0 }
+        let tokens = [facts.trueLiteral, facts.falseLiteral, facts.nullLiteral].compactMap(\.self)
         #expect(Set(tokens).count == tokens.count, "\(language) spells two scalars the same way")
     }
 

@@ -45,7 +45,7 @@ import Vapor
     }
 
     private func reloadFamily(
-        _ assignment: APIAssignment, on db: Database
+        _ assignment: APIAssignment, on db: any Database
     ) async throws
         -> PatternFamily
     {

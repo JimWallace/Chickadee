@@ -19,6 +19,8 @@
 // These run the real canonical runtime under Rscript and parse what it prints,
 // so the assertions are about observable output rather than the source text.
 
+import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

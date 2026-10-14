@@ -6,6 +6,7 @@
 // activity and student-option branches, and the section shells.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

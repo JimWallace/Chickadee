@@ -5,6 +5,7 @@
 // opens on demand, and every destructive action in a ⋯ menu.
 
 import Core
+import Fluent
 import Foundation
 import Testing
 import VaporTesting

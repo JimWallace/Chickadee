@@ -1,3 +1,4 @@
+import Core
 import Elementary
 import Foundation
 import Testing
@@ -24,9 +25,10 @@ import Testing
         let content = try Self.content(of: html)
         #expect(!content.contains("<"))
         #expect(html.components(separatedBy: "</script>").count == 2)
-        let original = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? NSDictionary
-        let parsed = try JSONSerialization.jsonObject(with: Data(content.utf8)) as? NSDictionary
-        #expect(original != nil)
+        let original = try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
+        let parsed = try JSONDecoder().decode(JSONValue.self, from: Data(content.utf8))
+        let originalIsObject = if case .object = original { true } else { false }
+        #expect(originalIsObject)
         #expect(parsed == original)
     }
 

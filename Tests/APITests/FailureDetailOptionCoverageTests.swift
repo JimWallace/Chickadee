@@ -8,6 +8,7 @@
 // refused on save.
 
 import Core
+import Elementary
 import Foundation
 import Testing
 
@@ -20,11 +21,10 @@ import Testing
     }
 
     private func tokens(in text: String, pattern: String) throws -> Set<String> {
-        let regex = try NSRegularExpression(pattern: pattern)
-        let range = NSRange(text.startIndex..., in: text)
+        let regex = try Regex(pattern)
         return Set(
-            regex.matches(in: text, range: range).compactMap { match in
-                Range(match.range(at: 1), in: text).map { String(text[$0]) }
+            text.matches(of: regex).compactMap { match in
+                match.output.count > 1 ? match.output[1].substring.map(String.init) : nil
             }.filter { !$0.isEmpty })
     }
 

@@ -54,7 +54,7 @@ actor LTITestGradeService {
     }
 
     var client: LTIServiceClient {
-        LTIServiceClient { [self] request in await self.handle(request) }
+        LTIServiceClient { [self] request in await handle(request) }
     }
 
     func handle(_ request: ClientRequest) -> ClientResponse {

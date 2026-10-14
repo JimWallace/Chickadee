@@ -170,7 +170,7 @@ import VaporTesting
     @discardableResult
     private func landRun(
         setupID: String, coverage: Double, contributors: [UUID], at date: Date,
-        on db: Database
+        on db: any Database
     ) async throws -> APIClassCoverageRun {
         let run = APIClassCoverageRun(
             testSetupID: setupID, submissionID: "sub_\(UUID().uuidString.prefix(8))",
