@@ -7,7 +7,7 @@ import Vapor
 struct HTTPSRedirectMiddleware: AsyncMiddleware {
     let configuration: AppSecurityConfiguration
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard configuration.enforceHTTPS else {
             return try await next.respond(to: request)
         }

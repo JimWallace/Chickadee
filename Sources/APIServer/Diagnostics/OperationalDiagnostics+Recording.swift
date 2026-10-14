@@ -14,7 +14,7 @@ extension OperationalDiagnosticsService {
 
     func recordSubmissionCreated(
         submission: APISubmission,
-        on db: Database,
+        on db: any Database,
         logger: Logger
     ) async {
         guard configuration.enabled, let submissionID = submission.id else { return }
@@ -71,7 +71,7 @@ extension OperationalDiagnosticsService {
     func recordRunnerCheckIn(
         snapshot: WorkerActivitySnapshot,
         reason: RunnerCheckInReason,
-        on db: Database,
+        on db: any Database,
         logger: Logger
     ) async {
         guard configuration.enabled else { return }
@@ -255,7 +255,7 @@ extension OperationalDiagnosticsService {
     func recordJobAssigned(
         submission: APISubmission,
         runnerVersion: String? = nil,
-        on db: Database,
+        on db: any Database,
         logger: Logger
     ) async {
         guard configuration.enabled, let submissionID = submission.id else { return }
@@ -351,7 +351,7 @@ extension OperationalDiagnosticsService {
     func recordWorkerExecutionReport(
         collection: TestOutcomeCollection,
         diagnostics workerDiagnostics: WorkerExecutionDiagnostics?,
-        on db: Database,
+        on db: any Database,
         logger: Logger
     ) async {
         guard configuration.enabled else { return }
@@ -445,7 +445,7 @@ extension OperationalDiagnosticsService {
         submission: APISubmission,
         inputs: WorkerExecutionReportInputs,
         timing: WorkerExecutionTiming,
-        on db: Database
+        on db: any Database
     ) async throws {
         let collection = inputs.collection
         let workerDiagnostics = inputs.workerDiagnostics
@@ -491,7 +491,7 @@ extension OperationalDiagnosticsService {
         diagnostics: APISubmissionDiagnostics,
         inputs: WorkerExecutionReportInputs,
         timing: WorkerExecutionTiming,
-        on db: Database
+        on db: any Database
     ) async throws -> JobExecutionMetric {
         let collection = inputs.collection
         let workerDiagnostics = inputs.workerDiagnostics
@@ -618,7 +618,7 @@ extension OperationalDiagnosticsService {
     func recordWorkerResult(
         collection: TestOutcomeCollection,
         submission: APISubmission,
-        on db: Database,
+        on db: any Database,
         logger: Logger
     ) async {
         let finishedAt = collection.timestamp

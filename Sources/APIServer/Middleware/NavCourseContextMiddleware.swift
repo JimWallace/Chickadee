@@ -18,7 +18,7 @@
 import Vapor
 
 struct NavCourseContextMiddleware: AsyncMiddleware {
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         if request.auth.has(APIUser.self) {
             _ = try? await request.courseAwareUserContext()
         }

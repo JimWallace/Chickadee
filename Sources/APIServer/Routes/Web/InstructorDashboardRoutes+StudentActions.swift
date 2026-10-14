@@ -5,6 +5,8 @@
 // override save/delete.  Split out of
 // InstructorDashboardRoutes+Submissions.swift — no behaviour changes.
 
+import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

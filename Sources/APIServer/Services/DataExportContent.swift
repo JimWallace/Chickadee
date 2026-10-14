@@ -167,7 +167,7 @@ struct DataExportContent: Sendable {
 /// Loads every piece of the export for `user` from the database.  Read-only;
 /// all file I/O happens later on the thread pool (`DataExportService`).
 func gatherDataExportContent(
-    for user: APIUser, on db: Database, now: Date = Date()
+    for user: APIUser, on db: any Database, now: Date = Date()
 ) async throws -> DataExportContent {
     let userID = try user.requireID()
 
@@ -214,7 +214,7 @@ func gatherDataExportContent(
 }
 
 private func gatherEnrollments(
-    userID: UUID, on db: Database
+    userID: UUID, on db: any Database
 ) async throws -> [DataExportEnrollment] {
     let rows = try await APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
@@ -244,7 +244,7 @@ private struct GatheredSubmissions: Sendable {
 }
 
 private func gatherSubmissions(
-    user: APIUser, on db: Database, now: Date
+    user: APIUser, on db: any Database, now: Date
 ) async throws -> GatheredSubmissions {
     let userID = try user.requireID()
     let submissions = try await APISubmission.query(on: db)
@@ -333,7 +333,7 @@ private func resolveVisibleTiers(
     user: APIUser,
     setups: [APITestSetup],
     assignmentBySetupID: [String: APIAssignment],
-    on db: Database,
+    on db: any Database,
     now: Date
 ) async throws -> [String: Set<String>] {
     var staffByCourseID: [UUID: Bool] = [:]
@@ -358,7 +358,7 @@ private func resolveVisibleTiers(
 }
 
 private func latestResultBySubmissionID(
-    submissionIDs: [String], on db: Database
+    submissionIDs: [String], on db: any Database
 ) async throws -> [String: APIResult] {
     guard !submissionIDs.isEmpty else { return [:] }
     let results = try await APIResult.query(on: db)
@@ -401,7 +401,7 @@ private let metadataSubjectActions: [String] = [
 ].map(\.rawValue)
 
 private func gatherAuditEntries(
-    for user: APIUser, on db: Database
+    for user: APIUser, on db: any Database
 ) async throws -> [DataExportAuditEntry] {
     let userID = try user.requireID()
     let uuidString = userID.uuidString
@@ -462,7 +462,7 @@ private func gatherAuditEntries(
 // MARK: - Grading adjustments
 
 private func gatherGradingAdjustments(
-    userID: UUID, on db: Database
+    userID: UUID, on db: any Database
 ) async throws -> DataExportGradingAdjustments {
     let extensions = try await APIAssignmentExtension.query(on: db)
         .filter(\.$userID == userID)

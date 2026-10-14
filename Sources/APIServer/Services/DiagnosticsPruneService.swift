@@ -9,6 +9,7 @@
 // Periodic scaffolding lives in `PeriodicSweepMonitor`; this file keeps only
 // the storage key and the accessor.
 
+import Fluent
 import Vapor
 
 struct DiagnosticsPruneMonitorKey: StorageKey {

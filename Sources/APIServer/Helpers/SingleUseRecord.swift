@@ -19,8 +19,8 @@ enum SingleUseRecord {
     /// win, which closes the replay race a read-check-then-save leaves open.
     /// `table` and `hashColumn` are compile-time schema constants (no
     /// injection surface); only the hash is bound.
-    static func burn(on db: Database, table: String, hashColumn: String, hash: String) async throws -> Bool {
-        guard let sql = db as? SQLDatabase else { return true }
+    static func burn(on db: any Database, table: String, hashColumn: String, hash: String) async throws -> Bool {
+        guard let sql = db as? (any SQLDatabase) else { return true }
         let rows = try await sql.raw(
             "UPDATE \(unsafeRaw: table) SET consumed = true WHERE \(unsafeRaw: hashColumn) = \(bind: hash) AND consumed = false RETURNING id"
         ).all()

@@ -42,7 +42,7 @@ enum ArenaResultError: Error, Equatable {
 
 /// The next match the arena plays for the setup: the lowest undecided slot
 /// of the current round of the running tournament, or nil when none waits.
-func nextArenaMatch(testSetupID: String, on db: Database) async throws -> ArenaMatch? {
+func nextArenaMatch(testSetupID: String, on db: any Database) async throws -> ArenaMatch? {
     guard let run = try await runningTournament(testSetupID: testSetupID, on: db), let runID = run.id else {
         return nil
     }
@@ -74,7 +74,7 @@ func nextArenaMatch(testSetupID: String, on db: Database) async throws -> ArenaM
 /// running tournament: the match itself (the home entrant's upload) or the
 /// away entrant's snapshotted submission. Only these may reach the
 /// presenter's browser through the arena.
-func isArenaEntrySubmission(_ submissionID: String, testSetupID: String, on db: Database) async throws -> Bool {
+func isArenaEntrySubmission(_ submissionID: String, testSetupID: String, on db: any Database) async throws -> Bool {
     guard let run = try await runningTournament(testSetupID: testSetupID, on: db), let runID = run.id else {
         return false
     }
@@ -106,7 +106,7 @@ func isArenaEntrySubmission(_ submissionID: String, testSetupID: String, on db: 
 /// the browser result route does): its submission ID must be the match's.
 func recordArenaMatch(
     matchSubmissionID: String, testSetupID: String, collection: TestOutcomeCollection, application: Application,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard collection.submissionID == matchSubmissionID, collection.testSetupID == testSetupID else {
         throw ArenaResultError.notAnArenaMatch
@@ -140,8 +140,8 @@ func recordArenaMatch(
 /// on SQLite and Postgres (the `claimTournamentStep` pattern). True when this
 /// caller's update landed; false when the match is not waiting for the arena,
 /// or another presenter claimed it first.
-private func claimArenaMatch(_ submissionID: String, testSetupID: String, on db: Database) async throws -> Bool {
-    guard let sql = db as? SQLDatabase else { return false }
+private func claimArenaMatch(_ submissionID: String, testSetupID: String, on db: any Database) async throws -> Bool {
+    guard let sql = db as? (any SQLDatabase) else { return false }
     let rows = try await sql.raw(
         """
         UPDATE \(unsafeRaw: APISubmission.schema) SET status = \(bind: SubmissionStatus.complete.rawValue) \
@@ -154,7 +154,7 @@ private func claimArenaMatch(_ submissionID: String, testSetupID: String, on db:
 }
 
 /// The setup's running tournament, newest first; nil when none runs.
-private func runningTournament(testSetupID: String, on db: Database) async throws -> APITournamentRun? {
+private func runningTournament(testSetupID: String, on db: any Database) async throws -> APITournamentRun? {
     try await APITournamentRun.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$status == APITournamentRun.Status.running)

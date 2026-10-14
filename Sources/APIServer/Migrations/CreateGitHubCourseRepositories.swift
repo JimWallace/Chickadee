@@ -10,7 +10,7 @@
 import Fluent
 
 struct CreateGitHubCourseRepositories: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APIGitHubCourseOrganization.schema)
             .id()
             .field("course_id", .uuid, .required, .references("courses", "id", onDelete: .cascade))
@@ -49,7 +49,7 @@ struct CreateGitHubCourseRepositories: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APIGitHubCourseRepository.schema).delete()
         try await database.schema(APIGitHubAssignmentTemplate.schema).delete()
         try await database.schema(APIGitHubCourseOrganization.schema).delete()

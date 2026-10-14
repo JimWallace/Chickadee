@@ -8,7 +8,7 @@ import Fluent
 import Vapor
 
 struct LTIRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let lti = routes.grouped("lti")
         lti.get("jwks", use: jwks)
         lti.get("login", use: login)

@@ -18,11 +18,11 @@ import Fluent
 import SQLKit
 
 struct DeleteUndatedSessions: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         try await sql.raw("DELETE FROM _fluent_sessions WHERE created_at IS NULL").run()
     }
 
     /// Nothing to restore: the deleted sessions were already dead.
-    func revert(on database: Database) async throws {}
+    func revert(on database: any Database) async throws {}
 }

@@ -34,7 +34,7 @@ struct RunnerProfileService {
         displayName: String?,
         profile: RunnerCapabilityProfile?,
         seenAt: Date,
-        on db: Database,
+        on db: any Database,
         lastSeenPersistInterval: TimeInterval = RunnerProfileService.lastSeenPersistInterval
     ) async throws -> RunnerProfileUpsertResult {
         guard !runnerID.isEmpty else {
@@ -104,13 +104,13 @@ struct RunnerProfileService {
         return RunnerProfileUpsertResult(profile: created, event: .registered)
     }
 
-    func profile(for runnerID: String, on db: Database) async throws -> RunnerProfile? {
+    func profile(for runnerID: String, on db: any Database) async throws -> RunnerProfile? {
         try await RunnerProfile.query(on: db)
             .filter(\.$runnerID == runnerID)
             .first()
     }
 
-    func refreshActiveFlags(activeWindowSeconds: TimeInterval, on db: Database) async throws {
+    func refreshActiveFlags(activeWindowSeconds: TimeInterval, on db: any Database) async throws {
         let cutoff = Date().addingTimeInterval(-activeWindowSeconds)
         let profiles = try await RunnerProfile.query(on: db).all()
         for profile in profiles {
@@ -136,7 +136,8 @@ struct RunnerProfileService {
 }
 
 struct AssignmentRequirementService {
-    func loadRequirement(for submission: APISubmission, on db: Database) async throws -> LoadedAssignmentRequirement {
+    func loadRequirement(for submission: APISubmission, on db: any Database) async throws -> LoadedAssignmentRequirement
+    {
         let assignment: APIAssignment?
         if submission.kind == APISubmission.Kind.validation, let submissionID = submission.id {
             assignment = try await APIAssignment.query(on: db)

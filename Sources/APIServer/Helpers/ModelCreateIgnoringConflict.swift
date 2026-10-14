@@ -13,7 +13,7 @@ extension Model {
     /// `withTransientDatabaseLockRetry`, and a `try?` here used to swallow the
     /// stale-snapshot lock error that retry exists for, so the row was lost
     /// with no log.
-    func createIgnoringConflict(on db: Database) async throws {
+    func createIgnoringConflict(on db: any Database) async throws {
         do {
             try await create(on: db)
         } catch  where isInsertConflict(error) {

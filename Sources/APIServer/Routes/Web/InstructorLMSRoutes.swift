@@ -11,7 +11,7 @@
 import Vapor
 
 struct InstructorLMSRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let r = routes.grouped("instructor")
         // Reconcile the roster against the LEARN classlist (flags dropped students).
         r.get("students", "learn-check", use: studentsLearnCheck)

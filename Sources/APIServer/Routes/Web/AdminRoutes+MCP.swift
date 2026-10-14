@@ -11,6 +11,7 @@
 // invalidate one already issued — it simply expires after its TTL.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

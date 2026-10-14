@@ -25,7 +25,7 @@ import Fluent
 import SQLKit
 
 struct CreateCourseEnrollments: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("course_enrollments")
             .id()
             .field(
@@ -72,7 +72,7 @@ struct CreateCourseEnrollments: ChickadeeMigration {
         // is what makes lazy materialization safe: without it, two
         // enrollments with no handle yet would collide on NULL under any
         // engine that treats NULLs as equal in a unique index.
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_enrollments_course_handle
@@ -83,8 +83,8 @@ struct CreateCourseEnrollments: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_enrollments_course_handle").run()
         }
         try await database.schema("course_enrollments").delete()

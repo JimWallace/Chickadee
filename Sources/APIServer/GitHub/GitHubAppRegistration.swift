@@ -10,6 +10,7 @@
 // and nothing said why. Every caller now asks here, a file problem is
 // logged, and the admin page names it.
 
+import Fluent
 import Vapor
 
 enum GitHubAppRegistration {

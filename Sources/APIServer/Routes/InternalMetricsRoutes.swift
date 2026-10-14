@@ -1,7 +1,8 @@
+import Fluent
 import Vapor
 
 struct InternalMetricsRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get("metrics", use: metrics)
         admin.get("metrics", "timeseries", use: timeseries)

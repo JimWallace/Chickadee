@@ -3,7 +3,7 @@
 import Fluent
 
 struct CreateClassCoverageRuns: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("class_coverage_runs")
             .id()
             .field("test_setup_id", .string, .required)
@@ -19,7 +19,7 @@ struct CreateClassCoverageRuns: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("class_coverage_runs").delete()
     }
 }

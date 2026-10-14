@@ -7,7 +7,7 @@
 import Fluent
 
 struct CreateGitHubAccountLinks: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APIGitHubAccountLink.schema)
             .id()
             .field("user_id", .uuid, .required, .references("users", "id", onDelete: .cascade))
@@ -19,7 +19,7 @@ struct CreateGitHubAccountLinks: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APIGitHubAccountLink.schema).delete()
     }
 }

@@ -33,8 +33,8 @@ struct SwapStarterGradcapForHeadband: ChickadeeMigration {
         }
     }
 
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         let rows = try await sql.select()
             .columns("id", "avatar_spec")
             .from("users")
@@ -57,7 +57,7 @@ struct SwapStarterGradcapForHeadband: ChickadeeMigration {
 
     /// Nothing to undo: the gradcap was not an earned choice, and restoring it
     /// would need a record of who had one, which the swap does not keep.
-    func revert(on database: Database) async throws {}
+    func revert(on database: any Database) async throws {}
 
     /// `spec` with its gradcap replaced by the headband; every other slot as it
     /// was.

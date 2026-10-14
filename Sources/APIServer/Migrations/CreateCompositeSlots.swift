@@ -5,7 +5,7 @@
 import Fluent
 
 struct CreateCompositeSlots: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APICompositeSlot.schema)
             .id()
             .field(
@@ -24,7 +24,7 @@ struct CreateCompositeSlots: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APICompositeSlot.schema).delete()
     }
 }

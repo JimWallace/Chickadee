@@ -26,7 +26,7 @@ enum LTICourseBinding {
     /// The course bound to this context, binding it by org unit when exactly
     /// one unbound, unarchived course matches and this is the only enabled
     /// platform. Nil when neither applies.
-    static func course(platformID: UUID, contextID: String, on db: Database) async throws -> Match? {
+    static func course(platformID: UUID, contextID: String, on db: any Database) async throws -> Match? {
         if let bound = try await APICourse.query(on: db)
             .filter(\.$ltiPlatformID == platformID)
             .filter(\.$ltiContextID == contextID)
@@ -48,7 +48,7 @@ enum LTICourseBinding {
     }
 
     /// Binds `course` to the context. The caller checks authority first.
-    static func bind(_ course: APICourse, platformID: UUID, contextID: String, on db: Database) async throws {
+    static func bind(_ course: APICourse, platformID: UUID, contextID: String, on db: any Database) async throws {
         course.ltiPlatformID = platformID
         course.ltiContextID = contextID
         try await course.save(on: db)

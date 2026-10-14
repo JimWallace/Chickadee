@@ -46,8 +46,8 @@ struct JobDiskReadings {
 /// Outcome of the two concurrent prepare-phase artifact fetches.  Both legs
 /// are `Result`s rather than `throws` on purpose — see `fetchJobArtifacts`.
 struct JobArtifactFetch {
-    let submission: Result<Void, Error>
-    let testSetup: Result<TestSetupCache.AcquireResult, Error>
+    let submission: Result<Void, any Error>
+    let testSetup: Result<TestSetupCache.AcquireResult, any Error>
     let testSetupAcquireMilliseconds: Int
 }
 

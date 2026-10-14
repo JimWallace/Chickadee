@@ -173,7 +173,7 @@ struct EditableSuiteRow: Encodable {
         case dependsOnJSON
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
         try container.encode(url, forKey: .url)
@@ -216,7 +216,7 @@ struct FamilySuiteRow: Encodable {
         case id, name, functionName, tier, caseCount, totalPoints, caseCountText
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         // Synthesized Encodable would skip `caseCountText` because it's a
         // computed property; the encoded row carries the subtitle, so
         // we emit it explicitly here.

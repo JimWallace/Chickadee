@@ -12,6 +12,7 @@
 //                                               student number (instructor)
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -214,7 +215,7 @@ extension InstructorLMSRoutes {
 
     // MARK: - Helpers
 
-    private func ltiGradeSyncRows(course: APICourse, on db: Database) async throws -> [APILTIGradeSync] {
+    private func ltiGradeSyncRows(course: APICourse, on db: any Database) async throws -> [APILTIGradeSync] {
         guard let courseID = course.id else { return [] }
         let setupIDs = try await APIAssignment.query(on: db)
             .filter(\.$courseID == courseID)
@@ -228,7 +229,7 @@ extension InstructorLMSRoutes {
     }
 
     private func ltiFailures(
-        rows: [APILTIGradeSync], on db: Database
+        rows: [APILTIGradeSync], on db: any Database
     ) async throws
         -> [LTIGradeFailureRow]
     {

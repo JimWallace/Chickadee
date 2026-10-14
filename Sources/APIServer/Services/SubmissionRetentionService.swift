@@ -39,7 +39,7 @@ enum SubmissionRetentionService {
     /// from the result (callers should default to 0).
     static func submissionCountsByCourse(
         courseIDs: [UUID],
-        on db: Database
+        on db: any Database
     ) async throws -> [UUID: Int] {
         guard !courseIDs.isEmpty else { return [:] }
 
@@ -60,7 +60,7 @@ enum SubmissionRetentionService {
         // and submissions is the largest unbounded-growth table (2026-07
         // audit; same pattern as loadUniqueSubmittersBySetup).
         var counts: [UUID: Int] = [:]
-        if let sql = db as? SQLDatabase {
+        if let sql = db as? (any SQLDatabase) {
             struct SetupCountRow: Decodable {
                 let testSetupID: String
                 let total: Int

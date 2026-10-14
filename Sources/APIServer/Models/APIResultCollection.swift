@@ -36,7 +36,7 @@ extension APIResult {
     /// columns from the collection, then persists the result row and its
     /// blob side-table row together in a transaction (composes with an
     /// enclosing transaction — the Fluent drivers no-op a nested `BEGIN`).
-    func saveWithCollection(json: String, on db: Database) async throws {
+    func saveWithCollection(json: String, on db: any Database) async throws {
         stampGradeFields(from: json)
         try await db.transaction { tx in
             try await self.save(on: tx)
@@ -48,7 +48,7 @@ extension APIResult {
     /// This result's collection blob, or nil when the side-table row is
     /// missing (should not happen for rows written after #1173 — the write
     /// path is transactional and deletes cascade from `results`).
-    func loadCollectionJSON(on db: Database) async throws -> String? {
+    func loadCollectionJSON(on db: any Database) async throws -> String? {
         guard let id else { return nil }
         return try await APIResultCollection.find(id, on: db)?.collectionJSON
     }
@@ -58,7 +58,7 @@ extension APIResult {
 /// bind-parameter limits, like the loaders in BestGradePercentBySubmissionID.
 func collectionJSONByResultID(
     for resultIDs: some Collection<String>,
-    on db: Database
+    on db: any Database
 ) async throws -> [String: String] {
     guard !resultIDs.isEmpty else { return [:] }
     let chunkSize = 5_000

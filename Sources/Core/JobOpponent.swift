@@ -56,7 +56,7 @@ public struct JobOpponent: Codable, Equatable, Sendable {
         case supportFile, matchSeed, submissionID, submissionURL, submissionFilename
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         supportFile = try c.decodeIfPresent(String.self, forKey: .supportFile)
         matchSeed = try c.decode(String.self, forKey: .matchSeed)
@@ -65,7 +65,7 @@ public struct JobOpponent: Codable, Equatable, Sendable {
         submissionFilename = try c.decodeIfPresent(String.self, forKey: .submissionFilename)
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encodeIfPresent(supportFile, forKey: .supportFile)
         try c.encode(matchSeed, forKey: .matchSeed)

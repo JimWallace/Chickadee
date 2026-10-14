@@ -13,6 +13,8 @@
 // filters on the resolved course id, so there is no way to page into another
 // course's history from this route.
 
+import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

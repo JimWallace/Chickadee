@@ -11,16 +11,16 @@ import SQLKit
 /// index serves the never-finished sweep beside it: a btree on `finished_at`
 /// also locates the NULL rows.
 struct CreateSubmissionDiagnosticsPruneIndex: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_submission_diagnostics_finished_at ON submission_diagnostics(finished_at)"
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw("DROP INDEX IF EXISTS idx_submission_diagnostics_finished_at").run()
     }

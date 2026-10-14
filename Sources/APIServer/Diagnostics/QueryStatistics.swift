@@ -64,8 +64,8 @@ enum QueryStatistics {
     /// dropped, so its row still counts.
     static let maximumQueryLength = 500
 
-    static func availability(on db: Database) async throws -> Availability {
-        guard let sql = db as? SQLDatabase, sql.dialect.name == "postgresql" else { return .notPostgres }
+    static func availability(on db: any Database) async throws -> Availability {
+        guard let sql = db as? (any SQLDatabase), sql.dialect.name == "postgresql" else { return .notPostgres }
         guard try await isPreloaded(sql) else { return .notPreloaded }
         return try await extensionSchema(on: sql) == nil ? .extensionMissing : .ready
     }
@@ -73,7 +73,7 @@ enum QueryStatistics {
     /// The schema that holds the extension's views, or nil when the
     /// extension does not exist. An extension exists once per database, but
     /// not always in the schema on the search path, so every read names it.
-    static func extensionSchema(on sql: SQLDatabase) async throws -> String? {
+    static func extensionSchema(on sql: any SQLDatabase) async throws -> String? {
         let row = try await sql.raw(
             """
             SELECT n.nspname AS schema_name
@@ -87,9 +87,9 @@ enum QueryStatistics {
     /// Creates the extension when the library is loaded and the extension is
     /// missing. Called once at startup. A failure is logged, never thrown:
     /// statement timing is diagnosis, and must not stop the server.
-    static func enableIfPreloaded(on db: Database, logger: Logger) async {
+    static func enableIfPreloaded(on db: any Database, logger: Logger) async {
         do {
-            guard try await availability(on: db) == .extensionMissing, let sql = db as? SQLDatabase else {
+            guard try await availability(on: db) == .extensionMissing, let sql = db as? (any SQLDatabase) else {
                 return
             }
             // In `public`, not the first schema on the search path: the
@@ -113,7 +113,7 @@ enum QueryStatistics {
 
     /// The statements of this database, ordered by `order`, most first.
     static func topStatements(
-        on sql: SQLDatabase,
+        on sql: any SQLDatabase,
         schema: String,
         orderedBy order: QueryStatisticsOrder,
         limit: Int
@@ -135,7 +135,7 @@ enum QueryStatistics {
     }
 
     /// The totals over every statement of this database.
-    static func totals(on sql: SQLDatabase, schema: String) async throws -> (calls: Int, totalExecMs: Double) {
+    static func totals(on sql: any SQLDatabase, schema: String) async throws -> (calls: Int, totalExecMs: Double) {
         let row = try await sql.raw(
             """
             SELECT coalesce(sum(calls), 0)::bigint AS calls,
@@ -153,12 +153,12 @@ enum QueryStatistics {
 
     /// When the statistics were last reset, from `pg_stat_statements_info`
     /// (Postgres 14 or later). Nil when the view does not exist.
-    static func statsResetAt(on sql: SQLDatabase, schema: String) async -> Date? {
+    static func statsResetAt(on sql: any SQLDatabase, schema: String) async -> Date? {
         let row = try? await sql.raw("SELECT stats_reset FROM \(ident: schema).pg_stat_statements_info").first()
         return try? row?.decode(column: "stats_reset", as: Date.self)
     }
 
-    private static func isPreloaded(_ sql: SQLDatabase) async throws -> Bool {
+    private static func isPreloaded(_ sql: any SQLDatabase) async throws -> Bool {
         let row = try await sql.raw("SELECT current_setting('shared_preload_libraries') AS libraries").first()
         let libraries = try row?.decode(column: "libraries", as: String.self) ?? ""
         return libraries.split(separator: ",")

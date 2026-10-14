@@ -12,6 +12,7 @@
 // only as a clone of one they teach, and becomes its instructor.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

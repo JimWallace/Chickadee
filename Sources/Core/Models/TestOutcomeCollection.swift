@@ -88,7 +88,7 @@ public struct TestOutcomeCollection: Codable, Sendable {
 
     // Custom decoder so old records without totalPoints/earnedPoints fall back
     // to totalTests/passCount, preserving correct grade display for existing results.
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         submissionID = try c.decode(String.self, forKey: .submissionID)
         testSetupID = try c.decode(String.self, forKey: .testSetupID)

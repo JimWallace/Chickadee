@@ -9,6 +9,7 @@
 // "highest grade wins" folds live in
 // `Helpers/BestGradePercentBySubmissionID.swift`.
 
+import Elementary
 import Fluent
 import Foundation
 import Vapor

@@ -21,7 +21,7 @@ enum JSONRPCID: Codable, Equatable, Hashable, Sendable {
     case number(Int)
     case null
 
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         if container.decodeNil() {
             self = .null
@@ -37,7 +37,7 @@ enum JSONRPCID: Codable, Equatable, Hashable, Sendable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .string(let value): try container.encode(value)
@@ -66,7 +66,7 @@ extension JSONRPCRequest: Decodable {
         case jsonrpc, id, method, params
     }
 
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         jsonrpc = try container.decode(String.self, forKey: .jsonrpc)
         method = try container.decode(String.self, forKey: .method)
@@ -101,7 +101,7 @@ extension JSONRPCResponse: Encodable {
         case jsonrpc, id, result, error
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode("2.0", forKey: .jsonrpc)
         // The spec requires an `id` on every response; it is null when the

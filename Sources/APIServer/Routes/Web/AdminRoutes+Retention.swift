@@ -12,6 +12,7 @@
 // AdminRoutes.boot() (`/archive` toggle and `/delete`).
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

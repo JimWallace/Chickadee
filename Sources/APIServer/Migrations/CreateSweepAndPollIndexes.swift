@@ -36,15 +36,15 @@ struct CreateSweepAndPollIndexes: ChickadeeMigration {
         ("idx_lti_deep_link_requests_expires", "lti_deep_link_requests(expires_at)"),
     ]
 
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         for index in Self.indexes {
             try await sql.raw("CREATE INDEX IF NOT EXISTS \(unsafeRaw: index.name) ON \(unsafeRaw: index.on)").run()
         }
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         for index in Self.indexes.reversed() {
             try await sql.raw("DROP INDEX IF EXISTS \(unsafeRaw: index.name)").run()
         }

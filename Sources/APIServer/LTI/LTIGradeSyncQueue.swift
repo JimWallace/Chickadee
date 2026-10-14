@@ -13,14 +13,14 @@ import Foundation
 enum LTIGradeSyncQueue {
     /// Queues `userIDs` for `testSetupID` when the assignment's course uses
     /// AGS.
-    static func queue(userIDs: [UUID], testSetupID: String, on db: Database, now: Date = Date()) async throws {
+    static func queue(userIDs: [UUID], testSetupID: String, on db: any Database, now: Date = Date()) async throws {
         guard !userIDs.isEmpty, try await courseUsesLTIGrades(testSetupID: testSetupID, on: db) else { return }
         try await markPending(userIDs: userIDs, testSetupID: testSetupID, on: db, now: now)
     }
 
     /// Queues the owner of a newly graded submission. Validation and other
     /// non-student submissions have no grade to send.
-    static func queue(submissionID: String, testSetupID: String, on db: Database) async throws {
+    static func queue(submissionID: String, testSetupID: String, on db: any Database) async throws {
         guard try await courseUsesLTIGrades(testSetupID: testSetupID, on: db),
             let submission = try await APISubmission.find(submissionID, on: db),
             submission.kind == APISubmission.Kind.student,
@@ -31,7 +31,7 @@ enum LTIGradeSyncQueue {
 
     /// Queues every student with a submission or an override for the setup:
     /// the "push all" action and a frozen class-goal bonus.
-    static func queueAllStudents(testSetupID: String, on db: Database, now: Date = Date()) async throws {
+    static func queueAllStudents(testSetupID: String, on db: any Database, now: Date = Date()) async throws {
         guard try await courseUsesLTIGrades(testSetupID: testSetupID, on: db) else { return }
         let submitters = try await APISubmission.query(on: db)
             .filter(\.$testSetupID == testSetupID)
@@ -49,7 +49,7 @@ enum LTIGradeSyncQueue {
     /// Queues again the rows that failed because the student had not yet
     /// opened Chickadee from the LMS. Called when that student launches. The
     /// rule keys on the stored reason code, never on the sentence.
-    static func retryFailed(userID: UUID, courseID: UUID, on db: Database, now: Date = Date()) async throws {
+    static func retryFailed(userID: UUID, courseID: UUID, on db: any Database, now: Date = Date()) async throws {
         let setupIDs = try await APIAssignment.query(on: db)
             .filter(\.$courseID == courseID)
             .all()
@@ -70,14 +70,14 @@ enum LTIGradeSyncQueue {
         }
     }
 
-    private static func courseUsesLTIGrades(testSetupID: String, on db: Database) async throws -> Bool {
+    private static func courseUsesLTIGrades(testSetupID: String, on db: any Database) async throws -> Bool {
         guard let assignment = try await assignmentByTestSetupID(testSetupID, on: db),
             let course = try await APICourse.find(assignment.courseID, on: db)
         else { return false }
         return course.usesLTIGrades
     }
 
-    private static func markPending(userIDs: [UUID], testSetupID: String, on db: Database, now: Date) async throws {
+    private static func markPending(userIDs: [UUID], testSetupID: String, on db: any Database, now: Date) async throws {
         guard !userIDs.isEmpty else { return }
         var existing: [APILTIGradeSync] = []
         for chunk in chunkedForInFilter(userIDs) {

@@ -9,6 +9,7 @@
 // wants the mapping reads the ordinary page.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

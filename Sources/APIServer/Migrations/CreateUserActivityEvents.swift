@@ -6,7 +6,7 @@ import SQLKit
 /// (the chart scans a trailing window) and on `(created_at, user_id)` (the
 /// distinct-users-per-bucket aggregation).
 struct CreateUserActivityEvents: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("user_activity_events")
             .id()
             .field(
@@ -19,7 +19,7 @@ struct CreateUserActivityEvents: ChickadeeMigration {
             .field("created_at", .datetime, .required)
             .create()
 
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "CREATE INDEX IF NOT EXISTS idx_user_activity_events_created ON user_activity_events(created_at)"
             ).run()
@@ -29,8 +29,8 @@ struct CreateUserActivityEvents: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_user_activity_events_created").run()
             try await sql.raw("DROP INDEX IF EXISTS idx_user_activity_events_created_user").run()
         }

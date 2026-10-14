@@ -191,7 +191,7 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
         self.failureDetail = failureDetail
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         tier = try c.decodeIfPresent(TestTier.self, forKey: .tier) ?? .pub
         points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
@@ -284,7 +284,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         self.enabled = enabled
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         key = try c.decode(String.self, forKey: .key)
         label = try c.decode(String.self, forKey: .label)
@@ -401,7 +401,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         self.ioComparison = ioComparison
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)

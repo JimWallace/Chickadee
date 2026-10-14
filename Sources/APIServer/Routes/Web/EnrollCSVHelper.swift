@@ -173,7 +173,7 @@ struct EnrollUsernamesResult {
 func enrollUsernamesInCourse(
     _ usernames: [String],
     courseID: UUID,
-    on db: Database
+    on db: any Database
 ) async throws -> EnrollUsernamesResult {
     var seen = Set<String>()
     let uniqueUsernames = usernames.filter { seen.insert($0).inserted }
@@ -246,7 +246,7 @@ func enrollUsernamesInCourse(
 /// swallowed and logged — they cannot block login.
 func resolvePendingPreEnrollments(
     for user: APIUser,
-    db: Database,
+    db: any Database,
     logger: Logger
 ) async {
     guard let userID = user.id else { return }

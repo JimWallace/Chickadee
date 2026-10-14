@@ -7,6 +7,7 @@
 // description names a level; every rendering comes from here.
 
 import Core
+import Foundation
 
 /// The student-facing failure-detail levels, rendered for agent-facing copy.
 enum MCPFailureDetailProse {

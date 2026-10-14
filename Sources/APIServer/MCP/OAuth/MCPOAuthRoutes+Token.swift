@@ -242,9 +242,9 @@ extension MCPOAuthRoutes {
     /// rotation; the caller then mirrors the swap onto the in-memory model and
     /// persists non-security telemetry (`lastUsedAt`).
     private static func rotateRefreshHash(
-        on db: Database, currentHash: String, newHash: String
+        on db: any Database, currentHash: String, newHash: String
     ) async throws -> Bool {
-        guard let sql = db as? SQLDatabase else { return true }
+        guard let sql = db as? (any SQLDatabase) else { return true }
         let rows = try await sql.raw(
             "UPDATE \(unsafeRaw: MCPGrant.schema) SET previous_refresh_token_hash = refresh_token_hash, refresh_token_hash = \(bind: newHash) WHERE refresh_token_hash = \(bind: currentHash) AND revoked = false RETURNING id"
         ).all()

@@ -44,7 +44,7 @@ func recordLeaderboardEntry(
     userID: UUID,
     submissionID: String,
     outcomes: [TestOutcome],
-    on db: Database
+    on db: any Database
 ) async throws {
     guard let metric = submissionMetric(from: outcomes),
         let setup = try await APITestSetup.find(testSetupID, on: db),
@@ -82,7 +82,7 @@ func recordLeaderboardEntry(
 /// Reads the materialised rows rather than the stored collections, which is
 /// the whole point of materialising them.
 func leaderboardEntries(
-    testSetupID: String, on db: Database
+    testSetupID: String, on db: any Database
 ) async throws -> [APILeaderboardEntry] {
     try await APILeaderboardEntry.query(on: db)
         .filter(\.$testSetupID == testSetupID)

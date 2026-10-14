@@ -67,7 +67,7 @@ enum SlipDayStore {
     /// Count of unrefunded spends for (user, course) — what the balance is
     /// charged for.
     static func unrefundedCount(
-        userID: UUID, courseID: UUID, on db: Database
+        userID: UUID, courseID: UUID, on db: any Database
     ) async throws -> Int {
         try await APISlipDaySpend.query(on: db)
             .filter(\.$userID == userID)
@@ -79,7 +79,7 @@ enum SlipDayStore {
     /// Unrefunded spend count per assignment for (user, course) — drives the
     /// per-row offer state on the dashboard.
     static func unrefundedCountByAssignment(
-        userID: UUID, courseID: UUID, on db: Database
+        userID: UUID, courseID: UUID, on db: any Database
     ) async throws -> [UUID: Int] {
         let rows = try await APISlipDaySpend.query(on: db)
             .filter(\.$userID == userID)
@@ -104,7 +104,7 @@ enum SlipDayStore {
     /// Every ledger row in the course (refunded included), newest first —
     /// the instructor roster ledger.
     static func courseLedger(
-        courseID: UUID, on db: Database
+        courseID: UUID, on db: any Database
     ) async throws -> [APISlipDaySpend] {
         try await APISlipDaySpend.query(on: db)
             .filter(\.$courseID == courseID)
@@ -126,7 +126,7 @@ enum SlipDayStore {
         userID: UUID,
         assignment: APIAssignment,
         policy: SlipDayPolicy,
-        on db: Database,
+        on db: any Database,
         now: Date = Date()
     ) async throws -> SlipDaySpendReceipt {
         guard let assignmentID = assignment.id else { throw SlipDayError.spendNotFound }
@@ -215,7 +215,7 @@ enum SlipDayStore {
         courseID: UUID,
         refundedBy staffUserID: UUID?,
         policy: SlipDayPolicy,
-        on db: Database,
+        on db: any Database,
         now: Date = Date()
     ) async throws -> APISlipDaySpend {
         try await db.transaction { tx in
@@ -260,9 +260,9 @@ enum SlipDayStore {
     /// lock on SQLite) and returns the row's slip-day adjustment.  Throws
     /// `notEnrolled` when no enrollment exists.
     private static func lockEnrollmentAndReadAdjustment(
-        userID: UUID, courseID: UUID, on tx: Database
+        userID: UUID, courseID: UUID, on tx: any Database
     ) async throws -> Int {
-        if let sql = tx as? SQLDatabase, sql.dialect.name == "postgresql" {
+        if let sql = tx as? (any SQLDatabase), sql.dialect.name == "postgresql" {
             let locked = try await sql.raw(
                 """
                 SELECT id FROM course_enrollments
@@ -290,7 +290,7 @@ enum SlipDayStore {
         userID: UUID,
         extendedDueAt: Date,
         stackedCount: Int,
-        on tx: Database
+        on tx: any Database
     ) async throws {
         let note = slipDayExtensionNote(stackedCount: stackedCount)
         if let existing {
@@ -320,7 +320,7 @@ enum SlipDayStore {
         userID: UUID,
         assignmentID: UUID,
         policy: SlipDayPolicy,
-        on tx: Database
+        on tx: any Database
     ) async throws {
         let extensionRow = try await APIAssignmentExtension.query(on: tx)
             .filter(\.$assignmentID == assignmentID)
@@ -454,7 +454,7 @@ func slipDayClaimWindowCeiling(
     for assignment: APIAssignment,
     user: APIUser,
     extensionDueAt: Date?,
-    on db: Database,
+    on db: any Database,
     now: Date = Date()
 ) async throws -> Date? {
     guard let userID = user.id, let assignmentID = assignment.id else { return nil }

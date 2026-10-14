@@ -5,7 +5,7 @@ import Fluent
 /// conditional renew/takeover UPDATE self-arbitrating. Tiny table (one row
 /// per sweep), no indexes beyond the PK.
 struct CreateSweepLeases: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(SweepLease.schema)
             .field("name", .string, .identifier(auto: false))
             .field("holder", .string, .required)
@@ -13,7 +13,7 @@ struct CreateSweepLeases: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(SweepLease.schema).delete()
     }
 }

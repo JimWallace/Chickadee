@@ -8,7 +8,7 @@ import Fluent
 import SQLKit
 
 struct CreateAssignmentExtensions: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("assignment_extensions")
             .id()
             .field(
@@ -35,15 +35,15 @@ struct CreateAssignmentExtensions: ChickadeeMigration {
             .unique(on: "assignment_id", "user_id")
             .create()
 
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "CREATE INDEX IF NOT EXISTS idx_assignment_extensions_user ON assignment_extensions(user_id)"
             ).run()
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_assignment_extensions_user").run()
         }
         try await database.schema("assignment_extensions").delete()

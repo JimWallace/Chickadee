@@ -18,6 +18,7 @@
 // anything from GitHub, and saves through the same helper.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -26,7 +27,7 @@ struct GitHubSubmissionRoutes: RouteCollection {
     /// Where `/github/installed` sends the student back to.
     static let returnPathKey = "githubReturnPath"
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("testsetups", ":testSetupID", "github", use: page)
         routes.post("testsetups", ":testSetupID", "github", use: submit)
         routes.post("testsetups", ":testSetupID", "github", "repository", use: makeRepository)
@@ -248,7 +249,7 @@ struct GitHubSubmissionRoutes: RouteCollection {
             userID: userID, testSetupID: setupID, courseID: setup.courseID, req: req)
     }
 
-    private static func installURL(on db: Database) async throws -> String? {
+    private static func installURL(on db: any Database) async throws -> String? {
         try await APIGitHubApp.query(on: db).first().map(GitHubSubmissionAccess.installURL(for:))
     }
 }
@@ -268,7 +269,7 @@ enum GitHubSubmissionOffer {
         return manifest.githubSubmission && manifest.effectiveGradingMode == .worker
     }
 
-    static func isOffered(setup: APITestSetup, on db: Database) async throws -> Bool {
+    static func isOffered(setup: APITestSetup, on db: any Database) async throws -> Bool {
         guard isOffered(manifest: setup.decodedManifest()) else { return false }
         return try await APIGitHubApp.query(on: db).count() > 0
     }

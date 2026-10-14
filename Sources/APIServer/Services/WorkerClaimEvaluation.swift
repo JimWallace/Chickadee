@@ -46,7 +46,7 @@ private struct BlockedCandidate {
 /// Validation submissions are always worker-mode (instructors validate via worker)
 /// and are appended after student work.
 func collectClaimCandidates(
-    on db: Database
+    on db: any Database
 ) async throws -> [(APISubmission, APITestSetup, TestProperties)] {
     // Cap the scan: a poll claims exactly one job, so walking the entire
     // pending queue (potentially tens of thousands of rows after a retest

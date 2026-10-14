@@ -109,7 +109,7 @@ extension CompositeLayout: Codable {
         case cols, rows, count
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         if let count = try c.decodeIfPresent(Int.self, forKey: .count) {
             self = .count(count)
@@ -119,7 +119,7 @@ extension CompositeLayout: Codable {
         }
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .grid(let columns, let rows):
@@ -247,7 +247,7 @@ public struct CompositeSpec: Codable, Equatable, Sendable {
 
     /// The three structural fields are required; the display settings decode
     /// with their defaults, as the rest of the activity block does.
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             compositor: try c.decode(CompositeCompositor.self, forKey: .compositor),

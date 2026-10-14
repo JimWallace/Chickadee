@@ -23,8 +23,8 @@ import Fluent
 import SQLKit
 
 struct CollapseUserRoles: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else {
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else {
             // Only the SQL drivers (SQLite / Postgres) are used in practice.
             return
         }
@@ -41,7 +41,7 @@ struct CollapseUserRoles: ChickadeeMigration {
             .run()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         // No-op: the student/instructor split is not recoverable from `user`,
         // and the global role no longer governs teaching authority.
     }

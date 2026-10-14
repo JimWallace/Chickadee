@@ -27,7 +27,7 @@ struct CreateResultCollections: ChickadeeMigration {
     /// prove multi-pass behaviour against a seeded multi-thousand-row table.
     static let backfillChunkSize = 1_000
 
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("result_collections")
             .field(
                 "result_id",
@@ -47,8 +47,8 @@ struct CreateResultCollections: ChickadeeMigration {
 
     /// Copies every not-yet-copied blob into the side table, one bounded
     /// chunk at a time, until none remain.
-    static func backfill(on database: Database, chunkSize: Int = backfillChunkSize) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    static func backfill(on database: any Database, chunkSize: Int = backfillChunkSize) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
         struct CountRow: Decodable { let remaining: Int }
         while true {
             let row = try await sql.raw(
@@ -74,8 +74,8 @@ struct CreateResultCollections: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "ALTER TABLE results ADD COLUMN collection_json TEXT NOT NULL DEFAULT '{}'"
             ).run()

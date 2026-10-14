@@ -300,7 +300,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.requiredConstructs = requiredConstructs
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decodeIfPresent(String.self, forKey: .name)

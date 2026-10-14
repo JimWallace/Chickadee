@@ -9,6 +9,7 @@
 
 import Foundation
 import JWT
+import NIOFoundationCompat
 import Vapor
 
 actor LTIServiceClient {

@@ -23,6 +23,7 @@
 // CSRF middleware) performs the clear.
 
 import Core
+import Elementary
 import Foundation
 import Vapor
 

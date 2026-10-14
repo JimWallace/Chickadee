@@ -5,7 +5,7 @@
 import Fluent
 
 struct CreateMCPAuthorizationCodes: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("oauth_authorization_codes")
             .id()
             .field("code_hash", .string, .required)
@@ -22,7 +22,7 @@ struct CreateMCPAuthorizationCodes: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("oauth_authorization_codes").delete()
     }
 }

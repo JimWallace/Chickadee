@@ -19,6 +19,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct CreateAssignmentTool: ContentTool {
     struct Input: Decodable, Sendable {

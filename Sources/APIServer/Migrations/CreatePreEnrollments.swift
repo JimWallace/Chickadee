@@ -15,7 +15,7 @@ import Fluent
 import SQLKit
 
 struct CreatePreEnrollments: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("pre_enrollments")
             .id()
             .field(
@@ -35,14 +35,14 @@ struct CreatePreEnrollments: ChickadeeMigration {
         // (one query per login).  The unique constraint above already
         // covers (course_id, username), but a username-only index is
         // what the resolver actually needs.
-        try await (database as? SQLDatabase)?.create(index: "idx_pre_enrollments_username")
+        try await (database as? (any SQLDatabase))?.create(index: "idx_pre_enrollments_username")
             .on("pre_enrollments")
             .column("username")
             .run()
     }
 
-    func revert(on database: Database) async throws {
-        try await (database as? SQLDatabase)?.drop(index: "idx_pre_enrollments_username")
+    func revert(on database: any Database) async throws {
+        try await (database as? (any SQLDatabase))?.drop(index: "idx_pre_enrollments_username")
             .ifExists()
             .run()
         try await database.schema("pre_enrollments").delete()

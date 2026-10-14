@@ -48,7 +48,7 @@ private struct RecordCandidate {
 /// Recomputes the 100%-earned class records of `setup` from every student
 /// submission's latest result. A record with no qualifying submission is
 /// removed. Ties go to the earlier submission.
-func recomputeClassRecords(setup: APITestSetup, on db: Database) async throws {
+func recomputeClassRecords(setup: APITestSetup, on db: any Database) async throws {
     guard let setupID = setup.id else { return }
     let records = BuiltInAchievements.classRecordsForAward(
         in: setup, disabled: BuiltInAchievements.disabled(in: setup)
@@ -99,7 +99,7 @@ private func earlier(_ lhs: RecordCandidate, _ rhs: RecordCandidate) -> Bool {
 /// Only a `.student` in the setup's own course counts, as in the incremental
 /// award.
 private func recordCandidates(
-    setupID: String, courseID: UUID, needsExecutionTime: Bool, on db: Database
+    setupID: String, courseID: UUID, needsExecutionTime: Bool, on db: any Database
 ) async throws -> [RecordCandidate] {
     let students = Set(
         try await APICourseEnrollment.query(on: db)
@@ -154,7 +154,7 @@ private func storeRecordHolder(
     testSetupID: String,
     winner: RecordCandidate?,
     metric: Double?,
-    on db: Database
+    on db: any Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
         .filter(\.$testSetupID == testSetupID)

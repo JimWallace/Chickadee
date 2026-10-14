@@ -12,7 +12,7 @@ import Foundation
 import Vapor
 
 struct SubmissionQueryRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let subs = routes.grouped("api", "v1", "submissions")
         subs.get(use: listSubmissions)
         subs.get(":submissionID", use: getSubmission)
@@ -198,7 +198,7 @@ struct SubmissionQueryRoutes: RouteCollection {
 /// visibility. Resolving the course once lets the caller reuse `isStaff` for
 /// tier filtering without a second lookup.
 private func submissionAccess(
-    caller: APIUser, submission: APISubmission, on db: Database
+    caller: APIUser, submission: APISubmission, on db: any Database
 ) async throws -> (canView: Bool, isStaff: Bool) {
     let isStaff = try await isSubmissionStaff(caller, submission: submission, on: db)
     return (isStaff || submission.userID == caller.id, isStaff)

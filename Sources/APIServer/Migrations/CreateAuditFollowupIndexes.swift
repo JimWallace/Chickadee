@@ -6,8 +6,8 @@ import SQLKit
 /// table that grows without bound across terms (see `docs/archive/audit-2026-06.md`,
 /// finding P1.7).
 struct CreateAuditFollowupIndexes: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         // `request_metrics` had no indexes at all, yet every `/api/*` request
         // (including every worker poll) inserts a row, and both the time-series
@@ -44,8 +44,8 @@ struct CreateAuditFollowupIndexes: ChickadeeMigration {
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw("DROP INDEX IF EXISTS idx_assignments_validation_submission_id").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_client_diagnostics_created_at").run()

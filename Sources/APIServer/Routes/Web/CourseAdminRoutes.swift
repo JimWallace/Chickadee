@@ -15,7 +15,7 @@ import Foundation
 import Vapor
 
 struct CourseAdminRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         // Course-scoped instructor actions (not under the /instructor prefix).
         routes.post("courses", ":courseID", "enrollment-mode", use: setCourseEnrollmentMode)
         routes.post("courses", ":courseID", "enroll-csv", use: instructorBulkEnrollCSV)

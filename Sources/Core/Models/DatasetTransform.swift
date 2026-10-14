@@ -54,7 +54,7 @@ public struct DatasetTransform: Codable, Sendable, Equatable {
         self.rate = rate
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kind = try c.decode(Kind.self, forKey: .kind)
         columns = try c.decodeIfPresent([String].self, forKey: .columns) ?? []

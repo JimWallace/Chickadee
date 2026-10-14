@@ -22,7 +22,7 @@ import Foundation
 import Vapor
 
 struct SessionRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let session = routes.grouped("session")
         session.post("keepalive", use: keepAlive)
     }

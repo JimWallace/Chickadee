@@ -23,7 +23,7 @@ struct MCPMetadataRoutes: RouteCollection {
     /// `content:read`, read_write advertises read + write.
     let advertisedScopes: [ContentScope]
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let wellKnown = routes.grouped(".well-known")
         wellKnown.get("oauth-protected-resource", use: protectedResourceMetadata)
         wellKnown.get("oauth-authorization-server", use: authorizationServerMetadata)

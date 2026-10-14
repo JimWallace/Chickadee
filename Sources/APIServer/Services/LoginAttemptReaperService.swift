@@ -8,6 +8,7 @@
 // Periodic scaffolding lives in `PeriodicSweepMonitor`; this file keeps only
 // the interval, the storage key and the accessor.
 
+import Fluent
 import Vapor
 
 /// Every ten minutes: the rows are bounded per key on write, so this only

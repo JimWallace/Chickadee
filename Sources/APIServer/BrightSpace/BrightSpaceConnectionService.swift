@@ -46,7 +46,7 @@ enum BrightSpaceConnectionService {
         valenceUserID: String,
         valenceUserKey: String,
         activeCourseUUID: UUID?,
-        on db: Database,
+        on db: any Database,
         application: Application
     ) async throws -> Connection {
         guard let appCredentials = application.brightSpaceAppCredentials else {
@@ -92,7 +92,7 @@ enum BrightSpaceConnectionService {
     /// Makes a connected instructor the course's grade-sync identity — the
     /// "reassign" action that lets a connected co-instructor take over
     /// pushes for the course.
-    static func designate(userUUID: UUID, course: APICourse, on db: Database) async throws {
+    static func designate(userUUID: UUID, course: APICourse, on db: any Database) async throws {
         guard try await BrightSpaceCredentialStore.load(userID: userUUID, on: db) != nil else {
             throw DesignateError.notConnected
         }
@@ -103,7 +103,7 @@ enum BrightSpaceConnectionService {
     /// Drops the instructor's stored key and cached client. Any course
     /// designating them as its sync identity then defers until someone
     /// reconnects — no grade is pushed with a stale key.
-    static func disconnect(userUUID: UUID, on db: Database, application: Application) async throws {
+    static func disconnect(userUUID: UUID, on db: any Database, application: Application) async throws {
         try await BrightSpaceCredentialStore.clear(userID: userUUID, on: db)
         await application.brightSpaceClientRegistry.invalidate(userUUID.uuidString)
     }

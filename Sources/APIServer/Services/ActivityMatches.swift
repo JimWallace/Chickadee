@@ -32,7 +32,7 @@ struct ChosenOpponent {
 /// A champion who RESUBMITS does play their own earlier entry: beating it
 /// moves the hill's submission forward, losing to it changes nothing.
 func chooseOpponent(
-    for submission: APISubmission, activity: ClassActivity, on db: Database
+    for submission: APISubmission, activity: ClassActivity, on db: any Database
 ) async throws -> ChosenOpponent {
     let bot = ChosenOpponent(
         champion: nil,
@@ -57,7 +57,7 @@ func chooseOpponent(
 /// plays) and the union read model (whose record counts), so the two cannot
 /// disagree about which submission represents a student.
 func latestStudentSubmissionsByUser(
-    setup: APITestSetup, excluding excluded: UUID? = nil, on db: Database
+    setup: APITestSetup, excluding excluded: UUID? = nil, on db: any Database
 ) async throws -> [UUID: APISubmission] {
     guard let setupID = setup.id else { return [:] }
     // NULL role is a pre-migration student (the `role` accessor's default).
@@ -94,7 +94,7 @@ func latestStudentSubmissionsByUser(
 /// Latest by submission time, one per classmate, so a resubmission by B
 /// changes what A's NEXT job plays and never what A's landed job played.
 func chooseClassmates(
-    for submission: APISubmission, activity: ClassActivity, on db: Database
+    for submission: APISubmission, activity: ClassActivity, on db: any Database
 ) async throws -> [ChosenOpponent] {
     guard activity.kind.opponentSource == .classmates,
         let setup = try await APITestSetup.find(submission.testSetupID, on: db)
@@ -118,7 +118,7 @@ func chooseClassmates(
 /// a row the re-test owns.
 func openMatch(
     testSetupID: String, submissionID: String, opponent: ChosenOpponent, seed: String, round: Int? = nil,
-    on db: Database
+    on db: any Database
 ) async throws {
     let existing = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
@@ -155,7 +155,7 @@ func openMatch(
 /// The claim calls this for a `standings` kind only. A `union` kind keeps
 /// its completed rows, because a kill belongs to the tester after the target
 /// resubmits (#2187).
-func voidCompletedMatrixRows(submissionID: String, on db: Database) async throws {
+func voidCompletedMatrixRows(submissionID: String, on db: any Database) async throws {
     try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
         .filter(\.$completedAt != nil)
@@ -185,7 +185,7 @@ func recordActivityMatch(
     submissionID: String,
     outcomes: [TestOutcome],
     matches: [MatchReport]? = nil,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard let setup = try await APITestSetup.find(testSetupID, on: db),
         let activity = setup.decodedManifest()?.activity
@@ -261,7 +261,7 @@ func recordActivityMatch(
 /// crowning landed first and the unique index on `test_setup_id` kept
 /// theirs; any other failure is rethrown.
 func crownFirstChampion(
-    testSetupID: String, userID: UUID, submissionID: String, on db: Database
+    testSetupID: String, userID: UUID, submissionID: String, on db: any Database
 ) async throws -> Bool {
     do {
         try await APIActivityChampion(
@@ -293,7 +293,7 @@ func crownFirstChampion(
 /// resubmits (docs/class-activities.md).
 private func recordMatrixMatches(
     setup: APITestSetup, userID: UUID, submissionID: String,
-    outcomes: [TestOutcome], matches: [MatchReport]?, on db: Database
+    outcomes: [TestOutcome], matches: [MatchReport]?, on db: any Database
 ) async throws {
     let open = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
@@ -355,8 +355,8 @@ private func recordMatrixMatches(
 /// Postgres and the write lock on SQLite. The second ingest waits for the
 /// first to commit (or, on SQLite, is retried by the caller's
 /// `withTransientDatabaseLockRetry`) and then reads both rows.
-private func lockStandings(of setupID: String, on db: Database) async throws {
-    guard let sql = db as? SQLDatabase else { return }
+private func lockStandings(of setupID: String, on db: any Database) async throws {
+    guard let sql = db as? (any SQLDatabase) else { return }
     try await sql.raw(
         "UPDATE \(unsafeRaw: APITestSetup.schema) SET id = id WHERE id = \(bind: setupID)"
     ).run()
@@ -371,7 +371,9 @@ private func lockStandings(of setupID: String, on db: Database) async throws {
 /// exists so the job has a match, but it is not a result against anyone, and
 /// counting it sat the first submitter last on a loss until a classmate
 /// arrived (#1748). With nothing to count, the student has no standings row.
-private func recomputeStanding(testSetupID: String, userID: UUID, submissionID: String, on db: Database) async throws {
+private func recomputeStanding(
+    testSetupID: String, userID: UUID, submissionID: String, on db: any Database
+) async throws {
     let rows = try await APIMatchResult.query(on: db)
         .filter(\.$submissionID == submissionID)
         .filter(\.$completedAt != nil)
@@ -407,7 +409,7 @@ private func recomputeStanding(testSetupID: String, userID: UUID, submissionID: 
 
 /// The standings, best first: average match score, then wins, then matches
 /// played, then the earlier row.
-func activityStandings(testSetupID: String, on db: Database) async throws -> [APIActivityStanding] {
+func activityStandings(testSetupID: String, on db: any Database) async throws -> [APIActivityStanding] {
     try await APIActivityStanding.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .all()
@@ -435,7 +437,7 @@ struct RankedStanding: Sendable {
 /// and the standings-leader record all read it, so a tie or a student who
 /// left the course cannot give the page one answer and the badge or the
 /// record another (#2191).
-func rankedStandings(testSetupID: String, courseID: UUID, on db: Database) async throws -> [RankedStanding] {
+func rankedStandings(testSetupID: String, courseID: UUID, on db: any Database) async throws -> [RankedStanding] {
     let standings = try await activityStandings(testSetupID: testSetupID, on: db)
     let enrolled = try await APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
@@ -474,7 +476,7 @@ private struct StandingKey: Equatable {
 /// have no row, or have left the course. The place is the page's
 /// (`rankedStandings`).
 func standingSignals(
-    testSetupID: String, userID: UUID, on db: Database
+    testSetupID: String, userID: UUID, on db: any Database
 ) async throws -> (standing: Int, matchesWon: Int)? {
     guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return nil }
     let ranked = try await rankedStandings(testSetupID: testSetupID, courseID: setup.courseID, on: db)
@@ -484,7 +486,7 @@ func standingSignals(
 
 /// The hill's current holder, for the leaderboard page; nil when the bot or
 /// nobody holds it.
-func currentChampion(testSetupID: String, on db: Database) async throws -> APIActivityChampion? {
+func currentChampion(testSetupID: String, on db: any Database) async throws -> APIActivityChampion? {
     try await APIActivityChampion.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .first()

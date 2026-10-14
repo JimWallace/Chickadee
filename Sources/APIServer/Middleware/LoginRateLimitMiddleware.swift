@@ -147,7 +147,7 @@ enum LoginAttemptService {
         now: Date,
         windowSeconds: TimeInterval,
         max: Int,
-        on db: Database
+        on db: any Database
     ) async throws -> Bool {
         let cutoff = now.addingTimeInterval(-windowSeconds)
         try await LoginAttempt.query(on: db)
@@ -172,7 +172,7 @@ enum LoginAttemptService {
         now: Date,
         windowSeconds: TimeInterval,
         threshold: Int,
-        on db: Database
+        on db: any Database
     ) async throws -> Bool {
         let cutoff = now.addingTimeInterval(-windowSeconds)
         let count = try await LoginAttempt.query(on: db)
@@ -189,7 +189,7 @@ enum LoginAttemptService {
         username: String,
         now: Date,
         windowSeconds: TimeInterval,
-        on db: Database
+        on db: any Database
     ) async throws {
         let cutoff = now.addingTimeInterval(-windowSeconds)
         try await LoginAttempt.query(on: db)
@@ -205,7 +205,7 @@ enum LoginAttemptService {
     /// Clears all failure records for `username`.  Called after a successful
     /// login so the user isn't subsequently locked out by their own pre-
     /// success retries.
-    static func clearFailures(username: String, on db: Database) async throws {
+    static func clearFailures(username: String, on db: any Database) async throws {
         try await LoginAttempt.query(on: db)
             .filter(\.$scope == LoginAttempt.Scope.userFailure)
             .filter(\.$attemptKey == username)
@@ -216,7 +216,7 @@ enum LoginAttemptService {
     /// came back and so were never pruned on-write). Runs on
     /// `loginAttemptReaperMonitor`; best-effort.
     static func purgeStale(
-        db: Database,
+        db: any Database,
         lockoutWindowSeconds: TimeInterval,
         logger: Logger
     ) async {

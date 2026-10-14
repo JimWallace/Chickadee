@@ -3,10 +3,11 @@
 import Core
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 struct SubmissionRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let api = routes.grouped("api", "v1")
 
         // POST /api/v1/submissions
@@ -138,7 +139,7 @@ struct SubmissionRoutes: RouteCollection {
 // MARK: - GET /api/v1/submissions/:id/download
 
 struct SubmissionDownloadRoute: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.grouped("api", "v1", "submissions", ":submissionID")
             .get("download", use: download)
     }

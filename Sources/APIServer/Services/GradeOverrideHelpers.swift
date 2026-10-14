@@ -22,7 +22,7 @@ struct GradeOverrideKey: Hashable {
 /// keyed by (setupID, userID).  Callers index by whichever pair they hold
 /// in scope.  The value is the override percent (0–100).
 func loadGradeOverridePercents(
-    setupIDs: some Collection<String>, on db: Database
+    setupIDs: some Collection<String>, on db: any Database
 ) async throws -> [GradeOverrideKey: Int] {
     guard !setupIDs.isEmpty else { return [:] }
     let rows = try await APIGradeOverride.query(on: db)
@@ -38,7 +38,7 @@ func loadGradeOverridePercents(
 /// One-off override lookup for single-submission pages.  Returns the
 /// override percent (0–100) for this (setup, user), or nil when none.
 func gradeOverridePercent(
-    setupID: String, userID: UUID, on db: Database
+    setupID: String, userID: UUID, on db: any Database
 ) async throws -> Int? {
     try await APIGradeOverride.query(on: db)
         .filter(\.$testSetupID == setupID)
@@ -74,7 +74,7 @@ func applyGradeOverride(
     percent: Int,
     note: String?,
     grantedByUserID: UUID?,
-    on db: Database
+    on db: any Database
 ) async throws {
     let row =
         try await APIGradeOverride.query(on: db)
@@ -109,7 +109,7 @@ func applyGradeOverride(
 func clearGradeOverride(
     testSetupID: String,
     studentUserID: UUID,
-    on db: Database
+    on db: any Database
 ) async throws -> Bool {
     guard
         let existing = try await APIGradeOverride.query(on: db)
@@ -139,7 +139,7 @@ func clearGradeOverride(
 func enqueueGradeClearIfOrphaned(
     testSetupID: String,
     studentUserID: UUID,
-    on db: Database
+    on db: any Database
 ) async throws {
     let hasSubmissions =
         try await APISubmission.query(on: db)
@@ -186,7 +186,7 @@ func flagStudentForBrightSpaceSync(
     override: APIGradeOverride?,
     testSetupID: String,
     studentUserID: UUID,
-    on db: Database
+    on db: any Database
 ) async throws {
     let now = Date()
     let results = try await gradeResultsForStudent(
@@ -212,7 +212,7 @@ func flagStudentForBrightSpaceSync(
 
 /// Every result on one student's student-submissions for a test setup.
 private func gradeResultsForStudent(
-    testSetupID: String, studentUserID: UUID, on db: Database
+    testSetupID: String, studentUserID: UUID, on db: any Database
 ) async throws -> [APIResult] {
     let submissionIDs = try await APISubmission.query(on: db)
         .filter(\.$userID == studentUserID)

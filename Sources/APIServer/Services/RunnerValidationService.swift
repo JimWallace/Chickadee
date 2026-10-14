@@ -523,7 +523,7 @@ func requeueValidationRun(
 func retestAllSubmissionsForSetup(
     setupID: String,
     triggeredBy userID: UUID?,
-    on db: Database,
+    on db: any Database,
     force: Bool = false
 ) async throws -> Int {
     try await bulkFlipStudentSubmissionsToPending(
@@ -550,7 +550,7 @@ func bulkFlipStudentSubmissionsToPending(
     studentUserID: UUID?,
     triggeredBy userID: UUID?,
     force: Bool,
-    on db: Database
+    on db: any Database
 ) async throws -> Int {
     let now = Date()
 
@@ -623,7 +623,7 @@ func retestStudentSubmissionsForSetup(
     setupID: String,
     studentUserID: UUID,
     triggeredBy userID: UUID?,
-    on db: Database,
+    on db: any Database,
     force: Bool = false
 ) async throws -> Int {
     try await bulkFlipStudentSubmissionsToPending(
@@ -642,7 +642,7 @@ func retestStudentSubmissionsForSetup(
 func flipSubmissionToPending(
     _ submission: APISubmission,
     triggeredBy userID: UUID?,
-    on db: Database,
+    on db: any Database,
     force: Bool = false,
     now: Date = Date()
 ) async throws -> Bool {
@@ -753,7 +753,7 @@ func ensureCompatibleValidationRunnerAvailability(
 /// validation service since #2140, because the service calls it.
 func loadAssignmentRequirementSpec(
     assignment: APIAssignment,
-    on db: Database
+    on db: any Database
 ) async throws -> AssignmentRequirementSpec? {
     guard let assignmentID = assignment.id else { return nil }
     let row = try await AssignmentRequirement.query(on: db)

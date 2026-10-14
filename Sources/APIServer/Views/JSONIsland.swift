@@ -11,6 +11,7 @@
 // JSON, so the substitution never lands outside one.
 
 import Elementary
+import Foundation
 
 struct JSONIsland: HTML {
     let id: String

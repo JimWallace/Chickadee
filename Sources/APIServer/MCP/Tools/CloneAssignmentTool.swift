@@ -18,6 +18,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct CloneAssignmentTool: ContentTool {
     struct Input: Decodable, Sendable {

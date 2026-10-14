@@ -13,7 +13,7 @@ extension AdminRoutes {
     /// The course's own row, with its three counts loaded in parallel. `id` is
     /// the path segment as the request spelled it, which the page's links echo.
     static func courseDetailRow(
-        for course: APICourse, id: String, courseID: UUID, brightspaceSyncEnabled: Bool, on db: Database
+        for course: APICourse, id: String, courseID: UUID, brightspaceSyncEnabled: Bool, on db: any Database
     ) async throws -> AdminCourseRow {
         async let enrollmentCountFetch = enrolledStudentCount(forCourse: courseID, on: db)
         async let assignmentCountFetch = APIAssignment.query(on: db)
@@ -43,7 +43,7 @@ extension AdminRoutes {
     /// role and their own seeded bird. `mcp` service accounts are enrolled to
     /// scope an agent's access (admin MCP tab), so they are not listed.
     static func enrolledUserRows(
-        for enrollments: [APICourseEnrollment], courseID: UUID, on db: Database
+        for enrollments: [APICourseEnrollment], courseID: UUID, on db: any Database
     ) async throws -> [AdminCourseEnrolledUserRow] {
         let enrolledUserIDs = enrollments.map(\.userID)
         guard !enrolledUserIDs.isEmpty else { return [] }
@@ -81,7 +81,7 @@ extension AdminRoutes {
 
     /// The course's assignments, by due date.
     static func assignmentRows(
-        forCourse courseID: UUID, on db: Database
+        forCourse courseID: UUID, on db: any Database
     ) async throws
         -> [AdminCourseAssignmentRow]
     {

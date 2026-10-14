@@ -36,7 +36,7 @@ enum BrightSpaceCourseBinding {
     }
 
     /// Clears the course's org-unit binding. The sync identity is left alone.
-    static func clearOrgUnit(course: APICourse, on db: Database) async throws {
+    static func clearOrgUnit(course: APICourse, on db: any Database) async throws {
         course.brightspaceOrgUnitID = nil
         course.brightspaceOrgUnitName = nil
         try await course.save(on: db)
@@ -49,7 +49,7 @@ enum BrightSpaceCourseBinding {
         course: APICourse,
         orgUnitID: String,
         binderUUID: UUID,
-        on db: Database,
+        on db: any Database,
         application: Application
     ) async throws -> Verification {
         guard try await BrightSpaceCredentialStore.load(userID: binderUUID, on: db) != nil else {
@@ -88,7 +88,7 @@ enum BrightSpaceCourseBinding {
         courseUUID: UUID,
         orgUnitID: String,
         client: BrightSpaceAPIClient,
-        on db: Database,
+        on db: any Database,
         application: Application
     ) async throws -> Int {
         let gradeObjects = try await client.listGradeObjects(orgUnitID: orgUnitID, on: application)

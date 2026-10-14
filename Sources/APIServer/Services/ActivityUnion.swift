@@ -73,7 +73,7 @@ struct UnionTally {
 /// Four queries regardless of class size: the roster's latest submissions,
 /// every student submission of the setup (to attribute a kill whose target
 /// has since resubmitted), and the completed match rows.
-func unionTally(setup: APITestSetup, on db: Database) async throws -> UnionTally {
+func unionTally(setup: APITestSetup, on db: any Database) async throws -> UnionTally {
     guard let setupID = setup.id else {
         return UnionTally(kills: [], defences: [], defeatedCount: 0, targetCount: 0)
     }

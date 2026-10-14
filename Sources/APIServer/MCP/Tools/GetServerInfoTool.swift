@@ -17,6 +17,7 @@
 // useful liveness check even if the database is unavailable.
 
 import Core
+import Vapor
 
 struct GetServerInfoTool: ContentTool {
     struct Input: Decodable, Sendable {}

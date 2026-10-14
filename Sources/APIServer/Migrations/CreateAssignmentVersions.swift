@@ -20,7 +20,7 @@ import Fluent
 import SQLKit
 
 struct CreateAssignmentVersions: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("assignment_versions")
             .id()
             .field("test_setup_id", .string, .required)
@@ -55,14 +55,14 @@ struct CreateAssignmentVersions: ChickadeeMigration {
 
         // The one hot query: "newest version for this setup" (the dedupe check
         // on every content edit) and "this setup's history, newest first".
-        guard let sql = database as? SQLDatabase else { return }
+        guard let sql = database as? (any SQLDatabase) else { return }
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_assignment_versions_setup_number ON assignment_versions(test_setup_id, version_number)"
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_assignment_versions_setup_number").run()
         }
         try await database.schema("assignment_versions").delete()

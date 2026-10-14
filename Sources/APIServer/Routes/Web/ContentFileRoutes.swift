@@ -27,7 +27,7 @@ struct ContentFileRoutes: RouteCollection {
         let safeName: String
     }
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("content-files", ":itemID", ":attachmentID", use: downloadContentFile)
         routes.get("content-files", ":itemID", ":attachmentID", "view", use: viewContentFile)
     }

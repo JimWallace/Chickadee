@@ -122,7 +122,7 @@ func isAssignmentOpenForUser(
 func studentExtensionDueAt(
     for assignment: APIAssignment,
     user: APIUser,
-    on db: Database
+    on db: any Database
 ) async throws -> Date? {
     guard let assignmentID = assignment.id, let userID = user.id else { return nil }
     return try await APIAssignmentExtension.query(on: db)
@@ -190,7 +190,7 @@ func laterDeadline(baseline: Date?, extensionDueAt: Date?) -> Date? {
 func effectiveDueAt(
     for assignment: APIAssignment,
     user: APIUser,
-    on db: Database
+    on db: any Database
 ) async throws -> Date? {
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
     return laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt)
@@ -204,7 +204,7 @@ func effectiveDueAt(
 func isAssignmentEffectivelyOpen(
     _ assignment: APIAssignment,
     for user: APIUser,
-    on db: Database,
+    on db: any Database,
     now: Date = Date()
 ) async throws -> Bool {
     // Preview is a staff-only "open": course staff see and use it exactly like an
@@ -226,7 +226,7 @@ func isAssignmentEffectivelyOpenResolved(
     _ assignment: APIAssignment,
     for user: APIUser,
     isStaff: Bool,
-    on db: Database,
+    on db: any Database,
     now: Date
 ) async throws -> Bool {
     let gate = assignment.visibility.submissionGate(isStaff: isStaff)
@@ -258,7 +258,7 @@ func isAssignmentEffectivelyOpenResolved(
 private func postDeadlineRevealDeadline(
     for assignment: APIAssignment,
     user: APIUser,
-    on db: Database,
+    on db: any Database,
     now: Date = Date()
 ) async throws -> Date? {
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
@@ -285,7 +285,7 @@ private func postDeadlineRevealDeadline(
 func releaseVisibilityDeadline(
     for assignment: APIAssignment?,
     user: APIUser,
-    on db: Database
+    on db: any Database
 ) async throws -> Date? {
     guard let assignment else { return nil }
     if let course = try await APICourse.find(assignment.courseID, on: db),
@@ -302,7 +302,7 @@ func releaseVisibilityDeadline(
 /// solution-serving routes each carried their own copy of this guard and one
 /// of them once shipped with no guard at all.
 func requireSolutionVisible(
-    assignment: APIAssignment?, user: APIUser, isStaff: Bool, on db: Database
+    assignment: APIAssignment?, user: APIUser, isStaff: Bool, on db: any Database
 ) async throws {
     guard !isStaff else { return }
     guard let assignment,
@@ -333,7 +333,7 @@ func requireSolutionVisible(
 func solutionVisibleToStudent(
     assignment: APIAssignment,
     user: APIUser,
-    on db: Database,
+    on db: any Database,
     now: Date = Date()
 ) async throws -> Bool {
     guard assignment.solutionVisibility == .afterDue else { return false }
@@ -349,7 +349,7 @@ func solutionVisibleToStudent(
 @discardableResult
 func closeAssignmentIfExpired(
     _ assignment: APIAssignment,
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     now: Date = Date()
 ) async throws -> Bool {
@@ -376,7 +376,7 @@ func closeAssignmentIfExpired(
 
 @discardableResult
 func closeExpiredAssignments(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     now: Date = Date()
 ) async throws -> Int {
@@ -409,7 +409,7 @@ func closeExpiredAssignments(
 @discardableResult
 func openScheduledAssignment(
     _ assignment: APIAssignment,
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     now: Date = Date()
 ) async throws -> Bool {
@@ -443,7 +443,7 @@ func openScheduledAssignment(
 
 @discardableResult
 func openScheduledAssignments(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     now: Date = Date()
 ) async throws -> Int {

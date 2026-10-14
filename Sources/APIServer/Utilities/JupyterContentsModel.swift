@@ -39,7 +39,7 @@ struct JupyterContentsModel: Encodable {
         case lastModified = "last_modified"
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
         try container.encode(path, forKey: .path)

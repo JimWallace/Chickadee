@@ -31,7 +31,7 @@ protocol BrightSpaceSyncFlaggable: AnyObject {
     var brightspaceSyncError: String? { get set }
     /// Stable identifier for log lines (a result's string id / an override's UUID).
     var brightspaceSyncRowID: String { get }
-    func save(on database: Database) async throws
+    func save(on database: any Database) async throws
 }
 
 extension APIResult: BrightSpaceSyncFlaggable {
@@ -56,7 +56,7 @@ extension APIBrightSpaceGradeClear: BrightSpaceSyncFlaggable {
 /// `missingPoints`/lookup `BrightSpaceSyncError` is terminal (the grade or item
 /// won't fix itself on retry). Anything else — a raw transport/NIO error from
 /// the signed request — is treated as transient.
-func isRetryableSyncError(_ error: Error) -> Bool {
+func isRetryableSyncError(_ error: any Error) -> Bool {
     if let syncError = error as? BrightSpaceSyncError {
         switch syncError {
         case .gradePushFailed(let status, _):
@@ -80,8 +80,8 @@ func isRetryableSyncError(_ error: Error) -> Bool {
 /// timestamp cleared.
 func recordSweepFailure(
     _ rows: [any BrightSpaceSyncFlaggable],
-    error: Error,
-    db: Database,
+    error: any Error,
+    db: any Database,
     logger: Logger
 ) async {
     let retryable = isRetryableSyncError(error)
@@ -120,7 +120,7 @@ func flagResultForBrightSpaceSync(
     _ result: APIResult,
     testSetupID: String,
     application: Application,
-    on db: Database
+    on db: any Database
 ) async throws {
     guard application.brightSpaceAppCredentials != nil else { return }
     guard
@@ -143,7 +143,7 @@ func flagResultForBrightSpaceSync(
 /// the `Date.distantPast` "retry immediately" sentinel is written (#1117) —
 /// the manual "Sync now" / "Push all" routes used to copy-paste this
 /// triple-write five times.
-func requeueForImmediateSync(_ rows: [any BrightSpaceSyncFlaggable], on db: Database) async throws {
+func requeueForImmediateSync(_ rows: [any BrightSpaceSyncFlaggable], on db: any Database) async throws {
     for row in rows {
         row.brightspaceSyncPending = true
         row.brightspacePendingSince = Date.distantPast
@@ -154,7 +154,7 @@ func requeueForImmediateSync(_ rows: [any BrightSpaceSyncFlaggable], on db: Data
 
 /// Clears the pending flag on every row in the group (the "nothing to
 /// push" no-op outcome).
-func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: Database) async throws {
+func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: any Database) async throws {
     for row in rows {
         row.brightspaceSyncPending = false
         try await row.save(on: db)
@@ -167,7 +167,7 @@ func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: Database) a
 /// the course (result rows, override-only rows, and queued grade clears)
 /// that previously errored, back-dating `pendingSince` so the next sweep
 /// retries it immediately. The "hard reset" half of "Sync now".
-func requeueErroredGradePushes(courseUUID: UUID, on db: Database) async throws {
+func requeueErroredGradePushes(courseUUID: UUID, on db: any Database) async throws {
     let resultKeys = try await courseStudentResultIDs(courseUUID: courseUUID, on: db)
     let results =
         resultKeys.isEmpty
@@ -204,7 +204,7 @@ func requeueErroredGradePushes(courseUUID: UUID, on db: Database) async throws {
 
 /// Submission IDs (used as result-query keys) for all student submissions
 /// in the active course's test setups.
-private func courseStudentResultIDs(courseUUID: UUID, on db: Database) async throws -> [String] {
+private func courseStudentResultIDs(courseUUID: UUID, on db: any Database) async throws -> [String] {
     let setupIDs = try await courseSetupIDs(courseUUID: courseUUID, on: db)
     guard !setupIDs.isEmpty else { return [] }
     return try await APISubmission.query(on: db)
@@ -216,7 +216,7 @@ private func courseStudentResultIDs(courseUUID: UUID, on db: Database) async thr
 
 /// Distinct test setup IDs for the active course's assignments.  Used to
 /// scope override-row queries (override-only grade pushes) by course.
-private func courseSetupIDs(courseUUID: UUID, on db: Database) async throws -> [String] {
+private func courseSetupIDs(courseUUID: UUID, on db: any Database) async throws -> [String] {
     let setupIDs = try await APIAssignment.query(on: db)
         .filter(\.$courseID == courseUUID)
         .all()

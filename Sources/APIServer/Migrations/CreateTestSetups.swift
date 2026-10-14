@@ -3,7 +3,7 @@
 import Fluent
 
 struct CreateTestSetups: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("test_setups")
             .field("id", .string, .identifier(auto: false))
             .field("manifest", .string, .required)
@@ -21,7 +21,7 @@ struct CreateTestSetups: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("test_setups").delete()
     }
 }

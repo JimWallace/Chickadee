@@ -15,6 +15,8 @@
 // `content:write` token issued while the server was `read_write` loses write the
 // instant an operator flips to `read_only`, without any token revocation.
 
+import Foundation
+
 enum MCPMode: String, Sendable, CaseIterable {
     case off
     case readOnly = "read_only"

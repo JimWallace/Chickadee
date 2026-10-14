@@ -18,6 +18,7 @@
 // typing its name, and make repositories there.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
@@ -41,7 +42,7 @@ struct GitHubCourseRoutes: RouteCollection {
         }
     }
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let r = routes.grouped("instructor", "github")
         r.get(use: page)
         r.post("bind", use: bind)
@@ -222,7 +223,7 @@ struct GitHubCourseRoutes: RouteCollection {
     /// organization ID decides, so a renamed organization still binds. After
     /// an unbind no ID is kept, so the owner in the stored names decides.
     private static func requireSameOrganization(
-        courseID: UUID, installation: GitHubUserInstallation, on db: Database
+        courseID: UUID, installation: GitHubUserInstallation, on db: any Database
     ) async throws {
         let setupIDs = try await APITestSetup.query(on: db).filter(\.$courseID == courseID).all().compactMap(\.id)
         guard !setupIDs.isEmpty else { return }
@@ -243,7 +244,7 @@ struct GitHubCourseRoutes: RouteCollection {
     }
 
     private static func saveBinding(
-        courseID: UUID, installation: GitHubUserInstallation, on db: Database
+        courseID: UUID, installation: GitHubUserInstallation, on db: any Database
     ) async throws {
         let row =
             try await APIGitHubCourseOrganization.query(on: db).filter(\.$courseID == courseID).first()
@@ -385,7 +386,7 @@ struct GitHubCourseRoutes: RouteCollection {
     /// The course's assignments that accept GitHub submission, with their
     /// template choice and how many repositories exist.
     private static func assignmentRows(
-        courseID: UUID, templates: [GitHubRepository], on db: Database
+        courseID: UUID, templates: [GitHubRepository], on db: any Database
     ) async throws -> [InstructorGitHubAssignmentRow] {
         let assignments = try await APIAssignment.query(on: db).filter(\.$courseID == courseID)
             .sort(\.$title).all()
@@ -416,8 +417,9 @@ struct GitHubCourseRoutes: RouteCollection {
     }
 
     /// Every course repository of the course, by assignment then student.
-    private static func repositoryRows(courseID: UUID, on db: Database) async throws -> [InstructorGitHubRepositoryRow]
-    {
+    private static func repositoryRows(
+        courseID: UUID, on db: any Database
+    ) async throws -> [InstructorGitHubRepositoryRow] {
         let assignments = try await APIAssignment.query(on: db).filter(\.$courseID == courseID).all()
         let titles = Dictionary(assignments.map { ($0.testSetupID, $0.title) }) { first, _ in first }
         let repositories = try await APIGitHubCourseRepository.query(on: db)

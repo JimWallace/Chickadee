@@ -98,7 +98,7 @@ func userNotebookWorkingCopyRelativePath(
 func studentHasOpenedAssignment(
     assignment: APIAssignment,
     userID: UUID,
-    on db: Database
+    on db: any Database
 ) async throws -> Bool {
     if let assignmentID = assignment.id,
         try await AssignmentParticipationStore.hasParticipation(
@@ -417,7 +417,7 @@ private func applyNotebookSubstitutionsIfNeeded(
     seedData: Data,
     setup: APITestSetup,
     userID: UUID,
-    db: Database,
+    db: any Database,
     supportFilesDirectory: String? = nil,
     logger: Logger
 ) async -> Data {
@@ -499,7 +499,7 @@ private func applySubstitutions(
 func solutionNotebookData(
     for assignment: APIAssignment?,
     setup: APITestSetup,
-    db: Database,
+    db: any Database,
     testSetupsDirectory: String
 ) async throws -> Data {
     // A draft setup with no assignment yet has no linked submission, and its

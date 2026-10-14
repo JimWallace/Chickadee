@@ -28,11 +28,12 @@
 // with the assignment's public ID as a custom parameter.
 
 import Core
+import Elementary
 import Fluent
 import Vapor
 
 struct LTIDeepLinkRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.post("lti", "deep-link", use: returnSelection)
         routes.post("lti", "deep-link", "bind", use: bindSelection)
     }

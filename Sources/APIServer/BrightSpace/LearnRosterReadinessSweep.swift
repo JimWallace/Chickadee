@@ -38,7 +38,7 @@ func reconcileCourseReadiness(
     course: APICourse,
     orgUnitID: String,
     client: any BrightSpaceGrading,
-    on db: Database,
+    on db: any Database,
     application: Application
 ) async throws -> RosterReadinessOutcome {
     guard let courseID = course.id else { return RosterReadinessOutcome() }
@@ -113,7 +113,7 @@ private func readinessFor(
 /// leaving its students' statuses as-is — never wrongly flagged unreachable.
 @discardableResult
 func sweepLearnRosterReadiness(
-    on db: Database,
+    on db: any Database,
     resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
     logger: Logger,
     application: Application

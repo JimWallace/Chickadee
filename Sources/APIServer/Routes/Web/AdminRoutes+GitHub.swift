@@ -13,6 +13,7 @@
 // No row means GitHub submission is off, so registering an App is the switch
 // that the privacy review (slice 0) gates.
 
+import Elementary
 import Fluent
 import Foundation
 import Vapor

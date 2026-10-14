@@ -12,10 +12,11 @@
 // below substitutes a more humane default in that case, so the user-facing
 // output is consistent regardless of which error style the handler used.
 
+import Elementary
 import Vapor
 
 struct ErrorPageMiddleware: AsyncMiddleware {
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         do {
             return try await next.respond(to: request)
         } catch {
@@ -23,7 +24,7 @@ struct ErrorPageMiddleware: AsyncMiddleware {
             let reason: String
 
             switch error {
-            case let abort as AbortError:
+            case let abort as any AbortError:
                 status = abort.status
                 reason = friendlyReason(status: abort.status, reason: abort.reason)
             default:

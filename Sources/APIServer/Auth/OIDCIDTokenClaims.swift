@@ -84,7 +84,7 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
         case email
     }
 
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: KnownKey.self)
         sub = try c.decode(SubjectClaim.self, forKey: .sub)
         iss = try c.decode(IssuerClaim.self, forKey: .iss)
@@ -110,7 +110,7 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
         extraClaims = extras
     }
 
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: KnownKey.self)
         try c.encode(sub, forKey: .sub)
         try c.encode(iss, forKey: .iss)

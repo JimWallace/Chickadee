@@ -415,7 +415,7 @@ actor WorkerDaemon {
 
     // extractNotebooksToCode is a module-level function (NotebookExtractor.swift).
 
-    func reportProcessingFailure(job: Job, error: Error) async throws {
+    func reportProcessingFailure(job: Job, error: any Error) async throws {
         let message = String(describing: error)
         let collection = TestOutcomeCollection(
             submissionID: job.submissionID,

@@ -109,7 +109,7 @@ func classCoverageGoalProgress(
 /// it.  Returns the number of snapshots written.
 @discardableResult
 func evaluateClassGoalAchievements(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     now: Date = Date()
 ) async throws -> Int {
@@ -369,7 +369,7 @@ private func writeClassGoalSnapshots(
     goals: [Achievement],
     rowByAchievement: [String: APIAchievementResult],
     evaluation: ClassGoalEvaluation,
-    on db: Database,
+    on db: any Database,
     logger: Logger
 ) async throws -> ClassGoalWriteOutcome {
     var outcome = ClassGoalWriteOutcome(written: 0, bonusFroze: false)
@@ -455,7 +455,7 @@ private func writeClassGoalSnapshots(
 func requeueFrozenClassGoalBonusPushes(
     assignment: APIAssignment,
     testSetupID: String,
-    on db: Database,
+    on db: any Database,
     logger: Logger
 ) async throws {
     guard assignment.brightspaceSyncExcluded != true,
@@ -497,7 +497,7 @@ func requeueFrozenClassGoalBonusPushes(
 /// `classGoal` currently grades on the whole-assignment metric; per-item /
 /// per-section targets are a follow-up (there is no way to author one until the
 /// Phase 5 editor, so this covers every goal that can exist today).
-func bestAssignmentGradeByStudent(testSetupID: String, on db: Database) async throws -> [UUID: Double] {
+func bestAssignmentGradeByStudent(testSetupID: String, on db: any Database) async throws -> [UUID: Double] {
     let submissions = try await APISubmission.query(on: db)
         .filter(\.$kind == APISubmission.Kind.student)
         .filter(\.$testSetupID == testSetupID)

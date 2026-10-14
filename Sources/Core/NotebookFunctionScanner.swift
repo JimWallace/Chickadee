@@ -68,7 +68,7 @@ public struct NotebookFunctionInfo: Codable, Sendable {
         self.isShadowed = isShadowed
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
         paramNames = try c.decode([String].self, forKey: .paramNames)

@@ -31,7 +31,7 @@ import Fluent
 import SQLKit
 
 struct CreateAssignments: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("assignments")
             .id()
             .field("public_id", .string, .required)
@@ -105,15 +105,15 @@ struct CreateAssignments: ChickadeeMigration {
         // backfill loop over existing rows before creating the index; on a
         // fresh deploy there are no rows yet, so the index can be created
         // immediately.
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "CREATE UNIQUE INDEX idx_assignments_course_slug ON assignments (course_id, slug)"
             ).run()
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_assignments_course_slug").run()
         }
         try await database.schema("assignments").delete()

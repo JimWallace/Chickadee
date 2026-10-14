@@ -8,13 +8,13 @@
 import Fluent
 
 struct AddAIFeedbackAttestation: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema(APICourseEnrollment.schema)
             .field("ai_feedback_attested_at", .datetime)
             .update()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema(APICourseEnrollment.schema)
             .deleteField("ai_feedback_attested_at")
             .update()

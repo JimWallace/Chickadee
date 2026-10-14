@@ -2,7 +2,7 @@ import Fluent
 import SQLKit
 
 struct CreateAuditLog: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("audit_log")
             .id()
             .field(
@@ -27,7 +27,7 @@ struct CreateAuditLog: ChickadeeMigration {
             .field("created_at", .datetime, .required)
             .create()
 
-        if let sql = database as? SQLDatabase {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw(
                 "CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC)"
             ).run()
@@ -42,8 +42,8 @@ struct CreateAuditLog: ChickadeeMigration {
         }
     }
 
-    func revert(on database: Database) async throws {
-        if let sql = database as? SQLDatabase {
+    func revert(on database: any Database) async throws {
+        if let sql = database as? (any SQLDatabase) {
             try await sql.raw("DROP INDEX IF EXISTS idx_audit_log_course_created").run()
             try await sql.raw("DROP INDEX IF EXISTS idx_audit_log_action_created").run()
             try await sql.raw("DROP INDEX IF EXISTS idx_audit_log_created_at").run()

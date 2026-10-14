@@ -20,7 +20,7 @@ struct AdminMCPRoutes: RouteCollection {
 
     private var transport: MCPTransport { MCPTransport(configuration: configuration) }
 
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let group = routes.grouped("admin-mcp")
         group.post(use: handlePost)
         group.on(.GET, use: streamingUnsupported)

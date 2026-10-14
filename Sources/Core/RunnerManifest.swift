@@ -92,11 +92,11 @@ public struct RunnerManifest: Codable, Equatable, Sendable {
             globalVariables: globalVariables)
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         self.init(try TestProperties(from: decoder))
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         try testProperties.encode(to: encoder)
     }
 }

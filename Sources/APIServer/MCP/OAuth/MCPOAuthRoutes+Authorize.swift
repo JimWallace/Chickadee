@@ -10,6 +10,7 @@
 // v0.4.37 large-source splits).  No logic change.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

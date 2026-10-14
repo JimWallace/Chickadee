@@ -10,16 +10,16 @@ import SQLKit
 /// request resolves its session through it — so the reaper was scanning and
 /// locking the hottest table on the server once an hour (#1365).
 struct CreateSessionReaperIndex: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_fluent_sessions_created_at ON _fluent_sessions(created_at)"
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw("DROP INDEX IF EXISTS idx_fluent_sessions_created_at").run()
     }

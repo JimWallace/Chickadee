@@ -7,6 +7,7 @@
 // graph, pattern families, notebook checks) in 800+ LOC.
 
 import Core
+import Foundation
 
 /// Validates the case key, uniqueness, and label fields of a pattern
 /// family case.  Shared by every `PatternKind`.

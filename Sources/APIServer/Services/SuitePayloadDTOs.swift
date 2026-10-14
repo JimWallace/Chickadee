@@ -90,7 +90,7 @@ struct SuitePayload: Content {
 
     enum CodingKeys: String, CodingKey { case items, sections }
 
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decodeIfPresent([SuiteItemDTO].self, forKey: .items) ?? []
         sections = try c.decodeIfPresent([TestSuiteSectionDTO].self, forKey: .sections) ?? []

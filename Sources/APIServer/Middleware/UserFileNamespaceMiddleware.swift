@@ -1,3 +1,4 @@
+import Fluent
 import Vapor
 
 /// Guards static user-scoped notebook files under `/.../files/users/<uuid>/...`.
@@ -10,7 +11,7 @@ struct UserFileNamespaceMiddleware: AsyncMiddleware {
         "/jupyterlite/notebooks/files/users/",
     ]
 
-    func respond(to req: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to req: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard let requestedUser = Self.requestedUserNamespace(from: req.url.path) else {
             return try await next.respond(to: req)
         }

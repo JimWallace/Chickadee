@@ -30,7 +30,7 @@ import Vapor
 /// `.instructor` bar is wired into the authoring surfaces in Phase 4, once
 /// per-course roles are authorable; until then it is exercised only by tests.
 func requireCourseRole(
-    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
+    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: any Database
 ) async throws {
     guard !caller.isAdmin else { return }
     guard let callerID = caller.id else { throw AppError.unauthenticated }
@@ -53,13 +53,13 @@ private func requireResolvedCourseRole(_ role: CourseRole?, atLeast minimum: Cou
 /// test setups carrying secret tests and reference solutions — by URL, even
 /// though the dashboard never showed it to them. Now the `.student` case of
 /// `requireCourseRole`.
-func requireCourseEnrollment(caller: APIUser, courseID: UUID, db: Database) async throws {
+func requireCourseEnrollment(caller: APIUser, courseID: UUID, db: any Database) async throws {
     try await requireCourseRole(caller: caller, courseID: courseID, atLeast: .student, db: db)
 }
 
 /// The caller's per-course role in `courseID`, or nil if they hold no
 /// enrollment there. The single role read behind `requireCourseRole`.
-func courseRole(of userID: UUID, inCourse courseID: UUID, db: Database) async throws -> CourseRole? {
+func courseRole(of userID: UUID, inCourse courseID: UUID, db: any Database) async throws -> CourseRole? {
     try await APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
         .filter(\.$course.$id == courseID)
@@ -71,7 +71,7 @@ func courseRole(of userID: UUID, inCourse courseID: UUID, db: Database) async th
 /// enrollment predicate behind both the web guard above and the MCP tools'
 /// `authorizeCourseAccess`. Deliberately carries no role bypass — role policy
 /// stays with the callers.
-func userIsEnrolled(userID: UUID, inCourse courseID: UUID, db: Database) async throws -> Bool {
+func userIsEnrolled(userID: UUID, inCourse courseID: UUID, db: any Database) async throws -> Bool {
     try await APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
         .filter(\.$course.$id == courseID)
@@ -86,7 +86,7 @@ func userIsEnrolled(userID: UUID, inCourse courseID: UUID, db: Database) async t
 /// set: admins see — and their agents may act on — exactly what they are
 /// enrolled in. Defined in terms of `enrolledCoursesWithRoles` so the two
 /// can't drift on which courses are visible or in what order.
-func enrolledCourses(for userID: UUID, on db: Database) async throws -> [APICourse] {
+func enrolledCourses(for userID: UUID, on db: any Database) async throws -> [APICourse] {
     try await enrolledCoursesWithRoles(for: userID, on: db).map(\.course)
 }
 
@@ -97,7 +97,7 @@ func enrolledCourses(for userID: UUID, on db: Database) async throws -> [APICour
 /// while the MCP initialize guidance (`mcpCourseGuidance`) reads the role
 /// variant to pick the courses the account can author in.
 func enrolledCoursesWithRoles(
-    for userID: UUID, on db: Database
+    for userID: UUID, on db: any Database
 ) async throws -> [(course: APICourse, role: CourseRole)] {
     let enrollments = try await APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
@@ -132,7 +132,7 @@ func courseListPrecedes(_ lhs: APICourse, _ rhs: APICourse) -> Bool {
 /// Slice G) — a viewer sees instructor-level detail (all tiers, other students'
 /// submissions, solution files) only for the courses they actually staff, not
 /// deployment-wide. TAs count as staff (they grade), matching Slice E.
-func isCourseStaff(_ user: APIUser, inCourse courseID: UUID, db: Database) async throws -> Bool {
+func isCourseStaff(_ user: APIUser, inCourse courseID: UUID, db: any Database) async throws -> Bool {
     if user.isAdmin { return true }
     guard let userID = user.id else { return false }
     return resolvedRoleIsStaff(try await courseRole(of: userID, inCourse: courseID, db: db))
@@ -150,7 +150,7 @@ private func resolvedRoleIsStaff(_ role: CourseRole?) -> Bool {
 /// OAuth content-scope consent gate, the user-file namespace). Downstream
 /// per-course checks still apply, so this only decides "may this account touch
 /// the staff surface at all", never which course it may act on.
-func isStaffAnywhere(_ user: APIUser, db: Database) async throws -> Bool {
+func isStaffAnywhere(_ user: APIUser, db: any Database) async throws -> Bool {
     if user.isAdmin { return true }
     guard let userID = user.id else { return false }
     return try await APICourseEnrollment.query(on: db)
@@ -166,7 +166,7 @@ func isStaffAnywhere(_ user: APIUser, db: Database) async throws -> Bool {
 /// setup (`test_setups.course_id`). Nil only if the setup row is missing.
 /// Used to scope per-course staff checks on the submission view/download/query
 /// paths (#417 Slice G).
-func courseID(ofSubmission submission: APISubmission, on db: Database) async throws -> UUID? {
+func courseID(ofSubmission submission: APISubmission, on db: any Database) async throws -> UUID? {
     try await APITestSetup.find(submission.testSetupID, on: db)?.courseID
 }
 
@@ -174,7 +174,7 @@ func courseID(ofSubmission submission: APISubmission, on db: Database) async thr
 /// per-course view gate for the submission view/download paths. False when the
 /// submission's setup (hence course) can't be resolved (#417 Slice G).
 func isSubmissionStaff(
-    _ user: APIUser, submission: APISubmission, on db: Database
+    _ user: APIUser, submission: APISubmission, on db: any Database
 ) async throws
     -> Bool
 {
@@ -210,7 +210,7 @@ enum CourseWriteDenial: Equatable {
 ///     assignment create/delete/open/close and the assignment-wide due date,
 ///     sections, archive, BrightSpace binding.
 func evaluateCourseWrite(
-    user: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
+    user: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: any Database
 ) async throws -> CourseWriteDenial? {
     guard !user.isAdmin else { return nil }
     guard let userID = user.id else { return .notEnrolled }
@@ -238,7 +238,7 @@ func evaluateCourseWrite(
 /// authorization the `/instructor` group middleware (which only sees the
 /// caller's active course) can't enforce. See docs/multi-course-roles.md.
 func requireCourseWriteAccess(
-    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
+    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: any Database
 ) async throws {
     switch try await evaluateCourseWrite(user: caller, courseID: courseID, atLeast: minimum, db: db) {
     case nil:
@@ -259,7 +259,7 @@ func requireCourseWriteAccess(
 /// non-admin instructor from self-demoting or unenrolling the course's last
 /// instructor without transferring the role first.
 func ensureNotLastInstructor(
-    caller: APIUser, courseID: UUID, removing userID: UUID, db: Database
+    caller: APIUser, courseID: UUID, removing userID: UUID, db: any Database
 ) async throws {
     guard !caller.isAdmin else { return }
     let otherInstructors = try await APICourseEnrollment.query(on: db)
@@ -283,7 +283,7 @@ func ensureNotLastInstructor(
 /// per-course now, so a plain `user` auto-enrolls as a student and the roster
 /// grants staff explicitly). The single place the creation-time seeding rule
 /// lives; callers handle their own "already enrolled?" dedup.
-func saveSeededEnrollment(for user: APIUser, courseID: UUID, on db: Database) async throws {
+func saveSeededEnrollment(for user: APIUser, courseID: UUID, on db: any Database) async throws {
     try await APICourseEnrollment(
         userID: try user.requireID(), courseID: courseID,
         role: user.isAdmin ? .instructor : .student
@@ -295,7 +295,7 @@ func saveSeededEnrollment(for user: APIUser, courseID: UUID, on db: Database) as
 /// and admin enrollment path wants: a repeat request is a no-op, not a
 /// duplicate row.
 @discardableResult
-func ensureSeededEnrollment(userID: UUID, courseID: UUID, on db: Database) async throws -> Bool {
+func ensureSeededEnrollment(userID: UUID, courseID: UUID, on db: any Database) async throws -> Bool {
     let existing = try await APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
         .filter(\.$course.$id == courseID)
@@ -307,7 +307,7 @@ func ensureSeededEnrollment(userID: UUID, courseID: UUID, on db: Database) async
 
 /// `saveSeededEnrollment` for callers that hold only the user's ID; loads the
 /// user to read its deployment role. A missing user falls back to `.student`.
-func saveSeededEnrollment(userID: UUID, courseID: UUID, on db: Database) async throws {
+func saveSeededEnrollment(userID: UUID, courseID: UUID, on db: any Database) async throws {
     let isAdmin = try await APIUser.find(userID, on: db)?.isAdmin ?? false
     try await APICourseEnrollment(
         userID: userID, courseID: courseID,

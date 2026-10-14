@@ -51,7 +51,7 @@ private let terminalValidationStatuses: Set<String> = ["passed", "failed", "no-r
 /// change. `emit` receives the progress fraction and a short human message.
 @discardableResult
 func watchValidation(
-    on db: Database,
+    on db: any Database,
     assignmentPublicID: String,
     pollInterval: Duration,
     deadline: ContinuousClock.Instant,
@@ -87,7 +87,7 @@ func watchValidation(
 /// assignment is treated as still-queued (the caller authorized it before the
 /// watch began, so this only happens on a transient read).
 private func currentValidationPhase(
-    on db: Database, assignmentPublicID: String
+    on db: any Database, assignmentPublicID: String
 ) async throws -> (status: String?, phase: ValidationPhase) {
     guard let assignment = try await assignmentByPublicID(assignmentPublicID, on: db) else {
         return (nil, .queued)

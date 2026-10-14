@@ -18,7 +18,7 @@ struct SubmitChips: Encodable {
     let deadlineISO: String?
 
     static func make(
-        setupID: String, assignment: APIAssignment?, user: APIUser, on db: Database
+        setupID: String, assignment: APIAssignment?, user: APIUser, on db: any Database
     ) async throws -> SubmitChips {
         // The deadline actually in force for this student: a personal extension
         // outranks the class due date, which is what the chip must show.

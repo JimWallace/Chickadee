@@ -251,7 +251,7 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             .sqlite(sqliteConfig, maxConnectionsPerEventLoop: settings.maxConnectionsPerEventLoop ?? 1),
             as: .chickadee, isDefault: true)
 
-        if case .file = settings.sqliteStorage, let sql = app.db as? SQLDatabase {
+        if case .file = settings.sqliteStorage, let sql = app.db as? (any SQLDatabase) {
             _ = try sql.raw("PRAGMA journal_mode = WAL").all().wait()
         }
     case .postgres:

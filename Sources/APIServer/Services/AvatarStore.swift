@@ -20,7 +20,7 @@ enum AvatarStore {
     /// staff ring; the caller decides it from the role the page is about
     /// (docs/student-wardrobe.md, "The staff ring").
     static func rosterAvatar(
-        for user: APIUser, isStaff: Bool, on db: Database
+        for user: APIUser, isStaff: Bool, on db: any Database
     ) async throws
         -> AvatarPresentation
     {
@@ -36,7 +36,7 @@ enum AvatarStore {
     ///   On Postgres a failed write aborts the whole transaction, so the
     ///   recover-by-refetch below would itself throw — the same rule, and the
     ///   same reason, as `AssignmentSeedStore.ensureSeed`.
-    static func ensureSpec(for user: APIUser, on db: Database) async throws -> AvatarSpec {
+    static func ensureSpec(for user: APIUser, on db: any Database) async throws -> AvatarSpec {
         // A stored bird is returned as it is. An axis added after a bird was
         // stored is filled once, by `FillLateAvatarAxes`, not on every read.
         if let stored = user.avatarSpecJSON, let decoded = decode(stored) { return decoded }
@@ -69,7 +69,7 @@ enum AvatarStore {
     /// rather than an error to swallow — the caller renders without a handle
     /// and the avatar still shows.
     static func ensureHandle(
-        for enrollment: APICourseEnrollment, on db: Database
+        for enrollment: APICourseEnrollment, on db: any Database
     ) async throws -> String? {
         // Shape, not list membership: a handle from an earlier word list is
         // kept, because a list change must never rename a student mid-term.
@@ -83,7 +83,7 @@ enum AvatarStore {
     /// `ensureHandle(for:on:)` with the course's taken handles already
     /// loaded, for a page that draws more than once per enrollment (#1759).
     static func ensureHandle(
-        for enrollment: APICourseEnrollment, taken: Set<String>, on db: Database
+        for enrollment: APICourseEnrollment, taken: Set<String>, on db: any Database
     ) async throws -> String? {
         if let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) {
             return handle
@@ -120,7 +120,7 @@ enum AvatarStore {
     /// winner's handle excluded; any other failure is thrown, so an outage is
     /// never reported as an exhausted pool (#2255).
     static func redrawHandle(
-        for enrollment: APICourseEnrollment, on db: Database
+        for enrollment: APICourseEnrollment, on db: any Database
     ) async throws -> String? {
         try await redrawHandle(
             for: enrollment, taken: takenHandles(inCourse: enrollment.$course.id, on: db), on: db)
@@ -128,7 +128,7 @@ enum AvatarStore {
 
     /// `redrawHandle(for:on:)` from a taken set the caller already loaded.
     static func redrawHandle(
-        for enrollment: APICourseEnrollment, taken: Set<String>, on db: Database
+        for enrollment: APICourseEnrollment, taken: Set<String>, on db: any Database
     ) async throws -> String? {
         var taken = taken
         let courseID = enrollment.$course.id
@@ -158,7 +158,7 @@ enum AvatarStore {
     /// Every handle already stored in this course. The one query behind every
     /// draw and check: one column, rows with a handle only, never the full
     /// enrollment rows (#1759).
-    static func takenHandles(inCourse courseID: UUID, on db: Database) async throws -> Set<String> {
+    static func takenHandles(inCourse courseID: UUID, on db: any Database) async throws -> Set<String> {
         Set(
             try await APICourseEnrollment.query(on: db)
                 .filter(\.$course.$id == courseID)
@@ -201,7 +201,7 @@ enum AvatarStore {
     /// write, so a second change is refused.  The caller has already checked
     /// that `handle` was one of the alternates it offered.
     static func chooseHandle(
-        _ handle: String, for enrollment: APICourseEnrollment, on db: Database
+        _ handle: String, for enrollment: APICourseEnrollment, on db: any Database
     ) async throws -> HandleChoice {
         guard enrollment.avatarHandleLockedAt == nil else { return .locked }
         return try await chooseHandle(
@@ -211,7 +211,7 @@ enum AvatarStore {
     /// `chooseHandle(_:for:on:)` with the pre-check against a taken set the
     /// caller already loaded.  The unique index still decides the race.
     static func chooseHandle(
-        _ handle: String, for enrollment: APICourseEnrollment, taken: Set<String>, on db: Database
+        _ handle: String, for enrollment: APICourseEnrollment, taken: Set<String>, on db: any Database
     ) async throws -> HandleChoice {
         guard enrollment.avatarHandleLockedAt == nil else { return .locked }
         // Swift compares text by canonical equivalence, but the unique index
@@ -242,7 +242,7 @@ enum AvatarStore {
     /// Locks this enrollment's handle, because somebody other than the student
     /// or staff has now seen it.  A no-op once locked, and never worth failing
     /// the page that showed the handle.
-    static func lockHandle(for enrollment: APICourseEnrollment, on db: Database) async {
+    static func lockHandle(for enrollment: APICourseEnrollment, on db: any Database) async {
         guard enrollment.avatarHandle != nil, enrollment.avatarHandleLockedAt == nil else { return }
         enrollment.avatarHandleLockedAt = Date()
         do {
@@ -261,7 +261,7 @@ enum AvatarStore {
     /// course's enrollment role instead (docs/student-wardrobe.md, "The staff
     /// ring"). An archived offering does not count: a student who was a TA in
     /// a past term is a student now, and gets their own ring back (#1756).
-    static func courseStaff(among userIDs: [UUID], on db: Database) async throws -> Set<UUID> {
+    static func courseStaff(among userIDs: [UUID], on db: any Database) async throws -> Set<UUID> {
         guard !userIDs.isEmpty else { return [] }
         let enrollments = try await APICourseEnrollment.query(on: db)
             .filter(\.$userID ~~ userIDs)

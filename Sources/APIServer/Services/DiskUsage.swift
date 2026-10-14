@@ -84,10 +84,10 @@ func testSetupSizesByID(testSetupsDirectory dir: String) -> [String: Int] {
 /// - Postgres: `pg_database_size(current_database())` (logical size).
 /// - SQLite: the db file plus its `-wal` / `-shm` sidecars.
 /// Returns nil when the size can't be determined.
-func databaseSizeBytes(on db: Database, settings: DatabaseSettings) async -> Int? {
+func databaseSizeBytes(on db: any Database, settings: DatabaseSettings) async -> Int? {
     switch settings.backend {
     case .postgres:
-        guard let sql = db as? SQLDatabase else { return nil }
+        guard let sql = db as? (any SQLDatabase) else { return nil }
         struct SizeRow: Decodable { let size: Int }
         let row = try? await sql.raw("SELECT pg_database_size(current_database()) AS size")
             .first(decoding: SizeRow.self)

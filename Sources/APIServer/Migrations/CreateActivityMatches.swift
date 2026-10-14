@@ -8,7 +8,7 @@
 import Fluent
 
 struct CreateActivityMatches: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("match_results")
             .id()
             .field("test_setup_id", .string, .required)
@@ -40,7 +40,7 @@ struct CreateActivityMatches: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("activity_champions").delete()
         try await database.schema("match_results").delete()
     }

@@ -27,7 +27,7 @@ private let dataExportReaperSweepInterval: TimeInterval = 3600
 /// row's generated zip first.  Terminal-state agnostic: an expired pending
 /// or failed row is just as dead as a complete one.
 func reapExpiredDataExports(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     maxAge: TimeInterval = dataExportRetentionMaxAge,
     now: Date = Date()

@@ -11,7 +11,7 @@ import SQLKit
 import Vapor
 
 struct HealthRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("health", use: health)
     }
 
@@ -20,7 +20,7 @@ struct HealthRoutes: RouteCollection {
         // DB check: run a trivial query and catch errors.
         let dbStatus: String
         do {
-            guard let sql = req.db as? SQLDatabase else {
+            guard let sql = req.db as? (any SQLDatabase) else {
                 dbStatus = "error"
                 throw Abort(.internalServerError)
             }

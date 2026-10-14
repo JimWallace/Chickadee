@@ -67,7 +67,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
         self.transforms = transforms
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         file = try c.decode(String.self, forKey: .file)
         kind = try c.decodeIfPresent(DatasetKind.self, forKey: .kind) ?? .rowSample

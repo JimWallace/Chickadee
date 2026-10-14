@@ -124,7 +124,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         case sectionID, hint, timeLimitSeconds, failureDetail
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         tier = try c.decode(TestTier.self, forKey: .tier)
         script = try c.decode(String.self, forKey: .script)
@@ -143,7 +143,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     /// an entry's bytes do not depend on which writer produced them.  `points`
     /// is written whenever it is not 1 -- including 0, since a missing key
     /// decodes to 1 and a 0-point gate would start counting toward the score.
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(tier, forKey: .tier)
         try c.encode(script, forKey: .script)
@@ -220,7 +220,7 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
         self.expressions = expressions
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
@@ -613,7 +613,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.builtInAchievementsSeeded = builtInAchievementsSeeded
     }
 
-    public init(from decoder: Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
         // The v2 form has its own shape (docs/manifest-format-v2.md).  Every
@@ -703,7 +703,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case builtInAchievementsSeeded
     }
 
-    public func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         // Always 1: this is the v1 form.  A value with any other number (one
         // read from an unknown version) must still write valid v1.

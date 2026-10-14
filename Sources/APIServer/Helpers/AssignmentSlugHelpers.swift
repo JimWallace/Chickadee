@@ -20,7 +20,7 @@ func assignmentSlug(fromTitle title: String) -> String {
     return parts.joined(separator: "-")
 }
 
-func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> APIAssignment? {
+func assignmentByPublicID(_ publicID: String, on db: any Database) async throws -> APIAssignment? {
     try await APIAssignment.query(on: db)
         .filter(\.$publicID == publicID)
         .first()
@@ -29,7 +29,7 @@ func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> A
 /// The assignment whose test setup is `testSetupID`, or nil for a draft or
 /// orphaned setup. The twin of `assignmentByPublicID` for the setup-keyed
 /// student routes and services.
-func assignmentByTestSetupID(_ testSetupID: String, on db: Database) async throws -> APIAssignment? {
+func assignmentByTestSetupID(_ testSetupID: String, on db: any Database) async throws -> APIAssignment? {
     try await APIAssignment.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .first()
@@ -39,7 +39,7 @@ func uniqueAssignmentSlug(
     title: String,
     courseID: UUID,
     excludingAssignmentID: UUID? = nil,
-    db: Database,
+    db: any Database,
     reserved: Set<String> = []
 ) async throws -> String {
     let slug = assignmentSlug(fromTitle: title)
@@ -89,7 +89,7 @@ struct NewAssignmentFields {
 
 func createAssignmentWithUniquePublicID(
     _ fields: NewAssignmentFields,
-    on db: Database
+    on db: any Database
 ) async throws -> APIAssignment {
     for _ in 0..<32 {
         let candidate = APIAssignment.generatePublicID()

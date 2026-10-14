@@ -9,7 +9,7 @@
 import Fluent
 
 struct CreateCourseContentItems: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("course_content_items")
             .id()
             .field(
@@ -41,7 +41,7 @@ struct CreateCourseContentItems: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("course_content_items").delete()
     }
 }

@@ -15,6 +15,7 @@
 // voice/tone guidance only — it never changes tool behaviour or scopes.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

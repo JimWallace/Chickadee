@@ -51,7 +51,7 @@ actor TestSetupCache {
         /// `CancellationError` their tasks never had.
         let generation: UUID
         var task: Task<Void, Never>
-        var waiters: [UUID: CheckedContinuation<URL, Error>] = [:]
+        var waiters: [UUID: CheckedContinuation<URL, any Error>] = [:]
     }
 
     /// In-progress populations, keyed by testSetupID.
@@ -259,7 +259,7 @@ actor TestSetupCache {
         // a synchronous same-actor call here — no interleaving between the
         // result being ready and the waiters being resumed.
         return Task {
-            let result: Result<URL, Error>
+            let result: Result<URL, any Error>
             do {
                 let stagingDir = try await populate()
                 result = .success(
@@ -279,7 +279,7 @@ actor TestSetupCache {
     /// successor's waiters, or clean up files the successor now owns. Such a
     /// stale finish has nothing left to do — a population is only cancelled
     /// once it has no waiters.
-    private func finishPopulation(testSetupID: String, generation: UUID, result: Result<URL, Error>) {
+    private func finishPopulation(testSetupID: String, generation: UUID, result: Result<URL, any Error>) {
         guard let current = inProgress[testSetupID], current.generation == generation else {
             writeStructuredRunnerLog(
                 event: "test_setup_cache_stale_population_finished",

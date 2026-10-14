@@ -15,12 +15,13 @@
 //   GET  /submissions/:id           → SubmissionPage  (live results)
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor
 
 struct WebRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get(use: index)
         routes.get("testsetups", ":testSetupID", "submit", use: submitForm)
         routes.post("testsetups", ":testSetupID", "submit", use: createSubmission)

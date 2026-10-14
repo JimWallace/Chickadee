@@ -26,7 +26,7 @@ private let activityEventReaperSweepInterval: TimeInterval = 3600
 /// Deletes `user_activity_events` rows older than `maxAge`.  `created_at` is
 /// NOT NULL in the schema, so no null-guard is needed.
 func reapStaleActivityEvents(
-    on db: Database,
+    on db: any Database,
     logger: Logger,
     maxAge: TimeInterval = activityEventDefaultMaxAge,
     now: Date = Date()

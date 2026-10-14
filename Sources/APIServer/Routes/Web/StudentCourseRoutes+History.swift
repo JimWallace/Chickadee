@@ -13,6 +13,7 @@
 // `StudentCourseRoutes` in the Phase 2 audit refactor.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Vapor

@@ -11,11 +11,12 @@
 // this is an ordinary first-party form.
 
 import Core
+import Elementary
 import Fluent
 import Vapor
 
 struct LTIBindRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("lti", "bind", use: bindPage)
         routes.post("lti", "bind", use: bind)
     }
@@ -90,7 +91,7 @@ struct LTIBindRoutes: RouteCollection {
 
     /// Unarchived courses `user` teaches (every unarchived course for an
     /// admin) that are not bound to any LMS course yet.
-    static func bindableCourses(for user: APIUser, on db: Database) async throws -> [APICourse] {
+    static func bindableCourses(for user: APIUser, on db: any Database) async throws -> [APICourse] {
         var query = APICourse.query(on: db)
             .filter(\.$isArchived == false)
             .filter(\.$ltiPlatformID == nil)

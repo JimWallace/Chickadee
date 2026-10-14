@@ -37,7 +37,7 @@ struct StudentGrade {
 func bestGradeForStudent(
     userID: UUID,
     testSetupID: String,
-    db: Database
+    db: any Database
 ) async throws -> StudentGrade? {
     // An instructor override replaces the runner-derived grade. It stores a
     // percent, so it needs a points denominator: the suite's total possible

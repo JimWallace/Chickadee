@@ -213,7 +213,7 @@ func datasetsPanelResponse(req: Request, setup: APITestSetup) async throws -> Da
 /// is a detail of whichever consumer happens to fold the array. A refusal is
 /// `.badRequest`.
 func applyDatasetsEdit(
-    setup: APITestSetup, datasets: [DatasetSpec], on db: Database
+    setup: APITestSetup, datasets: [DatasetSpec], on db: any Database
 ) async throws {
     let bundledFiles = await bundledFileNames(zipPath: setup.zipPath)
     var seenFiles: Set<String> = []

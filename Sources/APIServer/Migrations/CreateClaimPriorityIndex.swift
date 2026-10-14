@@ -15,16 +15,16 @@ import SQLKit
 /// Column order matches the query: the two equality predicates, then the
 /// nullability split, then the sort key (#1361).
 struct CreateClaimPriorityIndex: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func prepare(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_submissions_claim_priority ON submissions(status, kind, retested_at, submitted_at)"
         ).run()
     }
 
-    func revert(on database: Database) async throws {
-        guard let sql = database as? SQLDatabase else { return }
+    func revert(on database: any Database) async throws {
+        guard let sql = database as? (any SQLDatabase) else { return }
 
         try await sql.raw("DROP INDEX IF EXISTS idx_submissions_claim_priority").run()
     }

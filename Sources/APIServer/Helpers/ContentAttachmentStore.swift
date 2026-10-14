@@ -10,6 +10,7 @@
 
 import Core
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 enum ContentAttachmentStore {

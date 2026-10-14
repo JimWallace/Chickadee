@@ -70,7 +70,7 @@ struct SetActivityTool: ContentTool {
         /// The two opponent keys are always present — explicitly null when
         /// there is no opponent — so an agent reading the result can tell
         /// "no opponent" from "a server that predates the field".
-        func encode(to encoder: Encoder) throws {
+        func encode(to encoder: any Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(assignmentPublicID, forKey: .assignmentPublicID)
             try c.encode(kind, forKey: .kind)

@@ -61,7 +61,7 @@ enum CourseCloneService {
         target: CourseCloneTarget,
         directories: AuthoringDirectories,
         contentFilesDirectory: String,
-        on db: Database
+        on db: any Database
     ) async throws -> CourseCloneResult {
         let sourceID = try source.requireID()
         let sections = try await APICourseSection.query(on: db)
@@ -147,7 +147,7 @@ enum CourseCloneService {
     /// (#2168).
     private static func copyContentItem(
         _ item: APICourseContentItem, toCourse courseID: UUID, sectionID: UUID?,
-        contentFilesDirectory: String, createdPaths: inout [String], on db: Database
+        contentFilesDirectory: String, createdPaths: inout [String], on db: any Database
     ) async throws {
         let copy = APICourseContentItem(
             id: UUID(), courseID: courseID, sectionID: sectionID, sortOrder: item.sortOrder,

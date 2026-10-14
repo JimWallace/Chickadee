@@ -33,7 +33,7 @@ import Foundation
 import Vapor
 
 struct ClientDiagnosticsRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         let api = routes.grouped("api", "v1", "client-diagnostics")
         api.post(use: submit)
     }

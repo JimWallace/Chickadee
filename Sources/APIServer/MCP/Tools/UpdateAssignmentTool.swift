@@ -9,6 +9,7 @@
 import Core
 import Fluent
 import Foundation
+import Vapor
 
 struct UpdateAssignmentTool: ContentTool {
     struct Input: Decodable, Sendable {

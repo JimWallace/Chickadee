@@ -38,7 +38,7 @@ struct UserActivityMiddleware: AsyncMiddleware {
         return min(60, timeout / 3)
     }
 
-    func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+    func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         let isBackgroundRefresh =
             request.headers.first(name: Self.backgroundRefreshHeader) != nil
         if !isBackgroundRefresh, let user = request.auth.get(APIUser.self), let userID = user.id {

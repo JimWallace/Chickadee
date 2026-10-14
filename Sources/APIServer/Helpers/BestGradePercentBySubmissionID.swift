@@ -113,7 +113,7 @@ func bestGradeResultBySubmissionID(_ rows: [APIResult]) -> [String: APIResult] {
 /// limits (SQLite 32k, Postgres 65,535).
 func allResultsBySubmissionID(
     for submissionIDs: some Collection<String>,
-    on db: Database
+    on db: any Database
 ) async throws -> [String: [APIResult]] {
     guard !submissionIDs.isEmpty else { return [:] }
     let chunkSize = 5_000
@@ -152,7 +152,7 @@ func allResultsBySubmissionID(
 /// helpers so the projected and full paths can never disagree.
 func gradeSummariesBySubmissionID(
     for submissionIDs: some Collection<String>,
-    on db: Database
+    on db: any Database
 ) async throws -> [String: [GradeResultSummary]] {
     guard !submissionIDs.isEmpty else { return [:] }
     let chunkSize = 5_000
@@ -232,7 +232,7 @@ func gradeSummariesBySubmissionID(
 /// `gradePercentValue`; missing entries mean no gradeable result exists yet.
 func bestGradePercentBySubmissionID(
     for submissionIDs: some Collection<String>,
-    on db: Database
+    on db: any Database
 ) async throws -> [String: Int] {
     try await gradeSummariesBySubmissionID(for: submissionIDs, on: db)
         .compactMapValues { bestGradePercent(of: $0) }
@@ -242,7 +242,7 @@ func bestGradePercentBySubmissionID(
 /// submissions, loaded in one chunked query.
 func bestGradeResultBySubmissionID(
     for submissionIDs: some Collection<String>,
-    on db: Database
+    on db: any Database
 ) async throws -> [String: APIResult] {
     bestGradeResultBySubmissionID(
         try await allResultsBySubmissionID(for: submissionIDs, on: db).values.flatMap(\.self))

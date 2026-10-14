@@ -8,7 +8,7 @@
 import Fluent
 
 struct CreateMCPConsentRequests: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("oauth_consent_requests")
             .id()
             .field("token_hash", .string, .required)
@@ -26,7 +26,7 @@ struct CreateMCPConsentRequests: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("oauth_consent_requests").delete()
     }
 }

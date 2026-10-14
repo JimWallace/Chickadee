@@ -152,7 +152,7 @@ enum SupportFileURLFetcher {
         // Run the request, then shut the dedicated client down exactly once
         // regardless of outcome (a per-call client keeps the no-redirect config
         // off the shared client).
-        let outcome: Result<Data, Error>
+        let outcome: Result<Data, any Error>
         do {
             outcome = .success(try await performFetch(client, urlString: urlString))
         } catch {

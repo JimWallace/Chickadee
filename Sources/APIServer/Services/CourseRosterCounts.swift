@@ -21,7 +21,7 @@ import Foundation
 /// global `APIUser.role == "student"` onto the per-course enrollment role).
 /// Naturally excludes TA/instructor enrollments (a staff member enrolled to see
 /// the course), which is the whole point. Empty when the course has no students.
-func studentUserIDsInCourse(_ courseID: UUID, on db: Database) async throws -> Set<UUID> {
+func studentUserIDsInCourse(_ courseID: UUID, on db: any Database) async throws -> Set<UUID> {
     let enrollments = try await APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .all()
@@ -34,7 +34,7 @@ func studentUserIDsInCourse(_ courseID: UUID, on db: Database) async throws -> S
 /// students used to inflate `studentsMeeting` while the denominator counted
 /// only enrolled students).
 func studentUserIDsByCourse(
-    courseIDs: [UUID], on db: Database
+    courseIDs: [UUID], on db: any Database
 ) async throws -> [UUID: Set<UUID>] {
     guard !courseIDs.isEmpty else { return [:] }
     let enrollments = try await APICourseEnrollment.query(on: db)
@@ -56,7 +56,7 @@ func studentUserIDsByCourse(
 /// grows with every past term. nil keeps the deployment-wide behaviour the
 /// admin dashboard needs.
 func enrolledStudentCountsByCourse(
-    courseIDs: [UUID]? = nil, on db: Database
+    courseIDs: [UUID]? = nil, on db: any Database
 ) async throws -> [UUID: Int] {
     let enrollmentQuery = APICourseEnrollment.query(on: db)
     let preEnrollmentQuery = APIPreEnrollment.query(on: db)
@@ -82,7 +82,7 @@ func enrolledStudentCountsByCourse(
 }
 
 /// Single-course variant of `enrolledStudentCountsByCourse`.
-func enrolledStudentCount(forCourse courseID: UUID, on db: Database) async throws -> Int {
+func enrolledStudentCount(forCourse courseID: UUID, on db: any Database) async throws -> Int {
     async let enrollmentsFetch = APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .all()

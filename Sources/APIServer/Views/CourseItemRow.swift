@@ -11,6 +11,7 @@
 // action and the copy-student-link action, so an assignment outside a section
 // rendered without them. Keep one row.
 
+import Core
 import Elementary
 
 struct CourseItemRow: HTML {

@@ -28,7 +28,7 @@ import Foundation
 /// Takes the caller's already-decoded manifest (#1128): every call site has
 /// the setup row in hand, so this no longer re-fetches and re-decodes it.
 func classGoalBonusPoints(
-    testSetupID: String, props: TestProperties?, on db: Database
+    testSetupID: String, props: TestProperties?, on db: any Database
 ) async throws -> Double {
     guard let props else { return 0 }
     let goals = props.achievements.filter(\.isClassGoal)

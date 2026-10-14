@@ -1,7 +1,7 @@
 import Fluent
 
 struct CreateSubmissionDiagnostics: ChickadeeMigration {
-    func prepare(on database: Database) async throws {
+    func prepare(on database: any Database) async throws {
         try await database.schema("submission_diagnostics")
             .field(
                 "submission_id",
@@ -51,7 +51,7 @@ struct CreateSubmissionDiagnostics: ChickadeeMigration {
             .create()
     }
 
-    func revert(on database: Database) async throws {
+    func revert(on database: any Database) async throws {
         try await database.schema("submission_diagnostics").delete()
     }
 }

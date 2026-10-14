@@ -233,7 +233,7 @@ private func stagedExportFiles(
     return files
 }
 
-private func markExportFailed(exportID: UUID, error: Error, app: Application) async {
+private func markExportFailed(exportID: UUID, error: any Error, app: Application) async {
     guard let row = try? await APIDataExport.find(exportID, on: app.db),
         row.statusValue == .pending
     else { return }
