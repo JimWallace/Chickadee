@@ -9,6 +9,25 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.647] - 2026-10-14
+
+### Fixed
+
+- **The leaderboard page refreshes during a live session again.** Its results region carried the poll attributes, but the page never loaded `table-poll.js`, so the region did not refresh until a reload. Present mode was not affected. A refresh now keeps the reader's place: a typed filter stays applied, with its "no match" message, the refresh waits while the filter box has focus, and the bracket keeps its horizontal scroll. A board in a live session shows its filter box from the first row, because the class arrives while it is open.
+
+### Changed
+
+- **Mutation triage (#2535): the Core survivors and the equivalence ledger.** `AvatarCustomizationOpenTests` pins the open backdrops and the order the wardrobe choices are applied in. The ledger entry for the docstring guard in `NotebookExtraction.swift` is re-keyed to the current source, and the unreachable fallback in `writeStructuredRunnerLog` is recorded as unkillable with the reason.
+
+### Changed
+
+- **Mutation triage (#2535): the runner's startup decisions have tests.** The process-inspection label, the `--worker-secret` flag use and the container memory budget check moved into functions a test can call, and `WorkerCommandStartupTests` pins them together with the job-limit validation, the startup log fields, the job-cgroups warning and the SIGTERM drain.
+
+### Changed
+
+- **Mutation triage (#2535): the sandbox probes, the job cgroup files and the runner's last log line have tests.** The probe verdict and the probe directory are shared helpers of `SandboxedScriptRunner`, and new tests pin them, the `JobCgroup` control-file write and removal, the stream count of `ScriptCapture`, the `runner_shutdown` status and the capability-probe timeout log.
+
+
 ## [0.5.646] - 2026-10-14
 
 ### Changed
