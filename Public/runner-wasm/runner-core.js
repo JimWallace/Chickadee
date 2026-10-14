@@ -1296,7 +1296,6 @@ async function createInstantiator(options, swift) {
     }
   };
   const __bjs_codec_Array_M10RunnerWasmT11JSSuiteItem = __bjs_arrayCodec(__bjs_codec_M10RunnerWasmT11JSSuiteItem);
-  const __bjs_codec_Array_String = __bjs_arrayCodec(__bjs_stringCodec);
   const __bjs_codec_M10RunnerWasmT23JSCompositeContribution = {
     lower: (v) => {
       structHelpers.M10RunnerWasmT23JSCompositeContribution.lower(v);
@@ -1307,6 +1306,7 @@ async function createInstantiator(options, swift) {
     }
   };
   const __bjs_codec_Optional_M10RunnerWasmT23JSCompositeContribution = __bjs_optionalCodec(__bjs_codec_M10RunnerWasmT23JSCompositeContribution);
+  const __bjs_codec_Array_String = __bjs_arrayCodec(__bjs_stringCodec);
   const __bjs_codec_Optional_String = __bjs_optionalCodec(__bjs_stringCodec);
   const __bjs_codec_Optional_Double = __bjs_optionalCodec(__bjs_primitiveCodecs.Double);
   const __bjs_codec_Optional_Int = __bjs_optionalCodec(__bjs_primitiveCodecs.Int);
@@ -2035,7 +2035,7 @@ async function createInstantiator(options, swift) {
 }
 
 // .build/plugins/PackageToJS/outputs/Package/instantiate.js
-var MODULE_PATH = "RunnerWasm.84fd7fdcee9e.wasm";
+var MODULE_PATH = "RunnerWasm.55cdc170e81f.wasm";
 async function instantiate(options) {
   const { instantiator, ...result } = await _instantiate(options);
   options.wasi.initialize(result.instance);
@@ -3443,7 +3443,7 @@ async function initBrowser(_options) {
   };
   let module = options.module;
   if (!module) {
-    module = fetch(new URL("RunnerWasm.84fd7fdcee9e.wasm", import.meta.url));
+    module = fetch(new URL("RunnerWasm.55cdc170e81f.wasm", import.meta.url));
   }
   const instantiateOptions = await defaultBrowserSetup({
     module,
