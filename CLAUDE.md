@@ -367,9 +367,9 @@ greeting. The example below does so in R."
 - Swift 6, strict concurrency. The product targets also turn on the upcoming
   features `ExistentialAny` (write `any P`) and `MemberImportVisibility` (import
   each module whose members a file uses), through `sourceSettings` in
-  `Package.swift`. Import `Foundation`, not `FoundationEssentials`, and
-  `NIOFoundationCompat`, not `NIOFoundationEssentialsCompat`: the Essentials
-  modules are Linux-only names. No `@unchecked Sendable` except on a Fluent
+  `Package.swift`. Import the umbrella modules `Foundation` and
+  `NIOFoundationCompat`, not the split `FoundationEssentials` and
+  `NIOFoundationEssentialsCompat` modules that a fix-it suggests on Linux. No `@unchecked Sendable` except on a Fluent
   `Model` class, where the reason is always the same (Fluent's property
   wrappers are what the compiler cannot check). Use an actor or a `Mutex`
   instead. `scripts/check-unchecked-sendable.sh` fails `format-lint` on any
