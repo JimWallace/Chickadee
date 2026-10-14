@@ -174,7 +174,7 @@ func stageBreakdown(for metric: JobExecutionMetric) -> StageBreakdown? {
         downloadMs.map { "dl \(formatMs($0))" },
         prepMs.map { "prep \(formatMs($0))" },
         makeMs.map { "make \(formatMs($0))" },
-    ].compactMap { $0 }
+    ].compactMap(\.self)
 
     guard !parts.isEmpty else { return nil }
     return StageBreakdown(
@@ -192,7 +192,7 @@ func average(_ values: [Int]) -> Int? {
 }
 
 func sum(_ values: [Int?]) -> Int? {
-    let present = values.compactMap { $0 }
+    let present = values.compactMap(\.self)
     guard !present.isEmpty else { return nil }
     return present.reduce(0, +)
 }

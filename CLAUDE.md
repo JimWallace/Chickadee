@@ -392,6 +392,8 @@ greeting. The example below does so in R."
   complementary: swift-format owns formatting, SwiftLint owns correctness;
   overlapping rules are disabled in `.swiftlint.yml`. CI enforces SwiftLint
   as a step in the `format-lint` job (alongside `scripts/lint.sh`).
+  `Tests/.swiftlint.yml` turns off the modern-idiom rules that have findings
+  in existing tests, until the maintainer approves those test edits.
   `scripts/swiftlint.sh` passes `--strict` (every reported issue, warning
   or error, fails the build), keeping the codebase at zero violations
   going forward. If a structural-rule warning threshold (e.g.

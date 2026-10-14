@@ -489,7 +489,7 @@ extension SSOAuthRoutes {
                 userIdentifier.normalizedIdentityKey(),
                 email?.normalizedIdentityKey(),
             ]
-            .compactMap { $0 }
+            .compactMap(\.self)
         )
 
         // Only admins are SSO-assignable. Instructor authority is per-course

@@ -109,7 +109,7 @@ enum AchievementsEditing {
         // so an individual badge or a record carrying one would save cleanly and
         // never fire for anyone. Refuse it here: the editor hides the option
         // off-scope, but MCP writes the row as JSON and has no dropdown.
-        if scope != .classWide, let offending = conditions.first(where: { $0.signal.readsTheWholeClass }) {
+        if scope != .classWide, let offending = conditions.first(where: \.signal.readsTheWholeClass) {
             throw WebAssignmentError.invalidParameter(
                 name: "signal",
                 reason: "'\(offending.signal.rawValue)' reads the whole class, so it can only be "

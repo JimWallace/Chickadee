@@ -128,7 +128,7 @@ extension AdminRoutes {
     }
 
     private func fetchUsers(req: Request, jobs: [JobExecutionMetric]) async throws -> [UUID: APIUser] {
-        let userIDs = Array(Set(jobs.compactMap { $0.userID }))
+        let userIDs = Array(Set(jobs.compactMap(\.userID)))
         let users =
             userIDs.isEmpty
             ? []
@@ -299,10 +299,10 @@ extension AdminRoutes {
     ) -> AdminRunnerSummary {
         let overheadSamples = recentJobs.compactMap { overheadMs(for: $0) }
         let stageBreakdowns = recentJobs.map(stageBreakdown(for:))
-        let cacheFlagged = recentJobs.compactMap { $0.testSetupCacheHit }
+        let cacheFlagged = recentJobs.compactMap(\.testSetupCacheHit)
         let cacheHitRateFormatted: String? = {
             guard !cacheFlagged.isEmpty else { return nil }
-            let hits = cacheFlagged.filter { $0 }.count
+            let hits = cacheFlagged.filter(\.self).count
             let pct = Int((Double(hits) / Double(cacheFlagged.count) * 100).rounded())
             return "\(pct)% (\(hits)/\(cacheFlagged.count))"
         }()

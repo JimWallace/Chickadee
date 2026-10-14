@@ -71,6 +71,6 @@ struct BundleAssetCacheMiddleware: AsyncMiddleware {
             return false
         }
         let hashSegment = parts[parts.count - 2]
-        return hashSegment.count >= 7 && hashSegment.allSatisfy { $0.isHexDigit }
+        return hashSegment.count >= 7 && hashSegment.allSatisfy(\.isHexDigit)
     }
 }

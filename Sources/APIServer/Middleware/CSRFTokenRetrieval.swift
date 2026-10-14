@@ -53,7 +53,7 @@ private struct CSRFBodyField: Decodable {
 /// Retrieves the CSRF token from a request header or the `_csrf` body field,
 /// logging a structured diagnostic when neither is present.
 func chickadeeCSRFTokenRetrieval(_ request: Request) async throws -> String {
-    let headerNames = Set(request.headers.map { $0.name })
+    let headerNames = Set(request.headers.map(\.name))
     if let key = csrfHeaderKeys.intersection(headerNames).first,
         let token = request.headers[key].first
     {

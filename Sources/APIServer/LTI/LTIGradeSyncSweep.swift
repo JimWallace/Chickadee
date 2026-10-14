@@ -227,7 +227,7 @@ extension Application {
     var ltiGradeSyncSweep: LTIGradeSyncSweep {
         LTIGradeSyncSweep(
             db: db, logger: logger, client: ltiServiceClient,
-            keys: { [self] in try await self.ltiToolKeyAuthority() })
+            keys: { [self] in try await ltiToolKeyAuthority() })
     }
 
     /// The AGS sweep. It runs on every deployment and finds an empty queue

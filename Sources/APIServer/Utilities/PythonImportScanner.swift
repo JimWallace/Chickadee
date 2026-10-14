@@ -145,7 +145,7 @@ enum PythonImportScanner {
             guard let name = rest.split(whereSeparator: { $0 == " " || $0 == "\t" }).first else {
                 return []
             }
-            return [topLevel(of: String(name))].compactMap { $0 }
+            return [topLevel(of: String(name))].compactMap(\.self)
         }
         if let rest = afterKeyword("import", in: trimmed) {
             // `import a.b as ab, c` — split on commas, take each name's head,

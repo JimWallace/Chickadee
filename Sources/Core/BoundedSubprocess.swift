@@ -117,6 +117,6 @@ public func runBounded(
         let first = try await group.next()
         group.cancelAll()
         while (try? await group.next()) != nil {}
-        return first.flatMap { $0 }
+        return first.flatMap(\.self)
     }
 }

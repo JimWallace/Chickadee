@@ -134,7 +134,7 @@ func evaluateClassGoalAchievements(
         guard let setup = setupByID[assignment.testSetupID],
             let props = decodeManifest(fromJSON: setup.manifest)
         else { return nil }
-        let goals = props.achievements.filter { $0.isClassGoal }
+        let goals = props.achievements.filter(\.isClassGoal)
         guard !goals.isEmpty else { return nil }
         return GoalCarryingAssignment(
             assignment: assignment, setup: setup, properties: props, goals: goals)

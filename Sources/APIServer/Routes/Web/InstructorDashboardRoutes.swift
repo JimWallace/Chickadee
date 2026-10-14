@@ -130,7 +130,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         )
 
         let fmt = waterlooDateTimeFormatter()
-        let allSetupIDs = allSetups.compactMap { $0.id }
+        let allSetupIDs = allSetups.compactMap(\.id)
         let setupIndexByID: [String: Int] = Dictionary(
             uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
         )

@@ -362,7 +362,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         }
         let decoded = try await response.decodeContent(WhoAmIResponse.self)
         let display = [decoded.firstName, decoded.lastName]
-            .compactMap { $0 }
+            .compactMap(\.self)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         return BrightSpaceWhoAmI(
@@ -420,7 +420,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 orgUnitID: orgUnitID, status: Int(response.status.code))
         }
         let decoded = try await response.decodeContent([GradeObjectJSON].self)
-        return decoded.map { $0.asGradeObject }
+        return decoded.map(\.asGradeObject)
     }
 
     /// Fetches one grade item's metadata. Returns nil on 404 (item not found in

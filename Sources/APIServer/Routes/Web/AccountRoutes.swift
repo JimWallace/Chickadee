@@ -40,7 +40,7 @@ struct AccountRoutes: RouteCollection {
             .filter(\.$userID == userID)
             .with(\.$course)
             .all()
-        let enrolledIDs = Set(enrollments.compactMap { $0.$course.id })
+        let enrolledIDs = Set(enrollments.compactMap(\.$course.id))
 
         // Slip-day balances per enrolled course (#1228): one query for every
         // unrefunded spend, grouped by course in memory.

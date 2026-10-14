@@ -115,7 +115,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// response.  Nil entries are skipped; with none left, nothing changes.
     static func allowFrameAncestors(_ origins: [String?], on request: Request) {
         var allowed = request.storage[FrameAncestorsKey.self] ?? []
-        for origin in origins.compactMap({ $0 }) where !allowed.contains(origin) {
+        for origin in origins.compactMap(\.self) where !allowed.contains(origin) {
             allowed.append(origin)
         }
         request.storage[FrameAncestorsKey.self] = allowed

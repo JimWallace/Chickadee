@@ -90,7 +90,7 @@ public struct CompositeContribution: Equatable, Sendable {
 /// four, only `A–Z a–z 0–9 + /`, and at most two `=` at the end.
 func base64DecodedByteCount(_ text: String) -> Int? {
     let bytes = text.utf8
-    guard bytes.count % 4 == 0 else { return nil }
+    guard bytes.count.isMultiple(of: 4) else { return nil }
     var padding = 0
     for byte in bytes {
         if byte == UInt8(ascii: "=") {

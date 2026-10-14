@@ -341,7 +341,7 @@ extension DraftAssignmentRoutes {
         await extractSupportFilesToSharedDirectory(
             zipPath: paths.zipPath,
             setupID: paths.setupID,
-            testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
+            testSuiteScripts: Set(setupPackage.testSuites.map(\.script)),
             testSetupsDirectory: req.application.testSetupsDirectory
         )
 

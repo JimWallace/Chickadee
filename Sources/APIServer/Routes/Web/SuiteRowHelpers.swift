@@ -49,7 +49,7 @@ func currentSetupFiles(
         else {
             return []
         }
-        return props.testSuites.enumerated().map { (idx, item) in
+        return props.testSuites.enumerated().map { idx, item in
             ManifestSuiteRow(
                 script: item.script, tier: item.tier.rawValue, order: idx + 1,
                 dependsOn: item.dependsOn, points: item.points, name: item.name,

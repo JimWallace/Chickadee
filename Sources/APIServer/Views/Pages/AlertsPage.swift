@@ -149,7 +149,7 @@ struct AlertsPage: HTML {
     private var firingsSection: some HTML {
         section(.class("page-section")) {
             h2 { "Recent firings" }
-            if firingDays.allSatisfy({ $0.rows.isEmpty }) {
+            if firingDays.allSatisfy(\.rows.isEmpty) {
                 p(.class("empty")) { "No alerts have fired since startup." }
             } else {
                 table(.class("results-table section-items section-items--manage")) {

@@ -31,7 +31,7 @@ func classGoalBonusPoints(
     testSetupID: String, props: TestProperties?, on db: Database
 ) async throws -> Double {
     guard let props else { return 0 }
-    let goals = props.achievements.filter { $0.isClassGoal }
+    let goals = props.achievements.filter(\.isClassGoal)
     guard !goals.isEmpty else { return 0 }
 
     let rows = try await APIAchievementResult.query(on: db)

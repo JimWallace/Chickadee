@@ -138,7 +138,7 @@ func mergeExistingFilesIntoSuiteFiles(
     }
 
     var mergedFiles = suiteFiles
-    let uploadedNames = Set(suiteFiles.map { $0.filename })
+    let uploadedNames = Set(suiteFiles.map(\.filename))
 
     for i in rows.indices {
         guard rows[i].index == nil, let name = rows[i].name else { continue }

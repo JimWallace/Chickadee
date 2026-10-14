@@ -85,7 +85,7 @@ struct AdminRoutes: RouteCollection {
             try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
         // Submission counts need the (active) course IDs, so they run after the
         // course fetch resolves.
-        let activeCourseIDs = allCourses.filter { !$0.isArchived }.compactMap { $0.id }
+        let activeCourseIDs = allCourses.filter { !$0.isArchived }.compactMap(\.id)
         let submissionCounts = try await SubmissionRetentionService.submissionCountsByCourse(
             courseIDs: activeCourseIDs, on: req.db)
         let bsSyncEnabled = req.application.brightSpaceAppCredentials != nil
@@ -425,7 +425,7 @@ struct AdminRoutes: RouteCollection {
             .with(\.$course)
             .all()
 
-        let enrolledIDs = Set(enrollments.map { $0.$course.id })
+        let enrolledIDs = Set(enrollments.map(\.$course.id))
 
         let enrolledRows =
             enrollments

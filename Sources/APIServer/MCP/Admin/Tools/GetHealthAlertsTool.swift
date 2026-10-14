@@ -66,6 +66,6 @@ struct GetHealthAlertsTool: DiagnosticTool {
                 summary: evaluation.summary,
                 details: evaluation.details)
         }
-        return Output(anyFiring: rules.contains { $0.firing }, rules: rules)
+        return Output(anyFiring: rules.contains(where: \.firing), rules: rules)
     }
 }

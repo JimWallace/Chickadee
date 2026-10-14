@@ -282,7 +282,7 @@ enum AssignmentAuthoringService {
                     testSetupsDirectory: directories.setups)
             }
             let createdPaths =
-                [dstZip] + [newNotebookPath, copiedSolutionPath].compactMap { $0 }
+                [dstZip] + [newNotebookPath, copiedSolutionPath].compactMap(\.self)
                 + [directories.setups + "shared/\(newSetupID)/"]
             return AuthoredAssignment(assignment: assignment, setup: newSetup, createdPaths: createdPaths)
         } catch {

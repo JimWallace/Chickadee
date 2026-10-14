@@ -160,7 +160,7 @@ extension WebRoutes {
     /// counting distinct seeds over every match counts each entrant once.
     static func entrantCount(_ tournament: TournamentPresentation) -> Int {
         let seeds = tournament.rounds.flatMap(\.matches).flatMap { [$0.home?.seed, $0.away?.seed] }
-        return Set(seeds.compactMap { $0 }).count
+        return Set(seeds.compactMap(\.self)).count
     }
 }
 

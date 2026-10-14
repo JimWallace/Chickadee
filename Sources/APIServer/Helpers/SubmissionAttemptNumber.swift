@@ -40,7 +40,7 @@ func saveSubmissionWithNextAttemptNumber(
                 _ = query.filter(\.$userID == userID)
             }
             // max() on an optional field yields Int?? — flatten both levels.
-            let maxAttempt = (try await query.max(\.$attemptNumber)).flatMap { $0 } ?? 0
+            let maxAttempt = (try await query.max(\.$attemptNumber)).flatMap(\.self) ?? 0
 
             submission.attemptNumber = maxAttempt + 1
             try await submission.save(on: tx)

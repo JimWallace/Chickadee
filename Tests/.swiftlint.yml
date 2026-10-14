@@ -11,3 +11,13 @@ disabled_rules:
   # making the code easier to maintain.  The rule still applies to
   # Sources/.
   - type_body_length
+  # Modern-idiom rules that the root config turns on, with findings in
+  # existing tests. Never change an existing test without the approval of
+  # the maintainer, so these stay off for Tests/ until that approval.
+  - redundant_self
+  - prefer_key_path
+  - implicitly_unwrapped_optional
+  - direct_return
+  - optional_enum_case_matching
+  - superfluous_else
+  - legacy_multiple

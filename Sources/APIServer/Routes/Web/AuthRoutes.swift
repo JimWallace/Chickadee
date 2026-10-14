@@ -296,7 +296,7 @@ struct AuthRoutes: RouteCollection {
             let tokensToRevoke: [(token: String, hint: String)] = [
                 accessToken.map { ($0, "access_token") },
                 refreshToken.map { ($0, "refresh_token") },
-            ].compactMap { $0 }
+            ].compactMap(\.self)
 
             if !tokensToRevoke.isEmpty {
                 await app.backgroundWork.start {

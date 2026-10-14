@@ -114,8 +114,8 @@ extension AdminRoutes {
     /// A token lifetime in words: "1 hour", "30 minutes", "90 seconds".
     static func lifetimeText(seconds: Int) -> String {
         func unit(_ value: Int, _ name: String) -> String { "\(value) \(name)\(value == 1 ? "" : "s")" }
-        if seconds >= 3600, seconds % 3600 == 0 { return unit(seconds / 3600, "hour") }
-        if seconds >= 60, seconds % 60 == 0 { return unit(seconds / 60, "minute") }
+        if seconds >= 3600, seconds.isMultiple(of: 3600) { return unit(seconds / 3600, "hour") }
+        if seconds >= 60, seconds.isMultiple(of: 60) { return unit(seconds / 60, "minute") }
         return unit(seconds, "second")
     }
 

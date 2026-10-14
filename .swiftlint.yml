@@ -2,8 +2,8 @@
 #
 # Style/formatting is owned by swift-format (.swift-format at repo root).
 # SwiftLint covers the quality / correctness layer that swift-format does not:
-# force unwraps, dead bindings, .isEmpty vs count == 0, first(where:), unused
-# imports, function complexity, etc.
+# force unwraps, dead bindings, .isEmpty vs count == 0, first(where:),
+# function complexity, etc.
 #
 # Run locally:  scripts/swiftlint.sh
 # Run formatter: scripts/format.sh   (swift-format, separate concern)
@@ -20,7 +20,7 @@ disabled_rules:
   - statement_position
   - colon
   - comma
-  - operator_whitespace
+  - function_name_whitespace
   - return_arrow_whitespace
   - line_length        # swift-format owns the 120-char limit
   - todo               # repo has legitimate TODO/FIXME comments we keep
@@ -54,7 +54,6 @@ opt_in_rules:
   - redundant_nil_coalescing
   - redundant_type_annotation
   - toggle_bool
-  - unused_import
   - joined_default_parameter
   - sorted_first_last
   - static_operator
@@ -62,6 +61,36 @@ opt_in_rules:
   - prefer_zero_over_explicit_init
   - override_in_extension
   - prohibited_super_call
+  # Modern-idiom rules. Their findings in Sources/ were fixed when they were
+  # turned on, most by `swiftlint --fix`. Tests/.swiftlint.yml turns
+  # off the ones that have findings in existing tests, until the maintainer
+  # approves those test edits.
+  - shorthand_optional_binding
+  - shorthand_argument
+  - self_binding
+  - prefer_key_path
+  - prefer_self_type_over_type_of_self
+  - redundant_self
+  - direct_return
+  - superfluous_else
+  - unneeded_parentheses_in_closure_argument
+  - optional_enum_case_matching
+  - implicitly_unwrapped_optional
+  - legacy_multiple
+  - reduce_into
+  - flatmap_over_map_reduce
+  - return_value_from_void_function
+  - modifier_order
+  - lower_acl_than_parent
+  - convenience_type
+  - fatal_error_message
+  - discouraged_assert
+  # Concurrency. async_without_await is NOT enabled: most of what it flags
+  # are protocol witnesses (Fluent revert, JWT verify, Vapor lifecycle
+  # hooks) and helpers that are async on purpose for Vapor 5, such as
+  # Request.decodeContent. Its fix removes `async` from all of them.
+  - unhandled_throwing_task
+  - unowned_variable_capture
   # NOTE: discouraged_optional_boolean and discouraged_optional_collection
   # are intentionally NOT enabled.  They conflict with two well-established
   # patterns in this codebase:
@@ -74,6 +103,12 @@ opt_in_rules:
   #      collapses to false / [] if the rule's advice were followed.
   # Re-enable only after auditing every Codable schema for absence-vs-
   # default-value semantics.
+
+# Analyzer rules need a compiler log and run only under `swiftlint analyze`.
+# CI does not run that command, so this rule does not run in CI. It was in
+# opt_in_rules before, where it never ran at all.
+analyzer_rules:
+  - unused_import
 
 excluded:
   - .build

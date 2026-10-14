@@ -538,7 +538,7 @@ struct ReorderCourseSectionsTool: ContentTool {
         let sections = try await APICourseSection.query(on: context.db)
             .filter(\.$courseID == courseID)
             .all()
-        let existing = Set(sections.compactMap { $0.id })
+        let existing = Set(sections.compactMap(\.id))
         guard existing == Set(uuids) else {
             throw MCPToolError.invalidArguments(
                 detail: "orderedSectionIDs must list exactly the course's current section ids "

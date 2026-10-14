@@ -612,7 +612,7 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
         let props = decodeManifest(from: manifestData)
     else { return }
 
-    let testScriptNames = Set(props.testSuites.map { $0.script })
+    let testScriptNames = Set(props.testSuites.map(\.script))
     let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
     // Grader-only support files (e.g. an answer-key helper or a reserved
     // holdout) reach the worker via the zip but are withheld from every
@@ -621,7 +621,7 @@ func createSupportFileSymlinks(setup: APITestSetup, studentDir: String, applicat
     let graderOnly = props.graderOnlyFileSet
     // Dataset files are written as real per-student files by writeDatasetFiles;
     // skip symlinking them here so the symlink doesn't shadow the real file.
-    let datasetFilenames = Set(props.datasets.map { $0.file })
+    let datasetFilenames = Set(props.datasets.map(\.file))
     // Cached: this pass runs on every notebook visit (the symlinks are
     // idempotent), so listing the zip fresh each time would spawn a serialized
     // `unzip` subprocess per load. The cache busts when the zip's mtime/size

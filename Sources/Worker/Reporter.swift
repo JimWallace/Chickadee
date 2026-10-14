@@ -121,7 +121,7 @@ struct Reporter: Sendable {
                     writeStructuredRunnerLog(
                         event: event,
                         fields: [
-                            "runner_id": self.workerID,
+                            "runner_id": workerID,
                             "failure_stage": context.stage.rawValue,
                             "attempt": context.attempt,
                             "max_attempts": context.maxAttempts,
@@ -132,7 +132,7 @@ struct Reporter: Sendable {
                 },
                 operation: {
                     var signed = request
-                    self.signer.sign(&signed)
+                    signer.sign(&signed)
                     let result = await Self.attemptReport(session: session, request: signed, expectedStatus: 200)
                     switch result {
                     case .success:

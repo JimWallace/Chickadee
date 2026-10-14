@@ -218,7 +218,7 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
             let pairs = o.sorted { $0.key < $1.key }
             guard !pairs.isEmpty else { return "containers.Map()" }
             let keys = pairs.map { CStyleStringEscaping.octave.quotedLiteral($0.key) }.joined(separator: ", ")
-            let values = pairs.map { $0.value.octaveLiteral }.joined(separator: ", ")
+            let values = pairs.map(\.value.octaveLiteral).joined(separator: ", ")
             return "containers.Map({\(keys)}, {\(values)})"
         }
     }

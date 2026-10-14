@@ -105,7 +105,8 @@ struct CompositeSnapshot: Content, Equatable {
         }
 
         let fills = onlyUserID == nil ? try await emptySlotFills(scope, shown: shown, on: db) : Fills()
-        let spares = fills.spares, references = fills.references
+        let spares = fills.spares
+        let references = fills.references
         // A passing spare replaces a failed contribution on show.
         shown = shown.filter { spares[$0.key] == nil }
 
@@ -165,13 +166,14 @@ struct CompositeSnapshot: Content, Equatable {
     private static func emptySlotFills(
         _ scope: Scope, shown: [Int: APICompositeContribution], on db: any Database
     ) async throws -> Fills {
-        let spec = scope.spec, count = spec.layout.slotCount
+        let spec = scope.spec
+        let count = spec.layout.slotCount
         let shape = spec.contribution
         let length = (shape.width * shape.height * shape.frames * shape.format.channels + 2) / 3 * 4
         func fits(_ slot: Int, _ data: String?) -> Bool { slot < count && data?.utf8.count == length }
 
         var fills = Fills()
-        let filled = Set(shown.filter { $0.value.passed }.keys)
+        let filled = Set(shown.filter(\.value.passed).keys)
         for row in try await APICompositeSpare.query(on: db).filter(\.$assignmentID == scope.assignmentID).all()
         where row.passed && !filled.contains(row.slot) && fits(row.slot, row.data) {
             fills.spares[row.slot] = row
