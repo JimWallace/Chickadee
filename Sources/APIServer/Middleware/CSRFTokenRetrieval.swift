@@ -13,7 +13,7 @@
 //    requires the first body chunk to exactly equal Content-Length; anything
 //    else — a body split across TCP reads, or chunked transfer-encoding —
 //    is dispatched immediately as a *streaming* body). Middleware runs before
-//    the route's `.collect` step, so a synchronous `request.content.get` sees
+//    the route's `.collect` step, so a synchronous body read sees
 //    `body.data == nil` for every such request and the library's default
 //    retrieval 403s it with "No CSRF token provided." even though the form
 //    field is on the wire. That split is routine on real networks/proxies and
@@ -40,6 +40,16 @@ private let csrfHeaderKeys: Set<String> = [
     "_csrf", "csrf-token", "xsrf-token", "x-csrf-token", "x-xsrf-token", "x-csrftoken",
 ]
 
+/// The `_csrf` form field, read through `decodeContent`: Vapor 5 has no
+/// `content.get(_:at:)`.
+private struct CSRFBodyField: Decodable {
+    let token: String
+
+    enum CodingKeys: String, CodingKey {
+        case token = "_csrf"
+    }
+}
+
 /// Retrieves the CSRF token from a request header or the `_csrf` body field,
 /// logging a structured diagnostic when neither is present.
 func chickadeeCSRFTokenRetrieval(_ request: Request) async throws -> String {
@@ -53,14 +63,13 @@ func chickadeeCSRFTokenRetrieval(_ request: Request) async throws -> String {
     // The body may still be streaming at middleware time (see header comment);
     // collect it before reading. Same size cap as the route's own `.collect`
     // step, and an oversized body fails here exactly as it would there.
-    _ = try await request.body.collect(max: request.application.routes.defaultMaxBodySize.value).get()
+    try await request.collectBody()
 
-    // `content.get` returns "" for a present-but-empty field (which then
-    // fails validation as "Invalid"), and throws only when the field is
-    // absent or the body can't be decoded — exactly the cases we want to
-    // surface.
-    if let token = try? request.content.get(String.self, at: "_csrf") {
-        return token
+    // A present-but-empty field decodes as "" (which then fails validation as
+    // "Invalid"); the decode throws only when the field is absent or the body
+    // can't be decoded — exactly the cases we want to surface.
+    if let field = try? await request.decodeContent(CSRFBodyField.self) {
+        return field.token
     }
 
     let contentType = request.headers.first(name: .contentType) ?? "none"

@@ -1,0 +1,9 @@
+# Vapor 5 has no content.get(_:at:). A new use compiles on Vapor 4 and is one
+# more site to rewrite at the move.
+guard="scripts/check-vapor5-readiness.sh"
+files="Sources/APIServer/Utilities/BlockingWork.swift"
+description="a body field read with content.get"
+expect="a body is decoded directly"
+apply() {
+    printf '\nimport Vapor\n\nfunc guardFixture(_ req: Request) throws -> String {\n    try req.content.get(String.self, at: "x")\n}\n' >> Sources/APIServer/Utilities/BlockingWork.swift
+}

@@ -1,0 +1,9 @@
+# Vapor 5 has no EventLoopFuture. Waiting on one with .get() compiles on
+# Vapor 4 and hides the future from the event-loop rule.
+guard="scripts/check-vapor5-readiness.sh"
+files="Sources/APIServer/Utilities/BlockingWork.swift"
+description="a request body collected through the future API"
+expect="code waits on an EventLoopFuture"
+apply() {
+    printf '\nimport Vapor\n\nfunc guardFixture(_ req: Request) async throws {\n    _ = try await req.body.collect(max: 1).get()\n}\n' >> Sources/APIServer/Utilities/BlockingWork.swift
+}
