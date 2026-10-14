@@ -162,8 +162,9 @@ and the ambient rate stays measured rather than silently absorbed.
 *Correction (2026-09-20):* the probe had **no schedule** when this policy
 was written, and never had one — its only hard-zero runs were dispatches
 nobody made. The 30/30 scheduled hard-zero reading below is `editor-smoke`'s,
-which does have one. `grading-hang-probe.yml` now runs weekly (Monday
-04:17 UTC, ahead of the telemetry tally), so the sentence above is true from
+which does have one. The grading-hang probe now runs weekly (Monday
+04:17 UTC, ahead of the telemetry tally; the `grading-probe` job of
+`browser-probes.yml` since the probe workflows were combined), so the sentence above is true from
 that date on.
 
 **First chromium sighting (2026-08-04, PR #1261, run 30867456697).**

@@ -40,7 +40,7 @@
 // measured rate a true single-session figure — production telemetry corroborates
 // that real Safari students rarely hit it.
 //
-// DIAGNOSTIC harness — run via the `editor-exec-probe` workflow, deliberately NOT
+// DIAGNOSTIC harness — run via the `exec-probe` job of browser-probes.yml, deliberately NOT
 // wired into the required editor-smoke gate while we hunt the root cause, so an
 // intermittent hang can't flake the merge gate. Seeds through the real HTTP API
 // exactly like notebook-page-check.mjs (instructor → course → browser test setup

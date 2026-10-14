@@ -19,7 +19,7 @@ name: Browser grading smoke test
 # boot, the vendored bootstrap, and the workspace writer, so a change to any of
 # those can break the others.
 #
-# REQUIRED-GATE DESIGN, matching editor-smoke.yml: the trigger is deliberately
+# REQUIRED-GATE DESIGN, matching browser-probes.yml: the trigger is deliberately
 # NOT path-filtered, because a path-filtered workflow is *skipped* on unrelated
 # PRs and a required status check that is skipped blocks those merges forever.
 # Instead this runs on every PR, a `changes` job decides whether the R grading

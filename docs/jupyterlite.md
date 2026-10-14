@@ -160,7 +160,8 @@ answer:
 | WebKit (Safari) | **non-isolated on purpose** | **service worker**, which `JupyterLiteConfigFlagMiddleware` re-enables *per request* for this engine |
 
 So "the service worker is disabled" is true of Chromium only. Both paths are
-covered by a blocking `SMOKE_KERNEL=xpython` probe in `editor-smoke.yml`, run on
+covered by a blocking `SMOKE_KERNEL=xpython` probe in the `smoke` job of
+`browser-probes.yml`, run on
 both engines because the transports fail independently.
 
 

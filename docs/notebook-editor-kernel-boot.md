@@ -196,7 +196,7 @@ Prefer plan C; this is a per-browser safety net only.
 > against a kernel students no longer boot. What `input()` does under
 > xeus-python does on each engine is now **measured**: `input()` round-trips on
 > both, over SAB on Chromium and over the service worker on WebKit. A blocking
-> probe (`SMOKE_KERNEL=xpython`) keeps it that way in `editor-smoke.yml`.
+> probe (`SMOKE_KERNEL=xpython`) keeps it that way in `browser-probes.yml`.
 
 Now that cross-origin isolation is unconditional and `SharedArrayBuffer` carries
 the kernel's synchronous stdin/Drive, the JupyterLite **service worker is
@@ -318,8 +318,8 @@ the same `kernel_error` pipeline, so **success ≈ attempts − failures** — a
 fall toward zero once the root cause is fixed, the headline KPI for that work
 (`get_browser_diagnostics` `bySource`).
 
-**CI reproducer (this change).** `editor-exec-check.mjs` (the `editor-exec-probe`
-workflow, non-gating) opens the *real* notebook page, waits for `kernel_idle`,
+**CI reproducer (this change).** `editor-exec-check.mjs` (the `exec-probe` job of
+`browser-probes.yml`, non-gating) opens the *real* notebook page, waits for `kernel_idle`,
 then runs an editor cell and measures the hang rate per engine — the post-idle
 editor-cell execute the required smoke never exercised (it checks boot + browser
 grading, never an editor cell). While the root cause is open a reproduced hang is

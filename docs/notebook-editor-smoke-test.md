@@ -44,7 +44,8 @@ no course seeding). The original proposal follows for context.
 
 ## Make it a required gate — IMPLEMENTED (one setting left)
 
-The always-runs gate is now built into `editor-smoke.yml`. The workflow no longer
+The always-runs gate is now built into `browser-probes.yml` (it was
+`editor-smoke.yml` until the probe workflows were combined). The workflow no longer
 path-filters at the trigger; instead:
 
 1. a **`changes`** job decides whether the PR touched the editor/grading/isolation
