@@ -74,9 +74,9 @@ struct LeaderboardPage: HTML {
                 script(.src(page.asset("/class-composite-core.js"))) {}
                 script(.src(page.asset("/class-composite.js"))) {}
             }
-            if board.compositeBoard != nil {
-                // The canvas polls through table-poll.js, which then also
-                // runs the region poll this kind declares.
+            // The results region and the composite canvas refresh only
+            // through table-poll.js, which the base layout does not load.
+            if board.pollsLive || board.compositeBoard != nil {
                 script(.src(page.asset("/table-poll.js"))) {}
             }
         }

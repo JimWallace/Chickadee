@@ -68,8 +68,7 @@ extension WebRoutes {
             setup: setup, activity: activity, viewerID: user.id, includeNames: isStaff, on: req.db)
         let tournament =
             showsBracket
-            ? try await buildTournamentPresentation(
-                setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
+            ? try await buildTournamentPresentation(setup: setup, viewerID: user.id, includeNames: isStaff, on: req.db)
             : nil
         let union =
             showsUnion
@@ -78,6 +77,7 @@ extension WebRoutes {
                 allURL: "\(boardURL)?all=1", on: req.db)
             : nil
 
+        let pollsLive = activity.window.map { $0.state(at: Date()) != .afterClose } ?? false
         let listedCount = showsStandings ? standingsBoard.rankedCount : board.rankedCount
         let session = LiveSessionPresentation.make(activity)
         let presentation =
@@ -101,7 +101,9 @@ extension WebRoutes {
                 showingAll: showingAll && !isStaff,
                 allURL: "\(boardURL)?all=1",
                 boardURL: boardURL,
-                showFilter: showingAll && listedCount >= LeaderboardBoard.filterThreshold,
+                // A live board grows during the session, so it always has
+                // the box; a still one has it from the threshold up.
+                showFilter: showingAll && (listedCount >= LeaderboardBoard.filterThreshold || pollsLive),
                 filterPlaceholder: isStaff ? "Filter by handle or name…" : "Filter by handle…",
                 pollURL: showingAll && !isStaff
                     ? "\(boardURL)?fragment=body&all=1" : "\(boardURL)?fragment=body",
@@ -131,7 +133,7 @@ extension WebRoutes {
                 // just an open assignment and says nothing — while whether it
                 // refreshes is about whether anything can still change, which
                 // an open-ended session emphatically can.
-                pollsLive: activity.window.map { $0.state(at: Date()) != .afterClose } ?? false,
+                pollsLive: pollsLive,
                 hasPollUntil: activity.window?.closesAtISO != nil,
                 pollUntilISO: activity.window?.closesAtISO ?? "")
 

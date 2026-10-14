@@ -727,12 +727,15 @@ Every poll is conditional (ETag / 304) and carries `X-Background-Refresh: 1`,
 and it is suppressed while the tab is hidden, while focus is inside the
 element, while a `<details>` in it is open, and while its filter box has
 focus. Prefer the default `<tbody>` swap: a region swap destroys the whole
-subtree, so a sortable table inside one loses its click handlers and a filter
-box pointed into it stops finding its target — the file says so at
-`swapTargetFor`. Reach for `region` only when the rows do not move alone, as
-on a class activity's leaderboard, where the champion banner, the tournament
-status, the union count and the session countdown all change with the table
-beside them. Reach for `json` only for something the page draws rather than
+subtree, so a sortable table inside one loses its click handlers — the file
+says so at `swapTargetFor`. A region swap keeps two kinds of reader state: a
+filter box pointed at a table inside the region is applied again, with its
+no-match message, and its focus defers the poll; and each `.table-scroll` in
+the region keeps its horizontal scroll. A page with a polled element must load
+`table-poll.js`; the base layout does not. Reach for `region` only when the
+rows do not move alone, as on a class activity's leaderboard, where the
+champion banner, the tournament status, the union count and the session
+countdown all change with the table beside them. Reach for `json` only for something the page draws rather than
 renders: the class composite's canvas, whose pixels a region swap would throw
 away. It polls at once, then on the interval. Whatever the mode, keep a page's
 fixed chrome — its heading, its chips, its intro — OUTSIDE the polled element.

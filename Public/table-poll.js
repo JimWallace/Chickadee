@@ -54,9 +54,25 @@
         return document.querySelector('input[data-list-filter="' + table.id + '"]');
     }
 
+    // The filter boxes pointed at a table INSIDE a polled region. A region
+    // swap replaces that table, so `filterInputFor` (keyed on the polled
+    // element's own id) cannot find them: the leaderboard's filter box sits
+    // in the page's fixed chrome and points at `leaderboard-table`, which the
+    // region holds. Empty for every other element.
+    function regionFilterInputs(element) {
+        if (element.getAttribute('data-poll-swap') !== 'region') return [];
+        return Array.prototype.filter.call(
+            document.querySelectorAll('input[data-list-filter]'),
+            function (input) {
+                var target = document.getElementById(input.getAttribute('data-list-filter'));
+                return !!target && element.contains(target);
+            });
+    }
+
     function shouldSkip(table) {
         if (document.hidden) return true;
         if (table.contains(document.activeElement)) return true;
+        if (regionFilterInputs(table).indexOf(document.activeElement) !== -1) return true;
         // An open <details> is state the server does not know about: the
         // students table's pending-enrolment rows carry a registration panel,
         // and a repaint closes it mid-use. Focus alone did not cover this —
@@ -92,12 +108,10 @@
     // the whole table. `ChickadeeSortableTable.apply` re-sorts a table it
     // already enhanced, but `enhance()` binds the `.sort-header` clicks ONCE
     // at init, so a sortable table inside a polled region loses its sorting
-    // silently on the first repaint. `filterInputFor` keys on the polled
-    // element's id, so a filter box pointed at a table inside the region is
-    // not found and its empty state is not re-marked. Neither bites today —
-    // the one polled region holds plain `.results-table`s with no filter —
-    // and both are why a sortable or filterable table wants its own
-    // `data-poll-url` rather than a region around it.
+    // silently on the first repaint, which is why a sortable table wants its own
+    // `data-poll-url` rather than a region around it. A filter box pointed at
+    // a table inside the region is found by `regionFilterInputs`: the swap
+    // re-applies it, and its focus defers the poll, as for a table's own.
     //
     // The one way to get this wrong quietly: a non-table element that omits
     // `data-poll-swap="region"` looks for a `<tbody>`, finds none, and every
@@ -115,6 +129,21 @@
 
     function isJSON(element) {
         return element.getAttribute('data-poll-swap') === 'json';
+    }
+
+    function scrollPositions(target) {
+        if (!target.querySelectorAll) return [];
+        return Array.prototype.map.call(target.querySelectorAll('.table-scroll'), function (el) {
+            return el.scrollLeft;
+        });
+    }
+
+    function restoreScrollPositions(target, positions) {
+        if (!positions.length || !target.querySelectorAll) return;
+        var scrollers = target.querySelectorAll('.table-scroll');
+        for (var i = 0; i < scrollers.length && i < positions.length; i += 1) {
+            if (positions[i]) scrollers[i].scrollLeft = positions[i];
+        }
     }
 
     function refresh(table) {
@@ -153,7 +182,12 @@
                 return true;
             }
             var html = body;
+            // A region swap rebuilds every scroll container in it, so the
+            // reader's horizontal place in a wide table (the bracket) is put
+            // back by position.
+            var scrolled = scrollPositions(target);
             target.innerHTML = html;
+            restoreScrollPositions(target, scrolled);
             if (global.ChickadeeRelativeTime) {
                 global.ChickadeeRelativeTime.applyRelativeTimes(target);
             }
@@ -162,6 +196,9 @@
             }
             if (global.ChickadeeListFilter) {
                 global.ChickadeeListFilter.apply(filterInputFor(table));
+                regionFilterInputs(table).forEach(function (input) {
+                    global.ChickadeeListFilter.apply(input);
+                });
             }
             table.dispatchEvent(new CustomEvent('chickadee:table-repaint', { bubbles: true }));
             return true;
