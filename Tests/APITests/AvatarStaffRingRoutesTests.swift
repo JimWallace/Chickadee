@@ -74,7 +74,7 @@ import VaporTesting
 
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.contains("<use href=\"#av-ring-staff\" data-av-ring />"))
-            #expect(html.contains("Course staff wear the staff ring."))
+            #expect(html.contains("Course staff wear the staff ring in every course"))
             #expect(!html.contains("name=\"border\""))
             #expect(!html.contains("Locked rings will be earned"))
             // The backdrop stays theirs to choose.
@@ -118,27 +118,22 @@ import VaporTesting
         }
     }
 
-    @Test func lockedRingsAreShownDisabledAndRefused() async throws {
+    @Test func lockedRingsAreListedNotOfferedAndRefused() async throws {
         try await withAssignmentRoutesApp { app in
             let pupil = try await enroll("ring_locked", on: app)
             let cookie = try await loginUser(
                 username: pupil.username, password: "testpassword", role: "user", on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
+            // A locked ring is listed under "Not open yet" and is not an input.
             for value in ["spectrum", "twotone", "stitched"] {
-                #expect(
-                    html.contains(
-                        ##"data-av-ring="#av-ring-\##(value)" name="border" value="\##(value)" data-av-token="--avatar-border-none" disabled>"##
-                    ),
-                    "\(value) is not shown disabled")
+                #expect(!html.contains(##"name="border" value="\##(value)""##), "\(value) is an input")
+                #expect(html.contains(##"<use href="#av-ring-\##(value)" />"##), "\(value) is not shown")
             }
-            #expect(html.contains("Spectrum (locked)"))
-            #expect(html.contains("Two-tone (locked)"))
-            #expect(html.contains("Stitched (locked)"))
-            #expect(html.contains("Locked rings will be earned through course achievements."))
-            #expect(
-                !html.contains(
-                    ##"value="rainbow" data-av-token="--avatar-border-none" disabled"##
-                ))
+            #expect(html.contains("Not open yet"))
+            #expect(html.contains("Spectrum · earned"))
+            #expect(html.contains("Two-tone · earned"))
+            #expect(html.contains("Stitched · earned"))
+            #expect(html.contains(##"name="border" value="rainbow""##))
 
             let before = try await storedSpec(pupil, on: app)
             let refused = try await postChoices(["border": "spectrum"], cookie: cookie, on: app)

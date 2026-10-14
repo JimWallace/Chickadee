@@ -11,8 +11,16 @@
 // option list and no species. On a change it sets the per-student custom
 // properties the avatar already reads (the one kind of style write the UI
 // rules allow from script) and points the avatar's ring, plumage, tuft and
-// wing layers at the checked symbols. The backdrop and the cap also go on the form, so the ring samples
-// follow them. Nothing is saved until the form is submitted.
+// wing layers at the checked symbols. Every colourway offered is of the
+// student's own species, so the plumage, tuft and wing references name the
+// art the bird already wears and those three writes change nothing; they stay
+// so that the preview never depends on that rule. The backdrop and the cap
+// also go on the form, so the ring samples follow them. Nothing is saved until
+// the form is submitted.
+//
+// `trackChanges` keeps Save disabled and "Undo changes" hidden until a choice
+// changes. Undo resets the form to the saved choices and redraws the preview.
+// Without this script, Save is always enabled.
 (function () {
     'use strict';
 
@@ -109,17 +117,38 @@
         });
     }
 
+    /** Enables Save and shows Undo only while a choice differs from the
+     *  saved one. A reset fires no change event, so one is sent after it to
+     *  redraw the preview from the restored choices. */
+    function trackChanges(form) {
+        var save = form.querySelector('button[type="submit"]');
+        var undo = form.querySelector('button[type="reset"]');
+        function setChanged(changed) {
+            if (save) save.disabled = !changed;
+            if (undo) undo.hidden = !changed;
+        }
+        setChanged(false);
+        form.addEventListener('change', function () { setChanged(true); });
+        form.addEventListener('reset', function () {
+            setTimeout(function () {
+                form.dispatchEvent(new Event('change'));
+                setChanged(false);
+            }, 0);
+        });
+    }
+
     function init() {
         var form = document.querySelector('form[data-avatar-picker]');
         if (!form) return;
         var preview = document.querySelector(form.getAttribute('data-avatar-picker'));
         if (preview) attach(form, preview);
+        trackChanges(form);
     }
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = {
             previewValues: previewValues, previewRing: previewRing, previewTones: previewTones,
-            previewLayers: previewLayers, attach: attach
+            previewLayers: previewLayers, attach: attach, trackChanges: trackChanges
         };
     }
     if (typeof document !== 'undefined') {

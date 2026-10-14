@@ -334,8 +334,9 @@ duplicate.
   revealed").  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
   and must not be borrowed for it.
-- **`.account-identity`** — the account page's identity header: the student's
-  `.avatar`, the resolved name beside it, and the username under that.  The name
+- **`.account-identity`** — the account page's identity header: the resolved
+  name and the username under it.  The bird is not here: it is in the
+  `.bird-card` just below.  The name
   and username are element selectors inside the row, not classes of their own.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
@@ -458,19 +459,30 @@ duplicate.
   `.swatch-none` (a dashed ring, for "no border") and `.swatch-bird` (the
   student's own bird in a colourway, an `Avatar` at the roster size, so the
   species reads; it brings its own properties, so it shows the SAVED backdrop
-  and ring, not the previewed ones, while the ring samples follow the preview).  The Species group nests one
-  `.fieldset-plain--nested` per species inside the plain fieldset, a lighter
-  legend over each row.  An option that exists but
-  cannot be chosen yet has a `disabled` input, which dims its swatch
-  (`.swatch:has(input:disabled)`, the `.row-muted` opacity); its name says
-  "(locked)", or names the term of a seasonal ring, and a note under the row
-  says how each kind opens, so the state does not rest on the dimming alone.
-  The option a student already wears is never disabled.  Used by the account page's
-  bird picker, whose live preview (`avatar-picker.js`) copies the
-  checked option's tokens onto the avatar and points its ring, plumage, tuft
-  and wing layers at the checked symbols; see
-  [student-wardrobe.md](student-wardrobe.md) and
-  [avatar-species.md](avatar-species.md).
+  and ring, not the previewed ones, while the ring samples follow the preview).
+  An option that cannot be chosen yet is not a swatch: see `.bird-locked`.
+  Used by the account page's `.bird-card`.
+- **`.bird-card`** — the account page's "Your bird" card (a `.card`).
+  `.bird-card-body` is a wrapping flex row of
+  two items, so the columns stack on a phone with no media query:
+  `.bird-card-hero`, a light panel with the bird at `.avatar-xl` (the
+  `AvatarSize.podium` size, reused) and the species; and
+  `.bird-card-groups`, the form with the Colour and Ring fieldsets and a
+  `.toolbar` footer.  Inside the groups every `.swatch` is a 44px hit target;
+  a named swatch (a colourway, a ring) shows the checked state on the whole
+  tile, and a backdrop keeps the ring around its disc.  A backdrop is the one
+  swatch whose name is `.visually-hidden`: the eight discs are the choice,
+  and the checked one has the ring.  The backdrops sit in a
+  `.fieldset-plain--nested` inside the Colour fieldset, a lighter legend over
+  the row.  `.bird-locked` lists
+  the rings not open yet under a dashed rule: a dimmed sample, a lock icon and
+  "Name · earned" or "Name · Season term".  They are list items, not disabled
+  radios, because nothing about them can be chosen.  The ring a student
+  already wears is never listed there.  The live preview (`avatar-picker.js`)
+  copies the checked option's tokens onto the hero bird and points its ring
+  layer at the checked symbol; it also keeps Save disabled and "Undo changes"
+  hidden until a choice changes.  See [student-wardrobe.md](student-wardrobe.md)
+  and [avatar-species.md](avatar-species.md).
 - **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a
   `.section-items` row: the title and details, the state or value, and the cell
   that holds the actions.  They change nothing on a desktop; at 640px and below

@@ -3635,8 +3635,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     .publish-form { min-width: 0; }
 }
 
-/* The account page's identity header: the student's chickadee, their name,
-   their username. One class for the row; the name and username inside it are
+/* The account page's identity header: the student's name and their
+   username. One class for the row; the name and username inside it are
    element selectors rather than two more global classes, since they are one
    rule serving one component and would owe component-vocabulary entries for
    no gain. */
@@ -3646,6 +3646,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     gap: .75rem;
     margin: 0 0 1rem;
 }
+
+/* Inside a card the name lines up with the detail grid under it. */
+.card > .account-identity { margin: 0; padding: 1rem 1.25rem 0; }
 
 .account-identity > div {
     display: flex;
@@ -3767,8 +3770,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    the avatar sprite, so it shows the ring the student would wear. It inherits
    --av-backdrop from the form, which the live preview updates, so the samples
    follow a backdrop change before it is saved. "No border" is a dashed grey
-   ring. A locked ring's input is disabled: it is shown dimmed, and its name
-   says so. */
+   ring. A locked ring is not a swatch at all: see .bird-locked. */
 .swatch-backdrop { background: var(--av-backdrop); }
 
 /* A bird sample is the student's own bird in that colourway, at the roster
@@ -3781,16 +3783,125 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .swatch-none { border: 2px dashed var(--muted); }
 
-.swatch:has(input:disabled) {
-    opacity: .6;
-    cursor: not-allowed;
-}
-
 /* Forced colors would paint every sample the same. Keep the samples' own
    colours, and draw the checked ring in the system highlight colour. */
 @media (forced-colors: active) {
     .swatch-sample { forced-color-adjust: none; }
     .swatch input:checked + .swatch-sample { outline-color: Highlight; }
+    .bird-card-groups .swatch:has(.swatch-name):has(input:checked) { outline-color: Highlight; }
+}
+
+/* The account page's "Your bird" card. A light hero panel holds the bird at
+   the podium size; beside it, the Colour and Ring groups. The two flex items
+   wrap into one column on a narrow screen with no media query: the groups
+   take the spare width, the hero keeps 13rem. Every swatch is a 44px (2.75rem)
+   hit target at least. A named swatch (a colourway or a ring) shows the
+   checked state on the whole tile, a 2px outline and a light fill, and its
+   name goes bold; a backdrop keeps the ring around its disc. */
+/* A child's background stays inside the card's rounded edge. */
+.bird-card { overflow: hidden; }
+
+.bird-card-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding: 1.25rem;
+}
+
+.bird-card-hero {
+    flex: 1 0 13rem;
+    align-self: flex-start;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
+    padding: 1.25rem;
+    border-radius: var(--radius-lg);
+    background: var(--gray-50);
+    text-align: center;
+}
+
+.bird-card-hero p { margin: 0; }
+.bird-card-hero strong { font-size: var(--text-lg); }
+.bird-card-hero .avatar-xl { margin-bottom: .75rem; }
+
+.bird-card-groups {
+    flex: 999 1 24rem;
+    min-width: 0;
+}
+
+.bird-card-groups .fieldset-plain--nested { margin: 1rem 0 0; }
+
+/* The staff ring beside its note. */
+.bird-card-groups fieldset > .toolbar { flex-wrap: nowrap; }
+
+.bird-card-groups .swatch {
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding: .35rem;
+    border-radius: var(--radius-md);
+}
+
+.bird-card-groups .swatch:has(.swatch-name) { min-width: 4rem; }
+.bird-card-groups .swatch:has(.swatch-name) input:checked + .swatch-sample { outline: none; }
+
+.bird-card-groups .swatch:has(.swatch-name):has(input:checked) {
+    outline: 2px solid var(--gray-800);
+    background: var(--gray-50);
+}
+
+.bird-card-groups .swatch:has(.swatch-name):has(input:focus-visible) { outline: 2px solid var(--blue); }
+.bird-card-groups .swatch-sample { width: 2.5rem; height: 2.5rem; }
+.bird-card-groups .swatch-backdrop { width: 2rem; height: 2rem; }
+.bird-card-groups .swatch-bird { width: 3.25rem; height: 3.25rem; }
+.bird-card-groups .swatch-bird .avatar { width: 100%; height: 100%; }
+
+/* Save and Undo (a nested .toolbar) on the left, the note on the right,
+   under a rule. */
+.bird-card-groups > .toolbar {
+    justify-content: space-between;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.bird-card-groups > .toolbar .field-note { margin: 0; }
+
+/* Save before a change, and the hatch button with none left. */
+.bird-card .btn:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+/* The rings that are not open yet: a dimmed sample, a lock and a name. Not
+   inputs, since nothing about them can be chosen. */
+.bird-locked {
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px dashed var(--border);
+}
+
+.bird-locked ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.25rem;
+    margin: .5rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.bird-locked li {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: var(--text-sm);
+    color: var(--muted);
+}
+
+.bird-locked .swatch-sample {
+    width: 1.5rem;
+    height: 1.5rem;
+    opacity: .5;
 }
 
 /* The leaderboard's "you" card bird (6rem) and the Present-mode podium bird

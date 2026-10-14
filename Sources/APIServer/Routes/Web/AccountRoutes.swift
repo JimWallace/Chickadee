@@ -110,8 +110,6 @@ struct AccountRoutes: RouteCollection {
                 identityName: identityName,
                 identitySecondary: accountIdentitySecondary(
                     identityName: identityName, username: user.username),
-                avatar: AvatarPresentation(
-                    for: spec, size: .standard, accessibility: .decorative, isStaff: isStaff),
                 avatarPicker: AvatarPickerContext(for: spec, isStaff: isStaff),
                 avatarInvalid: avatarNotice == "invalid",
                 studentID: user.studentID,

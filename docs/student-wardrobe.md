@@ -158,8 +158,9 @@ backdrop, and the stripe made two thin lines, which is the shape of the staff
 ring.
 
 Until the unlocks slice (W3) exists, no student can get an earned or special
-ring. The picker shows them locked (disabled, with "(locked)" in the name), so
-that a student can see what there is to earn. `AvatarCustomization` refuses a
+ring. The account page lists them under "Not open yet", as items and not as
+inputs, with "earned" in the name ("Two-tone · earned"), so that a student can
+see what there is to earn. `AvatarCustomization` refuses a
 locked ring, so a hand-made request cannot choose one.
 
 ### 7. Seasonal rings
@@ -170,8 +171,9 @@ December). `AvatarBorder.season` names the term.
 
 - **A student can choose it only during its term.** The term comes from
   today's date on the Waterloo calendar (`TermSeason.current()`), not from a
-  course. Out of its term, the picker shows the ring disabled, with its term
-  in the name ("Maple (Fall)"), and the chokepoint refuses it.
+  course. Out of its term, the account page lists the ring under "Not open
+  yet", with its term in the name ("Maple · Fall term"), and the chokepoint
+  refuses it. In its term the ring is an open choice named "Maple · Fall".
 - **A student keeps it after the term.** The stored ring is drawn on every
   date. The chokepoint always allows the ring the student already wears, so
   saving the form again in Winter does not take the maple ring away. This
@@ -207,26 +209,33 @@ not a choice, and staff cannot change it.
 
 ---
 
-## The picker (W1, and the Species group from avatar-species.md A2)
+## The "Your bird" card (W1, as changed by avatar-species.md decision 5)
 
-One page section on the account page, "Bird":
+One page section on the account page, "Your bird", one card:
 
-- The bird at the standard size, as a preview (the Account info bird).
-- Three groups of choices: **Species** (every colourway, one row per
-  species, each option the student's own bird drawn in that colourway;
-  choosing a colourway chooses the species), **Backdrop** (eight) and
-  **Border** (none, the five colours and the seven patterned rings). Each choice is a radio input with a
-  round sample, so the form works with the keyboard and with no JavaScript. A
-  ring's sample is the ring itself, drawn from the sprite on the student's
-  backdrop. A locked ring is disabled and shown dimmed. Staff see a one-line
-  note in place of the Border group.
+- The bird at the podium size (10rem), with its species name. The bird is no
+  longer in Account info.
+- Two groups of choices: **Colour** (the colourways of the student's own
+  species, each option the student's own bird drawn in that colourway, then
+  the eight backdrops) and **Ring** (the rings open now: none, the five
+  colours, rainbow, and the seasonal ring of the term). Each choice is a radio
+  input with a round sample, so the form works with the keyboard and with no
+  JavaScript. A ring's sample is the ring itself, drawn from the sprite on the
+  student's backdrop. The rings not open yet follow under "Not open yet" as
+  plain items, not inputs. Staff see the staff ring and a note in place of
+  the Ring group.
 - One **Save** button. The form posts to `POST /account/avatar`.
 
-Each choice shows its name under the sample, so a reader who cannot tell two
-colours apart can still choose. The checked choice has a ring and a bold name.
+There is no species group. The species and the markings come with the bird
+(avatar-species.md, decision 5).
 
-With JavaScript, `Public/avatar-picker.js` updates the bird in the Account
-info section as soon as a choice changes (a live preview). It sets only
+Each colourway and ring shows its name under the sample, so a reader who
+cannot tell two colours apart can still choose. The checked choice has an
+outline and a bold name. A backdrop's name is for screen readers only.
+
+With JavaScript, `Public/avatar-picker.js` updates the card's bird as soon
+as a choice changes (a live preview), and keeps Save disabled and "Undo
+changes" hidden until a choice changes. It sets only
 custom properties, `--av-backdrop`, `--av-border` and the six tones of a
 colourway, which the UI rules allow ("JS does not make styling decisions"),
 and points the ring layer (the `use` element marked `data-av-ring`), the

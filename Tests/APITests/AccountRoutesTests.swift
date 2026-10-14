@@ -152,7 +152,7 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("<symbol id=\"av-plumage-chickadee\""), "sprite missing")
-                    #expect(html.contains("class=\"avatar\""))
+                    #expect(html.contains("class=\"avatar avatar-xl\""))
                     #expect(html.contains("<use href=\"#av-backdrop\" />"), "no backdrop layer")
                     // The varying layers are interpolated: each must appear
                     // resolved, and no interpolation may survive as text. The
