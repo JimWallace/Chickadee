@@ -129,9 +129,12 @@
        The white eye disc sits on the cap, so every -cap keeps at least 3:1
        against #FFFFFF (WCAG relative luminance): ink 15.1, slate 5.4,
        teal 4.7, forest 6.0, indigo 6.9, plum 7.0, rust 5.2, umber 6.2;
-       scarlet 5.9, crimson 7.6, fawn 3.4 (the lowest), copper 9.5,
-       brick 11.2, apricot 8.1, azure 4.1, cobalt 6.3, powder 3.4,
-       emerald 8.4, violet 9.8, bronze 10.6. AvatarSpeciesTests asserts the
+       scarlet 5.9, crimson 7.6, fawn 3.4, copper 9.5, brick 11.2,
+       apricot 8.1, azure 4.1, cobalt 6.3, powder 3.4, emerald 8.4,
+       violet 9.8, bronze 10.6; lemon 17.2, saffron 17.2, olive 4.5, jet 6.8,
+       onyx 6.4, ebony 6.7, cedar 3.5, taupe 3.6, sand 3.2 (the lowest),
+       pewter 8.2, graphite 10.5, dusk 13.5, chestnut 5.6, sepia 7.8,
+       hazel 4.0, oat 3.3, mauve 3.5, ash 3.3. AvatarSpeciesTests asserts the
        rule for every colourway. */
     --avatar-ink-cap: #23262F;      --avatar-ink-wing: #555D74;
     --avatar-ink-body: #F6EFE2;     --avatar-ink-bib: #3C4250;     --avatar-ink-beak: #E2A33C;     --avatar-ink-mark: #F6EFE2;
@@ -188,6 +191,71 @@
     --avatar-violet-body: #5A4A7A;  --avatar-violet-bib: #5A4A7A;  --avatar-violet-beak: #E9C440;  --avatar-violet-mark: #EFE3C8;
     --avatar-bronze-cap: #533D2C;   --avatar-bronze-wing: #8A6E55;
     --avatar-bronze-body: #6B4F3A;  --avatar-bronze-bib: #6B4F3A;  --avatar-bronze-beak: #E9C440;  --avatar-bronze-mark: #EFE3C8;
+
+    /* The goldfinch. A yellow body with a black forehead patch (the cap) and
+       grey wings barred dark. The mark is DARK, because the brows sit on the
+       yellow body and not on the small cap, so the wing is grey rather than
+       black to carry a dark bar; the beak is a brown-orange that reads on
+       yellow. Olive is the female and the winter bird. */
+    --avatar-lemon-cap: #1E1A1A;    --avatar-lemon-wing: #6B6B74;
+    --avatar-lemon-body: #F2D230;   --avatar-lemon-bib: #1E1A1A;   --avatar-lemon-beak: #9E5A1E;   --avatar-lemon-mark: #2A2A2E;
+    --avatar-saffron-cap: #1E1A1A;  --avatar-saffron-wing: #6B6B74;
+    --avatar-saffron-body: #E0A020; --avatar-saffron-bib: #1E1A1A; --avatar-saffron-beak: #8A4A14; --avatar-saffron-mark: #2A2A2E;
+    --avatar-olive-cap: #7A7A48;    --avatar-olive-wing: #8A8A6A;
+    --avatar-olive-body: #C9C27A;   --avatar-olive-bib: #5A5A4A;   --avatar-olive-beak: #7A5230;   --avatar-olive-mark: #3A3A2E;
+
+    /* The red-winged blackbird. The bib is the red epaulet at the shoulder
+       and the mark its yellow bar, both drawn above the wing's upper edge so
+       the wing does not cover them; the body is lifted above the dark
+       backdrops like the starling's, and the beak is pale because the body
+       is dark. */
+    --avatar-jet-cap: #5C5872;      --avatar-jet-wing: #4A4760;
+    --avatar-jet-body: #5C5872;     --avatar-jet-bib: #D23B2A;     --avatar-jet-beak: #B8B4C4;     --avatar-jet-mark: #F2C94C;
+    --avatar-onyx-cap: #50607A;     --avatar-onyx-wing: #3E4C62;
+    --avatar-onyx-body: #50607A;    --avatar-onyx-bib: #D23B2A;    --avatar-onyx-beak: #BCC2CC;    --avatar-onyx-mark: #F2C94C;
+    --avatar-ebony-cap: #655A58;    --avatar-ebony-wing: #504644;
+    --avatar-ebony-body: #655A58;   --avatar-ebony-bib: #C8402C;   --avatar-ebony-beak: #C4BAB8;   --avatar-ebony-mark: #F0C84A;
+
+    /* The cedar waxwing. A browner crown (the cap, kept above 3:1 against
+       the eye disc), a grey crest and wing, a dark ring round each eye (the
+       bib) and a yellow belly tip (the mark). */
+    --avatar-cedar-cap: #A6835A;    --avatar-cedar-wing: #9A8E7A;
+    --avatar-cedar-body: #D9B98A;   --avatar-cedar-bib: #2A2426;   --avatar-cedar-beak: #4A4046;   --avatar-cedar-mark: #F2D54A;
+    --avatar-taupe-cap: #9C8468;    --avatar-taupe-wing: #8E8878;
+    --avatar-taupe-body: #CDB38E;   --avatar-taupe-bib: #2A2426;   --avatar-taupe-beak: #4A4046;   --avatar-taupe-mark: #F2D54A;
+    --avatar-sand-cap: #B08A5E;     --avatar-sand-wing: #A69B86;
+    --avatar-sand-body: #E2C79E;    --avatar-sand-bib: #2A2426;    --avatar-sand-beak: #4A4046;    --avatar-sand-mark: #F2D54A;
+
+    /* The dark-eyed junco. A hood down to the breast (the robin's hood path,
+       so the beak sits on the hood, not the white body), a white body and a
+       pink beak light enough to read on the hood. Dusk is the Oregon form,
+       with a brown wing. */
+    --avatar-pewter-cap: #4B4F5A;   --avatar-pewter-wing: #5E6270;
+    --avatar-pewter-body: #F2F2EF;  --avatar-pewter-bib: #4B4F5A;  --avatar-pewter-beak: #E8A0A8;  --avatar-pewter-mark: #F2F2EF;
+    --avatar-graphite-cap: #3C3F48; --avatar-graphite-wing: #50545E;
+    --avatar-graphite-body: #F2F2EF; --avatar-graphite-bib: #3C3F48; --avatar-graphite-beak: #E8A0A8; --avatar-graphite-mark: #F2F2EF;
+    --avatar-dusk-cap: #2E2E36;     --avatar-dusk-wing: #8A6A4A;
+    --avatar-dusk-body: #F2F2EF;    --avatar-dusk-bib: #2E2E36;    --avatar-dusk-beak: #E8A0A8;    --avatar-dusk-mark: #F2F2EF;
+
+    /* The song sparrow. A brown crown and wing, a pale breast with dark
+       streaks and a central spot (the bib), and a dark horn beak that reads
+       on the pale breast. */
+    --avatar-chestnut-cap: #8B5E3C; --avatar-chestnut-wing: #8B5E3C;
+    --avatar-chestnut-body: #EFE6D2; --avatar-chestnut-bib: #5A3E2A; --avatar-chestnut-beak: #8A6E48; --avatar-chestnut-mark: #EADFC8;
+    --avatar-sepia-cap: #6E4A32;    --avatar-sepia-wing: #6E4A32;
+    --avatar-sepia-body: #E9DFC9;   --avatar-sepia-bib: #4A3222;   --avatar-sepia-beak: #8A6E48;   --avatar-sepia-mark: #E6DBC2;
+    --avatar-hazel-cap: #A5744A;    --avatar-hazel-wing: #A5744A;
+    --avatar-hazel-body: #F2EADA;   --avatar-hazel-bib: #6A4A30;   --avatar-hazel-beak: #8A6E48;   --avatar-hazel-mark: #EEE4CE;
+
+    /* The mourning dove. A soft pale body with a darker crown (kept above
+       3:1 against the eye disc), a dark cheek spot (the bib) just inboard of
+       each wing, and a dark beak. */
+    --avatar-oat-cap: #9C8C72;      --avatar-oat-wing: #B8A58C;
+    --avatar-oat-body: #D9CBB8;     --avatar-oat-bib: #3A3236;     --avatar-oat-beak: #4A4046;     --avatar-oat-mark: #EFE8DC;
+    --avatar-mauve-cap: #9A8482;    --avatar-mauve-wing: #AE9A98;
+    --avatar-mauve-body: #CDB8B4;   --avatar-mauve-bib: #3A3236;   --avatar-mauve-beak: #4A4046;   --avatar-mauve-mark: #EFE6E4;
+    --avatar-ash-cap: #918E88;      --avatar-ash-wing: #A8A59F;
+    --avatar-ash-body: #C9C6C0;     --avatar-ash-bib: #3A3236;     --avatar-ash-beak: #4A4046;     --avatar-ash-mark: #ECEAE6;
 
     --avatar-accent-ember: #C2523F;
     --avatar-accent-orchid: #7A4A86;

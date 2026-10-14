@@ -41,7 +41,7 @@ Job 1 comes free once job 2 is solved.
 
 ## The constraint the art has to respect
 
-> **Since the species (docs/avatar-species.md):** the bird is one of five
+> **Since the species (docs/avatar-species.md):** the bird is one of eleven
 > species, and the colourway decides which. What this section says about the
 > chickadee's markings now holds per species: a species' plumage symbol is
 > fixed, and the variation lives inside it. The silhouette, the eye discs and

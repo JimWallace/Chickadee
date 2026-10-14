@@ -361,7 +361,7 @@ duplicate.
   `.av-beak`, `.av-wing-mark` and `.av-brow`) read the per-student `--av-*`
   properties, and the fixed parts — `.av-eyewhite`, `.av-pupil`, `.av-glint`,
   `.av-blush`, `.av-mouth`, `.av-gear`, `.av-gear-line`, `.av-bloom-eye` —
-  read the palette directly.  The colourway decides the species (one of five,
+  read the palette directly.  The colourway decides the species (one of eleven,
   [avatar-species.md](avatar-species.md)); the eyes, the body circle and the
   beak shape are the same on every species and keep the birds one family.  **Five sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a

@@ -27,6 +27,15 @@ public enum AvatarCap: String, CaseIterable, Codable, Sendable {
     /// The starling's three, lifted above the dark backdrops
     /// (docs/avatar-species.md, finding 4).
     case emerald, violet, bronze
+    /// The second set, three each: goldfinch (olive is the female), blackbird
+    /// (lifted like the starling), waxwing, junco (dusk is the Oregon form),
+    /// song sparrow and mourning dove.
+    case lemon, saffron, olive
+    case jet, onyx, ebony
+    case cedar, taupe, sand
+    case pewter, graphite, dusk
+    case chestnut, sepia, hazel
+    case oat, mauve, ash
 
     /// The name a student reads in the picker.
     public var displayName: String { rawValue.capitalized }
@@ -92,6 +101,14 @@ public enum AvatarAccessory: String, CaseIterable, Codable, Sendable {
     public static let starterCases: [AvatarAccessory] = [
         .none, .scarf, .headphones, .beanie, .glasses, .headband, .bowtie, .bloom,
     ]
+
+    /// How often a first-use draw picks this accessory, relative to the other
+    /// starters (docs/avatar-species.md, "Trait weights"). `none` is a real
+    /// option and most birds should wear nothing, so it weighs four; every
+    /// other starter weighs one, which leaves about a third of the birds bare.
+    public var drawWeight: Int {
+        self == .none ? 4 : 1
+    }
 
     /// A hat that replaces the tuft: a bird wears one or the other, never
     /// both. The gradcap's board let a tuft stick up through it, which looked
@@ -237,12 +254,28 @@ public enum AvatarRing: String, CaseIterable, Sendable {
 /// the same both-directions drift test as `AvatarWing`.
 public enum AvatarTuft: String, CaseIterable, Codable, Sendable {
     case none, cowlick, crest, pair, swoop
+
+    /// How often a first-use draw picks this tuft, relative to the others
+    /// (docs/avatar-species.md, "Trait weights"). `none` weighs six against
+    /// one each for the four shapes, so three birds in five have a bare head,
+    /// which on a crested species is the species' own crest.
+    public var drawWeight: Int {
+        self == .none ? 6 : 1
+    }
 }
 
 /// How far the whole bird leans. Not a symbol: one rotate transform on the
 /// group that holds every layer except the backdrop, about the body centre.
 public enum AvatarTilt: String, CaseIterable, Codable, Sendable {
     case upright, left, right
+
+    /// How often a first-use draw picks this tilt, relative to the others
+    /// (docs/avatar-species.md, "Trait weights"). Upright weighs eight against
+    /// one each way, so four birds in five stand straight and a roster reads
+    /// as a few characters leaning, not a crowd.
+    public var drawWeight: Int {
+        self == .upright ? 8 : 1
+    }
 
     /// Degrees, clockwise positive (the SVG convention).
     public var degrees: Int {
@@ -399,8 +432,12 @@ extension AvatarSpec {
         _ axes: Set<AvatarLateAxis>, using generator: inout G
     ) -> AvatarSpec {
         var filled = self
-        if axes.contains(.tuft) { filled.tuft = Self.pick(using: &generator) }
-        if axes.contains(.tilt) { filled.tilt = Self.pick(using: &generator) }
+        if axes.contains(.tuft) {
+            filled.tuft = Self.pick(weighted: AvatarTuft.allCases, by: \.drawWeight, using: &generator)
+        }
+        if axes.contains(.tilt) {
+            filled.tilt = Self.pick(weighted: AvatarTilt.allCases, by: \.drawWeight, using: &generator)
+        }
         return filled
     }
 
@@ -452,16 +489,20 @@ extension AvatarSpec {
         // The species first, each equally likely, then a colourway of that
         // species. A draw over every colourway at once would make a chickadee
         // eight times as likely as a cardinal, which is not the design.
+        // Three slots are weighted so that a roster reads as a few characters
+        // rather than a crowd: most birds upright, bare-headed and wearing
+        // nothing. Everything else is uniform (docs/avatar-species.md, "Trait
+        // weights").
         let species: AvatarSpecies = pick(using: &generator)
         return AvatarSpec(
             cap: pick(from: species.colourways, using: &generator),
             wing: pick(using: &generator),
             expression: pick(from: AvatarExpression.starterCases, using: &generator),
-            accessory: pick(from: AvatarAccessory.starterCases, using: &generator),
+            accessory: pick(weighted: AvatarAccessory.starterCases, by: \.drawWeight, using: &generator),
             accent: pick(using: &generator),
             backdrop: pick(using: &generator),
-            tuft: pick(using: &generator),
-            tilt: pick(using: &generator)
+            tuft: pick(weighted: AvatarTuft.allCases, by: \.drawWeight, using: &generator),
+            tilt: pick(weighted: AvatarTilt.allCases, by: \.drawWeight, using: &generator)
         )
     }
 
@@ -488,5 +529,20 @@ extension AvatarSpec {
         from options: [T], using generator: inout G
     ) -> T {
         options[Int.random(in: 0..<options.count, using: &generator)]
+    }
+
+    /// One of `options`, each as likely as its `weight` against the sum of
+    /// all weights. One draw from the generator, so a seeded draw stays
+    /// reproducible.
+    fileprivate static func pick<T, G: RandomNumberGenerator>(
+        weighted options: [T], by weight: (T) -> Int, using generator: inout G
+    ) -> T {
+        let total = options.reduce(0) { $0 + weight($1) }
+        var remaining = Int.random(in: 0..<total, using: &generator)
+        for option in options {
+            remaining -= weight(option)
+            if remaining < 0 { return option }
+        }
+        return options[options.count - 1]
     }
 }

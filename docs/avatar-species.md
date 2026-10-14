@@ -1,11 +1,12 @@
 # Avatar species — design note
 
-**Status: the first set is built, and a student can choose.** Slices A0 and
-A1 shipped together: the model, the six-token palette, the sprite art for the
+**Status: eleven species, a picker, and weighted traits.** Slices A0 and A1
+shipped together: the model, the six-token palette, the sprite art for the
 cardinal, the robin, the blue jay and the starling, and the guards. A2, the
-Species group in the account-page picker, shipped next. The second set (A3)
-and the trait weights are next. This note continues
-[student-avatars.md](student-avatars.md) and
+Species group in the account-page picker, followed. Then the trait weights,
+and A3, the second set: goldfinch, blackbird, waxwing, junco, song sparrow
+and mourning dove. The open question is which traits belong to a species.
+This note continues [student-avatars.md](student-avatars.md) and
 [student-wardrobe.md](student-wardrobe.md). Read decisions 1, 2 and 7 there
 first: the spec is stored and drawn once, the art is a sprite of flat closed
 paths, and the sizes decide what reads.
@@ -16,8 +17,9 @@ paths, and the sizes decide what reads.
 | `AvatarSpecies`, derived from the colourway, and per-species colourways | shipped |
 | Sprite symbols for cardinal, robin, blue jay, starling | shipped |
 | Species in the account-page picker | shipped (A2) |
-| The second set: goldfinch, blackbird, waxwing, junco, sparrow redrawn | next (A3), each rendered first |
-| House sparrow | needs a redraw, see finding 2 |
+| Trait weights: most birds upright, bare-headed, wearing nothing | shipped |
+| The second set: goldfinch, blackbird, waxwing, junco, song sparrow, dove | shipped (A3), each rendered first |
+| House sparrow | dropped: the song sparrow took its place, see finding 2 |
 
 ---
 
@@ -131,6 +133,7 @@ Run it before a new species goes in.
 ```swift
 public enum AvatarSpecies: String, CaseIterable, Codable, Sendable {
     case chickadee, cardinal, robin, bluejay, starling
+    case goldfinch, blackbird, waxwing, junco, sparrow, dove
 }
 ```
 
@@ -166,6 +169,12 @@ valid for it:
 | robin | brick, apricot, copper | the breast varies; the hood stays grey-brown |
 | bluejay | azure, cobalt, powder | the mark tone is dark: a jay's bars are black |
 | starling | emerald, violet, bronze | body lifted above the dark backdrops (finding 4) |
+| goldfinch | lemon, saffron, olive | the cap is a black forehead patch; olive is the female and the winter bird |
+| blackbird | jet, onyx, ebony | the bib is the red epaulet and the mark its yellow bar; body lifted like the starling's; a pale beak |
+| waxwing | cedar, taupe, sand | crested, in the grey wing tone; the bib is a dark ring round each eye; the mark a yellow belly tip; the crown darkened to keep 3:1 |
+| junco | pewter, graphite, dusk | a hood like the robin's over a white body; the pink beak is dark enough to read on white; dusk is the Oregon form |
+| sparrow | chestnut, sepia, hazel | the song sparrow: the bib draws breast streaks and a central spot, which is what separates it from a chickadee (finding 2) |
+| dove | oat, mauve, ash | a soft pale bird with a darker crown (for the eye disc) and a cheek spot |
 
 Colourway names are unique across the enum, because the enum is one. The
 chickadee's `rust` is already taken, so the robin's breast is `brick`, not
@@ -267,27 +276,36 @@ ring follows a colourway change before it is saved.
 
 ## Counts
 
-The first-use draw today picks from 1,382,400 birds. With four new species
-of three colourways each, the colourway axis goes from 8 to 20, and the draw
-picks from 3,456,000. The number is for the changelog, not the design: as
-before, it counts settings and not birds a person can tell apart. What
-changes for a person is finding 3, and that is the number that matters.
+The first-use draw now picks from 38 colourways (the chickadee's eight and
+three for each of ten other species), so the starter count is 6,566,400 and
+the full count 11,080,800 (`AvatarSpec.starterCombinationCount` and
+`combinationCount`). The numbers are for the changelog, not the design: as
+before, they count settings and not birds a person can tell apart, and since
+the weights the settings are no longer equally likely. What changes for a
+person is finding 3, and that is the number that matters.
 
----
+## Trait weights
 
-## Next: trait weights, and which traits belong to a species
+The first-use draw weights three slots, by a `drawWeight` on the case, the
+way `HandleScheme.weight` works. Everything else is uniform. A weight
+changes only the draw, so no stored bird changes, and the species stays
+uniform because diversity in one class is the point.
 
-Two questions the maintainer raised while the first set landed. Neither is
-built. Both change only the draw, so a stored bird never changes.
+| Slot | Weights | Result |
+|---|---|---|
+| tilt | upright 8, left 1, right 1 | four birds in five stand straight; a roster reads as a few characters leaning, not a crowd |
+| tuft | none 6, each shape 1 | three in five have a bare head, which on a crested species is its own crest |
+| accessory | none 4, each other starter 1 | about a third wear nothing, which is what "most birds wear nothing" was meant to mean |
+| species, colourway, wing, expression, accent, backdrop | uniform | as before |
 
-**Weights.** The draw today is uniform in every slot except the species,
-which it picks first so that a class is as mixed as it can be. A uniform
-tilt means one bird in three is askew, which reads as a crowd leaning, not
-as a few characters. A slot can carry weights the way `HandleScheme.weight`
-does: most birds upright, a few leaning. The same question applies to the
-tuft (`none` more often), the accessory (`none` more often) and the three
-unlockable expressions (already weight zero in the starter draw). The
-species stays uniform: diversity in one class is the point.
+`AvatarDrawWeightTests` pins each share over 20,000 seeded draws, and the
+late-axis fill (`fillingMissing`) uses the same weights, so a bird filled
+later is drawn from the same distribution as a new one.
+
+## Next: which traits belong to a species
+
+A question the maintainer raised while the first set landed. Not built. It
+changes only the draw and the art, so a stored bird never changes.
 
 **Species traits against universal traits.** A crest belongs to the cardinal
 and the blue jay. Today the four tuft shapes are still drawn on every
@@ -300,18 +318,33 @@ product, and the draw picks the species-scoped slots after the species, the
 way it already picks the colourway. The benefit is that every species gets
 its own silhouette vocabulary instead of a chickadee's.
 
-## Candidates for a second set
+## The second set
 
-Each needs a prototype render before a decision, by finding 2.
+All six candidates were rendered beside an ink chickadee at 80 and 36 px,
+in a mixed roster, under every expression and hat, and on the dark
+backdrops, before the decision. All six went in. What the render decided:
 
-| Species | The read | Risk |
+| Species | The read | What the render changed |
 |---|---|---|
-| American goldfinch | yellow body, black forehead and wings | the black cap is the chickadee topology; the yellow may carry it |
-| red-winged blackbird | black body, red and yellow epaulet | the dark body meets finding 4 |
-| cedar waxwing | crest, black mask, yellow tail tip | the crest and mask are the cardinal topology in fawn |
-| dark-eyed junco | dark hood, white belly | the robin topology without the orange |
-| house or song sparrow | redrawn per finding 2 | a second render decides |
-| mourning dove | plain, soft grey-brown | may read as a plain chickadee |
+| goldfinch | yellow body, black forehead and wings | the yellow carries it; saffron deepened so it is not lemon twice |
+| blackbird | dark body, red and yellow epaulet | the body lifted to at least 2.0 against the dark backdrops; the three colourways pulled apart (violet, blue, warm); the epaulet moved above the wing's upper edge |
+| waxwing | crest, dark eye rings, yellow belly tip | the crown darkened for the eye disc; the crest is grey, not red, which is what keeps it from the fawn cardinal |
+| junco | dark hood, white belly, pink beak | the beak darkened to read on white |
+| song sparrow | brown crown, streaked breast, central spot | the streaks are the species read at 36 px, where the house sparrow had failed |
+| dove | soft pale body, darker crown, cheek spot | the crown darkened for the eye disc; the three colourways carry it (oat, mauve, ash) |
+
+The picker now shows eleven rows. The draw still picks the species first and
+uniformly, so one new student in eleven is a chickadee.
+
+The second render, on the real sprite, found four more things the first had
+not: the dove's cheek spots and the blackbird's yellow bar sat under the wing
+layer and never drew (both moved inboard or above the wing's upper edge); the
+goldfinch's brows vanished, because they sit on the yellow body and not on
+its small cap, so its mark tone is dark and its wing grey to carry a dark
+bar; and the goldfinch, sparrow and pewter junco beaks sat under the contrast
+floor, so they were darkened (or, for the junco, whose beak sits on the hood,
+lightened). **Check a new mark against the surface it actually lands on, not
+the one the rule names.**
 
 ---
 
@@ -322,7 +355,7 @@ Each needs a prototype render before a decision, by finding 2.
 | A0 | `AvatarSpecies`, the colourway rule, the six-token palette, the four inline properties, the drift tests | shipped |
 | A1 | Cardinal, robin, blue jay and starling: sprite symbols, crests, colourways, `preview.mjs` species rows, a render looked at | shipped |
 | A2 | The Species group in the picker, every colourway by species, with the live preview | shipped |
-| A3 | A second set from the candidates, each rendered first | next |
+| A3 | The second set: goldfinch, blackbird, waxwing, junco, song sparrow, dove, each rendered first | shipped |
 
 A0 and A1 shipped as one change. From the day it is live, a new student's
 first-use draw is one of the five species, and every stored bird is the

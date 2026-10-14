@@ -51,13 +51,13 @@ import Testing
     }
 
     @Test func combinationCountMatchesTheSlots() {
-        // 20 colourways (the chickadee's 8 and 3 for each of the four other
+        // 38 colourways (the chickadee's 8 and 3 for each of the ten other
         // species), 6 wings, 9 expressions (6 starter + 3 unlockable),
         // 9 accessories (8 starter + the gradcap) in 5 accents, 8 backdrops,
         // 5 tufts, 3 tilts. The accent multiplies — it is part of the
         // accessory axis. The border is chosen, not drawn, so it is not counted.
-        #expect(AvatarSpec.combinationCount == 20 * 6 * 9 * 9 * 5 * 8 * 5 * 3)
-        #expect(AvatarSpec.combinationCount == 5_832_000)
+        #expect(AvatarSpec.combinationCount == 38 * 6 * 9 * 9 * 5 * 8 * 5 * 3)
+        #expect(AvatarSpec.combinationCount == 11_080_800)
     }
 
     @Test func specRoundTripsThroughJSON() throws {

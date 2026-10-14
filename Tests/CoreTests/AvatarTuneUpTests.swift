@@ -43,9 +43,9 @@ import Testing
     }
 
     @Test func starterCombinationCountUsesOnlyStarterExpressions() {
-        // 20 colourways since the species (docs/avatar-species.md).
-        #expect(AvatarSpec.starterCombinationCount == 20 * 6 * 6 * 8 * 5 * 8 * 5 * 3)
-        #expect(AvatarSpec.starterCombinationCount == 3_456_000)
+        // 38 colourways since the species (docs/avatar-species.md).
+        #expect(AvatarSpec.starterCombinationCount == 38 * 6 * 6 * 8 * 5 * 8 * 5 * 3)
+        #expect(AvatarSpec.starterCombinationCount == 6_566_400)
     }
 
     // MARK: - Stored specs that predate the axes
