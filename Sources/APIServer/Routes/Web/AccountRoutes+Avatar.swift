@@ -150,17 +150,13 @@ struct AvatarPickerContext: Encodable {
 }
 
 extension AvatarPickerContext {
-    /// A ring's name. A seasonal ring always names its term, open or not, so
-    /// the page reads the same on every date: "Maple · Fall" when open,
-    /// "Snowflake · Winter term" when not. Any other locked ring is earned:
-    /// "Two-tone · earned".
+    /// A ring's name. A seasonal ring is named by its term: "Fall" among the
+    /// open rings, "Winter · opens in January" under "Not open yet". Any
+    /// other locked ring is earned: "Two-tone · earned".
     static func borderLabel(_ border: AvatarBorder, isLocked: Bool) -> String {
-        if let season = border.season {
-            return isLocked
-                ? "\(border.displayName) · \(season.displayName) term"
-                : "\(border.displayName) · \(season.displayName)"
-        }
-        return isLocked ? "\(border.displayName) · earned" : border.displayName
+        guard isLocked else { return border.displayName }
+        if let season = border.season { return "\(season.displayName) · opens in \(season.startMonthName)" }
+        return "\(border.displayName) · earned"
     }
 
     /// "Eight", "Three": the colourway count as a word, as the note reads.

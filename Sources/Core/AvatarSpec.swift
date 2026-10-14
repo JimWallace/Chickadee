@@ -164,11 +164,14 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
     case twotone
     /// The student's accent with a line of stitches. An earned reward.
     case stitched
-    /// Snowflakes on a lagoon band. Open to choose during the Winter term.
+    /// The Winter ramp: ice blue at the top of the ring to indigo at the
+    /// bottom, in eight flat steps. Open to choose during the Winter term.
     case snowflake
-    /// Blossoms on a green band. Open to choose during the Spring term.
+    /// The Spring ramp: blossom pink to apricot to new-leaf green. Open to
+    /// choose during the Spring term.
     case blossom
-    /// Maple leaves on a honey band. Open to choose during the Fall term.
+    /// The Fall ramp: gold to orange to brick to maroon. Open to choose
+    /// during the Fall term.
     case maple
 
     /// The accent this ring is drawn in; nil for `none` and the patterned rings.
@@ -200,11 +203,14 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// The name a student reads in the picker.
+    /// The name a student reads in the picker. A seasonal ring is named by
+    /// its term ("Winter"), since its art is the term's colours; the raw
+    /// value keeps the old name.
     public var displayName: String {
+        if let season { return season.displayName }
         switch self {
-        case .twotone: "Two-tone"
-        default: rawValue.capitalized
+        case .twotone: return "Two-tone"
+        default: return rawValue.capitalized
         }
     }
 

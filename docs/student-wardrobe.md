@@ -143,9 +143,9 @@ gets the ring. It is not a rank.
 | two-tone | earned | half in the bird's accent, half in its cap colour |
 | stitched | earned | the accent with 24 cream stitches |
 | spectrum | special | five bands in the five accent colours |
-| snowflake | seasonal (Winter) | white snowflakes on a lagoon band |
-| blossom | seasonal (Spring) | pink blossoms on a moss band |
-| maple | seasonal (Fall) | ember maple leaves on a honey band |
+| snowflake, shown as "Winter" | seasonal (Winter) | a ramp from ice blue at the top to indigo at the bottom |
+| blossom, shown as "Spring" | seasonal (Spring) | a ramp from blossom pink to apricot to new-leaf green |
+| maple, shown as "Fall" | seasonal (Fall) | a ramp from gold to orange to brick to maroon |
 
 Rainbow is a starter on purpose. It is also the Pride flag, and a student must
 not have to earn a way to show it.
@@ -167,21 +167,28 @@ locked ring, so a hand-made request cannot choose one.
 
 There is one seasonal ring for each Waterloo term: snowflake (Winter, January
 to April), blossom (Spring, May to August) and maple (Fall, September to
-December). `AvatarBorder.season` names the term.
+December). `AvatarBorder.season` names the term, and the page shows the ring
+by that name: "Winter", "Spring", "Fall". The raw values stay `snowflake`,
+`blossom` and `maple`.
 
 - **A student can choose it only during its term.** The term comes from
   today's date on the Waterloo calendar (`TermSeason.current()`), not from a
   course. Out of its term, the account page lists the ring under "Not open
-  yet", with its term in the name ("Maple · Fall term"), and the chokepoint
-  refuses it. In its term the ring is an open choice named "Maple · Fall".
+  yet" with the month it opens ("Fall · opens in September"), and the
+  chokepoint refuses it. In its term the ring is an open choice named "Fall".
 - **A student keeps it after the term.** The stored ring is drawn on every
   date. The chokepoint always allows the ring the student already wears, so
   saving the form again in Winter does not take the maple ring away. This
   exception is for the worn ring only: it does not open any other ring.
-- **The art uses existing colours.** The bands and motifs use the accent,
-  glint and blush classes, so the rings add no palette tokens. The motifs are
-  large enough to read at 48 px; at 36 px they show as spots of colour on the
-  band, which is still different from a solid ring.
+- **The art is one colour ramp per term.** Each ring is eight flat steps,
+  mirrored left and right and placed by height, so it shades from light at
+  the top to deep at the bottom (`--avatar-winter-1` to `-8`, and the same for
+  `spring` and `fall`). The earlier motifs (snowflakes, blossoms, maple
+  leaves) broke up into specks at 36 to 48 px; a ramp reads as one band at
+  every size. Segments overlap by 0.5 degrees, so no seam shows. Like the
+  rainbow, the ramps have no dark-mode mirror. Every step holds at least
+  1.45:1 against each light backdrop and 1.8:1 against each dark one
+  (`AvatarTermRingTests`).
 
 ### 8. The staff ring
 

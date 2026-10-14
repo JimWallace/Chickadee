@@ -245,6 +245,11 @@ import Testing
             "--avatar-rainbow-yellow", "--avatar-rainbow-green", "--avatar-rainbow-blue",
             "--avatar-rainbow-violet", "--avatar-staff-ring",
         ]
+        // The term rings colour themselves by class, like the rainbow: eight
+        // ramp steps per term, which no presentation names.
+        for term in ["winter", "spring", "fall"] {
+            for step in 1...8 { expected.insert("--avatar-\(term)-\(step)") }
+        }
         for cap in AvatarCap.allCases {
             for accent in AvatarAccent.allCases {
                 for backdrop in AvatarBackdrop.allCases {
@@ -273,7 +278,7 @@ import Testing
         var rest = Substring(css)
         while let start = rest.range(of: "--avatar-") {
             let tail = rest[start.lowerBound...]
-            let name = tail.prefix { $0.isLowercase || $0 == "-" }
+            let name = tail.prefix { $0.isLowercase || $0.isNumber || $0 == "-" }
             if tail.dropFirst(name.count).first == ":" { found.insert(String(name)) }
             rest = rest[start.upperBound...]
         }

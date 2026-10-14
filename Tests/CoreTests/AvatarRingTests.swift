@@ -175,6 +175,7 @@ import Testing
         let studentTokens =
             AvatarAccent.allCases.map { "--avatar-accent-\($0.rawValue)" }
             + ["red", "orange", "yellow", "green", "blue", "violet"].map { "--avatar-rainbow-\($0)" }
+            + ["winter", "spring", "fall"].flatMap { term in (1...8).map { "--avatar-\(term)-\($0)" } }
         for token in studentTokens {
             #expect(value(of: token) != staff, "\(token) is the staff colour")
         }
