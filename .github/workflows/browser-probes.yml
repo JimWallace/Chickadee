@@ -65,7 +65,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          filter: blob:none
       - id: smoke
         uses: ./.github/actions/changed-paths
         with:
@@ -110,6 +109,15 @@ jobs:
           GRADING: ${{ steps.grading.outputs.relevant }}
         run: |
           set -euo pipefail
+          known=",all,smoke,exec,bridge,lifecycle,reset,grading,"
+          if [ "$EVENT" = workflow_dispatch ]; then
+            for name in ${PROBES//,/ }; do
+              case "$known" in
+                *,"$name",*) ;;
+                *) echo "::error::Unknown probe '$name'. Use all, or some of smoke, exec, bridge, lifecycle, reset, grading."; exit 1 ;;
+              esac
+            done
+          fi
           any=false
           for probe in smoke exec bridge lifecycle reset grading; do
             case "$EVENT" in

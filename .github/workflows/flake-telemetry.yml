@@ -38,17 +38,19 @@ jobs:
           # probe's own legs failed. The other probes in the same run are
           # diagnostics and do not count. Old runs of the earlier
           # grading-hang-probe.yml and editor-smoke.yml are not read.
-          runs_json="$(gh api "repos/${REPO}/actions/workflows/browser-probes.yml/runs?created=%3E%3D${since}&per_page=50" 2>/dev/null || echo '{"workflow_runs":[]}')"
-          run_ids="$(echo "${runs_json}" | jq -r '.workflow_runs[].id')"
-          for probe in grading-probe smoke; do
-            warnings=0
-            red=0
-            for run_id in ${run_ids}; do
-              jobs_json="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs?per_page=100" 2>/dev/null || echo '{"jobs":[]}')"
+          # Every run in the window, paged: one workflow now holds every PR
+          # run of every probe, so a single 50-run page could drop the
+          # scheduled runs out of the week.
+          run_ids="$(gh api --paginate "repos/${REPO}/actions/workflows/browser-probes.yml/runs?created=%3E%3D${since}&per_page=100" \
+            --jq '.workflow_runs[].id' 2>/dev/null || true)"
+          declare -A warnings=([grading-probe]=0 [smoke]=0) red=([grading-probe]=0 [smoke]=0)
+          for run_id in ${run_ids}; do
+            jobs_json="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs?per_page=100" 2>/dev/null || echo '{"jobs":[]}')"
+            for probe in grading-probe smoke; do
               # The probe's matrix legs are named "<job> (<engine>)".
               legs="$(echo "${jobs_json}" | jq --arg p "${probe} (" '[.jobs[] | select(.name | startswith($p))]')"
               if [ "$(echo "${legs}" | jq '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled")] | length')" -gt 0 ]; then
-                red=$((red + 1))
+                red[$probe]=$((red[$probe] + 1))
               fi
               # Annotations only for the legs that can emit tolerated-flake
               # warnings (webkit, or any grading-probe leg), keeping API usage
@@ -56,12 +58,14 @@ jobs:
               for job_id in $(echo "${legs}" | jq -r '.[] | select(.name | test("webkit|grading-probe")) | .id'); do
                 n="$(gh api "repos/${REPO}/check-runs/${job_id}/annotations?per_page=100" \
                   --jq '[.[] | select(.message // "" | test("AMBIENT FLAKE TOLERATED|FLAKE RETRY"))] | length' 2>/dev/null || echo 0)"
-                warnings=$((warnings + n))
+                warnings[$probe]=$((warnings[$probe] + n))
               done
             done
-            summary+="- browser-probes.yml ${probe}: ${warnings} tolerated-flake warning(s), ${red} red run(s)"$'\n'
-            total_warnings=$((total_warnings + warnings))
-            total_red=$((total_red + red))
+          done
+          for probe in grading-probe smoke; do
+            summary+="- browser-probes.yml ${probe}: ${warnings[$probe]} tolerated-flake warning(s), ${red[$probe]} red run(s)"$'\n'
+            total_warnings=$((total_warnings + warnings[$probe]))
+            total_red=$((total_red + red[$probe]))
           done
           echo "${summary}"
           if [ "${total_warnings}" -eq 0 ] && [ "${total_red}" -eq 0 ]; then

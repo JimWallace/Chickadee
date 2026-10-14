@@ -6,7 +6,8 @@
   `server` job builds it for every probe leg. A `changes` job decides which
   probes run: on a pull request by each probe's own paths, as before; on a
   schedule by its cron (the editor smoke daily, the grading-hang probe
-  weekly); on a dispatch by a new `probes` input. The job names did not
+  weekly); on a dispatch by a new `probes` input, which runs all six by
+  default and refuses an unknown name. The job names did not
   change, so `editor-smoke-gate` is still the required check.
   `flake-telemetry.yml` now reads the combined workflow and counts a red run
   for a probe only when that probe's own legs failed.
