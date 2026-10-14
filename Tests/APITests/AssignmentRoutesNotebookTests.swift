@@ -56,7 +56,7 @@ import VaporTesting
             let mtimeBefore =
                 (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date)
                 ?? Date.distantPast
-            try await Task.sleep(nanoseconds: 1_100_000_000)  // ensure ≥1s mtime resolution
+            try await Task.sleep(for: .milliseconds(1100))  // ensure ≥1s mtime resolution
 
             try await app.asyncTest(
                 .POST,
@@ -86,7 +86,8 @@ import VaporTesting
                 let metadata = resetJSON["metadata"] as? [String: Any],
                 let kernelspec = metadata["kernelspec"] as? [String: Any]
             else {
-                Issue.record("Reset working copy is not a valid normalized notebook"); return
+                Issue.record("Reset working copy is not a valid normalized notebook")
+                return
             }
             #expect(
                 kernelspec["name"] as? String == "xpython",

@@ -16,7 +16,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-configs=(.swift-format Tests/.swift-format)
+configs=(.swift-format)
 
 # Prints the rule names in a configuration, one per line, sorted. A rule name
 # starts with a capital letter; every other key in the file does not. The CI

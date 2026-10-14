@@ -11,6 +11,7 @@
 // and are the point of several cases below.
 
 import ChickadeeTestSupport
+import Core
 import Foundation
 import Testing
 

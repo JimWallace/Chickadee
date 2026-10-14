@@ -7,6 +7,7 @@
 // renders of the fixtures marked `isExemplar`.
 
 import Core
+import Elementary
 import Foundation
 
 @testable import APIServer

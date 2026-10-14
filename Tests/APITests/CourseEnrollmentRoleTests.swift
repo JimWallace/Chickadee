@@ -361,7 +361,7 @@ import Vapor
         )
     }
 
-    private func courseRole(of user: APIUser, on db: Database) async throws -> CourseRole {
+    private func courseRole(of user: APIUser, on db: any Database) async throws -> CourseRole {
         let enrollment = try #require(
             try await APICourseEnrollment.query(on: db)
                 .filter(\.$userID == user.requireID())

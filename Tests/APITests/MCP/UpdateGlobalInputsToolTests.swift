@@ -47,7 +47,7 @@ import Vapor
     }
 
     private func reloadInputs(
-        _ assignment: APIAssignment, on db: Database
+        _ assignment: APIAssignment, on db: any Database
     ) async throws -> GlobalInputsService.Result {
         let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
         return try GlobalInputsService.current(setup: setup)

@@ -259,7 +259,7 @@ import Vapor
                 _ = try await applyPatternFamilies(
                     to: fixture.setup, nextFamilies: [pfBMIFamily()], on: fixture.app.db)
                 Issue.record("Expected validation to reject the family")
-            } catch let abort as AbortError {
+            } catch let abort as any AbortError {
                 #expect("\(abort.reason)".contains("hand-written script"))
             }
             #expect(fixture.setup.manifest == manifestBefore, "Failed validation must not mutate the manifest")
@@ -738,7 +738,7 @@ import Vapor
                     on: fixture.app.db
                 )
                 Issue.record("Expected cycle to be rejected")
-            } catch let abort as AbortError {
+            } catch let abort as any AbortError {
                 #expect(
                     "\(abort.reason)".contains("cycle"),
                     "Expected cycle error, got: \(abort.reason)")
@@ -771,7 +771,7 @@ import Vapor
                     on: fixture.app.db
                 )
                 Issue.record("Expected cycle to be rejected")
-            } catch let abort as AbortError {
+            } catch let abort as any AbortError {
                 #expect("\(abort.reason)".contains("cycle"))
             }
 
@@ -793,7 +793,7 @@ import Vapor
                     to: fixture.setup, nextFamilies: [f],
                     authoredItems: [.family(id: "loop")], on: fixture.app.db)
                 Issue.record("Expected self-ref to be rejected")
-            } catch let abort as AbortError {
+            } catch let abort as any AbortError {
                 #expect("\(abort.reason)".contains("itself") || "\(abort.reason)".contains("cycle"))
             }
 
@@ -821,7 +821,7 @@ import Vapor
                     on: fixture.app.db
                 )
                 Issue.record("Expected unknown-family-ref rejection")
-            } catch let abort as AbortError {
+            } catch let abort as any AbortError {
                 #expect("\(abort.reason)".contains("does_not_exist"))
             }
 

@@ -129,7 +129,7 @@ import VaporTesting
             for path in ["/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"] {
                 try await app.asyncTest(.GET, path) { res async in
                     #expect(res.status == .ok)
-                    #expect(self.scopesSupported(res) == expectedScopes)
+                    #expect(scopesSupported(res) == expectedScopes)
                 }
             }
 

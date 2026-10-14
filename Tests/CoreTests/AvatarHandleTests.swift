@@ -33,10 +33,10 @@ import Testing
             // Computed before the expectation: #expect decomposes a function
             // call into a rethrows-typed helper, so `allSatisfy` inside one
             // fails to compile.
-            let lettersOnly = word.allSatisfy { $0.isLetter }
+            let lettersOnly = word.allSatisfy(\.isLetter)
             let titleCased =
                 word.first?.isUppercase == true
-                && word.dropFirst().allSatisfy { $0.isLowercase }
+                && word.dropFirst().allSatisfy(\.isLowercase)
             #expect(!word.isEmpty)
             #expect(lettersOnly, "\(word) is not letters only")
             #expect(titleCased, "\(word) is not title case")

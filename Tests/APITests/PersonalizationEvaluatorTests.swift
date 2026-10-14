@@ -208,7 +208,7 @@ import Testing
                 group.addTask {
                     await gate.acquire()
                     await tracker.enter()
-                    try? await Task.sleep(nanoseconds: 5_000_000)
+                    try? await Task.sleep(for: .milliseconds(5))
                     await tracker.exit()
                     await gate.release()
                 }

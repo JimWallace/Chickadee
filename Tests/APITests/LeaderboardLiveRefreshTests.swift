@@ -7,6 +7,7 @@
 // during the session, so it shows its filter box however short it is.
 
 import Core
+import Elementary
 import Fluent
 import Foundation
 import Testing

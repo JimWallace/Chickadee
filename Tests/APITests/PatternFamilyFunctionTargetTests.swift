@@ -90,7 +90,7 @@ import Vapor
         do {
             try validate("bmiCategory", .java)
             Issue.record("Expected a bare Java method name to be refused")
-        } catch let abort as AbortError {
+        } catch let abort as any AbortError {
             let reason = "\(abort.reason)"
             #expect(reason.contains("Java"))
             #expect(reason.contains("Class.method"))

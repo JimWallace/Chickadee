@@ -43,16 +43,13 @@ import Testing
         let files = try swiftFiles(under: Self.apiServerSources)
         #expect(!files.isEmpty)  // sanity: the directory resolved
 
-        let callPattern = try NSRegularExpression(
-            pattern: #"logger\s*\.\s*(warning|error|critical)\s*\("#)
+        let callPattern = /logger\s*\.\s*(warning|error|critical)\s*\(/
 
         for file in files {
             let lines = try String(contentsOf: file, encoding: .utf8)
                 .components(separatedBy: "\n")
             for (index, line) in lines.enumerated() {
-                let range = NSRange(line.startIndex..., in: line)
-                guard callPattern.firstMatch(in: line, options: [], range: range) != nil
-                else { continue }
+                guard line.contains(callPattern) else { continue }
                 // The message argument comes before any `metadata:` label;
                 // metadata may carry identifiers freely (the ring buffer
                 // redacts those keys at capture).

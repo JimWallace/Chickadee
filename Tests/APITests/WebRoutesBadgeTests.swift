@@ -39,7 +39,7 @@ import VaporTesting
                 .all()
             #expect(
                 badges.isEmpty,
-                "Admin submission must not earn Pathfinder. Found: \(badges.map { $0.achievementID })")
+                "Admin submission must not earn Pathfinder. Found: \(badges.map(\.achievementID))")
         }
     }
 
@@ -114,7 +114,7 @@ import VaporTesting
                 .all()
             #expect(
                 afterAdmin.isEmpty,
-                "Admin's 100% submission must not earn class-wide badges. Found: \(afterAdmin.map { $0.achievementID })"
+                "Admin's 100% submission must not earn class-wide badges. Found: \(afterAdmin.map(\.achievementID))"
             )
 
             // Instructor call — also must persist no badges.
@@ -131,7 +131,7 @@ import VaporTesting
                 .all()
             #expect(
                 afterInstructor.isEmpty,
-                "Instructor's 100% submission must not earn class-wide badges. Found: \(afterInstructor.map { $0.achievementID })"
+                "Instructor's 100% submission must not earn class-wide badges. Found: \(afterInstructor.map(\.achievementID))"
             )
 
             // Student call — should award all three (Trailblazer + Speed Champion + Minimalist).

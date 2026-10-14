@@ -77,7 +77,7 @@ import VaporTesting
             // that found a handful would otherwise pass against a handful.
             #expect(declared.count >= 40, "parsed only \(declared.count) index names")
 
-            let sql = try #require(app.db as? SQLDatabase)
+            let sql = try #require(app.db as? any SQLDatabase)
             // On Postgres, only this app's schema: the lane runs suites in
             // parallel, each in its own schema, and a schema another suite is
             // still migrating holds indexes a later migration drops.

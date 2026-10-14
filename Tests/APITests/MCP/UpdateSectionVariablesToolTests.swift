@@ -47,7 +47,7 @@ import Vapor
     }
 
     private func reload(
-        _ assignment: APIAssignment, sectionID: String = "sec1", on db: Database
+        _ assignment: APIAssignment, sectionID: String = "sec1", on db: any Database
     ) async throws -> SectionInputsService.Inputs? {
         let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: db))
         return try SectionInputsService.current(setup: setup, sectionID: sectionID)

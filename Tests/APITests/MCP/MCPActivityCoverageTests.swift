@@ -22,9 +22,13 @@ import Testing
         let kinds = Set(ActivityKind.allCases.map(\.rawValue))
         var enumsSeen = 0
         for tool in MCPServedText.tools {
-            for schema in [tool.inputSchema, tool.outputSchema].compactMap({ $0 }) {
+            for schema in [tool.inputSchema, tool.outputSchema].compactMap(\.self) {
                 for values in Self.enumArrays(in: schema) {
-                    let named = Set(values.compactMap { if case .string(let s) = $0 { return s } else { return nil } })
+                    let named = Set(
+                        values.compactMap { value -> String? in
+                            guard case .string(let s) = value else { return nil }
+                            return s
+                        })
                     guard !named.isDisjoint(with: kinds) else { continue }
                     enumsSeen += 1
                     #expect(

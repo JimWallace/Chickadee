@@ -11,14 +11,14 @@ import VaporTesting
 @Suite struct AdminMCPEndpointTests {
     private struct StubPrincipalMiddleware: AsyncMiddleware {
         let principal: AdminMCPPrincipal
-        func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+        func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
             request.adminMcpPrincipal = principal
             return try await next.respond(to: request)
         }
     }
 
     private func makeApp(configuration: MCPRoutes.Configuration = .init()) async throws -> Application {
-        let app = try await makeTestingApplication { app in
+        try await makeTestingApplication { app in
             let dispatcher = AdminMCPDispatcher(
                 serverInfo: MCPServerInfo(name: "Chickadee Admin MCP", version: "test"),
                 tools: AdminMCPToolCatalog.live)
@@ -26,7 +26,6 @@ import VaporTesting
             try app.grouped(StubPrincipalMiddleware(principal: principal))
                 .register(collection: AdminMCPRoutes(dispatcher: dispatcher, configuration: configuration))
         }
-        return app
     }
 
     private let jsonHeaders: HTTPHeaders = ["Content-Type": "application/json"]

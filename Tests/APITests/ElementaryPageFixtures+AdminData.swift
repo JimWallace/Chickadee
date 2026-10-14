@@ -3,6 +3,7 @@
 // The admin Data pages (storage, retention, audit log), for
 // ElementaryPageGuardTests.
 
+import Elementary
 import Foundation
 
 @testable import APIServer

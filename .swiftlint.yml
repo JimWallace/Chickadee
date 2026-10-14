@@ -61,10 +61,8 @@ opt_in_rules:
   - prefer_zero_over_explicit_init
   - override_in_extension
   - prohibited_super_call
-  # Modern-idiom rules. Their findings in Sources/ were fixed when they were
-  # turned on, most by `swiftlint --fix`. Tests/.swiftlint.yml turns
-  # off the ones that have findings in existing tests, until the maintainer
-  # approves those test edits.
+  # Modern-idiom rules. Their findings were fixed when they were turned on,
+  # most by `swiftlint --fix`.
   - shorthand_optional_binding
   - shorthand_argument
   - self_binding
@@ -201,20 +199,18 @@ legacy_objc_type:
     - NSNumber
 
 custom_rules:
-  # Legacy Foundation APIs with a modern Swift replacement. Sources/ only:
-  # existing tests still use them, and test edits need the maintainer's
-  # approval. Comments and strings do not match, so prose about an API is
-  # not a finding.
+  # Legacy Foundation APIs with a modern Swift replacement. Comments and
+  # strings do not match, so prose about an API is not a finding.
   legacy_regular_expression:
     name: "Swift Regex, not NSRegularExpression"
-    included: "Sources/.*\\.swift"
+    included: "(Sources|Tests)/.*\\.swift"
     regex: "\\bNSRegularExpression\\b"
     excluded_match_kinds: [comment, doccomment, string]
     message: "Use a regex literal or Regex(_:). Store a shared pattern as a computed static property, because Regex is not Sendable."
     severity: error
   legacy_task_sleep_nanoseconds:
     name: "Task.sleep(for:), not Task.sleep(nanoseconds:)"
-    included: "Sources/.*\\.swift"
+    included: "(Sources|Tests)/.*\\.swift"
     regex: "Task\\.sleep\\(\\s*nanoseconds:"
     excluded_match_kinds: [comment, doccomment, string]
     message: "Use Task.sleep(for: .seconds(n)) or another Duration."

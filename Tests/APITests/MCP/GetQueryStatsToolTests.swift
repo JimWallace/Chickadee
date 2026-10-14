@@ -23,7 +23,7 @@ import VaporTesting
     }
 
     private var isPostgres: Bool {
-        (app.db as? SQLDatabase)?.dialect.name == "postgresql"
+        (app.db as? any SQLDatabase)?.dialect.name == "postgresql"
     }
 
     @Test func availabilityMatchesTheDatabase() async throws {
@@ -61,7 +61,7 @@ import VaporTesting
     @Test func readyStatisticsListNormalizedStatements() async throws {
         try await withApp(app) { app in
             guard try await QueryStatistics.availability(on: app.db) == .ready,
-                let sql = app.db as? SQLDatabase
+                let sql = app.db as? any SQLDatabase
             else {
                 // A trait cannot ask the database, so this branch is the
                 // check for a database without the extension: nothing to list.

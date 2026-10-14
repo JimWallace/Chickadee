@@ -17,6 +17,7 @@
 // tests, but a clean improvement on the previous "spin up the whole
 // HTTP stack to test one validation branch" pattern.
 
+import Core
 import Fluent
 import Foundation
 import Testing

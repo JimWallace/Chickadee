@@ -10,6 +10,7 @@
 // throughout; the tarball is a real one.
 
 import ChickadeeTestSupport
+import Core
 import CryptoExtras
 import Fluent
 import Foundation

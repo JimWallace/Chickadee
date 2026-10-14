@@ -44,7 +44,9 @@ import VaporTesting
             let auto = try await makeCourse(code: "ENR_AUTO1", mode: .auto)
             let closed = try await makeCourse(code: "ENR_CLOSED1", mode: .closed)
             let archived = try await makeCourse(code: "ENR_ARCH1", mode: .open, archived: true)
-            _ = auto; _ = closed; _ = archived
+            _ = auto
+            _ = closed
+            _ = archived
 
             let cookie = try await loginUser(
                 username: "enr_student1", password: "pw",
@@ -261,7 +263,7 @@ import VaporTesting
             let enrolledIDs = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$userID == (try #require(user)).requireID())
                 .all()
-                .map { $0.$course.id }
+                .map(\.$course.id)
 
             #expect(enrolledIDs.contains(id1), "Should be enrolled in first auto course")
             #expect(enrolledIDs.contains(id2), "Should be enrolled in second auto course")
@@ -289,7 +291,7 @@ import VaporTesting
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == (try #require(user)).requireID())
                     .all()
-                    .map { $0.$course.id })
+                    .map(\.$course.id))
 
             #expect(enrolledIDs.contains(autoID), "Should be auto-enrolled in .auto course")
             #expect(enrolledIDs.contains(openID) == false, "Should NOT be auto-enrolled in .open course")

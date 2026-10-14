@@ -7,6 +7,7 @@
 //   POST /api/v1/submissions/browser-result        — merges hidden test cells
 //   POST /api/v1/submissions/file                  — merges hidden test cells
 
+import Core
 import Fluent
 import Foundation
 import Testing

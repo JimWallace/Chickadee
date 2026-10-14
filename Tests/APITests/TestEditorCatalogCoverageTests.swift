@@ -21,6 +21,7 @@
 // under the Leaf-comment finding.
 
 import ChickadeeTestSupport
+import Elementary
 import Foundation
 import Testing
 
@@ -63,15 +64,10 @@ import Testing
     /// Every `{ value: '…', mechanism: '…' }` pair in the catalog.
     private static func catalogEntries() throws -> [String: String] {
         let body = try literalBody(try modalSource(), named: "CATALOG", open: "[", close: "]")
-        let pattern = try NSRegularExpression(
-            pattern: #"\bvalue:\s*'([a-z_]+)'\s*,\s*mechanism:\s*'([a-z]+)'"#)
-        let range = NSRange(body.startIndex..., in: body)
+        let pattern = /\bvalue:\s*'([a-z_]+)'\s*,\s*mechanism:\s*'([a-z]+)'/.wordBoundaryKind(.simple)
         var entries: [String: String] = [:]
-        for match in pattern.matches(in: body, range: range) {
-            guard let key = Range(match.range(at: 1), in: body),
-                let mechanism = Range(match.range(at: 2), in: body)
-            else { continue }
-            entries[String(body[key])] = String(body[mechanism])
+        for match in body.matches(of: pattern) {
+            entries[String(match.output.1)] = String(match.output.2)
         }
         return entries
     }
@@ -192,13 +188,7 @@ import Testing
     /// nobody reports because it reads as "not supported yet".
     @Test func theFamilyEditorOffersEveryPatternKind() throws {
         let template = FamilyEditorBody().render()
-        let pattern = try NSRegularExpression(pattern: #"<option value="([a-z_]+)">"#)
-        let range = NSRange(template.startIndex..., in: template)
-        let offered = Set(
-            pattern.matches(in: template, range: range).compactMap { match -> String? in
-                guard let value = Range(match.range(at: 1), in: template) else { return nil }
-                return String(template[value])
-            })
+        let offered = Set(template.matches(of: /<option value="([a-z_]+)">/).map { String($0.output.1) })
         #expect(!offered.isEmpty, "no <option> values parsed — has FamilyEditorBody changed shape?")
         for kind in PatternKind.allCases {
             #expect(
@@ -218,13 +208,8 @@ import Testing
         let source = try Self.modalSource()
         let descriptions = try Self.literalBody(
             source, named: "DESCRIPTIONS", open: "{", close: "}")
-        let pattern = try NSRegularExpression(pattern: #"(?m)^\s*([a-z_]+):\s*'"#)
-        let range = NSRange(descriptions.startIndex..., in: descriptions)
         let described = Set(
-            pattern.matches(in: descriptions, range: range).compactMap { match -> String? in
-                guard let key = Range(match.range(at: 1), in: descriptions) else { return nil }
-                return String(descriptions[key])
-            })
+            descriptions.matches(of: /^\s*([a-z_]+):\s*'/.anchorsMatchLineEndings()).map { String($0.output.1) })
         #expect(!described.isEmpty, "no descriptions were parsed — has the literal's shape changed?")
         for value in try Self.catalogEntries().keys.sorted() {
             #expect(

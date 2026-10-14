@@ -53,9 +53,9 @@ enum MCPOutputSchemaValidator {
     private static func typeViolation(of value: JSONValue, against type: JSONValue?, at path: String) -> String? {
         var allowed: [String] = []
         switch type {
-        case .string(let one)?:
+        case .string(let one):
             allowed = [one]
-        case .array(let many)?:
+        case .array(let many):
             for case .string(let name) in many {
                 allowed.append(name)
             }
@@ -120,8 +120,8 @@ enum MCPOutputSchemaValidator {
 
     private static func number(_ value: JSONValue?) -> Double? {
         switch value {
-        case .int(let i)?: return Double(i)
-        case .double(let d)?: return d
+        case .int(let i): return Double(i)
+        case .double(let d): return d
         default: return nil
         }
     }

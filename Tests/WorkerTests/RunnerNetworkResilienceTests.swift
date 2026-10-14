@@ -88,7 +88,10 @@ import Testing
     private struct StubError: Error {}
 
     @Test func withRunnerRetryReturnsImmediatelyOnSuccess() async throws {
-        actor Counter { var n = 0; func incr() { n += 1 } }
+        actor Counter {
+            var n = 0
+            func incr() { n += 1 }
+        }
         let calls = Counter()
 
         let result: Int = try await withRunnerRetry(
@@ -107,7 +110,11 @@ import Testing
     }
 
     @Test func withRunnerRetryRetriesUntilSuccess() async throws {
-        actor Counter { var n = 0; func incr() { n += 1 }; func value() -> Int { n } }
+        actor Counter {
+            var n = 0
+            func incr() { n += 1 }
+            func value() -> Int { n }
+        }
         let calls = Counter()
 
         let result: Int = try await withRunnerRetry(
@@ -127,7 +134,10 @@ import Testing
     }
 
     @Test func withRunnerRetryShortCircuitsOnTerminalDisposition() async {
-        actor Counter { var n = 0; func incr() { n += 1 } }
+        actor Counter {
+            var n = 0
+            func incr() { n += 1 }
+        }
         let calls = Counter()
 
         do {
@@ -152,7 +162,10 @@ import Testing
     }
 
     @Test func withRunnerRetryRespectsMaxAttemptsAndRethrows() async {
-        actor Counter { var n = 0; func incr() { n += 1 } }
+        actor Counter {
+            var n = 0
+            func incr() { n += 1 }
+        }
         let calls = Counter()
 
         do {
@@ -177,7 +190,10 @@ import Testing
     }
 
     @Test func withRunnerRetryThrowsImmediatelyWhenPolicyDisabled() async {
-        actor Counter { var n = 0; func incr() { n += 1 } }
+        actor Counter {
+            var n = 0
+            func incr() { n += 1 }
+        }
         let calls = Counter()
 
         do {

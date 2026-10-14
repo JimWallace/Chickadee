@@ -83,7 +83,7 @@ import Testing
             }
             return try await group.reduce(into: []) { $0.append($1) }
         }
-        defer { servers.forEach { $0.stop() } }
+        defer { for server in servers { server.stop() } }
 
         let sockets = Self.serverChildSockets(serving: directory)
         #expect(sockets.count == servers.count, "found \(sockets.count) server children")
