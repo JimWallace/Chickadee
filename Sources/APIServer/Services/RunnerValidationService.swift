@@ -12,6 +12,7 @@
 import Core
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 func enqueueRunnerValidationSubmission(
@@ -28,7 +29,7 @@ func enqueueRunnerValidationSubmission(
     )
     let submissionsDir = context.application.submissionsDirectory
     let subID = freshShortID(prefix: "sub")
-    let ext = (sanitizedFilename as NSString).pathExtension
+    let ext = (FilePath(sanitizedFilename).extension ?? "")
     let filePath = submissionsDir + "\(subID).\(ext)"
     try solutionNotebookData.write(to: URL(fileURLWithPath: filePath))
 
@@ -172,7 +173,7 @@ private func enqueueValidationVariants(
         else { return }
 
         let submissionsDir = context.application.submissionsDirectory
-        let ext = (filename as NSString).pathExtension
+        let ext = (FilePath(filename).extension ?? "")
         for index in 0..<validationVariantCount {
             let seedHex = DatasetDiagnostics.preflightSeed(index)
             let subID = freshShortID(prefix: "sub")
@@ -666,7 +667,7 @@ func ensureValidationRunnerAvailability(context: some ServiceContext) async {
     guard !hasRecentRunner else { return }
 
     await context.application.localRunnerManager.ensureRunning(app: context.application, logger: context.logger)
-    try? await Task.sleep(nanoseconds: 1_000_000_000)
+    try? await Task.sleep(for: .seconds(1))
 }
 
 /// Active window for the validation pre-check's DB-backed runner-liveness

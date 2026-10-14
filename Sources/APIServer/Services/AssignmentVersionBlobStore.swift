@@ -19,6 +19,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 enum AssignmentVersionBlobError: Error, CustomStringConvertible {
     case invalidHash(String)
@@ -112,7 +113,7 @@ struct AssignmentVersionBlobStore: Sendable {
         let finalPath = try path(for: hash)
         guard !FileManager.default.fileExists(atPath: finalPath) else { return }
 
-        let directory = (finalPath as NSString).deletingLastPathComponent
+        let directory = FilePath(finalPath).removingLastComponent().string
         do {
             try FileManager.default.createDirectory(
                 atPath: directory, withIntermediateDirectories: true)

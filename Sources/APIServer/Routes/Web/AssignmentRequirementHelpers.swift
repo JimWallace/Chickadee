@@ -151,20 +151,15 @@ private func pythonCapabilitySuggestions(in source: String) -> [String] {
         "scipy": "scipy",
         "matplotlib": "matplotlib",
     ]
-    let patterns = [
-        #"(?m)^\s*import\s+([A-Za-z_][A-Za-z0-9_\.]*)"#,
-        #"(?m)^\s*from\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+import\s+"#,
-    ]
+    let imports = source.matches(of: /^\s*import\s+([A-Za-z_][A-Za-z0-9_.]*)/.anchorsMatchLineEndings())
+        .map(\.output.1)
+    let fromImports = source.matches(of: /^\s*from\s+([A-Za-z_][A-Za-z0-9_.]*)\s+import\s+/.anchorsMatchLineEndings())
+        .map(\.output.1)
     var matches = Set<String>()
-    for pattern in patterns {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-        let nsrange = NSRange(source.startIndex..<source.endIndex, in: source)
-        for match in regex.matches(in: source, range: nsrange) where match.numberOfRanges > 1 {
-            guard let range = Range(match.range(at: 1), in: source) else { continue }
-            let root = source[range].split(separator: ".").first.map(String.init)?.lowercased() ?? ""
-            if let capability = allowed[root] {
-                matches.insert(capability)
-            }
+    for module in imports + fromImports {
+        let root = module.split(separator: ".").first.map(String.init)?.lowercased() ?? ""
+        if let capability = allowed[root] {
+            matches.insert(capability)
         }
     }
     return matches.sorted()

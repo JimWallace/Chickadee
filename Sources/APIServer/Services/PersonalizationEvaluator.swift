@@ -28,6 +28,7 @@ import Foundation
 
 #if canImport(Glibc)
 import Glibc
+import SystemPackage
 #endif
 
 enum PersonalizationEvaluatorError: Error {
@@ -383,7 +384,7 @@ enum PersonalizationEvaluator {
         // agreeing.
         func filesWithThisLanguagesSourceExtension() -> [String] {
             let wanted = language.sourceFileExtension.lowercased()
-            return entries.filter { (($0 as NSString).pathExtension).lowercased() == wanted }
+            return entries.filter { ((FilePath($0).extension ?? "")).lowercased() == wanted }
                 .sorted()
         }
 
@@ -418,7 +419,7 @@ enum PersonalizationEvaluator {
             // headers first, then sources (the extracted reference solution
             // arrives as `solution.cpp`), sorted within each group for
             // deterministic driver bytes.
-            let lowered = entries.map { ($0, (($0 as NSString).pathExtension).lowercased()) }
+            let lowered = entries.map { ($0, ((FilePath($0).extension ?? "")).lowercased()) }
             let headers = lowered.filter { $0.1 == "hpp" || $0.1 == "h" }.map(\.0).sorted()
             let sources = lowered.filter { $0.1 == "cpp" }.map(\.0).sorted()
             return headers + sources

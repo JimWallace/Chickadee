@@ -5,6 +5,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 
 // MARK: - Index page context types
 
@@ -164,7 +165,7 @@ struct ContentItemRow: Encodable {
         let attachmentViews = item.attachments.map { attachment in
             let downloadURL = "/content-files/\(itemID)/\(attachment.id.uuidString)"
             let isPDF =
-                (attachment.originalName as NSString).pathExtension.lowercased() == "pdf"
+                (FilePath(attachment.originalName).extension ?? "").lowercased() == "pdf"
             return ContentAttachmentView(
                 id: attachment.id.uuidString,
                 displayName: attachment.displayName,

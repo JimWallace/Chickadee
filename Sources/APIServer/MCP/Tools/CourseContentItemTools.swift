@@ -16,6 +16,7 @@
 import Core
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 // MARK: - Shared DTO + helpers
@@ -86,9 +87,9 @@ func contentItemDTO(from item: APICourseContentItem) -> ContentItemDTO {
 /// component, percent-decoded); the store then validates the extension + size.
 func attachmentFilename(fromURL urlString: String) -> String {
     guard let comps = URLComponents(string: urlString) else { return "attachment" }
-    let last = (comps.path as NSString).lastPathComponent
+    let last = (FilePath(comps.path).lastComponent?.string ?? "")
     let decoded = last.removingPercentEncoding ?? last
-    return decoded.isEmpty || decoded == "/" ? "attachment" : decoded
+    return decoded.isEmpty ? "attachment" : decoded
 }
 
 /// Fetches each attachment's sourceUrl under the SSRF guard and stores it on the

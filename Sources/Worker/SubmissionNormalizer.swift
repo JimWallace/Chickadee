@@ -1,5 +1,6 @@
 import Core
 import Foundation
+import SystemPackage
 
 enum DetectedSubmissionKind {
     case pythonScript
@@ -415,20 +416,20 @@ struct SubmissionNormalizer {
     }
 
     private func normalizedNotebookOutputRelativePath(relativePath: String) -> String {
-        let relativeNSString = relativePath as NSString
-        let ext = relativeNSString.pathExtension.lowercased()
-        if ext == "ipynb" {
-            return relativeNSString.deletingPathExtension + ".py"
+        let path = FilePath(relativePath)
+        var stemPath = path
+        stemPath.extension = nil
+        let withoutExtension = stemPath.string
+        if (path.extension ?? "").lowercased() == "ipynb" {
+            return withoutExtension + ".py"
         }
-        let stem =
-            relativeNSString.deletingPathExtension.split(separator: "/").last.map(String.init)
-            ?? relativeNSString.deletingPathExtension
-        let parent = relativeNSString.deletingLastPathComponent
+        let stem = withoutExtension.split(separator: "/").last.map(String.init) ?? withoutExtension
+        let parent = path.removingLastComponent().string
         let generatedName = stem + ".extracted.py"
         if parent.isEmpty || parent == "." {
             return generatedName
         }
-        return (parent as NSString).appendingPathComponent(generatedName)
+        return FilePath(parent).appending(generatedName).string
     }
 
     private func uniqueDestination(preferred: URL) -> URL {
@@ -451,7 +452,7 @@ struct SubmissionNormalizer {
 
     private func singleExpectedPythonFilename(from manifest: RunnerManifest) -> String? {
         let pythonFiles = manifest.requiredFiles.filter {
-            ($0 as NSString).pathExtension.lowercased() == "py"
+            (FilePath($0).extension ?? "").lowercased() == "py"
         }
         return pythonFiles.count == 1 ? pythonFiles[0] : nil
     }
@@ -461,7 +462,7 @@ struct SubmissionNormalizer {
     }
 
     private func preferredModuleIfRootLevel(_ relativePath: String) -> String? {
-        relativePath.contains("/") ? nil : (relativePath as NSString).lastPathComponent
+        relativePath.contains("/") ? nil : (FilePath(relativePath).lastComponent?.string ?? "")
     }
 }
 

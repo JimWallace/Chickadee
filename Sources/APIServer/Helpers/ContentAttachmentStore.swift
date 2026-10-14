@@ -11,6 +11,7 @@
 import Core
 import Foundation
 import NIOFoundationCompat
+import SystemPackage
 import Vapor
 
 enum ContentAttachmentStore {
@@ -63,7 +64,7 @@ enum ContentAttachmentStore {
         guard let safeName = FilenameSafety.bareFilename(trimmed) else {
             throw StoreError.unsafeName(trimmed)
         }
-        let ext = (safeName as NSString).pathExtension.lowercased()
+        let ext = (FilePath(safeName).extension ?? "").lowercased()
         guard allowedExtensions.contains(ext) else { throw StoreError.disallowedType(ext) }
         guard bytes.count <= maxFileBytes else { throw StoreError.tooLarge(name: safeName) }
         return safeName

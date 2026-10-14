@@ -14,6 +14,7 @@
 import Core
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 struct ContentFileRoutes: RouteCollection {
@@ -68,7 +69,7 @@ struct ContentFileRoutes: RouteCollection {
             .replacingOccurrences(of: "\n", with: "")
         return ResolvedAttachment(
             attachment: attachment, path: path,
-            ext: (attachment.originalName as NSString).pathExtension.lowercased(),
+            ext: (FilePath(attachment.originalName).extension ?? "").lowercased(),
             safeName: safeName)
     }
 

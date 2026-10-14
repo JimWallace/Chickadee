@@ -15,6 +15,7 @@
 
 import Core
 import Foundation
+import SystemPackage
 import Vapor
 
 enum KernelImportGuard {
@@ -40,7 +41,7 @@ enum KernelImportGuard {
     /// would reject every `require`, including the `require("test_runtime")`
     /// every Lua test opens with.
     static func language(forFile filename: String) -> AssignmentLanguage? {
-        switch (filename as NSString).pathExtension.lowercased() {
+        switch (FilePath(filename).extension ?? "").lowercased() {
         case "py": return .python
         case "r": return .r
         default: return nil
@@ -107,7 +108,7 @@ enum KernelImportGuard {
     /// and removes a whole class of false positive if a course ever ships a
     /// package-shaped helper.
     static func localModuleName(forFile filename: String) -> String? {
-        let base = (filename as NSString).lastPathComponent
+        let base = (FilePath(filename).lastComponent?.string ?? "")
         let stem: String
         if base.hasSuffix(".py") {
             stem = String(base.dropLast(3))

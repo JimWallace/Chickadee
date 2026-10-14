@@ -332,7 +332,7 @@ func createRunnerSetupZip(
             finalName = baseName
         } else {
             let ext = URL(fileURLWithPath: baseName).pathExtension
-            let stem = (baseName as NSString).deletingPathExtension
+            let stem = runnerScriptStem(baseName)
             var suffix = 2
             var candidate = baseName
             while seenNames.contains(candidate) {

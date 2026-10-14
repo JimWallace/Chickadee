@@ -138,7 +138,7 @@ struct EditableSuiteRow: Encodable {
     /// Used as the default value of the name input in the assignment editor.
     var displayNameOrStem: String {
         if let n = displayName, !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return n }
-        let stem = (name as NSString).deletingPathExtension
+        let stem = runnerScriptStem(name)
         return stem.isEmpty ? name : stem
     }
 

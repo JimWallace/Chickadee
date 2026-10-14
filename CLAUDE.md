@@ -375,6 +375,11 @@ greeting. The example below does so in R."
   instead. `scripts/check-unchecked-sendable.sh` fails `format-lint` on any
   other site, with or without a comment.
 - `async/await` throughout. No completion handlers.
+- Swift APIs over their Foundation predecessors: a regex literal or `Regex`, not
+  `NSRegularExpression`; `FilePath`, not `NSString` path calls;
+  `Task.sleep(for:)`, not `Task.sleep(nanoseconds:)`. SwiftLint enforces these in
+  `Sources/`. `Regex` is not `Sendable`, so a shared pattern is a computed
+  static property, not a stored one.
 - Actors for any shared mutable state (`WorkerSecretStore`, `WorkerActivityStore`,
   `LocalRunnerAutoStartStore`, `LocalRunnerManager`).
 - All models in `Core/` must be `Codable`, `Sendable`, and have no Vapor imports.

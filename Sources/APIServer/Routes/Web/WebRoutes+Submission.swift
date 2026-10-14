@@ -666,7 +666,7 @@ extension WebRoutes {
             sections = props.sections
             entries = props.testSuites
             for entry in props.testSuites {
-                let stem = (entry.script as NSString).deletingPathExtension
+                let stem = runnerScriptStem(entry.script)
                 let stemKey = stem.isEmpty ? entry.script : stem
                 if let displayName = entry.name,
                     !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

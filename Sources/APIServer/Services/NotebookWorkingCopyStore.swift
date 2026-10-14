@@ -17,6 +17,7 @@
 import Core
 import Fluent
 import Foundation
+import SystemPackage
 import Vapor
 
 /// Which of an assignment's two notebooks a working copy or a save names.
@@ -226,7 +227,7 @@ func ensureUserNotebookWorkingCopy(
         application.directory.publicDirectory
         + "jupyterlite/files/"
         + resolvedRelativePath
-    let workingCopyDir = (workingCopyPath as NSString).deletingLastPathComponent
+    let workingCopyDir = FilePath(workingCopyPath).removingLastComponent().string
 
     // All synchronous filesystem work below runs on the thread pool (#1156):
     // this function executes on every notebook page/source request, and a
