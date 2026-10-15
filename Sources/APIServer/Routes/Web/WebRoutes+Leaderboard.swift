@@ -4,7 +4,7 @@
 // (docs/class-activities.md). Reached by students through the vanity path
 // `/:courseCode/:assignmentSlug/leaderboard` and from their submission page.
 //
-// Students are named by their per-course handle and their chickadee, never by
+// Students are named by their bird's handle and their chickadee, never by
 // name: the avatar is the identity primitive the leaderboard was designed on
 // (docs/student-avatars.md §3), and this page has no identity code of its own.
 // Course staff see a real name beside the handle, because a grading dispute
@@ -149,25 +149,20 @@ extension WebRoutes {
     }
 }
 
-/// Who reads a board, and what the read may do. Staff read names and the
-/// whole list. A classmate reading the page locks every handle it shows
-/// (docs/student-avatars.md §3); a staff view, the page or Present mode,
-/// locks nothing (#1757).
+/// Who reads a board. Staff read names and the whole list; a classmate reads
+/// handles and birds.
 struct LeaderboardReader {
     let user: APIUser
     let isStaff: Bool
-    /// The viewer whose read locks the handles shown; nil when nothing locks.
-    let lockingFor: UUID?
 
     /// A classmate or a staff member reading the leaderboard page.
     static func page(user: APIUser, isStaff: Bool) -> LeaderboardReader {
-        LeaderboardReader(user: user, isStaff: isStaff, lockingFor: isStaff ? nil : user.id)
+        LeaderboardReader(user: user, isStaff: isStaff)
     }
 
-    /// Present mode: nameless like a student view, locking nothing like a
-    /// staff one.
+    /// Present mode: nameless like a student view.
     static func presenting(as user: APIUser) -> LeaderboardReader {
-        LeaderboardReader(user: user, isStaff: false, lockingFor: nil)
+        LeaderboardReader(user: user, isStaff: false)
     }
 }
 
@@ -179,7 +174,6 @@ func buildUnionPresentation(
 ) async throws -> UnionPresentation? {
     let viewer = reader.user
     let isStaff = reader.isStaff
-    let lockingFor = reader.lockingFor
     let tally = try await unionTally(setup: setup, on: db)
     guard tally.targetCount > 0 else { return nil }
     let identities = try await RankedIdentities.load(
@@ -202,7 +196,7 @@ func buildUnionPresentation(
         let isTied = (killTieSizes[rank] ?? 1) > 1
         guard
             let identity = try await identities.presentation(
-                for: kill.userID, includeName: isStaff, lockingFor: lockingFor, fallbackLabel: "Student",
+                for: kill.userID, includeName: isStaff, fallbackLabel: "Student",
                 size: .roster,
                 on: db)
         else { continue }
@@ -223,8 +217,7 @@ func buildUnionPresentation(
     for tally in tally.defences {
         guard
             let identity = try await identities.presentation(
-                for: tally.userID, includeName: isStaff, lockingFor: lockingFor,
-                fallbackLabel: "Student", size: .roster,
+                for: tally.userID, includeName: isStaff, fallbackLabel: "Student", size: .roster,
                 on: db)
         else { continue }
         let statusText: String
@@ -312,7 +305,7 @@ func buildTournamentPresentation(
     for entrant in entrants {
         let identity = try await identities.presentation(
             for: entrant.userID, includeName: includeNames,
-            lockingFor: includeNames ? nil : viewerID, fallbackLabel: "Seed \(entrant.seed)", on: db)
+            fallbackLabel: "Seed \(entrant.seed)", on: db)
         // A dropped entrant keeps their seed on the bracket they played.
         bySeed[entrant.seed] = TournamentEntrantPresentation(
             seed: entrant.seed,
@@ -391,12 +384,7 @@ func buildChampionPresentation(
             .filter(\.$userID == champion.userID)
             .first()
     else { return nil }
-    let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
-    // The same lock as a ranking row: a classmate has now seen this handle.
-    // A nil viewer is Present mode, a staff view, which locks nothing (#2254).
-    if !includeNames, let viewerID, champion.userID != viewerID {
-        await AvatarStore.lockHandle(for: enrollment, on: db)
-    }
+    let handle = try await AvatarStore.ensureHandle(for: user, on: db) ?? ""
     let spec = try await AvatarStore.ensureSpec(for: user, on: db)
     let accessibility: AvatarAccessibility = handle.isEmpty ? .labelled("Champion") : .decorative
     // The model requires the date; the fallback only keeps the two strings
@@ -445,7 +433,6 @@ func buildLeaderboard(
 ) async throws -> LeaderboardBoard {
     let viewer = reader.user
     let isStaff = reader.isStaff
-    let lockingFor = reader.lockingFor
     let setupID = setup.id ?? ""
     let allEntries = try await leaderboardEntries(testSetupID: setupID, on: db)
     let identities = try await RankedIdentities.load(
@@ -474,7 +461,7 @@ func buildLeaderboard(
         guard
             let identity = try await identities.presentation(
                 for: entry.userID, includeName: isStaff,
-                lockingFor: lockingFor, fallbackLabel: "Student \(rank)",
+                fallbackLabel: "Student \(rank)",
                 size: .roster, on: db)
         else { continue }
         var tieNote = ""
@@ -590,7 +577,7 @@ struct ViewerIdentity {
                 .filter(\.$userID == viewerID)
                 .first()
         else { return nil }
-        let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
+        let handle = try await AvatarStore.ensureHandle(for: viewer, on: db) ?? ""
         let spec = try await AvatarStore.ensureSpec(for: viewer, on: db)
         return ViewerIdentity(
             handle: handle,
@@ -688,7 +675,6 @@ func buildStandingsBoard(
 ) async throws -> StandingsBoard {
     let viewer = reader.user
     let isStaff = reader.isStaff
-    let lockingFor = reader.lockingFor
     let ranked = try await rankedStandings(testSetupID: setup.id ?? "", courseID: setup.courseID, on: db)
     let identities = try await RankedIdentities.load(
         userIDs: ranked.map(\.standing.userID), courseID: setup.courseID, on: db)
@@ -700,8 +686,7 @@ func buildStandingsBoard(
         let isTied = entry.isTied
         guard
             let identity = try await identities.presentation(
-                for: standing.userID, includeName: isStaff, lockingFor: lockingFor,
-                fallbackLabel: "Student \(rank)",
+                for: standing.userID, includeName: isStaff, fallbackLabel: "Student \(rank)",
                 size: .roster, on: db)
         else { continue }
         rows.append(
@@ -759,25 +744,23 @@ struct RankedIdentities {
             .all()
         var enrollmentByUser: [UUID: APICourseEnrollment] = [:]
         for enrollment in enrollments { enrollmentByUser[enrollment.userID] = enrollment }
-        try await drawMissingHandles(enrollments, courseID: courseID, on: db)
+        try await drawMissingHandles(users, on: db)
         return RankedIdentities(userByID: userByID, enrollmentByUser: enrollmentByUser)
     }
 
-    /// Draws a handle for each ranked enrollment that has none, reading the
-    /// course's taken handles once for the page rather than once per row
-    /// (#2257). `presentation` then finds every handle already in place.
-    private static func drawMissingHandles(
-        _ enrollments: [APICourseEnrollment], courseID: UUID, on db: any Database
-    ) async throws {
+    /// Draws a handle for each ranked bird that has none, reading the taken
+    /// handles once for the page rather than once per row (#2257).
+    /// `presentation` then finds every handle already in place.
+    private static func drawMissingHandles(_ users: [APIUser], on db: any Database) async throws {
         var taken: Set<String>?
-        for enrollment in enrollments where !(enrollment.avatarHandle.map(AvatarHandle.hasHandleShape) ?? false) {
+        for user in users where !(user.avatarHandle.map(AvatarHandle.hasHandleShape) ?? false) {
             var current: Set<String>
             if let taken {
                 current = taken
             } else {
-                current = try await AvatarStore.takenHandles(inCourse: courseID, on: db)
+                current = try await AvatarStore.takenHandles(on: db)
             }
-            if let handle = try await AvatarStore.ensureHandle(for: enrollment, taken: current, on: db) {
+            if let handle = try await AvatarStore.ensureHandle(for: user, taken: current, on: db) {
                 current.insert(handle)
             }
             taken = current
@@ -785,26 +768,18 @@ struct RankedIdentities {
     }
 
     /// False for a student who has since dropped: the roster is what a
-    /// classmate is ranked against, and their enrollment carried the handle.
+    /// classmate is ranked against.
     func isOnRoster(_ userID: UUID) -> Bool {
         userByID[userID] != nil && enrollmentByUser[userID] != nil
     }
 
     /// nil when `isOnRoster` is false.
-    ///
-    /// `lockingFor` is the student viewing the page, or nil for a staff view.
-    /// Showing a handle to a classmate locks it (docs/student-avatars.md §3):
-    /// from then on the student cannot choose a different one.  A student's own
-    /// row, and anything staff see, locks nothing.
     func presentation(
-        for userID: UUID, includeName: Bool, lockingFor viewerID: UUID?, fallbackLabel: String,
+        for userID: UUID, includeName: Bool, fallbackLabel: String,
         size: AvatarSize = .small, on db: any Database
     ) async throws -> Presentation? {
         guard let user = userByID[userID], let enrollment = enrollmentByUser[userID] else { return nil }
-        let handle = try await AvatarStore.ensureHandle(for: enrollment, on: db) ?? ""
-        if let viewerID, viewerID != userID {
-            await AvatarStore.lockHandle(for: enrollment, on: db)
-        }
+        let handle = try await AvatarStore.ensureHandle(for: user, on: db) ?? ""
         let spec = try await AvatarStore.ensureSpec(for: user, on: db)
         // Decorative when the handle carries the identity; the bird must
         // announce whose it is only when there is no handle beside it.

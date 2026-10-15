@@ -294,7 +294,7 @@ public enum AvatarTilt: String, CaseIterable, Codable, Sendable {
 /// throughout because customization mutates one slot at a time.  `Hashable`
 /// so a set of specs is expressible — the draw tests count distinct birds that
 /// way — and deliberately NOT used as a uniqueness key: see
-/// docs/student-avatars.md on why uniqueness is carried by a per-course handle
+/// docs/student-avatars.md on why uniqueness is carried by the handle
 /// instead.
 public struct AvatarSpec: Codable, Sendable, Hashable {
     public var cap: AvatarCap

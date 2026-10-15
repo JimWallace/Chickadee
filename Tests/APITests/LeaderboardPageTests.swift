@@ -57,8 +57,8 @@ import VaporTesting
             #expect(res.status == .ok)
             let html = res.body.string
             // Both rows appear under their handles, materialised on this view.
-            let enrollments = try await APICourseEnrollment.query(on: app.db).all()
-            let handles = enrollments.compactMap(\.avatarHandle)
+            let handles = try await APIUser.query(on: app.db).filter(\.$avatarHandle != nil).all()
+                .compactMap(\.avatarHandle)
             #expect(handles.count == 2)
             for handle in handles { #expect(html.contains(handle)) }
             // Never a real name for a student viewer.
@@ -233,7 +233,7 @@ import VaporTesting
             let enrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == (try holder.requireID())).first())
-            #expect(html.contains(try #require(enrollment.avatarHandle)))
+            #expect(html.contains(try #require(try await APIUser.find(enrollment.userID, on: app.db)?.avatarHandle)))
             #expect(!html.contains("lb_hill_holder"))
             #expect(!html.contains("No student holds the hill yet"))
         }
@@ -284,11 +284,11 @@ import VaporTesting
             let mateEnrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == (try mate.requireID())).first())
-            let mateHandle = try #require(mateEnrollment.avatarHandle)
+            let mateHandle = try #require(try await APIUser.find(mateEnrollment.userID, on: app.db)?.avatarHandle)
             let viewerEnrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == (try viewer.requireID())).first())
-            let viewerHandle = try #require(viewerEnrollment.avatarHandle)
+            let viewerHandle = try #require(try await APIUser.find(viewerEnrollment.userID, on: app.db)?.avatarHandle)
             // The list, not the viewer's card above it.
             let list = try #require(html.range(of: "<tbody>")).upperBound
             let mateAt = try #require(html.range(of: mateHandle, range: list..<html.endIndex)?.lowerBound)
@@ -362,7 +362,7 @@ import VaporTesting
             let enrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == (try mate.requireID())).first())
-            #expect(html.contains(try #require(enrollment.avatarHandle)))
+            #expect(html.contains(try #require(try await APIUser.find(enrollment.userID, on: app.db)?.avatarHandle)))
         }
     }
 
@@ -429,7 +429,7 @@ import VaporTesting
             let enrollment = try #require(
                 try await APICourseEnrollment.query(on: app.db)
                     .filter(\.$userID == (try mate.requireID())).first())
-            #expect(html.contains(try #require(enrollment.avatarHandle)))
+            #expect(html.contains(try #require(try await APIUser.find(enrollment.userID, on: app.db)?.avatarHandle)))
 
             run.status = APITournamentRun.Status.complete
             run.winnerUserID = try mate.requireID()

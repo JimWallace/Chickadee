@@ -76,21 +76,25 @@ import VaporTesting
         }
     }
 
-    /// Present mode is a staff view: it shows every handle and locks none
-    /// of them (#1757).
-    @Test func presentModeLocksNoHandle() async throws {
+    /// Present mode is a staff view that shows every ranked bird's handle
+    /// (#1757).
+    @Test func presentModeShowsTheHandles() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await seed(on: app, id: "lp_lock")
-            _ = try await getResponse("/testsetups/lp_lock/leaderboard?present=1", cookie: cookie, on: app)
-            let enrollments = try await APICourseEnrollment.query(on: app.db).all()
-            #expect(enrollments.contains { $0.avatarHandle != nil })
-            #expect(enrollments.allSatisfy { $0.avatarHandleLockedAt == nil })
+            let res = try await getResponse("/testsetups/lp_lock/leaderboard?present=1", cookie: cookie, on: app)
+            // Places one to ten are on the wall; the eleventh and twelfth are not.
+            for index in 0..<10 {
+                let user = try #require(
+                    try await APIUser.query(on: app.db).filter(\.$username == "lp_lock_s\(index)").first())
+                let handle = try #require(user.avatarHandle)
+                #expect(res.body.string.contains(handle))
+            }
         }
     }
 
     /// The hill's champion card follows the same rule as the rows: Present
-    /// mode shows the champion's handle and locks nothing (#2254).
-    @Test func presentModeLocksNoChampionHandle() async throws {
+    /// mode shows the champion's handle (#2254).
+    @Test func presentModeShowsTheChampionHandle() async throws {
         try await withWebRoutesApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let props = TestProperties(
@@ -114,12 +118,8 @@ import VaporTesting
 
             let res = try await getResponse("/testsetups/lp_hill/leaderboard?present=1", cookie: cookie, on: app)
             #expect(res.status == .ok)
-            let enrollment = try #require(
-                try await APICourseEnrollment.query(on: app.db)
-                    .filter(\.$userID == holder.requireID()).first())
-            let handle = try #require(enrollment.avatarHandle)
+            let handle = try #require(try await APIUser.find(holder.requireID(), on: app.db)?.avatarHandle)
             #expect(res.body.string.contains(handle))
-            #expect(enrollment.avatarHandleLockedAt == nil)
         }
     }
 

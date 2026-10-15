@@ -8,7 +8,8 @@ import Foundation
 import Vapor
 
 /// One course on the account page: an enrolled one, with the student's
-/// slip-day balance and class handle, or an open one the user may join.
+/// slip-day balance, or an open one the user may join. The handle names the
+/// bird, so it is on the bird card, not on each row.
 struct AccountCourseRow: Encodable {
     let id: String
     let code: String
@@ -19,13 +20,6 @@ struct AccountCourseRow: Encodable {
     /// "1 of 2 remaining" — the slip-day balance for a student enrollment in
     /// a course with the policy on; nil hides the line (#1228).
     let slipDaysText: String?
-    /// This student's pseudonym in this course, "Hazy Cedar". nil hides the
-    /// line — a course whose word lists are exhausted, which is a real state
-    /// rather than an error: the avatar still shows.
-    let handle: String?
-    /// Whether the student can still choose a different handle, and the
-    /// options if so.  nil wherever `handle` is nil.
-    let handleChoice: AccountHandleChoice?
 }
 
 extension AccountRoutes {
@@ -37,8 +31,7 @@ extension AccountRoutes {
     /// days:" label beside it. `slipDaysUsed` is the count of unrefunded
     /// spends in this course.
     static func enrolledCourseRow(
-        for enrollment: APICourseEnrollment, courseID: UUID, slipDaysUsed: Int,
-        handle: String?, handleChoice: AccountHandleChoice?
+        for enrollment: APICourseEnrollment, courseID: UUID, slipDaysUsed: Int
     ) -> AccountCourseRow {
         let course = enrollment.course
         let policy = course.slipDayPolicy
@@ -54,9 +47,7 @@ extension AccountRoutes {
             code: course.code,
             name: course.name, termLabel: course.term?.displayName,
             enrollmentMode: course.enrollmentMode.rawValue,
-            slipDaysText: slipDaysText,
-            handle: handle,
-            handleChoice: handleChoice)
+            slipDaysText: slipDaysText)
     }
 
     /// A row for an open course the user is not enrolled in, or nil for a
@@ -66,6 +57,6 @@ extension AccountRoutes {
         return AccountCourseRow(
             id: id.uuidString, code: course.code, name: course.name, termLabel: course.term?.displayName,
             enrollmentMode: course.enrollmentMode.rawValue,
-            slipDaysText: nil, handle: nil, handleChoice: nil)
+            slipDaysText: nil)
     }
 }

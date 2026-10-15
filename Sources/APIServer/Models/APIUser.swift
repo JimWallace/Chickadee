@@ -108,6 +108,18 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "avatar_previous_spec")
     var avatarPreviousSpecJSON: String?
 
+    /// The bird's handle, "Curious Noether": its name in every course
+    /// (docs/student-avatars.md §3). Unique across the deployment by
+    /// `idx_users_avatar_handle`, which excludes NULL. Drawn on first need by
+    /// `AvatarStore.ensureHandle`; a hatch draws a new one.
+    @OptionalField(key: "avatar_handle")
+    var avatarHandle: String?
+
+    /// The handle of the bird before the last hatch. A go back restores it if
+    /// no other bird has taken it since.
+    @OptionalField(key: "avatar_previous_handle")
+    var avatarPreviousHandle: String?
+
     /// `UserRole` raw value; column stays a string.
     @Field(key: "role")
     var role: String

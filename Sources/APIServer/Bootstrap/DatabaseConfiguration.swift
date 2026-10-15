@@ -595,4 +595,9 @@ func registerMigrations(on app: Application) {
     // and the bird before the last hatch.
     app.migrations.add(CreateAvatarHatches())
     app.migrations.add(AddUserAvatarPreviousSpec())
+    // The handle names the bird, not the enrollment (docs/student-avatars.md
+    // §3): the columns, then the one-time move. `MoveHandlesToBirds`
+    // full-queries `APIUser` and `APICourseEnrollment`, so it stays last.
+    app.migrations.add(AddUserAvatarHandle())
+    app.migrations.add(MoveHandlesToBirds())
 }

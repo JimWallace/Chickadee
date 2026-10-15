@@ -33,6 +33,9 @@ struct AvatarHatchContext: Encodable {
     let previous: AvatarPresentation?
     /// "cardinal": the previous species, lowercase for a sentence.
     let previousSpeciesWord: String?
+    /// The bird's handle; nil for a bird with none (course staff), whose
+    /// hatch draws no name.
+    let handle: String?
 
     var canHatch: Bool { left > 0 }
 
@@ -40,9 +43,10 @@ struct AvatarHatchContext: Encodable {
     /// left, and a hatched strip needs a previous bird to go back to;
     /// otherwise no strip shows.
     init(
-        spec: AvatarSpec, status: AvatarHatchStatus, nextTerm: AcademicTerm?, requested: AvatarHatchStrip?,
-        isStaff: Bool
+        spec: AvatarSpec, handle: String?, status: AvatarHatchStatus, nextTerm: AcademicTerm?,
+        requested: AvatarHatchStrip?, isStaff: Bool
     ) {
+        self.handle = handle
         left = status.left
         caption = Self.caption(left: status.left, nextTerm: nextTerm)
         current = AvatarPresentation(for: spec, size: .standard, accessibility: .decorative, isStaff: isStaff)
@@ -57,6 +61,20 @@ struct AvatarHatchContext: Encodable {
         case .hatched: strip = status.previous != nil ? .hatched : nil
         case nil: strip = nil
         }
+    }
+
+    /// "Meet your new bird: Curious Noether, a blue jay."
+    var meetTitle: String {
+        guard let handle else { return "Meet your new bird: \(speciesWithArticle)." }
+        return "Meet your new bird: \(handle), \(speciesWithArticle)."
+    }
+
+    /// What classmates see now, and the way back to the previous bird. It
+    /// names no handle: the old one comes back only while it is free.
+    var meetBody: String {
+        let seen = handle == nil ? "it" : "it and its handle"
+        return "Classmates see \(seen) from now on. "
+            + "You can go back to your \(previousSpeciesWord ?? "bird") until you hatch again."
     }
 
     /// "2 of 3 left this term"; at none, "None left this term. 3 more when

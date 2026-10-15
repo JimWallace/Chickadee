@@ -471,7 +471,9 @@ duplicate.
   Under it, `.bird-card-body` is a wrapping flex row of
   two items, so the columns stack on a phone with no media query:
   `.bird-card-hero`, a light panel with the bird at `.avatar-xl` (the
-  `AvatarSize.podium` size, reused), the species, the hatched date and the
+  `AvatarSize.podium` size, reused), the handle in `<strong>` above the
+  species (a student's bird only; a staff bird has no handle, and the species
+  is the strong line), the hatched date and the
   hatch control, `.bird-card-hatch` (a link to the confirm, or a disabled
   button with none left, and its caption);
   and

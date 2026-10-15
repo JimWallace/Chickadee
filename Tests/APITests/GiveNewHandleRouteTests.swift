@@ -32,16 +32,15 @@ import VaporTesting
         return cookie
     }
 
-    /// A student enrolled in `course` whose stored handle is `handle`.
+    /// A student enrolled in `course` whose bird's handle is `handle`.
     private func enrolledStudent(
         _ username: String, in course: APICourse, handle: String
     ) async throws -> APICourseEnrollment {
         let student = try await makeTestStudent(on: app, username: username)
-        let enrollment = try await makeTestEnrollment(
+        student.avatarHandle = handle
+        try await student.save(on: app.db)
+        return try await makeTestEnrollment(
             on: app, userID: try student.requireID(), courseID: try course.requireID())
-        enrollment.avatarHandle = handle
-        try await enrollment.save(on: app.db)
-        return enrollment
     }
 
     private func postNewHandle(
@@ -68,8 +67,7 @@ import VaporTesting
             let status = try await postNewHandle(course: course, userID: enrollment.userID, cookie: cookie)
             #expect(status == .seeOther)
 
-            let stored = try #require(
-                try await APICourseEnrollment.find(enrollment.id, on: app.db)?.avatarHandle)
+            let stored = try #require(try await APIUser.find(enrollment.userID, on: app.db)?.avatarHandle)
             #expect(stored != "Quiet Cedar")
             #expect(AvatarHandle.isWellFormed(stored))
 
@@ -103,7 +101,7 @@ import VaporTesting
             let status = try await postNewHandle(course: course, userID: enrollment.userID, cookie: cookie)
             #expect(status == .forbidden)
 
-            let stored = try await APICourseEnrollment.find(enrollment.id, on: app.db)?.avatarHandle
+            let stored = try await APIUser.find(enrollment.userID, on: app.db)?.avatarHandle
             #expect(stored == "Quiet Cedar")
         }
     }

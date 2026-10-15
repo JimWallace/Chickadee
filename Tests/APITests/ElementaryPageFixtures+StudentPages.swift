@@ -112,29 +112,17 @@ extension ElementaryPageFixtures {
             for: AvatarSpec.drawn(fromSeed: seed), size: size, accessibility: .decorative, isStaff: false)
     }
 
-    static func handleChoice(locked: Bool, taken: Bool = false, wasLocked: Bool = false) -> AccountHandleChoice {
-        let options =
-            locked
-            ? []
-            : ["Hazy Cedar", "Quiet <Fern>", "Bold Ash"].enumerated().map { index, handle in
-                AccountHandleOption(handle: handle, isCurrent: index == 0, avatar: avatar(7, size: .small))
-            }
-        return AccountHandleChoice(
-            isLocked: locked, options: options, canChoose: !locked, wasTaken: taken, wasLocked: wasLocked)
-    }
-
     static var accountEnrolledCourses: [AccountCourseRow] {
         [
             AccountCourseRow(
                 id: "c1", code: "CS135", name: "Design", termLabel: "Fall 2026", enrollmentMode: "open",
-                slipDaysText: "1 of 2 slip days left", handle: "Hazy Cedar",
-                handleChoice: handleChoice(locked: false, taken: true)),
+                slipDaysText: "1 of 2 slip days left"),
             AccountCourseRow(
                 id: "c2", code: "CS136", name: "Algorithms <II>", termLabel: nil, enrollmentMode: "auto",
-                slipDaysText: nil, handle: "Bold Ash", handleChoice: handleChoice(locked: true, wasLocked: true)),
+                slipDaysText: nil),
             AccountCourseRow(
                 id: "c3", code: "STAT230", name: "Probability", termLabel: "", enrollmentMode: "closed",
-                slipDaysText: "", handle: nil, handleChoice: nil),
+                slipDaysText: ""),
         ]
     }
 
@@ -142,7 +130,7 @@ extension ElementaryPageFixtures {
         [
             AccountCourseRow(
                 id: "c4", code: "CS246", name: "Objects", termLabel: "Winter 2027", enrollmentMode: "open",
-                slipDaysText: nil, handle: nil, handleChoice: nil)
+                slipDaysText: nil)
         ]
     }
 
@@ -378,9 +366,10 @@ extension ElementaryPageFixtures {
     ) -> AvatarPickerContext {
         let status = AvatarHatchStatus(used: used, lastHatchedAt: nil, previous: previous)
         let hatch = AvatarHatchContext(
-            spec: spec, status: status, nextTerm: AcademicTerm(year: 2027, season: .winter), requested: strip,
-            isStaff: false)
-        return AvatarPickerContext(for: spec, isStaff: false, hatchedText: "Hatched Sep 8, 2026", hatch: hatch)
+            spec: spec, handle: "Curious <Noether>", status: status,
+            nextTerm: AcademicTerm(year: 2027, season: .winter), requested: strip, isStaff: false)
+        return AvatarPickerContext(
+            for: spec, isStaff: false, handle: "Curious <Noether>", hatchedText: "Hatched Sep 8, 2026", hatch: hatch)
     }
 
     static var submissionPage: ElementaryPageFixture {

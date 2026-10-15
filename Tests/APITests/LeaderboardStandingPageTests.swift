@@ -54,10 +54,7 @@ import VaporTesting
     }
 
     private func handle(of user: APIUser, on app: Application) async throws -> String {
-        let enrollment = try #require(
-            try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == user.requireID()).first())
-        return try #require(enrollment.avatarHandle)
+        try #require(try await APIUser.find(user.requireID(), on: app.db)?.avatarHandle)
     }
 
     @Test func aRankedStudentSeesTheirCardWithRankBestAndNextPlace() async throws {

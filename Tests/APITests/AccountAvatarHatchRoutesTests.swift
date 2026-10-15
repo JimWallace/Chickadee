@@ -64,14 +64,16 @@ import VaporTesting
 
     // MARK: - Hatch
 
-    @Test func aHatchGivesAnotherSpeciesAndKeepsBackdropRingAndHandles() async throws {
+    @Test func aHatchGivesAnotherSpeciesAndANewHandleAndKeepsBackdropAndRing() async throws {
         try await withApp(app) { _ in
             let cookie = try await student("hatch_one")
             let course = try await makeTestCourse(on: app, code: "HATCH101")
-            let enrollment = APICourseEnrollment(
-                userID: try await user("hatch_one").requireID(), courseID: try course.requireID(), role: .student)
-            enrollment.avatarHandle = "Quiet Cedar"
-            try await enrollment.save(on: app.db)
+            let student = try await user("hatch_one")
+            try await APICourseEnrollment(
+                userID: try student.requireID(), courseID: try course.requireID(), role: .student
+            ).save(on: app.db)
+            student.avatarHandle = "Quiet Cedar"
+            try await student.save(on: app.db)
             let before = try await storedSpec("hatch_one")
 
             let (_, location) = try await post("/account/avatar/hatch", cookie: cookie)
@@ -82,8 +84,12 @@ import VaporTesting
             #expect(after.backdrop == before.backdrop)
             #expect(after.border == before.border)
             #expect(try await previousSpec("hatch_one") == before)
-            let handle = try await APICourseEnrollment.find(enrollment.requireID(), on: app.db)?.avatarHandle
-            #expect(handle == "Quiet Cedar")
+            // A new name with the new bird, in every course at once.
+            let hatched = try await user("hatch_one")
+            let handle = try #require(hatched.avatarHandle)
+            #expect(handle != "Quiet Cedar")
+            #expect(AvatarHandle.isWellFormed(handle))
+            #expect(hatched.avatarPreviousHandle == "Quiet Cedar")
             let rows = try await APIAvatarHatch.query(on: app.db)
                 .filter(\.$userID == user("hatch_one").requireID()).all()
             #expect(rows.map(\.termKey) == [try currentTermKey()])

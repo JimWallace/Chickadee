@@ -168,11 +168,12 @@ extension CourseAdminRoutes {
 
     // MARK: - POST /courses/:courseID/new-handle/:userID
     //
-    // Gives an enrolled student a new class handle, drawn from the current word
-    // lists.  This is the only way a handle changes: a list change never renames
-    // anybody mid-term (docs/student-avatars.md §3).  It exists for a handle
-    // that must go, for example one a student reports as a real classmate's
-    // name.  Instructor-only, like every other roster change.
+    // Gives an enrolled student's bird a new handle, drawn from the current
+    // word lists. The handle names the bird, so the new one shows in every
+    // course. Besides a hatch, this is the only way a handle changes: a list
+    // change never renames anybody (docs/student-avatars.md §3). It exists for
+    // a handle that must go, for example one a student reports as a real
+    // classmate's name. Instructor-only, like every other roster change.
 
     @Sendable
     func instructorGiveNewHandle(req: Request) async throws -> Response {
@@ -190,15 +191,17 @@ extension CourseAdminRoutes {
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         guard
-            let enrollment = try await APICourseEnrollment.query(on: req.db)
+            try await APICourseEnrollment.query(on: req.db)
                 .filter(\.$course.$id == courseID)
                 .filter(\.$userID == userID)
-                .first()
+                .first() != nil,
+            let student = try await APIUser.find(userID, on: req.db)
         else {
             return req.redirect(to: "/instructor/students?handleError=notEnrolled")
         }
-        let previous = enrollment.avatarHandle
-        guard let handle = try await AvatarStore.redrawHandle(for: enrollment, on: req.db) else {
+        // The handle names the bird, so the new one shows in every course.
+        let previous = student.avatarHandle
+        guard let handle = try await AvatarStore.redrawHandle(for: student, on: req.db) else {
             return req.redirect(to: "/instructor/students?handleError=exhausted")
         }
 

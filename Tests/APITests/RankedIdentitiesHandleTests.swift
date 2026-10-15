@@ -31,15 +31,14 @@ import VaporTesting
                 _ = try await makeTestEnrollment(on: app, userID: userID, courseID: courseID)
                 userIDs.append(userID)
             }
-            let named = try #require(
-                try await APICourseEnrollment.query(on: app.db).filter(\.$userID == userIDs[0]).first())
+            let named = try #require(try await APIUser.find(userIDs[0], on: app.db))
             named.avatarHandle = "Quiet Cedar"
             try await named.save(on: app.db)
 
             _ = try await RankedIdentities.load(userIDs: userIDs, courseID: courseID, on: app.db)
 
-            let handles = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$course.$id == courseID).all()
+            let handles = try await APIUser.query(on: app.db)
+                .filter(\.$id ~~ userIDs).all()
                 .compactMap(\.avatarHandle)
             #expect(handles.count == 20)
             #expect(Set(handles).count == 20)
