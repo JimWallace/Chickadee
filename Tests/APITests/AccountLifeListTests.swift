@@ -60,20 +60,17 @@ import VaporTesting
             let student = try await user("life_page")
             let seen = try await AvatarStore.lifeList(for: student, on: app.db)
 
-            #expect(html.contains("class=\"bird-life-list\""))
-            #expect(html.contains("Life list</strong> · \(seen.count) of \(AvatarSpecies.allCases.count) species"))
-            #expect(
-                html.components(separatedBy: "class=\"bird-life-list-unseen\"").count - 1
-                    == AvatarSpecies.allCases.count - seen.count)
-            // Read the list itself, not the rest of the card.
-            let start = try #require(html.range(of: "class=\"bird-life-list\""))
+            // The list is the shared locked-list component with its own label.
+            let start = try #require(html.range(of: "id=\"bird-life-list-label\""), "no life list")
             let end = try #require(html[start.upperBound...].range(of: "</ul>"))
             let list = html[start.upperBound..<end.lowerBound]
+            #expect(list.hasPrefix(">Life list · \(seen.count) of \(AvatarSpecies.allCases.count) species"))
+            #expect(list.components(separatedBy: "<li").count - 1 == AvatarSpecies.allCases.count)
+            #expect(list.components(separatedBy: "class=\"bird-locked-had\"").count - 1 == seen.count)
             for species in AvatarSpecies.allCases {
-                let named = list.contains("<span>\(species.displayName)</span>")
-                let hidden = list.contains("\(species.displayName), not yet")
-                #expect(named == seen.contains(species), "\(species)")
-                #expect(hidden == !seen.contains(species), "\(species)")
+                let notYet = list.contains("\(species.displayName) · not yet")
+                #expect(notYet == !seen.contains(species), "\(species)")
+                #expect(list.contains(species.displayName), "\(species) is not named")
             }
         }
     }

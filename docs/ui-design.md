@@ -499,18 +499,14 @@ duplicate.
   the faces and rings not open yet under a dashed rule: a dimmed sample, a lock icon and
   "Name · earned", or for a term ring "Winter · opens in January".  They are list items, not disabled
   radios, because nothing about them can be chosen.  The ring a student
-  already wears is never listed there.  The live preview (`avatar-picker.js`)
+  already wears is never listed there.  The same list, with its own label, is the life list at the foot of
+  the card (#2593): every species with its standing bird, the ones the
+  student has had at full strength (`.bird-locked-had`), the others dimmed and
+  marked "· not yet".  It is a record, private to the account page.  The live preview (`avatar-picker.js`)
   copies the checked option's tokens onto the hero bird and points its ring
   and face layers at the checked symbols; it also keeps Save disabled and "Undo changes"
   hidden until a choice changes.  See [student-wardrobe.md](student-wardrobe.md)
   and [avatar-species.md](avatar-species.md).
-- **`.bird-life-list`** — the foot of the `.bird-card`: the student's life
-  list (#2593), every species as a list item with its standing bird in a
-  `.swatch-bird` sample, under a dashed rule like `.bird-locked`.  A species
-  the student has had shows its name; one they have not is
-  `.bird-life-list-unseen`, a dimmed sample and a "?" (with the name for
-  screen readers).  It is a record, not a choice, so nothing in it is an
-  input.  Private: the account page only, never a leaderboard.
 - **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a
   `.section-items` row: the title and details, the state or value, and the cell
   that holds the actions.  They change nothing on a desktop; at 640px and below

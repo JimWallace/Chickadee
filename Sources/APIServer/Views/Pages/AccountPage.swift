@@ -245,33 +245,23 @@ private struct AccountBirdCard: HTML {
     }
 }
 
-/// The life list (#2593): every species, the ones the student has had drawn
-/// and named, the others dimmed. Private: the account page only.
+/// The life list (#2593): every species, the ones the student has had at full
+/// strength (`.bird-locked-had`), the others dimmed and marked "not yet".
+/// Private: the account page only.
 private struct AccountLifeList: HTML {
     let picker: AvatarPickerContext
 
     var body: some HTML {
-        div(.class("bird-life-list")) {
-            p(.class("field-note"), .id("bird-life-list-label")) {
-                strong { "Life list" }
-                " · \(picker.lifeListNote)"
-            }
-            ul(.custom(name: "aria-labelledby", value: "bird-life-list-label")) {
-                for entry in picker.lifeList {
-                    li {
-                        span(.class("swatch-sample swatch-bird"), .ariaHidden) {
-                            Avatar(avatar: entry.presentation)
-                        }
-                        " "
-                        if entry.seen {
-                            span { entry.name }
-                        } else {
-                            span(.class("visually-hidden")) { "\(entry.name), not yet" }
-                            span(.ariaHidden) { "?" }
-                        }
+        AccountLockedList(labelID: "bird-life-list-label", label: "Life list · \(picker.lifeListNote)") {
+            for entry in picker.lifeList {
+                li {
+                    span(.class("swatch-sample swatch-bird"), .ariaHidden) {
+                        Avatar(avatar: entry.presentation)
                     }
-                    .attributes(.class("bird-life-list-unseen"), when: !entry.seen)
+                    " "
+                    entry.seen ? entry.name : "\(entry.name) · not yet"
                 }
+                .attributes(.class("bird-locked-had"), when: entry.seen)
             }
         }
     }
@@ -556,20 +546,23 @@ private struct AccountFaceGroup: HTML {
     }
 }
 
-/// The faces or rings not open yet, under "Not open yet": plain items, not
-/// inputs. `labelID` names the list, and is unique on the page.
+/// A labelled list of dimmed bird samples under a dashed rule: plain items,
+/// not inputs. The faces or rings not open yet ("Not open yet"), and the life
+/// list. `labelID` names the list, and is unique on the page.
 private struct AccountLockedList<Items: HTML>: HTML {
     let labelID: String
+    let label: String
     let items: Items
 
-    init(labelID: String, @HTMLBuilder items: () -> Items) {
+    init(labelID: String, label: String = "Not open yet", @HTMLBuilder items: () -> Items) {
         self.labelID = labelID
+        self.label = label
         self.items = items()
     }
 
     var body: some HTML {
         div(.class("bird-locked")) {
-            p(.class("field-note"), .id(labelID)) { "Not open yet" }
+            p(.class("field-note"), .id(labelID)) { label }
             ul(.custom(name: "aria-labelledby", value: labelID)) { items }
         }
     }
