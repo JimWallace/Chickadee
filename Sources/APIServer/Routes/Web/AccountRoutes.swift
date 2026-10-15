@@ -138,8 +138,12 @@ struct AccountRoutes: RouteCollection {
     private static func avatarPickerContext(
         user: APIUser, spec: AvatarSpec, handle: String?, isStaff: Bool, avatarNotice: String?, req: Request
     ) async throws -> AvatarPickerContext {
+        // Earned items are granted here, on the page that shows them, and
+        // never while a result is written (docs/student-wardrobe.md, W3).
+        let unlocked =
+            (try? await WardrobeUnlockStore.grantEarned(for: user.requireID(), on: req.db)) ?? []
         guard let term = AcademicTerm.current() else {
-            return AvatarPickerContext(for: spec, isStaff: isStaff, handle: handle ?? "")
+            return AvatarPickerContext(for: spec, isStaff: isStaff, handle: handle ?? "", unlocked: unlocked)
         }
         let status = try await AvatarStore.hatchStatus(for: user, term: term, on: req.db)
         let requested: AvatarHatchStrip? =
@@ -152,7 +156,8 @@ struct AccountRoutes: RouteCollection {
         formatter.timeStyle = .none
         let hatchedText = (status.lastHatchedAt ?? user.createdAt).map { "Hatched \(formatter.string(from: $0))" }
         return AvatarPickerContext(
-            for: spec, isStaff: isStaff, handle: handle ?? "", hatchedText: hatchedText ?? "", hatch: hatch)
+            for: spec, isStaff: isStaff, handle: handle ?? "", hatchedText: hatchedText ?? "", hatch: hatch,
+            unlocked: unlocked)
     }
 
     /// The one-shot success banner after a redirect back to this page.
