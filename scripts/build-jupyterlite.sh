@@ -162,6 +162,14 @@ python3 "$ROOT_DIR/scripts/patch-jupyterlite-diagnostics.py" "$OUTPUT_DIR"
 # editor boot. Idempotent; fails if the upstream shapes drift.
 python3 "$ROOT_DIR/scripts/patch-xeus-extension.py" "$OUTPUT_DIR"
 
+# Remove the files that no kernel reads at run time from each kernel package:
+# static archives, headers, manuals, CPython's test suite and the second copy
+# of each kernel shared library. A kernel unpacks its whole environment into
+# browser memory at boot, so an Octave boot unpacks about 150 MB less.
+# Each rewritten archive gets a content-hash name (see the script docstring).
+# It runs before the pyodide-http patch, which then patches the pruned bytes.
+python3 "$ROOT_DIR/scripts/prune-kernel-packages.py" "$OUTPUT_DIR"
+
 # Drop pyodide-http's Pyodide-only `to_js(dict_converter=...)` call from the
 # vendored xeus-python env. xeus-python -> xeus-python-shell-lite ->
 # pyodide-http is an unavoidable dependency chain, the shell calls patch_all()

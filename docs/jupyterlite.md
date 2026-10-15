@@ -208,6 +208,18 @@ and restoring its CSP allowances.
   `kernel_packages/` location in `deploy/nginx.conf` on a systemd host. A new
   version arrives under a new name through `empack_env_meta.json`, which stays
   `no-cache`.
+- **Kernel packages hold no build-only files.** A kernel unpacks every package
+  into browser memory at boot. `scripts/prune-kernel-packages.py` (run from
+  `build-jupyterlite.sh`) removes what no kernel reads at run time: static
+  `.a` archives, top-level `include/`, pkg-config and CMake files,
+  `share/man` and `share/doc`, CPython's `lib/python3.X/test/`, and the
+  second copy of each kernel shared library. The xeus loader fetches those
+  libraries from the kernel directory (`metadata.shared` in `kernel.json`,
+  plus `lib/libxeus.so`), never from the unpacked package. Unpacked, this
+  removed about 152 MB of 305 MB from Octave, 50 of 64 from Lua, 48 of 204
+  from Python and 13 of 123 from R. Each archive it changes gets a
+  content-hash name, as in the next rule. `check-xeus-vendored.sh` section 10
+  fails if a package still holds such a file.
 - **Large kernel files go out as brotli copies made at image build.** The
   `kernel-assets` stage of the Dockerfile writes `<file>.br` (quality 9) beside
   each `.wasm`, `.js` and `.so` file over 64 KB under `xeus/`, outside

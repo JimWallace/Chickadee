@@ -57,6 +57,7 @@ on:
       - "scripts/derive-kernel-modules.py"
       # build-jupyterlite.sh runs each of them on the built bundle.
       - "scripts/patch-*.py"
+      - "scripts/prune-kernel-packages.py"
       - ".github/workflows/revendor-kernels.yml"
 
 concurrency:

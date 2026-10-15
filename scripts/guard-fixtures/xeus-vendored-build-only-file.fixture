@@ -1,0 +1,24 @@
+# A kernel unpacks every package into browser memory at boot, so a package
+# that still holds a build-only file (here a static archive) must be seen to
+# fail.
+guard="scripts/check-xeus-vendored.sh"
+files="Public/jupyterlite/xeus/chickadee-lua/kernel_packages/python_abi-3.14-9_cp314.tar.gz"
+description="a kernel package holds a static archive"
+expect="build-only file(s), for example lib/libstatic.a"
+apply() {
+    python3 - Public/jupyterlite/xeus/chickadee-lua/kernel_packages/python_abi-3.14-9_cp314.tar.gz <<'PY'
+import io
+import sys
+import tarfile
+
+path = sys.argv[1]
+with tarfile.open(path, "r:gz") as source:
+    members = [(m, source.extractfile(m).read() if m.isfile() else None) for m in source.getmembers()]
+with tarfile.open(path, "w:gz") as out:
+    for member, data in members:
+        out.addfile(member, io.BytesIO(data) if data is not None else None)
+    info = tarfile.TarInfo("lib/libstatic.a")
+    info.size = 4
+    out.addfile(info, io.BytesIO(b"!<ar"))
+PY
+}
