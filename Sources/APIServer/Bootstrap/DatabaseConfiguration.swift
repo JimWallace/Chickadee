@@ -603,4 +603,6 @@ func registerMigrations(on app: Application) {
     // Wardrobe unlocks (docs/student-wardrobe.md, W3): the items a student
     // has earned, kept for good.
     app.migrations.add(CreateWardrobeUnlocks())
+    // The life list (#2593): the species each hatch came from and went to.
+    app.migrations.add(AddAvatarHatchSpecies())
 }

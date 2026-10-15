@@ -67,9 +67,13 @@ extension AvatarStore {
                     let fresh = try await APIUser.find(userID, on: db),
                     let current = fresh.avatarSpecJSON.flatMap(decode)
                 else { return false }
-                try await APIAvatarHatch(userID: userID, termKey: termKey, slot: used + 1).create(on: db)
+                let hatched = AvatarSpec.drawn(excluding: current.species, keeping: current)
+                try await APIAvatarHatch(
+                    userID: userID, termKey: termKey, slot: used + 1, fromSpecies: current.species,
+                    species: hatched.species
+                ).create(on: db)
                 fresh.avatarPreviousSpecJSON = encode(current)
-                fresh.avatarSpecJSON = encode(AvatarSpec.drawn(excluding: current.species, keeping: current))
+                fresh.avatarSpecJSON = encode(hatched)
                 fresh.avatarPreviousHandle = fresh.avatarHandle
                 if let handle = fresh.avatarHandle {
                     // The old handle stays taken: it is excluded with the
@@ -126,5 +130,19 @@ extension AvatarStore {
             .filter(\.$userID == userID)
             .filter(\.$termKey == termKey)
             .count()
+    }
+
+    /// The species `user`'s birds have been, for the life list (#2593).
+    static func lifeList(for user: APIUser, on db: any Database) async throws -> Set<AvatarSpecies> {
+        let hatches = try await APIAvatarHatch.query(on: db).filter(\.$userID == user.requireID()).all()
+        return AvatarLifeList.seen(
+            current: user.avatarSpecJSON.flatMap(decode)?.species,
+            previous: user.avatarPreviousSpecJSON.flatMap(decode)?.species,
+            hatches: hatches.map {
+                (
+                    from: $0.fromSpecies.flatMap(AvatarSpecies.init(rawValue:)),
+                    to: $0.species.flatMap(AvatarSpecies.init(rawValue:))
+                )
+            })
     }
 }
