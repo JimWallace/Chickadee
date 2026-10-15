@@ -1,0 +1,222 @@
+name: Nightly failure notes
+
+# When the nightly clean build (test-coverage.yml) fails, its `report-failure`
+# job opens or comments on the "Nightly clean build failing" issue with the run
+# link. This workflow adds what that comment cannot: which step failed and why,
+# the first error, and the commits since the last green nightly that most
+# likely caused it. A small model reads the failed log and the commit range;
+# the note goes on the same issue.
+#
+# A REPORT, NEVER A GATE. It changes nothing and re-runs nothing. Its "likely
+# cause" is a reading of the log and of which files each commit touched, not a
+# bisect.
+#
+# The same layers as the other agent workflows: the agent's job is read-only,
+# the agent may read only notes/ and docs/ci-flakiness.md (for Family 7, the
+# upstream build crash that a re-run clears), and a second job with no model
+# posts the comment after it refuses credential-shaped text and caps the
+# length.
+
+on:
+  workflow_run:
+    workflows: ["Nightly Clean Build & Coverage"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: nightly-failure-notes-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  notes:
+    name: nightly-failure-notes
+    # On `main` only: a dispatch from another branch is not the canary.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Read only. The write scope is in the `post` job.
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      id-token: write
+    outputs:
+      issue: ${{ steps.collect.outputs.issue }}
+      marker: ${{ steps.collect.outputs.marker }}
+      outcome: ${{ steps.notes.outcome }}
+      result: ${{ steps.notes.outputs.structured_output }}
+
+    steps:
+      # Full history, for the commit range. The default branch, as
+      # workflow_run always gives.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check for credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the nightly failure notes did not run."
+          fi
+
+      - name: Collect the failure
+        id: collect
+        if: steps.credentials.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CREATED: ${{ github.event.workflow_run.created_at }}
+        run: |
+          set -euo pipefail
+          # The issue that report-failure opened or commented on.
+          issue="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label nightly-clean-build \
+            --json number,title --jq 'map(select(.title == "Nightly clean build failing")) | .[0].number // empty')"
+          if [ -z "$issue" ]; then
+            echo "::notice::No open \"Nightly clean build failing\" issue to comment on."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          marker="<!-- nightly-failure-notes:run-${RUN_ID}-attempt-${ATTEMPT} -->"
+          # Read the bodies first: `grep -q` in a pipe can end the pipe early,
+          # and pipefail then reports a match as a miss.
+          bodies="$(gh api "repos/$GITHUB_REPOSITORY/issues/$issue/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | .body')"
+          if grep -qF "$marker" <<< "$bodies"; then
+            echo "::notice::Issue #$issue already has notes for this run."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mkdir -p notes
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --attempt "$ATTEMPT" \
+            --json url,headSha,jobs \
+            --jq '{url, headSha, failedJobs: [.jobs[] | select(.conclusion == "failure")
+                   | {name, failedSteps: [.steps[] | select(.conclusion == "failure") | .name]}]}' \
+            > notes/run.json
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --attempt "$ATTEMPT" --log-failed \
+            | cut -c1-400 > failed-full.log || true
+          head -n 20000 failed-full.log > notes/failed.log
+
+          # The commits since the last green nightly, with the files each one
+          # touched. "Last green" is the newest SCHEDULED green run created
+          # before this one, and it must be an ancestor of this commit; a
+          # manual run, a later run or another branch would give a wrong
+          # range. Without one, the last 30 commits.
+          last_green="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test-coverage.yml \
+            --branch main --event schedule --status success --created "<$CREATED" --limit 1 \
+            --json headSha --jq '.[0].headSha // empty')"
+          if [ -n "$last_green" ] && git merge-base --is-ancestor "$last_green" "$HEAD_SHA" 2>/dev/null; then
+            range="$last_green..$HEAD_SHA"
+          else
+            range="-30 $HEAD_SHA"
+          fi
+          # To a file first: `head` in the pipe would end git log early, and
+          # pipefail would then fail this step.
+          # shellcheck disable=SC2086
+          git log --no-merges --format='--- %h %s (%an)' --name-only $range > commits-full.txt
+          head -n 2000 commits-full.txt > notes/commits.txt
+          echo "Range: $range" > notes/range.txt
+          {
+            echo "issue=$issue"
+            echo "marker=$marker"
+            echo "go=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write the notes
+        id: notes
+        if: steps.collect.outputs.go == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            The nightly clean build of the Chickadee repository failed. It
+            builds the whole package with no cache, runs the tests, and
+            enforces a coverage floor. Say what failed and what most likely
+            caused it.
+
+            Inputs, all in the working directory. You may read nothing else.
+            - notes/run.json: the failed jobs and steps.
+            - notes/failed.log: the log of each failed step. Search it with
+              Grep; do not read it all.
+            - notes/commits.txt and notes/range.txt: the commits since the
+              last green nightly, each with the files it touched.
+            - docs/ci-flakiness.md: read "Family 7" (an upstream crash with
+              exit code 139 before any compile; a re-run clears it) and the
+              headings of the other families.
+
+            Decide the cause: compile, test, coverage-floor, flake or unclear.
+            Then find the first error line. For compile and test, name the
+            commit or commits in the range that touched the failing file or
+            its target, if any did. For coverage-floor, quote the measured
+            and required values from the log.
+
+            Write `comment` as GitHub Markdown, at most 15 lines: a heading
+            `### Nightly failure notes: <cause>`, the failed step, the first
+            error (quoted), the likely commits with their short hashes, and
+            the next step. Say "likely", not "caused": this is a reading, not
+            a bisect. Plain, short sentences. No exclamation marks or emoji.
+          claude_args: |
+            --model haiku
+            --max-turns 25
+            --allowedTools "Read(./notes/**),Read(./docs/ci-flakiness.md),Grep,Glob"
+            --disallowedTools "Bash,Edit,Write,WebFetch,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**)"
+            --json-schema '{"type":"object","properties":{"cause":{"type":"string","enum":["compile","test","coverage-floor","flake","unclear"]},"comment":{"type":"string"}},"required":["cause","comment"]}'
+
+  post:
+    name: nightly-failure-notes (post)
+    needs: notes
+    if: needs.notes.outputs.outcome == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # No model runs in this job, and no repository code is checked out.
+    permissions:
+      issues: write
+
+    steps:
+      - name: Comment on the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.notes.outputs.result }}
+          ISSUE: ${{ needs.notes.outputs.issue }}
+          MARKER: ${{ needs.notes.outputs.marker }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -uo pipefail
+          jq -r '.comment // empty' <<< "${RESULT:-null}" > raw.md
+          if [ ! -s raw.md ]; then
+            echo "::warning::The nightly failure notes came back empty."
+            exit 0
+          fi
+          if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' raw.md; then
+            echo "::error::The notes look like they hold a credential. They were not posted."
+            exit 1
+          fi
+          head -n 25 raw.md | cut -c1-300 | head -c 3000 | sed 's/@/@\xE2\x80\x8B/g' > comment.md
+          {
+            echo
+            echo "Run: $RUN_URL"
+            echo
+            echo "$MARKER"
+            echo
+            echo "---"
+            echo "_Generated by [Claude Code](https://claude.ai/code)_"
+          } >> comment.md
+          if ! gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" -F "body=@comment.md" > /dev/null; then
+            echo "::error::Could not comment on issue #$ISSUE."
+            exit 1
+          fi
