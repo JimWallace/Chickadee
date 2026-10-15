@@ -2641,11 +2641,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .enroll-intro { margin-bottom: 1.25rem; color: var(--gray-600); }
 .fieldset-plain { border: none; padding: 0; margin: 0 0 1.5rem; }
 .fieldset-plain > legend { margin-bottom: .75rem; font-weight: 600; }
-/* A group inside a plain fieldset: one row per species in the account page's
-   Species group. A lighter legend and a shorter gap, so the species names
-   read as sub-headings of the group and not as groups of their own. */
-.fieldset-plain--nested { margin-bottom: .75rem; }
-.fieldset-plain--nested > legend { margin-bottom: .5rem; font-size: var(--text-sm); font-weight: 500; }
 .checkbox-list { display: flex; flex-direction: column; gap: .6rem; }
 .checkbox-row { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
 
@@ -3819,8 +3814,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    ring. A locked ring is not a swatch at all: see .bird-locked. */
 .swatch-backdrop { background: var(--av-backdrop); }
 
-/* A bird sample is the student's own bird in that colourway, at the roster
-   size (2.25rem) rather than the swatch's 1.75rem, because a species has to
+/* A bird sample is the student's own bird wearing that face, at the roster
+   size (2.25rem) rather than the swatch's 1.75rem, because a face has to
    read on it. The avatar inside brings its own nine properties. */
 .swatch-bird {
     width: 2.25rem;
@@ -3841,7 +3836,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
    the podium size; beside it, the Colour and Ring groups. The two flex items
    wrap into one column on a narrow screen with no media query: the groups
    take the spare width, the hero keeps 13rem. Every swatch is a 44px (2.75rem)
-   hit target at least. A named swatch (a colourway or a ring) shows the
+   hit target at least. A named swatch (a face or a ring) shows the
    checked state on the whole tile, a 2px outline and a light fill, and its
    name goes bold; a backdrop keeps the ring around its disc. */
 /* The strip above the body (a hatch's confirm and result) runs to the
@@ -3944,7 +3939,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     min-width: 0;
 }
 
-.bird-card-groups .fieldset-plain--nested { margin: 1rem 0 0; }
 
 /* The staff ring beside its note. */
 .bird-card-groups fieldset > .toolbar { flex-wrap: nowrap; }

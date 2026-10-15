@@ -68,6 +68,9 @@ public enum AvatarExpression: String, CaseIterable, Codable, Sendable {
         .bright, .sleepy, .wink, .curious, .keen, .intrigued,
     ]
 
+    /// The name a student reads in the picker.
+    public var displayName: String { rawValue.capitalized }
+
     /// Raw values a stored spec may carry for a case that was replaced, and
     /// the case each decodes to. Permanent: a row keeps the value it was
     /// stored with until its student saves the picker, which re-encodes it.
@@ -517,14 +520,15 @@ extension AvatarSpec {
     }
 
     /// A hatched bird: drawn like `drawn(using:)`, but the species is one of
-    /// the others than `species`, each equally likely, and the backdrop and
-    /// the ring are `spec`'s. The accent is drawn again: it belongs to the
-    /// hat. See `AvatarHatch`.
+    /// the others than `species`, each equally likely, and the face, the
+    /// backdrop and the ring are `spec`'s: the student chose them (#2588).
+    /// The accent is drawn again: it belongs to the hat. See `AvatarHatch`.
     public static func drawn<G: RandomNumberGenerator>(
         excluding species: AvatarSpecies, keeping spec: AvatarSpec, using generator: inout G
     ) -> AvatarSpec {
         let others = AvatarSpecies.allCases.filter { $0 != species }
         var hatched = drawn(species: pick(from: others, using: &generator), using: &generator)
+        hatched.expression = spec.expression
         hatched.backdrop = spec.backdrop
         hatched.border = spec.border
         return hatched

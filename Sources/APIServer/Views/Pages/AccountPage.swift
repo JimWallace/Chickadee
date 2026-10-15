@@ -1,7 +1,7 @@
 // APIServer/Views/Pages/AccountPage.swift
 //
-// GET /account: the signed-in user's identity, their bird (its colour and
-// ring), the GitHub link, their courses and the courses open to join, and
+// GET /account: the signed-in user's identity, their bird (its face,
+// backdrop and ring), the GitHub link, their courses and the courses open to join, and
 // the personal-data export (#557). The plain student page exemplar
 // (docs/ui-design.md).
 
@@ -208,9 +208,9 @@ struct AccountPage: HTML {
     }
 }
 
-/// The "Your bird" card: the bird, and its Colour and Ring groups
-/// (docs/student-wardrobe.md, W1; docs/avatar-species.md). The species and
-/// markings are drawn, not chosen, so neither has a group.
+/// The "Your bird" card: the bird, and its Face, Backdrop and Ring groups
+/// (docs/student-wardrobe.md, W1; docs/avatar-species.md; #2588). The
+/// species, colours and markings are drawn, not chosen, so none has a group.
 private struct AccountBirdCard: HTML {
     let page: PageRequestContext
     let picker: AvatarPickerContext
@@ -296,7 +296,7 @@ private struct AccountHatchStrip: HTML {
                     p {
                         (hatch.handle == nil
                             ? "You’ll get a different species" : "You’ll get a new handle and a different species")
-                            + ", with random colours, markings, face and hat. Your backdrop and ring stay. "
+                            + ", with random colours, markings and hat. Your face, backdrop and ring stay. "
                             + "This uses 1 of the \(hatch.left) you have left this term."
                     }
                 }
@@ -376,8 +376,8 @@ private struct AccountRestoreForm: HTML {
     }
 }
 
-/// The Colour and Ring groups and the Save button. The live preview updates
-/// the hero bird.
+/// The Face, Backdrop and Ring groups and the Save button. The live preview
+/// updates the hero bird.
 private struct AccountBirdForm: HTML {
     let page: PageRequestContext
     let picker: AvatarPickerContext
@@ -395,22 +395,13 @@ private struct AccountBirdForm: HTML {
                     + "--av-accent: var(\(picker.accentToken))")
         ) {
             CSRFField(token: page.csrfToken)
+            AccountFaceGroup(picker: picker)
             fieldset(.class("fieldset-plain")) {
-                legend { "Colour" }
-                p(.class("field-note field-note--muted")) { picker.colourNote }
+                legend { "Backdrop" }
                 div(.class("swatch-row")) {
-                    for (position, option) in picker.feathers.enumerated() {
+                    for (position, option) in picker.backdrops.enumerated() {
                         if position > 0 { " " }
-                        AccountBirdSwatch(option: option)
-                    }
-                }
-                fieldset(.class("fieldset-plain fieldset-plain--nested")) {
-                    legend { "Backdrop" }
-                    div(.class("swatch-row")) {
-                        for (position, option) in picker.backdrops.enumerated() {
-                            if position > 0 { " " }
-                            AccountBackdropSwatch(option: option)
-                        }
+                        AccountBackdropSwatch(option: option)
                     }
                 }
             }
@@ -422,7 +413,9 @@ private struct AccountBirdForm: HTML {
                     // avatar-picker.js shows it once a choice changes.
                     button(.class("btn"), .type(.reset), .hidden) { "Undo changes" }
                 }
-                p(.class("field-note field-note--muted")) { "Species and markings come with your bird." }
+                p(.class("field-note field-note--muted")) {
+                    "Species, colours and markings come with your bird."
+                }
             }
         }
     }
@@ -498,27 +491,53 @@ private struct AccountRingGroup: HTML {
     }
 }
 
-/// One colourway choice: the student's own bird drawn in it. The radio
-/// carries the six tone tokens and the three layer references the live
-/// preview sets. Every colourway offered is of the student's own species, so
-/// the plumage, tuft and wing references never change the bird's art.
-private struct AccountBirdSwatch: HTML {
+/// The Face group: the open faces as radios, each the student's own bird
+/// wearing it, then the faces not open yet as plain items.
+private struct AccountFaceGroup: HTML {
+    let picker: AvatarPickerContext
+
+    var body: some HTML {
+        fieldset(.class("fieldset-plain")) {
+            legend { "Face" }
+            p(.class("field-note field-note--muted")) { "How your bird looks out of the page." }
+            div(.class("swatch-row")) {
+                for (position, option) in picker.faces.enumerated() {
+                    if position > 0 { " " }
+                    AccountFaceSwatch(option: option)
+                }
+            }
+            if !picker.lockedFaces.isEmpty {
+                div(.class("bird-locked")) {
+                    p(.class("field-note"), .id("bird-locked-faces-label")) { "Not open yet" }
+                    ul(.custom(name: "aria-labelledby", value: "bird-locked-faces-label")) {
+                        for option in picker.lockedFaces {
+                            li {
+                                span(.class("swatch-sample swatch-bird"), .ariaHidden) {
+                                    Avatar(avatar: option.presentation)
+                                }
+                                " "
+                                Icon("i-lock")
+                                " \(option.label)"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One face choice: the student's own bird wearing it. The radio carries the
+/// expression symbol the live preview points the bird's face layer at.
+private struct AccountFaceSwatch: HTML {
     let option: AvatarBirdOption
 
     var body: some HTML {
         label(.class("swatch")) {
             " "
             input(
-                .type(.radio), .name("cap"), .value(option.value),
-                .data("av-cap", value: option.presentation.capToken),
-                .data("av-wing", value: option.presentation.wingToken),
-                .data("av-body", value: option.presentation.bodyToken),
-                .data("av-bib", value: option.presentation.bibToken),
-                .data("av-beak", value: option.presentation.beakToken),
-                .data("av-mark", value: option.presentation.markToken),
-                .data("av-plumage", value: option.presentation.plumageSymbolRef),
-                .data("av-tuft", value: option.presentation.tuftSymbolRef),
-                .data("av-wing-art", value: option.presentation.wingSymbolRef)
+                .type(.radio), .name("expression"), .value(option.value),
+                .data("av-expression", value: option.presentation.expressionSymbolRef)
             )
             .attributes(.checked, when: option.checked)
             " "

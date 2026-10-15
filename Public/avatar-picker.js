@@ -4,28 +4,19 @@
 // The form carries `data-avatar-picker`, a selector for the avatar to preview.
 // Each backdrop or ring radio carries the palette token it stands for in
 // `data-av-token`, and a ring radio the ring symbol it draws in `data-av-ring`.
-// A colourway radio (name "cap") carries the six tone tokens in `data-av-cap`,
-// `data-av-wing`, `data-av-body`, `data-av-bib`, `data-av-beak` and
-// `data-av-mark`, and the three layers a species changes in `data-av-plumage`,
-// `data-av-tuft` and `data-av-wing-art`. So this file holds no palette, no
-// option list and no species. On a change it sets the per-student custom
-// properties the avatar already reads (the one kind of style write the UI
-// rules allow from script) and points the avatar's ring, plumage, tuft and
-// wing layers at the checked symbols. Every colourway offered is of the
-// student's own species, so the plumage, tuft and wing references name the
-// art the bird already wears and those three writes change nothing; they stay
-// so that the preview never depends on that rule. The backdrop and the cap
-// also go on the form, so the ring samples follow them. Nothing is saved until
-// the form is submitted.
+// A face radio (name "expression") carries the expression symbol it draws in
+// `data-av-expression`. So this file holds no palette, no option list and no
+// face list. On a change it sets the per-student custom properties the avatar
+// already reads (the one kind of style write the UI rules allow from script)
+// and points the avatar's ring and face layers at the checked symbols. The
+// backdrop also goes on the form, so the ring samples follow it. Nothing is
+// saved until the form is submitted.
 //
 // `trackChanges` keeps Save disabled and "Undo changes" hidden until a choice
 // changes. Undo resets the form to the saved choices and redraws the preview.
 // Without this script, Save is always enabled.
 (function () {
     'use strict';
-
-    /** The six tones of a colourway, in the order the avatar names them. */
-    var TONES = ['cap', 'wing', 'body', 'bib', 'beak', 'mark'];
 
     /** The value to give each avatar custom property, as `var(<token>)`.
      *  `checkedToken(group)` returns the checked radio's token, or null when
@@ -47,33 +38,11 @@
         return ring && ring.indexOf('#av-ring-') === 0 ? ring : null;
     }
 
-    /** The value to give each tone property of the checked colourway, as
-     *  `var(<token>)`, keyed by tone. `checkedAttribute(name)` returns the
-     *  checked colourway radio's `data-av-<name>`, or null when none is
-     *  checked; a missing or non-token value leaves that tone alone. */
-    function previewTones(checkedAttribute) {
-        var tones = {};
-        TONES.forEach(function (tone) {
-            var token = checkedAttribute(tone);
-            tones[tone] = token && token.indexOf('--') === 0 ? 'var(' + token + ')' : null;
-        });
-        return tones;
-    }
-
-    /** The plumage, tuft and wing symbol references of the checked
-     *  colourway, or null each. Only a same-page reference to a plumage
-     *  symbol, to a tuft or crest symbol, or to a wing symbol is passed
-     *  through. The server names the wing symbol because a species may draw
-     *  a pattern with its own art (docs/avatar-species.md, "Trait map"). */
-    function previewLayers(checkedAttribute) {
-        var plumage = checkedAttribute('plumage');
-        var tuft = checkedAttribute('tuft');
-        var wing = checkedAttribute('wing-art');
-        return {
-            plumage: plumage && plumage.indexOf('#av-plumage-') === 0 ? plumage : null,
-            tuft: tuft && (tuft.indexOf('#av-tuft-') === 0 || tuft.indexOf('#av-crest-') === 0) ? tuft : null,
-            wing: wing && wing.indexOf('#av-wing-') === 0 ? wing : null
-        };
+    /** The expression symbol reference for the checked face, or null. Only
+     *  a same-page reference to an expression symbol is passed through. */
+    function previewFace(checkedFace) {
+        var face = checkedFace();
+        return face && face.indexOf('#av-expression-') === 0 ? face : null;
     }
 
     /** Wires `form` to update `preview` on every change. */
@@ -86,9 +55,9 @@
             var input = form.querySelector('input[name="border"]:checked');
             return input ? input.getAttribute('data-av-ring') : null;
         }
-        function checkedColourway(name) {
-            var input = form.querySelector('input[name="cap"]:checked');
-            return input ? input.getAttribute('data-av-' + name) : null;
+        function checkedFace() {
+            var input = form.querySelector('input[name="expression"]:checked');
+            return input ? input.getAttribute('data-av-expression') : null;
         }
         function pointLayer(selector, ref) {
             var layer = preview.querySelector(selector);
@@ -104,16 +73,8 @@
             if (values.border) preview.style.setProperty('--av-border', values.border);
             var ring = previewRing(checkedRing);
             if (ring) pointLayer('use[data-av-ring]', ring);
-            var tones = previewTones(checkedColourway);
-            TONES.forEach(function (tone) {
-                if (tones[tone]) preview.style.setProperty('--av-' + tone, tones[tone]);
-            });
-            // The two-tone ring sample draws the cap colour.
-            if (tones.cap && form.style) form.style.setProperty('--av-cap', tones.cap);
-            var layers = previewLayers(checkedColourway);
-            if (layers.plumage) pointLayer('use[href^="#av-plumage-"]', layers.plumage);
-            if (layers.tuft) pointLayer('use[href^="#av-tuft-"], use[href^="#av-crest-"]', layers.tuft);
-            if (layers.wing) pointLayer('use[href^="#av-wing-"]', layers.wing);
+            var face = previewFace(checkedFace);
+            if (face) pointLayer('use[href^="#av-expression-"]', face);
         });
     }
 
@@ -147,8 +108,8 @@
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = {
-            previewValues: previewValues, previewRing: previewRing, previewTones: previewTones,
-            previewLayers: previewLayers, attach: attach, trackChanges: trackChanges
+            previewValues: previewValues, previewRing: previewRing, previewFace: previewFace,
+            attach: attach, trackChanges: trackChanges
         };
     }
     if (typeof document !== 'undefined') {

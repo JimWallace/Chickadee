@@ -465,8 +465,8 @@ duplicate.
   backdrop and the ring symbol from the avatar sprite; it inherits
   `--av-backdrop` from the form, so it follows the previewed backdrop) and
   `.swatch-none` (a dashed ring, for "no border") and `.swatch-bird` (the
-  student's own bird in a colourway, an `Avatar` at the roster size, so the
-  species reads; it brings its own properties, so it shows the SAVED backdrop
+  student's own bird wearing a face, an `Avatar` at the roster size, so the
+  face reads; it brings its own properties, so it shows the SAVED backdrop
   and ring, not the previewed ones, while the ring samples follow the preview).
   An option that cannot be chosen yet is not a swatch: see `.bird-locked`.
   Used by the account page's `.bird-card`.
@@ -484,15 +484,13 @@ duplicate.
   hatch control, `.bird-card-hatch` (a link to the confirm, or a disabled
   button with none left, and its caption);
   and
-  `.bird-card-groups`, the form with the Colour and Ring fieldsets and a
+  `.bird-card-groups`, the form with the Face, Backdrop and Ring fieldsets and a
   `.toolbar` footer.  Inside the groups every `.swatch` is a 44px hit target;
-  a named swatch (a colourway, a ring) shows the checked state on the whole
+  a named swatch (a face, a ring) shows the checked state on the whole
   tile, and a backdrop keeps the ring around its disc.  A backdrop is the one
   swatch whose name is `.visually-hidden`: the eight discs are the choice,
-  and the checked one has the ring.  The backdrops sit in a
-  `.fieldset-plain--nested` inside the Colour fieldset, a lighter legend over
-  the row.  `.bird-locked` lists
-  the rings not open yet under a dashed rule: a dimmed sample, a lock icon and
+  and the checked one has the ring.  `.bird-locked` lists
+  the faces and rings not open yet under a dashed rule: a dimmed sample, a lock icon and
   "Name · earned", or for a term ring "Winter · opens in January".  They are list items, not disabled
   radios, because nothing about them can be chosen.  The ring a student
   already wears is never listed there.  The live preview (`avatar-picker.js`)

@@ -117,11 +117,14 @@ import VaporTesting
                     #expect(html.contains(#"data-avatar-picker=".bird-card .avatar-xl""#))
                     #expect(html.contains("/avatar-picker.js"))
                     // One radio per option the chokepoint accepts, in each
-                    // group: the own species' colourways, every backdrop, and
-                    // the rings open now (a locked ring is not an input).
+                    // group: the starter faces and the worn one, every
+                    // backdrop, and the rings open now (a locked face or ring
+                    // is not an input).
                     let spec = try await storedSpec(username: "picker_page")
                     let open: [AvatarCustomizableSlot: Int] = [
-                        .cap: AvatarCustomization.options(for: .cap, species: spec.species).count,
+                        .expression: AvatarCustomization.options(for: .expression).filter {
+                            $0 == spec.expression.rawValue || AvatarCustomization.isOpen($0, for: .expression)
+                        }.count,
                         .backdrop: AvatarCustomization.options(for: .backdrop).count,
                         .border: AvatarCustomization.options(for: .border).filter {
                             $0 == spec.border.rawValue || AvatarCustomization.isOpen($0, for: .border)
@@ -131,7 +134,7 @@ import VaporTesting
                         let radios = html.components(separatedBy: #"name="\#(slot.rawValue)""#).count - 1
                         #expect(radios == open[slot], "\(slot)")
                     }
-                    // Exactly one checked radio per group: species, backdrop, border.
+                    // Exactly one checked radio per group: face, backdrop, border.
                     #expect(html.components(separatedBy: " checked>").count - 1 == 3)
                     #expect(!html.contains("var()"), "a swatch token resolved to empty")
                 })
