@@ -250,6 +250,16 @@ import Testing
         for term in ["winter", "spring", "fall"] {
             for step in 1...8 { expected.insert("--avatar-\(term)-\(step)") }
         }
+        // The concept rings colour themselves by class too; the snake's eye
+        // uses the bird's own eye tokens.
+        expected.formUnion([
+            "--avatar-function", "--avatar-binary", "--avatar-pulse",
+            "--avatar-ouroboros-body", "--avatar-ouroboros-back",
+            "--avatar-greenlight-band", "--avatar-greenlight-housing", "--avatar-greenlight-red",
+            "--avatar-greenlight-amber", "--avatar-greenlight-green",
+            "--avatar-lifering-white", "--avatar-lifering-red", "--avatar-lifering-rim",
+            "--avatar-lifering-rope",
+        ])
         for cap in AvatarCap.allCases {
             for accent in AvatarAccent.allCases {
                 for backdrop in AvatarBackdrop.allCases {
