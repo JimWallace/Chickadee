@@ -2,6 +2,7 @@
 //
 // The site nav and the course tab strip.
 
+import Core
 import Elementary
 
 struct SiteNav: HTML {
@@ -69,6 +70,10 @@ struct SiteNav: HTML {
                 .type(.button), .class("nav-link nav-username nav-dropdown-toggle"),
                 .ariaHasPopup(true), .ariaExpanded(false), .ariaLabel("Account menu")
             ) {
+                // Decorative: the name beside it says whose bird it is.
+                if let bird = user.navAvatar {
+                    Avatar(avatar: bird)
+                }
                 span { user.preferredName ?? user.displayName ?? user.username }
                 " "
                 span(.class("nav-dropdown-caret"), .ariaHidden) { "▾" }

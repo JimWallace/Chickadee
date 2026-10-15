@@ -5,7 +5,18 @@ handle that names it in every course, drawn on first view and stored; the accoun
 place of the initials monogram, which is gone, and the wardrobe lets a student
 choose its backdrop and ring (docs/student-wardrobe.md).
 
-**Both are shown to other people.** Twelve templates include the avatar partial:
+**Every signed-in user sees their own bird (October 2026).** The nav's
+account menu shows it beside the name on every page that has the nav (not an
+embedded page), for staff as well as students. A student's own result page
+shows it beside the grade. On a clean pass the bird wears the `chirp` face for
+that page and hops; on any other result it is the bird as stored. The reaction
+is never stored and never unlocks the face (`AvatarReaction`). This is a
+deliberate trade with decision 5: `chirp` is an unlockable, and the cheer shows
+it for one page as a preview of what can be earned, not as a way to wear it.
+The bird is drawn on the first signed-in page, in `courseAwareUserContext`, and
+the avatar sprite is in `BaseLayout` for every signed-in page.
+
+**Both are shown to other people.** Twelve templates include the avatar partial (and two more, the nav and the result page, show the user only their own bird):
 the leaderboard pages (list, bracket, Present mode) show a student's bird and
 handle to classmates, and the instructor Students, Slip days and LEARN lists,
 the admin Users list, the admin course page, the admin runner page and the
@@ -312,9 +323,10 @@ The repo's UI guards decide the mechanism here, and they decide it well.
 `check-styles.sh` guard S4 fails on raw SVG path data in any template or in
 `Public/*.js` — every icon lives once in the `Resources/Sprites/icons.svg`
 sprite and call sites reference it. So the chickadee parts go in a sprite as
-symbols (a separate `Resources/Sprites/avatar-sprite.svg`, included by the
-pages that render avatars rather than by the layout, since most pages need
-none of it), and one avatar is a stack of
+symbols (a separate `Resources/Sprites/avatar-sprite.svg`; at first included
+only by the pages that render avatars, and since October 2026 by the layout on
+every signed-in page, because the nav shows the user's bird), and one avatar is
+a stack of
 about eight `use` elements.
 
 Colour comes from CSS custom properties set on the wrapping element —

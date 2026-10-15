@@ -29,7 +29,6 @@ struct AdminCoursePage: HTML {
             if isNew {
                 newCourse
             } else {
-                AvatarSprite(page: page)
                 AdminCourseHeader(course: course, csrfToken: page.csrfToken)
                 AdminCourseForms(
                     course: course, courseForm: courseForm, cloneForm: cloneForm, csrfToken: page.csrfToken)

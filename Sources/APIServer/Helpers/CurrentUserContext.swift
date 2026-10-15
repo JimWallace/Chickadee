@@ -43,6 +43,12 @@ struct CurrentUserContext: Encodable {
     /// nav renders one direct "Instructor" link for it instead of a strip.
     /// nil when they staff zero or many courses.
     let primaryStaffCourse: CourseContext?
+    /// The user's own bird for the nav's account menu, or nil when no bird is
+    /// stored yet. Read from the stored spec only: `courseAwareUserContext`
+    /// draws a missing bird before it builds this, so a page render never
+    /// writes. It wears the staff ring when the user is a TA or an instructor
+    /// in an enrolled course (docs/student-wardrobe.md, "The staff ring").
+    let navAvatar: AvatarPresentation?
 
     init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
@@ -78,5 +84,11 @@ struct CurrentUserContext: Encodable {
         self.isStaffAnywhere = !staffCourses.isEmpty
         self.showStaffTabs = staffCourses.count > 1
         self.primaryStaffCourse = staffCourses.count == 1 ? staffCourses[0] : nil
+        // Teaching role only, not the admin rule above: the ring means "staff
+        // in a course", as it does on the account page.
+        let teaches = enrolledCourses.contains { $0.role >= .ta }
+        self.navAvatar = user.avatarSpecJSON.flatMap(AvatarStore.decode).map {
+            AvatarPresentation(for: $0, size: .small, accessibility: .decorative, isStaff: teaches)
+        }
     }
 }

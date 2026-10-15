@@ -47,6 +47,12 @@ extension Request {
         if let cached = storage[CourseAwareUserContextStorageKey.self] { return cached }
         guard let user = auth.get(APIUser.self) else { return nil }
         let state = try await resolveActiveCourse(for: user)
+        // The nav shows the user's bird, so draw it on first need here, once,
+        // and never in a render. `try?`: the bird is cosmetic, and a lost
+        // write must not fail a page (`AvatarStore.ensureSpec`).
+        if user.avatarSpecJSON == nil {
+            _ = try? await AvatarStore.ensureSpec(for: user, on: db)
+        }
         let context = CurrentUserContext(
             user: user, activeCourse: state.active, enrolledCourses: state.all)
         storage[CourseAwareUserContextStorageKey.self] = context

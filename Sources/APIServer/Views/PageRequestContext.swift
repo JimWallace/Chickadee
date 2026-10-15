@@ -18,8 +18,8 @@ struct PageRequestContext: Sendable {
     /// True when the content-authoring MCP endpoint is mounted. The admin tab
     /// bar shows its MCP item only then.
     var mcpEnabled = false
-    /// The avatar sprite (`Resources/Sprites/avatar-sprite.svg`). Only pages that show an
-    /// avatar render it, through `AvatarSprite`.
+    /// The avatar sprite (`Resources/Sprites/avatar-sprite.svg`). `BaseLayout`
+    /// renders it on every signed-in page, through `AvatarSprite`.
     var avatarSprite = ""
 
     /// A static asset path with the cache-busting version query.
@@ -74,7 +74,8 @@ private struct SpriteStorageKey: StorageKey {
 enum StaticSprite: String, CaseIterable, Sendable {
     /// The Feather icons, inlined on every page by the layout.
     case icons = "icons.svg"
-    /// The avatar parts, inlined once by each page that shows an avatar.
+    /// The avatar parts, inlined by `BaseLayout` on every signed-in page and by
+    /// the Present page.
     case avatars = "avatar-sprite.svg"
 }
 

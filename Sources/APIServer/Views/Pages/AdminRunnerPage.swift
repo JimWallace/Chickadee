@@ -26,7 +26,6 @@ struct AdminRunnerPage: HTML {
 
     var body: some HTML {
         BaseLayout(title: "Runner \(runner.workerID)", page: page) {
-            AvatarSprite(page: page)
             section(.class("page-section")) {
                 p(.class("page-crumb")) {
                     a(.href("/admin")) { "Overview" }

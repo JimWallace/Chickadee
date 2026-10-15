@@ -36,7 +36,6 @@ struct InstructorSlipDaysPage: HTML {
     var body: some HTML {
         BaseLayout(title: "Slip days", page: page, flash: flash) {
             InstructorTabs(active: .slipDays)
-            AvatarSprite(page: page)
             if !hasActiveCourse {
                 section(.class("page-section")) {
                     p(.class("empty")) { "Select a course to manage its slip days." }

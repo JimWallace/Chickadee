@@ -6,6 +6,7 @@
 // submission waits for a runner, the page shows a spinner and
 // `submission-root[data-pending]` tells the page script to poll.
 
+import Core
 import Elementary
 
 struct SubmissionPage: HTML {
@@ -106,26 +107,39 @@ struct SubmissionPage: HTML {
             : "\(result.passCount) / \(result.totalTests) tests passed"
     }
 
+    private var scoreSummary: some HTML {
+        div(.class("score-summary")) {
+            p(.class("card-meta")) { "Grade" }
+            if result.gradeIsOverridden {
+                p(.class("score score-header")) {
+                    span(.class("score-figure grade-override-active")) { result.overrideGradeText ?? "" }
+                    " "
+                    span(
+                        .class("grade-override-tag"),
+                        .title("Your instructor set this grade for the assignment")
+                    ) { "overridden" }
+                }
+                p(.class("score score-autograded")) { "Autograded: \(result.gradePercent)% · \(scoreLine)" }
+            } else {
+                p(.class("score score-header")) {
+                    span(.class("score-figure")) { "\(result.gradePercent)%" }
+                }
+                p(.class("score score-autograded")) { scoreLine }
+            }
+        }
+    }
+
     private var scoreRow: some HTML {
         div(.class("submission-score-row")) {
-            div(.class("score-summary")) {
-                p(.class("card-meta")) { "Grade" }
-                if result.gradeIsOverridden {
-                    p(.class("score score-header")) {
-                        span(.class("score-figure grade-override-active")) { result.overrideGradeText ?? "" }
-                        " "
-                        span(
-                            .class("grade-override-tag"),
-                            .title("Your instructor set this grade for the assignment")
-                        ) { "overridden" }
-                    }
-                    p(.class("score score-autograded")) { "Autograded: \(result.gradePercent)% · \(scoreLine)" }
-                } else {
-                    p(.class("score score-header")) {
-                        span(.class("score-figure")) { "\(result.gradePercent)%" }
-                    }
-                    p(.class("score score-autograded")) { scoreLine }
+            // The bird joins the grade's group, so the band stays two groups.
+            if let bird = result.ownBird {
+                div(.class("submission-bird")) {
+                    Avatar(avatar: bird.avatar)
+                    scoreSummary
                 }
+                .attributes(.class("submission-bird-cheer"), when: bird.reaction == .cheer)
+            } else {
+                scoreSummary
             }
             div(.class("diagnostics-cards")) {
                 SubmissionDiagnosticCard(value: result.passCount, label: "Passed", alert: false)

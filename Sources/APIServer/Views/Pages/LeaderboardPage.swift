@@ -18,7 +18,6 @@ struct LeaderboardPage: HTML {
                 p(.class("page-crumb")) { board.courseLabel }
             }
             h1 { board.assignmentTitle }
-            AvatarSprite(page: page)
             section(.class("page-section")) {
                 div(.class("page-titlebar")) {
                     h2 { "Leaderboard" }
