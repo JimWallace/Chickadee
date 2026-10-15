@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.682] - 2026-10-15
+
+### Added
+
+- **An explanation of each visual-regression failure.** When the visual check fails on a PR, `visual-diff-explainer.yml` has a model (the sonnet family) compare each changed page's baseline, capture and diff image with the PR's UI diff, and comment once per PR: what changed, and whether the diff explains it. It is a report; the visual check stays the gate.
+
+
 ## [0.5.681] - 2026-10-15
 
 ### Removed
