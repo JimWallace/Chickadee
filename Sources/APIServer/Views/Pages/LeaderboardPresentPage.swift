@@ -44,6 +44,7 @@ struct LeaderboardPresentPage: HTML {
                     PresentFooter(board: board)
                 }
             }
+            script(.src(page.asset("/present-podium.js"))) {}
             if board.compositeStage != nil {
                 script(.src(page.asset("/class-composite-core.js"))) {}
                 script(.src(page.asset("/class-composite.js"))) {}

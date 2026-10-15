@@ -200,6 +200,10 @@ struct PresentModePresentation {
     let title: String
     let podium: [PresentPlace]
     let hasPodium: Bool
+    /// The podium's handles in order, joined by "|": present-podium.js
+    /// compares it across refreshes, so the birds bounce only when the top
+    /// three change (#2591).
+    var podiumKey: String { podium.map(\.handle).joined(separator: "|") }
     /// Places four to ten.
     let rest: [PresentPlace]
     let rankedCount: Int

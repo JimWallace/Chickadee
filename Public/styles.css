@@ -1713,8 +1713,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 /* The user's own bird moves a little (#2589): it leans when the pointer or
    the keyboard is on it, the account page's large bird breathes until the
    pointer reaches it, and a press makes that bird hop. Never under reduced
-   motion. Only the user's own bird moves: a roster or a leaderboard stays
-   still. */
+   motion. Only the user's own bird reacts to the pointer: a roster or a
+   leaderboard bird does not (the Present podium bounce is its own rule). */
 @keyframes bird-breathe { 50% { transform: scale(1.03); } }
 @media (prefers-reduced-motion: no-preference) {
     .nav-username .avatar,
@@ -2254,6 +2254,24 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .podium-place[data-rank-tier="2"] .podium-plinth { height: 5rem; border-top-color: var(--rank-silver-bg); }
 .podium-place[data-rank-tier="3"] .podium-plinth { height: 3.5rem; border-top-color: var(--rank-bronze-bg); }
 .podium-plinth .rank-disc { width: 3rem; height: 3rem; font-size: 1.6em; }
+/* The podium birds bounce when the board first shows and when the top three
+   change (#2591): third, then second, then first. A refresh that keeps the
+   same three marks the podium settled (present-podium.js), so the birds stay
+   still. Never under reduced motion. Nothing is drawn on a bird to mark its
+   rank; every podium bird bounces. The bounce runs by default and the
+   modifier turns it off, unlike .composite-slot--arrived, because the first
+   render must bounce with no script. */
+@keyframes podium-bounce {
+    30% { transform: translateY(-1.5rem); }
+    55% { transform: translateY(0); }
+    75% { transform: translateY(-.5rem); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .podium-place .avatar { animation: podium-bounce .9s ease-out both; }
+    .podium-place[data-rank-tier="2"] .avatar { animation-delay: .15s; }
+    .podium-place[data-rank-tier="1"] .avatar { animation-delay: .3s; }
+    .podium--settled .podium-place .avatar { animation: none; }
+}
 
 .present-rows { display: grid; gap: .6rem; margin: 0; }
 .present-row {
@@ -3925,7 +3943,57 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .bird-card-hero p { margin: 0; }
 .bird-card-hero strong { font-size: var(--text-lg); }
-.bird-card-hero .avatar-xl { margin-bottom: .75rem; }
+.bird-card-hero > .avatar-xl { margin-bottom: .75rem; }
+
+/* A new bird coming out of its egg, on the first page after a hatch (#2590).
+   The egg is two shell halves over the bird, drawn in the chickadee's cream,
+   which has no dark mirror, so the egg reads in both themes. The egg wobbles,
+   splits and falls away while the bird grows out of it. The egg exists only
+   for readers who did not ask for less motion; everyone else sees the bird.
+   Every animation fills forwards, so a capture with animations finished
+   shows the bird and no egg. */
+.bird-hatch {
+    position: relative;
+    display: block;
+    margin-bottom: .75rem;
+}
+.bird-hatch-egg { display: none; }
+@keyframes bird-hatch-wobble {
+    20%, 60% { transform: rotate(-7deg); }
+    40%, 80% { transform: rotate(7deg); }
+}
+@keyframes bird-hatch-lift { to { opacity: 0; transform: translate(-1.5rem, -3rem) rotate(-35deg); } }
+@keyframes bird-hatch-drop { to { opacity: 0; transform: translateY(2rem); } }
+@keyframes bird-hatch-grow { from { opacity: 0; transform: scale(.4); } }
+@media (prefers-reduced-motion: no-preference) {
+    .bird-hatch-egg {
+        position: absolute;
+        inset: .5rem 1.25rem;
+        display: block;
+        animation: bird-hatch-wobble .9s ease-in-out both;
+    }
+    /* Each half is the whole egg, cut along one shared zigzag, so the halves
+       meet with no gap until they part. */
+    .bird-hatch-shell {
+        position: absolute;
+        inset: 0;
+        background: var(--avatar-ink-body);
+        border: 2px solid var(--gray-300);
+        border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+        /* Decorative, like the bird under it (.avatar). */
+        forced-color-adjust: none;
+    }
+    .bird-hatch-shell--top {
+        clip-path: polygon(0 0, 100% 0, 100% 55%, 87.5% 48%, 75% 58%, 62.5% 48%, 50% 58%, 37.5% 48%, 25% 58%,
+            12.5% 48%, 0 55%);
+        animation: bird-hatch-lift .5s ease-in .9s both;
+    }
+    .bird-hatch-shell--bottom {
+        clip-path: polygon(0 55%, 12.5% 48%, 25% 58%, 37.5% 48%, 50% 58%, 62.5% 48%, 75% 58%, 87.5% 48%, 100% 55%, 100% 100%, 0 100%);
+        animation: bird-hatch-drop .5s ease-in .9s both;
+    }
+    .bird-hatch > .avatar-xl { animation: bird-hatch-grow .5s ease-out .9s both; }
+}
 
 /* The hatch control under the species, below a rule. */
 .bird-card-hatch {
