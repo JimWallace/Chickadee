@@ -62,6 +62,10 @@ struct DataExportAvatarHatch: Codable, Sendable {
     /// "2026-fall".
     let term: String
     let hatchedAt: Date?
+    /// The species before and after the hatch (#2593); nil on a hatch made
+    /// before species were recorded.
+    var fromSpecies: String?
+    var species: String?
 }
 
 struct DataExportGitHubCourseRepository: Codable, Sendable {
@@ -193,7 +197,10 @@ func gatherDataExportContent(
     let githubLink = try await APIGitHubAccountLink.query(on: db).filter(\.$userID == userID).first()
     let avatarHatches = try await APIAvatarHatch.query(on: db).filter(\.$userID == userID)
         .sort(\.$createdAt, .ascending).all()
-        .map { DataExportAvatarHatch(term: $0.termKey, hatchedAt: $0.createdAt) }
+        .map {
+            DataExportAvatarHatch(
+                term: $0.termKey, hatchedAt: $0.createdAt, fromSpecies: $0.fromSpecies, species: $0.species)
+        }
     let courseRepositories = try await APIGitHubCourseRepository.query(on: db).filter(\.$userID == userID).all()
         .map {
             DataExportGitHubCourseRepository(
@@ -572,7 +579,8 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
     - `profile.json` — your account profile: username, names, email,
       student ID, sign-in provider, account timestamps, the choices
       behind your generated avatar and its handle, the avatar and handle
-      before your last hatch, and when you hatched a new one. Passwords are
+      before your last hatch, and when you hatched a new one and the
+      species each hatch came from and gave you. Passwords are
       stored only as one-way hashes and are never included.
     - `enrollments.json` — the courses you are enrolled in, with each
       course's term, your role in each, when you enrolled, and the

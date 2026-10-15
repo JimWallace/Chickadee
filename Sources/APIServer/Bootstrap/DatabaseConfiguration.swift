@@ -600,4 +600,6 @@ func registerMigrations(on app: Application) {
     // full-queries `APIUser` and `APICourseEnrollment`, so it stays last.
     app.migrations.add(AddUserAvatarHandle())
     app.migrations.add(MoveHandlesToBirds())
+    // The life list (#2593): the species each hatch came from and went to.
+    app.migrations.add(AddAvatarHatchSpecies())
 }

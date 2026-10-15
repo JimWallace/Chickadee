@@ -4,6 +4,7 @@
 // current term, counted, are the hatches used; the newest row's date is the
 // "Hatched …" line on the account page.
 
+import Core
 import Fluent
 import Vapor
 
@@ -29,11 +30,26 @@ final class APIAvatarHatch: Model, @unchecked Sendable {
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
+    /// `AvatarSpecies.rawValue` of the bird before this hatch, for the life
+    /// list (#2593). Nil on a row made before species were recorded.
+    @OptionalField(key: "from_species")
+    var fromSpecies: String?
+
+    /// `AvatarSpecies.rawValue` of the bird this hatch drew. Nil on a row
+    /// made before species were recorded.
+    @OptionalField(key: "species")
+    var species: String?
+
     init() {}
 
-    init(userID: UUID, termKey: String, slot: Int) {
+    init(
+        userID: UUID, termKey: String, slot: Int, fromSpecies: AvatarSpecies? = nil,
+        species: AvatarSpecies? = nil
+    ) {
         self.userID = userID
         self.termKey = termKey
         self.slot = slot
+        self.fromSpecies = fromSpecies?.rawValue
+        self.species = species?.rawValue
     }
 }

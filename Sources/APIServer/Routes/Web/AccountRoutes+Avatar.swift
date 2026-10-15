@@ -111,6 +111,11 @@ struct AvatarPickerContext: Encodable {
     /// Course staff wear the staff ring and cannot choose one: the Ring group
     /// becomes a note.
     let isStaff: Bool
+    /// The life list (#2593): every species in order, each marked seen or
+    /// not. Empty hides the list.
+    let lifeList: [AvatarLifeListEntry]
+    /// "3 of 11 species".
+    let lifeListNote: String
     /// The student's own colours, so a ring sample shows the ring they would
     /// wear: two-tone and stitched are drawn in their accent and cap colour.
     let backdropToken: String
@@ -119,7 +124,7 @@ struct AvatarPickerContext: Encodable {
 
     init(
         for spec: AvatarSpec, isStaff: Bool, handle: String = "", hatchedText: String = "",
-        hatch: AvatarHatchContext? = nil
+        hatch: AvatarHatchContext? = nil, lifeList seen: Set<AvatarSpecies> = []
     ) {
         hero = AvatarPresentation(for: spec, size: .podium, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
@@ -130,6 +135,17 @@ struct AvatarPickerContext: Encodable {
         self.accentToken = hero.accentToken
         self.capToken = hero.capToken
         speciesName = spec.species.displayName
+        lifeList =
+            seen.isEmpty
+            ? []
+            : AvatarSpecies.allCases.map { species in
+                AvatarLifeListEntry(
+                    name: species.displayName, seen: seen.contains(species),
+                    presentation: AvatarPresentation(
+                        for: AvatarLifeList.bird(for: species), size: .roster, accessibility: .decorative,
+                        isStaff: false))
+            }
+        lifeListNote = "\(seen.count) of \(AvatarSpecies.allCases.count) species"
         let allFaces = AvatarCustomization.options(for: .expression).compactMap(AvatarExpression.init(rawValue:))
             .map { expression in
                 var preview = spec
@@ -196,6 +212,14 @@ extension AvatarPickerContext {
         if let season = border.season { return "\(season.displayName) · opens in \(season.startMonthName)" }
         return "\(border.displayName) · earned"
     }
+}
+
+/// One species on the life list: its standing bird and whether the student
+/// has had it.
+struct AvatarLifeListEntry: Encodable {
+    let name: String
+    let seen: Bool
+    let presentation: AvatarPresentation
 }
 
 /// One face: the student's own bird drawn with it. The presentation carries

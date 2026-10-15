@@ -504,6 +504,13 @@ duplicate.
   and face layers at the checked symbols; it also keeps Save disabled and "Undo changes"
   hidden until a choice changes.  See [student-wardrobe.md](student-wardrobe.md)
   and [avatar-species.md](avatar-species.md).
+- **`.bird-life-list`** — the foot of the `.bird-card`: the student's life
+  list (#2593), every species as a list item with its standing bird in a
+  `.swatch-bird` sample, under a dashed rule like `.bird-locked`.  A species
+  the student has had shows its name; one they have not is
+  `.bird-life-list-unseen`, a dimmed sample and a "?" (with the name for
+  screen readers).  It is a record, not a choice, so nothing in it is an
+  input.  Private: the account page only, never a leaderboard.
 - **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a
   `.section-items` row: the title and details, the state or value, and the cell
   that holds the actions.  They change nothing on a desktop; at 640px and below

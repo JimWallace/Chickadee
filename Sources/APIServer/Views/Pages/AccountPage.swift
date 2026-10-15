@@ -236,8 +236,43 @@ private struct AccountBirdCard: HTML {
                     AccountBirdHero(page: page, picker: picker)
                     AccountBirdForm(page: page, picker: picker)
                 }
+                if !picker.lifeList.isEmpty {
+                    AccountLifeList(picker: picker)
+                }
             }
             script(.src(page.asset("/avatar-picker.js"))) {}
+        }
+    }
+}
+
+/// The life list (#2593): every species, the ones the student has had drawn
+/// and named, the others dimmed. Private: the account page only.
+private struct AccountLifeList: HTML {
+    let picker: AvatarPickerContext
+
+    var body: some HTML {
+        div(.class("bird-life-list")) {
+            p(.class("field-note"), .id("bird-life-list-label")) {
+                strong { "Life list" }
+                " · \(picker.lifeListNote)"
+            }
+            ul(.custom(name: "aria-labelledby", value: "bird-life-list-label")) {
+                for entry in picker.lifeList {
+                    li {
+                        span(.class("swatch-sample swatch-bird"), .ariaHidden) {
+                            Avatar(avatar: entry.presentation)
+                        }
+                        " "
+                        if entry.seen {
+                            span { entry.name }
+                        } else {
+                            span(.class("visually-hidden")) { "\(entry.name), not yet" }
+                            span(.ariaHidden) { "?" }
+                        }
+                    }
+                    .attributes(.class("bird-life-list-unseen"), when: !entry.seen)
+                }
+            }
         }
     }
 }

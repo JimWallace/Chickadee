@@ -852,7 +852,11 @@ other.
    `users.avatar_previous_handle`), and the student can go back to both until
    they hatch again. The old handle comes back only if no other bird has taken
    it since; otherwise the bird keeps the handle from the hatch. A go back does
-   not give the hatch back. Each hatch is a
+   not give the hatch back. Each hatch records the species it came from and
+   went to, and the bird card ends with a **life list** (#2593): every
+   species, the ones the student's birds have been named, the others dimmed.
+   It is private, the account page only. Hatch rows from before the record
+   add nothing; no species is guessed. Each hatch is a
    row in `avatar_hatches` (user, term key such as "2026-fall", date), which
    the data export includes and an account deletion removes. Nothing else may
    change a stored bird's species (decision 2). Not built: blocking a hatch

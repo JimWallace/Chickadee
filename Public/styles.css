@@ -4020,6 +4020,30 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     color: var(--muted);
 }
 
+/* The life list (#2593): every species across the foot of the bird card,
+   the ones the student has had named, the others dimmed with a "?". */
+.bird-life-list {
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px dashed var(--border);
+}
+.bird-life-list ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.25rem;
+    margin: .5rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+.bird-life-list li {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: var(--text-sm);
+}
+.bird-life-list-unseen { color: var(--muted); }
+.bird-life-list-unseen .swatch-sample { opacity: .3; }
+
 .bird-locked .swatch-sample {
     width: 1.5rem;
     height: 1.5rem;
