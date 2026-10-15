@@ -333,7 +333,10 @@ duplicate.
   neutral state badge, for a state with no status colour ("Secret tests
   revealed").  `.tier-danger` is the one
   that means something went wrong; `.tier-closed` is a neutral inactive grey
-  and must not be borrowed for it.
+  and must not be borrowed for it.  One `.tier-open` is not a state: the
+  result page's gain beside the grade ("+13%", result-celebration.md) uses
+  it, because the gain is the student's own good news in the open colour,
+  not a pass or fail count, which is what `.chip-ok` marks.
 - **`.account-identity`** — the account page's identity header: the resolved
   name and the username under it.  The bird is not here: it is in the
   `.bird-card` just below.  The name
