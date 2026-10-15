@@ -50,7 +50,9 @@ extension AccountRoutes {
             .isEmpty == false
         let updated: AvatarSpec
         do {
-            updated = try AvatarCustomization.applying(form.choices, to: current, isStaff: isStaff)
+            updated = try AvatarCustomization.applying(
+                form.choices, to: current, isStaff: isStaff,
+                unlocked: try await WardrobeUnlockStore.unlocked(for: user.requireID(), on: req.db))
         } catch is AvatarCustomizationError {
             return req.redirect(to: "/account?avatar=invalid#chickadee")
         }
@@ -124,7 +126,8 @@ struct AvatarPickerContext: Encodable {
 
     init(
         for spec: AvatarSpec, isStaff: Bool, handle: String = "", hatchedText: String = "",
-        hatch: AvatarHatchContext? = nil, lifeList seen: Set<AvatarSpecies> = []
+        hatch: AvatarHatchContext? = nil, unlocked: Set<WardrobeItem> = [],
+        lifeList seen: Set<AvatarSpecies> = []
     ) {
         hero = AvatarPresentation(for: spec, size: .podium, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
@@ -152,10 +155,14 @@ struct AvatarPickerContext: Encodable {
                 preview.expression = expression
                 // The worn face is never locked.
                 let isWorn = expression == spec.expression
-                let isLocked = !isWorn && !AvatarCustomization.isOpen(expression.rawValue, for: .expression)
+                let isLocked =
+                    !isWorn && !AvatarCustomization.isOpen(expression.rawValue, for: .expression, unlocked: unlocked)
                 return AvatarBirdOption(
                     value: expression.rawValue,
-                    label: isLocked ? "\(expression.displayName) · earned" : expression.displayName,
+                    label: isLocked
+                        ? Self.lockedLabel(
+                            expression.displayName, item: WardrobeItem(slot: .expression, value: expression.rawValue))
+                        : expression.displayName,
                     checked: isWorn,
                     isLocked: isLocked,
                     presentation: AvatarPresentation(
@@ -187,7 +194,8 @@ struct AvatarPickerContext: Encodable {
             // The ring a student already wears is never locked: a seasonal ring
             // is kept after its term.
             let isWorn = value == spec.border.rawValue
-            let isLocked = !isWorn && !AvatarCustomization.isOpen(value, for: .border, season: season)
+            let isLocked =
+                !isWorn && !AvatarCustomization.isOpen(value, for: .border, season: season, unlocked: unlocked)
             return AvatarPickerOption(
                 value: value,
                 label: Self.borderLabel(preview.border, isLocked: isLocked),
@@ -210,7 +218,15 @@ extension AvatarPickerContext {
     static func borderLabel(_ border: AvatarBorder, isLocked: Bool) -> String {
         guard isLocked else { return border.displayName }
         if let season = border.season { return "\(season.displayName) · opens in \(season.startMonthName)" }
-        return "\(border.displayName) · earned"
+        return lockedLabel(border.displayName, item: WardrobeItem(slot: .border, value: border.rawValue))
+    }
+
+    /// A locked earned item's name: "Chirp · earned by a first graded
+    /// submission" when a rule earns it (`WardrobeItem.howToEarn`), and
+    /// "Spectrum · earned" for an item no rule earns yet.
+    static func lockedLabel(_ name: String, item: WardrobeItem?) -> String {
+        guard let item else { return "\(name) · earned" }
+        return "\(name) · earned \(item.howToEarn)"
     }
 }
 

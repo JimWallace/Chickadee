@@ -51,6 +51,9 @@ struct DataExportProfile: Codable, Sendable {
     let previousAvatarHandle: String?
     /// Every "Hatch a new bird", oldest first; nil when there is none.
     var avatarHatches: [DataExportAvatarHatch]?
+    /// The wardrobe items the student has earned (docs/student-wardrobe.md,
+    /// W3), oldest first; nil when there is none.
+    var wardrobeUnlocks: [DataExportWardrobeUnlock]?
     /// The linked GitHub account (docs/github-submissions.md slice 2), or nil
     /// when none is linked.
     let githubAccount: DataExportGitHubAccount?
@@ -66,6 +69,12 @@ struct DataExportAvatarHatch: Codable, Sendable {
     /// before species were recorded.
     var fromSpecies: String?
     var species: String?
+}
+
+struct DataExportWardrobeUnlock: Codable, Sendable {
+    /// "expression.chirp".
+    let item: String
+    let unlockedAt: Date?
 }
 
 struct DataExportGitHubCourseRepository: Codable, Sendable {
@@ -201,6 +210,9 @@ func gatherDataExportContent(
             DataExportAvatarHatch(
                 term: $0.termKey, hatchedAt: $0.createdAt, fromSpecies: $0.fromSpecies, species: $0.species)
         }
+    let wardrobeUnlocks = try await APIWardrobeUnlock.query(on: db).filter(\.$userID == userID)
+        .sort(\.$unlockedAt, .ascending).all()
+        .map { DataExportWardrobeUnlock(item: $0.item, unlockedAt: $0.unlockedAt) }
     let courseRepositories = try await APIGitHubCourseRepository.query(on: db).filter(\.$userID == userID).all()
         .map {
             DataExportGitHubCourseRepository(
@@ -228,6 +240,7 @@ func gatherDataExportContent(
             avatarHandle: user.avatarHandle,
             previousAvatarHandle: user.avatarPreviousHandle,
             avatarHatches: avatarHatches.isEmpty ? nil : avatarHatches,
+            wardrobeUnlocks: wardrobeUnlocks.isEmpty ? nil : wardrobeUnlocks,
             githubAccount: githubLink.map {
                 DataExportGitHubAccount(githubUserID: $0.githubUserID, login: $0.githubLogin, linkedAt: $0.linkedAt)
             },
@@ -579,8 +592,9 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
     - `profile.json` — your account profile: username, names, email,
       student ID, sign-in provider, account timestamps, the choices
       behind your generated avatar and its handle, the avatar and handle
-      before your last hatch, and when you hatched a new one and the
-      species each hatch came from and gave you. Passwords are
+      before your last hatch, when you hatched a new one and the
+      species each hatch came from and gave you, and the wardrobe items
+      you have earned and when. Passwords are
       stored only as one-way hashes and are never included.
     - `enrollments.json` — the courses you are enrolled in, with each
       course's term, your role in each, when you enrolled, and the

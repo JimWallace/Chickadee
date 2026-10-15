@@ -138,10 +138,18 @@ struct AccountRoutes: RouteCollection {
     private static func avatarPickerContext(
         user: APIUser, spec: AvatarSpec, handle: String?, isStaff: Bool, avatarNotice: String?, req: Request
     ) async throws -> AvatarPickerContext {
+        // Earned items are granted here, on the page that shows them, and
+        // never while a result is written (docs/student-wardrobe.md, W3).
+        // A failed grant falls back to what is stored, so an earned item is
+        // never shown locked because of it.
+        let userID = try user.requireID()
+        let stored = (try? await WardrobeUnlockStore.unlocked(for: userID, on: req.db)) ?? []
+        let unlocked = (try? await WardrobeUnlockStore.grantEarned(for: userID, on: req.db)) ?? stored
         // The life list is a cosmetic: a failed read hides it, not the page.
         let lifeList = (try? await AvatarStore.lifeList(for: user, on: req.db)) ?? []
         guard let term = AcademicTerm.current() else {
-            return AvatarPickerContext(for: spec, isStaff: isStaff, handle: handle ?? "", lifeList: lifeList)
+            return AvatarPickerContext(
+                for: spec, isStaff: isStaff, handle: handle ?? "", unlocked: unlocked, lifeList: lifeList)
         }
         let status = try await AvatarStore.hatchStatus(for: user, term: term, on: req.db)
         let requested: AvatarHatchStrip? =
@@ -155,7 +163,7 @@ struct AccountRoutes: RouteCollection {
         let hatchedText = (status.lastHatchedAt ?? user.createdAt).map { "Hatched \(formatter.string(from: $0))" }
         return AvatarPickerContext(
             for: spec, isStaff: isStaff, handle: handle ?? "", hatchedText: hatchedText ?? "", hatch: hatch,
-            lifeList: lifeList)
+            unlocked: unlocked, lifeList: lifeList)
     }
 
     /// The one-shot success banner after a redirect back to this page.
