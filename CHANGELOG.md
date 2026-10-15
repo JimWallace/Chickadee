@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.681] - 2026-10-15
+
+### Removed
+
+- **The "weekly triage routine" section of `docs/mutation-triage.md`.** It described a scheduled Claude Code routine that no longer exists. The triage protocol and the automatic first pass (`mutation-pretriage.yml`) are unchanged.
+
+
 ## [0.5.680] - 2026-10-15
 
 ### Added
