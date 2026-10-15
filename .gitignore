@@ -72,6 +72,7 @@ Tools/browser-grading-smoke/node_modules/
 Tools/visual-regression/node_modules/
 visual-bootstrap/
 visual-diffs/
+visual-captures/
 
 # Muter run config, written per-machine for a mutation-testing run. It pins an
 # absolute path to the local swift binary, so it is never portable and must not
