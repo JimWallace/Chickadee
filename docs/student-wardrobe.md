@@ -216,39 +216,39 @@ not a choice, and staff cannot change it.
 
 ---
 
-## The "Your bird" card (W1, as changed by avatar-species.md decision 5)
+## The "Your bird" card (W1, as changed by avatar-species.md decision 5 and #2588)
 
 One page section on the account page, "Your bird", one card:
 
 - The bird at the podium size (10rem), with its species name. The bird is no
   longer in Account info.
-- Two groups of choices: **Colour** (the colourways of the student's own
-  species, each option the student's own bird drawn in that colourway, then
-  the eight backdrops) and **Ring** (the rings open now: none, the five
-  colours, rainbow, and the seasonal ring of the term). Each choice is a radio
-  input with a round sample, so the form works with the keyboard and with no
-  JavaScript. A ring's sample is the ring itself, drawn from the sprite on the
-  student's backdrop. The rings not open yet follow under "Not open yet" as
-  plain items, not inputs. Staff see the staff ring and a note in place of
-  the Ring group.
+- Three groups of choices: **Face** (the starter expressions, each option
+  the student's own bird wearing that face, then the unlockable faces under
+  "Not open yet"), **Backdrop** (the eight backdrops) and **Ring** (the rings
+  open now: none, the five colours, rainbow, and the seasonal ring of the
+  term). Each choice is a radio input with a round sample, so the form works
+  with the keyboard and with no JavaScript. A ring's sample is the ring
+  itself, drawn from the sprite on the student's backdrop. The faces and
+  rings not open yet follow under "Not open yet" as plain items, not inputs.
+  Staff see the staff ring and a note in place of the Ring group.
 - One **Save** button. The form posts to `POST /account/avatar`.
 
-There is no species group. The species and the markings come with the bird
-(avatar-species.md, decision 5).
+There is no species or colour group. The species, the colours and the
+markings come with the bird (avatar-species.md, decision 5).
 
-Each colourway and ring shows its name under the sample, so a reader who
+Each face and ring shows its name under the sample, so a reader who
 cannot tell two colours apart can still choose. The checked choice has an
 outline and a bold name. A backdrop's name is for screen readers only.
 
 With JavaScript, `Public/avatar-picker.js` updates the card's bird as soon
 as a choice changes (a live preview), and keeps Save disabled and "Undo
 changes" hidden until a choice changes. It sets only
-custom properties, `--av-backdrop`, `--av-border` and the six tones of a
-colourway, which the UI rules allow ("JS does not make styling decisions"),
-and points the ring layer (the `use` element marked `data-av-ring`), the
-plumage layer and the tuft layer at the checked symbols. Each radio input
-carries its token names and symbol references in data attributes, so the
-script holds no palette, no ring list and no species. Nothing is saved until
+custom properties, `--av-backdrop` and `--av-border`, which the UI rules
+allow ("JS does not make styling decisions"), and points the ring layer (the
+`use` element marked `data-av-ring`) and the face layer at the checked
+symbols. Each radio input carries its token names and symbol references in
+data attributes, so the script holds no palette, no ring list and no face
+list. Nothing is saved until
 the student presses Save.
 
 The style guard counted every `.style.<property>` write, including a
