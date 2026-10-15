@@ -6,6 +6,7 @@
 // submission waits for a runner, the page shows a spinner and
 // `submission-root[data-pending]` tells the page script to poll.
 
+import Core
 import Elementary
 
 struct SubmissionPage: HTML {
@@ -108,6 +109,10 @@ struct SubmissionPage: HTML {
 
     private var scoreRow: some HTML {
         div(.class("submission-score-row")) {
+            if let bird = result.ownBird {
+                span(.class("submission-bird")) { Avatar(avatar: bird.avatar) }
+                    .attributes(.class("submission-bird-cheer"), when: bird.reaction == .cheer)
+            }
             div(.class("score-summary")) {
                 p(.class("card-meta")) { "Grade" }
                 if result.gradeIsOverridden {

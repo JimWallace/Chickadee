@@ -14,7 +14,6 @@ struct AdminUsersPage: HTML {
     var body: some HTML {
         BaseLayout(title: "Users", page: page) {
             AdminTabs(active: .users, page: page)
-            AvatarSprite(page: page)
             section(.class("page-section")) {
                 div(.class("page-titlebar")) {
                     h2 {

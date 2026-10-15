@@ -345,9 +345,11 @@ duplicate.
   symbols in `Resources/Sprites/avatar-sprite.svg`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
   last, on top and untilted, the ring.
-  **A page that renders `Avatar` must also include `AvatarSprite`, once per
-  page** — forget it and the page still returns 200 and shows an empty circle,
-  which no guard can catch.  Nine colours are per-student
+  **`BaseLayout` includes `AvatarSprite` once on every signed-in page**,
+  because the nav shows the user's own bird. A page does not include it
+  again. `PresentLayout` has no nav, so the Present page includes it itself;
+  a new layout that shows a bird must do the same, or the page still returns
+  200 and shows an empty circle, which no guard can catch.  Nine colours are per-student
   (`--av-cap`, `--av-wing`, `--av-body`, `--av-bib`, `--av-beak`, `--av-mark`,
   `--av-accent`, `--av-backdrop`, `--av-border`, assigned inline, which is
   the sanctioned form); `--av-border` colours a solid
@@ -369,12 +371,17 @@ duplicate.
   has its own beak.  `.av-eyewhite` is the fixed white: the eye disc, and a
   white wing mark where a species' own wing art needs one.  **Five sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
-  row where the handle beside it carries the identity — the bracket —
+  row where the handle beside it carries the identity — the bracket, and
+  the nav's account menu, where the user's name is beside it —
   because below 48px the bird is recognition, not identification, and a row
   with no text beside it would want a monogram chip instead.  **`.avatar-md`**
   (2.25rem) is the roster size: a row on the instructor Students, Slip days or
   LEARN list, where the name beside the bird carries the identity and the bird
   is the student's own seeded one, the same as on their account page.
+  `.avatar` at 3rem is also the student's own bird on their own result page
+  (`.submission-bird`). On a clean pass it wears the `chirp` face for that
+  page only and hops twice (`.submission-bird-cheer`), and not at all under
+  `prefers-reduced-motion`; it never looks sad (`AvatarReaction`).
   **`.avatar-lg`** (6rem, `AvatarSize.hero`) is the leaderboard "you" card and
   **`.avatar-xl`** (10rem, `AvatarSize.podium`) a Present-mode podium place.
   Present mode alone scales its birds past the class, because the room reads

@@ -59,6 +59,11 @@ struct BaseLayout<Content: HTML>: HTML {
             documentHead
             Elementary.body {
                 HTMLRaw(page.iconSprite)
+                // Every signed-in page can show a bird: the nav's account menu
+                // shows the user's own. Once here, so no page inlines it again.
+                if page.currentUser != nil {
+                    AvatarSprite(page: page)
+                }
                 if !embedded {
                     a(.class("skip-link"), .href("#main-content")) { "Skip to main content" }
                     SiteNav(page: page)

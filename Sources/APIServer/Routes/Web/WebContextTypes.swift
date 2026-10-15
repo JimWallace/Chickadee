@@ -518,6 +518,17 @@ struct SubmissionContext: Encodable {
     /// This submission's contribution to a class composite
     /// (docs/class-composite.md); nil on every other assignment.
     var compositeTile: CompositeTilePanel?
+    /// The student's own bird, reacting to this result. Nil when the viewer
+    /// is not the student who submitted it: staff reading a student's result
+    /// see no bird.
+    var ownBird: SubmissionBird?
+}
+
+/// The student's own bird on their own result page, and how it reacts to the
+/// result (`AvatarReaction`). The reaction is already applied to `avatar`.
+struct SubmissionBird: Encodable {
+    let avatar: AvatarPresentation
+    let reaction: AvatarReaction
 }
 
 /// The repository and commit a GitHub submission came from

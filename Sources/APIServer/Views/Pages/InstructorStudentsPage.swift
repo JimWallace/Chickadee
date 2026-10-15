@@ -31,7 +31,6 @@ struct InstructorStudentsPage: HTML {
     var body: some HTML {
         BaseLayout(title: "Students", page: page, flash: flash) {
             InstructorTabs(active: .students)
-            AvatarSprite(page: page)
             section(.class("page-section")) {
                 titlebar
                 if let activeCourseID, !rosterReadOnly {

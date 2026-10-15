@@ -1351,6 +1351,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
     color: var(--nav-fg-muted);
 }
 
+/* The user's own bird before the name. The toggle's gap spaces it, so the
+   row margin of .avatar-sm is not wanted here. */
+.nav-username .avatar-sm { margin-right: 0; }
+
 /* ── Nav dropdown menus ──────────────────────────────── */
 
 /* A nav item with more than one option (the Instructor course picker, the
@@ -1691,6 +1695,14 @@ code { font-family: var(--font-mono); font-size: .9em; }
     background: var(--surface-muted);
     border-radius: var(--radius-lg);
     padding: 1rem 1.25rem;
+}
+
+/* The student's own bird on their own result page (SubmissionBird). On a
+   clean pass it wears the chirp face, set in the markup, and hops twice. */
+.submission-bird { display: inline-flex; }
+@keyframes bird-hop { 40% { transform: translateY(-.4rem); } }
+@media (prefers-reduced-motion: no-preference) {
+    .submission-bird-cheer .avatar { animation: bird-hop .6s ease-out 2; }
 }
 
 /* The count tiles are an auto-fit grid, so inside a flex row they receive only

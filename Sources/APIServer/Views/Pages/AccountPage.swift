@@ -41,7 +41,6 @@ struct AccountPage: HTML {
     var body: some HTML {
         BaseLayout(title: "My Account", page: page, flash: flash) {
             h1 { "My Account" }
-            AvatarSprite(page: page)
             if error == "invalid" {
                 p(.class("form-error"), .role("alert")) { "That course is not available." }
             }

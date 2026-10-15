@@ -18,7 +18,6 @@ struct InstructorBrightspacePage: HTML {
             flash: FlashMessages(success: model.flashSuccess, error: model.flashError)
         ) {
             InstructorTabs(active: .brightspace)
-            AvatarSprite(page: page)
             if model.hasActiveCourse {
                 section(.class("page-section")) {
                     titlebar

@@ -460,7 +460,7 @@ extension WebRoutes {
             submission: submission, assignment: submissionAssignment, props: setupProps,
             user: user, isStaff: isStaff, on: req.db)
 
-        let ctx = buildSubmissionContext(
+        var ctx = buildSubmissionContext(
             subID: subID,
             submission: submission,
             processed: processed,
@@ -488,9 +488,29 @@ extension WebRoutes {
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
+        ctx.ownBird = try await ownSubmissionBird(
+            for: user, submission: submission, context: ctx, isStaff: isStaff, on: req.db)
         let page = PageRequestContext(request: req)
         let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
         return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
+    }
+
+    /// The viewer's own bird, reacting to `context`, when the viewer is the
+    /// student who made this submission (`SubmissionContext.ownBird`).
+    private func ownSubmissionBird(
+        for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
+        on db: any Database
+    ) async throws -> SubmissionBird? {
+        guard submission.kind == APISubmission.Kind.student, let userID = user.id, submission.userID == userID
+        else { return nil }
+        let spec = try await AvatarStore.ensureSpec(for: user, on: db)
+        let reaction = AvatarReaction(
+            passCount: context.passCount, totalTests: context.totalTests,
+            buildFailed: context.buildFailed, isPending: context.isPending)
+        return SubmissionBird(
+            avatar: AvatarPresentation(
+                for: reaction.applied(to: spec), size: .standard, accessibility: .decorative, isStaff: isStaff),
+            reaction: reaction)
     }
 
     // MARK: - submissionPage helpers
