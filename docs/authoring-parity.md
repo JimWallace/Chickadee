@@ -229,6 +229,48 @@ would turn a one-line vocabulary change into a 54-file edit.
 
 ---
 
+## The browser Octave kernel lacks functions that native Octave has
+
+The xeus-octave kernel uses emscripten-forge's `octave` package. That package
+is built without several optional libraries, so the functions that need them
+stop with "support for … was unavailable or disabled when Octave was built".
+The native worker runs Ubuntu's full `octave` package (`Dockerfile`), which is
+built with these libraries. **Instructor validation always runs on the native
+worker, so an assignment that calls one of these functions validates, and
+then fails for every student in the browser.** Use worker grading for such an
+assignment, or avoid the function.
+
+Measured on `octave-10.3.0` in Chromium (2026-10), each call in its own
+`try` block:
+
+| Missing library | Functions that fail in the browser |
+|---|---|
+| FFTW | `fft`, `ifft`, `fft2` |
+| ARPACK | `eigs`, `svds` |
+| SuiteSparse (CHOLMOD, UMFPACK, SPQR) | `chol`, `lu` and `qr` of a sparse matrix |
+| Qhull | `convhulln`, `delaunay`, `voronoi` |
+| GLPK | `glpk` |
+| SUNDIALS | `ode15s`, `ode15i` |
+| zlib | `gzip`, `gunzip`, `save -z` |
+| HDF5 | `save -hdf5` |
+| libsndfile | `audioread`, `audiowrite` |
+| libcurl | `urlread`, `webread` (the CSP blocks them in any case) |
+
+These work in the browser: `ode45`, sparse `\`, `qrupdate`, `cholupdate`,
+`conv`, `filter`, `eig`, `svd`, `inv`, `expm`, `quadgk`, `integral`, `fzero`,
+`fminsearch`, `interp1`, `polyfit`, `regexp`, `hash`, `datestr` and
+`containers.Map`. `__octave_config_info__("build_features")` in the kernel
+lists every library the build has.
+
+Nothing in Chickadee caused this, and pruning the kernel packages did not
+change it: the same calls fail in the same way on the unpruned kernel. A guard
+like `KernelImportGuard` could refuse a browser-graded Octave script that
+calls one of these functions. No such guard exists yet. The broader fix,
+validating a browser-graded assignment on the browser substrate as well, is
+#2586.
+
+---
+
 ## Work, in order
 
 1. **Raw-script inlining.** *(done — see Defect 1.)*
