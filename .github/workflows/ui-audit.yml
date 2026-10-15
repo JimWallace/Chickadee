@@ -1,0 +1,245 @@
+name: UI audit
+
+# Runs the `ui-audit` agent over the WHOLE web UI once a month and files the
+# report as one GitHub issue. The `ui-review` workflow reviews one pull request
+# at a time; this one compares pages with each other and applies the usability
+# heuristics in docs/ui-design.md ("Usability heuristics").
+#
+# A REPORT, NEVER A GATE. Nothing here blocks a merge. The findings are
+# judgement, and a person triages them. A finding that recurs becomes a rule in
+# docs/ui-design.md, and a guard when the rule is mechanical; that is the path
+# from this report to enforcement.
+#
+# The brief is `.claude/agents/ui-audit.md`, the same file a Claude Code
+# session runs as a subagent. This workflow holds no second copy of it.
+#
+# TWO JOBS. `capture` runs in the Swift CI container, builds the server and
+# screenshots the pages in Tools/visual-regression/pages.mjs, one per page
+# archetype, in light and dark, and some at 375px (run-visual.sh
+# --capture-only). The agent reviews the other pages from their source. `audit` runs on the plain runner,
+# because claude-code-action does not run inside a job container, and reads
+# those screenshots plus the source. When the capture fails, the audit still
+# runs on the source alone and says so in its report.
+#
+# ONE OPEN ISSUE. Each run opens a new issue labelled `ui-audit` and closes the
+# previous one with a link. The agent reads the previous report and carries
+# forward every finding that is still true, so the open issue is always the
+# whole current state.
+#
+# WHAT IT NEEDS. One repository secret, ANTHROPIC_API_KEY (or
+# CLAUDE_CODE_OAUTH_TOKEN for a Claude subscription). Without either the job
+# says so and passes, on the same rule ui-review.yml follows.
+
+on:
+  schedule:
+    # 07:23 UTC on the first day of each month.
+    - cron: "23 7 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ui-audit
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    name: capture
+    runs-on: ubuntu-latest
+    # Same budget as visual-regression.yml, for the same reason: a cold server
+    # build in browser-probe-setup can take most of it.
+    timeout-minutes: 50
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.4-resolute
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: chromium
+          node-project: Tools/visual-regression
+
+      - name: Capture the pages in pages.mjs
+        working-directory: Tools/visual-regression
+        run: ./run-visual.sh --capture-only
+
+      - name: Upload captures
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-audit-captures
+          path: visual-captures/
+          retention-days: 30
+
+  audit:
+    name: ui-audit
+    needs: capture
+    # Run on the source alone when the capture failed.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Download captures
+        id: captures
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ui-audit-captures
+          path: visual-captures/
+
+      - name: Check for credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the UI audit did not run."
+            {
+              echo "## ui-audit"
+              echo
+              echo "Did not run: no ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repository secret is set."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The agent gets the previous report as a file, so it needs no GitHub
+      # access of its own.
+      - name: Find the previous audit
+        id: previous
+        if: steps.credentials.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CAPTURE_OUTCOME: ${{ steps.captures.outcome }}
+        run: |
+          set -euo pipefail
+          gh label create ui-audit --color 5319e7 \
+            --description "Monthly site-wide UI audit (ui-audit.yml)" --force
+          # Newest first. Normally there is one; after a failed run there can
+          # be more, and the next step closes all of them.
+          open_issues="$(gh issue list --label ui-audit --state open --limit 20 \
+            --json number --jq '[.[].number] | sort | reverse | map(tostring) | join(" ")')"
+          number="${open_issues%% *}"
+          echo "open=$open_issues" >> "$GITHUB_OUTPUT"
+          if [ -n "$number" ]; then
+            gh issue view "$number" --json body --jq .body > previous-audit.md
+            echo "file=previous-audit.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=none" >> "$GITHUB_OUTPUT"
+          fi
+          count="$(find visual-captures -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+          if [ "$CAPTURE_OUTCOME" = "success" ] && [ "$count" -gt 0 ]; then
+            echo "captures=visual-captures/ ($count screenshots)" >> "$GITHUB_OUTPUT"
+          else
+            echo "captures=none: the capture job failed, so review the source only" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Audit the UI
+        id: audit
+        if: steps.credentials.outputs.present == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            SCREENSHOTS: ${{ steps.previous.outputs.captures }}
+            PREVIOUS AUDIT: ${{ steps.previous.outputs.file }}
+
+            You are the Chickadee ui-audit agent. Your brief is the file
+            .claude/agents/ui-audit.md in the checked-out tree. Read it first
+            and follow it exactly. The default branch is checked out in the
+            working directory.
+
+            The screenshots are already made. Do not run run-visual.sh.
+            Do not post anything to GitHub and do not write files. Return
+            the full report as Markdown in the `report` field of the
+            structured output, and the number of findings at each severity
+            in the other fields. Count those numbers from the findings in the
+            report itself. A later step files the report as an issue.
+          # A family alias, not a dated model ID: `opus` is always the newest
+          # Opus. One run a month of site-wide judgement is worth the top tier.
+          # The brief's `model:` line says the same for local sessions.
+          claude_args: |
+            --model opus
+            --max-turns 120
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*)"
+            --json-schema '{"type":"object","properties":{"report":{"type":"string"},"high":{"type":"integer"},"medium":{"type":"integer"},"low":{"type":"integer"}},"required":["report","high","medium","low"]}'
+
+      - name: File the report
+        if: steps.credentials.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.audit.outcome }}
+          STRUCTURED: ${{ steps.audit.outputs.structured_output }}
+          PREVIOUS: ${{ steps.previous.outputs.open }}
+        run: |
+          set -uo pipefail
+          if [ "$OUTCOME" != "success" ]; then
+            echo "::warning::The UI audit did not complete (step outcome: $OUTCOME). Re-run the workflow."
+            {
+              echo "## ui-audit"
+              echo
+              echo "Did not complete (step outcome: $OUTCOME). Re-run the workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          jq -r '.report // ""' <<< "${STRUCTURED:-null}" > report.md
+          if [ ! -s report.md ]; then
+            echo "::warning::The UI audit returned no report. Re-run the workflow."
+            exit 0
+          fi
+          counts="$(jq -r '"\(.high // 0) high, \(.medium // 0) medium, \(.low // 0) low"' <<< "$STRUCTURED")"
+          # An issue body holds at most 65,536 characters. Keep the full report
+          # as an artifact and cut the issue copy when it is too long.
+          cp report.md ui-audit-report.md
+          if [ "$(wc -m < report.md)" -gt 60000 ]; then
+            head -c 60000 ui-audit-report.md > report.md
+            printf '\n\n_The report is cut here. The full report is the `ui-audit-report` artifact of run %s._\n' \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> report.md
+          fi
+          printf '\n---\n_Generated by [Claude Code](https://claude.ai/code)_\n' >> report.md
+          if ! url="$(gh issue create --label ui-audit \
+            --title "UI audit $(date -u +%Y-%m-%d): $counts" \
+            --body-file report.md)"; then
+            echo "::error::Could not file the UI audit issue. The report is in the ui-audit-report artifact."
+            exit 1
+          fi
+          for previous in $PREVIOUS; do
+            gh issue close "$previous" --reason completed \
+              --comment "Replaced by $url" || true
+          done
+          {
+            echo "## ui-audit"
+            echo
+            echo "**Findings:** $counts"
+            echo
+            echo "Report: $url"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        if: ${{ !cancelled() && steps.credentials.outputs.present == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-audit-report
+          path: ui-audit-report.md
+          if-no-files-found: ignore
+          retention-days: 90

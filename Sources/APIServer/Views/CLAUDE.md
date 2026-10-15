@@ -89,3 +89,10 @@ findings are handled like any other bot finding. The workflow needs one
 repository secret (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`) and
 passes with a warning when neither is set. A UI change that has not been
 through `ui-review`, by either route, is not finished.
+
+The `ui-audit` agent (`.claude/agents/ui-audit.md`) is its site-wide
+partner. It does not review a change. It compares pages with each other and
+applies "Usability heuristics" in `docs/ui-design.md`. CI runs it on the first
+day of each month (`.github/workflows/ui-audit.yml`) and files one issue,
+labelled `ui-audit`, that replaces the previous one. It is a report, not a
+gate.

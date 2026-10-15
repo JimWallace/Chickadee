@@ -4149,6 +4149,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     opacity: .5;
 }
 
+/* On the life list (#2593), a species the student has had is at full
+   strength; the others stay dimmed like a locked item. */
+.bird-locked .bird-locked-had { color: var(--gray-900); }
+.bird-locked-had .swatch-sample { opacity: 1; }
+
 /* A locked face differs from the open ones only by its eyes and beak, so it
    keeps the roster size, where a face reads. */
 .bird-locked .swatch-bird {

@@ -431,6 +431,9 @@ The subagents are in `.claude/agents/`. Each one reports and does not edit.
 - After a code change, run `test-runner` with a filter for the suites that the
   change affects. Run it with no filter once before a push.
 - After a change to an Elementary view, `Public/styles.css` or a `Public/*.js` file, run `ui-guard`. Run `ui-review` too.
+- For the state of the whole UI, run `ui-audit`. It applies the usability
+  heuristics in `docs/ui-design.md` across all pages. CI runs it each month
+  (`.github/workflows/ui-audit.yml`) and files the report as an issue.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
 
 The hooks in `.claude/hooks/` do three jobs, so you need not:
