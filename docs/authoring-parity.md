@@ -265,7 +265,9 @@ lists every library the build has.
 Nothing in Chickadee caused this, and pruning the kernel packages did not
 change it: the same calls fail in the same way on the unpruned kernel. A guard
 like `KernelImportGuard` could refuse a browser-graded Octave script that
-calls one of these functions. No such guard exists yet.
+calls one of these functions. No such guard exists yet. The broader fix,
+validating a browser-graded assignment on the browser substrate as well, is
+#2586.
 
 ---
 
