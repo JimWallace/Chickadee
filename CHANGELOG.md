@@ -9,6 +9,18 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.680] - 2026-10-15
+
+### Added
+
+- **The result page celebrates a gain (J1).** A student's first 100% on an assignment replays the test marks, counts the grade up, makes their bird hop and bursts feathers in the bird's colours; an improvement counts up from the previous attempt and shows the gain; a repeated 100% sparkles. It plays once per submission, only for the student's own latest graded submission, never for staff and never under reduced motion. A result that is the same or lower plays nothing. The bird on the result page is now 3.5rem. Design: `docs/result-celebration.md`. The wardrobe earning design pass (#2603) is recorded in `docs/student-wardrobe.md`.
+- **Two more earned items (#2603).** The `dreamy` face is earned by a graded submission two days before the due date on three assignments, and the stitched ring by a comeback (every test passing after an attempt that did not) on three assignments. A Core test checks the planned pace across a term for a strong, a steady and a struggling student.
+
+### Changed
+
+- **Staff see the student's bird on a result page.** It shows as stored, with no reaction and no celebration, and it does not move under the staff reader's pointer.
+
+
 ## [0.5.679] - 2026-10-15
 
 ### Added
