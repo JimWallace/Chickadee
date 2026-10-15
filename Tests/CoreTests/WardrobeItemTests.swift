@@ -22,7 +22,12 @@ import Testing
 
     /// The stored raw values are the storage format: they must not change.
     @Test func theStoredRawValuesAreFixed() {
-        #expect(WardrobeItem.allCases.map(\.rawValue) == ["expression.chirp", "expression.sly", "border.twotone"])
+        #expect(
+            WardrobeItem.allCases.map(\.rawValue) == [
+                "expression.chirp", "expression.sly", "border.twotone",
+                "border.lifering", "border.greenlight", "border.ouroboros",
+                "border.function", "border.binary", "border.pulse",
+            ])
     }
 
     @Test(arguments: WardrobeItem.allCases)

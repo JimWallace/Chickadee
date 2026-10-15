@@ -24,16 +24,35 @@ enum WardrobeUnlockStore {
             .filter(APISubmission.self, \.$userID == userID)
             .filter(APISubmission.self, \.$kind == APISubmission.Kind.student)
             .all()
-        let graded = try results.map { result in
-            let submission = try result.joined(APISubmission.self)
-            return WardrobeProgress.Graded(
+        let submissions = try results.map { try $0.joined(APISubmission.self) }
+        let concepts = try await concepts(of: Set(submissions.map(\.testSetupID)), on: db)
+        let graded = zip(results, submissions).map { result, submission in
+            WardrobeProgress.Graded(
                 assignmentID: submission.testSetupID,
                 // A row with no attempt number is not counted as a first try.
                 attemptNumber: submission.attemptNumber ?? 0,
                 passCount: result.passCount ?? 0,
-                totalTests: result.totalTests ?? 0)
+                totalTests: result.totalTests ?? 0,
+                concept: concepts[submission.testSetupID])
         }
         return WardrobeProgress(graded: graded)
+    }
+
+    /// The concept each test setup's assignment is tagged with. A setup
+    /// whose assignment has no concept is not in the result.
+    private static func concepts(
+        of testSetupIDs: Set<String>, on db: any Database
+    ) async throws -> [String: AssignmentConcept] {
+        guard !testSetupIDs.isEmpty else { return [:] }
+        let assignments = try await APIAssignment.query(on: db)
+            .filter(\.$testSetupID ~~ Array(testSetupIDs))
+            .filter(\.$conceptRaw != nil)
+            .all()
+        var concepts: [String: AssignmentConcept] = [:]
+        for assignment in assignments {
+            concepts[assignment.testSetupID] = assignment.concept
+        }
+        return concepts
     }
 
     /// Stores every item `userID` has earned and not yet stored, and returns

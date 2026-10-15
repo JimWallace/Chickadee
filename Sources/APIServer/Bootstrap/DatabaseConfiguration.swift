@@ -603,4 +603,6 @@ func registerMigrations(on app: Application) {
     // Wardrobe unlocks (docs/student-wardrobe.md, W3): the items a student
     // has earned, kept for good.
     app.migrations.add(CreateWardrobeUnlocks())
+    // The lab concept on an assignment, for the concept rings.
+    app.migrations.add(AddAssignmentConcept())
 }
