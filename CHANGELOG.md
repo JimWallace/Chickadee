@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.684] - 2026-10-15
+
+### Added
+
+- **A weekly digest of the scheduled reports.** Every Monday afternoon, `weekly-digest.yml` has a small model (the haiku family) read the week's ZAP scan, the open CodeQL alerts, the kernel-currency result (with the upstream release notes of any kernel that moved), the flake tally and the open Dependabot PRs, and file one issue: what is new, and at most five items that need a person. The reports themselves do not change. It never dispatches a re-vendor or merges anything.
+
+
 ## [0.5.683] - 2026-10-15
 
 ### Added
