@@ -1697,12 +1697,17 @@ code { font-family: var(--font-mono); font-size: .9em; }
     padding: 1rem 1.25rem;
 }
 
-/* The student's own bird on their own result page (SubmissionBird). On a
-   clean pass it wears the chirp face, set in the markup, and hops twice. */
-.submission-bird { display: inline-flex; }
+/* The student's own bird on their own result page (SubmissionBird), beside
+   the grade in one group, so the band stays two groups. On a clean pass it
+   wears the chirp face, set in the markup, and hops twice. */
+.submission-bird {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
 @keyframes bird-hop { 40% { transform: translateY(-.4rem); } }
 @media (prefers-reduced-motion: no-preference) {
-    .submission-bird-cheer .avatar { animation: bird-hop .6s ease-out 2; }
+    .submission-bird-cheer > .avatar { animation: bird-hop .6s ease-out 2; }
 }
 
 /* The count tiles are an auto-fit grid, so inside a flex row they receive only

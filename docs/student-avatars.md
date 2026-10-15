@@ -5,15 +5,18 @@ handle that names it in every course, drawn on first view and stored; the accoun
 place of the initials monogram, which is gone, and the wardrobe lets a student
 choose its backdrop and ring (docs/student-wardrobe.md).
 
-**The student sees their own bird on every page (October 2026).** The nav's
-account menu shows it beside the name, and the student's own result page shows
-it beside the grade. On a clean pass the bird wears the `chirp` face for that
-page and hops; on any other result it is the bird as stored. The reaction is
-never stored and never unlocks the face (`AvatarReaction`). The bird is drawn
-on the first signed-in page, in `courseAwareUserContext`, and the avatar sprite
-is in `BaseLayout` for every signed-in page.
+**Every signed-in user sees their own bird (October 2026).** The nav's
+account menu shows it beside the name on every page that has the nav (not an
+embedded page), for staff as well as students. A student's own result page
+shows it beside the grade. On a clean pass the bird wears the `chirp` face for
+that page and hops; on any other result it is the bird as stored. The reaction
+is never stored and never unlocks the face (`AvatarReaction`). This is a
+deliberate trade with decision 5: `chirp` is an unlockable, and the cheer shows
+it for one page as a preview of what can be earned, not as a way to wear it.
+The bird is drawn on the first signed-in page, in `courseAwareUserContext`, and
+the avatar sprite is in `BaseLayout` for every signed-in page.
 
-**Both are shown to other people.** Twelve templates include the avatar partial:
+**Both are shown to other people.** Twelve templates include the avatar partial (and two more, the nav and the result page, show the user only their own bird):
 the leaderboard pages (list, bracket, Present mode) show a student's bird and
 handle to classmates, and the instructor Students, Slip days and LEARN lists,
 the admin Users list, the admin course page, the admin runner page and the
