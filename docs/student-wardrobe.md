@@ -170,7 +170,7 @@ locked ring, so a hand-made request cannot choose one.
 
 ### 6b. Earned items (a small W3, #2592)
 
-Three items are earned by a student's own graded work, with no instructor
+Five items are earned by a student's own graded work, with no instructor
 setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
 
 | Item | Earned by |
@@ -178,6 +178,8 @@ setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
 | `chirp` face | the first graded submission |
 | `sly` face | a first attempt on which every test it ran passes |
 | two-tone ring | every test passing on three different assignments |
+| `dreamy` face | a graded submission two days before the due date, on three assignments (#2603) |
+| stitched ring | a comeback (every test passing after an attempt that did not) on three assignments (#2603) |
 
 - **Granted on the account page, never while grading.** `WardrobeUnlockStore`
   reads the student's own student-kind submissions that have a result, and
@@ -192,9 +194,8 @@ setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
 - **Account-wide and lateral**, as every wardrobe item is.
 - **In the export** (`profile.json`, `wardrobeUnlocks`) and removed with the
   account.
-- `dreamy`, stitched and spectrum have no rule yet and stay locked. The
-  design pass (#2603) gives `dreamy` and stitched a rule and keeps spectrum
-  hidden until the achievement link exists.
+- Spectrum has no rule yet and stays locked until the achievement link
+  exists (E7).
 
 ### 7. Seasonal rings
 
@@ -336,14 +337,15 @@ spam, and each submission costs runner time.
 | `chirp` face | a first graded submission | effort |
 | `sly` face | every test passes on a first attempt | correctness |
 | two-tone ring | every test passes on three assignments | correctness |
-| `dreamy` face | proposed: a submission at least 48 hours before the due date, on three assignments | habit |
-| stitched ring | proposed: every test passes after an earlier attempt that did not, on three assignments | persistence |
+| `dreamy` face | a graded submission at least 48 hours before the due date, on three assignments | habit |
+| stitched ring | every test passes after an earlier attempt that did not, on three assignments | persistence |
 | spectrum ring | no rule; hidden until the achievement link (E7) | — |
 | concept rings | every test passes on linked assignments (E6) | mastery |
 
-The early rule reads the server's submission time and the assignment's due
-date, so a student cannot forge it. An assignment with no due date does not
-count for it.
+The early rule reads the server's submission time and the assignment's own
+due date, not a student's extension, so a student cannot forge it. An
+assignment with no due date does not count for it. An early submission counts
+whatever its result: the rule rewards the habit, not the grade.
 
 ### E5. Pace across a term
 
@@ -494,7 +496,7 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | W3 (small) | `wardrobe_unlocks`; three items earned by a student's own graded work (#2592) | shipped |
 | J1 | The result-page celebration: the bird at 56px, the 100% moment, the Improved and Already-100% states ([result-celebration.md](result-celebration.md)) | in progress |
 | E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | planned |
-| E-b | The `dreamy` and stitched rules and the pace test (E4, E5) | planned |
+| E-b | The `dreamy` and stitched rules and the pace test (E4, E5) | in progress |
 | C1 | Concept rings and the instructor's concept link (E6) | planned; design brief to come |
 | J2 | The Earned toast for wardrobe items (E11) | planned |
 | J3 | One toast for everything earned, achievements included (E7) | planned |

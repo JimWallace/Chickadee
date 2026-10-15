@@ -1706,9 +1706,11 @@ code { font-family: var(--font-mono); font-size: .9em; }
     padding: 1rem 1.25rem;
 }
 
-/* The student's own bird on their own result page (SubmissionBird), beside
-   the grade in one group, so the band stays two groups. On a clean pass it
-   wears the chirp face, set in the markup, and hops twice. */
+/* The submitting student's bird on a result page (SubmissionBird), beside
+   the grade in one group, so the band stays two groups. On the student's own
+   page a clean pass wears the chirp face, set in the markup, and hops twice.
+   Staff reading the page see the bird as stored (.submission-bird-other),
+   and it does not react to their pointer. */
 .submission-bird {
     display: flex;
     align-items: center;
@@ -1764,14 +1766,14 @@ code { font-family: var(--font-mono); font-size: .9em; }
 @keyframes bird-breathe { 50% { transform: scale(1.03); } }
 @media (prefers-reduced-motion: no-preference) {
     .nav-username .avatar,
-    .submission-bird > .avatar { transition: transform .2s ease-out; }
+    .submission-bird:not(.submission-bird-other) > .avatar { transition: transform .2s ease-out; }
     .bird-card-hero .avatar {
         transition: transform .2s ease-out;
         animation: bird-breathe 4s ease-in-out infinite;
     }
     .nav-username:hover .avatar,
     .nav-username:focus-visible .avatar,
-    .submission-bird > .avatar:hover,
+    .submission-bird:not(.submission-bird-other) > .avatar:hover,
     .bird-card-hero .avatar:hover { transform: rotate(-8deg) translateY(-.125rem); }
     .bird-card-hero .avatar:hover { animation: none; }
     .bird-card-hero .avatar:active { transform: translateY(-.375rem) scale(1.05); }

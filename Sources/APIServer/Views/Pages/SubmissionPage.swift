@@ -56,7 +56,7 @@ struct SubmissionPage: HTML {
                     results
                 }
             }
-            if result.ownBird?.celebration != nil {
+            if result.bird?.celebration != nil {
                 script(.src(page.asset("/celebrate-core.js"))) {}
                 script(.src(page.asset("/celebrate.js"))) {}
             }
@@ -137,12 +137,12 @@ struct SubmissionPage: HTML {
     /// The student's own full-marks result shows its grade in the open
     /// colour on every load, so the end of the celebration is the page as
     /// it always reads (docs/result-celebration.md).
-    private var showsPerfectGrade: Bool { result.ownBird?.isFullMarks ?? false }
+    private var showsPerfectGrade: Bool { result.bird?.isFullMarks ?? false }
 
     private var scoreRow: some HTML {
         div(.class("submission-score-row")) {
             // The bird joins the grade's group, so the band stays two groups.
-            if let bird = result.ownBird {
+            if let bird = result.bird {
                 if let celebration = bird.celebration {
                     div(
                         .class("submission-bird"), .data("celebrate", value: celebration.state.rawValue),
@@ -164,6 +164,7 @@ struct SubmissionPage: HTML {
                         scoreSummary
                     }
                     .attributes(.class("submission-bird-cheer"), when: bird.reaction == .cheer)
+                    .attributes(.class("submission-bird-other"), when: !bird.isOwn)
                 }
             } else {
                 scoreSummary

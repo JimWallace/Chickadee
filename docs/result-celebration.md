@@ -59,7 +59,9 @@ the page shows the instructor's grade first.
 
 - The bird is 56px (`AvatarSize.result`, 3.5rem), to the left of the grade,
   in the `.submission-bird` group of `SubmissionPage`.
-- It is the student's stored spec, ring included. The existing cheer
+- It is the student's stored spec, ring included. Staff who read the
+  submission see the same bird, as stored, with no reaction, and it does not
+  move under their pointer. The existing cheer
   (`AvatarReaction`) still borrows the `chirp` face on a clean pass.
 - The hops are a `translateY` on the bird's wrapper, set through a custom
   property, so the script makes no styling decision.

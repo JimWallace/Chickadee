@@ -488,24 +488,43 @@ extension WebRoutes {
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
-        ctx.ownBird = try await ownSubmissionBird(
+        ctx.bird = try await submissionBird(
             for: user, submission: submission, context: ctx, isStaff: isStaff, graded: displayCollection, on: req.db)
         let page = PageRequestContext(request: req)
         let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
         return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
     }
 
-    /// The viewer's own bird, reacting to `context`, when the viewer is the
-    /// student who made this submission (`SubmissionContext.ownBird`), with
-    /// the celebration the page plays for the `graded` result
-    /// (docs/result-celebration.md). An instructor's grade override plays
-    /// nothing, because the page shows that grade first.
-    private func ownSubmissionBird(
+    /// The bird of the student who made this submission
+    /// (`SubmissionContext.bird`). The student sees their own bird reacting
+    /// to `context`, with the celebration the page plays for the `graded`
+    /// result (docs/result-celebration.md). Staff see the student's bird as
+    /// it is stored: no reaction and no celebration.
+    private func submissionBird(
         for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
         graded: TestOutcomeCollection?, on db: any Database
     ) async throws -> SubmissionBird? {
-        guard submission.kind == APISubmission.Kind.student, let userID = user.id, submission.userID == userID
-        else { return nil }
+        guard submission.kind == APISubmission.Kind.student, let submitterID = submission.userID else { return nil }
+        if user.id == submitterID {
+            return try await ownBird(
+                for: user, submission: submission, context: context, isStaff: isStaff, graded: graded, on: db)
+        }
+        guard isStaff, let submitter = try await APIUser.find(submitterID, on: db) else { return nil }
+        let spec = try await AvatarStore.ensureSpec(for: submitter, on: db)
+        // The bird is the student's in their role here; a student-kind
+        // submission is a student's work, so it wears the student's own ring.
+        return SubmissionBird(
+            avatar: AvatarPresentation(for: spec, size: .result, accessibility: .decorative, isStaff: false),
+            reaction: .none)
+    }
+
+    /// The student's own bird on their own result. An instructor's grade
+    /// override plays no celebration, because the page shows that grade
+    /// first.
+    private func ownBird(
+        for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
+        graded: TestOutcomeCollection?, on db: any Database
+    ) async throws -> SubmissionBird {
         let spec = try await AvatarStore.ensureSpec(for: user, on: db)
         let reaction = AvatarReaction(
             passCount: context.passCount, totalTests: context.totalTests,
@@ -528,7 +547,7 @@ extension WebRoutes {
         return SubmissionBird(
             avatar: AvatarPresentation(
                 for: reaction.applied(to: spec), size: .result, accessibility: .decorative, isStaff: isStaff),
-            reaction: reaction, celebration: celebration,
+            reaction: reaction, isOwn: true, celebration: celebration,
             isFullMarks: percent == 100 && !gradeIsOverridden)
     }
 

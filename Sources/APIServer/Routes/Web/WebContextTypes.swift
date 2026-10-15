@@ -518,17 +518,21 @@ struct SubmissionContext: Encodable {
     /// This submission's contribution to a class composite
     /// (docs/class-composite.md); nil on every other assignment.
     var compositeTile: CompositeTilePanel?
-    /// The student's own bird, reacting to this result. Nil when the viewer
-    /// is not the student who submitted it: staff reading a student's result
-    /// see no bird.
-    var ownBird: SubmissionBird?
+    /// The bird of the student who made the submission: reacting to this
+    /// result when the viewer is that student, as stored when staff read it
+    /// (docs/result-celebration.md). Nil for any other submission kind.
+    var bird: SubmissionBird?
 }
 
-/// The student's own bird on their own result page, and how it reacts to the
-/// result (`AvatarReaction`). The reaction is already applied to `avatar`.
+/// The submitting student's bird on a result page, and how it reacts to the
+/// result (`AvatarReaction`; `.none` for a staff reader). The reaction is
+/// already applied to `avatar`.
 struct SubmissionBird: Encodable {
     let avatar: AvatarPresentation
     let reaction: AvatarReaction
+    /// The viewer is the student who made the submission. Only their own
+    /// bird reacts to their pointer; staff see `.submission-bird-other`.
+    var isOwn = false
     /// The celebration the page plays, nil when it plays none.
     var celebration: SubmissionCelebration?
     /// The autograded grade is 100% and no override replaces it: the grade

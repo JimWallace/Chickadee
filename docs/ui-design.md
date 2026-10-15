@@ -378,8 +378,10 @@ duplicate.
   (2.25rem) is the roster size: a row on the instructor Students, Slip days or
   LEARN list, where the name beside the bird carries the identity and the bird
   is the student's own seeded one, the same as on their account page.
-  The student's own bird on their own result page (`.submission-bird`) is
-  **`.avatar-result`** (3.5rem, `AvatarSize.result`). On a clean pass it
+  The submitting student's bird on a result page (`.submission-bird`) is
+  **`.avatar-result`** (3.5rem, `AvatarSize.result`). Staff reading a
+  student's result see that bird as stored, with no reaction
+  (`.submission-bird-other`). On the student's own page, on a clean pass it
   wears the `chirp` face for that page only and hops twice
   (`.submission-bird-cheer`), and not at all under
   `prefers-reduced-motion`; it never looks sad (`AvatarReaction`). A gain
