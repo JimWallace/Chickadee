@@ -495,7 +495,7 @@ duplicate.
   radios, because nothing about them can be chosen.  The ring a student
   already wears is never listed there.  The live preview (`avatar-picker.js`)
   copies the checked option's tokens onto the hero bird and points its ring
-  layer at the checked symbol; it also keeps Save disabled and "Undo changes"
+  and face layers at the checked symbols; it also keeps Save disabled and "Undo changes"
   hidden until a choice changes.  See [student-wardrobe.md](student-wardrobe.md)
   and [avatar-species.md](avatar-species.md).
 - **`.item-main`, `.item-status`, `.item-actions-td`** — name the cells of a

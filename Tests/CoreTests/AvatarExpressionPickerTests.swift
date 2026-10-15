@@ -57,7 +57,8 @@ import Testing
 
     @Test func anUnknownFaceIsRefusedAndChangesNothing() {
         #expect(throws: AvatarCustomizationError.unknownOption(slot: .expression, value: "grumpy")) {
-            try AvatarCustomization.applying(["expression": "grumpy", "backdrop": "sky"], to: Self.base, isStaff: false)
+            try AvatarCustomization.applying(
+                ["expression": "grumpy", "backdrop": "sky"], to: Self.base, isStaff: false)
         }
         // Raw values are exact: the picker posts them as the enum spells them.
         #expect(throws: AvatarCustomizationError.unknownOption(slot: .expression, value: "Sleepy")) {

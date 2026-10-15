@@ -3833,7 +3833,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 }
 
 /* The account page's "Your bird" card. A light hero panel holds the bird at
-   the podium size; beside it, the Colour and Ring groups. The two flex items
+   the podium size; beside it, the Face, Backdrop and Ring groups. The two flex items
    wrap into one column on a narrow screen with no media query: the groups
    take the spare width, the hero keeps 13rem. Every swatch is a 44px (2.75rem)
    hit target at least. A named swatch (a face or a ring) shows the
@@ -3939,7 +3939,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     min-width: 0;
 }
 
-
 /* The staff ring beside its note. */
 .bird-card-groups fieldset > .toolbar { flex-wrap: nowrap; }
 
@@ -3975,8 +3974,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .bird-card-groups > .toolbar .field-note { margin: 0; }
 
-
-/* The rings that are not open yet: a dimmed sample, a lock and a name. Not
+/* The faces and rings that are not open yet: a dimmed sample, a lock and a name. Not
    inputs, since nothing about them can be chosen. */
 .bird-locked {
     margin-top: 1rem;
@@ -4005,6 +4003,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     width: 1.5rem;
     height: 1.5rem;
     opacity: .5;
+}
+
+/* A locked face differs from the open ones only by its eyes and beak, so it
+   keeps the roster size, where a face reads. */
+.bird-locked .swatch-bird {
+    width: 2.25rem;
+    height: 2.25rem;
 }
 
 /* The leaderboard's "you" card bird (6rem) and the Present-mode podium bird

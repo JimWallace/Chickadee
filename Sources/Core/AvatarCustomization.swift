@@ -8,13 +8,12 @@
 // decision 5, as superseded twice): only hatching a new bird changes either. A
 // student chooses the bird's face instead (#2588). Every starter expression,
 // every backdrop and every starter ring is open to every student, and a
-// seasonal ring is open during its term. The three unlockable expressions are
-// refused until unlocks arrive, like the earned rings. Earned and special rings exist and
-// are shown locked: `applying` refuses them until unlocks arrive
-// (docs/student-wardrobe.md, W3), and then only `isOpen` has to learn about a
-// student's unlocks. Re-choosing the ring or the face a student already wears
-// is always allowed, so a seasonal ring is kept after its term. Course staff cannot
-// change their ring.
+// seasonal ring is open during its term. The unlockable faces and the earned
+// and special rings exist and are shown locked: `applying` refuses them until
+// unlocks arrive (docs/student-wardrobe.md, W3), and then only `isOpen` has to
+// learn about a student's unlocks. Re-choosing the face or the ring a student
+// already wears is always allowed, so a seasonal ring is kept after its term.
+// Course staff cannot change their ring.
 
 /// A slot a student may change on the account page.
 public enum AvatarCustomizableSlot: String, CaseIterable, Sendable {

@@ -1,8 +1,8 @@
 // APIServer/Views/Pages/AccountPage.swift
 //
 // GET /account: the signed-in user's identity, their bird (its face,
-// backdrop and ring), the GitHub link, their courses and the courses open to join, and
-// the personal-data export (#557). The plain student page exemplar
+// backdrop and ring), the GitHub link, their courses and the courses open to
+// join, and the personal-data export (#557). The plain student page exemplar
 // (docs/ui-design.md).
 
 import Core
@@ -472,16 +472,13 @@ private struct AccountRingGroup: HTML {
                     }
                 }
                 if !picker.lockedRings.isEmpty {
-                    div(.class("bird-locked")) {
-                        p(.class("field-note"), .id("bird-locked-label")) { "Not open yet" }
-                        ul(.custom(name: "aria-labelledby", value: "bird-locked-label")) {
-                            for option in picker.lockedRings {
-                                li(.data("av-season", value: option.season)) {
-                                    AccountRingSample(token: option.token, ringRef: option.ringRef)
-                                    " "
-                                    Icon("i-lock")
-                                    " \(option.label)"
-                                }
+                    AccountLockedList(labelID: "bird-locked-label") {
+                        for option in picker.lockedRings {
+                            li(.data("av-season", value: option.season)) {
+                                AccountRingSample(token: option.token, ringRef: option.ringRef)
+                                " "
+                                Icon("i-lock")
+                                " \(option.label)"
                             }
                         }
                     }
@@ -499,7 +496,7 @@ private struct AccountFaceGroup: HTML {
     var body: some HTML {
         fieldset(.class("fieldset-plain")) {
             legend { "Face" }
-            p(.class("field-note field-note--muted")) { "How your bird looks out of the page." }
+            p(.class("field-note field-note--muted")) { "Shown on your bird everywhere it appears." }
             div(.class("swatch-row")) {
                 for (position, option) in picker.faces.enumerated() {
                     if position > 0 { " " }
@@ -507,22 +504,38 @@ private struct AccountFaceGroup: HTML {
                 }
             }
             if !picker.lockedFaces.isEmpty {
-                div(.class("bird-locked")) {
-                    p(.class("field-note"), .id("bird-locked-faces-label")) { "Not open yet" }
-                    ul(.custom(name: "aria-labelledby", value: "bird-locked-faces-label")) {
-                        for option in picker.lockedFaces {
-                            li {
-                                span(.class("swatch-sample swatch-bird"), .ariaHidden) {
-                                    Avatar(avatar: option.presentation)
-                                }
-                                " "
-                                Icon("i-lock")
-                                " \(option.label)"
+                AccountLockedList(labelID: "bird-locked-faces-label") {
+                    for option in picker.lockedFaces {
+                        li {
+                            span(.class("swatch-sample swatch-bird"), .ariaHidden) {
+                                Avatar(avatar: option.presentation)
                             }
+                            " "
+                            Icon("i-lock")
+                            " \(option.label)"
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/// The faces or rings not open yet, under "Not open yet": plain items, not
+/// inputs. `labelID` names the list, and is unique on the page.
+private struct AccountLockedList<Items: HTML>: HTML {
+    let labelID: String
+    let items: Items
+
+    init(labelID: String, @HTMLBuilder items: () -> Items) {
+        self.labelID = labelID
+        self.items = items()
+    }
+
+    var body: some HTML {
+        div(.class("bird-locked")) {
+            p(.class("field-note"), .id(labelID)) { "Not open yet" }
+            ul(.custom(name: "aria-labelledby", value: labelID)) { items }
         }
     }
 }
