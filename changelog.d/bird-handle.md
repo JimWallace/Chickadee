@@ -1,3 +1,0 @@
-### Changed
-
-- **The handle names the bird.** A student's handle, such as "Curious Noether", is now one name for their bird in every course, unique across the deployment, and the account page shows it on the bird card above the species. Hatching a new bird also draws a new handle, so a student changes their name and bird at once; going back restores the old handle if no other bird has taken it. The per-course "Change handle" panel and its lock are removed. A one-time migration gives each bird the handle of its newest course, and draws a new one where two students shared a handle. Staff birds have no handle. The data export includes the handle and the previous handle.
