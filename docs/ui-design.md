@@ -383,9 +383,9 @@ duplicate.
   page only and hops twice (`.submission-bird-cheer`), and not at all under
   `prefers-reduced-motion`; it never looks sad (`AvatarReaction`).
   The user's own bird (the nav's, the result page's, the account card's)
-  leans a little when the pointer is on it, and the account card's large
-  bird breathes slowly; a click on that bird shows the `chirp` face for a
-  moment (`bird-chirp.js`, `data-bird-chirp`). All of it sits behind
+  leans a little when the pointer or the keyboard is on it, and the account
+  card's large bird breathes slowly and hops while it is pressed. It is CSS
+  only, with no script and no change of face. All of it sits behind
   `prefers-reduced-motion: no-preference`, and a roster or leaderboard bird
   never moves (#2589).
   **`.avatar-lg`** (6rem, `AvatarSize.hero`) is the leaderboard "you" card and

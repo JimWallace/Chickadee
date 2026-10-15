@@ -1,46 +1,70 @@
 // Tests/APITests/BirdMotionTests.swift
 //
-// The user's own bird moves a little (#2589): a lean on hover, a slow breath
-// on the account page, and a chirp on click. All of the motion sits behind
-// `prefers-reduced-motion: no-preference`, and the chirp is wired by
-// `Public/bird-chirp.js`, whose own behaviour is under node --test.
+// The user's own bird moves a little (#2589): a lean on hover or focus, a
+// slow breath on the account page, and a hop while that bird is pressed. It
+// is CSS only, and all of it sits behind
+// `prefers-reduced-motion: no-preference`.
 
 import ChickadeeTestSupport
 import Foundation
 import Testing
-import VaporTesting
 
-@testable import APIServer
+@Suite struct BirdMotionTests {
 
-@Suite(.serialized) struct BirdMotionTests {
+    private static let guardOpen = "@media (prefers-reduced-motion: no-preference) {"
 
-    @Test func theAccountPageWiresTheChirp() async throws {
-        try await withWebRoutesApp { app in
-            let cookie = try await wrLoginAsStudent(on: app)
-            let html = try await getHTML("/account", cookie: cookie, on: app)
-            #expect(html.contains("class=\"bird-card-hero\" data-bird-chirp"))
-            #expect(html.contains("/bird-chirp.js"))
+    /// The text inside each reduced-motion guard in `css`, found by matching
+    /// braces, so a comment or a nested rule cannot end a block early.
+    private static func guardedBlocks(in css: String) -> [Substring] {
+        var blocks: [Substring] = []
+        var searchStart = css.startIndex
+        while let open = css.range(of: guardOpen, range: searchStart..<css.endIndex) {
+            var depth = 1
+            var index = open.upperBound
+            while index < css.endIndex, depth > 0 {
+                if css[index] == "{" { depth += 1 }
+                if css[index] == "}" { depth -= 1 }
+                index = css.index(after: index)
+            }
+            blocks.append(css[open.upperBound..<index])
+            searchStart = index
         }
+        return blocks
     }
 
-    /// Every rule that starts the breath or the lean is inside the
-    /// reduced-motion guard, so a reader who asked for less motion sees a
-    /// still bird.
-    @Test func theMotionIsOnlyForReadersWhoDidNotAskForLess() throws {
-        let css = try String(
-            contentsOf: repositoryRoot.appendingPathComponent("Public/styles.css"), encoding: .utf8)
-        let guardOpen = "@media (prefers-reduced-motion: no-preference) {"
-        let guarded = css.components(separatedBy: guardOpen).dropFirst().map { block in
-            // The block runs to the first line that closes it at column 0.
-            block.components(separatedBy: "\n}\n").first ?? ""
-        }
-        let unguarded = css.components(separatedBy: guardOpen).enumerated().map { index, chunk in
-            index == 0 ? chunk : (chunk.components(separatedBy: "\n}\n").dropFirst().joined(separator: "\n}\n"))
-        }.joined()
+    private static func stylesheet() throws -> String {
+        try String(contentsOf: repositoryRoot.appendingPathComponent("Public/styles.css"), encoding: .utf8)
+    }
 
-        #expect(guarded.contains { $0.contains("animation: bird-breathe") })
-        #expect(guarded.contains { $0.contains("transform: rotate(-8deg)") })
-        #expect(!unguarded.contains("animation: bird-breathe"))
-        #expect(!unguarded.contains("rotate(-8deg)"))
+    /// Each declaration that moves the user's own bird is inside a guard, and
+    /// nowhere outside one, so a reader who asked for less motion sees a still
+    /// bird.
+    @Test(arguments: [
+        "animation: bird-breathe",
+        "transform: rotate(-8deg)",
+        "transform: translateY(-.375rem) scale(1.05)",
+    ])
+    func theMotionIsOnlyForReadersWhoDidNotAskForLess(declaration: String) throws {
+        let css = try Self.stylesheet()
+        let blocks = Self.guardedBlocks(in: css)
+        let inside = blocks.reduce(0) { $0 + $1.components(separatedBy: declaration).count - 1 }
+        let everywhere = css.components(separatedBy: declaration).count - 1
+        #expect(inside == 1, "\(declaration) is not in exactly one guarded rule")
+        #expect(everywhere == inside, "\(declaration) appears outside the reduced-motion guard")
+    }
+
+    /// Only the user's own bird moves: the guarded rules name the nav, the
+    /// result page and the account card, and never a bare `.avatar`.
+    @Test func onlyTheUsersOwnBirdMoves() throws {
+        let block = try #require(
+            Self.guardedBlocks(in: try Self.stylesheet()).first { $0.contains("bird-breathe") })
+        for selector in [".nav-username", ".submission-bird", ".bird-card-hero"] {
+            #expect(block.contains(selector), "\(selector) does not move")
+        }
+        for line in block.split(separator: "\n") where line.contains(".avatar") {
+            #expect(
+                [".nav-username", ".submission-bird", ".bird-card-hero"].contains { line.contains($0) },
+                "a rule moves a bird that is not the user's own: \(line)")
+        }
     }
 }

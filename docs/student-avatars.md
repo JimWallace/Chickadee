@@ -16,7 +16,8 @@ it for one page as a preview of what can be earned, not as a way to wear it.
 The bird is drawn on the first signed-in page, in `courseAwareUserContext`, and
 the avatar sprite is in `BaseLayout` for every signed-in page. The user's own bird
 also moves a little: it leans on hover, the account card's bird breathes, and a
-click there makes it chirp for a moment. Nothing moves under reduced motion,
+press there makes it hop. The face never changes, so an unlockable face is
+not shown. Nothing moves under reduced motion,
 and no other person's bird moves (#2589).
 
 **Both are shown to other people.** Twelve templates include the avatar partial (and two more, the nav and the result page, show the user only their own bird):
