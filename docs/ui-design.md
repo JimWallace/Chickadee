@@ -369,7 +369,7 @@ duplicate.
   [avatar-species.md](avatar-species.md)); the eyes and the body circle are
   the same on every species and keep the birds one family, and each species
   has its own beak.  `.av-eyewhite` is the fixed white: the eye disc, and a
-  white wing mark where a species' own wing art needs one.  **Five sizes.**  `.avatar` alone is 3rem: the
+  white wing mark where a species' own wing art needs one.  **Six sizes.**  `.avatar` alone is 3rem: the
   bird earns its detail at 48px and up.  `.avatar-sm` (1.5rem, inline) is for a
   row where the handle beside it carries the identity — the bracket, and
   the nav's account menu, where the user's name is beside it —
@@ -378,10 +378,19 @@ duplicate.
   (2.25rem) is the roster size: a row on the instructor Students, Slip days or
   LEARN list, where the name beside the bird carries the identity and the bird
   is the student's own seeded one, the same as on their account page.
-  `.avatar` at 3rem is also the student's own bird on their own result page
-  (`.submission-bird`). On a clean pass it wears the `chirp` face for that
-  page only and hops twice (`.submission-bird-cheer`), and not at all under
-  `prefers-reduced-motion`; it never looks sad (`AvatarReaction`).
+  The student's own bird on their own result page (`.submission-bird`) is
+  **`.avatar-result`** (3.5rem, `AvatarSize.result`). On a clean pass it
+  wears the `chirp` face for that page only and hops twice
+  (`.submission-bird-cheer`), and not at all under
+  `prefers-reduced-motion`; it never looks sad (`AvatarReaction`). A gain
+  plays the result-page celebration once instead
+  ([result-celebration.md](result-celebration.md)): `celebrate.js` adds
+  `.is-celebrating` to the group and the page, shows each row's mark as
+  `.result-mark-skipped` until its beat, counts the grade up in
+  `.score-figure-counting`, and draws feathers on one `.celebrate-canvas`
+  overlay that ignores the pointer. A full-marks grade on the student's own
+  page reads in the open colour (`.score-figure-perfect`), and an
+  improvement shows its gain in a `.tier .tier-open` pill.
   The user's own bird (the nav's, the result page's, the account card's)
   leans a little when the pointer or the keyboard is on it, and the account
   card's large bird breathes slowly and hops while it is pressed. It is CSS

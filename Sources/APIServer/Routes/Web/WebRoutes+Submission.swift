@@ -489,17 +489,20 @@ extension WebRoutes {
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         ctx.ownBird = try await ownSubmissionBird(
-            for: user, submission: submission, context: ctx, isStaff: isStaff, on: req.db)
+            for: user, submission: submission, context: ctx, isStaff: isStaff, graded: displayCollection, on: req.db)
         let page = PageRequestContext(request: req)
         let flash = SpareFlash.messages(for: req.query[String.self, at: "spare"])
         return try await HTMLResponse { SubmissionPage(page: page, result: ctx, flash: flash) }.encodeResponse(for: req)
     }
 
     /// The viewer's own bird, reacting to `context`, when the viewer is the
-    /// student who made this submission (`SubmissionContext.ownBird`).
+    /// student who made this submission (`SubmissionContext.ownBird`), with
+    /// the celebration the page plays for the `graded` result
+    /// (docs/result-celebration.md). An instructor's grade override plays
+    /// nothing, because the page shows that grade first.
     private func ownSubmissionBird(
         for user: APIUser, submission: APISubmission, context: SubmissionContext, isStaff: Bool,
-        on db: any Database
+        graded: TestOutcomeCollection?, on db: any Database
     ) async throws -> SubmissionBird? {
         guard submission.kind == APISubmission.Kind.student, let userID = user.id, submission.userID == userID
         else { return nil }
@@ -507,10 +510,26 @@ extension WebRoutes {
         let reaction = AvatarReaction(
             passCount: context.passCount, totalTests: context.totalTests,
             buildFailed: context.buildFailed, isPending: context.isPending)
+        var celebration: SubmissionCelebration?
+        let gradeIsOverridden = context.gradeIsOverridden
+        let percent = graded.flatMap(gradePercent(from:))
+        if !context.isPending, !context.buildFailed, !gradeIsOverridden, let percent {
+            let history = try await CelebrationHistory.load(for: submission, on: db)
+            if history.isLatest,
+                let state = ResultCelebration(
+                    percent: percent, previousPercent: history.previousPercent,
+                    earlierBestPercent: history.bestPercent)
+            {
+                celebration = SubmissionCelebration(
+                    state: state, gradeTo: percent, gradeFrom: history.previousPercent ?? 0,
+                    passCount: context.passCount, totalTests: context.totalTests)
+            }
+        }
         return SubmissionBird(
             avatar: AvatarPresentation(
-                for: reaction.applied(to: spec), size: .standard, accessibility: .decorative, isStaff: isStaff),
-            reaction: reaction)
+                for: reaction.applied(to: spec), size: .result, accessibility: .decorative, isStaff: isStaff),
+            reaction: reaction, celebration: celebration,
+            isFullMarks: percent == 100 && !gradeIsOverridden)
     }
 
     // MARK: - submissionPage helpers

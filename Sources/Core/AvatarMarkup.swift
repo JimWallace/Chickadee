@@ -38,6 +38,10 @@ public enum AvatarSize: String, CaseIterable, Sendable {
     /// page alone scales it further (12rem first, 9.5rem second and third);
     /// see "Component vocabulary" in docs/ui-design.md.
     case podium
+    /// 3.5rem — the student's own bird beside the grade on their result
+    /// page, where it hops in the result-page celebration
+    /// (docs/result-celebration.md).
+    case result
 
     public var cssClass: String {
         switch self {
@@ -46,6 +50,7 @@ public enum AvatarSize: String, CaseIterable, Sendable {
         case .roster: "avatar avatar-md"
         case .hero: "avatar avatar-lg"
         case .podium: "avatar avatar-xl"
+        case .result: "avatar avatar-result"
         }
     }
 }

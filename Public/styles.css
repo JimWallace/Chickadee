@@ -5,6 +5,15 @@
     --health-teal:       #0098A5;
     --health-teal-light: #97DFEF;
     --uw-gold:           #FFCC33;
+    /* The result-page celebration (docs/result-celebration.md). The particles
+       draw on a canvas, which reads these; the feathers also take the
+       student's own bird colours and the two health teals. The light values
+       are correct in both themes: the seed and the spark are mid-tones that
+       read on either surface, and the quill is drawn on a feather, never on
+       the page, so it is dark ink in both. */
+    --celebrate-seed:       #B98B4E;
+    --celebrate-spark-gold: #E8B13A;
+    --celebrate-quill:      rgba(17, 24, 39, .28);
 
     --blue:    var(--health-teal-dark);  /* primary interactive — links, focus, spinner */
     --gold:    var(--uw-gold);
@@ -1707,7 +1716,44 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 @keyframes bird-hop { 40% { transform: translateY(-.4rem); } }
 @media (prefers-reduced-motion: no-preference) {
-    .submission-bird-cheer > .avatar { animation: bird-hop .6s ease-out 2; }
+    /* While the celebration plays, celebrate.js moves the bird instead. */
+    .submission-bird-cheer:not(.is-celebrating) > .avatar { animation: bird-hop .6s ease-out 2; }
+}
+
+/* The result-page celebration (docs/result-celebration.md, J1). celebrate.js
+   sets the custom properties below, frame by frame, and removes them at the
+   end; with no script, or with reduced motion, the page reads as it always
+   does. A 100% grade the page celebrates reads in the open colour. */
+.score-figure-perfect { color: var(--open-fg); }
+.score-figure-counting { color: var(--muted); }
+.submission-bird[data-celebrate] .score-figure { font-variant-numeric: tabular-nums; }
+.submission-bird[data-celebrate] > .tier { align-self: center; }
+.celebrate-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+}
+/* The values celebrate.js changes, at rest. Each is one line, so no line of
+   a rule below begins with a custom property. */
+.submission-bird.is-celebrating > .avatar { --celebrate-bird-y: 0px; }
+.submission-bird.is-celebrating .score-figure { --celebrate-grade-scale: 1; }
+.submission-bird.is-celebrating > .tier { --celebrate-chip-opacity: 1; --celebrate-chip-y: 0px; --celebrate-chip-scale: 1; }
+.is-celebrating .results-table .result-mark { --celebrate-mark-scale: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .submission-bird.is-celebrating > .avatar { transform: translateY(var(--celebrate-bird-y)); }
+    .submission-bird.is-celebrating .score-figure {
+        display: inline-block;
+        transform-origin: left center;
+        transform: scale(var(--celebrate-grade-scale));
+    }
+    .submission-bird.is-celebrating > .tier {
+        opacity: var(--celebrate-chip-opacity);
+        transform: translateY(var(--celebrate-chip-y)) scale(var(--celebrate-chip-scale));
+    }
+    .is-celebrating .results-table .result-mark { transform: scale(var(--celebrate-mark-scale)); }
 }
 
 /* The user's own bird moves a little (#2589): it leans when the pointer or
@@ -3791,6 +3837,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .avatar-md {
     width: 2.25rem;
     height: 2.25rem;
+}
+
+/* The 3.5rem form beside the grade on the student's own result page, where
+   the bird hops in the celebration. See AvatarSize.result. */
+.avatar-result {
+    width: 3.5rem;
+    height: 3.5rem;
 }
 
 /* Swatch choice: radio inputs shown as round colour samples with a name

@@ -529,6 +529,11 @@ struct SubmissionContext: Encodable {
 struct SubmissionBird: Encodable {
     let avatar: AvatarPresentation
     let reaction: AvatarReaction
+    /// The celebration the page plays, nil when it plays none.
+    var celebration: SubmissionCelebration?
+    /// The autograded grade is 100% and no override replaces it: the grade
+    /// reads in the open colour on every load (docs/result-celebration.md).
+    var isFullMarks = false
 }
 
 /// The repository and commit a GitHub submission came from

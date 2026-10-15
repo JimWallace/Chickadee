@@ -1,0 +1,3 @@
+### Added
+
+- **The result page celebrates a gain (J1).** A student's first 100% on an assignment replays the test marks, counts the grade up, makes their bird hop and bursts feathers in the bird's colours; an improvement counts up from the previous attempt and shows the gain; a repeated 100% sparkles. It plays once per submission, only for the student's own latest graded submission, never for staff and never under reduced motion. A result that is the same or lower plays nothing. The bird on the result page is now 3.5rem. Design: `docs/result-celebration.md`. The wardrobe earning design pass (#2603) is recorded in `docs/student-wardrobe.md`.

@@ -630,6 +630,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/class-composite.md` — shipped: each student renders one slot of a shared image, composed live on the projector; opens with a Status table
 - `docs/unlockable-labs.md` — assignment prerequisites and sticky per-student unlocks
 - `docs/student-wardrobe.md` — cosmetic choices for the avatar, kept apart from earned status
+- `docs/result-celebration.md` — the result-page celebration: the 100% moment, the bird, and the Earned toast
 - `docs/student-avatars.md` — generated avatars and the per-course pseudonymous handle
 - `docs/avatar-species.md` — eleven avatar species on one shared skeleton, the colourway decides the species, the trait weights, the prototype findings; opens with a Status table
 - `docs/browser-freeze-investigation.md` — the 2026-08 editor freeze, its root cause, the freeze tracer
