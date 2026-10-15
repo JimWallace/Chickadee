@@ -134,11 +134,15 @@ jobs:
           echo "target=$target" >> "$GITHUB_OUTPUT"
 
           # Already triaged? A second delivery of one event must not post twice.
+          # Read the bodies first: `grep -q` in a pipe can end the pipe early,
+          # and pipefail then reports a match as a miss.
           case "$target" in
             pr:*) comments="repos/$GITHUB_REPOSITORY/issues/${target#pr:}/comments" ;;
             commit:*) comments="repos/$GITHUB_REPOSITORY/commits/${target#commit:}/comments" ;;
           esac
-          if gh api "$comments" --paginate --jq '.[].body' | grep -qF "$marker"; then
+          bodies="$(gh api "$comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | .body')"
+          if grep -qF "$marker" <<< "$bodies"; then
             echo "Already triaged."
             echo "go=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -265,12 +269,13 @@ jobs:
           } >> comment.md
 
           case "$TARGET" in
-            pr:*)
-              gh pr comment "${TARGET#pr:}" --repo "$GITHUB_REPOSITORY" --body-file comment.md ;;
-            commit:*)
-              gh api "repos/$GITHUB_REPOSITORY/commits/${TARGET#commit:}/comments" \
-                -F "body=@comment.md" > /dev/null ;;
+            pr:*) endpoint="repos/$GITHUB_REPOSITORY/issues/${TARGET#pr:}/comments" ;;
+            commit:*) endpoint="repos/$GITHUB_REPOSITORY/commits/${TARGET#commit:}/comments" ;;
           esac
+          if ! gh api "$endpoint" -F "body=@comment.md" > /dev/null; then
+            echo "::error::Could not post the triage to $TARGET."
+            exit 1
+          fi
           {
             echo "## ci-triage"
             echo
