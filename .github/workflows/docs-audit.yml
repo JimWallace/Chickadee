@@ -1,0 +1,233 @@
+name: Documentation audit
+
+# Once a month, the `docs-audit` agent compares the documentation with the
+# repository and files one issue: claims that are no longer true (a path, a
+# workflow, a script or an agent that does not exist, a count that changed, a
+# process that no longer runs) and docs/ files that the reference list in
+# CLAUDE.md does not name. The brief is .claude/agents/docs-audit.md, the same
+# file a Claude Code session runs as a subagent.
+#
+# A REPORT, NEVER A GATE. The fixes are usually one line each, and a person (or
+# a session they start) makes them.
+#
+# SCOPE PER RUN, so that a run reads about 25 documents and not 75:
+#   * every CLAUDE.md file;
+#   * each document under docs/ (not docs/archive/) that names a file deleted
+#     or renamed in the last 31 days, which is where most drift comes from;
+#   * one quarter of the other documents, by month, so that each one is
+#     audited at least every four months.
+#
+# ONE OPEN ISSUE. Each run opens a new issue labelled `docs-audit` and closes
+# the previous one with a link. The agent reads the previous report and carries
+# forward each finding that is still true.
+#
+# The inputs are `main`'s own files, so there is no untrusted text here. The
+# layers are the same as in the other agent workflows anyway: the `audit` job,
+# where the model runs, is read-only, and the `file` job, which files the
+# issue, runs no model.
+#
+# WHAT IT NEEDS. The same repository secret as ui-review.yml. Without it the
+# job says so and passes.
+
+on:
+  schedule:
+    # 07:29 UTC on the second day of each month (ui-audit.yml runs on the first).
+    - cron: "29 7 2 * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: docs-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: docs-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Read only. The write scope is in the `file` job.
+    permissions:
+      contents: read
+      issues: read
+      id-token: write
+    outputs:
+      outcome: ${{ steps.audit.outcome }}
+      result: ${{ steps.audit.outputs.structured_output }}
+      previous: ${{ steps.scope.outputs.open }}
+
+    steps:
+      # Full history: the scope and the agent both use `git log`.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check for credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the documentation audit did not run."
+          fi
+
+      - name: Work out the scope and find the previous audit
+        id: scope
+        if: steps.credentials.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+          # The files changed in the last 31 days, for the agent, and the
+          # paths deleted or renamed away, for the scope. The generated and
+          # vendored trees are left out: no document cites their files.
+          skip='^(Public/jupyterlite/|Public/vendor/|Tools/visual-regression/baselines/|changelog\.d/)'
+          git log --since=31.days --name-only --format= | grep -v -E "$skip" \
+            | sort -u > audit/changed-files.txt || true
+          git log --since=31.days --diff-filter=DR --name-status --format= \
+            | awk '{ print $2 }' | grep -v -E "$skip" | grep / | sort -u > audit/gone-files.txt || true
+
+          # Gone paths are whole paths with a directory (`grep /` above), so a
+          # deleted README.md cannot match every document that says README.md.
+          # The quarter comes from a hash of the path, so adding or removing one
+          # document does not move the others to another quarter.
+          git ls-files '*CLAUDE.md' > audit/scope.txt
+          quarter=$(( $(date -u +%-m) % 4 ))
+          while read -r doc; do
+            if [ -s audit/gone-files.txt ] && grep -q -F -f audit/gone-files.txt "$doc"; then
+              echo "$doc" >> audit/scope.txt
+            elif [ $(( $(printf '%s' "$doc" | cksum | cut -d' ' -f1) % 4 )) -eq "$quarter" ]; then
+              echo "$doc" >> audit/scope.txt
+            fi
+          done < <(git ls-files 'docs/*.md' 'docs/**/*.md' | grep -v '^docs/archive/' | sort)
+          sort -u -o audit/scope.txt audit/scope.txt
+          echo "documents=$(wc -l < audit/scope.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          echo "changed=$(wc -l < audit/changed-files.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+          # The previous report, newest first; after a failed run there can
+          # be more than one open, and the `file` job closes all of them. On
+          # the first run the label does not exist yet and the list is empty.
+          open_issues="$(gh issue list --repo "$GITHUB_REPOSITORY" --label docs-audit --state open --limit 20 \
+            --json number --jq '[.[].number] | sort | reverse | map(tostring) | join(" ")')"
+          echo "open=$open_issues" >> "$GITHUB_OUTPUT"
+          number="${open_issues%% *}"
+          if [ -n "$number" ]; then
+            gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body --jq .body > audit/previous-audit.md
+            echo "previous=audit/previous-audit.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "previous=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Audit the documentation
+        id: audit
+        if: steps.credentials.outputs.present == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the Chickadee docs-audit agent. Your brief is the file
+            .claude/agents/docs-audit.md in the checked-out tree. Read it
+            first and follow it exactly. The default branch is checked out in
+            the working directory, with full history.
+
+            SCOPE: the ${{ steps.scope.outputs.documents }} documents listed in
+            audit/scope.txt. Audit each of them in full. The
+            ${{ steps.scope.outputs.changed }} files changed in the last 31
+            days are in audit/changed-files.txt, and the ones deleted or
+            renamed away are in audit/gone-files.txt; use them to find what
+            may have drifted. Check the reference list (brief, check 5) against
+            all of docs/, not only the scope.
+            PREVIOUS AUDIT: ${{ steps.scope.outputs.previous }}
+
+            Do not post anything to GitHub and do not write files. Return the
+            full report as Markdown in the `report` field of the structured
+            output, and the number of findings in `findings`, counted from
+            the report itself. A later step files the report as an issue.
+          claude_args: |
+            --model sonnet
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*),Bash(git ls-files:*)"
+            --disallowedTools "Edit,Write,WebFetch,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**)"
+            --json-schema '{"type":"object","properties":{"findings":{"type":"integer"},"report":{"type":"string"}},"required":["findings","report"]}'
+
+      - name: Say so if the audit did not complete
+        if: steps.credentials.outputs.present == 'true' && steps.audit.outcome != 'success'
+        env:
+          OUTCOME: ${{ steps.audit.outcome }}
+        run: |
+          echo "::warning::The documentation audit did not complete (step outcome: $OUTCOME). Re-run the workflow."
+          {
+            echo "## docs-audit"
+            echo
+            echo "Did not complete (step outcome: $OUTCOME). Re-run the workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  file:
+    name: docs-audit (file the issue)
+    needs: audit
+    if: needs.audit.outputs.outcome == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # No model runs in this job, and no repository code is checked out.
+    permissions:
+      issues: write
+
+    steps:
+      - name: File the report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.audit.outputs.result }}
+          PREVIOUS: ${{ needs.audit.outputs.previous }}
+        run: |
+          set -uo pipefail
+          jq -r '.report // ""' <<< "${RESULT:-null}" > report.md
+          if [ ! -s report.md ]; then
+            echo "::warning::The documentation audit returned no report. Re-run the workflow."
+            exit 0
+          fi
+          if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' report.md; then
+            echo "::error::The report looks like it holds a credential. It was not filed."
+            exit 1
+          fi
+          findings="$(jq -r '.findings // 0' <<< "$RESULT")"
+          # An issue body holds at most 65,536 characters. Cut on a line, say
+          # so, and keep the full report as an artifact.
+          cp report.md docs-audit-report.md
+          awk '{ total += length($0) + 1; if (total > 60000) exit; print }' report.md \
+            | sed 's/@/@\xE2\x80\x8B/g' > body.md
+          if [ "$(wc -c < body.md)" -lt "$(wc -c < report.md)" ]; then
+            printf '\n\n_The report is cut here. The full report is the `docs-audit-report` artifact of run %s._\n' \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> body.md
+          fi
+          printf '\n---\n_Generated by [Claude Code](https://claude.ai/code)_\n' >> body.md
+          gh label create docs-audit --repo "$GITHUB_REPOSITORY" --color 0e8a16 \
+            --description "Monthly documentation drift audit (docs-audit.yml)" --force
+          if ! url="$(gh issue create --repo "$GITHUB_REPOSITORY" --label docs-audit \
+            --title "Documentation audit $(date -u +%Y-%m-%d): $findings findings" \
+            --body-file body.md)"; then
+            echo "::error::Could not file the documentation audit issue."
+            exit 1
+          fi
+          for previous in $PREVIOUS; do
+            gh issue close "$previous" --repo "$GITHUB_REPOSITORY" --reason completed \
+              --comment "Replaced by $url" || true
+          done
+          echo "## docs-audit" >> "$GITHUB_STEP_SUMMARY"
+          echo "$findings findings: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the full report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-audit-report
+          path: docs-audit-report.md
+          if-no-files-found: ignore
+          retention-days: 90
