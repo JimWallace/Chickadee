@@ -238,6 +238,7 @@ private struct AccountBirdCard: HTML {
                 }
             }
             script(.src(page.asset("/avatar-picker.js"))) {}
+            script(.src(page.asset("/bird-chirp.js"))) {}
         }
     }
 }
@@ -249,7 +250,8 @@ private struct AccountBirdHero: HTML {
     let picker: AvatarPickerContext
 
     var body: some HTML {
-        div(.class("bird-card-hero")) {
+        // bird-chirp.js: a click on the bird chirps for a moment (#2589).
+        div(.class("bird-card-hero"), .dataFlag("bird-chirp")) {
             Avatar(avatar: picker.hero)
             if !picker.handle.isEmpty {
                 p { strong(.dataFlag("avatar-handle")) { picker.handle } }

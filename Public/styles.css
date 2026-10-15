@@ -1710,6 +1710,24 @@ code { font-family: var(--font-mono); font-size: .9em; }
     .submission-bird-cheer > .avatar { animation: bird-hop .6s ease-out 2; }
 }
 
+/* The user's own bird moves a little (#2589): it leans when the pointer is on
+   it, and the account page's large bird breathes until the pointer reaches
+   it. Never under reduced motion. Only the user's own bird moves: a roster
+   or a leaderboard stays still. */
+@keyframes bird-breathe { 50% { transform: scale(1.03); } }
+@media (prefers-reduced-motion: no-preference) {
+    .nav-username .avatar,
+    .submission-bird > .avatar,
+    .bird-card-hero .avatar { transition: transform .2s ease-out; }
+    .bird-card-hero .avatar { animation: bird-breathe 4s ease-in-out infinite; }
+    .nav-username:hover .avatar,
+    .submission-bird > .avatar:hover,
+    .bird-card-hero .avatar:hover {
+        animation: none;
+        transform: rotate(-8deg) translateY(-.125rem);
+    }
+}
+
 /* The count tiles are an auto-fit grid, so inside a flex row they receive only
    their content width and collapse to a single column — which is what the band
    did until the graded results page finally had a pixel baseline to show it.
