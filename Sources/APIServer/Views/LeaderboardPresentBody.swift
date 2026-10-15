@@ -57,7 +57,9 @@ struct LeaderboardPresentBody: HTML {
             }
             if board.hasPodium {
                 div(.class("present-stage")) {
-                    div(.class("podium")) {
+                    // present-podium.js compares the key across refreshes, so
+                    // the podium bounces only when the top three change.
+                    div(.class("podium"), .data("podium-key", value: board.podiumKey)) {
                         for place in board.podium {
                             PodiumPlace(place: place)
                         }

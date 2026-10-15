@@ -18,7 +18,8 @@ the avatar sprite is in `BaseLayout` for every signed-in page. The user's own bi
 also moves a little: it leans on hover, the account card's bird breathes, and a
 press there makes it hop. The face never changes, so an unlockable face is
 not shown. Nothing moves under reduced motion,
-and no other person's bird moves (#2589).
+and no other person's bird reacts to the pointer (#2589). The Present-mode
+podium birds bounce when the top three change (#2591).
 
 **Both are shown to other people.** Twelve templates include the avatar partial (and two more, the nav and the result page, show the user only their own bird):
 the leaderboard pages (list, bracket, Present mode) show a student's bird and
@@ -852,7 +853,9 @@ other.
    `users.avatar_previous_handle`), and the student can go back to both until
    they hatch again. The old handle comes back only if no other bird has taken
    it since; otherwise the bird keeps the handle from the hatch. A go back does
-   not give the hatch back. Each hatch is a
+   not give the hatch back. On the first page after a hatch the new bird
+   comes out of an egg (#2590; `.bird-hatch` in docs/ui-design.md), and a
+   reader who asked for less motion sees the bird at once. Each hatch is a
    row in `avatar_hatches` (user, term key such as "2026-fall", date), which
    the data export includes and an account deletion removes. Nothing else may
    change a stored bird's species (decision 2). Not built: blocking a hatch
