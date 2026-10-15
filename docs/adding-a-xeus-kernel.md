@@ -1554,6 +1554,14 @@ install. The one native-side surprise: Ubuntu ships no CLI-only package —
 so the interpreter costs ~338 MB installed on both images. Reported, priced,
 accepted.
 
+Found later (2026-10): the emscripten-forge `octave` build leaves out FFTW,
+ARPACK, SuiteSparse, Qhull, GLPK, SUNDIALS, zlib, HDF5 and libsndfile. So
+`fft`, `eigs`, sparse `chol`, `convhulln`, `glpk`, `ode15s` and `gzip`, among
+others, fail in the browser but work on the native worker. The measured list
+is in [authoring-parity.md](authoring-parity.md#the-browser-octave-kernel-lacks-functions-that-native-octave-has).
+For a new kernel, run `__octave_config_info__("build_features")` (or the
+language's equivalent) in the browser and compare it with the native build.
+
 ## What the Java run actually cost
 
 The seventh language, and the first added since this document was last revised —
