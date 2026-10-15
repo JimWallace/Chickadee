@@ -88,6 +88,9 @@ struct AvatarPickerContext: Encodable {
     /// The student's bird at the podium size, the card's hero and the live
     /// preview's target.
     let hero: AvatarPresentation
+    /// The bird's handle, "Curious Noether": its name in every course. Empty
+    /// for a bird with none (course staff), which hides the line.
+    let handle: String
     /// "Cardinal".
     let speciesName: String
     /// "Three cardinal colourways, plus your backdrop."
@@ -113,9 +116,13 @@ struct AvatarPickerContext: Encodable {
     let accentToken: String
     let capToken: String
 
-    init(for spec: AvatarSpec, isStaff: Bool, hatchedText: String = "", hatch: AvatarHatchContext? = nil) {
+    init(
+        for spec: AvatarSpec, isStaff: Bool, handle: String = "", hatchedText: String = "",
+        hatch: AvatarHatchContext? = nil
+    ) {
         hero = AvatarPresentation(for: spec, size: .podium, accessibility: .decorative, isStaff: isStaff)
         self.isStaff = isStaff
+        self.handle = handle
         self.hatchedText = hatchedText
         self.hatch = hatch
         self.backdropToken = hero.backdropToken

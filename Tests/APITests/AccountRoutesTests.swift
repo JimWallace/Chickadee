@@ -170,10 +170,9 @@ import VaporTesting
         }
     }
 
-    /// A student sees the handle reserved for them in each course, named as a
-    /// noun phrase rather than a sentence — the shape the slip-day line beside
-    /// it already uses, where the phrase carries its own noun.
-    @Test func accountPageShowsThePerCourseHandleAndItsLimits() async throws {
+    /// A student sees their bird's handle on the bird card: one name, the
+    /// same in every course.
+    @Test func accountPageShowsTheBirdsHandle() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "AVATARC")
             let cookie = try await loginUser(
@@ -189,18 +188,17 @@ import VaporTesting
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in #expect(res.status == .ok) })
 
-            let handle = try #require(
-                try await APICourseEnrollment.query(on: app.db)
-                    .filter(\.$userID == user.requireID()).first()?.avatarHandle)
+            let handle = try #require(try await APIUser.find(user.requireID(), on: app.db)?.avatarHandle)
             #expect(AvatarHandle.isWellFormed(handle))
 
-            // Second load shows it, and says what it does not promise.
+            // Second load shows it on the card, and not on the course row.
             try await app.asyncTest(
                 .GET, "/account",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
                     let html = res.body.string
-                    #expect(html.contains("Class handle: \(handle)"))
+                    #expect(html.contains("<strong data-avatar-handle>\(handle)</strong>"))
+                    #expect(!html.contains("Class handle:"))
                 })
         }
     }

@@ -221,7 +221,7 @@ private struct AccountBirdCard: HTML {
         section(.class("page-section"), .id("bird")) {
             h2 { "Your bird" }
             p(.class("section-note")) {
-                "Classmates see your bird beside your class handle on leaderboards and in live sessions. "
+                "Classmates see your bird and its handle on leaderboards and in live sessions. "
                     + "Only you and course staff can link either one to you."
             }
             if invalid {
@@ -243,8 +243,8 @@ private struct AccountBirdCard: HTML {
     }
 }
 
-/// The bird at the podium size, with its species, when it hatched and the
-/// hatch control.
+/// The bird at the podium size, with its handle, its species, when it hatched
+/// and the hatch control.
 private struct AccountBirdHero: HTML {
     let page: PageRequestContext
     let picker: AvatarPickerContext
@@ -252,8 +252,15 @@ private struct AccountBirdHero: HTML {
     var body: some HTML {
         div(.class("bird-card-hero")) {
             Avatar(avatar: picker.hero)
-            p {
-                strong { picker.speciesName }
+            if !picker.handle.isEmpty {
+                p { strong(.dataFlag("avatar-handle")) { picker.handle } }
+            }
+            p(.dataFlag("avatar-species")) {
+                if picker.handle.isEmpty {
+                    strong { picker.speciesName }
+                } else {
+                    picker.speciesName
+                }
                 if picker.hatch?.strip == .hatched {
                     " "
                     span(.class("tier")) { "New" }
@@ -288,9 +295,13 @@ private struct AccountHatchStrip: HTML {
                 div {
                     p { strong { "Hatch a new bird?" } }
                     p {
-                        "You’ll get a different species, with random colours, markings, face and hat. "
-                            + "Your backdrop, ring and class handles stay. "
-                            + "This uses 1 of the \(hatch.left) you have left this term."
+                        hatch.handle == nil
+                            ? "You’ll get a different species, with random colours, markings, face and hat. "
+                                + "Your backdrop and ring stay. "
+                                + "This uses 1 of the \(hatch.left) you have left this term."
+                            : "You’ll get a new handle and a different species, with random colours, markings, "
+                                + "face and hat. Your backdrop and ring stay. "
+                                + "This uses 1 of the \(hatch.left) you have left this term."
                     }
                 }
                 div(.class("toolbar")) {
@@ -305,11 +316,8 @@ private struct AccountHatchStrip: HTML {
         case .hatched:
             div(.class("bird-card-strip"), .role("status")) {
                 div {
-                    p { strong { "Meet your new bird: \(hatch.speciesWithArticle)." } }
-                    p {
-                        "Classmates see it beside your class handle from now on. "
-                            + "You can go back to your \(hatch.previousSpeciesWord ?? "") until you hatch again."
-                    }
+                    p { strong { hatch.meetTitle } }
+                    p { hatch.meetBody }
                 }
                 div(.class("toolbar")) {
                     AccountRestoreForm(page: page, hatch: hatch, linkStyled: false)
@@ -620,8 +628,8 @@ private struct AccountGitHubBlock: HTML {
     }
 }
 
-/// A course the user is enrolled in: its handle, slip days, and the Change
-/// handle and Leave course actions.
+/// A course the user is enrolled in: its slip days and the Leave course
+/// action. The handle names the bird, so it is on the bird card.
 private struct AccountEnrolledCourseRow: HTML {
     let page: PageRequestContext
     let course: AccountCourseRow
@@ -637,17 +645,6 @@ private struct AccountEnrolledCourseRow: HTML {
                     if let termLabel = course.termLabel { " \(termLabel)" }
                 }
                 div(.class("item-details")) { course.name }
-                if let handle = course.handle {
-                    div(.class("item-details"), .dataFlag("avatar-handle")) { "Class handle: \(handle)" }
-                    if let choice = course.handleChoice, choice.isLocked {
-                        div(.class("item-details")) { "Your handle is set for this course." }
-                        if choice.wasLocked {
-                            div(.class("item-details"), .role("status")) {
-                                "It was set before your last choice arrived."
-                            }
-                        }
-                    }
-                }
                 if let slipDaysText = course.slipDaysText {
                     div(.class("item-details")) { slipDaysText }
                 }
@@ -670,9 +667,6 @@ private struct AccountEnrolledCourseRow: HTML {
             }
             td(.class("item-actions-td")) {
                 div(.class("assignment-actions-cell")) {
-                    if let choice = course.handleChoice, choice.canChoose {
-                        AccountHandleChooser(page: page, course: course, choice: choice)
-                    }
                     if course.enrollmentMode == "open" {
                         leaveMenu
                     }
@@ -696,50 +690,6 @@ private struct AccountEnrolledCourseRow: HTML {
                 }
             }
         }
-    }
-}
-
-/// The Change handle panel: the current handle and two alternates, each
-/// beside the student's own bird.
-private struct AccountHandleChooser: HTML {
-    let page: PageRequestContext
-    let course: AccountCourseRow
-    let choice: AccountHandleChoice
-
-    var body: some HTML {
-        details(.class("ext-details form-flush")) {
-            summary(.class("btn action-btn ext-summary")) { "Change handle" }
-            form(.method(.post), .action("/account/handle/\(course.id)"), .class("ext-panel")) {
-                CSRFField(token: page.csrfToken)
-                if choice.wasTaken {
-                    p(.class("form-error"), .role("alert")) { "That one was just taken. Here are two more." }
-                }
-                p(.class("field-note")) { "You can change it once, until classmates see it." }
-                div(
-                    .class("checkbox-list"), .role("radiogroup"), .ariaLabel("Class handle for \(course.code)")
-                ) {
-                    for (position, option) in choice.options.enumerated() {
-                        if position > 0 { " " }
-                        label(.class("checkbox-row")) {
-                            " "
-                            input(.type(.radio), .name("handle"), .value(option.handle))
-                                .attributes(.checked, when: option.isCurrent)
-                            " "
-                            Avatar(avatar: option.avatar)
-                            " \(option.handle) "
-                            if option.isCurrent {
-                                span(.class("chip")) { "Current" }
-                                " "
-                            }
-                        }
-                    }
-                }
-                div(.class("ext-panel-actions")) {
-                    button(.class("btn action-btn"), .type(.submit)) { "Save" }
-                }
-            }
-        }
-        .attributes(.custom(name: "open"), when: choice.wasTaken)
     }
 }
 

@@ -180,7 +180,7 @@ async function main() {
             .forEach((el) => {
               el.textContent = "0000-00-00 00:00";
             });
-          // The per-course handle is two words drawn at random, so its LENGTH
+          // A handle is two words drawn at random, so its LENGTH
           // moves between runs. Freezing the text rather than masking the line
           // keeps its label and typography under test and only gives up the
           // two words themselves — a mask here would be sized by the text and
@@ -203,8 +203,12 @@ async function main() {
               swatch.querySelector(".swatch-name").textContent = "Colour";
               swatch.querySelector("input").checked = index === 0;
             });
-            card.querySelectorAll(".bird-card-hero strong").forEach((el) => {
+            card.querySelectorAll("[data-avatar-species]").forEach((el) => {
               el.textContent = "Species";
+            });
+            // The card names the bird by its handle alone.
+            card.querySelectorAll("[data-avatar-handle]").forEach((el) => {
+              el.textContent = "Aaaaaaa Bbbbbb";
             });
             // The account is created by the seed, so the "Hatched" date is
             // the day of the run.

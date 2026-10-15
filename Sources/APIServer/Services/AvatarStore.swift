@@ -1,7 +1,8 @@
 // APIServer/Services/AvatarStore.swift
 //
 // First-use materialization for the two halves of a student's pseudonymous
-// identity: the avatar spec (per user) and the handle (per user, per course).
+// identity: the bird (its spec) and the bird's handle, both per user. A hatch
+// replaces both (AvatarStore+Hatch.swift).
 //
 // Both are drawn once and stored, never re-derived.  See
 // docs/student-avatars.md — re-deriving a spec on each render means appending
@@ -62,194 +63,121 @@ enum AvatarStore {
         return spec
     }
 
-    /// This enrollment's handle, generating and saving one on first call.
+    // MARK: - The bird's handle (docs/student-avatars.md §3)
+
+    /// This user's bird's handle, drawing and saving one on first call. One
+    /// handle names the bird in every course, so it is unique across the
+    /// deployment.
     ///
-    /// Returns nil only when the course has exhausted the word lists, which is
-    /// a real condition (a course larger than `AvatarHandle.combinationCount`)
-    /// rather than an error to swallow — the caller renders without a handle
-    /// and the avatar still shows.
-    static func ensureHandle(
-        for enrollment: APICourseEnrollment, on db: any Database
-    ) async throws -> String? {
-        // Shape, not list membership: a handle from an earlier word list is
-        // kept, because a list change must never rename a student mid-term.
-        if let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) {
-            return handle
-        }
-        return try await ensureHandle(
-            for: enrollment, taken: takenHandles(inCourse: enrollment.$course.id, on: db), on: db)
+    /// Returns nil only when the word lists are exhausted, which is a real
+    /// condition (more birds than `AvatarHandle.combinationCount`) rather
+    /// than an error to swallow: the caller renders without a handle and the
+    /// bird still shows.
+    static func ensureHandle(for user: APIUser, on db: any Database) async throws -> String? {
+        if let handle = user.avatarHandle, AvatarHandle.hasHandleShape(handle) { return handle }
+        return try await ensureHandle(for: user, taken: takenHandles(on: db), on: db)
     }
 
-    /// `ensureHandle(for:on:)` with the course's taken handles already
-    /// loaded, for a page that draws more than once per enrollment (#1759).
+    /// `ensureHandle(for:on:)` with the taken handles already loaded, for a
+    /// page that draws more than one handle (#1759).
     static func ensureHandle(
-        for enrollment: APICourseEnrollment, taken: Set<String>, on db: any Database
+        for user: APIUser, taken: Set<String>, on db: any Database
     ) async throws -> String? {
-        if let handle = enrollment.avatarHandle, AvatarHandle.hasHandleShape(handle) {
-            return handle
-        }
+        // Shape, not list membership: a handle from an earlier word list is
+        // kept, because a list change must never rename a student.
+        if let handle = user.avatarHandle, AvatarHandle.hasHandleShape(handle) { return handle }
         guard let handle = AvatarHandle.make(excluding: taken) else { return nil }
-
-        enrollment.avatarHandle = handle
+        user.avatarHandle = handle
         do {
-            try await enrollment.save(on: db)
+            try await user.save(on: db)
             return handle
         } catch {
-            // Lost the unique index race with a concurrent enrollment read of
-            // the same remainder. Re-read the winner rather than looping: if
-            // the row now has a handle it is ours to show, and if it does not
-            // the next page load tries again.
+            // Lost the unique-index race, or the row moved under us. Re-read
+            // the winner rather than looping: if the row now has a handle it
+            // is ours to show, and if not the next page load tries again.
             //
             // `try?` for the same reason as `ensureSpec`: on Postgres the
             // failed save has already aborted the transaction, so this read
             // throws as well, and a handle is never worth failing the page for.
-            let winner = (try? await APICourseEnrollment.find(enrollment.id, on: db))
-                .flatMap { $0?.avatarHandle }
-            enrollment.avatarHandle = winner
+            let winner = (try? await APIUser.find(user.id, on: db)).flatMap { $0?.avatarHandle }
+            user.avatarHandle = winner
             return winner
         }
     }
 
-    /// Replaces this enrollment's handle with a fresh draw from the current
-    /// lists.  This is the staff "Give new handle" action, for a handle that
-    /// must change (a student reports that it matches a real name).  Nothing
-    /// calls it automatically: a list change never renames a student mid-term.
-    ///
-    /// Returns nil when the course has exhausted the current lists, and leaves
-    /// the old handle in place.  A lost unique-index race is retried with the
-    /// winner's handle excluded; any other failure is thrown, so an outage is
-    /// never reported as an exhausted pool (#2255).
-    static func redrawHandle(
-        for enrollment: APICourseEnrollment, on db: any Database
-    ) async throws -> String? {
-        try await redrawHandle(
-            for: enrollment, taken: takenHandles(inCourse: enrollment.$course.id, on: db), on: db)
+    /// The handle of the bird of the user enrolled in `enrollment`, drawing
+    /// one on first call. For the course pages, which hold the enrollment.
+    static func ensureHandle(for enrollment: APICourseEnrollment, on db: any Database) async throws -> String? {
+        guard let user = try await APIUser.find(enrollment.userID, on: db) else { return nil }
+        return try await ensureHandle(for: user, on: db)
     }
 
-    /// `redrawHandle(for:on:)` from a taken set the caller already loaded.
-    static func redrawHandle(
-        for enrollment: APICourseEnrollment, taken: Set<String>, on db: any Database
-    ) async throws -> String? {
-        var taken = taken
-        let courseID = enrollment.$course.id
-        let previous = enrollment.avatarHandle
-        for _ in 0..<3 {
-            guard let handle = AvatarHandle.make(excluding: taken) else { break }
-            enrollment.avatarHandle = handle
-            do {
-                try await enrollment.save(on: db)
-                return handle
-            } catch {
-                // Retry only a lost race: the index refused a handle that a
-                // classmate now holds.
-                guard (try? await takenHandles(inCourse: courseID, on: db).contains(handle)) == true else {
-                    enrollment.avatarHandle = previous
-                    throw error
-                }
-                taken.insert(handle)
-            }
+    /// The stored handle of each of `userIDs` that has one. Reads only; for a
+    /// list that shows handles without drawing them.
+    static func handles(for userIDs: [UUID], on db: any Database) async throws -> [UUID: String] {
+        guard !userIDs.isEmpty else { return [:] }
+        var handles: [UUID: String] = [:]
+        for user in try await APIUser.query(on: db).filter(\.$id ~~ userIDs).filter(\.$avatarHandle != nil).all() {
+            if let id = user.id, let handle = user.avatarHandle { handles[id] = handle }
         }
-        enrollment.avatarHandle = previous
-        return nil
+        return handles
     }
 
-    // MARK: - The student's one choice (docs/student-avatars.md §3)
-
-    /// Every handle already stored in this course. The one query behind every
-    /// draw and check: one column, rows with a handle only, never the full
-    /// enrollment rows (#1759).
-    static func takenHandles(inCourse courseID: UUID, on db: any Database) async throws -> Set<String> {
+    /// Every handle a bird holds now. The one query behind every draw and
+    /// check: one column, rows with a handle only (#1759).
+    static func takenHandles(on db: any Database) async throws -> Set<String> {
         Set(
-            try await APICourseEnrollment.query(on: db)
-                .filter(\.$course.$id == courseID)
+            try await APIUser.query(on: db)
                 .filter(\.$avatarHandle != nil)
                 .all(\.$avatarHandle)
                 .compactMap(\.self))
     }
 
-    /// Unused handles from the current lists, two by default, for the account
-    /// page's "Change handle" panel, drawn from a taken set the caller loaded.
-    /// They are not reserved: the choice is checked again against the unique
-    /// index when the student picks one.  Fewer than `count` when the course
-    /// has nearly exhausted the lists.
-    static func drawAlternates(taken: Set<String>, count: Int = 2) -> [String] {
+    /// Replaces this user's bird's handle with a fresh draw from the current
+    /// lists. This is the staff "Give new handle" action, for a handle that
+    /// must change (a student reports that it matches a real name). It
+    /// changes the name in every course.
+    ///
+    /// Returns nil when the lists are exhausted, and leaves the old handle in
+    /// place. A lost unique-index race is retried with the winner's handle
+    /// excluded; any other failure is thrown, so an outage is never reported
+    /// as an exhausted pool (#2255).
+    static func redrawHandle(for user: APIUser, on db: any Database) async throws -> String? {
+        try await redrawHandle(for: user, taken: takenHandles(on: db), on: db)
+    }
+
+    /// `redrawHandle(for:on:)` from a taken set the caller already loaded.
+    static func redrawHandle(
+        for user: APIUser, taken: Set<String>, on db: any Database
+    ) async throws -> String? {
         var taken = taken
-        var alternates: [String] = []
-        while alternates.count < count, let handle = AvatarHandle.make(excluding: taken) {
-            alternates.append(handle)
-            taken.insert(handle)
-        }
-        return alternates
-    }
-
-    /// Whether an offered alternate can still be picked: from the current
-    /// lists and not stored by anybody in the course.
-    static func isStillAvailable(_ handle: String, taken: Set<String>) -> Bool {
-        AvatarHandle.isWellFormed(handle) && !taken.contains(handle)
-    }
-
-    enum HandleChoice: Equatable {
-        /// The handle is now the student's, and it is locked.
-        case chosen
-        /// The handle was already locked; nothing changed.
-        case locked
-        /// Somebody else stored this handle first; nothing changed.
-        case taken
-    }
-
-    /// The student's one change.  Saves `handle` and locks it in the same
-    /// write, so a second change is refused.  The caller has already checked
-    /// that `handle` was one of the alternates it offered.
-    static func chooseHandle(
-        _ handle: String, for enrollment: APICourseEnrollment, on db: any Database
-    ) async throws -> HandleChoice {
-        guard enrollment.avatarHandleLockedAt == nil else { return .locked }
-        return try await chooseHandle(
-            handle, for: enrollment, taken: takenHandles(inCourse: enrollment.$course.id, on: db), on: db)
-    }
-
-    /// `chooseHandle(_:for:on:)` with the pre-check against a taken set the
-    /// caller already loaded.  The unique index still decides the race.
-    static func chooseHandle(
-        _ handle: String, for enrollment: APICourseEnrollment, taken: Set<String>, on db: any Database
-    ) async throws -> HandleChoice {
-        guard enrollment.avatarHandleLockedAt == nil else { return .locked }
-        // Swift compares text by canonical equivalence, but the unique index
-        // compares bytes. Store the one form every generated handle has
-        // (NFC), so a posted handle in another form cannot pass the index.
-        let handle = handle.precomposedStringWithCanonicalMapping
-        let courseID = enrollment.$course.id
-        guard !taken.contains(handle) else { return .taken }
-
-        let previous = enrollment.avatarHandle
-        enrollment.avatarHandle = handle
-        enrollment.avatarHandleLockedAt = Date()
-        do {
-            try await enrollment.save(on: db)
-            return .chosen
-        } catch {
-            enrollment.avatarHandle = previous
-            enrollment.avatarHandleLockedAt = nil
-            // A concurrent pick of the same handle loses on the unique index.
-            // Anything else is a real failure.
-            if (try? await takenHandles(inCourse: courseID, on: db).contains(handle)) == true {
-                return .taken
+        let previous = user.avatarHandle
+        for _ in 0..<3 {
+            guard let handle = AvatarHandle.make(excluding: taken) else { break }
+            user.avatarHandle = handle
+            do {
+                try await user.save(on: db)
+                return handle
+            } catch {
+                // Retry only a lost race: the index refused a handle that
+                // another bird now holds.
+                guard (try? await takenHandles(on: db).contains(handle)) == true else {
+                    user.avatarHandle = previous
+                    throw error
+                }
+                taken.insert(handle)
             }
-            throw error
         }
+        user.avatarHandle = previous
+        return nil
     }
 
-    /// Locks this enrollment's handle, because somebody other than the student
-    /// or staff has now seen it.  A no-op once locked, and never worth failing
-    /// the page that showed the handle.
-    static func lockHandle(for enrollment: APICourseEnrollment, on db: any Database) async {
-        guard enrollment.avatarHandle != nil, enrollment.avatarHandleLockedAt == nil else { return }
-        enrollment.avatarHandleLockedAt = Date()
-        do {
-            try await enrollment.save(on: db)
-        } catch {
-            enrollment.avatarHandleLockedAt = nil
-        }
+    /// Whether `handle` is free for `userID`'s bird: no other bird holds it.
+    static func isHandleFree(_ handle: String, for userID: UUID, on db: any Database) async throws -> Bool {
+        try await APIUser.query(on: db)
+            .filter(\.$avatarHandle == handle)
+            .filter(\.$id != userID)
+            .count() == 0
     }
 
     // MARK: - The staff ring

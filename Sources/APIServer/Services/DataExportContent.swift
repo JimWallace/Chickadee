@@ -44,6 +44,11 @@ struct DataExportProfile: Codable, Sendable {
     /// The bird before the last "Hatch a new bird", while the student can
     /// still go back to it; nil when there is none.
     let previousAvatar: AvatarSpec?
+    /// The bird's handle, its name on the class-facing pages in every course
+    /// (docs/student-avatars.md); nil before one has been drawn.
+    let avatarHandle: String?
+    /// The handle of the bird before the last hatch; nil when there is none.
+    let previousAvatarHandle: String?
     /// Every "Hatch a new bird", oldest first; nil when there is none.
     var avatarHatches: [DataExportAvatarHatch]?
     /// The linked GitHub account (docs/github-submissions.md slice 2), or nil
@@ -84,10 +89,9 @@ struct DataExportEnrollment: Codable, Sendable {
     let role: String
     let enrolledAt: Date?
     let learnSection: String?
-    /// The per-course handle this student is shown under on the class-facing
-    /// pages (the leaderboards; docs/student-avatars.md). nil before one has
-    /// been materialized. A staff enrollment keeps a handle drawn while the
-    /// user was a student.
+    /// The per-course handle from before a handle named the bird
+    /// (docs/student-avatars.md §3), still stored with the enrollment. nil for
+    /// a course joined since. The bird's handle is in the profile.
     let avatarHandle: String?
 }
 
@@ -214,6 +218,8 @@ func gatherDataExportContent(
             lastSeenAt: user.lastSeenAt,
             avatar: user.avatarSpecJSON.flatMap(AvatarStore.decode),
             previousAvatar: user.avatarPreviousSpecJSON.flatMap(AvatarStore.decode),
+            avatarHandle: user.avatarHandle,
+            previousAvatarHandle: user.avatarPreviousHandle,
             avatarHatches: avatarHatches.isEmpty ? nil : avatarHatches,
             githubAccount: githubLink.map {
                 DataExportGitHubAccount(githubUserID: $0.githubUserID, login: $0.githubLogin, linkedAt: $0.linkedAt)
@@ -248,7 +254,7 @@ private func gatherEnrollments(
                 role: row.role.rawValue,
                 enrolledAt: row.enrolledAt,
                 learnSection: row.brightspaceSection,
-                avatarHandle: row.avatarHandle
+                avatarHandle: row.legacyAvatarHandle
             )
         }
 }
@@ -565,12 +571,12 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
 
     - `profile.json` — your account profile: username, names, email,
       student ID, sign-in provider, account timestamps, the choices
-      behind your generated avatar, the avatar before your last hatch, and
-      when you hatched a new one. Passwords are stored only as one-way
-      hashes and are never included.
+      behind your generated avatar and its handle, the avatar and handle
+      before your last hatch, and when you hatched a new one. Passwords are
+      stored only as one-way hashes and are never included.
     - `enrollments.json` — the courses you are enrolled in, with each
       course's term, your role in each, when you enrolled, and the
-      per-course handle reserved for you.
+      per-course handle you had there before handles moved to your avatar.
     - `submissions.json` — an index of every submission you have made:
       course, assignment, attempt number, timestamps, and where in this
       archive to find the uploaded file and its grading results.

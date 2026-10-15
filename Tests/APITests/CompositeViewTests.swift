@@ -56,10 +56,8 @@ import VaporTesting
         let user = try await makeTestStudent(on: app, username: name)
         try await wrEnrollUser(user, on: app)
         let id = try user.requireID()
-        let enrollment = try #require(
-            try await APICourseEnrollment.query(on: app.db).filter(\.$userID == id).first())
-        enrollment.avatarHandle = "Handle \(name)"
-        try await enrollment.save(on: app.db)
+        user.avatarHandle = "Handle \(name)"
+        try await user.save(on: app.db)
         try await APICompositeSlot(assignmentID: f.assignmentID, userID: id, slot: slot, round: round)
             .create(on: app.db)
         return id

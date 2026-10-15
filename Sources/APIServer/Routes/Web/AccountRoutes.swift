@@ -8,7 +8,6 @@
 //   POST /account/avatar               → AccountRoutes+Avatar.swift
 //   POST /account/avatar/hatch         → AccountRoutes+Avatar.swift
 //   POST /account/avatar/restore       → AccountRoutes+Avatar.swift
-//   POST /account/handle/:courseID     → choose a class handle (AccountRoutes+Handle.swift)
 
 import Core
 import Elementary
@@ -23,7 +22,6 @@ struct AccountRoutes: RouteCollection {
         routes.post("account", "avatar", use: saveAvatar)
         routes.post("account", "avatar", "hatch", use: hatchAvatar)
         routes.post("account", "avatar", "restore", use: restoreAvatar)
-        routes.post("account", "handle", ":courseID", use: chooseHandle)
     }
 
     // MARK: - GET /account
@@ -58,20 +56,17 @@ struct AccountRoutes: RouteCollection {
             spendCountByCourseID[spend.courseID, default: 0] += 1
         }
 
-        // Per-course handles, materialized on first view — for STUDENT
-        // enrollments only, the same gate the slip-day line below applies and
-        // for the same kind of reason: a pseudonym is for a student who will
-        // appear pseudonymously, and staff teaching a course appear under their
-        // own name. Gating here also keeps staff from consuming handles out of
-        // a course's finite space. `ensureHandle` is a no-op read once the row
-        // carries one.
         let spec = try await AvatarStore.ensureSpec(for: user, on: req.db)
         // Staff anywhere wear the staff ring here: this page belongs to no one
         // course (docs/student-wardrobe.md, "The staff ring"). One answer for
-        // every bird on the page, the handle panel's included (#1758).
+        // every bird on the page (#1758).
         let isStaff = try await AvatarStore.courseStaff(among: [userID], on: req.db).isEmpty == false
-        let (handlesByCourseID, handleChoicesByCourseID) = try await Self.studentHandles(
-            enrollments: enrollments, spec: spec, isStaff: isStaff, req: req)
+        // The bird's handle, drawn on first view, for a student in a current
+        // course only: a pseudonym is for someone who appears pseudonymously,
+        // and staff appear under their own name. `ensureHandle` is a read
+        // once the bird has one.
+        let isStudent = enrollments.contains { $0.role == .student && !$0.course.isArchived }
+        let handle = isStudent ? try await AvatarStore.ensureHandle(for: user, on: req.db) : nil
 
         let enrolledRows =
             enrollments
@@ -79,8 +74,7 @@ struct AccountRoutes: RouteCollection {
             .compactMap { e in
                 e.course.id.map { id in
                     Self.enrolledCourseRow(
-                        for: e, courseID: id, slipDaysUsed: spendCountByCourseID[id] ?? 0,
-                        handle: handlesByCourseID[id], handleChoice: handleChoicesByCourseID[id])
+                        for: e, courseID: id, slipDaysUsed: spendCountByCourseID[id] ?? 0)
                 }
             }
 
@@ -98,7 +92,7 @@ struct AccountRoutes: RouteCollection {
 
         let avatarNotice = req.query[String.self, at: "avatar"]
         let avatarPicker = try await Self.avatarPickerContext(
-            user: user, spec: spec, isStaff: isStaff, avatarNotice: avatarNotice, req: req)
+            user: user, spec: spec, handle: handle, isStaff: isStaff, avatarNotice: avatarNotice, req: req)
         let identityName = accountIdentityName(
             displayName: user.displayName,
             preferredName: user.preferredName,
@@ -139,19 +133,23 @@ struct AccountRoutes: RouteCollection {
     /// The bird card, with its hatch control. `?hatch=confirm` asks for the
     /// hatch confirm, and `?avatar=hatched` for the new bird's strip.
     private static func avatarPickerContext(
-        user: APIUser, spec: AvatarSpec, isStaff: Bool, avatarNotice: String?, req: Request
+        user: APIUser, spec: AvatarSpec, handle: String?, isStaff: Bool, avatarNotice: String?, req: Request
     ) async throws -> AvatarPickerContext {
-        guard let term = AcademicTerm.current() else { return AvatarPickerContext(for: spec, isStaff: isStaff) }
+        guard let term = AcademicTerm.current() else {
+            return AvatarPickerContext(for: spec, isStaff: isStaff, handle: handle ?? "")
+        }
         let status = try await AvatarStore.hatchStatus(for: user, term: term, on: req.db)
         let requested: AvatarHatchStrip? =
             avatarNotice == "hatched"
             ? .hatched : req.query[String.self, at: "hatch"] == "confirm" ? .confirm : nil
         let hatch = AvatarHatchContext(
-            spec: spec, status: status, nextTerm: term.next, requested: requested, isStaff: isStaff)
+            spec: spec, handle: handle, status: status, nextTerm: term.next, requested: requested,
+            isStaff: isStaff)
         let formatter = waterlooDateTimeFormatter()
         formatter.timeStyle = .none
         let hatchedText = (status.lastHatchedAt ?? user.createdAt).map { "Hatched \(formatter.string(from: $0))" }
-        return AvatarPickerContext(for: spec, isStaff: isStaff, hatchedText: hatchedText ?? "", hatch: hatch)
+        return AvatarPickerContext(
+            for: spec, isStaff: isStaff, handle: handle ?? "", hatchedText: hatchedText ?? "", hatch: hatch)
     }
 
     /// The one-shot success banner after a redirect back to this page.

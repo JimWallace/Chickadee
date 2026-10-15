@@ -167,11 +167,12 @@ extension InstructorDashboardRoutes {
         userIDString: String, courseID: UUID, on db: any Database
     ) async throws -> String? {
         guard let userID = UUID(uuidString: userIDString),
-            let handle = try await APICourseEnrollment.query(on: db)
+            try await APICourseEnrollment.query(on: db)
                 .filter(\.$course.$id == courseID)
                 .filter(\.$userID == userID)
-                .first()?.avatarHandle,
-            let user = try await APIUser.find(userID, on: db)
+                .first() != nil,
+            let user = try await APIUser.find(userID, on: db),
+            let handle = user.avatarHandle
         else { return nil }
         return "@\(user.username) now has the class handle \(handle)."
     }

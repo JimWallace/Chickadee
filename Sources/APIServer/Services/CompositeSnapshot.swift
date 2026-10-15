@@ -187,22 +187,18 @@ struct CompositeSnapshot: Content, Equatable {
         return fills
     }
 
-    /// The class handle of each student, by user ID. A student with no handle
-    /// yet has no entry.
+    /// The handle of each student still enrolled in the course, by user ID. A
+    /// student with no handle yet has no entry.
     private static func handles(
         of userIDs: [UUID], inCourse courseID: UUID, on db: any Database
     ) async throws
         -> [UUID: String]
     {
         guard !userIDs.isEmpty else { return [:] }
-        let enrollments = try await APICourseEnrollment.query(on: db)
+        let enrolled = try await APICourseEnrollment.query(on: db)
             .filter(\.$course.$id == courseID)
             .filter(\.$userID ~~ userIDs)
-            .all()
-        var handles: [UUID: String] = [:]
-        for enrollment in enrollments {
-            if let handle = enrollment.avatarHandle { handles[enrollment.userID] = handle }
-        }
-        return handles
+            .all(\.$userID)
+        return try await AvatarStore.handles(for: enrolled, on: db)
     }
 }

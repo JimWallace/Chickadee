@@ -1,7 +1,7 @@
 # Student avatars — design note
 
-**Status: shipped, and in use.** Every student has a bird and a per-course
-handle, drawn on first view and stored; the account page renders the bird in
+**Status: shipped, and in use.** Every student has a bird, and the bird has a
+handle that names it in every course, drawn on first view and stored; the account page renders the bird in
 place of the initials monogram, which is gone, and the wardrobe lets a student
 choose its backdrop and ring (docs/student-wardrobe.md).
 
@@ -10,8 +10,8 @@ the leaderboard pages (list, bracket, Present mode) show a student's bird and
 handle to classmates, and the instructor Students, Slip days and LEARN lists,
 the admin Users list, the admin course page, the admin runner page and the
 readiness list show the bird beside the name to staff. The handle is therefore **in use**, and student-facing copy says so: the
-account page names the handle per course and says plainly that a stable
-pseudonym is not anonymity (section 5).
+account page shows the handle on the bird card, above the species, and says
+plainly that a stable pseudonym is not anonymity (section 5).
 
 ---
 
@@ -171,9 +171,9 @@ near-certain visible pair. Enforcing per-course
 distinctness would then make an avatar depend on the roster, so it would change
 when somebody drops. That is a bad trade for a cosmetic.
 
-Instead, every enrollment carries a **handle**, such as "Curious Noether",
+Instead, every student's bird carries a **handle**, such as "Curious Noether",
 "Photon Navigator" or "Ionspark", drawn from curated lists and enforced
-UNIQUE per course. The handle is the identity; the avatar is the glance. The
+UNIQUE across the deployment. The handle is the identity; the avatar is the glance. The
 leaderboard shows both, so a micro-collision costs nothing — the two rows still
 say different things.
 
@@ -188,12 +188,25 @@ The handle earns its place three more times over:
 - **Text contexts.** Anywhere a leaderboard is exported, sorted, or pasted into
   a discussion, the handle survives and the SVG does not.
 
-Scope asymmetry, and it is deliberate: **the avatar is per user, the handle is
-per (user, course).** A per-course handle is what makes UNIQUE-per-course
-enforceable at enrollment time, and it keeps a student unlinkable across two
-courses' leaderboards by name. The avatar being global is what lets cosmetic
-unlocks follow a student between courses, which is the part that makes
-gamification feel like it accumulates.
+**The handle names the bird (Fall 2026).** The handle was per (user, course)
+until the hatch arrived. It is now one column, `users.avatar_handle`, unique
+across the deployment by the partial index `idx_users_avatar_handle` (NULL
+excluded). A student has the same handle in every course and every term, so a
+hatch changes the name and the bird at once. This is a deliberate trade: the
+handle now links a student across two courses' leaderboards, as the bird
+already did. The maintainer accepted that linkability, because one name per
+bird is what a student recognises as theirs, and a hatch is the way to change
+both.
+
+- **Students only.** Staff appear under their own name, so a staff-only
+  account's bird gets no handle, its card shows none, and a hatch does not give
+  it one. An account that is a student in a current course gets one.
+- **The move.** `MoveHandlesToBirds` copied each student's handle from their
+  newest course (by term, then by enrollment date) to the bird. Handles were
+  unique per course, so two students could share one: accounts are taken
+  oldest first, and a later account whose handle is taken draws a new one. The
+  old column, `course_enrollments.avatar_handle`, is kept as it was and read by
+  nothing else; the data export reports it per enrollment as history.
 
 Curating the lists is real work, not a lookup: word generators produce
 unfortunate pairs, and every list needs a pass for words that collide with
@@ -267,45 +280,30 @@ fetch dates are in `Tools/handle-review/data/README.md`.
 **Capacity.** The pool must be at least four times the largest expected course
 (`AvatarHandle.maxExpectedEnrollment`, 1,000), so that the last students in a
 large course still get a random handle and not the remainder. The three
-schemes give 32,299 handles. A scheme with no free handle is skipped, so a
-course runs out only when all three do.
+schemes give 32,299 handles. A scheme with no free handle is skipped. Since the
+handle is unique across the deployment, the pool is shared by every student
+account that has a handle, and a hatch takes a new handle without freeing the
+old one until a later hatch replaces it. When the pool runs out, a new bird
+stays without a handle and a hatch keeps the old one. Grow the lists before
+the deployment comes near the limit.
 
 **Lists change between terms; a stored handle is kept.** A new draw uses the
 current lists only. A handle already stored is never checked against a list:
 `AvatarStore.ensureHandle` keeps any stored value of the right form (one to
 three words, each a capital letter followed by letters, with real hyphens
-allowed), so a list change renames nobody mid-term. A handle is per
-(user, course) and each term's offering is a new course, so an old handle ages
-out on its own. When one handle must change (a student reports that it matches
-a real name), an instructor uses **Give new handle** in the Students tab row
-menu. It draws from the current lists and writes an audit entry
+allowed), so a list change renames nobody. A student changes their handle by hatching a
+new bird (Open questions, 1). When one handle must change for another reason (a
+student reports that it matches a real name), an instructor uses **Give new
+handle** in the Students tab row menu. It draws from the current lists, changes
+the bird's handle in every course, and writes an audit entry
 (`enrollment.handle_changed`).
 
-**Choose from three, once, before classmates see it.** A student gets some
-ownership of the handle without any way to spell their name into it. While the
-handle is unlocked, the account page shows a "Change handle" button in the
-course row's actions. It opens a panel with the current handle and two unused
-alternates from the current lists, as radio buttons, each beside the student's
-own bird. All three are random. Saving with an alternate selected changes the
-handle; saving with the current one selected changes nothing and does not use
-the change.
-
-- **The offer is kept in the session.** Reloading the page shows the same two
-  alternates while both are still free, so the choice is from three and not
-  from as many as a student cares to reload. The POST accepts only a handle
-  that was offered.
-- **Alternates are not reserved.** The unique index decides a race. If a
-  classmate stored the picked handle first, nothing changes and the panel opens
-  again with "That one was just taken. Here are two more."
-- **The lock** is `course_enrollments.avatar_handle_locked_at`. It is set when
-  the student uses their one change, and the first time the handle is rendered
-  to a classmate: a student-visible leaderboard viewed by another student
-  (`RankedIdentities.presentation` and the hill's holder). A student's own row
-  and every staff view lock nothing, the projected Present page included: it
-  renders without names, but staff decide what they project and when, and
-  opening it to check it must not spend every student's one change. After the
-  lock, the row reads "Your handle is set for this course." Staff **Give new
-  handle** ignores the lock and does not set it.
+**No per-course choice and no lock (Fall 2026).** The account page once had a
+"Change handle" panel per course, with one change before the handle locked the
+first time a classmate saw it. A hatch replaces it: it is how a student changes
+their name, and it has its own limit per term. The panel, its route and the lock
+are gone; the lock column, `course_enrollments.avatar_handle_locked_at`, is kept
+and read by nothing.
 
 ### 4. Rendered as layered SVG `use`, recoloured through design tokens
 
@@ -372,7 +370,7 @@ near it. The staff ring does not have that problem, for three reasons:
 The role chip beside a name stays. The ring is a second signal, not a
 replacement: a chip is searchable and a screen reader reads it. (Impersonation
 between students is not a risk worth engineering against: the handle is unique
-per course and cannot be chosen, so a copied outfit still sits under a different
+across the deployment and cannot be chosen, so a copied outfit still sits under a different
 name.)
 
 Three consequences to accept up front:
@@ -697,7 +695,7 @@ assert against the markup instead.
 **The size floor, as built:** "the bird earns its detail at 48px and up". Below
 it the bird is recognition, not identification, so `.avatar-sm` (1.5rem,
 `AvatarSize.small`) is drawn only where a handle beside it carries the identity:
-the bracket and the account page's handle panel. The list, standings and union
+the bracket. The list, standings and union
 rows use `.avatar-md` (`AvatarSize.roster`).
 A row with no text beside the bird would want a monogram chip instead, and none
 exists.
@@ -784,10 +782,11 @@ Each slice is independently mergeable and independently useful.
   sub-context and the monogram is gone — the helper, the CSS, its
   component-vocabulary entry and its tests with it. The visual-regression
   baseline (`student-account--light.png` and its dark twin) is committed.
-- **S3 — student-facing copy and compliance. Done.** The account page names the
-  handle per course and says plainly that a stable pseudonym is not anonymity.
-  `profile.json` carries the spec and `enrollments.json` the handle, both
-  described in the export's own README. The deletion path needed no work: both
+- **S3 — student-facing copy and compliance. Done.** The account page shows the
+  handle on the bird card and says plainly that a stable pseudonym is not
+  anonymity. `profile.json` carries the spec, the handle and the previous
+  handle, and `enrollments.json` the per-course handle each enrollment had
+  before the move, all described in the export's own README. The deletion path needed no work: both
   columns sit on rows that already cascade.
 - **S4 — the wardrobe.** The geometry slots (eye, beak, tuft, accessory), the
   unlock model, the validation chokepoint, the picker. This is where the art
@@ -831,10 +830,13 @@ other.
 
 1. **Reroll.** Answered: allowed, as "Hatch a new bird" on the account page,
    3 times per Waterloo term (`AvatarHatch.perTerm`). A hatch always gives a
-   different species. The backdrop, the ring and every class handle stay: the
-   handle is the identity. The bird before the last hatch is kept
-   (`users.avatar_previous_spec`), and the student can go back to it until
-   they hatch again; a go back does not give the hatch back. Each hatch is a
+   different species and a new handle, unique across the deployment: a new name
+   and a new bird at once. The backdrop and the ring stay. The bird before the
+   last hatch and its handle are kept (`users.avatar_previous_spec`,
+   `users.avatar_previous_handle`), and the student can go back to both until
+   they hatch again. The old handle comes back only if no other bird has taken
+   it since; otherwise the bird keeps the handle from the hatch. A go back does
+   not give the hatch back. Each hatch is a
    row in `avatar_hatches` (user, term key such as "2026-fall", date), which
    the data export includes and an account deletion removes. Nothing else may
    change a stored bird's species (decision 2). Not built: blocking a hatch

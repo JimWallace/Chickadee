@@ -45,23 +45,16 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "role")
     var roleRaw: String?
 
-    /// This student's pseudonym in this course — "Hazy Cedar".
-    ///
-    /// Per (user, course) rather than per user: it is what makes uniqueness
-    /// enforceable at enrollment time, and it keeps a student unlinkable across
-    /// two courses' leaderboards. Unique within a course by
-    /// `idx_enrollments_course_handle`, which excludes NULL so rows can be
-    /// created before a handle is assigned. Materialized lazily by
-    /// `AvatarStore.ensureHandle`.
+    /// Legacy: the per-course handle from before a handle named the bird
+    /// (docs/student-avatars.md §3). Read only by `MoveHandlesToBirds`, which
+    /// copied it to `APIUser.avatarHandle`. Nothing else reads or writes it.
     @OptionalField(key: "avatar_handle")
-    var avatarHandle: String?
+    var legacyAvatarHandle: String?
 
-    /// When this handle stopped being the student's to change: the first time
-    /// a classmate saw it on a student-visible leaderboard, or when the student
-    /// used their one change on the account page.  nil while the student may
-    /// still choose.  Staff "Give new handle" ignores it.
+    /// Legacy: when the per-course handle locked. Nothing reads it since the
+    /// handle moved to the bird.
     @OptionalField(key: "avatar_handle_locked_at")
-    var avatarHandleLockedAt: Date?
+    var legacyAvatarHandleLockedAt: Date?
 
     /// LEARN grade-sync readiness for this (student, course): whether the
     /// roster-readiness sweep has confirmed we can deliver this student's grade

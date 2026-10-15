@@ -55,13 +55,11 @@ struct CompositeBoardPresentation {
                 user.id.map { ($0, user) }
             }
         ) { first, _ in first }
-        let handles = Dictionary(
-            try await APICourseEnrollment.query(on: db)
-                .filter(\.$course.$id == courseID)
-                .filter(\.$userID ~~ userIDs)
-                .all()
-                .compactMap { enrollment in enrollment.avatarHandle.map { (enrollment.userID, $0) } }
-        ) { first, _ in first }
+        let enrolled = try await APICourseEnrollment.query(on: db)
+            .filter(\.$course.$id == courseID)
+            .filter(\.$userID ~~ userIDs)
+            .all(\.$userID)
+        let handles = try await AvatarStore.handles(for: enrolled, on: db)
 
         let holders = dealt.map { row -> Holder in
             let name = users[row.userID].map { $0.displayName ?? $0.username } ?? "Unknown"
