@@ -8,7 +8,8 @@
 //
 // It plays once per submission in this browser
 // (`localStorage["ck-celebrated:" + id]`, written when it starts), and never
-// for a reader who asked for reduced motion: they see the final page.
+// for a reader who asked for reduced motion: they see the final page and
+// hear its one sentence in the live region.
 //
 // It makes no styling decision. It sets custom properties that styles.css
 // reads, toggles classes, and draws particles in colours it reads from
@@ -32,8 +33,15 @@
         try { window.localStorage.setItem(key, '1'); } catch (_) { /* plays again next load */ }
     }
 
-    if (reduced || alreadyPlayed()) { return; }
+    if (alreadyPlayed()) { return; }
     markPlayed();
+    // A reader who asked for reduced motion sees the final page and hears
+    // the same one sentence, once, with nothing moving.
+    if (reduced) {
+        var region = document.querySelector('.js-celebrate-live');
+        if (region) { region.textContent = group.dataset.announce || ''; }
+        return;
+    }
 
     var bird = group.querySelector('.avatar');
     var grade = group.querySelector('.score-figure');

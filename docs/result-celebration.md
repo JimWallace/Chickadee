@@ -100,7 +100,8 @@ stagger at `2400 / N` ms, so the cascade ends in less than 3 seconds.
 ### Reduced motion
 
 With `prefers-reduced-motion: reduce`, nothing moves: no cascade, count-up,
-pop, hop or particle. The rows and the grade render in their final state.
+pop, hop or particle. The rows and the grade render in their final state, and
+the live region still reads its sentence once.
 
 ### Accessibility
 
