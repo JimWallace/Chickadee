@@ -64,8 +64,10 @@ import VaporTesting
             #expect(html.contains("Chirp · earned by a first graded submission"))
             #expect(html.contains("Sly · earned when every test passes on a first attempt"))
             #expect(html.contains("Two-tone · earned when every test passes on three assignments"))
+            #expect(html.contains("Dreamy · earned by submitting two days early on three assignments"))
+            #expect(html.contains("Stitched · earned for a comeback on three assignments"))
             // An item no rule earns yet keeps the plain label.
-            #expect(html.contains("Dreamy · earned<"))
+            #expect(html.contains("Spectrum · earned<"))
             #expect(!html.contains(#"name="expression" value="chirp""#))
             #expect(
                 try await save(["expression": "chirp"], cookie: cookie, on: app) == "/account?avatar=invalid#chickadee")

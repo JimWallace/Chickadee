@@ -56,6 +56,10 @@ struct SubmissionPage: HTML {
                     results
                 }
             }
+            if result.bird?.celebration != nil {
+                script(.src(page.asset("/celebrate-core.js"))) {}
+                script(.src(page.asset("/celebrate.js"))) {}
+            }
             if result.compositeTile != nil {
                 script(.src(page.asset("/class-composite-core.js"))) {}
                 script(.src(page.asset("/class-composite.js"))) {}
@@ -123,21 +127,45 @@ struct SubmissionPage: HTML {
             } else {
                 p(.class("score score-header")) {
                     span(.class("score-figure")) { "\(result.gradePercent)%" }
+                        .attributes(.class("score-figure-perfect"), when: showsPerfectGrade)
                 }
                 p(.class("score score-autograded")) { scoreLine }
             }
         }
     }
 
+    /// The student's own full-marks result shows its grade in the open
+    /// colour on every load, so the end of the celebration is the page as
+    /// it always reads (docs/result-celebration.md).
+    private var showsPerfectGrade: Bool { result.bird?.isFullMarks ?? false }
+
     private var scoreRow: some HTML {
         div(.class("submission-score-row")) {
             // The bird joins the grade's group, so the band stays two groups.
-            if let bird = result.ownBird {
-                div(.class("submission-bird")) {
-                    Avatar(avatar: bird.avatar)
-                    scoreSummary
+            if let bird = result.bird {
+                if let celebration = bird.celebration {
+                    div(
+                        .class("submission-bird"), .data("celebrate", value: celebration.state.rawValue),
+                        .data("grade-from", value: String(celebration.gradeFrom)),
+                        .data("grade-to", value: String(celebration.gradeTo)),
+                        .data("announce", value: celebration.announcement)
+                    ) {
+                        Avatar(avatar: bird.avatar)
+                        scoreSummary
+                        if let gain = celebration.gain {
+                            span(.class("tier tier-open js-grade-gain")) { "+\(gain)%" }
+                        }
+                    }
+                    .attributes(.class("submission-bird-cheer"), when: bird.reaction == .cheer)
+                    p(.class("visually-hidden js-celebrate-live"), .custom(name: "aria-live", value: "polite")) {}
+                } else {
+                    div(.class("submission-bird")) {
+                        Avatar(avatar: bird.avatar)
+                        scoreSummary
+                    }
+                    .attributes(.class("submission-bird-cheer"), when: bird.reaction == .cheer)
+                    .attributes(.class("submission-bird-other"), when: !bird.isOwn)
                 }
-                .attributes(.class("submission-bird-cheer"), when: bird.reaction == .cheer)
             } else {
                 scoreSummary
             }
