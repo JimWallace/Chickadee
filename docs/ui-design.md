@@ -470,6 +470,13 @@ duplicate.
   and ring, not the previewed ones, while the ring samples follow the preview).
   An option that cannot be chosen yet is not a swatch: see `.bird-locked`.
   Used by the account page's `.bird-card`.
+- **`.bird-hatch`** — the hero bird on the first page after a hatch (#2590):
+  the bird with `.bird-hatch-egg` over it, two `.bird-hatch-shell` halves
+  (`.bird-hatch-shell--top`, with a zigzag crack edge, and
+  `.bird-hatch-shell--bottom`) in the chickadee's cream. The egg wobbles,
+  splits and falls away while the bird grows out of it, all filling forwards
+  so the end state is the plain bird. The egg exists only inside
+  `prefers-reduced-motion: no-preference`; every other reader sees the bird.
 - **`.bird-card`** — the account page's "Your bird" card (a `.card`).  An
   optional `.bird-card-strip` across its top holds a hatch's confirm or its
   result, tinted `--you-bg`: the birds, the text and a `.toolbar` of actions.

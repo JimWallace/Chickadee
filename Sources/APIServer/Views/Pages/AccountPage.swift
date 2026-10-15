@@ -242,6 +242,24 @@ private struct AccountBirdCard: HTML {
     }
 }
 
+/// The new bird coming out of its egg, on the first page after a hatch
+/// (#2590). The egg wobbles, splits and falls away, and the bird grows out of
+/// it. CSS only: under reduced motion there is no egg, only the bird. The
+/// shell halves are decoration, so a screen reader hears nothing of them.
+private struct AccountHatchReveal: HTML {
+    let hero: AvatarPresentation
+
+    var body: some HTML {
+        span(.class("bird-hatch")) {
+            Avatar(avatar: hero)
+            span(.class("bird-hatch-egg"), .ariaHidden) {
+                span(.class("bird-hatch-shell bird-hatch-shell--top")) {}
+                span(.class("bird-hatch-shell bird-hatch-shell--bottom")) {}
+            }
+        }
+    }
+}
+
 /// The bird at the podium size, with its handle, its species, when it hatched
 /// and the hatch control.
 private struct AccountBirdHero: HTML {
@@ -250,7 +268,11 @@ private struct AccountBirdHero: HTML {
 
     var body: some HTML {
         div(.class("bird-card-hero")) {
-            Avatar(avatar: picker.hero)
+            if picker.hatch?.strip == .hatched {
+                AccountHatchReveal(hero: picker.hero)
+            } else {
+                Avatar(avatar: picker.hero)
+            }
             if !picker.handle.isEmpty {
                 p { strong(.dataFlag("avatar-handle")) { picker.handle } }
             }
