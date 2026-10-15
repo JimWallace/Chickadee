@@ -71,21 +71,68 @@ import VaporTesting
         }
     }
 
+    /// The text inside each reduced-motion guard in `css`, found by matching
+    /// braces, and the text outside every guard.
+    private static func splitByMotionGuard(_ css: String) -> (inside: [Substring], outside: String) {
+        let open = "@media (prefers-reduced-motion: no-preference) {"
+        var inside: [Substring] = []
+        var outside = ""
+        var cursor = css.startIndex
+        while let start = css.range(of: open, range: cursor..<css.endIndex) {
+            outside += css[cursor..<start.lowerBound]
+            var depth = 1
+            var index = start.upperBound
+            while index < css.endIndex, depth > 0 {
+                if css[index] == "{" { depth += 1 }
+                if css[index] == "}" { depth -= 1 }
+                index = css.index(after: index)
+            }
+            inside.append(css[start.upperBound..<index])
+            cursor = index
+        }
+        outside += css[cursor...]
+        return (inside, outside)
+    }
+
+    /// The declarations of the rule for `selector` in `css`: the text between
+    /// its braces, or nil when no rule starts with exactly that selector.
+    private static func declarations(of selector: String, in css: some StringProtocol) -> Substring? {
+        let text = String(css)
+        var cursor = text.startIndex
+        while let match = text.range(of: selector, range: cursor..<text.endIndex) {
+            cursor = match.upperBound
+            // The selector must stand alone: at a line start, before its brace.
+            let before = text[text.startIndex..<match.lowerBound].last
+            guard before == nil || before == "\n" || before == " " else { continue }
+            let rest = text[match.upperBound...].drop { $0 == " " }
+            guard rest.first == "{", let close = rest.firstIndex(of: "}") else { continue }
+            return Substring(text[rest.index(after: rest.startIndex)..<close])
+        }
+        return nil
+    }
+
     /// The suite owns an app, so this check runs inside `withApp` too, which
     /// shuts the app down.
     ///
-    /// The egg is shown only inside the reduced-motion guard: outside it, the
-    /// egg is `display: none`, so a reader who asked for less motion sees the
-    /// bird at once.
+    /// The egg shows, and every part of it moves, only inside the
+    /// reduced-motion guard. Outside it the egg is hidden, so a reader who
+    /// asked for less motion sees the bird at once.
     @Test func theEggIsOnlyForReadersWhoDidNotAskForLessMotion() async throws {
         try await withApp(app) { _ in
             let css = try String(
                 contentsOf: repositoryRoot.appendingPathComponent("Public/styles.css"), encoding: .utf8)
-            #expect(css.contains(".bird-hatch-egg { display: none; }"))
-            let guardOpen = "@media (prefers-reduced-motion: no-preference) {\n    .bird-hatch-egg {"
-            let guarded = try #require(css.range(of: guardOpen), "the egg is not shown inside the guard")
-            #expect(css[guarded.upperBound...].prefix(200).contains("display: block;"))
-            #expect(css.components(separatedBy: "animation: bird-hatch-").count - 1 == 4)
+            let (inside, outside) = Self.splitByMotionGuard(css)
+
+            let hidden = try #require(Self.declarations(of: ".bird-hatch-egg", in: outside))
+            #expect(hidden.contains("display: none"))
+            let shown = try #require(
+                inside.lazy.compactMap { Self.declarations(of: ".bird-hatch-egg", in: $0) }.first,
+                "the egg is not shown inside the guard")
+            #expect(shown.contains("display: block"))
+
+            #expect(!outside.contains("animation: bird-hatch-"), "an egg animation runs outside the guard")
+            #expect(inside.contains { $0.contains("animation: bird-hatch-wobble") })
+            #expect(inside.contains { $0.contains("animation: bird-hatch-grow") })
         }
     }
 }
