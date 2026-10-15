@@ -2,7 +2,9 @@
 
 **Status:** slice W1 (border and backdrop colour, chosen on the account page),
 slice W2 (rings as sprite art, the patterned rings and the staff ring) and the
-seasonal rings (W2b, 0.5.309) have shipped. Everything after W2b is a plan. The participation currency is
+seasonal rings (W2b, 0.5.309) have shipped, and so has a small W3: three
+items a student earns by their own graded work (#2592, "Earned items" below).
+The achievement reward and everything after W3 are a plan. The participation currency is
 **shelved**: the maintainer decided that the first idea for it ("seeds") is
 not fun enough, and we will come back to it.
 
@@ -89,8 +91,8 @@ and draws the transparent ring in the system colour.
 
 `AvatarCustomization` (Core) is the only thing that applies a student's choice
 to a spec. It lists the slots a student may change and the options that are
-open to them. Today every option of the two slots is open. When unlocks arrive,
-this is the one place that checks them, in the same shape as
+open to them. It is also the one place that checks unlocks (`isOpen` and
+`applying` take the student's earned `WardrobeItem`s), in the same shape as
 `evaluateCourseWrite`. The route never writes a spec field itself.
 
 The request carries raw values. A value that is not a case of the slot's enum,
@@ -157,11 +159,39 @@ stripe inside the accent). The segments lost the edge of the disc on a pale
 backdrop, and the stripe made two thin lines, which is the shape of the staff
 ring.
 
-Until the unlocks slice (W3) exists, no student can get an earned or special
-ring. The account page lists them under "Not open yet", as items and not as
-inputs, with "earned" in the name ("Two-tone · earned"), so that a student can
-see what there is to earn. `AvatarCustomization` refuses a
+A locked earned or special ring is listed under "Not open yet", as an item
+and not as an input, with "earned" in the name, so that a student can see
+what there is to earn. When a rule earns it, the name says how ("Two-tone ·
+earned when every test passes on three assignments"); stitched and spectrum
+have no rule yet ("Stitched · earned"). `AvatarCustomization` refuses a
 locked ring, so a hand-made request cannot choose one.
+
+### 6b. Earned items (a small W3, #2592)
+
+Three items are earned by a student's own graded work, with no instructor
+setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
+
+| Item | Earned by |
+|---|---|
+| `chirp` face | the first graded submission |
+| `sly` face | a first attempt on which every test it ran passes |
+| two-tone ring | every test passing on three different assignments |
+
+- **Granted on the account page, never while grading.** `WardrobeUnlockStore`
+  reads the student's own student-kind submissions that have a result, and
+  stores what they earn in `wardrobe_unlocks` (user, item, time; unique per
+  user and item). A cosmetic cannot fail a grade.
+- **Sticky.** A stored unlock is never taken back, even when a regrade changes
+  the result that earned it.
+- **Browser results count.** A browser-graded result is built in the
+  student's own browser, so a student who forges one could earn an item. The
+  harm is cosmetic, and First-Try Perfect already trusts the same results;
+  excluding them would leave most students nothing to earn.
+- **Account-wide and lateral**, as every wardrobe item is.
+- **In the export** (`profile.json`, `wardrobeUnlocks`) and removed with the
+  account.
+- `dreamy`, stitched and spectrum have no rule yet and stay locked. The
+  instructor reward `unlock(itemID)` is still planned.
 
 ### 7. Seasonal rings
 
@@ -351,7 +381,8 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | W1 | Border + backdrop picker on the account page; headband replaces the gradcap in the draw; existing gradcaps swapped | shipped |
 | W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | shipped |
 | W2b | Seasonal rings: snowflake, blossom and maple, open during their term and kept after | shipped |
-| W3 | `wardrobe_unlocks` + the `unlock(itemID)` achievement reward; the three unlockable expressions become grantable | planned |
+| W3 (small) | `wardrobe_unlocks`; three items earned by a student's own graded work (#2592) | shipped |
+| W3 | the `unlock(itemID)` achievement reward; rules for `dreamy`, stitched and spectrum | planned |
 | W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | planned |
 | W5 | Trophy case + class-activity medals | planned |
 | — | Participation currency | shelved |

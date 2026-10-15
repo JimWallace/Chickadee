@@ -600,4 +600,7 @@ func registerMigrations(on app: Application) {
     // full-queries `APIUser` and `APICourseEnrollment`, so it stays last.
     app.migrations.add(AddUserAvatarHandle())
     app.migrations.add(MoveHandlesToBirds())
+    // Wardrobe unlocks (docs/student-wardrobe.md, W3): the items a student
+    // has earned, kept for good.
+    app.migrations.add(CreateWardrobeUnlocks())
 }
