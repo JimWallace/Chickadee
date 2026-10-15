@@ -387,7 +387,8 @@ duplicate.
   card's large bird breathes slowly and hops while it is pressed. It is CSS
   only, with no script and no change of face. All of it sits behind
   `prefers-reduced-motion: no-preference`, and a roster or leaderboard bird
-  never moves (#2589).
+  does not react to the pointer (#2589); the one other person's bird that
+  moves is on the Present-mode podium (`.podium-place .avatar`, below).
   **`.avatar-lg`** (6rem, `AvatarSize.hero`) is the leaderboard "you" card and
   **`.avatar-xl`** (10rem, `AvatarSize.podium`) a Present-mode podium place.
   Present mode alone scales its birds past the class, because the room reads
@@ -425,7 +426,13 @@ duplicate.
   `.podium-place` columns (`.podium-handle`, `.podium-value`, and a
   `.podium-plinth` whose top edge takes the place's gold, silver or bronze; the
   first-place bird is 12rem, the others 9.5rem; the hill's holder carries a
-  `.podium-kicker`).  On the right, places four to ten as `.present-rows` of
+  `.podium-kicker`).  The podium birds (`.podium-place .avatar`,
+  `podium-bounce`) bounce, third to first, when the board first shows and
+  when the top three change; after a `chickadee:table-repaint`,
+  `present-podium.js` marks a podium with the same three `.podium--settled`,
+  the off switch, which stills them. The bounce runs by default, unlike
+  `.composite-slot--arrived`, because the first render must bounce with no
+  script, and nothing moves under reduced motion (#2591).  On the right, places four to ten as `.present-rows` of
   `.present-row` lines (3.5rem birds; `.present-row-handle`,
   `.present-row-value`).  A tournament replaces the stage with a
   `.present-bracket` (the page's bracket at display scale) under the winner's
