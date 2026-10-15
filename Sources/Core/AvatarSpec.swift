@@ -176,6 +176,23 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
     /// The Fall ramp: gold to orange to brick to maroon. Open to choose
     /// during the Fall term.
     case maple
+    /// A red and white life ring with rope wraps: a float. Earned on a
+    /// variables and numbers lab.
+    case lifering
+    /// A green band with a traffic light at the bottom, the green lamp lit.
+    /// Earned on a conditionals lab.
+    case greenlight
+    /// A snake that eats its tail (`while True:`), head at the lower left.
+    /// Earned on a loops lab.
+    case ouroboros
+    /// The ring broken into a tapered `(` and `)`. Earned on a functions lab.
+    case function
+    /// Eight dashes, long for 1 and short for 0, that spell 230 clockwise
+    /// from the top. Earned on a data representation lab.
+    case binary
+    /// A solid band with one ECG trace (P, QRS, T) at the lower right.
+    /// Earned on a health data lab.
+    case pulse
 
     /// The accent this ring is drawn in; nil for `none` and the patterned rings.
     public var accent: AvatarAccent? { AvatarAccent(rawValue: rawValue) }
@@ -192,6 +209,12 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         case .snowflake: .snowflake
         case .blossom: .blossom
         case .maple: .maple
+        case .lifering: .lifering
+        case .greenlight: .greenlight
+        case .ouroboros: .ouroboros
+        case .function: .function
+        case .binary: .binary
+        case .pulse: .pulse
         }
     }
 
@@ -213,6 +236,8 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         if let season { return season.displayName }
         switch self {
         case .twotone: return "Two-tone"
+        case .lifering: return "Life ring"
+        case .greenlight: return "Green light"
         default: return rawValue.capitalized
         }
     }
@@ -224,6 +249,7 @@ public enum AvatarBorder: String, CaseIterable, Codable, Sendable {
         switch self {
         case .none, .ember, .orchid, .lagoon, .honey, .moss, .rainbow: .starter
         case .twotone, .stitched: .earned
+        case .lifering, .greenlight, .ouroboros, .function, .binary, .pulse: .earned
         case .spectrum: .special
         case .snowflake, .blossom, .maple: .seasonal
         }
@@ -253,6 +279,7 @@ public enum AvatarAvailability: String, CaseIterable, Codable, Sendable {
 public enum AvatarRing: String, CaseIterable, Sendable {
     case none, solid, rainbow, spectrum, twotone, stitched, staff
     case snowflake, blossom, maple
+    case lifering, greenlight, ouroboros, function, binary, pulse
 }
 
 /// A feather tuft on top of the head — the one axis that changes the

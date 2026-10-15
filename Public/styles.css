@@ -324,6 +324,27 @@
     --avatar-fall-6: #BB4635;
     --avatar-fall-7: #A74647;
     --avatar-fall-8: #934555;
+    /* The concept rings (lifering, greenlight, ouroboros, function, binary,
+       pulse): earned, one per lab concept. No dark mirror, like the term
+       rings. Each band colour holds the term-ring contrast floors
+       (AvatarConceptRingTests); the lamps, eye, pupil, rope, back pattern
+       and the life ring's white quarters are exempt. */
+    --avatar-function: #6B52C9;
+    --avatar-binary: #2F6DB3;
+    --avatar-pulse: #C43A4C;
+    --avatar-ouroboros-body: #3F8E4A;
+    --avatar-ouroboros-back: #2A6B36;
+    --avatar-ouroboros-eye: #FFFFFF;
+    --avatar-ouroboros-pupil: #1F2937;
+    --avatar-greenlight-band: #3E9653;
+    --avatar-greenlight-housing: #2B3442;
+    --avatar-greenlight-red: #6E2E2E;
+    --avatar-greenlight-amber: #6B5A22;
+    --avatar-greenlight-green: #5BE08A;
+    --avatar-lifering-white: #FFFFFF;
+    --avatar-lifering-red: #D8412F;
+    --avatar-lifering-rim: #AB3327;
+    --avatar-lifering-rope: #B98B4E;
     /* The staff ring: a colour no student ring uses, in a double shape no
        student ring has. The one part of the bird with a dark-mode mirror
        beside the backdrop, because it must read against a dark backdrop. */
@@ -4159,6 +4180,22 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-fall-6 { fill: var(--avatar-fall-6); }
 .av-fall-7 { fill: var(--avatar-fall-7); }
 .av-fall-8 { fill: var(--avatar-fall-8); }
+.av-function { fill: var(--avatar-function); }
+.av-binary { fill: var(--avatar-binary); }
+.av-pulse { fill: var(--avatar-pulse); }
+.av-ouroboros-body { fill: var(--avatar-ouroboros-body); }
+.av-ouroboros-back { fill: var(--avatar-ouroboros-back); }
+.av-ouroboros-eye { fill: var(--avatar-ouroboros-eye); }
+.av-ouroboros-pupil { fill: var(--avatar-ouroboros-pupil); }
+.av-greenlight-band { fill: var(--avatar-greenlight-band); }
+.av-greenlight-housing { fill: var(--avatar-greenlight-housing); }
+.av-greenlight-red { fill: var(--avatar-greenlight-red); }
+.av-greenlight-amber { fill: var(--avatar-greenlight-amber); }
+.av-greenlight-green { fill: var(--avatar-greenlight-green); }
+.av-lifering-white { fill: var(--avatar-lifering-white); }
+.av-lifering-red { fill: var(--avatar-lifering-red); }
+.av-lifering-rim { fill: var(--avatar-lifering-rim); }
+.av-lifering-rope { fill: var(--avatar-lifering-rope); }
 .av-spectrum-ember { fill: var(--avatar-accent-ember); }
 .av-spectrum-honey { fill: var(--avatar-accent-honey); }
 .av-spectrum-moss { fill: var(--avatar-accent-moss); }
