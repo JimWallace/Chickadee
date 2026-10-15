@@ -1,3 +1,8 @@
+# Each PR that this file produces gets one comment from
+# .github/workflows/dependabot-notes.yml: what changed upstream, where the
+# package is used here, and which checks the comment above its entry asks for.
+# So these comments are read by that workflow as well as by people. Keep them
+# true and specific: they are the most important input it has.
 version: 2
 updates:
   # Swift package graph (Package.swift + Package.resolved).
