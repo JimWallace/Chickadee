@@ -2258,7 +2258,9 @@ code { font-family: var(--font-mono); font-size: .9em; }
    change (#2591): third, then second, then first. A refresh that keeps the
    same three marks the podium settled (present-podium.js), so the birds stay
    still. Never under reduced motion. Nothing is drawn on a bird to mark its
-   rank; the bounce is on the place, and every podium bird gets it. */
+   rank; every podium bird bounces. The bounce runs by default and the
+   modifier turns it off, unlike .composite-slot--arrived, because the first
+   render must bounce with no script. */
 @keyframes podium-bounce {
     30% { transform: translateY(-1.5rem); }
     55% { transform: translateY(0); }

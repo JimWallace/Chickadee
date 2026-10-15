@@ -38,24 +38,27 @@ test('settle: the first podium bounces, and a board with no podium has no key', 
   assert.equal(Podium.settle(region(null).region, 'Ada'), null);
 });
 
-test('attach: each refresh compares with the podium before it', () => {
+test('attach: each repaint compares with the podium before it', () => {
   let current = region('Ada|Bo|Cy');
-  const target = { querySelector: sel => current.region.querySelector(sel) };
-  let onRefresh = null;
-  Podium.attach(target, (_target, callback) => { onRefresh = callback; });
+  let onRepaint = null;
+  const target = {
+    querySelector: sel => current.region.querySelector(sel),
+    addEventListener: (type, fn) => { if (type === 'chickadee:table-repaint') onRepaint = fn; },
+  };
+  Podium.attach(target);
 
   // A value below the podium changed: the same three stay still.
   current = region('Ada|Bo|Cy');
-  onRefresh();
+  onRepaint();
   assert.ok(current.classes.has(Podium.SETTLED));
 
   // The top three changed: they bounce.
   current = region('Bo|Ada|Cy');
-  onRefresh();
+  onRepaint();
   assert.equal(current.classes.size, 0);
 
   // The new three stay: still again.
   current = region('Bo|Ada|Cy');
-  onRefresh();
+  onRepaint();
   assert.ok(current.classes.has(Podium.SETTLED));
 });

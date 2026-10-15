@@ -4,10 +4,12 @@
 // The polled region (`#present-results`, table-poll.js) replaces its contents
 // whenever anything on the board changes, which would replay the CSS bounce
 // on every update. The podium carries `data-podium-key`, the three handles in
-// order. After a swap, a podium whose key matches the one before is marked
-// `podium--settled`, which turns the bounce off. A MutationObserver callback
-// runs before the browser paints, so a settled podium never starts to move.
-// The file toggles a class only; the motion is in the stylesheet.
+// order. After each swap, table-poll.js fires `chickadee:table-repaint` on the
+// region, in the same task as the swap and so before the browser paints; a
+// podium whose key matches the one before is then marked `podium--settled`,
+// which turns the bounce off before it starts. A board whose podium leaves
+// and later comes back bounces again, as on first show. The file toggles a
+// class only; the motion is in the stylesheet.
 (function () {
     'use strict';
 
@@ -29,20 +31,16 @@
         return key;
     }
 
-    /** Watches `region` for refreshes. `observe(region, callback)` starts the
-     *  observer; it is a MutationObserver on the page. */
-    function attach(region, observe) {
+    /** Settles the podium in `region` after each of its refreshes. */
+    function attach(region) {
         var podium = podiumIn(region);
         var key = podium ? podium.getAttribute('data-podium-key') : null;
-        observe(region, function () { key = settle(region, key); });
+        region.addEventListener('chickadee:table-repaint', function () { key = settle(region, key); });
     }
 
     function init() {
         var region = document.getElementById('present-results');
-        if (!region || typeof MutationObserver === 'undefined') return;
-        attach(region, function (target, callback) {
-            new MutationObserver(callback).observe(target, { childList: true });
-        });
+        if (region) attach(region);
     }
 
     if (typeof module !== 'undefined' && module.exports) {
