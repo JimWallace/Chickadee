@@ -189,8 +189,9 @@ lateral: different, not better. The raw value is the sprite name
   `--avatar-binary`, `--avatar-pulse`, `--avatar-ouroboros-body`,
   `--avatar-greenlight-band`, `--avatar-lifering-red` and
   `--avatar-lifering-rim` hold the term-ring floors (1.45:1 light, 1.8:1
-  dark). The lamps, the eye, the pupil, the rope, the snake's back pattern
-  and the white quarters are exempt. The white quarters rely on the rim to
+  dark). The lamps, the rope, the snake's back pattern and the white
+  quarters are exempt. The snake's eye uses the bird's own `.av-eyewhite`
+  and `.av-pupil`. The white quarters rely on the rim to
   separate them from a light backdrop. The rim was lifted from the design's
   `#8E2A20` to `#AB3327` (same hue), because the design value gave only
   1.40:1 on the dark sky backdrop. No dark mirror.

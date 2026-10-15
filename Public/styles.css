@@ -327,15 +327,14 @@
     /* The concept rings (lifering, greenlight, ouroboros, function, binary,
        pulse): earned, one per lab concept. No dark mirror, like the term
        rings. Each band colour holds the term-ring contrast floors
-       (AvatarConceptRingTests); the lamps, eye, pupil, rope, back pattern
-       and the life ring's white quarters are exempt. */
+       (AvatarConceptRingTests); the lamps, rope, back pattern and the life
+       ring's white quarters are exempt. The snake's eye uses the bird's own
+       .av-eyewhite and .av-pupil. */
     --avatar-function: #6B52C9;
     --avatar-binary: #2F6DB3;
     --avatar-pulse: #C43A4C;
     --avatar-ouroboros-body: #3F8E4A;
     --avatar-ouroboros-back: #2A6B36;
-    --avatar-ouroboros-eye: #FFFFFF;
-    --avatar-ouroboros-pupil: #1F2937;
     --avatar-greenlight-band: #3E9653;
     --avatar-greenlight-housing: #2B3442;
     --avatar-greenlight-red: #6E2E2E;
@@ -4185,8 +4184,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .av-pulse { fill: var(--avatar-pulse); }
 .av-ouroboros-body { fill: var(--avatar-ouroboros-body); }
 .av-ouroboros-back { fill: var(--avatar-ouroboros-back); }
-.av-ouroboros-eye { fill: var(--avatar-ouroboros-eye); }
-.av-ouroboros-pupil { fill: var(--avatar-ouroboros-pupil); }
 .av-greenlight-band { fill: var(--avatar-greenlight-band); }
 .av-greenlight-housing { fill: var(--avatar-greenlight-housing); }
 .av-greenlight-red { fill: var(--avatar-greenlight-red); }

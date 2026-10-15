@@ -91,14 +91,26 @@ import Testing
 
     // MARK: - The art
 
-    /// Every class a concept ring's symbol uses is that ring's own, and each
-    /// has a fill rule in the stylesheet.
+    /// Every `<symbol>` in the sprite carries an id. A stray `<symbol>` with
+    /// none (pasted prose, say) would swallow the symbols after it when the
+    /// page inlines the sprite.
+    @Test func everySymbolHasAnID() throws {
+        let sprite = try Self.contents(of: "Resources/Sprites/avatar-sprite.svg")
+        let opened = sprite.components(separatedBy: "<symbol").count - 1
+        let withID = sprite.components(separatedBy: "<symbol id=\"").count - 1
+        #expect(opened == withID)
+        #expect(opened == sprite.components(separatedBy: "</symbol>").count - 1)
+    }
+
+    /// Every class a concept ring's symbol uses is that ring's own, or the
+    /// bird's own eye classes for the snake's eye, and each has a fill rule.
     @Test(arguments: conceptRings)
     func eachSymbolUsesItsOwnStyledClasses(border: AvatarBorder) throws {
         let css = try Self.contents(of: "Public/styles.css")
         let classes = try Self.classes(ofRing: border.rawValue)
         try #require(!classes.isEmpty)
-        for name in Set(classes) {
+        let sharedEye: Set<String> = ["av-eyewhite", "av-pupil"]
+        for name in Set(classes).subtracting(border == .ouroboros ? sharedEye : []) {
             #expect(name == "av-\(border.rawValue)" || name.hasPrefix("av-\(border.rawValue)-"), "\(name)")
             #expect(css.contains(".\(name) { fill: var(--avatar-\(name.dropFirst(3))); }"), "\(name) has no rule")
         }
