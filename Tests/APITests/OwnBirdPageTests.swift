@@ -124,7 +124,7 @@ import VaporTesting
         }
     }
 
-    @Test func staffReadingAStudentsResultSeeNoBird() async throws {
+    @Test func staffReadingAStudentsResultSeeTheStudentsBirdAsStored() async throws {
         try await withWebRoutesApp { app in
             _ = try await wrLoginAsStudent(on: app)
             try await seedResult(app: app, setupID: "setup_bird4", subID: "sub_bird4", statuses: [.pass])
@@ -135,7 +135,12 @@ import VaporTesting
 
             let html = try await getHTML("/submissions/sub_bird4", cookie: staffCookie, on: app)
             #expect(html.contains("submission-score-row"))
-            #expect(!html.contains("submission-bird"))
+            // The student's bird, with no reaction and no pointer motion.
+            #expect(html.contains("class=\"submission-bird submission-bird-other\""))
+            #expect(!html.contains("submission-bird-cheer"))
+            let student = try await wrStudentUser(on: app)
+            let spec = try #require(student.avatarSpecJSON.flatMap(AvatarStore.decode))
+            #expect(html.contains("#av-expression-\(spec.expression.rawValue)"))
         }
     }
 }
