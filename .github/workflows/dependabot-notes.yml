@@ -201,5 +201,5 @@ jobs:
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" \
               -F "body=@comment.md" > /dev/null
           else
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
-          fi
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F "body=@comment.md" > /dev/null
+          fi || { echo "::error::Could not post the Dependabot notes."; exit 1; }
