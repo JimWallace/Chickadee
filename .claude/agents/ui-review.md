@@ -6,6 +6,7 @@ description: >
   Sources/APIServer/Views/, Public/styles.css or a page-wiring Public/*.js
   file.
   Read-only: it reports, it does not edit.
+model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 
