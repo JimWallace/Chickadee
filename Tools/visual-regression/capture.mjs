@@ -188,20 +188,12 @@ async function main() {
           document.querySelectorAll("[data-avatar-handle]").forEach((el) => {
             el.textContent = "Aaaaaaa Bbbbbb";
           });
-          // The bird is drawn at random (see the .avatar mask), and its
-          // species decides the species name, the colour note and how many
-          // colourways the Colour group offers: three, or eight for a
-          // chickadee. Keep three swatches, freeze their text and check the
-          // first, so the layout and the checked tile are the same for every
-          // species and every colourway the draw picked.
+          // The bird is drawn at random (see the .avatar mask), and so is its
+          // face, which decides which Face radio is checked. Check the first,
+          // so the checked tile is the same for every draw.
           document.querySelectorAll(".bird-card").forEach((card) => {
-            card.querySelectorAll('.swatch:has(input[name="cap"])').forEach((swatch, index) => {
-              if (index >= 3) {
-                swatch.remove();
-                return;
-              }
-              swatch.querySelector(".swatch-name").textContent = "Colour";
-              swatch.querySelector("input").checked = index === 0;
+            card.querySelectorAll('input[name="expression"]').forEach((input, index) => {
+              input.checked = index === 0;
             });
             // Freeze the name only, so a strong species line and the "New"
             // chip stay under test.
@@ -212,9 +204,6 @@ async function main() {
             // the day of the run.
             card.querySelectorAll("[data-avatar-hatched]").forEach((el) => {
               el.textContent = "Hatched Jan 1, 2026";
-            });
-            card.querySelectorAll(".bird-card-groups > fieldset:first-of-type > .field-note").forEach((el) => {
-              el.textContent = "Three species colourways, plus your backdrop.";
             });
           });
           // Which seasonal ring is open depends on today's Waterloo term, so

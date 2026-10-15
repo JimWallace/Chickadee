@@ -848,7 +848,7 @@ other.
 1. **Reroll.** Answered: allowed, as "Hatch a new bird" on the account page,
    3 times per Waterloo term (`AvatarHatch.perTerm`). A hatch always gives a
    different species and a new handle, unique across the deployment: a new name
-   and a new bird at once. The backdrop and the ring stay. The bird before the
+   and a new bird at once. The face, the backdrop and the ring stay. The bird before the
    last hatch and its handle are kept (`users.avatar_previous_spec`,
    `users.avatar_previous_handle`), and the student can go back to both until
    they hatch again. The old handle comes back only if no other bird has taken
