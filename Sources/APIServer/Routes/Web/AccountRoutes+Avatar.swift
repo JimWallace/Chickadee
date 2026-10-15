@@ -3,15 +3,15 @@
 // The student's own bird choices (docs/student-wardrobe.md, W1, and
 // docs/avatar-species.md, A2).
 //
-//   POST /account/avatar           → apply colourway / backdrop / border → redirect to /account
+//   POST /account/avatar           → apply expression / backdrop / border → redirect to /account
 //   POST /account/avatar/hatch     → hatch a new bird of another species → ?avatar=hatched#bird,
 //                                    or ?avatar=nohatch#bird when none is left this term
 //   POST /account/avatar/restore   → go back to the bird before the last hatch → ?avatar=restored#bird
 //
 // `GET /account?hatch=confirm#bird` shows the hatch confirm with no script.
 //
-// A colourway is a shade within the student's own species. A colourway of
-// another species is refused: only a hatch changes the species.
+// The species and the colourway come with the bird: only a hatch changes
+// them. A student chooses the bird's face (#2588).
 //
 // The route never writes a spec field itself: it hands the raw form values to
 // `AvatarCustomization`, the one chokepoint that later also checks unlocks.
@@ -27,14 +27,14 @@ extension AccountRoutes {
     struct AvatarChoiceForm: Content {
         var backdrop: String?
         var border: String?
-        /// The colourway: a shade of the student's own species.
-        var cap: String?
+        /// The bird's face.
+        var expression: String?
 
         var choices: [String: String] {
             var choices: [String: String] = [:]
             choices[AvatarCustomizableSlot.backdrop.rawValue] = backdrop
             choices[AvatarCustomizableSlot.border.rawValue] = border
-            choices[AvatarCustomizableSlot.cap.rawValue] = cap
+            choices[AvatarCustomizableSlot.expression.rawValue] = expression
             return choices
         }
     }
@@ -80,10 +80,10 @@ extension AccountRoutes {
     }
 }
 
-/// The "Your bird" card: the bird itself, and the Colour and Ring groups,
-/// built from `AvatarCustomization.options(for:species:)` so the page cannot
-/// offer an option the chokepoint would refuse. A ring the chokepoint would
-/// refuse is listed apart, as "Not open yet", and is not an input.
+/// The "Your bird" card: the bird itself, and the Face, Backdrop and Ring
+/// groups, built from `AvatarCustomization.options(for:)` so the page cannot
+/// offer an option the chokepoint would refuse. A face or ring the chokepoint
+/// would refuse is listed apart, as "Not open yet", and is not an input.
 struct AvatarPickerContext: Encodable {
     /// The student's bird at the podium size, the card's hero and the live
     /// preview's target.
@@ -93,15 +93,16 @@ struct AvatarPickerContext: Encodable {
     let handle: String
     /// "Cardinal".
     let speciesName: String
-    /// "Three cardinal colourways, plus your backdrop."
-    let colourNote: String
     /// "Hatched Sep 8, 2026"; empty hides the line.
     let hatchedText: String
     /// The hatch control and strip; nil shows neither.
     let hatch: AvatarHatchContext?
-    /// The colourways of the student's own species, each the student's own
-    /// bird in that colourway, so the sample shows what a save would draw.
-    let feathers: [AvatarBirdOption]
+    /// The faces a student may choose now, each the student's own bird with
+    /// that face, so the sample shows what a save would draw. The worn face
+    /// is always among them.
+    let faces: [AvatarBirdOption]
+    /// The faces not open yet: shown, never selectable.
+    let lockedFaces: [AvatarBirdOption]
     let backdrops: [AvatarPickerOption]
     /// The rings a student may choose now, the worn one always among them.
     let rings: [AvatarPickerOption]
@@ -129,21 +130,23 @@ struct AvatarPickerContext: Encodable {
         self.accentToken = hero.accentToken
         self.capToken = hero.capToken
         speciesName = spec.species.displayName
-        let colourways = AvatarCustomization.options(for: .cap, species: spec.species)
-            .compactMap(AvatarCap.init(rawValue:))
-        colourNote =
-            "\(Self.countWord(colourways.count)) \(spec.species.displayName.lowercased()) colourways, "
-            + "plus your backdrop."
-        feathers = colourways.map { cap in
-            var preview = spec
-            preview.cap = cap
-            return AvatarBirdOption(
-                value: cap.rawValue,
-                label: cap.displayName,
-                checked: cap == spec.cap,
-                presentation: AvatarPresentation(
-                    for: preview, size: .roster, accessibility: .decorative, isStaff: isStaff))
-        }
+        let allFaces = AvatarCustomization.options(for: .expression).compactMap(AvatarExpression.init(rawValue:))
+            .map { expression in
+                var preview = spec
+                preview.expression = expression
+                // The worn face is never locked.
+                let isWorn = expression == spec.expression
+                let isLocked = !isWorn && !AvatarCustomization.isOpen(expression.rawValue, for: .expression)
+                return AvatarBirdOption(
+                    value: expression.rawValue,
+                    label: isLocked ? "\(expression.displayName) · earned" : expression.displayName,
+                    checked: isWorn,
+                    isLocked: isLocked,
+                    presentation: AvatarPresentation(
+                        for: preview, size: .roster, accessibility: .decorative, isStaff: isStaff))
+            }
+        faces = allFaces.filter { !$0.isLocked }
+        lockedFaces = allFaces.filter(\.isLocked)
         backdrops = AvatarCustomization.options(for: .backdrop).map { value in
             AvatarPickerOption(
                 value: value,
@@ -193,21 +196,17 @@ extension AvatarPickerContext {
         if let season = border.season { return "\(season.displayName) · opens in \(season.startMonthName)" }
         return "\(border.displayName) · earned"
     }
-
-    /// "Eight", "Three": the colourway count as a word, as the note reads.
-    static func countWord(_ count: Int) -> String {
-        let words = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
-        return words.indices.contains(count) ? words[count] : "\(count)"
-    }
 }
 
-/// One colourway: the student's own bird drawn in it. The presentation
-/// carries the six tone tokens, the plumage symbol and the tuft or crest the
-/// live preview sets, so the preview draws exactly what a save would.
+/// One face: the student's own bird drawn with it. The presentation carries
+/// the expression symbol the live preview sets, so the preview draws exactly
+/// what a save would.
 struct AvatarBirdOption: Encodable {
     let value: String
     let label: String
     let checked: Bool
+    /// An unlockable face before it is unlocked: shown, not selectable.
+    let isLocked: Bool
     let presentation: AvatarPresentation
 }
 

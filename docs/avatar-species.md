@@ -248,22 +248,21 @@ fails too (finding 4).
 
 ### 5. Species is chosen on the account page, like the backdrop
 
-**Superseded.** The species is drawn, not chosen. With the species are drawn
-the markings (wing), the face (expression), the head (tuft or crest), the
-tilt, the hat (accessory) and the accent. A student may change the colour and
-the ring only. The colour is a colourway **of the student's own species** (8
-for a chickadee, 3 for every other species) plus the backdrop. The ring is any
-open ring. `AvatarCustomization` enforces the species rule, not only the page:
-a colourway of another species is refused with
-`AvatarCustomizationError.colourwayChangesSpecies`, and the spec is not
-changed. `options(for: .cap, species:)` offers exactly
-`AvatarSpecies.colourways`, so the page cannot offer a colourway that the
-chokepoint refuses.
+**Superseded twice.** The species is drawn, not chosen. With the species are
+drawn the colourway (#2588), the markings (wing), the head (tuft or crest),
+the tilt, the hat (accessory) and the accent. A student may change the face
+(expression), the backdrop and the ring only. The face is any starter
+expression; `chirp`, `sly` and `dreamy` stay locked until unlocks arrive,
+unless the bird already wears one. `AvatarCustomization` has no colourway
+slot, so a `cap` in a request is not applied. The first version of this
+superseding text let a student choose a colourway of their own species; the
+maintainer chose the face instead, because it says more about the student
+than a shade does.
 
 Hatching is the one way to a different species. "Hatch a new bird", 3 times
 per term, draws a fresh bird of one of the ten other species
-(`AvatarSpec.drawn(excluding:keeping:)`) and keeps the backdrop, the ring and
-the class handles; the previous bird can be restored until the next hatch
+(`AvatarSpec.drawn(excluding:keeping:)`) and keeps the face, the backdrop,
+the ring and the handle's place; the previous bird can be restored until the next hatch
 (student-avatars.md, open question 1).
 
 A stored bird is never reshuffled. A student who chose a species with the old
