@@ -24,7 +24,7 @@ import Testing
     @Test func theStoredRawValuesAreFixed() {
         #expect(
             WardrobeItem.allCases.map(\.rawValue) == [
-                "expression.chirp", "expression.sly", "border.twotone",
+                "expression.chirp", "expression.sly", "border.twotone", "expression.dreamy", "border.stitched",
                 "border.lifering", "border.greenlight", "border.ouroboros",
                 "border.function", "border.binary", "border.pulse",
             ])
@@ -81,10 +81,10 @@ import Testing
         #expect(AvatarCustomization.isOpen("chirp", for: .expression, unlocked: [.chirpFace]))
         #expect(!AvatarCustomization.isOpen("sly", for: .expression, unlocked: [.chirpFace]))
         #expect(AvatarCustomization.isOpen("twotone", for: .border, unlocked: [.twoToneRing]))
+        #expect(AvatarCustomization.isOpen("dreamy", for: .expression, unlocked: [.dreamyFace]))
+        #expect(AvatarCustomization.isOpen("stitched", for: .border, unlocked: [.stitchedRing]))
         // An item no rule earns stays locked whatever is unlocked.
         let everything = Set(WardrobeItem.allCases)
-        #expect(!AvatarCustomization.isOpen("dreamy", for: .expression, unlocked: everything))
-        #expect(!AvatarCustomization.isOpen("stitched", for: .border, unlocked: everything))
         #expect(!AvatarCustomization.isOpen("spectrum", for: .border, unlocked: everything))
 
         let updated = try AvatarCustomization.applying(

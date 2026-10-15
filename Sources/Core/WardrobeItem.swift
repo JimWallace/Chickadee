@@ -22,6 +22,12 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
     /// The two-tone ring, for every test passing on three different
     /// assignments.
     case twoToneRing = "border.twotone"
+    /// The `dreamy` face, for a graded submission well before the due date
+    /// on three different assignments (docs/student-wardrobe.md, E4).
+    case dreamyFace = "expression.dreamy"
+    /// The stitched ring, for a comeback on three different assignments:
+    /// every test passing after an earlier attempt where some did not.
+    case stitchedRing = "border.stitched"
     /// The concept rings, one for each `AssignmentConcept`, for every test
     /// passing on an assignment tagged with that concept.
     case lifeRing = "border.lifering"
@@ -34,8 +40,9 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
     /// The slot the item belongs to.
     public var slot: AvatarCustomizableSlot {
         switch self {
-        case .chirpFace, .slyFace: .expression
-        case .twoToneRing, .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing, .pulseRing:
+        case .chirpFace, .slyFace, .dreamyFace: .expression
+        case .twoToneRing, .stitchedRing, .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing,
+            .pulseRing:
             .border
         }
     }
@@ -46,6 +53,8 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .chirpFace: AvatarExpression.chirp.rawValue
         case .slyFace: AvatarExpression.sly.rawValue
         case .twoToneRing: AvatarBorder.twotone.rawValue
+        case .dreamyFace: AvatarExpression.dreamy.rawValue
+        case .stitchedRing: AvatarBorder.stitched.rawValue
         case .lifeRing: AvatarBorder.lifering.rawValue
         case .greenLightRing: AvatarBorder.greenlight.rawValue
         case .ouroborosRing: AvatarBorder.ouroboros.rawValue
@@ -68,6 +77,8 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .chirpFace: "by a first graded submission"
         case .slyFace: "when every test passes on a first attempt"
         case .twoToneRing: "when every test passes on three assignments"
+        case .dreamyFace: "by submitting two days early on three assignments"
+        case .stitchedRing: "for a comeback on three assignments"
         case .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing, .pulseRing:
             "when every test passes on a \(concept?.displayName.lowercased() ?? "concept") lab"
         }
@@ -92,6 +103,10 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
 
     /// The full-marks assignments the two-tone ring needs.
     public static let fullMarksAssignmentsForTwoTone = 3
+    /// The early assignments the `dreamy` face needs.
+    public static let earlyAssignmentsForDreamy = 3
+    /// The comeback assignments the stitched ring needs.
+    public static let comebackAssignmentsForStitched = 3
 
     /// The items `progress` earns.
     public static func earned(by progress: WardrobeProgress) -> Set<WardrobeItem> {
@@ -99,6 +114,8 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         if progress.hasGradedSubmission { items.insert(.chirpFace) }
         if progress.hasFirstTryFullMarks { items.insert(.slyFace) }
         if progress.fullMarksAssignments >= fullMarksAssignmentsForTwoTone { items.insert(.twoToneRing) }
+        if progress.earlyAssignments >= earlyAssignmentsForDreamy { items.insert(.dreamyFace) }
+        if progress.comebackAssignments >= comebackAssignmentsForStitched { items.insert(.stitchedRing) }
         for concept in progress.fullMarksConcepts { items.insert(WardrobeItem(concept: concept)) }
         return items
     }

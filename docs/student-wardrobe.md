@@ -4,9 +4,10 @@
 slice W2 (rings as sprite art, the patterned rings and the staff ring) and the
 seasonal rings (W2b, 0.5.309) have shipped, and so has a small W3: three
 items a student earns by their own graded work (#2592, "Earned items" below).
-The achievement reward and everything after W3 are a plan. The participation currency is
-**shelved**: the maintainer decided that the first idea for it ("seeds") is
-not fun enough, and we will come back to it.
+The design pass on earning (#2603) is decided: see "Earning: the design pass"
+below, which replaces the earlier plan where they differ. The participation
+currency is **shelved**: the maintainer decided that the first idea for it
+("seeds") is not fun enough, and we will come back to it.
 
 This note continues [student-avatars.md](student-avatars.md). Read decisions 2
 and 5 there first: the spec is stored and drawn once, unlocks are account-wide,
@@ -162,7 +163,8 @@ ring.
 
 A locked earned or special ring is listed under "Not open yet", as an item
 and not as an input, with "earned" in the name, so that a student can see
-what there is to earn. When a rule earns it, the name says how ("Two-tone ·
+what there is to earn. **The design pass (#2603) removes this list:** a
+locked item does not show at all (see "Earning: the design pass", E3). When a rule earns it, the name says how ("Two-tone ·
 earned when every test passes on three assignments"); stitched and spectrum
 have no rule yet ("Stitched · earned"). `AvatarCustomization` refuses a
 locked ring, so a hand-made request cannot choose one.
@@ -213,6 +215,8 @@ instructor setup: the concept tag on an assignment.
 | `chirp` face | the first graded submission |
 | `sly` face | a first attempt on which every test it ran passes |
 | two-tone ring | every test passing on three different assignments |
+| `dreamy` face | a graded submission two days before the due date, on three assignments (#2603) |
+| stitched ring | a comeback (every test passing after an attempt that did not) on three assignments (#2603) |
 | a concept ring | every test passing on an assignment tagged with its concept |
 
 - **Granted on the account page, never while grading.** `WardrobeUnlockStore`
@@ -228,8 +232,8 @@ instructor setup: the concept tag on an assignment.
 - **Account-wide and lateral**, as every wardrobe item is.
 - **In the export** (`profile.json`, `wardrobeUnlocks`) and removed with the
   account.
-- `dreamy`, stitched and spectrum have no rule yet and stay locked. The
-  instructor reward `unlock(itemID)` is still planned.
+- Spectrum has no rule yet and stays locked until the achievement link
+  exists (E7).
 
 ### 7. Seasonal rings
 
@@ -323,6 +327,114 @@ The style guard counted every `.style.<property>` write, including a
 custom-property write, so the preview first looked impossible. The guard now
 exempts `.style.setProperty('--…')`, which is the pattern the UI rules already
 named as the right one.
+
+---
+
+## Earning: the design pass (#2603)
+
+The maintainer decided these points in October 2026. Where they differ from
+an earlier section of this note, they replace it.
+
+### E1. Items are surprises
+
+A student does not see a map of what there is to earn. The account page
+shows only the items that the student can choose now. It shows no locked
+item, no rule and no progress count. Students collect items organically
+during the term, and each student has a different set.
+
+The reasons:
+
+- A list of locked items with rules reads as a list of goals. A student who
+  cannot reach a goal can feel that they fail. The wardrobe must never do
+  that.
+- The account page must not fill with text.
+
+### E2. After a student earns an item, the page says how
+
+An earned item says how the student earned it, in the past tense: "Stitched:
+earned for a comeback on three assignments". Before the student earns it,
+nothing says that the item exists. This rewards the student, and it gives
+students a reason to talk to each other about their birds.
+
+### E3. Every item that can show has a rule
+
+Because a locked item does not show, an item with no rule is simply not seen.
+The "· earned" label goes away with the "Not open yet" list. The seasonal ring
+of another term is the one exception: every student gets it, so "Fall · opens
+in September" stays. It shows no failure.
+
+### E4. What we reward
+
+The rules reward effort, habits, persistence and correctness, so that a
+student who starts with less experience still collects items. Each rule counts
+**different assignments**, never submissions: a count of submissions rewards
+spam, and each submission costs runner time.
+
+| Item | Rule | Kind |
+|---|---|---|
+| `chirp` face | a first graded submission | effort |
+| `sly` face | every test passes on a first attempt | correctness |
+| two-tone ring | every test passes on three assignments | correctness |
+| `dreamy` face | a graded submission at least 48 hours before the due date, on three assignments | habit |
+| stitched ring | every test passes after an earlier attempt that did not, on three assignments | persistence |
+| spectrum ring | no rule; hidden until the achievement link (E7) | — |
+| concept rings | every test passes on linked assignments (E6) | mastery |
+
+The early rule reads the server's submission time and the assignment's own
+due date, not a student's extension, so a student cannot forge it. An
+assignment with no due date does not count for it. An early submission counts
+whatever its result: the rule rewards the habit, not the grade.
+
+### E5. Pace across a term
+
+For a steady student: about one item by week 2, two or three by week 6, and
+four or five by the end of the term. A strong student has the built-in items
+by mid-term. Each threshold is a named constant. A Core test runs three
+synthetic students (strong, steady, struggling) through the rules and checks
+these targets.
+
+### E6. Concept-mastery items, linked by an instructor
+
+Some items mark mastery of a concept: loops, conditionals, recursion. The
+concepts are a fixed list in code, append-only. Each concept owns one item. An
+instructor links a concept to course content in the editor and through MCP;
+this is authoring data, not student data. A student earns the item when every
+test passes on the linked work. The design handoff draws these items as rings
+(for example the ouroboros ring for loops), so they need no new slot.
+
+### E7. Achievements: open
+
+Achievements and badges stay a separate system for now. The result-page toast
+(J3, [result-celebration.md](result-celebration.md)) shows both, in one card.
+Whether an achievement can grant a wardrobe item is still open. One rule is
+already fixed: an item that an achievement grants has no built-in rule, so the
+"how you earned it" text is always true.
+
+### E8. Per account
+
+Items stay per account (student-avatars.md, decision 5). The rules count work
+in all courses. A student in two courses collects faster. This is acceptable
+for a cosmetic.
+
+### E9. Instructor control
+
+There are no switches for the built-in rules. They need no setup, and an item
+is lateral, so a switch would have no purpose. An instructor's one control is
+the concept link (E6). A course-only item is out of scope, because an
+account-wide item would carry it into other courses.
+
+### E10. Trust
+
+Every rule reads the same result rows as First-Try Perfect, or a server time.
+A forged browser result can give only a cosmetic item. This is acceptable for
+each rule above, and every new rule must say the same in its issue.
+
+### E11. A student finds out on the result page
+
+When a result page loads, it grants what the student has earned, off the
+grading path, as the account page does. A new item shows in the Earned toast
+on that page, with the bird wearing it and a **Wear it** button. The design is
+in [result-celebration.md](result-celebration.md), slices J1 to J3.
 
 ---
 
@@ -420,7 +532,12 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | shipped |
 | W2b | Seasonal rings: snowflake, blossom and maple, open during their term and kept after | shipped |
 | W3 (small) | `wardrobe_unlocks`; three items earned by a student's own graded work (#2592) | shipped |
-| W3 | the `unlock(itemID)` achievement reward; rules for `dreamy`, stitched and spectrum | planned |
+| J1 | The result-page celebration: the bird at 56px, the 100% moment, the Improved and Already-100% states ([result-celebration.md](result-celebration.md)) | in progress |
+| E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | planned |
+| E-b | The `dreamy` and stitched rules and the pace test (E4, E5) | in progress |
+| C1 | Concept rings and the instructor's concept link (E6) | in review: the art and cases, locked (#2605); the unlock rule (#2607) |
+| J2 | The Earned toast for wardrobe items (E11) | planned |
+| J3 | One toast for everything earned, achievements included (E7) | planned |
 | W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | planned |
 | W5 | Trophy case + class-activity medals | planned |
 | — | Participation currency | shelved |

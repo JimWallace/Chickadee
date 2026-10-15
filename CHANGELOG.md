@@ -9,6 +9,37 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.680] - 2026-10-15
+
+### Added
+
+- **The result page celebrates a gain (J1).** A student's first 100% on an assignment replays the test marks, counts the grade up, makes their bird hop and bursts feathers in the bird's colours; an improvement counts up from the previous attempt and shows the gain; a repeated 100% sparkles. It plays once per submission, only for the student's own latest graded submission, never for staff and never under reduced motion. A result that is the same or lower plays nothing. The bird on the result page is now 3.5rem. Design: `docs/result-celebration.md`. The wardrobe earning design pass (#2603) is recorded in `docs/student-wardrobe.md`.
+- **Two more earned items (#2603).** The `dreamy` face is earned by a graded submission two days before the due date on three assignments, and the stitched ring by a comeback (every test passing after an attempt that did not) on three assignments. A Core test checks the planned pace across a term for a strong, a steady and a struggling student.
+
+### Changed
+
+- **Staff see the student's bird on a result page.** It shows as stored, with no reaction and no celebration, and it does not move under the staff reader's pointer.
+
+
+## [0.5.679] - 2026-10-15
+
+### Added
+
+- **Automatic CI failure triage.** When a CI workflow fails, `ci-triage.yml` has a small model read the failed log against `docs/ci-flakiness.md` and post one comment on the PR (or on the commit on `main`): a known flake family, a real failure with its first error, an infrastructure death, or "unclear". It never re-runs a job and never blocks a merge.
+
+### Added
+
+- **Notes on Dependabot pull requests.** Every Monday afternoon (UTC), `dependabot-notes.yml` has a small model read each open Dependabot PR (its release notes, its diff and the comments in `.github/dependabot.yml`) and post one comment: upstream breaking changes, where the package is used, and the checks a merge needs. It runs on a schedule, so it uses the normal Actions secret and needs no Dependabot secret. It never approves, merges or blocks.
+
+### Added
+
+- **A first reading of each mutation survivor.** After the weekly sweep, `mutation-pretriage.yml` has a model (the sonnet family) read each survivor against the source, the tests and the equivalent-mutant ledger, and comment on the sweep issue: a likely gap with a test sketch, a likely equivalent with a draft argument, reachable only from `APITests`, or unclear. The readings are unverified; `docs/mutation-triage.md` still governs. It writes no tests.
+
+### Added
+
+- **Notes on a failed nightly clean build.** When `test-coverage.yml` fails, `nightly-failure-notes.yml` has a small model read the failed log and the commits since the last green nightly, and comment on the "Nightly clean build failing" issue: the failed step, the first error, and the commits that likely caused it. It changes and re-runs nothing.
+
+
 ## [0.5.678] - 2026-10-15
 
 ### Changed
