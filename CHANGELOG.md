@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.670] - 2026-10-15
+
+### Changed
+
+- **The docs list the Octave functions that the browser kernel lacks.** The emscripten-forge Octave build has no FFTW, ARPACK, SuiteSparse, Qhull, GLPK, SUNDIALS, zlib, HDF5 or libsndfile. So `fft`, `eigs`, sparse `chol`, `convhulln`, `glpk`, `ode15s`, `gzip` and others fail in the browser, while instructor validation passes on the native worker. `docs/authoring-parity.md` has the measured list.
+
+### Fixed
+
+- **Python bytecode is no longer tracked.** `scripts/__pycache__/patch-xeus-python-http.cpython-313.pyc` was committed by accident, and each run of `check-xeus-vendored.sh` rewrote it, so the guard left the working tree dirty. `.gitignore` now ignores `__pycache__/` and `*.pyc` in the whole repository.
+
+
 ## [0.5.669] - 2026-10-15
 
 ### Changed
