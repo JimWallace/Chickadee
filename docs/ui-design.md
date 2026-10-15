@@ -879,6 +879,162 @@ questions ("is this runner offline?") use
 `ChickadeeRelativeTime.isStale(iso)`, whose threshold is the client half of
 `RunnerStaleness` — never a hand-written `Date.now() - t > …` comparison.
 
+## Usability heuristics
+
+The sections above tell you how to build a page. This section tells you how
+to judge whether the page works for the person who uses it. It is the rubric
+for the `ui-audit` agent (`.claude/agents/ui-audit.md`), and a human reviewer
+can apply it in the same way.
+
+The heuristics come from Nielsen's ten, rewritten for the tasks that people
+do in Chickadee. Each one states the rule, then the conditions that make a
+finding. A finding must name one of these conditions. "This page feels busy"
+is not a finding. "The submit page has three primary buttons (U8)" is a
+finding.
+
+**No guard enforces these rules.** They are judgement, so they are advisory.
+When the same finding occurs on three or more pages, do not report it again
+each month. Make it a rule elsewhere in this document, and a guard when the
+rule is mechanical. That is how the widget audit turned ten findings into
+five guards (`docs/ui-consistency-audit.md`).
+
+### Who uses the UI, and for what
+
+Apply each heuristic to the tasks below. A problem on one of these paths is
+more important than a problem on a page that people seldom open.
+
+| Person | Tasks |
+|---|---|
+| Student | find what is due; submit; wait for the grade; read the result; use a slip day |
+| TA | find a student's submission; read the results; give feedback |
+| Instructor | create and edit an assignment; validate it; set deadlines; manage the roster |
+| Admin | look at health and alerts; manage users, courses and runners |
+
+### Severity
+
+| Severity | Meaning |
+|---|---|
+| **High** | A person cannot finish a task, or the page misleads them about a grade, a deadline or the state of a submission. |
+| **Medium** | A person can finish the task, but it is slow or the risk of an error is high. |
+| **Low** | An inconsistency or a polish problem. The task is not affected. |
+
+### The heuristics
+
+**U1. Show the status of the system.**
+A person always knows what Chickadee is doing with their work.
+A finding is:
+- A submission state (queued, running, graded, build failed) that the page
+  does not show, or shows only after a reload. Pages that change use
+  `table-poll.js` ("Interaction idioms").
+- An action (save, submit, validate) that gives no feedback, or gives it
+  only in a place the person does not look.
+- A due date, a late penalty or a slip-day balance that is not visible on
+  the page where the student submits.
+
+**U2. Use the words of the reader.**
+A finding is:
+- An internal name on a page that a student sees: a database ID, an enum
+  raw value, a route, "test setup" where the page means "assignment".
+- Two names for one concept across pages ("lab" and "assignment",
+  "results" and "outcomes"), or one name for two concepts.
+- A status, tier or score that a student cannot interpret without help
+  from staff.
+
+**U3. Let people undo and leave.**
+A finding is:
+- A destructive action that does not use the confirmation seam (the
+  `data-confirm` attribute that `Public/app.js` handles), or a confirmation
+  on an action that is easy to reverse.
+- A page with no clear route back to where the person came from, for
+  example after a submit or after an error.
+- A form that loses what the person typed when validation fails.
+
+**U4. Keep the same thing the same everywhere.**
+This is the site-wide form of the rules in "Component vocabulary" and
+"Page archetypes". The `ui-review` agent checks one change at a time. This
+heuristic compares pages with each other.
+A finding is:
+- One action with different labels on different pages ("Delete" and
+  "Remove" for the same operation).
+- One action in a different position on pages of the same archetype.
+- One kind of data (a timestamp, a score, a person) shown in different forms
+  on different pages, when "Timestamps" or the vocabulary gives one form.
+
+**U5. Prevent errors.**
+A finding is:
+- An input that accepts a value that the server will refuse, when the
+  page can say so first (a file type, a number range, a required field).
+- A disabled control that does not say why it is disabled.
+- A late submission, or a submission that uses a slip day, that the
+  student can make without a clear statement of that effect before they
+  confirm.
+
+**U6. Show, do not make people remember.**
+A finding is:
+- A page that does not show which course and term it is for, when the
+  person can be enrolled in more than one.
+- A task that needs a value (an ID, a name, a date) that the person must
+  copy from a different page.
+- A filter, sort or open panel that resets when the page polls or when the
+  person returns to the page.
+
+**U7. Error messages say what went wrong and what to do next.**
+A finding is:
+- A raw error, a stack trace, an HTTP status or an exception name on a
+  page.
+- A message that says that something failed but not what the person can
+  do about it.
+- A build failure or a grading error that a student sees with no
+  statement that tells them whether the problem is in their work or in the
+  system.
+
+**U8. Show only what the task needs.**
+A finding is:
+- More than one primary button in one section.
+- The same information two times on one page.
+- Copy over the budget in "UI copy", or text that explains the control
+  next to it when a better label can do the work.
+- A control that a person in this role cannot use, shown to them (a staff
+  control on a student page).
+
+**U9. Empty, loading and error states are designed.**
+The two empty states in "Component vocabulary" are the rule. A finding is:
+- A table or list that renders as nothing, or as a bare heading, when it has
+  no rows.
+- An empty state that does not give a route out (what to do to fill it).
+- A panel that shows no placeholder while its content loads.
+
+**U10. Everybody can use it.**
+The axe scan (`Tools/visual-regression/run-a11y.sh`) checks the markup. This
+heuristic checks what axe cannot see.
+A finding is:
+- Information that only colour carries (a pass or a fail that has no text
+  or icon).
+- A layout at 375 px width that overlaps, cuts off text, or needs
+  horizontal scrolling outside a table scroll container.
+- A task that a keyboard cannot finish, or a focus order that does not
+  follow the visual order.
+- A dark-mode page with text or an icon that is hard to see.
+
+**U11. Each role sees what it must see.**
+Chickadee hides tests by tier, and roles are per course.
+A finding is:
+- A student page that shows, or tells the student about, the contents of
+  a secret test, or a release test before its release.
+- A staff page that does not show staff what a student will see (for
+  example, which tier a test is in).
+- A page that changes for a TA or an instructor in a way that the page does
+  not make clear.
+
+### What is not a finding
+
+- A matter of taste with no condition above.
+- A rule that a guard already enforces: tokens, class resolution, inline
+  styles, the ratchets, the axe scan.
+- A rule that `ui-review` already checks on each change, unless the audit
+  finds it on several pages that the change-by-change review did not see.
+- Assignment content. The authoring-voice guide in `CLAUDE.md` covers it.
+
 ## Class names must resolve
 
 A class name assigned in a template or in first-party `Public/*.js` must

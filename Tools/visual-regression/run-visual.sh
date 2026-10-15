@@ -7,6 +7,9 @@
 #
 #   run-visual.sh            capture + compare (exit 1 on visual diff)
 #   run-visual.sh --update   capture + overwrite baselines/ (commit the result)
+#   run-visual.sh --capture-only
+#                            capture into visual-captures/ at the repo root, no
+#                            compare (the ui-audit agent reads these)
 #
 # Env knobs:
 #   CHICKADEE_SERVER_BIN   path to the built server (default: debug build)
@@ -82,6 +85,14 @@ if [ "$rc" -ne 0 ]; then
   echo "run-visual: capture failed (rc=$rc) — server log tail:" >&2
   tail -40 "$LOG" >&2 || true
   exit "$rc"
+fi
+
+if [ "$MODE" = "--capture-only" ]; then
+  rm -rf "$REPO_ROOT/visual-captures"
+  mkdir -p "$REPO_ROOT/visual-captures"
+  cp "$OUT/capture/"*.png "$REPO_ROOT/visual-captures/"
+  echo "run-visual: $(ls "$REPO_ROOT/visual-captures/"*.png | wc -l | tr -d ' ') captures saved to visual-captures/ (not compared)."
+  exit 0
 fi
 
 if [ "$MODE" = "--update" ]; then

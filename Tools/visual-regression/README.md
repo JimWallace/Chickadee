@@ -68,6 +68,17 @@ Exit 1 on drift, with `*.diff.png` / `*.actual.png` evidence. In CI
 (`visual-regression.yml`, path-filtered, not a required check) the evidence
 uploads as the `visual-diffs` artifact.
 
+## Captures for the UI audit
+
+```bash
+./run-visual.sh --capture-only
+```
+
+captures the pages in `pages.mjs` into `visual-captures/` at the repository root and does
+not compare. The `ui-audit` agent (`.claude/agents/ui-audit.md`) reads these
+screenshots; the monthly `ui-audit.yml` workflow runs this mode and passes
+the result to the agent.
+
 ## Intentional UI change?
 
 ```bash
