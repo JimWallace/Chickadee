@@ -89,8 +89,11 @@ muter_logs/
 # carries a full copy of Muter's stdout.
 mutation-report/
 
-# Bytecode from the mutation tooling's self-test.
-Tools/mutation/__pycache__/
+# Python bytecode. The guards import the build scripts (check-xeus-vendored.sh
+# loads patch-xeus-python-http.py and prune-kernel-packages.py), which writes a
+# .pyc beside them; one such file was committed by accident in #2544.
+__pycache__/
+*.pyc
 
 # LLVM coverage output. A test run built with coverage writes default.profraw
 # into the working directory; a 9 MB copy reached main by accident in #1558.
