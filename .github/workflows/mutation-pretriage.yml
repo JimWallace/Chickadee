@@ -1,0 +1,246 @@
+name: Mutation survivor pre-triage
+
+# After the weekly mutation sweep files its issue, a model reads each survivor
+# against the source, the existing tests and the equivalent-mutant ledger, and
+# comments on the sweep issue with a first reading per survivor, grouped by
+# file as docs/mutation-triage.md asks:
+#
+#   gap         - a test should pin this; the comment sketches what it asserts
+#   equivalent  - nothing reaching the site can tell the difference; the
+#                 comment drafts the ledger argument
+#   api-only    - reachable only from APITests, which the sweep skips (the
+#                 Core caveat in mutation-weekly.yml); check against the full
+#                 suite before writing anything
+#   unclear     - the reading is not obvious from the code
+#
+# A FIRST READING, NOT A VERDICT. The agent cannot run the verifier, so every
+# line is a hypothesis. The protocol in docs/mutation-triage.md still applies
+# in full: the "before" pass with Tools/mutation/verify-survivor.py, then the
+# test or the ledger entry, then the "after" pass. What this saves is the cold
+# start: reading 40 survivors to learn which five matter.
+#
+# IT WRITES NO TESTS AND OPENS NO PR. Tests are written by a person, or by a
+# session the maintainer starts, against the protocol. A test sketch here is
+# text in a comment.
+#
+# Untrusted text is unlikely here (the inputs are main's source and a record
+# the sweep wrote), but the layers are the same as in the other agent
+# workflows: the agent's job is read-only with read-only tools, the checkout
+# keeps no credentials, and a second job with no model posts the comment after
+# it refuses credential-shaped text and caps the length.
+
+on:
+  workflow_run:
+    workflows: ["Mutation testing (weekly)"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: mutation-pretriage
+  cancel-in-progress: false
+
+jobs:
+  pretriage:
+    name: mutation-pretriage
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Read only. The write scope is in the `post` job.
+    permissions:
+      contents: read
+      issues: read
+      id-token: write
+    outputs:
+      issue: ${{ steps.collect.outputs.issue }}
+      marker: ${{ steps.collect.outputs.marker }}
+      outcome: ${{ steps.pretriage.outcome }}
+      result: ${{ steps.pretriage.outputs.structured_output }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check for credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret is set, so the pre-triage did not run."
+          fi
+
+      - name: Find the sweep issue and its run record
+        id: collect
+        if: steps.credentials.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SWEEP_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          # The run record, from the mutation-reports branch, through the API
+          # (the checkout keeps no credentials). For a dispatch, the newest one.
+          listing="$(gh api "repos/$GITHUB_REPOSITORY/contents/MutationReports?ref=mutation-reports" \
+            --jq '.[].path' | sort)"
+          if [ -n "$SWEEP_RUN" ]; then
+            record="$(grep -- "-run${SWEEP_RUN}.json$" <<< "$listing" || true)"
+          else
+            record="$(tail -n 1 <<< "$listing")"
+          fi
+          if [ -z "$record" ]; then
+            echo "::notice::No run record for this sweep on the mutation-reports branch."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p pretriage
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$GITHUB_REPOSITORY/contents/$record?ref=mutation-reports" > pretriage/record.json
+          survivors="$(jq '.survivors | length' pretriage/record.json)"
+          if [ "$survivors" -eq 0 ]; then
+            echo "::notice::The record has no survivors."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The issue for THIS record. mutation-weekly.yml titles it with the
+          # same date that it writes into the record, so match on that rather
+          # than take the newest open issue, which can be an older week's.
+          date="$(jq -r '.date' pretriage/record.json)"
+          title="Mutation sweep: logic tier ($date)"
+          issue="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --search "in:title \"$title\"" --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")"
+          if [ -z "$issue" ]; then
+            echo "::notice::No open issue titled \"$title\"."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Already done? Read the bodies first: `grep -q` in a pipe can end
+          # the pipe early, and pipefail then reports a match as a miss.
+          marker="<!-- mutation-pretriage:$(basename "$record" .json) -->"
+          bodies="$(gh api "repos/$GITHUB_REPOSITORY/issues/$issue/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | .body')"
+          if grep -qF "$marker" <<< "$bodies"; then
+            echo "::notice::Issue #$issue already has a pre-triage for $record."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "issue=$issue"
+            echo "marker=$marker"
+            echo "record=$record"
+            echo "survivors=$survivors"
+            echo "go=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read each survivor
+        id: pretriage
+        if: steps.collect.outputs.go == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            The weekly mutation sweep of the Chickadee repository left
+            ${{ steps.collect.outputs.survivors }} survivors. Give a first
+            reading of each one, for the person who will triage them.
+
+            Read first:
+            - docs/mutation-triage.md: the protocol. A survivor is a question,
+              not a bug, and three answers are legitimate.
+            - Tools/mutation/equivalent-mutants.json: survivors already
+              closed with an argument. If a survivor matches an entry, mark
+              it equivalent, write "already in the ledger", and move on.
+            - The header of .github/workflows/mutation-weekly.yml, the part
+              about why a Core survivor is weaker evidence (the sweep skips
+              APITests).
+
+            The input is pretriage/record.json (${{ steps.collect.outputs.record }}).
+            Each survivor has a file, a line, an operator, the original and
+            the mutated text. For each one, read the source around the line
+            and search Tests/ for the tests that cover it. Then choose one:
+            - gap: a realistic input reaches the site and the two versions
+              behave differently. Sketch the test in one line: the input and
+              what it asserts.
+            - equivalent: no input that can reach the site tells the two
+              versions apart. Give the argument in one or two sentences, in
+              the form the ledger asks for (which inputs reach the site and
+              why none distinguishes them). "Equivalent mutant" alone is not
+              an argument.
+            - api-only: the site is reached only through APITests. Name the
+              route or call that reaches it.
+            - unclear: say what you would need to know.
+
+            You cannot run the tests or the verifier, so write each line as a
+            reading to check, not as a fact.
+
+            Write `comment` as GitHub Markdown:
+            - `### Pre-triage of ${{ steps.collect.outputs.record }}`, then one
+              line with the count of each reading.
+            - One `#### <file>` section per source file, in the order the
+              protocol suggests (the file with the most gaps first). Under it,
+              one bullet per survivor: `line N, <operator>: **<reading>**.`
+              and the sketch or the argument.
+            - Last, one paragraph: "These readings are unverified. Follow
+              docs/mutation-triage.md: run the verifier before and after."
+            Plain, short sentences. No exclamation marks or emoji.
+          claude_args: |
+            --model sonnet
+            --max-turns 150
+            --allowedTools "Read,Grep,Glob"
+            --disallowedTools "Bash,Edit,Write,WebFetch,WebSearch,Read(//proc/**),Read(//sys/**),Read(//etc/**),Read(//tmp/**),Read(//github/**),Read(//root/**),Read(//home/runner/work/_temp/**),Read(~/.*/**),Read(./.git/**)"
+            --json-schema '{"type":"object","properties":{"gap":{"type":"integer"},"equivalent":{"type":"integer"},"apiOnly":{"type":"integer"},"unclear":{"type":"integer"},"comment":{"type":"string"}},"required":["gap","equivalent","apiOnly","unclear","comment"]}'
+
+  post:
+    name: mutation-pretriage (post)
+    needs: pretriage
+    if: needs.pretriage.outputs.outcome == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # No model runs in this job, and no repository code is checked out.
+    permissions:
+      issues: write
+
+    steps:
+      - name: Comment on the sweep issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.pretriage.outputs.result }}
+          ISSUE: ${{ needs.pretriage.outputs.issue }}
+          MARKER: ${{ needs.pretriage.outputs.marker }}
+        run: |
+          set -uo pipefail
+          jq -r '.comment // empty' <<< "${RESULT:-null}" > raw.md
+          if [ ! -s raw.md ]; then
+            echo "::warning::The pre-triage came back empty."
+            exit 0
+          fi
+          if grep -qE 'sk-ant-|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|eyJ[A-Za-z0-9_-]{20,}\.|BEGIN [A-Z ]*PRIVATE KEY' raw.md; then
+            echo "::error::The pre-triage looks like it holds a credential. It was not posted."
+            exit 1
+          fi
+          # A comment holds at most 65,536 characters.
+          head -c 60000 raw.md | sed 's/@/@\xE2\x80\x8B/g' > comment.md
+          {
+            echo
+            echo "$MARKER"
+            echo
+            echo "---"
+            echo "_Generated by [Claude Code](https://claude.ai/code)_"
+          } >> comment.md
+          if ! gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" -F "body=@comment.md" > /dev/null; then
+            echo "::error::Could not comment on issue #$ISSUE."
+            exit 1
+          fi
+          counts="$(jq -r '"\(.gap // 0) gap, \(.equivalent // 0) equivalent, \(.apiOnly // 0) api-only, \(.unclear // 0) unclear"' <<< "$RESULT")"
+          echo "## mutation-pretriage" >> "$GITHUB_STEP_SUMMARY"
+          echo "Issue #$ISSUE: $counts" >> "$GITHUB_STEP_SUMMARY"

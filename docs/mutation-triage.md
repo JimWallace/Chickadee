@@ -225,6 +225,16 @@ Killed mutants leave the list on their own; phantoms, inert mutations and
 recorded equivalents are filtered into their own sections. What remains is the
 queue, and emptying it is the goal.
 
+## The automatic first pass
+
+When the sweep finishes, `.github/workflows/mutation-pretriage.yml` comments on
+the sweep issue with a first reading of each survivor, grouped by file: `gap`
+(with a one-line test sketch), `equivalent` (with a draft ledger argument),
+`api-only` (reached only through `APITests`, which the sweep skips) or
+`unclear`. It cannot run the verifier, so every reading is a hypothesis. Use it
+to decide where to start, then do the loop above in full. It writes no tests
+and opens no PR.
+
 ## The weekly triage routine
 
 A scheduled Claude Code routine does this triage every Tuesday, after the sweep
