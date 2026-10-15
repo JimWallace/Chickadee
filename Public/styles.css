@@ -1741,13 +1741,14 @@ code { font-family: var(--font-mono); font-size: .9em; }
 /* The values celebrate.js changes, at rest. Each is one line, so no line of
    a rule below begins with a custom property. */
 .submission-bird.is-celebrating > .avatar { --celebrate-bird-y: 0px; }
-.submission-bird.is-celebrating .score-figure { --celebrate-grade-scale: 1; }
+.submission-bird.is-celebrating .score-figure { --celebrate-grade-scale: 1; --celebrate-grade-width: auto; }
 .submission-bird.is-celebrating > .tier { --celebrate-chip-opacity: 1; --celebrate-chip-y: 0px; --celebrate-chip-scale: 1; }
 .is-celebrating .results-table .result-mark { --celebrate-mark-scale: 1; }
 @media (prefers-reduced-motion: no-preference) {
     .submission-bird.is-celebrating > .avatar { transform: translateY(var(--celebrate-bird-y)); }
     .submission-bird.is-celebrating .score-figure {
         display: inline-block;
+        min-width: var(--celebrate-grade-width);
         transform-origin: left center;
         transform: scale(var(--celebrate-grade-scale));
     }

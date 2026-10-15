@@ -1,9 +1,10 @@
 # Result-page celebration — design note
 
-**Status:** J1 (the bird and the celebration) is in progress. J2 (the Earned
-toast for wardrobe items) and J3 (one toast for everything earned) are
-planned. The design came from a design handoff ("The 100% moment", round 17);
-this note records it as it applies to this codebase. The earning rules are in
+**Status:** J1 (the bird and the celebration) shipped in #2608. J1b (the
+reduced-motion banner, #2618), J2 (the Earned toast for wardrobe items,
+#2616) and J3 (one toast for everything earned, #2617) are planned. The
+design came from a design handoff ("The 100% moment", round 17); this note
+records it as it applies to this codebase. The earning rules are in
 [student-wardrobe.md](student-wardrobe.md), "Earning: the design pass".
 
 ---

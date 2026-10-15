@@ -494,12 +494,14 @@ wardrobe must work first. What we learned is kept here for when it comes back:
 | W2 | Rings as sprite art; rainbow (starter), two-tone and stitched (earned), spectrum (special); the staff ring | shipped |
 | W2b | Seasonal rings: snowflake, blossom and maple, open during their term and kept after | shipped |
 | W3 (small) | `wardrobe_unlocks`; three items earned by a student's own graded work (#2592) | shipped |
-| J1 | The result-page celebration: the bird at 56px, the 100% moment, the Improved and Already-100% states ([result-celebration.md](result-celebration.md)) | in progress |
-| E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | planned |
-| E-b | The `dreamy` and stitched rules and the pace test (E4, E5) | in progress |
-| C1 | Concept rings and the instructor's concept link (E6) | planned; design brief to come |
-| J2 | The Earned toast for wardrobe items (E11) | planned |
-| J3 | One toast for everything earned, achievements included (E7) | planned |
-| W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | planned |
-| W5 | Trophy case + class-activity medals | planned |
+| J1 | The result-page celebration: the bird at 56px, the 100% moment, the Improved and Already-100% states ([result-celebration.md](result-celebration.md), #2608) | shipped |
+| E-b | The `dreamy` and stitched rules and the pace test (E4, E5, #2608) | shipped |
+| E-a | Hide locked items; say how an item was earned after it is earned (E1 to E3) | #2615 |
+| C1, C2 | Concept rings, and the instructor's concept link on an assignment (E6) | #2605, #2607 |
+| J1b | The reduced-motion banner for a 100% result | #2618 |
+| J2 | The Earned toast for wardrobe items (E11) | #2616 |
+| J3 | One toast for everything earned, achievements included | #2617 |
+| E7 | Design: can an achievement grant a wardrobe item? | #2619 |
+| W4 | Slots and the first earned accessories (gradcap for completion, rubber duck) | #2620 |
+| W5 | Trophy case + class-activity medals | #2621 |
 | — | Participation currency | shelved |
