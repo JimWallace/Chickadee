@@ -252,6 +252,7 @@ import VaporTesting
                         "\(base)/secret-reveal",
                         "\(base)/solution-visibility",
                         "\(base)/passing-threshold",
+                        "\(base)/concept",
                         "\(base)/suite-sections",
                         "\(base)/suite-sections/sec1/rename",
                     ]

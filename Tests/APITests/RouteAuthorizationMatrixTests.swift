@@ -332,6 +332,7 @@ import VaporTesting
         "POST /instructor/:assignmentID/solution-visibility": .instructor,
         "POST /instructor/:assignmentID/github-submission": .instructor,
         "POST /instructor/:assignmentID/passing-threshold": .instructor,
+        "POST /instructor/:assignmentID/concept": .instructor,
         "POST /instructor/:assignmentID/ai-feedback": .instructor,
         "POST /instructor/:assignmentID/activity": .instructor,
         "POST /instructor/:assignmentID/activity/opponent": .instructor,
