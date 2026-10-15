@@ -1557,6 +1557,14 @@ wedge watchdog never run, because the process that dies is SwiftPM.
 
 ## Structural problems → current state
 
+**Automatic triage.** When a CI workflow fails, `ci-triage.yml` gives the
+failed log and this document to a small model, and posts one comment: a known
+family (with the tell that matched), a real failure (with its first error), an
+infrastructure death, or "unclear". It never re-runs a job. Its verdict is a
+first reading, not evidence: check the family's tells before you spend the one
+re-run. When a new family is added here, the triage learns it at once, because
+it reads this file from `main` on each run.
+
 1. **A bot's only re-kick was a new SHA.** Fixed: comment `/rerun-failed`
    on a PR (`rerun-failed.yml`, OWNER/MEMBER/COLLABORATOR only) re-runs
    only the failed/cancelled runs for the current head SHA via
