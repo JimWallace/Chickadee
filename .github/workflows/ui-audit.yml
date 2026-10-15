@@ -175,7 +175,11 @@ jobs:
             structured output, and the number of findings at each severity
             in the other fields. Count those numbers from the findings in the
             report itself. A later step files the report as an issue.
+          # A family alias, not a dated model ID: `opus` is always the newest
+          # Opus. One run a month of site-wide judgement is worth the top tier.
+          # The brief's `model:` line says the same for local sessions.
           claude_args: |
+            --model opus
             --max-turns 120
             --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*)"
             --json-schema '{"type":"object","properties":{"report":{"type":"string"},"high":{"type":"integer"},"medium":{"type":"integer"},"low":{"type":"integer"}},"required":["report","high","medium","low"]}'
