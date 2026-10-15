@@ -71,7 +71,7 @@ extension InstructorDashboardRoutes {
         }
         let flashError: String? = {
             switch req.query[String.self, at: "handleError"] {
-            case "exhausted": return "No unused class handle is left in this course."
+            case "exhausted": return "No unused handle is left."
             case "notEnrolled": return "That person is not enrolled in this course."
             default: return nil
             }

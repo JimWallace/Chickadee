@@ -66,7 +66,10 @@ struct AccountRoutes: RouteCollection {
         // and staff appear under their own name. `ensureHandle` is a read
         // once the bird has one.
         let isStudent = enrollments.contains { $0.role == .student && !$0.course.isArchived }
-        let handle = isStudent ? try await AvatarStore.ensureHandle(for: user, on: req.db) : nil
+        // A current student's bird gets a handle on first need. Any other
+        // bird shows the one it has, if any, so a hatch never changes a name
+        // the card does not show.
+        let handle = isStudent ? try await AvatarStore.ensureHandle(for: user, on: req.db) : user.avatarHandle
 
         let enrolledRows =
             enrollments

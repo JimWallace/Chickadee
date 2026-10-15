@@ -36,10 +36,9 @@
 //
 // Lists change between terms, never during one, and a list change renames
 // nobody.  A stored handle is kept as it is, whichever list it came from
-// (`hasHandleShape` checks only its form): a handle is per (user, course) and
-// each term's offering is a new course, so a handle from an older list ages
-// out on its own.  A handle that must go is replaced by staff, one enrollment
-// at a time ("Give new handle").
+// (`hasHandleShape` checks only its form).  A handle names a bird, unique
+// across the deployment; a student changes it by hatching a new bird, and a
+// handle that must go is replaced by staff ("Give new handle").
 
 public enum AvatarHandle {
 
@@ -69,7 +68,10 @@ public enum AvatarHandle {
     ]
 
     /// The largest course the lists must serve.  If a real course is larger,
-    /// append words to the lists and run the review tool again.
+    /// append words to the lists and run the review tool again.  The pool is
+    /// shared by every student bird in the deployment, so grow the lists too
+    /// before the deployment comes near `combinationCount`
+    /// (docs/student-avatars.md, "Capacity").
     public static let maxExpectedEnrollment = 1_000
 
     /// Every handle the current lists can form, across the three schemes.  It
@@ -105,7 +107,7 @@ public enum AvatarHandle {
         return nil
     }
 
-    /// The production path: a handle unused in this course, from the system RNG.
+    /// The production path: a handle that no bird holds, from the system RNG.
     public static func make(excluding taken: Set<String>) -> String? {
         var generator = SystemRandomNumberGenerator()
         return make(excluding: taken, using: &generator)

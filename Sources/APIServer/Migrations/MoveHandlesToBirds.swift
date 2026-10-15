@@ -4,7 +4,8 @@
 // (docs/student-avatars.md §3). A user's bird takes the handle of their newest
 // course. Handles were unique per course, so two users can share one: users
 // are taken oldest account first, and a later user whose handle is already
-// taken draws a new one. Users with no handle anywhere get one on first need.
+// taken draws a new one. Only student enrollments count: staff birds have no
+// handle. Users with no handle anywhere get one on first need.
 // The enrollment column is left as it was. Full-queries `APIUser` and
 // `APICourseEnrollment`, so it follows every migration that changes either.
 
@@ -16,6 +17,7 @@ struct MoveHandlesToBirds: ChickadeeMigration {
     func prepare(on database: any Database) async throws {
         let enrollments = try await APICourseEnrollment.query(on: database)
             .filter(\.$legacyAvatarHandle != nil)
+            .filter(\.$roleRaw == CourseRole.student.rawValue)
             .with(\.$course)
             .all()
         var byUser: [UUID: [APICourseEnrollment]] = [:]

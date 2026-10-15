@@ -97,6 +97,23 @@ import VaporTesting
         }
     }
 
+    /// Staff appear under their own name, so a staff enrollment's old handle
+    /// does not move to the bird.
+    @Test func theMoveGivesAStaffBirdNoHandle() async throws {
+        try await withApp(app) { _ in
+            let course = try await course("BH250", Self.term)
+            let staff = try await makeTestUser(on: app, username: "bh_ta", role: "user")
+            let enrollment = APICourseEnrollment(
+                userID: try staff.requireID(), courseID: try course.requireID(), role: .ta)
+            enrollment.legacyAvatarHandle = Self.first
+            try await enrollment.save(on: app.db)
+
+            try await MoveHandlesToBirds().prepare(on: app.db)
+
+            #expect(try await stored(staff).avatarHandle == nil)
+        }
+    }
+
     @Test func theMoveLeavesABirdThatAlreadyHasAHandleAsItIs() async throws {
         try await withApp(app) { _ in
             let course = try await course("BH300", Self.term)

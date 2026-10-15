@@ -4,7 +4,7 @@
 // (docs/class-activities.md). Reached by students through the vanity path
 // `/:courseCode/:assignmentSlug/leaderboard` and from their submission page.
 //
-// Students are named by their per-course handle and their chickadee, never by
+// Students are named by their bird's handle and their chickadee, never by
 // name: the avatar is the identity primitive the leaderboard was designed on
 // (docs/student-avatars.md §3), and this page has no identity code of its own.
 // Course staff see a real name beside the handle, because a grading dispute

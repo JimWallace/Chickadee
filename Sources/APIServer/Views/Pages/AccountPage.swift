@@ -295,13 +295,10 @@ private struct AccountHatchStrip: HTML {
                 div {
                     p { strong { "Hatch a new bird?" } }
                     p {
-                        hatch.handle == nil
-                            ? "You’ll get a different species, with random colours, markings, face and hat. "
-                                + "Your backdrop and ring stay. "
-                                + "This uses 1 of the \(hatch.left) you have left this term."
-                            : "You’ll get a new handle and a different species, with random colours, markings, "
-                                + "face and hat. Your backdrop and ring stay. "
-                                + "This uses 1 of the \(hatch.left) you have left this term."
+                        (hatch.handle == nil
+                            ? "You’ll get a different species" : "You’ll get a new handle and a different species")
+                            + ", with random colours, markings, face and hat. Your backdrop and ring stay. "
+                            + "This uses 1 of the \(hatch.left) you have left this term."
                     }
                 }
                 div(.class("toolbar")) {

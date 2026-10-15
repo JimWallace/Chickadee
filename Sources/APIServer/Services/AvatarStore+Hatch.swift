@@ -75,6 +75,10 @@ extension AvatarStore {
                     // The old handle stays taken: it is excluded with the
                     // rest, so the new name always differs. Exhausted lists
                     // keep the old name.
+                    // A concurrent draw of the same handle makes the unique
+                    // index refuse the save and the hatch fails as a whole,
+                    // with nothing changed; the student can try again. One
+                    // free handle in many thousands makes this rare.
                     let taken = try await takenHandles(on: db).union([handle])
                     fresh.avatarHandle = AvatarHandle.make(excluding: taken) ?? handle
                 }

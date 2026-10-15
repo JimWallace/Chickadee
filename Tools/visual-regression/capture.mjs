@@ -182,11 +182,11 @@ async function main() {
             });
           // A handle is two words drawn at random, so its LENGTH
           // moves between runs. Freezing the text rather than masking the line
-          // keeps its label and typography under test and only gives up the
+          // keeps its typography under test and only gives up the
           // two words themselves — a mask here would be sized by the text and
           // so would move anyway, which is the trap the comment above records.
           document.querySelectorAll("[data-avatar-handle]").forEach((el) => {
-            el.textContent = "Class handle: Aaaaaaa Bbbbbb";
+            el.textContent = "Aaaaaaa Bbbbbb";
           });
           // The bird is drawn at random (see the .avatar mask), and its
           // species decides the species name, the colour note and how many
@@ -203,12 +203,10 @@ async function main() {
               swatch.querySelector(".swatch-name").textContent = "Colour";
               swatch.querySelector("input").checked = index === 0;
             });
+            // Freeze the name only, so a strong species line and the "New"
+            // chip stay under test.
             card.querySelectorAll("[data-avatar-species]").forEach((el) => {
-              el.textContent = "Species";
-            });
-            // The card names the bird by its handle alone.
-            card.querySelectorAll("[data-avatar-handle]").forEach((el) => {
-              el.textContent = "Aaaaaaa Bbbbbb";
+              (el.querySelector("strong") ?? el.firstChild).textContent = "Species";
             });
             // The account is created by the seed, so the "Hatched" date is
             // the day of the run.
@@ -262,8 +260,7 @@ async function main() {
           animations: "disabled",
           // Visible matches only. Chromium lays out the content of a CLOSED
           // <details>, so an unfiltered mask paints boxes over elements the
-          // page does not show (the account page's handle panel draws three
-          // avatars that way) and bakes them into the baseline.
+          // page does not show and bakes them into the baseline.
           mask: MASKS.map((sel) => page.locator(sel).filter({ visible: true })),
           maskColor: "#FF00FF",
         });
