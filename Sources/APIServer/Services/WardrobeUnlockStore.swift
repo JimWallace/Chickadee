@@ -28,7 +28,8 @@ enum WardrobeUnlockStore {
             let submission = try result.joined(APISubmission.self)
             return WardrobeProgress.Graded(
                 assignmentID: submission.testSetupID,
-                attemptNumber: submission.attemptNumber ?? 1,
+                // A row with no attempt number is not counted as a first try.
+                attemptNumber: submission.attemptNumber ?? 0,
                 passCount: result.passCount ?? 0,
                 totalTests: result.totalTests ?? 0)
         }
@@ -36,15 +37,17 @@ enum WardrobeUnlockStore {
     }
 
     /// Stores every item `userID` has earned and not yet stored, and returns
-    /// everything stored. A failed write keeps the page: the next load grants
-    /// again, and the unique index stores an item once.
+    /// what is stored afterwards, so the page offers exactly what the save
+    /// route accepts. A failed write keeps the page: the next load grants
+    /// again, and the unique index stores an item once when two requests race.
     static func grantEarned(for userID: UUID, on db: any Database) async throws -> Set<WardrobeItem> {
         let stored = try await unlocked(for: userID, on: db)
-        let earned = WardrobeItem.earned(by: try await progress(for: userID, on: db))
-        let missing = earned.subtracting(stored)
+        guard stored.count < WardrobeItem.allCases.count else { return stored }
+        let missing = WardrobeItem.earned(by: try await progress(for: userID, on: db)).subtracting(stored)
+        guard !missing.isEmpty else { return stored }
         for item in WardrobeItem.allCases where missing.contains(item) {
             try? await APIWardrobeUnlock(userID: userID, item: item).save(on: db)
         }
-        return stored.union(earned)
+        return try await unlocked(for: userID, on: db)
     }
 }

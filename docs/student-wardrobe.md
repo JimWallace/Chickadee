@@ -162,8 +162,8 @@ ring.
 A locked earned or special ring is listed under "Not open yet", as an item
 and not as an input, with "earned" in the name, so that a student can see
 what there is to earn. When a rule earns it, the name says how ("Two-tone ·
-earned by full marks on three assignments"); stitched and spectrum have no
-rule yet ("Stitched · earned"). `AvatarCustomization` refuses a
+earned when every test passes on three assignments"); stitched and spectrum
+have no rule yet ("Stitched · earned"). `AvatarCustomization` refuses a
 locked ring, so a hand-made request cannot choose one.
 
 ### 6b. Earned items (a small W3, #2592)
@@ -174,8 +174,8 @@ setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
 | Item | Earned by |
 |---|---|
 | `chirp` face | the first graded submission |
-| `sly` face | full marks (every test it ran passed) on a first attempt |
-| two-tone ring | full marks on three different assignments |
+| `sly` face | a first attempt on which every test it ran passes |
+| two-tone ring | every test passing on three different assignments |
 
 - **Granted on the account page, never while grading.** `WardrobeUnlockStore`
   reads the student's own student-kind submissions that have a result, and
@@ -183,6 +183,10 @@ setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
   user and item). A cosmetic cannot fail a grade.
 - **Sticky.** A stored unlock is never taken back, even when a regrade changes
   the result that earned it.
+- **Browser results count.** A browser-graded result is built in the
+  student's own browser, so a student who forges one could earn an item. The
+  harm is cosmetic, and First-Try Perfect already trusts the same results;
+  excluding them would leave most students nothing to earn.
 - **Account-wide and lateral**, as every wardrobe item is.
 - **In the export** (`profile.json`, `wardrobeUnlocks`) and removed with the
   account.

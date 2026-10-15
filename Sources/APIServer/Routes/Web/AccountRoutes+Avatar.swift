@@ -204,12 +204,12 @@ extension AvatarPickerContext {
         return lockedLabel(border.displayName, item: WardrobeItem(slot: .border, value: border.rawValue))
     }
 
-    /// A locked earned item's name: "Chirp · earned by your first graded
+    /// A locked earned item's name: "Chirp · earned by a first graded
     /// submission" when a rule earns it (`WardrobeItem.howToEarn`), and
     /// "Spectrum · earned" for an item no rule earns yet.
     static func lockedLabel(_ name: String, item: WardrobeItem?) -> String {
         guard let item else { return "\(name) · earned" }
-        return "\(name) · earned by \(item.howToEarn)"
+        return "\(name) · earned \(item.howToEarn)"
     }
 }
 

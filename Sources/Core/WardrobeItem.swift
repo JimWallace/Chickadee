@@ -15,9 +15,10 @@
 public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
     /// The `chirp` face, for a first graded submission.
     case chirpFace = "expression.chirp"
-    /// The `sly` face, for full marks on a first attempt.
+    /// The `sly` face, for a first attempt on which every test passes.
     case slyFace = "expression.sly"
-    /// The two-tone ring, for full marks on three different assignments.
+    /// The two-tone ring, for every test passing on three different
+    /// assignments.
     case twoToneRing = "border.twotone"
 
     /// The slot the item belongs to.
@@ -43,13 +44,13 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         self = item
     }
 
-    /// How a student earns the item, as the account page says it after the
-    /// item's name: "Chirp · earned by your first graded submission".
+    /// How a student earns the item, as the account page says it after
+    /// "earned": "Chirp · earned by a first graded submission".
     public var howToEarn: String {
         switch self {
-        case .chirpFace: "your first graded submission"
-        case .slyFace: "full marks on a first try"
-        case .twoToneRing: "full marks on three assignments"
+        case .chirpFace: "by a first graded submission"
+        case .slyFace: "when every test passes on a first attempt"
+        case .twoToneRing: "when every test passes on three assignments"
         }
     }
 

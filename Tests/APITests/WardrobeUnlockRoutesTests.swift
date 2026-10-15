@@ -61,9 +61,9 @@ import VaporTesting
             let cookie = try await wrLoginAsStudent(on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(try await storedUnlocks(on: app).isEmpty)
-            #expect(html.contains("Chirp · earned by your first graded submission"))
-            #expect(html.contains("Sly · earned by full marks on a first try"))
-            #expect(html.contains("Two-tone · earned by full marks on three assignments"))
+            #expect(html.contains("Chirp · earned by a first graded submission"))
+            #expect(html.contains("Sly · earned when every test passes on a first attempt"))
+            #expect(html.contains("Two-tone · earned when every test passes on three assignments"))
             // An item no rule earns yet keeps the plain label.
             #expect(html.contains("Dreamy · earned<"))
             #expect(!html.contains(#"name="expression" value="chirp""#))
@@ -81,7 +81,7 @@ import VaporTesting
             #expect(try await storedUnlocks(on: app) == ["expression.chirp"])
             #expect(html.contains(#"name="expression" value="chirp""#))
             #expect(!html.contains("Chirp · earned"))
-            #expect(html.contains("Sly · earned by full marks on a first try"))
+            #expect(html.contains("Sly · earned when every test passes on a first attempt"))
 
             #expect(
                 try await save(["expression": "chirp"], cookie: cookie, on: app) == "/account?avatar=saved#chickadee")

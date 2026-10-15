@@ -140,8 +140,11 @@ struct AccountRoutes: RouteCollection {
     ) async throws -> AvatarPickerContext {
         // Earned items are granted here, on the page that shows them, and
         // never while a result is written (docs/student-wardrobe.md, W3).
-        let unlocked =
-            (try? await WardrobeUnlockStore.grantEarned(for: user.requireID(), on: req.db)) ?? []
+        // A failed grant falls back to what is stored, so an earned item is
+        // never shown locked because of it.
+        let userID = try user.requireID()
+        let stored = (try? await WardrobeUnlockStore.unlocked(for: userID, on: req.db)) ?? []
+        let unlocked = (try? await WardrobeUnlockStore.grantEarned(for: userID, on: req.db)) ?? stored
         guard let term = AcademicTerm.current() else {
             return AvatarPickerContext(for: spec, isStaff: isStaff, handle: handle ?? "", unlocked: unlocked)
         }
