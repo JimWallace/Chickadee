@@ -7,6 +7,7 @@ description: >
   whole. CI runs it every month (.github/workflows/ui-audit.yml). For one
   change, use ui-review instead.
   Read-only: it reports, it does not edit.
+model: opus
 tools: Read, Grep, Glob, Bash
 ---
 
