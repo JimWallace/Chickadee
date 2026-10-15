@@ -476,6 +476,15 @@ duplicate.
   and ring, not the previewed ones, while the ring samples follow the preview).
   An option that cannot be chosen yet is not a swatch: see `.bird-locked`.
   Used by the account page's `.bird-card`.
+- **`.bird-hatch`** — the hero bird on the first page after a hatch (#2590):
+  the bird with `.bird-hatch-egg` over it, two `.bird-hatch-shell` halves
+  (`.bird-hatch-shell--top`, with a zigzag crack edge, and
+  `.bird-hatch-shell--bottom`) in the chickadee's cream: the egg reads
+  `--avatar-ink-body` on purpose, so it is the colour of the mascot's breast
+  in both themes, and like `.avatar` it sets `forced-color-adjust: none`. The egg wobbles,
+  splits and falls away while the bird grows out of it, all filling forwards
+  so the end state is the plain bird. The egg exists only inside
+  `prefers-reduced-motion: no-preference`; every other reader sees the bird.
 - **`.bird-card`** — the account page's "Your bird" card (a `.card`).  An
   optional `.bird-card-strip` across its top holds a hatch's confirm or its
   result, tinted `--you-bg`: the birds, the text and a `.toolbar` of actions.
@@ -484,7 +493,8 @@ duplicate.
   Under it, `.bird-card-body` is a wrapping flex row of
   two items, so the columns stack on a phone with no media query:
   `.bird-card-hero`, a light panel with the bird at `.avatar-xl` (the
-  `AvatarSize.podium` size, reused), the handle in `<strong>` above the
+  `AvatarSize.podium` size, reused; inside `.bird-hatch` on the first page
+  after a hatch), the handle in `<strong>` above the
   species (a student's bird only; a staff bird has no handle, and the species
   is the strong line), the hatched date and the
   hatch control, `.bird-card-hatch` (a link to the confirm, or a disabled
