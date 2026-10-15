@@ -9,6 +9,17 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.675] - 2026-10-15
+
+### Added
+
+- **A new bird hatches from an egg.** On the first page after "Hatch a new bird", the egg wobbles, splits and falls away, and the new bird grows out of it. Readers who asked for less motion see the bird at once (#2590).
+
+### Added
+
+- **The podium birds bounce in Present mode.** When the board first shows, and whenever the top three change, the podium birds bounce from third to first. A refresh that keeps the same three leaves them still, and nothing moves under reduced motion (#2591).
+
+
 ## [0.5.674] - 2026-10-15
 
 ### Changed
