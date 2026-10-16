@@ -169,10 +169,7 @@ private struct AdminGitHubAppToolbar: HTML {
 
     var body: some HTML {
         div(.class("toolbar")) {
-            a(.class("btn action-btn"), .href(app.htmlURL), .target(.blank), .rel("noopener noreferrer")) {
-                "Open on GitHub "
-                Icon("i-external")
-            }
+            NewTabLink(href: app.htmlURL, text: "Open on GitHub ", attributes: [.class("btn action-btn")])
             details(.class("add-section-details popup-anchor")) {
                 summary(
                     .class("btn action-btn action-btn-icon summary-btn"), .title("More actions"),
