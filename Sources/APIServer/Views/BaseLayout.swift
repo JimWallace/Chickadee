@@ -99,14 +99,7 @@ struct BaseLayout<Content: HTML>: HTML {
                 meta(.name("session-idle-warning-seconds"), .content(String(page.sessionIdleWarningSeconds)))
             }
             Elementary.title { "\(title) — Chickadee" }
-            // Elementary models neither `sizes` nor `type` on a link.
-            for size in ["32x32", "16x16"] {
-                link(
-                    .rel(.icon), .href(page.asset("/favicon.png")),
-                    .custom(name: "sizes", value: size), .custom(name: "type", value: "image/png"))
-            }
-            link(.rel("shortcut icon"), .href(page.asset("/favicon.png")), .custom(name: "type", value: "image/png"))
-            link(.rel("apple-touch-icon"), .href(page.asset("/apple-touch-icon.png")))
+            TabIcons(page: page, key: tabIconKey)
             link(.rel(.stylesheet), .href(page.asset("/styles.css")))
             // Loaded in the head, not beside app.js: page scripts that run
             // during parse reference ChickadeeUI and its delegates.
@@ -116,6 +109,14 @@ struct BaseLayout<Content: HTML>: HTML {
             script(.src(page.asset("/surface-swap.js"))) {}
             script(.src(page.asset("/relative-time.js"))) {}
         }
+    }
+
+    /// The viewer's own bird, or the house bird when there is none. A staff
+    /// member who opens a student's work still sees their own. An LMS frame
+    /// shows the house bird, because nobody sees its tab.
+    private var tabIconKey: String {
+        if embedded { return AvatarIconKey.house }
+        return page.currentUser?.tabIconKey ?? AvatarIconKey.house
     }
 
     @HTMLBuilder private var footerScripts: some HTML {

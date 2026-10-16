@@ -9,6 +9,9 @@ func routes(_ app: Application) throws {
     // MARK: - Public routes (no auth required)
 
     try app.register(collection: HealthRoutes())
+    // The browser tab icon (docs/student-avatars.md, "The tab icon"). Public:
+    // the key names a bird and no user.
+    try app.register(collection: AvatarIconRoutes(renderer: app.avatarIconRenderer()))
     // LTI 1.3 tool endpoints (docs/lti-1-3.md). Public: the platform fetches
     // the key set with no session. Creating the key cache here, before any
     // request, keeps two concurrent first requests from each generating a key.

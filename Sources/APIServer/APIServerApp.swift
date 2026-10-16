@@ -105,6 +105,9 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     try bootstrapAppDirectories(app, workDir: workDir, cliWorkerSecret: cliWorkerSecret)
     bootstrapAppMiddleware(app, appConfig: appConfig)
     try await bootstrapAppServices(app, appConfig: appConfig)
+    // After the sprites load (bootstrapAppMiddleware) and before the routes:
+    // a tab icon with a missing part is a startup error, not a blank bird.
+    try app.loadAvatarIconRenderer()
 
     try routes(app)
 }

@@ -744,6 +744,50 @@ can serve a page, and it would gain nothing a student can see.
 This is the one exception to "append only", and it is safe only because the
 old raw value still decodes. Do not remove a case without an alias.
 
+## The tab icon
+
+When you are signed in, the browser tab shows your own bird. In all other
+cases, it shows the house bird: an ink chickadee with a plain wing and a bright
+face on an aqua backdrop.
+
+| Page | Tab icon |
+|---|---|
+| Signed in, with a bird | The viewer's own bird. Staff see their own bird, also on a student's submission. |
+| Signed out, or no bird yet | The house bird |
+| Present mode (`PresentLayout`) | The house bird, because the page is on a projector |
+| An LMS frame (`embedded`) | The house bird, because nobody sees the tab |
+
+**What the icon draws.** It draws the species, the colourway, the wing, the
+expression, the tuft or crest, the accessory with its accent, and the backdrop.
+It does not draw the ring, because at 16px the ring takes the outer 1.5px and
+blurs into the backdrop. It does not draw the tilt, so the bird is upright. It
+never draws the staff ring. The backdrop disc fills the full viewBox. Thus one
+file is clear on a light and on a dark tab bar, and it uses the light palette.
+
+**How it is made.** A favicon is a separate document. It cannot use the inline
+sprite or the custom properties of the page. `AvatarIconRenderer` reads the
+symbol children from `Resources/Sprites/avatar-sprite.svg` and the light
+`:root` palette and the `.av-*` class rules from `Public/styles.css`. It reads
+them one time, at boot, and writes one self-contained SVG for each bird. It
+holds no path and no colour of its own. A missing symbol, class rule or token
+stops the server at boot (`loadAvatarIconRenderer` in `configure`).
+
+**The route.** `GET /avatar-icon/:version/:key.svg`. The key is the icon's
+fields in a fixed order, joined by dots (`AvatarIconKey`): species, colourway,
+wing, expression, tuft, accessory, accent, backdrop. For example,
+`chickadee.teal.barred.bright.cowlick.scarf.honey.sky`. A field that is not a
+current raw value, or a species that does not agree with the colourway, gives
+a 404. The version is the app version. The route is public: the key holds only
+what the leaderboard shows, and no user id. The response is cached for one
+year (`immutable`), and its CSP is `default-src 'none'; style-src
+'unsafe-inline'`. The server keeps up to 2,000 rendered icons in memory.
+`GET /favicon.svg` gives the house bird with no key, for bookmarks and
+crawlers, and is cached for one day.
+
+**The fallback.** `Public/favicon.ico` is the house bird at 16, 32 and 48px. A
+browser without SVG favicons shows it. `Public/apple-touch-icon.png` is not
+changed. A bookmark keeps the icon that it was saved with.
+
 ## Changing the art
 
 The art is expected to move. What that costs, and what it cannot break:
@@ -766,6 +810,9 @@ The art is expected to move. What that costs, and what it cannot break:
    `layerSymbolIDs`, a `--av-*` property assigned in the partial that the
    presentation does not supply. What they will NOT catch is whether it looks
    right — hence step 2.
+5. **The tab icon follows the art** (see "The tab icon"). If the house bird
+   changes, update the snapshot `Tests/Fixtures/avatar-icon-house.svg`, and
+   render `Public/favicon.ico` again from `/favicon.svg` at 16, 32 and 48px.
 
 **Stored specs survive a redraw.** A spec names slots, not shapes, so
 redrawing shared geometry changes what everyone's bird looks like without
