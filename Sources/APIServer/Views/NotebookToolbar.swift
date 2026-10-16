@@ -28,7 +28,7 @@ struct NotebookToolbar<Status: HTML>: HTML {
                 }
             }
             // notebook-toolbar.js writes the editor's save state here.
-            span(.class("text-quiet"), .id("nb-save-state"), .hidden) {}
+            span(.class("text-quiet"), .id("nb-save-state"), .role("status"), .hidden) {}
             status
             div(.class("notebook-actions")) {
                 // The " " after each control keeps the spaces between them.
@@ -105,15 +105,11 @@ struct NotebookToolbar<Status: HTML>: HTML {
                 .data("nb-commands", value: "notebook:clear-all-cell-outputs")
             ) { "Clear outputs" }
         }
-        a(
-            .class("row-menu-item"), .role("menuitem"),
-            .href("https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md"),
-            .target(.blank), .rel("noopener noreferrer")
-        ) {
-            "Help "
-            Icon("i-external")
-            span(.class("visually-hidden")) { "(opens in a new tab)" }
-        }
+        NewTabLink(
+            href: "https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md",
+            text: "Help ",
+            attributes: [.class("row-menu-item"), .role("menuitem")]
+        )
         if notebook.showSubmit, !notebook.embedded, let csrfToken = notebook.csrfToken {
             form(
                 .method(.post), .action("/testsetups/\(notebook.testSetupID)/reset-notebook"),
@@ -174,16 +170,11 @@ struct NotebookToolbar<Status: HTML>: HTML {
         } else if notebook.showSubmit {
             if notebook.aiFeedbackNotice {
                 span(.class("nb-closed-notice")) {
-                    a(
-                        .href(
-                            "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#information-for-students"
-                        ),
-                        .target(.blank), .rel("noopener noreferrer")
-                    ) {
-                        "AI-assisted feedback is on "
-                        Icon("i-external")
-                        span(.class("visually-hidden")) { "(opens in a new tab)" }
-                    }
+                    NewTabLink(
+                        href:
+                            "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#information-for-students",
+                        text: "AI-assisted feedback is on "
+                    )
                 }
                 " "
             }
