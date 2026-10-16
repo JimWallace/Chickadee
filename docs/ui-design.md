@@ -781,7 +781,9 @@ duplicate.
   `.outline-tasks` list of `.outline-row` buttons.  Each row has an
   `.outline-glyph`, an `.outline-name` and its points; `data-status` colours the
   glyph, and the glyph character and the editor's pill always say the status
-  too.  `aria-current` marks the task under the cursor.  A Reflection row,
+  too.  The `starter` glyph ("Still the starter code") reuses the amber
+  `--preview-bg` / `--preview-fg` pair on purpose: it is the one "attention,
+  not failure" pair, and `--amber-bg` has no matching foreground.  `aria-current` marks the task under the cursor.  A Reflection row,
   `written` or `empty`, follows the tasks.  A task row carries an
   `.outline-wide` name and an `.outline-short` label: below 1100px the same nodes
   become a row of chips at least 44px tall, and below 640px the outline is
