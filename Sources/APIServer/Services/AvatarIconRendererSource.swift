@@ -16,12 +16,13 @@ final class AvatarIconRendererSource: Sendable {
     }
 
     /// The renderer, or why it could not be built. The first call builds it.
-    func renderer() -> Result<AvatarIconRenderer, AvatarIconRendererError> {
-        built.withLock { built in
+    func renderer() throws(AvatarIconRendererError) -> AvatarIconRenderer {
+        let result = built.withLock { built in
             if let built { return built }
             let result = build()
             built = result
             return result
         }
+        return try result.get()
     }
 }

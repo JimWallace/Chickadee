@@ -54,7 +54,7 @@ struct AvatarIconRoutes: RouteCollection {
     private func svg(forKey key: String) throws -> String? {
         if let cached = cache.svg(forKey: key) { return cached }
         guard let spec = AvatarIconKey.decode(key) else { return nil }
-        let svg = try renderer.renderer().get().svg(for: spec)
+        let svg = try renderer.renderer().svg(for: spec)
         cache.insert(svg, forKey: key)
         return svg
     }
