@@ -1358,6 +1358,25 @@ code { font-family: var(--font-mono); font-size: .9em; }
     background: var(--gray-400);
 }
 
+/* The notebook toolbar (design frame 18a): the title with the due date under
+   it, then the edit buttons, set off from the kernel chip by a hairline. */
+.nb-title-block {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+    min-width: 0;
+}
+.nb-edit-actions {
+    flex-wrap: nowrap;
+    padding-right: .5rem;
+    border-right: 1px solid var(--border);
+}
+/* The editor fills the page, so the site header is a 44px bar here. */
+body:has(.notebook-header .nb-title-block) .nav {
+    min-height: 44px;
+    padding-block: .4rem;
+}
+
 /* The editor stage: the loading panel over the iframe. A flex column, so the
    iframe still shrinks to the workbench pane as it did when it was the pane's
    own flex item. */
@@ -3828,10 +3847,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .state-select[data-state="mapped"]::before,
 .state-select[data-state="instructor"]::before,
 .state-select[data-state="admin"]::before,
-.kernel-chip[data-state="ready"]::before { background: var(--kind-graded-bg); }
+.kernel-chip[data-state="ready"]::before,
+.kernel-chip[data-state="idle"]::before { background: var(--kind-graded-bg); }
 .state-select[data-state="preview"]::before,
 .state-select[data-state="ta"]::before,
-.kernel-chip[data-state="starting"]::before { background: var(--state-amber); }
+.kernel-chip[data-state="starting"]::before,
+.kernel-chip[data-state="busy"]::before { background: var(--state-amber); }
+/* A stopped kernel: the danger colour, with "stopped" beside it. */
+.kernel-chip[data-state="dead"]::before { background: var(--danger-fg); }
 
 /* A centred explanatory panel standing in for content that cannot render here
    — no notebook selected, or a viewport too small for the editor. Two pages

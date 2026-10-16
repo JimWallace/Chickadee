@@ -15,6 +15,9 @@ if [[ ! -d "$VENV_DIR" ]]; then
 fi
 
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
-"$VENV_DIR/bin/pip" install -r "$REQ_FILE"
+# From the repository root: requirements.txt names the Chickadee extension by
+# a path, and pip resolves a path in a requirements file from the current
+# directory.
+(cd "$ROOT_DIR" && "$VENV_DIR/bin/pip" install -r "$REQ_FILE")
 
 echo "JupyterLite toolchain ready in $VENV_DIR"

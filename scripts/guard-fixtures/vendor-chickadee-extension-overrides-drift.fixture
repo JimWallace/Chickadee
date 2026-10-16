@@ -1,0 +1,10 @@
+# The committed bundle must carry Tools/jupyterlite/overrides.json. An override
+# edited at its source and not vendored would ship the old editor chrome.
+guard="scripts/vendor-chickadee-extension.sh"
+args="--check"
+files="Tools/jupyterlite/overrides.json"
+description="a settings override changed at its source but not vendored into the bundle"
+expect="Run scripts/vendor-chickadee-extension.sh"
+apply() {
+    sed -i 's|"theme": "Chickadee"|"theme": "JupyterLab Light"|' Tools/jupyterlite/overrides.json
+}

@@ -39,6 +39,12 @@ below are in [docs/jupyterlite.md](../../docs/jupyterlite.md).
 - **Synchronous stdin uses a different transport per engine.** Read the
   middleware, not `jupyter-lite.json`: Chromium and Firefox are isolated and use
   `SharedArrayBuffer`; WebKit is not isolated and uses the service worker.
+- **Chickadee's own extension is `chickadee-extension/`** (NB2). Its
+  labextension is built with `jlpm build` and committed;
+  `scripts/vendor-chickadee-extension.sh` puts it and `overrides.json` into the
+  bundle, and `--check` fails CI when they drift. The overrides must keep the
+  notebook toolbar's `executionProgress` item, because the boot diagnostics
+  read the kernel state from it. See `docs/notebook-editor-extension.md`.
 - **jszip, CodeMirror and the xeus bootstrap are vendored under `Public/vendor/`**,
   so no page load reaches a third-party CDN. Pyodide is gone (v0.5.19).
   `'unsafe-eval'` cannot be narrowed to `'wasm-unsafe-eval'`, because JupyterLab

@@ -514,6 +514,33 @@ public struct LanguageDescriptor: Equatable, Sendable {
     }
 }
 
+extension LanguageDescriptor {
+    /// One regex per definition shape, each matching one line with the defined
+    /// name in capture group 1: the function scan's patterns, then the
+    /// variable pattern. The notebook editor's extension reads the names a cell
+    /// defines with these (notebook views, NB2), so it holds no language facts
+    /// of its own. Written in the syntax JavaScript and Swift share.
+    ///
+    /// Python's functions are read by a parser, not a pattern; its entry here
+    /// is the `def` line that parser starts from. Empty for a language with no
+    /// solution notebook.
+    public var definitionLinePatterns: [String] {
+        var patterns: [String]
+        switch functionScan {
+        case .pythonDefStatements:
+            patterns = [#"^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("#]
+        case .definitionPatterns(let functionPatterns):
+            patterns = functionPatterns
+        case .noSolutionNotebook:
+            return []
+        }
+        if case .assignmentPattern(let variablePattern) = variableScan {
+            patterns.append(variablePattern)
+        }
+        return patterns
+    }
+}
+
 extension AssignmentLanguage {
 
     /// The facts about this language, in one place.

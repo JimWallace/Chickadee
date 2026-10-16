@@ -142,7 +142,7 @@ struct InstructorWorkbenchRoutes: RouteCollection {
                 testSetupID: setupID,
                 assignmentTitle: title.isEmpty ? "Assignment" : title,
                 edit: editCtx,
-                notebook: notebookCtx.map { NotebookBody($0, appVersion: page.appVersion) },
+                notebook: notebookCtx.map { NotebookBody($0, appVersion: page.appVersion, csrfToken: page.csrfToken) },
                 notebookPaneURLsJSON: urlsJSON,
                 assignmentHasTemplateView: assignmentHasTemplate,
                 solutionHasTemplateView: solutionHasTemplate

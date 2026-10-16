@@ -1,0 +1,168 @@
+/* The Chickadee editor themes (notebook views brief, NB2). The theme plugin
+   loads JupyterLab's own light or dark theme and sets body[data-ck-theme], so
+   these blocks override only the variables that differ. Every name below is
+   defined by the vendored @jupyterlab/theme-light-extension (JupyterLab
+   4.6.4). The light values come from the round-18 mocks; the dark values
+   mirror the dark block of Public/styles.css. */
+
+body[data-ck-theme] {
+  /* Type */
+  --jp-ui-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --jp-content-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --jp-code-font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --jp-cell-prompt-font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --jp-code-font-size: 13px;
+  --jp-content-font-size1: 15px;
+  --jp-ui-font-size1: 13px;
+}
+
+body[data-ck-theme="light"] {
+  /* Surfaces */
+  --jp-layout-color0: #FFFFFF;
+  --jp-layout-color1: #FFFFFF;
+  --jp-layout-color2: #F8FAFC;
+  --jp-layout-color3: #F3F4F6;
+  --jp-border-color0: #D1D5DB;
+  --jp-border-color1: #E5E7EB;
+  --jp-border-color2: #E5E7EB;
+  --jp-border-color3: #F0F1F3;
+
+  /* Text */
+  --jp-ui-font-color0: #111827;
+  --jp-ui-font-color1: #111827;
+  --jp-ui-font-color2: #4B5563;
+  --jp-ui-font-color3: #6B7280;
+  --jp-content-font-color0: #111827;
+  --jp-content-font-color1: #111827;
+  --jp-content-font-color2: #4B5563;
+  --jp-content-font-color3: #6B7280;
+  --jp-content-link-color: #005963;
+
+  /* Brand: the active cell and the selection */
+  --jp-brand-color0: #005963;
+  --jp-brand-color1: #0098A5;
+  --jp-brand-color2: #97DFEF;
+  --jp-brand-color3: #DCF3F6;
+  --jp-brand-color4: #F0FAFB;
+  --jp-notebook-multiselected-color: #DCF3F6;
+
+  /* Cells */
+  --jp-cell-editor-background: #F8FAFC;
+  --jp-cell-editor-border-color: #E5E7EB;
+  --jp-cell-editor-active-background: #F8FAFC;
+  --jp-cell-prompt-not-active-font-color: #9CA3AF;
+  --jp-cell-inprompt-font-color: #9CA3AF;
+  --jp-cell-outprompt-font-color: #9CA3AF;
+
+  /* Status */
+  --jp-success-color1: #16A34A;
+  --jp-warn-color1: #8A5300;
+  --jp-error-color1: #B42318;
+  --jp-rendermime-error-background: #FEF2F2;
+
+  /* Syntax (CodeMirror 6) */
+  --jp-mirror-editor-keyword-color: #6B52C9;
+  --jp-mirror-editor-def-color: #005963;
+  --jp-mirror-editor-string-color: #2F7D3A;
+  --jp-mirror-editor-number-color: #B4610E;
+  --jp-mirror-editor-comment-color: #6B7280;
+  --jp-mirror-editor-builtin-color: #0D7C86;
+  --jp-mirror-editor-variable-color: #1F2937;
+  --jp-mirror-editor-operator-color: #374151;
+  --jp-mirror-editor-punctuation-color: #374151;
+
+  --ck-ring: rgba(0, 152, 165, 0.14);
+  --ck-ring-border: #0098A5;
+  --ck-placeholder-bg: #FEF1D2;
+  --ck-placeholder-fg: #8A5300;
+  --ck-placeholder-hot: #E8B13A;
+  --ck-fail-line: #FDE2E2;
+}
+
+body[data-ck-theme="dark"] {
+  /* Surfaces (styles.css dark: --surface, --surface-muted, --gray-*) */
+  --jp-layout-color0: #111827;
+  --jp-layout-color1: #111827;
+  --jp-layout-color2: #0F172A;
+  --jp-layout-color3: #1F2937;
+  --jp-border-color0: #374151;
+  --jp-border-color1: #1F2937;
+  --jp-border-color2: #1F2937;
+  --jp-border-color3: #1F2937;
+
+  /* Text */
+  --jp-ui-font-color0: #E5E7EB;
+  --jp-ui-font-color1: #E5E7EB;
+  --jp-ui-font-color2: #CBD5E1;
+  --jp-ui-font-color3: #9CA3AF;
+  --jp-content-font-color0: #E5E7EB;
+  --jp-content-font-color1: #E5E7EB;
+  --jp-content-font-color2: #CBD5E1;
+  --jp-content-font-color3: #9CA3AF;
+  --jp-content-link-color: #67E8F9;
+
+  /* Brand (--open-fg, --kind-graded-bg, --open-bg) */
+  --jp-brand-color0: #67E8F9;
+  --jp-brand-color1: #007C87;
+  --jp-brand-color2: #0B4F59;
+  --jp-brand-color3: #072D35;
+  --jp-brand-color4: #0B1F26;
+  --jp-notebook-multiselected-color: #072D35;
+
+  /* Cells */
+  --jp-cell-editor-background: #0F172A;
+  --jp-cell-editor-border-color: #1F2937;
+  --jp-cell-editor-active-background: #0F172A;
+  --jp-cell-prompt-not-active-font-color: #9CA3AF;
+  --jp-cell-inprompt-font-color: #9CA3AF;
+  --jp-cell-outprompt-font-color: #9CA3AF;
+
+  /* Status (--green, --amber, --danger-fg, --danger-bg) */
+  --jp-success-color1: #4ADE80;
+  --jp-warn-color1: #FBBF24;
+  --jp-error-color1: #F87171;
+  --jp-rendermime-error-background: #3B1217;
+
+  /* Syntax (CodeMirror 6) */
+  --jp-mirror-editor-keyword-color: #C4B5FD;
+  --jp-mirror-editor-def-color: #67E8F9;
+  --jp-mirror-editor-string-color: #86EFAC;
+  --jp-mirror-editor-number-color: #FDBA74;
+  --jp-mirror-editor-comment-color: #9CA3AF;
+  --jp-mirror-editor-builtin-color: #5EEAD4;
+  --jp-mirror-editor-variable-color: #E5E7EB;
+  --jp-mirror-editor-operator-color: #CBD5E1;
+  --jp-mirror-editor-punctuation-color: #CBD5E1;
+
+  --ck-ring: rgba(103, 232, 249, 0.18);
+  --ck-ring-border: #007C87;
+  --ck-placeholder-bg: #3D2800;
+  --ck-placeholder-fg: #FED34C;
+  --ck-placeholder-hot: #FED34C;
+  --ck-fail-line: #3B1217;
+}
+
+/* What the variables cannot express. Keep it this short. */
+body[data-ck-theme] .jp-Cell .jp-InputArea-editor { border-radius: 0.45rem; }
+body[data-ck-theme] .jp-Notebook .jp-Cell.jp-mod-active .jp-InputArea-editor {
+  border-color: var(--ck-ring-border);
+  box-shadow: 0 0 0 3px var(--ck-ring);
+}
+/* No coloured bar beside the active cell: the ring above replaces it. */
+body[data-ck-theme] .jp-Notebook .jp-Cell.jp-mod-active .jp-Collapser,
+body[data-ck-theme] .jp-Notebook .jp-mod-commandMode .jp-Cell.jp-mod-active .jp-Collapser {
+  background: transparent;
+}
+/* Comments in italics, as in the mocks. */
+body[data-ck-theme] .cm-editor .tok-comment { font-style: italic; }
+/* Input placeholders such as {{goal_steps}} (NB7 marks them). */
+body[data-ck-theme] .ck-placeholder {
+  background: var(--ck-placeholder-bg);
+  color: var(--ck-placeholder-fg);
+  border-radius: 4px;
+  padding: 0 0.15rem;
+  font-weight: 600;
+}
+body[data-ck-theme] .ck-placeholder.ck-hot { box-shadow: 0 0 0 2px var(--ck-placeholder-hot); }
+/* The solution line that a selected failing test trips on (NB7). */
+body[data-ck-theme] .ck-fail-line { background: var(--ck-fail-line); }

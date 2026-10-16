@@ -1,0 +1,43 @@
+{
+  "name": "@chickadee/jupyterlite-extension",
+  "version": "0.1.0",
+  "description": "Chickadee's JupyterLite extension: the editor theme, the bridge commands and the events the notebook page reads.",
+  "license": "MIT",
+  "private": true,
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "style": "style/index.css",
+  "files": [
+    "lib/**/*.{d.ts,js}",
+    "style/**/*.{css,js}"
+  ],
+  "sideEffects": [
+    "style/*.css",
+    "style/index.js"
+  ],
+  "styleModule": "style/index.js",
+  "scripts": {
+    "build": "jlpm build:lib && jlpm build:labextension",
+    "build:lib": "tsc --sourceMap false",
+    "build:labextension": "jupyter labextension build .",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@jupyterlab/application": "~4.6.4",
+    "@jupyterlab/apputils": "~4.7.4",
+    "@jupyterlab/notebook": "~4.6.4"
+  },
+  "devDependencies": {
+    "@jupyterlab/builder": "~4.5.11",
+    "typescript": "~5.5.4"
+  },
+  "jupyterlab": {
+    "extension": true,
+    "outputDir": "chickadee_jupyterlite_extension/labextension",
+    "_build": {
+      "load": "static/remoteEntry.0f8eeeb2f240ae8c4f93.js",
+      "extension": "./extension",
+      "style": "./style"
+    }
+  }
+}

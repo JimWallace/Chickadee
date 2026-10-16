@@ -1,0 +1,56 @@
+{
+  "@jupyterlab/apputils-extension:themes": {
+    "theme": "Chickadee"
+  },
+  "@jupyter-notebook/application-extension:top": {
+    "visible": "no"
+  },
+  "@jupyterlab/notebook-extension:panel": {
+    "toolbar": [
+      {
+        "name": "save",
+        "disabled": true
+      },
+      {
+        "name": "insert",
+        "disabled": true
+      },
+      {
+        "name": "cut",
+        "disabled": true
+      },
+      {
+        "name": "copy",
+        "disabled": true
+      },
+      {
+        "name": "paste",
+        "disabled": true
+      },
+      {
+        "name": "run",
+        "disabled": true
+      },
+      {
+        "name": "interrupt",
+        "disabled": true
+      },
+      {
+        "name": "restart",
+        "disabled": true
+      },
+      {
+        "name": "restart-and-run",
+        "disabled": true
+      },
+      {
+        "name": "cellType",
+        "disabled": true
+      },
+      {
+        "name": "spacer",
+        "disabled": true
+      }
+    ]
+  }
+}

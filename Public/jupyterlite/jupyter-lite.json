@@ -14,6 +14,12 @@
     "federated_extensions": [
       {
         "extension": "./extension",
+        "load": "static/remoteEntry.0f8eeeb2f240ae8c4f93.js",
+        "name": "@chickadee/jupyterlite-extension",
+        "style": "./style"
+      },
+      {
+        "extension": "./extension",
         "load": "static/remoteEntry.c8c9eed2cdefdeac.js",
         "name": "@jupyter-widgets/jupyterlab-manager"
       },
@@ -411,6 +417,62 @@
     "fullStaticUrl": "./build",
     "licensesUrl": "./lab/api/licenses",
     "litePluginSettings": {},
+    "settingsOverrides": {
+      "@jupyter-notebook/application-extension:top": {
+        "visible": "no"
+      },
+      "@jupyterlab/apputils-extension:themes": {
+        "theme": "Chickadee"
+      },
+      "@jupyterlab/notebook-extension:panel": {
+        "toolbar": [
+          {
+            "disabled": true,
+            "name": "save"
+          },
+          {
+            "disabled": true,
+            "name": "insert"
+          },
+          {
+            "disabled": true,
+            "name": "cut"
+          },
+          {
+            "disabled": true,
+            "name": "copy"
+          },
+          {
+            "disabled": true,
+            "name": "paste"
+          },
+          {
+            "disabled": true,
+            "name": "run"
+          },
+          {
+            "disabled": true,
+            "name": "interrupt"
+          },
+          {
+            "disabled": true,
+            "name": "restart"
+          },
+          {
+            "disabled": true,
+            "name": "restart-and-run"
+          },
+          {
+            "disabled": true,
+            "name": "cellType"
+          },
+          {
+            "disabled": true,
+            "name": "spacer"
+          }
+        ]
+      }
+    },
     "versionInfo": {
       "@jupyter-notebook/application": {
         "label": "Jupyter Notebook",

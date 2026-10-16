@@ -31,9 +31,10 @@
     const statusEl   = document.getElementById('nb-status');
     const submitBtn  = document.getElementById('nb-submit');
     const resultsEl  = document.getElementById('nb-results');
-    // The .ipynb upload inputs: the failure panel's, and the slow-boot
-    // notice's (#2028). One handler serves both (section 3 below).
-    const uploadFiles = ['nb-upload-file', 'nb-slow-upload-file']
+    // The .ipynb upload inputs: the failure panel's, the slow-boot notice's
+    // (#2028) and the toolbar ⋯ menu's. One handler serves all three
+    // (section 3 below).
+    const uploadFiles = ['nb-upload-file', 'nb-slow-upload-file', 'nb-menu-upload-file']
         .map(function (id) { return document.getElementById(id); })
         .filter(Boolean);
     // Course-staff authoring control; absent for students (see NotebookBody).
@@ -1296,6 +1297,9 @@
         }
         return false;
     }
+    // The toolbar (notebook-toolbar.js) drives the editor through the same
+    // bridge-first channel.
+    window.chickadeeEditorCommand = executeEditorCommand;
 
     // Exposed for idle-logout.js: flush the open notebook to JupyterLite's
     // storage before the inactivity watchdog signs the user out, so unsaved

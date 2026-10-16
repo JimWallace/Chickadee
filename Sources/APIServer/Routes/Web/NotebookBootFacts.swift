@@ -20,6 +20,16 @@ enum NotebookBootFacts {
         return language.displayName
     }
 
+    /// The patterns the editor extension reads defined names with, from the
+    /// declared language (`LanguageDescriptor.definitionLinePatterns`). Empty
+    /// when the assignment declares no language with a notebook.
+    static func definitionPatterns(manifestJSON: String) -> [String] {
+        guard let manifest = decodeManifest(fromJSON: manifestJSON),
+            let language = AssignmentLanguage.resolve(manifest: manifest)
+        else { return [] }
+        return language.descriptor.definitionLinePatterns
+    }
+
     /// The viewer's stored bird with the curious face, at the hero size (96px).
     /// Nil when they have no bird yet, which only staff can reach: a student's
     /// bird is drawn before a page renders. `isStaff` draws the staff ring.

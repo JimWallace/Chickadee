@@ -69,7 +69,7 @@ jobs:
         uses: ./.github/actions/changed-paths
         with:
           label: editor smoke
-          pattern: '^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/[a-z0-9]+-(grading|eval)-|Public/grading-shared\.js|Public/eval-protocol-shared\.js|Public/xeus-kernel-shared\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/jupyterlite/|Public/vendor/|Sources/APIServer/Views/Pages/WorkbenchPage\.swift|Sources/APIServer/Views/Pages/NotebookPage\.swift|Sources/APIServer/Views/NotebookBody\.swift|Sources/APIServer/Views/BaseLayout\.swift|Sources/APIServer/Views/AssignmentEditBody\.swift|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/changed-paths/|\.github/actions/(browser-probe-setup|build-probe-server)/)'
+          pattern: '^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/[a-z0-9]+-(grading|eval)-|Public/grading-shared\.js|Public/eval-protocol-shared\.js|Public/xeus-kernel-shared\.js|Public/freeze-watchdog-worker\.js|Public/workbench\.js|Public/jupyterlite/|Public/vendor/|Sources/APIServer/Views/Pages/WorkbenchPage\.swift|Sources/APIServer/Views/Pages/NotebookPage\.swift|Sources/APIServer/Views/NotebookBody\.swift|Sources/APIServer/Views/Notebook(Toolbar|BootPanel)\.swift|Sources/APIServer/Views/BaseLayout\.swift|Sources/APIServer/Views/AssignmentEditBody\.swift|Sources/APIServer/Routes/Web/InstructorWorkbenchRoutes\.swift|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/browser-probes\.yml|\.github/actions/changed-paths/|\.github/actions/(browser-probe-setup|build-probe-server)/)'
       - id: exec
         uses: ./.github/actions/changed-paths
         with:
@@ -349,6 +349,28 @@ jobs:
           fi
           echo "::warning::FLAKE RETRY: webkit workbench e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
           SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=workbench-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
+      # The Chickadee JupyterLite extension and the page's one toolbar (notebook
+      # views NB2): the extension loads and reports the kernel, the theme follows
+      # the page, the editor's own chrome is hidden, and every toolbar button
+      # drives the editor. The boot diagnostics must still see the kernel, so a
+      # settings override that removes the execution indicator fails here.
+      - name: Run notebook toolbar e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-toolbar-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          else
+            rc=$?
+          fi
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit notebook toolbar e2e failed (rc=${rc}) — same flake class as the notebook-page e2e. Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-toolbar-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
   # Always-running required status. Green when the smoke passed OR was skipped
   # (no editor-relevant changes), red only when the smoke actually failed — so

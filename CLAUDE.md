@@ -615,6 +615,7 @@ One line per document. Each document holds its own rules and evidence.
 - `docs/adding-a-xeus-kernel.md` — the runbook for a new language: both halves, the compiler-invisible list, the parity checklist, the per-language postmortems
 - `docs/kernel-boot-cost.md` — what a kernel boot costs, and on-demand package loading
 - `docs/jupyterlite.md` — the vendored editor and kernels: environments, import checks, re-vendoring, patches, stdin transports
+- `docs/notebook-editor-extension.md` — the Chickadee JupyterLite extension: theme, hidden chrome, bridge commands, page events, build and vendor
 - `docs/authoring-editors.md` — the suite editor, the notebook write-back, the language seed and server-side auto-compute
 - `docs/notebook-guide.md` — tests anchored to notebook cells by name, and the student guide the editor reads
 - `docs/testing-conventions.md` — the test rules in full, with the reason for each
