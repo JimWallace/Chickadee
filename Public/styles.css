@@ -1377,6 +1377,111 @@ body:has(.notebook-header .nb-title-block) .nav {
     padding-block: .4rem;
 }
 
+/* The student's task outline beside the editor (NB4, frame 18a), drawn by
+   notebook-guide.js: the attempt card, then one row per task with a glyph,
+   its name and its points. Status shows as a glyph and the editor's words,
+   never colour alone. Below 1100px the same nodes are a row of chips under the
+   toolbar, each at least 44px tall. */
+.nb-workspace {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+.nb-workspace > .nb-stage { flex: 1; min-width: 0; }
+.nb-outline {
+    flex: 0 0 232px;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    font-size: var(--text-base);
+}
+.outline-attempt {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    padding: .75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+}
+.outline-caption {
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+.outline-figure { font-size: var(--text-2xl); font-weight: 700; }
+.outline-meta { font-size: var(--text-sm); color: var(--text-secondary); }
+.outline-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.outline-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .5rem .75rem;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.outline-row:hover,
+.outline-row:focus-visible { background: var(--gray-100); }
+.outline-row[aria-current] { background: var(--open-bg); color: var(--open-fg); }
+.outline-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outline-glyph {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    background: var(--gray-100);
+    color: var(--text-secondary);
+}
+.outline-row[data-status="pass"] .outline-glyph { background: var(--open-bg); color: var(--open-fg); }
+.outline-row[data-status="fail"] .outline-glyph { background: var(--danger-bg); color: var(--danger-fg); }
+.outline-row[data-status="starter"] .outline-glyph { background: var(--preview-bg); color: var(--preview-fg); }
+.outline-short { display: none; }
+@media (max-width: 1100px) {
+    .notebook-toolbar { flex-wrap: wrap; }
+    .nb-workspace { flex-direction: column; align-items: stretch; }
+    .nb-outline {
+        flex: none;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .5rem;
+    }
+    .outline-wide { display: none; }
+    .outline-short { display: inline; }
+    .outline-attempt { padding: .5rem 1rem; min-height: 44px; justify-content: center; }
+    .outline-tasks { flex-direction: row; flex-wrap: wrap; gap: .5rem; }
+    .outline-row {
+        width: auto;
+        min-height: 44px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        background: var(--surface);
+    }
+}
+@media (max-width: 640px) {
+    .nb-outline { display: none; }
+}
+
 /* The editor stage: the loading panel over the iframe. A flex column, so the
    iframe still shrinks to the workbench pane as it did when it was the pane's
    own flex item. */

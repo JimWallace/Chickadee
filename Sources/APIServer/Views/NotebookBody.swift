@@ -164,9 +164,15 @@ struct NotebookBody: HTML {
         fallbackPanel
         // The loading panel sits over the iframe while the editor starts. The
         // iframe loads underneath it, and nothing about the mount changes.
-        div(.class("nb-stage")) {
-            NotebookBootPanel(kernelLanguage: kernelLanguage, bird: bootBird)
-            editorFrame
+        // A student's editor has the task outline beside it (NB4, frame 18a);
+        // notebook-guide.js fills it from the guide.
+        if showsGuide {
+            div(.class("nb-workspace")) {
+                nav(.id("nb-outline"), .class("nb-outline"), .ariaLabel("Tasks"), .hidden) {}
+                stage
+            }
+        } else {
+            stage
         }
         div(.id("nb-results"), .class("nb-results"), .hidden) {}
         div(
@@ -180,6 +186,17 @@ struct NotebookBody: HTML {
             .src(asset("/browser-runner.js")), .data("setup-id", value: testSetupID),
             .data("grading-mode", value: gradingMode)
         ) {}
+    }
+
+    /// The student guide and its outline: a student's own notebook, never the
+    /// workbench, a template or a solution.
+    private var showsGuide: Bool { showSubmit && !embedded }
+
+    private var stage: some HTML {
+        div(.class("nb-stage")) {
+            NotebookBootPanel(kernelLanguage: kernelLanguage, bird: bootBird)
+            editorFrame
+        }
     }
 
     /// The editor iframe. notebook.js boots it after the capability preflight
@@ -201,6 +218,7 @@ struct NotebookBody: HTML {
             .data("working-copy-mtime", value: String(workingCopyMtime)),
             .data("read-only", value: String(isReadOnly)),
             .data("definition-patterns", value: definitionPatternsJSON),
+            .data("guide-url", value: showsGuide ? "/testsetups/\(testSetupID)/notebook-guide.json" : ""),
             .src("about:blank"),
             .custom(name: "loading", value: "eager")
         ) {}
@@ -221,6 +239,7 @@ struct NotebookBody: HTML {
         "/notebook-core.js",
         "/notebook.js",
         "/notebook-toolbar.js",
+        "/notebook-guide.js",
     ]
 
     /// `definitionPatterns` as a JSON array for the data attribute.

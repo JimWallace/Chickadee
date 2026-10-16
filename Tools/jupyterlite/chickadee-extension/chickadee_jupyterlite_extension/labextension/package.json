@@ -25,7 +25,9 @@
   "dependencies": {
     "@jupyterlab/application": "~4.6.4",
     "@jupyterlab/apputils": "~4.7.4",
-    "@jupyterlab/notebook": "~4.6.4"
+    "@jupyterlab/cells": "~4.6.4",
+    "@jupyterlab/notebook": "~4.6.4",
+    "@lumino/widgets": "^2.7.0"
   },
   "devDependencies": {
     "@jupyterlab/builder": "~4.5.11",
@@ -35,7 +37,7 @@
     "extension": true,
     "outputDir": "chickadee_jupyterlite_extension/labextension",
     "_build": {
-      "load": "static/remoteEntry.0f8eeeb2f240ae8c4f93.js",
+      "load": "static/remoteEntry.aab5d26ed127e83dd987.js",
       "extension": "./extension",
       "style": "./style"
     }

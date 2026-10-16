@@ -2,8 +2,8 @@
 
 This document describes how Chickadee links each test to the notebook cell that
 it checks, and the student guide that the notebook editor reads. It is part of
-the notebook views work (NB3). The editor headers and checks lines (NB4) and the
-instructor margin cards (NB7) use these two parts.
+the notebook views work (NB3). The editor headers and checks lines (NB4, "In
+the editor" below) and the instructor margin cards (NB7) use these two parts.
 
 ## Anchors
 
@@ -78,6 +78,63 @@ These rules keep the guide safe:
 - `hint` is the hint of the check. The guide sends it only for a failure.
 - The guide reads the solution on the server to resolve rule 4. No part of the
   solution goes into the response.
+- With no solution notebook yet, the starter of the student gives the anchors.
+  The starter has the same headings and, usually, the same function stubs.
+
+## In the editor
+
+The notebook page (NB4, design frame 18a) shows the guide in two places.
+
+**The outline** (`Public/notebook-guide.js`) is beside the editor. It shows the
+attempt card and one row for each task: a glyph, the name and the points. A row
+click reveals the task in the editor (`chickadee:reveal`). The row of the task
+under the cursor has `aria-current`. Below 1100px the outline is a row of chips
+under the toolbar. Below 640px it is hidden. Only a student who can submit sees
+it, and not in the embedded workbench.
+
+**The editor** (`chickadee-extension/src/guide.ts` and `guideView.ts`) draws
+two rows for each task:
+
+- A **task header** above the `## ` heading of the task, in the header widget
+  of that cell. It has the status glyph, the label, the points and a pill. With
+  no heading, the header goes above the first anchored cell.
+- A **checks line** under the last anchored code cell, in the footer widget of
+  that cell. It has "Checked in attempt N" (or "Checked when you submit"), a
+  chip for each public check, and the count of hidden tests. Each failure shows
+  its detail and the hint of the instructor, two at most.
+
+The pill gives the status:
+
+| Status | Pill |
+|---|---|
+| `pass` | "Passed in attempt N" |
+| `fail` | "K checks failed in attempt N" |
+| `starter` | "Still the starter code". Every anchor cell is the same as `starterSources`. |
+| `fresh` | "Not submitted yet" |
+| `null` | "Attempt N is being graded" while grading, else no pill |
+
+"· edited since" follows a pass or a fail when an anchor cell changed after the
+attempt. The editor keeps the sources of the attempt in `localStorage`, from the
+first time that the browser sees the attempt. An edit made before that first view, or in
+another browser, does not show as "edited since".
+
+A cell whose anchored name is gone (a renamed function) shows "Can't find
+`name` in your notebook" in its checks line.
+
+Rules that keep the editor fast and safe:
+
+- JupyterLab gives an empty cell header and footer zero height. The view adds
+  `ck-guide-host` to a header or footer that it draws into, and the stylesheet
+  gives that node its own height.
+- The view reads no layout. It redraws at most once for each animation frame,
+  and 500ms after the last edit. A redraw whose cells did not change touches no
+  node, so a run, which changes only outputs, redraws nothing.
+- The view never changes a cell, its metadata or its outputs. Every string from
+  the guide goes in through `textContent`.
+- Without the extension, the outline still shows the statuses of the server.
+
+`Tools/editor-smoke-test/notebook-guide-check.mjs` checks all of this in a real
+browser. CI runs it in `browser-probes.yml`.
 
 ## What NB3 found
 

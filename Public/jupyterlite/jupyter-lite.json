@@ -14,7 +14,7 @@
     "federated_extensions": [
       {
         "extension": "./extension",
-        "load": "static/remoteEntry.0f8eeeb2f240ae8c4f93.js",
+        "load": "static/remoteEntry.aab5d26ed127e83dd987.js",
         "name": "@chickadee/jupyterlite-extension",
         "style": "./style"
       },

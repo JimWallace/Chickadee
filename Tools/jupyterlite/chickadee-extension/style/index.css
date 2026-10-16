@@ -166,3 +166,132 @@ body[data-ck-theme] .ck-placeholder {
 body[data-ck-theme] .ck-placeholder.ck-hot { box-shadow: 0 0 0 2px var(--ck-placeholder-hot); }
 /* The solution line that a selected failing test trips on (NB7). */
 body[data-ck-theme] .ck-fail-line { background: var(--ck-fail-line); }
+
+/* The student guide on the notebook (NB4, frame 18a): a task header above
+   each task and a checks line under its code. Drawn into the cells' own
+   header and footer, so the notebook itself is unchanged. Status is never
+   colour alone: a glyph and words are always beside it.
+   The page's tokens do not reach this document, so these values mirror them
+   by value: pass is --open-fg/--open-bg, fail is --danger-fg/--danger-bg and
+   starter is --preview-fg/--preview-bg (Public/styles.css). Change both
+   together. The pill is this document's counterpart of the page's .tier. */
+body[data-ck-theme="light"] {
+  --ck-pass-fg: #005963;
+  --ck-pass-bg: #DCF3F6;
+  --ck-fail-fg: #B42318;
+  --ck-fail-bg: #FEF2F2;
+  --ck-fail-border: #FECACA;
+  --ck-starter-fg: #7A5000;
+  --ck-starter-bg: #FEF3C7;
+  --ck-muted: #6B7280;
+  --ck-chip-border: #E5E7EB;
+}
+body[data-ck-theme="dark"] {
+  --ck-pass-fg: #67E8F9;
+  --ck-pass-bg: #072D35;
+  --ck-fail-fg: #F87171;
+  --ck-fail-bg: #3B1217;
+  --ck-fail-border: #7F1D1D;
+  --ck-starter-fg: #FED34C;
+  --ck-starter-bg: #3D2800;
+  --ck-muted: #9CA3AF;
+  --ck-chip-border: #374151;
+}
+/* JupyterLab gives an empty cell header and footer a zero height. */
+body[data-ck-theme] .ck-guide-host {
+  height: auto;
+}
+
+body[data-ck-theme] .ck-task-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.9rem 0 0.35rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--jp-border-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: 0.8rem;
+  color: var(--ck-muted);
+}
+body[data-ck-theme] .ck-task-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--jp-ui-font-color1);
+}
+body[data-ck-theme] .ck-spacer { flex: 1; }
+body[data-ck-theme] .ck-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--jp-layout-color3);
+  color: var(--ck-muted);
+}
+body[data-ck-theme] .ck-pill {
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--jp-layout-color3);
+  color: var(--ck-muted);
+}
+body[data-ck-theme] [data-status="pass"] > .ck-glyph,
+body[data-ck-theme] [data-status="written"] > .ck-glyph,
+body[data-ck-theme] [data-status="pass"] > .ck-pill { background: var(--ck-pass-bg); color: var(--ck-pass-fg); }
+body[data-ck-theme] [data-status="fail"] > .ck-glyph,
+body[data-ck-theme] [data-status="fail"] > .ck-pill { background: var(--ck-fail-bg); color: var(--ck-fail-fg); }
+body[data-ck-theme] [data-status="starter"] > .ck-glyph,
+body[data-ck-theme] [data-status="starter"] > .ck-pill { background: var(--ck-starter-bg); color: var(--ck-starter-fg); }
+
+body[data-ck-theme] .ck-checks {
+  margin: 0.35rem 0 0.5rem;
+  font-family: var(--jp-ui-font-family);
+  font-size: 0.8rem;
+  color: var(--ck-muted);
+}
+body[data-ck-theme] .ck-checks-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+body[data-ck-theme] .ck-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem 0.1rem 0.25rem;
+  border: 1px solid var(--ck-chip-border);
+  border-radius: 999px;
+  color: var(--jp-ui-font-color1);
+}
+body[data-ck-theme] .ck-chip[data-result="pass"] > .ck-glyph { background: var(--ck-pass-bg); color: var(--ck-pass-fg); }
+body[data-ck-theme] .ck-chip[data-result="fail"] > .ck-glyph,
+body[data-ck-theme] .ck-chip[data-result="error"] > .ck-glyph,
+body[data-ck-theme] .ck-chip[data-result="timeout"] > .ck-glyph { background: var(--ck-fail-bg); color: var(--ck-fail-fg); }
+body[data-ck-theme] .ck-chip-hidden { padding-left: 0.5rem; color: var(--ck-muted); }
+body[data-ck-theme] .ck-mono,
+body[data-ck-theme] .ck-checks code,
+body[data-ck-theme] .ck-failure-detail { font-family: var(--jp-code-font-family); font-size: 0.78rem; }
+body[data-ck-theme] .ck-failure {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--ck-fail-border);
+  border-radius: 0.45rem;
+  background: var(--ck-fail-bg);
+  color: var(--jp-ui-font-color1);
+}
+body[data-ck-theme] .ck-failure-title code { color: var(--ck-fail-fg); font-weight: 700; }
+body[data-ck-theme] .ck-failure-detail {
+  margin: 0.3rem 0;
+  white-space: pre-wrap;
+  color: var(--ck-fail-fg);
+  background: transparent;
+}
+body[data-ck-theme] .ck-more { margin-top: 0.4rem; }
+body[data-ck-theme] .ck-more a { color: var(--jp-content-link-color); }
+body[data-ck-theme] .ck-missing { color: var(--ck-starter-fg); }
