@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.691] - 2026-10-16
+
+### Added
+
+- **A course bundle keeps the concept tag.** Export and import carry an assignment's lab concept, so its concept ring survives a bundle move. A concept the importing instance does not know imports as no concept.
+
+
 ## [0.5.690] - 2026-10-16
 
 ### Added
