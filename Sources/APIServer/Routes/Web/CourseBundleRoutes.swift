@@ -346,7 +346,8 @@ struct CourseBundleRoutes: RouteCollection {
                 solutionVisibility: a.solutionVisibility,
                 brightspaceSyncExcluded: a.brightspaceSyncExcluded,
                 deadlineOverrideActive: a.deadlineOverrideActive,
-                requirement: data.requirementByAssignmentID[aid]
+                requirement: data.requirementByAssignmentID[aid],
+                concept: a.concept?.rawValue
             )
         }
 

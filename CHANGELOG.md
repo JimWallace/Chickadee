@@ -9,6 +9,27 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.692] - 2026-10-16
+
+### Added
+
+- **A Chickadee extension for the notebook editor, and one toolbar.** The editor has a "Chickadee" theme in light and dark that follows the page, and the menu bar, top area and notebook toolbar of the editor are hidden. The page toolbar has the title and due date, the save state, Run, Run all, + Code, + Text, the kernel chip, a ⋯ menu (Download, Upload .ipynb, Restart kernel, Clear outputs, Help, Reset to starter) and Submit. The extension reports the kernel, the active cell and each run to the page. See `docs/notebook-editor-extension.md`.
+
+
+## [0.5.691] - 2026-10-16
+
+### Added
+
+- **A course bundle keeps the concept tag.** Export and import carry an assignment's lab concept, so its concept ring survives a bundle move. A concept the importing instance does not know imports as no concept.
+
+
+## [0.5.690] - 2026-10-16
+
+### Added
+
+- **Tests anchored to notebook cells, and the student guide.** Each suite item now resolves to the notebook cell that it checks, by the name that the cell defines: a pinned name, the name of a notebook check, the function of a pattern family, the names that a script uses, or the section heading. `GET /testsetups/:id/notebook-guide.json` gives the student a guide for each task, with public results only, the anchors and the personalized starter source of each anchor. The notebook editor uses it in a later change. See `docs/notebook-guide.md`.
+
+
 ## [0.5.689] - 2026-10-16
 
 ### Added

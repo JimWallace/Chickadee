@@ -98,8 +98,6 @@ struct NotebookToolbar<Status: HTML>: HTML {
                 .type(.button), .class("row-menu-item"), .role("menuitem"),
                 .data("nb-commands", value: "notebook:restart-kernel")
             ) { "Restart kernel" }
-        }
-        if !notebook.isReadOnly {
             button(
                 .type(.button), .class("row-menu-item"), .role("menuitem"),
                 .data("nb-commands", value: "notebook:clear-all-cell-outputs")
