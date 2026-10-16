@@ -11,7 +11,8 @@
 //
 // The phases are the `kernel-diag` messages that jl-kernel-diagnostics.js
 // posts from inside the editor iframe. notebook.js forwards the same messages
-// to the diagnostics pipeline; this script only reads them.
+// to the diagnostics pipeline; this script only reads them. The Chickadee
+// extension's `ck:kernel` idle (or busy) also ends the panel.
 //
 // The existing notices win. The failure panel replaces this panel
 // (notebook-preflight.js `showFailure` hides it), and the slow-boot and
@@ -114,7 +115,10 @@
 
         // The kernel is idle: the last step is active while the panel fades.
         var finish = function () {
-            setKernelChip('ready');
+            // Only over "starting": once the extension reports the kernel
+            // (idle, busy), notebook-toolbar.js owns the chip.
+            var chip = document.getElementById('nb-kernel-chip');
+            if (!chip || chip.getAttribute('data-state') === 'starting') setKernelChip('ready');
             var el = panel();
             if (!el || el.hidden || fadeTimer) return;
             render(el, 'kernel_idle');
@@ -130,7 +134,14 @@
             try {
                 if (!e || e.origin !== window.location.origin) return;
                 var d = e.data;
-                if (!d || d.ck !== 'kernel-diag') return;
+                if (!d) return;
+                // The Chickadee extension reports the kernel directly. Idle or
+                // busy means it is up, whatever the diagnostics have seen.
+                if (d.ck === 'ck:kernel' && (d.status === 'idle' || d.status === 'busy')) {
+                    finish();
+                    return;
+                }
+                if (d.ck !== 'kernel-diag') return;
                 if (d.kind === 'kernel_error' && d.source === 'boot_stalled') {
                     dismiss();
                     return;

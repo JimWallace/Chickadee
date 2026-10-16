@@ -1,0 +1,20 @@
+# The Python wrapper that lets `jupyter lite build` find the extension, the
+# same way it finds jupyter-iframe-commands: pip installs the prebuilt
+# labextension into share/jupyter/labextensions. The labextension is built by
+# `jlpm build` and committed, so installing needs no Node.js.
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chickadee-jupyterlite-extension"
+version = "0.1.0"
+description = "Chickadee's JupyterLite extension: the editor theme, the bridge commands and the page events."
+license = { text = "MIT" }
+requires-python = ">=3.9"
+
+[tool.hatch.build.targets.wheel]
+packages = ["chickadee_jupyterlite_extension"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"chickadee_jupyterlite_extension/labextension" = "share/jupyter/labextensions/@chickadee/jupyterlite-extension"

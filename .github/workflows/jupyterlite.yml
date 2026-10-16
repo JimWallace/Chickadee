@@ -62,6 +62,9 @@ jobs:
         # polyfill worker in its blob: form.
         run: scripts/verify-jupyterlite.sh Public/jupyterlite
 
+      - name: The bundle carries the built Chickadee extension and its overrides
+        run: scripts/vendor-chickadee-extension.sh --check
+
       # The FIPPA property — the editor kernel boots with ZERO external fetches —
       # used to be checked by scripts/check-kernel-deps-vendored.py, which scanned
       # the Pyodide kernel wheels' startup imports against the vended pyodide-lock

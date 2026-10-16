@@ -11,6 +11,7 @@
 
 import Core
 import Elementary
+import Foundation
 
 struct NotebookBody: HTML {
     let testSetupID: String
@@ -41,6 +42,17 @@ struct NotebookBody: HTML {
     var kernelLanguage: String?
     /// The viewer's bird for the loading panel, or nil for no bird.
     var bootBird: AvatarPresentation?
+    /// The assignment title and its due date for the toolbar, shown only
+    /// when this body is the page.
+    var assignmentTitle: String?
+    var dueLabel: String?
+    /// The CSRF token for the ⋯ menu's "Reset to starter" form. Nil leaves
+    /// the item out.
+    var csrfToken: String?
+    /// The patterns the editor extension reads defined names with
+    /// (`LanguageDescriptor.definitionLinePatterns`), passed to it by
+    /// notebook-toolbar.js.
+    var definitionPatterns: [String] = []
 
     var body: some HTML {
         // The `.main` override only when this body is the page.
@@ -87,57 +99,13 @@ struct NotebookBody: HTML {
             """
         )
         div(.class("notebook-header")) {
-            div(.class("notebook-toolbar")) {
-                span(
+            NotebookToolbar(
+                notebook: self,
+                status: span(
                     .class("nb-status"), .id("nb-status"), .role("status"),
                     .custom(name: "aria-live", value: "polite"), .custom(name: "aria-atomic", value: "true"),
                     .tabindex(-1)
-                ) {}
-                div(.class("notebook-actions")) {
-                    // The " " after each control keeps the spaces between
-                    // them.
-                    kernelChip
-                    " "
-                    headerNotice
-                    " "
-                    if let viewToggleURL, !embedded {
-                        // Suppressed in a workbench pane: the workbench has its
-                        // own template/values control, and `viewToggleURL`
-                        // carries no `embedded=1`.
-                        a(.class("btn"), .href(viewToggleURL)) {
-                            isTemplateView ? "View with values" : "Edit the template"
-                        }
-                        " "
-                    }
-                    if canSaveToAssignment {
-                        // Present but hidden in a workbench pane: the
-                        // workbench's single Save calls the function
-                        // notebook.js binds here.
-                        button(
-                            .class("btn btn-primary"), .type(.button), .id("nb-save-assignment")
-                        ) {
-                            fileKind == "solution" ? "Save solution" : "Save to assignment"
-                        }
-                        .attributes(.hidden, when: embedded)
-                        .attributes(
-                            .data("file-kind", value: fileKind),
-                            .data("view-mode", value: isTemplateView ? "template" : "personalized"),
-                            .title("Write what is in this editor back to the assignment for every student")
-                        )
-                        " "
-                    }
-                    if let solutionViewURL {
-                        a(.class("btn"), .href(solutionViewURL)) { "View solution" }
-                        " "
-                    }
-                    if let downloadURL, !embedded {
-                        // Suppressed in a workbench pane: the left pane's Files
-                        // table already links the file.
-                        a(.class("btn"), .href(downloadURL), HTMLAttribute(name: "download", value: nil)) { "Download" }
-                        " "
-                    }
-                }
-            }
+                ) {})
         }
         // The three dismissible notices below are revealed by
         // notebook-preflight.js. They do not block: the editor still loads
@@ -232,6 +200,7 @@ struct NotebookBody: HTML {
             .data("editor-url", value: jupyterLiteEditorURL),
             .data("working-copy-mtime", value: String(workingCopyMtime)),
             .data("read-only", value: String(isReadOnly)),
+            .data("definition-patterns", value: definitionPatternsJSON),
             .src("about:blank"),
             .custom(name: "loading", value: "eager")
         ) {}
@@ -251,47 +220,17 @@ struct NotebookBody: HTML {
         "/grading-executors.js",
         "/notebook-core.js",
         "/notebook.js",
+        "/notebook-toolbar.js",
     ]
+
+    /// `definitionPatterns` as a JSON array for the data attribute.
+    private var definitionPatternsJSON: String {
+        guard let data = try? JSONEncoder().encode(definitionPatterns) else { return "[]" }
+        return String(bytes: data, encoding: .utf8) ?? "[]"
+    }
 
     private func asset(_ path: String) -> String {
         "\(path)?v=\(appVersion)"
-    }
-
-    /// The kernel's state: amber while it starts, teal when it is ready.
-    /// notebook-boot.js writes the state.
-    private var kernelChip: some HTML {
-        span(.id("nb-kernel-chip"), .class("kernel-chip"), .data("state", value: "starting")) {
-            "\(kernelLanguage ?? "Kernel") · "
-            span(.class("js-nb-kernel-state")) { "starting" }
-        }
-    }
-
-    /// The toolbar's one status notice, or Submit.
-    @HTMLBuilder private var headerNotice: some HTML {
-        if isStudentSolutionView {
-            span(.class("nb-closed-notice")) {
-                "Reference solution"
-                if isReadOnly {
-                    " — view only."
-                }
-            }
-        } else if isTemplateView {
-            span(.class("nb-closed-notice")) { "Editing the template — placeholders stand as written." }
-        } else if showSubmit {
-            if aiFeedbackNotice {
-                span(.class("nb-closed-notice")) {
-                    helpLink(
-                        "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md#information-for-students",
-                        "AI-assisted feedback is on ")
-                }
-                " "
-            }
-            button(.class("btn btn-primary"), .type(.button), .id("nb-submit")) { "Submit" }
-        } else if isReadOnly {
-            span(.class("nb-closed-notice")) { "This assignment is closed — view only." }
-        } else if isClosed {
-            span(.class("nb-closed-notice")) { "This assignment is closed to students — editable as course staff." }
-        }
     }
 
     /// The failure panel, shown only when the editor failed: notebook-preflight.js
@@ -347,7 +286,7 @@ struct NotebookBody: HTML {
 extension NotebookBody {
     /// The body for a `NotebookContext`, the values the route and the
     /// workbench build.
-    init(_ context: NotebookContext, appVersion: String) {
+    init(_ context: NotebookContext, appVersion: String, csrfToken: String? = nil) {
         self.init(
             testSetupID: context.testSetupID,
             notebookURL: context.notebookURL,
@@ -369,7 +308,11 @@ extension NotebookBody {
             aiFeedbackNotice: context.aiFeedbackNotice,
             appVersion: appVersion,
             kernelLanguage: context.kernelLanguage,
-            bootBird: context.bootBird
+            bootBird: context.bootBird,
+            assignmentTitle: context.assignmentTitle,
+            dueLabel: context.dueLabel,
+            csrfToken: csrfToken,
+            definitionPatterns: context.definitionPatterns
         )
     }
 }

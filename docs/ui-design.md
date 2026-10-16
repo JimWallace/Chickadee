@@ -148,7 +148,9 @@ and `LeaderboardPresentPage` owns the viewport through
 its own `PresentLayout`, not the `fullBleed` flag.  The shim's body view is
 the page's whole content: `NotebookPage` is `BaseLayout` around `NotebookBody`,
 and the workbench renders `AssignmentEditBody` and `NotebookBody` in its two
-panes.
+panes.  On a page that holds the notebook toolbar (`.nb-title-block`), the
+site header is a compact 44px bar, so that the editor gets the height.  This is
+the one page-local change to the shared header, and it keeps every link.
 
 `Tests/APITests/PageArchetypeTests.swift` reads this table —
 so the exemplar column and the guard cannot drift apart — and re-checks each
@@ -738,11 +740,21 @@ duplicate.
   `.standin-panel`, replaces it, and the slow-boot notice sits above it.  It
   does not reuse `.standin-panel` or `.pending-box`, because it is an
   overlay that has to fill the editor, not a card or a box in the page flow.
+- **`.nb-title-block`**, **`.nb-edit-actions`** — the notebook editor's one
+  toolbar (`NotebookToolbar`, design frame 18a).  The title with the due date
+  as a `.card-meta` under it, and the Run · Run all · + Code · + Text group, a
+  `.toolbar` set off from the kernel chip by a hairline.  The buttons name
+  JupyterLab commands in `data-nb-commands`, which `notebook-toolbar.js` runs
+  through the editor bridge.  The ⋯ is a `RowMenu`.
 - **`.kernel-chip`** — the notebook toolbar's kernel state: the language, a
   dot and the state in words ("Python · starting").  The dot is the
   `.state-select` scan cue, coloured by the same rules: `data-state` makes it
-  amber while the kernel starts and teal when it is ready, and the words always say the state.  It
+  amber while the kernel starts or is busy, teal when it is ready or idle, and
+  the danger colour when it has stopped, and the words always say the state.  It
   is not a `.chip`, because it carries a status colour.
+- **`NewTabLink`** — a link that opens in a new tab: `target="_blank"`, the
+  `i-external` icon and a `.visually-hidden` "(opens in a new tab)".  Write a
+  new one with this view, not by hand.  Older views still write it by hand.
 - **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
   disclosure (the audit log, alert firings).  A log row shows when, who, what
   and how it went; everything else — category, target, remote address,

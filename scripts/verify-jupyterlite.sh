@@ -47,6 +47,20 @@ for name in sorted(names) + sorted(settings):
             "means re-vendoring ~465 MB and restoring its CSP allowances."
         )
 
+# Chickadee's extension draws the theme and answers the page's chickadee:*
+# commands. A build without it loads, but the page's toolbar then drives an
+# editor with its own chrome and no events (notebook views, NB2).
+if "@chickadee/jupyterlite-extension" not in names:
+    fail("@chickadee/jupyterlite-extension is missing from federated_extensions")
+chickadee_static = build_dir / "extensions" / "@chickadee" / "jupyterlite-extension" / "static"
+if not list(chickadee_static.glob("remoteEntry.*.js")):
+    fail(f"missing extension asset: no remoteEntry.*.js under {chickadee_static}")
+overrides = data.get("settingsOverrides", {})
+if overrides.get("@jupyterlab/apputils-extension:themes", {}).get("theme") != "Chickadee":
+    fail("settingsOverrides must make the Chickadee theme the default")
+if overrides.get("@jupyter-notebook/application-extension:top", {}).get("visible") != "no":
+    fail("settingsOverrides must hide the Notebook top area")
+
 # The xeus extension is what actually serves both kernels now.
 xeus_static = build_dir / "extensions" / "@jupyterlite" / "xeus-extension" / "static"
 remote_entries = [

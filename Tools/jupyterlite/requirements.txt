@@ -7,6 +7,11 @@ jupyterlite-core==0.8.6
 # cross-frame poking with a supported API.  Federated into the bundle by
 # `jupyter lite build`; do not add to litePluginSettings (auto-discovered).
 jupyter-iframe-commands==0.3.0
+# Chickadee's own extension (notebook views, NB2): the editor theme, the
+# chickadee:* bridge commands and the ck:* page events. Its labextension is
+# prebuilt and committed, so this install needs no Node.js. Between full
+# rebuilds, scripts/vendor-chickadee-extension.sh puts it into the bundle.
+./Tools/jupyterlite/chickadee-extension
 # BOTH editor kernels — xpython (xeus-python) and xr (xeus-r) — are built from
 # emscripten-forge, one env each: Tools/jupyterlite/environment-python.yml and
 # environment-r.yml.  The build needs micromamba on PATH and network to

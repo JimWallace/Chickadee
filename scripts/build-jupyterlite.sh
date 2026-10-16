@@ -41,6 +41,9 @@ else
 fi
 trap 'rm -rf "$TMP_LITE_DIR" "$TEMP_BUILD_DIR"' EXIT
 cp "$LITE_SRC_DIR/jupyter-lite.json" "$TMP_LITE_DIR/jupyter-lite.json"
+# The settings overrides (theme, the hidden Notebook 7 chrome) for the
+# Chickadee extension; `jupyter lite build` writes them into jupyter-lite.json.
+cp "$LITE_SRC_DIR/overrides.json" "$TMP_LITE_DIR/overrides.json"
 
 BUILD_ARGS=(--lite-dir "$TMP_LITE_DIR" --output-dir "$TEMP_BUILD_DIR")
 if [[ -n "$SOURCE_DATE_EPOCH" ]]; then

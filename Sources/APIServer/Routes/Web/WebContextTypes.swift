@@ -356,6 +356,10 @@ struct NotebookContext: Encodable {
     /// The viewer's own bird for the loading panel, with the curious face, or
     /// nil when they have no bird.
     let bootBird: AvatarPresentation?
+    /// The due date for the toolbar, formatted for display, or nil.
+    var dueLabel: String?
+    /// The patterns the editor extension reads defined names with.
+    var definitionPatterns: [String] = []
 }
 
 // MARK: - Submission history page

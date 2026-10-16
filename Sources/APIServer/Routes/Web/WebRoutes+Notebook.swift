@@ -276,7 +276,9 @@ extension WebRoutes {
                 currentUser: req.currentUserContext,
                 embedded: args.embedded,
                 kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
-                bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff)
+                bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff),
+                dueLabel: args.assignment?.dueAt.map { waterlooDateTimeFormatter().string(from: $0) },
+                definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
             ))
     }
 
@@ -296,7 +298,8 @@ extension WebRoutes {
     private func notebookPageResponse(req: Request, context: NotebookContext) -> HTMLResponse<NotebookPage> {
         let page = PageRequestContext(request: req)
         return HTMLResponse {
-            NotebookPage(page: page, notebook: NotebookBody(context, appVersion: page.appVersion))
+            NotebookPage(
+                page: page, notebook: NotebookBody(context, appVersion: page.appVersion, csrfToken: page.csrfToken))
         }
     }
 
@@ -417,7 +420,9 @@ extension WebRoutes {
             embedded: args.embedded,
             aiFeedbackNotice: aiFeedbackNotice,
             kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
-            bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff)
+            bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isStaff),
+            dueLabel: args.assignment?.dueAt.map { waterlooDateTimeFormatter().string(from: $0) },
+            definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest)
         )
     }
 
