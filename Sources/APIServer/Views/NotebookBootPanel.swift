@@ -1,10 +1,11 @@
 // APIServer/Views/NotebookBootPanel.swift
 //
 // The panel over the notebook editor while it starts (design frame 18e): the
-// viewer's bird pecking at seeds, three steps, and one line on how long it
-// takes. `NotebookBody` renders it over `#jl-frame`. `Public/notebook-boot.js`
-// moves it through the steps from the kernel phases that
-// `jl-kernel-diagnostics.js` posts, and fades it out when the kernel is idle.
+// viewer's bird pecking at seeds, three steps, and one line on why a later
+// visit is faster. `NotebookBody` renders it over `#jl-frame`.
+// `Public/notebook-boot.js` moves it through the steps from the kernel phases
+// that `jl-kernel-diagnostics.js` posts, and fades it out when the kernel is
+// idle.
 // The failure panel replaces it (`notebook-preflight.js`).
 //
 // The ids, the `data-boot-step` names and the `js-` class are read by
@@ -49,8 +50,7 @@ struct NotebookBootPanel: HTML {
             }
             div(.class("nb-boot-bar"), .ariaHidden) {}
             p(.class("nb-boot-note")) {
-                "This usually takes about 10 seconds. Next time is faster, "
-                    + "because your browser keeps the download."
+                "Later visits start faster, because your browser keeps the download."
             }
             p(.class("visually-hidden js-nb-boot-live"), .custom(name: "aria-live", value: "polite")) {}
         }

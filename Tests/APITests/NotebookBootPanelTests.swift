@@ -85,7 +85,7 @@ import Testing
         #expect(html.contains("<li data-boot-step=\"editor\" data-state=\"active\">Load the editor</li>"))
         #expect(html.contains("<li data-boot-step=\"kernel\" data-state=\"pending\">Download and start Python</li>"))
         #expect(html.contains("<li data-boot-step=\"notebook\" data-state=\"pending\">Open your notebook</li>"))
-        #expect(html.contains("Next time is faster, because your browser keeps the download."))
+        #expect(html.contains("Later visits start faster, because your browser keeps the download."))
         #expect(html.contains("aria-live=\"polite\""))
         #expect(!html.contains("nb-boot-bird"))
     }
