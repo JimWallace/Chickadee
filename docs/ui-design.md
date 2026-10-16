@@ -346,6 +346,9 @@ duplicate.
   The name resolves display name → preferred name → username, and the username
   line is omitted when it would merely repeat the name.
 - **`.avatar`** and the `.av-*` part classes — the generated student bird.
+  The browser tab icon also reads the `.av-*` rules and the light `:root`
+  palette, at boot. A missing rule or token stops the server
+  (docs/student-avatars.md, "The tab icon").
   One `<svg>` carrying the size class wraps seven `<use>` elements naming
   symbols in `Resources/Sprites/avatar-sprite.svg`: backdrop, then — inside one group that
   carries the tilt transform — tuft, plumage, wing, expression, accessory, and
@@ -754,7 +757,9 @@ duplicate.
   is not a `.chip`, because it carries a status colour.
 - **`NewTabLink`** — a link that opens in a new tab: `target="_blank"`, the
   `i-external` icon and a `.visually-hidden` "(opens in a new tab)".  Write a
-  new one with this view, not by hand.  Older views still write it by hand.
+  new one with this view, not by hand.  One exception remains:
+  `NotebookBody.helpLink` writes the anchor by hand, because
+  `notebook-slow-notice.test.mjs` reads its body.
 - **`.nb-workspace`**, **`.nb-outline`** — the student's task outline beside
   the editor (design frame 18a), drawn by `notebook-guide.js` from the guide
   payload (`docs/notebook-guide.md`).  `.nb-workspace` puts the outline and the

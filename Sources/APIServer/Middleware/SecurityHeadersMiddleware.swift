@@ -102,6 +102,13 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         typealias Value = String
     }
 
+    /// Per-request `Content-Security-Policy` replacement.  Lets a handler serve
+    /// a document that is not a page with a stricter policy of its own (the
+    /// avatar tab icon, an SVG that needs nothing but its inline style).
+    private struct ContentSecurityPolicyKey: StorageKey {
+        typealias Value = String
+    }
+
     /// Appends a validated origin (`scheme://host[:port]`) to this response's
     /// `form-action` allow-list.  No-op when `origin` is nil.
     static func allowFormAction(_ origin: String?, on request: Request) {
@@ -124,6 +131,14 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// Overrides the `Cross-Origin-Opener-Policy` header for this one response.
     static func setOpenerPolicy(_ value: String, on request: Request) {
         request.storage[OpenerPolicyKey.self] = value
+    }
+
+    /// Replaces the whole `Content-Security-Policy` header for this one
+    /// response.  Use it only for a stricter policy than the page one.  The
+    /// value is used as given: no `frame-ancestors` or `form-action` origins
+    /// are added to it (`X-Frame-Options` is still set).
+    static func setContentSecurityPolicy(_ value: String, on request: Request) {
+        request.storage[ContentSecurityPolicyKey.self] = value
     }
 
     /// CSP for application pages.  Permissive enough to keep JupyterLite and the
@@ -291,10 +306,12 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     ) async throws -> Response {
         let response = try await next.respond(to: request)
         let frameAncestors = request.storage[FrameAncestorsKey.self] ?? []
-        let csp = Self.renderCSP(
-            base: Self.withFrameAncestors(frameAncestors, in: cspDirectives(for: request)),
-            formActionOrigins: formActionExtras(for: request)
-        )
+        let csp =
+            request.storage[ContentSecurityPolicyKey.self]
+            ?? Self.renderCSP(
+                base: Self.withFrameAncestors(frameAncestors, in: cspDirectives(for: request)),
+                formActionOrigins: formActionExtras(for: request)
+            )
         // Never cache authenticated HTML — a logged-out browser must re-ask
         // the server rather than render a stale dashboard from its bf-cache or
         // disk cache. Scoped to text/html so static assets stay cacheable.

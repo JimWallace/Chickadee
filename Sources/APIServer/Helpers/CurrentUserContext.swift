@@ -49,6 +49,10 @@ struct CurrentUserContext: Encodable {
     /// writes. It wears the staff ring when the user is a TA or an instructor
     /// in an enrolled course (docs/student-wardrobe.md, "The staff ring").
     let navAvatar: AvatarPresentation?
+    /// The same bird as the browser tab icon (`AvatarIconKey`), or nil when
+    /// no bird is stored yet. Built from the spec `navAvatar` draws, so the
+    /// tab and the account menu cannot disagree. It never wears the staff ring.
+    let tabIconKey: String?
 
     init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
@@ -87,8 +91,10 @@ struct CurrentUserContext: Encodable {
         // Teaching role only, not the admin rule above: the ring means "staff
         // in a course", as it does on the account page.
         let teaches = enrolledCourses.contains { $0.role >= .ta }
-        self.navAvatar = user.avatarSpecJSON.flatMap(AvatarStore.decode).map {
+        let bird = user.avatarSpecJSON.flatMap(AvatarStore.decode)
+        self.navAvatar = bird.map {
             AvatarPresentation(for: $0, size: .small, accessibility: .decorative, isStaff: teaches)
         }
+        self.tabIconKey = bird.map(AvatarIconKey.encode)
     }
 }

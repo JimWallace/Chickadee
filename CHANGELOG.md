@@ -9,6 +9,31 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.694] - 2026-10-16
+
+### Added
+
+- **Your bird is the tab icon.** When you are signed in, the browser tab shows your own bird, without its ring or tilt. Signed-out pages, Present mode and LMS frames show the house bird. A new public route, `/avatar-icon/:version/:key.svg`, renders each bird from the avatar sprite and the stylesheet, and `/favicon.svg` gives the house bird.
+
+### Changed
+
+- **Smaller fallback icon.** `Public/favicon.ico` (the house bird, 5 KB) replaces `Public/favicon.png` (929 KB).
+
+
+## [0.5.693] - 2026-10-16
+
+### Changed
+
+- **One view for each new-tab link.** Nine views now use `NewTabLink` and do not write the new-tab anchor by hand. Seven of them render the same markup as before. The "Create an assignment" link on the LTI content picker now shows the external icon. It and the "Open on GitHub" button on the admin GitHub page now tell a screen reader that they open in a new tab.
+
+
+## [0.5.692] - 2026-10-16
+
+### Added
+
+- **A Chickadee extension for the notebook editor, and one toolbar.** The editor has a "Chickadee" theme in light and dark that follows the page, and the menu bar, top area and notebook toolbar of the editor are hidden. The page toolbar has the title and due date, the save state, Run, Run all, + Code, + Text, the kernel chip, a ⋯ menu (Download, Upload .ipynb, Restart kernel, Clear outputs, Help, Reset to starter) and Submit. The extension reports the kernel, the active cell and each run to the page. See `docs/notebook-editor-extension.md`.
+
+
 ## [0.5.691] - 2026-10-16
 
 ### Added

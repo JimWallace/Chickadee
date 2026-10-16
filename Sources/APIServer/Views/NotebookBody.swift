@@ -293,6 +293,8 @@ struct NotebookBody: HTML {
     }
 
     /// A link to the docs on GitHub, in a new tab, with the external icon.
+    /// It writes the anchor by hand and does not use `NewTabLink`, because
+    /// `notebook-slow-notice.test.mjs` reads this body.
     private func helpLink(_ url: String, _ text: String) -> some HTML {
         a(.href(url), .target(.blank), .rel("noopener noreferrer")) {
             text

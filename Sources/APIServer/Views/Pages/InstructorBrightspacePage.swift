@@ -252,16 +252,11 @@ private struct InstructorBrightspaceConnection: HTML {
         }
         p(.class("field-note"), .id("bs-connect-note")) {
             "Follow the "
-            a(
-                .href(
-                    "https://github.com/JimWallace/Chickadee/blob/main/docs/brightspace-setup.md#per-instructor-identity"
-                ),
-                .target(.blank), .rel("noopener noreferrer")
-            ) {
-                "LEARN setup guide "
-                Icon("i-external")
-                span(.class("visually-hidden")) { "(opens in a new tab)" }
-            }
+            NewTabLink(
+                href:
+                    "https://github.com/JimWallace/Chickadee/blob/main/docs/brightspace-setup.md#per-instructor-identity",
+                text: "LEARN setup guide "
+            )
             " to get a Valence User ID and User Key for your own account."
         }
     }

@@ -30,14 +30,10 @@ struct AssignmentFeedbackPage: HTML {
             }
             p(.class("page-subtitle")) {
                 "Students see only the feedback you release. "
-                a(
-                    .href("https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md"),
-                    .target(.blank), .rel("noopener noreferrer")
-                ) {
-                    "How it works "
-                    Icon("i-external")
-                    span(.class("visually-hidden")) { "(opens in a new tab)" }
-                }
+                NewTabLink(
+                    href: "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md",
+                    text: "How it works "
+                )
             }
             if !gatesOpen {
                 FlashBanner(.warning) {

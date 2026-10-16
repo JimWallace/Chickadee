@@ -16,14 +16,10 @@ struct ConnectedAgentsPage: HTML {
                 h1(.class("agents-heading")) { "Connected agents" }
                 p(.class("section-intro")) {
                     "AI agents authorized to author course content on \(isAdmin ? "a user's" : "your") behalf over the Model Context Protocol. Revoking stops the agent immediately; any access token it holds lapses within minutes. "
-                    a(
-                        .href("https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md"),
-                        .target(.blank), .rel("noopener noreferrer")
-                    ) {
-                        "What a feedback grant can read "
-                        Icon("i-external")
-                        span(.class("visually-hidden")) { "(opens in a new tab)" }
-                    }
+                    NewTabLink(
+                        href: "https://github.com/JimWallace/Chickadee/blob/main/docs/ai-assisted-feedback.md",
+                        text: "What a feedback grant can read "
+                    )
                 }
                 div(.class("table-scroll")) {
                     table(.class("results-table")) {

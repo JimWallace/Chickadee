@@ -27,9 +27,7 @@ struct LTIDeepLinkPage: HTML {
             if assignments.isEmpty {
                 p(.class("empty")) { "This course has no assignments yet." }
                 p(.class("section-note")) {
-                    a(.href("/instructor/new"), .target(.blank), .rel("noopener noreferrer")) {
-                        "Create an assignment"
-                    }
+                    NewTabLink(href: "/instructor/new", text: "Create an assignment ")
                     ", then open the LMS content picker again."
                 }
             } else {
