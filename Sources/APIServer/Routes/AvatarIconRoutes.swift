@@ -15,14 +15,14 @@ import Vapor
 struct AvatarIconRoutes: RouteCollection {
     /// A failure is a startup error in production (`loadAvatarIconRenderer`);
     /// a test app that serves no stylesheet gets a 500 here instead.
-    let renderer: Result<AvatarIconRenderer, AvatarIconRendererError>
+    let renderer: AvatarIconRendererSource
     let cache: AvatarIconCache
 
     /// The icon document needs nothing but its own inline style.
     static let contentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'"
 
     init(
-        renderer: Result<AvatarIconRenderer, AvatarIconRendererError>, cache: AvatarIconCache = AvatarIconCache()
+        renderer: AvatarIconRendererSource, cache: AvatarIconCache = AvatarIconCache()
     ) {
         self.renderer = renderer
         self.cache = cache
@@ -54,7 +54,7 @@ struct AvatarIconRoutes: RouteCollection {
     private func svg(forKey key: String) throws -> String? {
         if let cached = cache.svg(forKey: key) { return cached }
         guard let spec = AvatarIconKey.decode(key) else { return nil }
-        let svg = try renderer.get().svg(for: spec)
+        let svg = try renderer.renderer().get().svg(for: spec)
         cache.insert(svg, forKey: key)
         return svg
     }
@@ -83,17 +83,31 @@ extension Application {
         _ = try renderer.get()
     }
 
-    /// The renderer `loadAvatarIconRenderer` built, or a new one when it has
-    /// not run (an app built without `configure`, as the tests build one).
-    func avatarIconRenderer() -> Result<AvatarIconRenderer, AvatarIconRendererError> {
-        storage[AvatarIconRendererKey.self] ?? buildAvatarIconRenderer()
+    /// The renderer `loadAvatarIconRenderer` built, or one built on the first
+    /// icon request when it has not run (an app built without `configure`, as
+    /// the tests build one).
+    func avatarIconRenderer() -> AvatarIconRendererSource {
+        if let built = storage[AvatarIconRendererKey.self] {
+            return AvatarIconRendererSource { built }
+        }
+        let sprite = sprite(.avatars)
+        let stylesheetPath = directory.publicDirectory + "styles.css"
+        return AvatarIconRendererSource {
+            Self.buildAvatarIconRenderer(sprite: sprite, stylesheetPath: stylesheetPath)
+        }
     }
 
     private func buildAvatarIconRenderer() -> Result<AvatarIconRenderer, AvatarIconRendererError> {
-        let stylesheetPath = directory.publicDirectory + "styles.css"
+        Self.buildAvatarIconRenderer(
+            sprite: sprite(.avatars), stylesheetPath: directory.publicDirectory + "styles.css")
+    }
+
+    private static func buildAvatarIconRenderer(
+        sprite: String, stylesheetPath: String
+    ) -> Result<AvatarIconRenderer, AvatarIconRendererError> {
         let stylesheet = (try? String(contentsOfFile: stylesheetPath, encoding: .utf8)) ?? ""
         return Result { () throws(AvatarIconRendererError) in
-            try AvatarIconRenderer(sprite: sprite(.avatars), stylesheet: stylesheet)
+            try AvatarIconRenderer(sprite: sprite, stylesheet: stylesheet)
         }
     }
 }
