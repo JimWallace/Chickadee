@@ -254,6 +254,7 @@ enum AssignmentAuthoringService {
             // map per course.
             assignment.secretRevealEnabled = source.secretRevealEnabled
             assignment.passingThresholdPercent = source.passingThresholdPercent
+            assignment.conceptRaw = source.conceptRaw
             assignment.brightspaceSyncExcluded = source.brightspaceSyncExcluded
             try await assignment.save(on: db)
             // The runner requirements the author declared travel with the

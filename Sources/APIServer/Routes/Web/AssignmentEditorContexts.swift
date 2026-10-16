@@ -125,6 +125,11 @@ struct EditAssignmentContext: Encodable {
     /// The advisory passing threshold (1...100), or nil when the passing
     /// concept is off.  Renders the third "Student Options" control.
     let passingThresholdPercent: Int?
+    /// "None" and each `AssignmentConcept`, for the "Wardrobe ring" select.
+    var conceptOptions: [SelectOption] = []
+    /// The ring the chosen concept earns, as a sentence names it ("the
+    /// Ouroboros ring"); nil when the assignment has no concept.
+    var conceptRingPhrase: String?
     /// The assignment gate for AI-assisted feedback
     /// (docs/ai-assisted-feedback.md). Nil while the course gate is off, so
     /// the "Student Options" control does not render at all.

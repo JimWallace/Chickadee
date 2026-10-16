@@ -25,6 +25,8 @@ import Testing
         #expect(
             WardrobeItem.allCases.map(\.rawValue) == [
                 "expression.chirp", "expression.sly", "border.twotone", "expression.dreamy", "border.stitched",
+                "border.lifering", "border.greenlight", "border.ouroboros",
+                "border.function", "border.binary", "border.pulse",
             ])
     }
 

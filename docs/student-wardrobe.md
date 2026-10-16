@@ -197,15 +197,18 @@ lateral: different, not better. The raw value is the sprite name
   separate them from a light backdrop. The rim was lifted from the design's
   `#8E2A20` to `#AB3327` (same hue), because the design value gave only
   1.40:1 on the dark sky backdrop. No dark mirror.
-- **Locked for now.** No rule earns a concept ring yet, so each shows under
-  "Not open yet" as "{Name} · earned". The rule needs an instructor to tag an
-  assignment with its concept, which is the first wardrobe rule that is not
-  read only from a student's own work.
+- **Earned on a tagged lab.** An instructor tags an assignment with a concept
+  (`AssignmentConcept`) in the "Wardrobe ring" select under Student Options
+  on the edit page, or through MCP `set_assignment_concept`. A student who passes every test on a tagged assignment
+  earns that concept's ring. The tag is optional, and several assignments may
+  share one concept. This is the first wardrobe rule that needs instructor
+  setup. Nothing infers the concept from a title or an order.
 
 ### 6b. Earned items (a small W3, #2592)
 
-Five items are earned by a student's own graded work, with no instructor
-setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
+These items are earned by a student's own graded work (`WardrobeItem` in
+Core, the rules in `WardrobeItem.earned(by:)`). Only the concept rings need
+instructor setup: the concept tag on an assignment.
 
 | Item | Earned by |
 |---|---|
@@ -214,6 +217,7 @@ setup (`WardrobeItem` in Core, the rules in `WardrobeItem.earned(by:)`):
 | two-tone ring | every test passing on three different assignments |
 | `dreamy` face | a graded submission two days before the due date, on three assignments (#2603) |
 | stitched ring | a comeback (every test passing after an attempt that did not) on three assignments (#2603) |
+| a concept ring | every test passing on an assignment tagged with its concept |
 
 - **Granted on the account page, never while grading.** `WardrobeUnlockStore`
   reads the student's own student-kind submissions that have a result, and

@@ -6,9 +6,11 @@
 // it. Unlocks are account-wide, and the wardrobe stays lateral: an earned
 // item is different, not better.
 //
-// The rules read only what a student's own graded work already records, so
-// no instructor sets anything up. They are checked away from the grading
-// path (when the account page loads), so a cosmetic can never fail a grade.
+// The rules read what a student's own graded work already records. The
+// concept rings also read the concept an instructor tagged an assignment with
+// (`AssignmentConcept`), the one rule that needs instructor setup. The rules
+// are checked away from the grading path (when the account page loads), so a
+// cosmetic can never fail a grade.
 
 /// One earnable option of one customizable slot. The raw value is stored, so
 /// it is append-only: never rename or reorder a case.
@@ -26,12 +28,22 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
     /// The stitched ring, for a comeback on three different assignments:
     /// every test passing after an earlier attempt where some did not.
     case stitchedRing = "border.stitched"
+    /// The concept rings, one for each `AssignmentConcept`, for every test
+    /// passing on an assignment tagged with that concept.
+    case lifeRing = "border.lifering"
+    case greenLightRing = "border.greenlight"
+    case ouroborosRing = "border.ouroboros"
+    case functionRing = "border.function"
+    case binaryRing = "border.binary"
+    case pulseRing = "border.pulse"
 
     /// The slot the item belongs to.
     public var slot: AvatarCustomizableSlot {
         switch self {
         case .chirpFace, .slyFace, .dreamyFace: .expression
-        case .twoToneRing, .stitchedRing: .border
+        case .twoToneRing, .stitchedRing, .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing,
+            .pulseRing:
+            .border
         }
     }
 
@@ -43,6 +55,12 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .twoToneRing: AvatarBorder.twotone.rawValue
         case .dreamyFace: AvatarExpression.dreamy.rawValue
         case .stitchedRing: AvatarBorder.stitched.rawValue
+        case .lifeRing: AvatarBorder.lifering.rawValue
+        case .greenLightRing: AvatarBorder.greenlight.rawValue
+        case .ouroborosRing: AvatarBorder.ouroboros.rawValue
+        case .functionRing: AvatarBorder.function.rawValue
+        case .binaryRing: AvatarBorder.binary.rawValue
+        case .pulseRing: AvatarBorder.pulse.rawValue
         }
     }
 
@@ -61,6 +79,25 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         case .twoToneRing: "when every test passes on three assignments"
         case .dreamyFace: "by submitting two days early on three assignments"
         case .stitchedRing: "for a comeback on three assignments"
+        case .lifeRing, .greenLightRing, .ouroborosRing, .functionRing, .binaryRing, .pulseRing:
+            "when every test passes on a \(concept?.displayName.lowercased() ?? "concept") lab"
+        }
+    }
+
+    /// The concept whose ring this item is; nil for every other item.
+    public var concept: AssignmentConcept? {
+        AssignmentConcept.allCases.first { WardrobeItem(concept: $0) == self }
+    }
+
+    /// The item for `concept`'s ring.
+    public init(concept: AssignmentConcept) {
+        switch concept {
+        case .numbers: self = .lifeRing
+        case .conditionals: self = .greenLightRing
+        case .loops: self = .ouroborosRing
+        case .functions: self = .functionRing
+        case .binary: self = .binaryRing
+        case .healthData: self = .pulseRing
         }
     }
 
@@ -79,6 +116,7 @@ public enum WardrobeItem: String, CaseIterable, Codable, Sendable {
         if progress.fullMarksAssignments >= fullMarksAssignmentsForTwoTone { items.insert(.twoToneRing) }
         if progress.earlyAssignments >= earlyAssignmentsForDreamy { items.insert(.dreamyFace) }
         if progress.comebackAssignments >= comebackAssignmentsForStitched { items.insert(.stitchedRing) }
+        for concept in progress.fullMarksConcepts { items.insert(WardrobeItem(concept: concept)) }
         return items
     }
 }

@@ -82,11 +82,10 @@ import Testing
         #expect(AvatarBorder.pulse.displayName == "Pulse")
     }
 
-    /// No rule earns a concept ring yet, so each is refused.
+    /// A concept ring is refused to a student who has not earned it.
     @Test(arguments: conceptRings)
     func aConceptRingIsLocked(border: AvatarBorder) {
         #expect(!AvatarCustomization.isOpen(border.rawValue, for: .border))
-        #expect(WardrobeItem(slot: .border, value: border.rawValue) == nil)
     }
 
     // MARK: - The art

@@ -646,6 +646,23 @@ private struct EditStudentOptionsBlock: HTML {
                 }
                 button(.class("btn action-btn"), .type(.submit)) { "Save passing threshold" }
             }
+            form(.method(.post), .action("\(base)/concept"), .dataFlag("ck-inplace")) {
+                CSRFField(token: csrfToken)
+                " "
+                label(.class("field-inline")) {
+                    "Wardrobe ring "
+                    select(.name("concept"), .class("form-input input-compact")) {
+                        SelectOptions(options: edit.conceptOptions)
+                    }
+                    " "
+                }
+                if let ring = edit.conceptRingPhrase {
+                    p(.class("field-note field-note--muted")) {
+                        "Students who pass every test on this assignment earn \(ring)."
+                    }
+                }
+                button(.class("btn action-btn"), .type(.submit)) { "Save wardrobe ring" }
+            }
         }
     }
 

@@ -605,4 +605,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateWardrobeUnlocks())
     // The life list (#2593): the species each hatch came from and went to.
     app.migrations.add(AddAvatarHatchSpecies())
+    // The lab concept on an assignment, for the concept rings.
+    app.migrations.add(AddAssignmentConcept())
 }

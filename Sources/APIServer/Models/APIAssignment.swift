@@ -141,6 +141,20 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "passing_threshold_percent")
     var passingThresholdPercent: Int?
 
+    /// The lab concept, stored as the raw `AssignmentConcept` string: full
+    /// marks here earn that concept's wardrobe ring
+    /// (docs/student-wardrobe.md, "Concept rings"). nil = no concept (the
+    /// default). Set by hand on the edit page; nothing infers it.
+    @OptionalField(key: "concept")
+    var conceptRaw: String?
+
+    /// Typed accessor for `conceptRaw`. An unrecognised value reads as no
+    /// concept, so it earns nothing.
+    var concept: AssignmentConcept? {
+        get { conceptRaw.flatMap(AssignmentConcept.init(rawValue:)) }
+        set { conceptRaw = newValue?.rawValue }
+    }
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

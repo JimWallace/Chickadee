@@ -74,6 +74,9 @@ import Testing
         // any generated test exists, so it cannot change what an existing suite
         // grades — the case that would warrant a close cannot arise.
         "SetAssignmentLanguageTool.swift",
+        // A cosmetic tag: changes which wardrobe ring full marks earn, not
+        // what the suite grades. No close/regrade.
+        "SetAssignmentConceptTool.swift",
         // Time limits are enforced at run time; no content change.
         "SetTimeLimitTool.swift",
         // Minimum-runner-version gate: changes which runner may grade, not what

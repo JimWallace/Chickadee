@@ -261,6 +261,7 @@ enum MCPServerInstructions {
         or "none"; declaring \(LanguageProse.uploadOnlyTokens) also sets uploadOnly and worker \
         grading, and the change is refused once any pattern family or notebook check has \
         generated a test), \
+        set_assignment_concept (the lab concept whose wardrobe ring full marks earn, or "none"), \
         set_time_limit (the assignment's default per-test timeout in seconds; a per-test \
         timeLimitSeconds override, \(mcpTimeLimitRangeText)s, can be set on a hand-written script via author_script / \
         update_suite, on a pattern family via create_pattern_family / update_pattern_family \
@@ -330,7 +331,7 @@ enum MCPServerInstructions {
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
         Metadata-only edits (update_assignment, set_grading_mode, set_submission_mode, \
-        set_assignment_language, set_time_limit, set_dataset, \
+        set_assignment_language, set_assignment_concept, set_time_limit, set_dataset, \
         set_minimum_runner_version, set_activity, update_achievements, the section-organization \
         tools) never trigger \
         a regrade or a close. run_tournament (a tournament-kind activity only) starts a bracket on a \

@@ -20,19 +20,23 @@ public struct WardrobeProgress: Equatable, Sendable {
     /// The number of different assignments with a comeback: a submission
     /// that passed every test it ran, after an earlier attempt that did not.
     public var comebackAssignments: Int
+    /// The concepts of the assignments with a submission that passed every
+    /// test it ran. An assignment with no concept adds none.
+    public var fullMarksConcepts: Set<AssignmentConcept>
 
     /// How long before the due date a submission counts as early: two days.
     public static let earlyLeadSeconds: Double = 48 * 60 * 60
 
     public init(
         hasGradedSubmission: Bool, hasFirstTryFullMarks: Bool, fullMarksAssignments: Int,
-        earlyAssignments: Int = 0, comebackAssignments: Int = 0
+        earlyAssignments: Int = 0, comebackAssignments: Int = 0, fullMarksConcepts: Set<AssignmentConcept> = []
     ) {
         self.hasGradedSubmission = hasGradedSubmission
         self.hasFirstTryFullMarks = hasFirstTryFullMarks
         self.fullMarksAssignments = fullMarksAssignments
         self.earlyAssignments = earlyAssignments
         self.comebackAssignments = comebackAssignments
+        self.fullMarksConcepts = fullMarksConcepts
     }
 
     /// One graded submission, as the rules read it.
@@ -45,16 +49,19 @@ public struct WardrobeProgress: Equatable, Sendable {
         /// it, in seconds; negative when late, nil when the assignment has
         /// no due date.
         public let secondsBeforeDue: Double?
+        /// The concept the instructor tagged the assignment with, if any.
+        public let concept: AssignmentConcept?
 
         public init(
             assignmentID: String, attemptNumber: Int, passCount: Int, totalTests: Int,
-            secondsBeforeDue: Double? = nil
+            secondsBeforeDue: Double? = nil, concept: AssignmentConcept? = nil
         ) {
             self.assignmentID = assignmentID
             self.attemptNumber = attemptNumber
             self.passCount = passCount
             self.totalTests = totalTests
             self.secondsBeforeDue = secondsBeforeDue
+            self.concept = concept
         }
 
         /// Every test it ran passed, and it ran at least one.
@@ -78,6 +85,7 @@ public struct WardrobeProgress: Equatable, Sendable {
             hasFirstTryFullMarks: fullMarks.contains { $0.attemptNumber == 1 },
             fullMarksAssignments: Set(fullMarks.map(\.assignmentID)).count,
             earlyAssignments: Set(graded.filter(\.isEarly).map(\.assignmentID)).count,
-            comebackAssignments: Set(comebacks.map(\.assignmentID)).count)
+            comebackAssignments: Set(comebacks.map(\.assignmentID)).count,
+            fullMarksConcepts: Set(fullMarks.compactMap(\.concept)))
     }
 }

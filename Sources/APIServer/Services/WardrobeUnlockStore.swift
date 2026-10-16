@@ -26,6 +26,7 @@ enum WardrobeUnlockStore {
             .all()
         let submissions = try results.map { try $0.joined(APISubmission.self) }
         let dueDates = try await dueDates(of: Set(submissions.map(\.testSetupID)), on: db)
+        let concepts = try await concepts(of: Set(submissions.map(\.testSetupID)), on: db)
         let graded = zip(results, submissions).map { result, submission in
             WardrobeProgress.Graded(
                 assignmentID: submission.testSetupID,
@@ -34,7 +35,8 @@ enum WardrobeUnlockStore {
                 passCount: result.passCount ?? 0,
                 totalTests: result.totalTests ?? 0,
                 // The server's own receipt time, so a student cannot forge it.
-                secondsBeforeDue: secondsBeforeDue(submission.submittedAt, dueDates[submission.testSetupID]))
+                secondsBeforeDue: secondsBeforeDue(submission.submittedAt, dueDates[submission.testSetupID]),
+                concept: concepts[submission.testSetupID])
         }
         return WardrobeProgress(graded: graded)
     }
@@ -58,6 +60,23 @@ enum WardrobeUnlockStore {
     private static func secondsBeforeDue(_ submittedAt: Date?, _ dueAt: Date?) -> Double? {
         guard let submittedAt, let dueAt else { return nil }
         return dueAt.timeIntervalSince(submittedAt)
+    }
+
+    /// The concept each test setup's assignment is tagged with. A setup
+    /// whose assignment has no concept is not in the result.
+    private static func concepts(
+        of testSetupIDs: Set<String>, on db: any Database
+    ) async throws -> [String: AssignmentConcept] {
+        guard !testSetupIDs.isEmpty else { return [:] }
+        let assignments = try await APIAssignment.query(on: db)
+            .filter(\.$testSetupID ~~ Array(testSetupIDs))
+            .filter(\.$conceptRaw != nil)
+            .all()
+        var concepts: [String: AssignmentConcept] = [:]
+        for assignment in assignments {
+            concepts[assignment.testSetupID] = assignment.concept
+        }
+        return concepts
     }
 
     /// Stores every item `userID` has earned and not yet stored, and returns
