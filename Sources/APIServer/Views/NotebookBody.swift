@@ -1,14 +1,15 @@
 // APIServer/Views/NotebookBody.swift
 //
 // The notebook editor's body: the toolbar, the dismissible notices, the
-// failure panel, the JupyterLite iframe and the page scripts. `NotebookPage`
-// renders it as the whole page, and `WorkbenchPage` renders it in its
-// right-hand pane. It takes plain values and no request.
+// failure panel, the loading panel, the JupyterLite iframe and the page
+// scripts. `NotebookPage` renders it as the whole page, and `WorkbenchPage`
+// renders it in its right-hand pane. It takes plain values and no request.
 //
 // Every id, data attribute, iframe attribute and script tag here is read by
 // `Public/notebook*.js`, `Public/browser-runner.js` and the isolation
 // middleware. Change none of them without changing their readers.
 
+import Core
 import Elementary
 
 struct NotebookBody: HTML {
@@ -35,6 +36,11 @@ struct NotebookBody: HTML {
     let aiFeedbackNotice: Bool
     /// The cache-busting version on the script URLs.
     let appVersion: String
+    /// The declared language when it has an editor kernel, for the loading
+    /// panel and the kernel chip. Nil names "the kernel" instead.
+    var kernelLanguage: String?
+    /// The viewer's bird for the loading panel, or nil for no bird.
+    var bootBird: AvatarPresentation?
 
     var body: some HTML {
         // The `.main` override only when this body is the page.
@@ -90,6 +96,8 @@ struct NotebookBody: HTML {
                 div(.class("notebook-actions")) {
                     // The " " after each control keeps the spaces between
                     // them.
+                    kernelChip
+                    " "
                     headerNotice
                     " "
                     if let viewToggleURL, !embedded {
@@ -186,26 +194,12 @@ struct NotebookBody: HTML {
             }
         }
         fallbackPanel
-        // The editor is booted by notebook.js after the capability preflight
-        // resolves (mountEditor sets the iframe src from data-editor-url), not
-        // eagerly here: an eager boot raced the preflight's service-worker
-        // registration and IndexedDB probes and intermittently left the kernel
-        // dead. On phones notebook.js skips the mount, so the iframe stays
-        // about:blank.
-        iframe(
-            .id("jl-frame"),
-            .class(embedded ? "jl-frame jl-frame-embedded" : "jl-frame"),
-            .title("Notebook editor"),
-            .data("setup-id", value: testSetupID),
-            .data("grading-mode", value: gradingMode),
-            .data("browser-unsupported", value: String(browserUnsupported)),
-            .data("notebook-url", value: notebookURL),
-            .data("editor-url", value: jupyterLiteEditorURL),
-            .data("working-copy-mtime", value: String(workingCopyMtime)),
-            .data("read-only", value: String(isReadOnly)),
-            .src("about:blank"),
-            .custom(name: "loading", value: "eager")
-        ) {}
+        // The loading panel sits over the iframe while the editor starts. The
+        // iframe loads underneath it, and nothing about the mount changes.
+        div(.class("nb-stage")) {
+            NotebookBootPanel(kernelLanguage: kernelLanguage, bird: bootBird)
+            editorFrame
+        }
         div(.id("nb-results"), .class("nb-results"), .hidden) {}
         div(
             .id("browser-runner-status"), .class("nb-status"), .role("status"),
@@ -220,9 +214,33 @@ struct NotebookBody: HTML {
         ) {}
     }
 
+    /// The editor iframe. notebook.js boots it after the capability preflight
+    /// resolves (mountEditor sets the iframe src from data-editor-url), not
+    /// eagerly here: an eager boot raced the preflight's service-worker
+    /// registration and IndexedDB probes and intermittently left the kernel
+    /// dead. On phones notebook.js skips the mount, so the iframe stays
+    /// about:blank.
+    private var editorFrame: some HTML {
+        iframe(
+            .id("jl-frame"),
+            .class(embedded ? "jl-frame jl-frame-embedded" : "jl-frame"),
+            .title("Notebook editor"),
+            .data("setup-id", value: testSetupID),
+            .data("grading-mode", value: gradingMode),
+            .data("browser-unsupported", value: String(browserUnsupported)),
+            .data("notebook-url", value: notebookURL),
+            .data("editor-url", value: jupyterLiteEditorURL),
+            .data("working-copy-mtime", value: String(workingCopyMtime)),
+            .data("read-only", value: String(isReadOnly)),
+            .src("about:blank"),
+            .custom(name: "loading", value: "eager")
+        ) {}
+    }
+
     /// The page scripts, in load order. `browser-runner.js` follows them with
     /// its own data attributes.
     private static let scripts = [
+        "/notebook-boot.js",
         "/notebook-preflight-core.js",
         "/notebook-preflight.js",
         "/grading-shared.js",
@@ -237,6 +255,15 @@ struct NotebookBody: HTML {
 
     private func asset(_ path: String) -> String {
         "\(path)?v=\(appVersion)"
+    }
+
+    /// The kernel's state: amber while it starts, teal when it is ready.
+    /// notebook-boot.js writes the state.
+    private var kernelChip: some HTML {
+        span(.id("nb-kernel-chip"), .class("kernel-chip"), .data("state", value: "starting")) {
+            "\(kernelLanguage ?? "Kernel") · "
+            span(.class("js-nb-kernel-state")) { "starting" }
+        }
     }
 
     /// The toolbar's one status notice, or Submit.
@@ -340,7 +367,9 @@ extension NotebookBody {
             workingCopyMtime: context.workingCopyMtime,
             embedded: context.embedded == true,
             aiFeedbackNotice: context.aiFeedbackNotice,
-            appVersion: appVersion
+            appVersion: appVersion,
+            kernelLanguage: context.kernelLanguage,
+            bootBird: context.bootBird
         )
     }
 }
