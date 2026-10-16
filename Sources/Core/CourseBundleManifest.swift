@@ -314,6 +314,12 @@ public struct BundledAssignment: Codable, Sendable {
     /// a bundle written before it was carried, or when the assignment
     /// declared none.
     public let requirement: AssignmentRequirementSpec?
+    /// The lab concept whose wardrobe ring full marks earn, as the raw
+    /// `AssignmentConcept` value. Nil in a bundle written before it was
+    /// carried, or when the assignment has no concept. Kept as a string so a
+    /// concept this instance does not know imports as no concept, rather than
+    /// failing the whole bundle.
+    public let concept: String?
 
     public init(
         bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool? = nil,
@@ -325,7 +331,8 @@ public struct BundledAssignment: Codable, Sendable {
         solutionVisibility: SolutionVisibility? = nil,
         brightspaceSyncExcluded: Bool? = nil,
         deadlineOverrideActive: Bool? = nil,
-        requirement: AssignmentRequirementSpec? = nil
+        requirement: AssignmentRequirementSpec? = nil,
+        concept: String? = nil
     ) {
         self.bundleID = bundleID
         self.title = title
@@ -342,6 +349,7 @@ public struct BundledAssignment: Codable, Sendable {
         self.brightspaceSyncExcluded = brightspaceSyncExcluded
         self.deadlineOverrideActive = deadlineOverrideActive
         self.requirement = requirement
+        self.concept = concept
     }
 }
 

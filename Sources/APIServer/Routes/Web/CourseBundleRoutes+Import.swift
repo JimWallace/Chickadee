@@ -657,6 +657,9 @@ private func importBundledAssignments(
             newAssign.solutionVisibility = solutionVisibility
         }
         newAssign.brightspaceSyncExcluded = bundledAssign.brightspaceSyncExcluded
+        // The lab concept for the wardrobe's concept rings. One this instance
+        // does not know imports as no concept.
+        newAssign.concept = bundledAssign.concept.flatMap(AssignmentConcept.init(rawValue:))
         // The deadline override travels with the open state it protects
         // (#2166): without it the next sweep closes an imported assignment
         // whose due date has passed.
