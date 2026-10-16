@@ -201,8 +201,8 @@ lateral: different, not better. The raw value is the sprite name
   (`AssignmentConcept`) in the "Wardrobe ring" select under Student Options
   on the edit page, or through MCP `set_assignment_concept`. A student who passes every test on a tagged assignment
   earns that concept's ring. The tag is optional, and several assignments may
-  share one concept. This is the first wardrobe rule that needs instructor
-  setup. Nothing infers the concept from a title or an order.
+  share one concept. A clone and a course bundle keep the tag. This is the
+  first wardrobe rule that needs instructor setup. Nothing infers the concept from a title or an order.
 
 ### 6b. Earned items (a small W3, #2592)
 
