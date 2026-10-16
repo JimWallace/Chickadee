@@ -359,7 +359,8 @@ duplicate.
   ring (`.av-ring`) and is the transparent `--avatar-border-none` for every
   other ring.  The patterned rings colour themselves by class
   (`.av-rainbow-*`, `.av-spectrum-*`, the term ramps `.av-winter-*`,
-  `.av-spring-*` and `.av-fall-*`, or the student's `.av-accent` and
+  `.av-spring-*` and `.av-fall-*`, the concept rings `.av-<ring>` and
+  `.av-<ring>-*` with no dark mirror, or the student's `.av-accent` and
   `.av-cap`), and the **staff ring** (`.av-staff-ring`, a double ring in a
   colour no student ring uses, with a dark-mode mirror) is drawn from a course
   role, never from a stored choice.  `.avatar` sets `forced-color-adjust:

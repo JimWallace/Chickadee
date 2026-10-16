@@ -149,6 +149,7 @@ gets the ring. It is not a rank.
 | snowflake, shown as "Winter" | seasonal (Winter) | a ramp from ice blue at the top to indigo at the bottom |
 | blossom, shown as "Spring" | seasonal (Spring) | a ramp from blossom pink to apricot to new-leaf green |
 | maple, shown as "Fall" | seasonal (Fall) | a ramp from gold to orange to brick to maroon |
+| the six concept rings | earned | see "Concept rings" below |
 
 Rainbow is a starter on purpose. It is also the Pride flag, and a student must
 not have to earn a way to show it.
@@ -167,6 +168,39 @@ locked item does not show at all (see "Earning: the design pass", E3). When a ru
 earned when every test passes on three assignments"); stitched and spectrum
 have no rule yet ("Stitched · earned"). `AvatarCustomization` refuses a
 locked ring, so a hand-made request cannot choose one.
+
+**Concept rings.** Six earned rings, one for each lab concept. They are
+lateral: different, not better. The raw value is the sprite name
+(`av-ring-<raw value>`).
+
+| Raw value | Display name | Art | Concept |
+|---|---|---|---|
+| `lifering` | Life ring | A red and white life ring with rope wraps: a float | Variables & numbers |
+| `greenlight` | Green light | A green band, with a traffic light at the bottom and the green lamp lit | Conditionals |
+| `ouroboros` | Ouroboros | A snake that eats its tail (`while True:`), head at the lower left | Loops |
+| `function` | Function | The ring broken into a tapered `(` and `)` | Functions |
+| `binary` | Binary | Eight dashes, long for 1 and short for 0, that spell 230 clockwise from the top | Data representation |
+| `pulse` | Pulse | A solid band with one ECG trace (P, QRS, T) at the lower right | Health data |
+
+- **Three rings are wider, inward only.** The usual band is r 28.8 to 32.
+  The ouroboros head goes in to r 25.6, the green light housing to r 25.4,
+  and the life ring to r 25.6 all the way round. Nothing goes past r 32. At
+  36 and 96 px, at all three tilts, none of the three touches the eyes or the
+  beak.
+- **Contrast applies to the band colours only.** `--avatar-function`,
+  `--avatar-binary`, `--avatar-pulse`, `--avatar-ouroboros-body`,
+  `--avatar-greenlight-band`, `--avatar-lifering-red` and
+  `--avatar-lifering-rim` hold the term-ring floors (1.45:1 light, 1.8:1
+  dark). The lamps, the rope, the snake's back pattern and the white
+  quarters are exempt. The snake's eye uses the bird's own `.av-eyewhite`
+  and `.av-pupil`. The white quarters rely on the rim to
+  separate them from a light backdrop. The rim was lifted from the design's
+  `#8E2A20` to `#AB3327` (same hue), because the design value gave only
+  1.40:1 on the dark sky backdrop. No dark mirror.
+- **Locked for now.** No rule earns a concept ring yet, so each shows under
+  "Not open yet" as "{Name} · earned". The rule needs an instructor to tag an
+  assignment with its concept, which is the first wardrobe rule that is not
+  read only from a student's own work.
 
 ### 6b. Earned items (a small W3, #2592)
 
