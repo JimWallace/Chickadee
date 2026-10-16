@@ -139,7 +139,19 @@ async function main() {
     await shot("outline");
 
     // (2) Headers and checks lines in the editor.
-    await waitFor("two task headers and the reflection", async () => (await headers().count()) === 3);
+    await waitFor("two task headers and the reflection", async () => (await headers().count()) === 3).catch(async (e) => {
+      // What the editor holds, so a failure on one engine can be read.
+      const seen = await editorFrame().evaluate(() => ({
+        cells: document.querySelectorAll(".jp-Notebook .jp-Cell").length,
+        cellHeaders: document.querySelectorAll(".jp-Notebook .jp-CellHeader").length,
+        hosts: document.querySelectorAll(".ck-guide-host").length,
+        nodes: document.querySelectorAll(".ck-guide-node").length,
+        labels: [...document.querySelectorAll(".ck-task-label")].map((n) => n.textContent),
+        theme: document.body.dataset.ckTheme || null,
+      })).catch((err) => `unreadable: ${err}`);
+      console.log(`editor state: ${JSON.stringify(seen)}`);
+      throw e;
+    });
     const labels = await headers().locator(".ck-task-label").allTextContents();
     console.log(`headers: ${labels.join(" | ")}; pills: ${(await pills()).join(" | ")}`);
     if (labels.join("|") !== "Task 1|Task 2|Reflection") return fail(`header labels ${labels}`);

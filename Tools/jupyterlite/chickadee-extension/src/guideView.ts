@@ -56,6 +56,9 @@ export class GuideView {
   /** What the last redraw read, to skip a redraw that would change nothing. */
   private lastInput = '';
   private lastWidgets: readonly Cell[] = [];
+  /** Cells already waited for, so a cell that never gets a header is not
+   * waited for again on every redraw. */
+  private awaited = new WeakSet<Cell>();
 
   constructor(private readonly notebook: () => Notebook | null) {}
 
@@ -88,6 +91,24 @@ export class GuideView {
       .filter((t): t is DrawnTask & { headerCell: number } => t.headerCell !== null)
       .map(t => ({ sectionID: t.sectionID, cell: t.headerCell }));
     return taskOfCell(index, headers);
+  }
+
+  /**
+   * Draws `node` into `host`. A cell builds its header and footer only when
+   * its DOM is first made, which can be after this redraw (it is lazy, and
+   * WebKit is slower to reach it). Then the redraw is not complete: wait for
+   * the cell, and redraw once it is ready.
+   */
+  private attachTo(cell: Cell, host: HTMLElement | null, node: HTMLElement): void {
+    if (host) {
+      attach(host, node);
+      return;
+    }
+    this.lastInput = '';
+    if (!this.awaited.has(cell)) {
+      this.awaited.add(cell);
+      void cell.ready.then(() => this.schedule());
+    }
   }
 
   /** At most one redraw per animation frame. */
@@ -134,13 +155,16 @@ export class GuideView {
       const status = taskStatus(task, placement, cells, guide.starterSources);
       const edited = editedSince.has(task.sectionID ?? '') && (status === 'pass' || status === 'fail');
       if (placement.headerCell !== null) {
-        attach(
-          header(widgets[placement.headerCell]),
+        const cell = widgets[placement.headerCell];
+        this.attachTo(
+          cell,
+          header(cell),
           taskHeader(task, number, status, pillText(status, task, guide.attempt, edited))
         );
       }
       if (placement.checksCell !== null) {
-        attach(footer(widgets[placement.checksCell]), checksLine(task, status, guide, placement.missing));
+        const cell = widgets[placement.checksCell];
+        this.attachTo(cell, footer(cell), checksLine(task, status, guide, placement.missing));
       }
       return {
         sectionID: task.sectionID ?? null,
@@ -151,7 +175,7 @@ export class GuideView {
     const tags = (guide.reflections ?? []).map(r => r.tag);
     for (const cell of widgets) {
       if (tagsOf(cell).some(t => tags.includes(t))) {
-        attach(header(cell), reflectionHeader(cell.model.sharedModel.getSource()));
+        this.attachTo(cell, header(cell), reflectionHeader(cell.model.sharedModel.getSource()));
       }
     }
     const tagged = widgets.map(c => ({ tags: tagsOf(c), source: c.model.sharedModel.getSource() }));
@@ -231,11 +255,9 @@ function clear(cell: Cell): void {
   }
 }
 
-function attach(host: HTMLElement | null, node: HTMLElement): void {
-  if (host) {
-    host.classList.add(HOST);
-    host.appendChild(node);
-  }
+function attach(host: HTMLElement, node: HTMLElement): void {
+  host.classList.add(HOST);
+  host.appendChild(node);
 }
 
 function tagsOf(cell: Cell): string[] {
