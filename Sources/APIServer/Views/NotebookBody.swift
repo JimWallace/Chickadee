@@ -106,6 +106,10 @@ struct NotebookBody: HTML {
                     .custom(name: "aria-live", value: "polite"), .custom(name: "aria-atomic", value: "true"),
                     .tabindex(-1)
                 ) {})
+            // NB5: shown under Submit when an attempt is graded.
+            if showsGuide {
+                NotebookGradedToast(bird: bootBird)
+            }
         }
         // The three dismissible notices below are revealed by
         // notebook-preflight.js. They do not block: the editor still loads
@@ -240,6 +244,7 @@ struct NotebookBody: HTML {
         "/notebook.js",
         "/notebook-toolbar.js",
         "/notebook-guide.js",
+        "/notebook-graded.js",
     ]
 
     /// `definitionPatterns` as a JSON array for the data attribute.

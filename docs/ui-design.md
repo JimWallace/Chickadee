@@ -755,6 +755,18 @@ duplicate.
   amber while the kernel starts or is busy, teal when it is ready or idle, and
   the danger colour when it has stopped, and the words always say the state.  It
   is not a `.chip`, because it carries a status colour.
+- **`.nb-graded`** — the graded toast on the notebook page (design frame
+  18f, `NotebookGradedToast`).  `notebook-graded.js` shows it under Submit when
+  an attempt is graded while the student is in the editor.  It holds the
+  viewer's bird (`.nb-graded-bird`, 72px), an `.nb-graded-caption`
+  ("Attempt 3 graded"), the `.nb-graded-grade`, a `.card-meta` summary and a
+  `.toolbar` with See results and Keep editing, in `.nb-graded-text`.  It is a
+  `role="status"` region and never closes by itself.  At 100% (`.is-perfect`)
+  three `.nb-graded-star` stars show and the bird hops once, unless the viewer
+  reduces motion.  It is not a `.flash`, because it floats over the editor
+  instead of pushing it down, and the editor must not move under the student's
+  cursor.  The planned Earned toasts of the results page (`docs/result-celebration.md`,
+  J2 and J3) should take this shape, not a second one.
 - **`NewTabLink`** — a link that opens in a new tab: `target="_blank"`, the
   `i-external` icon and a `.visually-hidden` "(opens in a new tab)".  Write a
   new one with this view, not by hand.  One exception remains:

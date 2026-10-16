@@ -1261,6 +1261,7 @@ code { font-family: var(--font-mono); font-size: .9em; }
 /* ── Notebook page ───────────────────────────────────── */
 
 .notebook-header {
+    position: relative;  /* the graded toast hangs under it */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1481,6 +1482,48 @@ body:has(.notebook-header .nb-title-block) .nav {
 @media (max-width: 640px) {
     .nb-outline { display: none; }
 }
+
+/* The graded toast (NB5, frame 18f): under Submit, from notebook-graded.js,
+   when an attempt is graded while the student is in the editor. It stays
+   until the student closes it. At 100% (.is-perfect) three stars show round
+   the bird and it hops once; below 100% the bird stays calm. */
+.nb-graded {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 50;
+    display: flex;
+    gap: 1rem;
+    width: min(23rem, 100%);
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-pop);
+}
+.nb-graded[hidden] { display: none; }
+.nb-graded-bird { position: relative; flex: none; }
+.nb-graded-bird .avatar { width: 4.5rem; height: 4.5rem; }
+.nb-graded-star { display: none; position: absolute; color: var(--gold); font-size: var(--text-sm); }
+.nb-graded-star:nth-of-type(1) { top: 0; left: -.25rem; }
+.nb-graded-star:nth-of-type(2) { top: -.5rem; right: .75rem; }
+.nb-graded-star:nth-of-type(3) { top: 1rem; right: -.5rem; }
+.nb-graded.is-perfect .nb-graded-star { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+    /* The result page's hop (bird-hop, .4rem), once. */
+    .nb-graded.is-perfect .nb-graded-bird .avatar { animation: bird-hop .6s ease-out 1; }
+}
+.nb-graded-text { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
+.nb-graded-text p { margin: 0; }
+.nb-graded-caption {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+.nb-graded-grade { font-size: var(--text-2xl); font-weight: 700; }
+.nb-graded-text .toolbar { margin-top: .5rem; }
 
 /* The editor stage: the loading panel over the iframe. A flex column, so the
    iframe still shrinks to the workbench pane as it did when it was the pane's

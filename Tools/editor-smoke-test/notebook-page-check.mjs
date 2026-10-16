@@ -395,25 +395,28 @@ async function main() {
       if (!enabled) return fail("Submit button never became enabled (notebook never synced)");
     }
     await submit.click();
-    const results = page.locator("#nb-results");
-    // Wait for the grader to render a terminal result line ("N / M passed …").
+    // Wait for the grader's terminal result: the inline panel ("N / M
+    // passed …"), or, with the editor extension loaded, the graded toast that
+    // replaces it ("N of M checks passed.", notebook views NB5).
     const gotResults = await page.waitForFunction(
       () => {
-        const el = document.getElementById("nb-results");
-        if (!el || el.hidden) return false;
-        return /\d+\s*\/\s*\d+\s*passed/i.test(el.innerText || "");
+        const inline = document.getElementById("nb-results");
+        if (inline && !inline.hidden && /\d+\s*\/\s*\d+\s*passed/i.test(inline.innerText || "")) return true;
+        const toast = document.getElementById("nb-graded");
+        return !!toast && !toast.hidden && /\d+ of \d+ checks? passed/i.test(toast.innerText || "");
       },
       null, { timeout: SUBMIT_RESULT_MS }
     ).then(() => true).catch(() => false);
     if (blocked.length) return fail("blocked resources during submit/grading (a worker was COEP-blocked)", blocked.join("\n"));
     if (!gotResults) return fail(`no grading result rendered within ${SUBMIT_RESULT_MS}ms`, phaseTrail());
+    const results = (await page.locator("#nb-graded").isVisible()) ? page.locator("#nb-graded") : page.locator("#nb-results");
     const resultText = (await results.innerText()).replace(/\s+/g, " ").trim().slice(0, 200);
     console.log(`grading result rendered: "${resultText}"`);
     // The fixture's one public test (`print(...)`, exit 0) must PASS — a
     // result of "1 / 1 passed" proves the grading worker spawned under isolation,
     // booted its kernel, ran the test, and posted a correct outcome end-to-end.
-    if (!/1\s*\/\s*1\s*passed/i.test(resultText)) {
-      return fail(`grading did not pass cleanly (expected "1 / 1 passed"): ${resultText}`);
+    if (!/\b1\s*\/\s*1\s*passed|\b1 of 1 check passed/i.test(resultText)) {
+      return fail(`grading did not pass cleanly (expected "1 / 1 passed" or "1 of 1 check passed"): ${resultText}`);
     }
 
     if (strayTabs.length) {
