@@ -1340,7 +1340,8 @@ code { font-family: var(--font-mono); font-size: .9em; }
 
 /* The kernel chip in the notebook toolbar: the language and its state, with a
    dot as the scan cue. notebook-boot.js writes data-state; the text always
-   says the state too, so colour is never the only carrier. */
+   says the state too, so colour is never the only carrier. The state colours
+   are in the .state-select rules, so the mapping lives in one place. */
 .kernel-chip {
     display: inline-flex;
     align-items: center;
@@ -1356,8 +1357,6 @@ code { font-family: var(--font-mono); font-size: .9em; }
     border-radius: 50%;
     background: var(--gray-400);
 }
-.kernel-chip[data-state="starting"]::before { background: var(--state-amber); }
-.kernel-chip[data-state="ready"]::before { background: var(--green); }
 
 /* The editor stage: the loading panel over the iframe. A flex column, so the
    iframe still shrinks to the workbench pane as it did when it was the pane's
@@ -3828,9 +3827,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .state-select[data-state="visible"]::before,
 .state-select[data-state="mapped"]::before,
 .state-select[data-state="instructor"]::before,
-.state-select[data-state="admin"]::before { background: var(--kind-graded-bg); }
+.state-select[data-state="admin"]::before,
+.kernel-chip[data-state="ready"]::before { background: var(--kind-graded-bg); }
 .state-select[data-state="preview"]::before,
-.state-select[data-state="ta"]::before { background: var(--state-amber); }
+.state-select[data-state="ta"]::before,
+.kernel-chip[data-state="starting"]::before { background: var(--state-amber); }
 
 /* A centred explanatory panel standing in for content that cannot render here
    — no notebook selected, or a viewport too small for the editor. Two pages

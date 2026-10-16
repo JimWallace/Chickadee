@@ -257,7 +257,7 @@ struct NotebookBody: HTML {
         "\(path)?v=\(appVersion)"
     }
 
-    /// The kernel's state: amber while it starts, green when it is ready.
+    /// The kernel's state: amber while it starts, teal when it is ready.
     /// notebook-boot.js writes the state.
     private var kernelChip: some HTML {
         span(.id("nb-kernel-chip"), .class("kernel-chip"), .data("state", value: "starting")) {

@@ -734,8 +734,8 @@ duplicate.
   overlay that has to fill the editor, not a card or a box in the page flow.
 - **`.kernel-chip`** — the notebook toolbar's kernel state: the language, a
   dot and the state in words ("Python · starting").  The dot is the
-  `.state-select` scan cue: `data-state` colours it amber while the kernel
-  starts and green when it is ready, and the words always say the state.  It
+  `.state-select` scan cue, coloured by the same rules: `data-state` makes it
+  amber while the kernel starts and teal when it is ready, and the words always say the state.  It
   is not a `.chip`, because it carries a status colour.
 - **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
   disclosure (the audit log, alert firings).  A log row shows when, who, what
