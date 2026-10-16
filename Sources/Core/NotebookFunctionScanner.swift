@@ -132,9 +132,13 @@ public struct NotebookFunctionScanEntry: Sendable {
     /// The `##` header text of the section containing this function.
     /// `nil` when the function appears before any `##` header in the notebook.
     public let sectionName: String?
-    public init(info: NotebookFunctionInfo, sectionName: String?) {
+    /// The index of the code cell that defines the function, in the
+    /// notebook's `cells` array. Nil only for an entry built by hand.
+    public let cellIndex: Int?
+    public init(info: NotebookFunctionInfo, sectionName: String?, cellIndex: Int? = nil) {
         self.info = info
         self.sectionName = sectionName
+        self.cellIndex = cellIndex
     }
 }
 
@@ -162,7 +166,7 @@ public func scanNotebookForSectionsAndFunctions(
     var entries: [NotebookFunctionScanEntry] = []
     var rawEntriesByName: [String: Int] = [:]  // for shadowing pass below
 
-    for cell in cells {
+    for (cellIndex, cell) in cells.enumerated() {
         let cellType = cell["cell_type"] as? String
         let source = NotebookCellSources.cellSource(cell)
         if cellType == "markdown" {
@@ -178,7 +182,8 @@ public func scanNotebookForSectionsAndFunctions(
             let fns = extractTopLevelFunctions(from: source, language: language)
             for fn in fns {
                 rawEntriesByName[fn.name] = entries.count
-                entries.append(NotebookFunctionScanEntry(info: fn, sectionName: currentSection))
+                entries.append(
+                    NotebookFunctionScanEntry(info: fn, sectionName: currentSection, cellIndex: cellIndex))
             }
         }
     }
@@ -198,7 +203,8 @@ public func scanNotebookForSectionsAndFunctions(
             hasDocstring: info.hasDocstring,
             isShadowed: last != idx
         )
-        return NotebookFunctionScanEntry(info: withShadow, sectionName: entry.sectionName)
+        return NotebookFunctionScanEntry(
+            info: withShadow, sectionName: entry.sectionName, cellIndex: entry.cellIndex)
     }
 
     return NotebookScanResult(sectionNames: sectionsInOrder, functions: shadowed)
@@ -233,7 +239,7 @@ public func notebookSectionNames(_ notebookData: Data) -> [String] {
 
 /// The first `## ` heading in a markdown cell's source, or nil. `###`+ is not a
 /// section, and one section is set per cell — subsequent headings are ignored.
-private func firstSectionHeading(in source: String) -> String? {
+func firstSectionHeading(in source: String) -> String? {
     for line in source.components(separatedBy: "\n") {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("## "), !trimmed.hasPrefix("### ") else { continue }

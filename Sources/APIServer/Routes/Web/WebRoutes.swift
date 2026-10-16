@@ -41,6 +41,9 @@ struct WebRoutes: RouteCollection {
             "testsetups", ":testSetupID", "arena", "matches", ":submissionID", "result", use: arenaMatchResult)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
+        // The student guide beside each task in the editor
+        // (WebRoutes+NotebookGuide.swift).
+        routes.get("testsetups", ":testSetupID", "notebook-guide.json", use: notebookGuide)
         // Course-staff-only: persist what the author is editing in JupyterLite
         // back to the assignment (WebRoutes+NotebookSave.swift).
         routes.post("testsetups", ":testSetupID", "notebook", "save", use: saveNotebookFromEditor)

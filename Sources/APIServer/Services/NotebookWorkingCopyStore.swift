@@ -402,6 +402,27 @@ func overwriteUserNotebookWithPersonalizedStarter(
     )
 }
 
+/// `userID`'s personalized starter notebook, the bytes a reset would give
+/// them, without writing their working copy. Nil when the setup has no
+/// starter notebook.
+func personalizedStarterNotebook(
+    setup: APITestSetup,
+    userID: UUID,
+    on db: any Database,
+    application: Application,
+    logger: Logger
+) async -> Data? {
+    guard let setupID = setup.id, let starter = try? await notebookData(for: setup) else { return nil }
+    return await applyNotebookSubstitutionsIfNeeded(
+        seedData: starter,
+        setup: setup,
+        userID: userID,
+        db: db,
+        supportFilesDirectory: application.testSetupsDirectory + "shared/\(setupID)/",
+        logger: logger
+    )
+}
+
 /// Slice 1 + Slice 2: applies `{{name}}` substitutions to a notebook.
 /// Sources:
 ///   - `globalVariables` (Slice 1, literals)
