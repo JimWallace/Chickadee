@@ -84,8 +84,11 @@ extension AccountRoutes {
 
 /// The "Your bird" card: the bird itself, and the Face, Backdrop and Ring
 /// groups, built from `AvatarCustomization.options(for:)` so the page cannot
-/// offer an option the chokepoint would refuse. A face or ring the chokepoint
-/// would refuse is listed apart, as "Not open yet", and is not an input.
+/// offer an option the chokepoint would refuse. A face or ring that a student
+/// earns is not shown until it is earned: items are surprises, and a list of
+/// items not earned yet reads as a list of failures (docs/student-wardrobe.md,
+/// E1 to E3). The one exception is a seasonal ring out of its term, which
+/// every student gets: it is listed apart, as "Not open yet".
 struct AvatarPickerContext: Encodable {
     /// The student's bird at the podium size, the card's hero and the live
     /// preview's target.
@@ -103,13 +106,14 @@ struct AvatarPickerContext: Encodable {
     /// that face, so the sample shows what a save would draw. The worn face
     /// is always among them.
     let faces: [AvatarBirdOption]
-    /// The faces not open yet: shown, never selectable.
-    let lockedFaces: [AvatarBirdOption]
     let backdrops: [AvatarPickerOption]
     /// The rings a student may choose now, the worn one always among them.
     let rings: [AvatarPickerOption]
-    /// The rings that are not open yet: shown, never selectable.
-    let lockedRings: [AvatarPickerOption]
+    /// The seasonal rings out of their term: shown, never selectable.
+    let laterRings: [AvatarPickerOption]
+    /// The items the student has earned, each with how it was earned, in
+    /// wardrobe order. Empty hides the section.
+    let earned: [AvatarEarnedItem]
     /// Course staff wear the staff ring and cannot choose one: the Ring group
     /// becomes a note.
     let isStaff: Bool
@@ -132,27 +136,22 @@ struct AvatarPickerContext: Encodable {
         self.accentToken = hero.accentToken
         self.capToken = hero.capToken
         speciesName = spec.species.displayName
-        let allFaces = AvatarCustomization.options(for: .expression).compactMap(AvatarExpression.init(rawValue:))
+        faces = AvatarCustomization.options(for: .expression).compactMap(AvatarExpression.init(rawValue:))
+            // The worn face is always open.
+            .filter { expression in
+                expression == spec.expression
+                    || AvatarCustomization.isOpen(expression.rawValue, for: .expression, unlocked: unlocked)
+            }
             .map { expression in
                 var preview = spec
                 preview.expression = expression
-                // The worn face is never locked.
-                let isWorn = expression == spec.expression
-                let isLocked =
-                    !isWorn && !AvatarCustomization.isOpen(expression.rawValue, for: .expression, unlocked: unlocked)
                 return AvatarBirdOption(
                     value: expression.rawValue,
-                    label: isLocked
-                        ? Self.lockedLabel(
-                            expression.displayName, item: WardrobeItem(slot: .expression, value: expression.rawValue))
-                        : expression.displayName,
-                    checked: isWorn,
-                    isLocked: isLocked,
+                    label: expression.displayName,
+                    checked: expression == spec.expression,
                     presentation: AvatarPresentation(
                         for: preview, size: .roster, accessibility: .decorative, isStaff: isStaff))
             }
-        faces = allFaces.filter { !$0.isLocked }
-        lockedFaces = allFaces.filter(\.isLocked)
         backdrops = AvatarCustomization.options(for: .backdrop).map { value in
             AvatarPickerOption(
                 value: value,
@@ -161,55 +160,67 @@ struct AvatarPickerContext: Encodable {
                 ringRef: "",
                 checked: value == spec.backdrop.rawValue,
                 isNone: false,
-                isLocked: false,
                 season: "")
         }
         let season = TermSeason.current()
-        let borders = AvatarCustomization.options(for: .border).map { value in
-            // The same token and ring the presentation would name for this
-            // border, so the live preview draws exactly what a save would.
-            var preview = spec
-            preview.border = AvatarBorder(rawValue: value) ?? .none
-            // A sample is the ring a STUDENT would wear: staff never see the
-            // samples, only the note, so the staff ring has no sample.
-            let drawn = AvatarPresentation(
-                for: preview, size: .standard, accessibility: .decorative, isStaff: false)
-            // The ring a student already wears is never locked: a seasonal ring
-            // is kept after its term.
-            let isWorn = value == spec.border.rawValue
-            let isLocked =
-                !isWorn && !AvatarCustomization.isOpen(value, for: .border, season: season, unlocked: unlocked)
-            return AvatarPickerOption(
-                value: value,
-                label: Self.borderLabel(preview.border, isLocked: isLocked),
-                token: drawn.borderToken,
-                ringRef: drawn.ringSymbolRef,
-                checked: isWorn,
-                isNone: value == AvatarBorder.none.rawValue,
-                isLocked: isLocked,
-                season: preview.border.season?.rawValue ?? "")
+        // The ring a student already wears is always open: a seasonal ring is
+        // kept after its term.
+        let values = AvatarCustomization.options(for: .border)
+        let open = values.filter { value in
+            value == spec.border.rawValue
+                || AvatarCustomization.isOpen(value, for: .border, season: season, unlocked: unlocked)
         }
-        rings = borders.filter { !$0.isLocked }
-        lockedRings = borders.filter(\.isLocked)
+        rings = open.map { Self.ringOption($0, for: spec, isLocked: false) }
+        laterRings = values.filter { !open.contains($0) && AvatarBorder(rawValue: $0)?.season != nil }
+            .map { Self.ringOption($0, for: spec, isLocked: true) }
+        // Staff cannot choose a ring, so an earned ring is not theirs to read about.
+        earned = WardrobeItem.allCases
+            .filter { unlocked.contains($0) && !(isStaff && $0.slot == .border) }
+            .map(AvatarEarnedItem.init)
     }
 }
 
 extension AvatarPickerContext {
-    /// A ring's name. A seasonal ring is named by its term: "Fall" among the
-    /// open rings, "Winter · opens in January" under "Not open yet". Any
-    /// other locked ring is earned: "Two-tone · earned".
-    static func borderLabel(_ border: AvatarBorder, isLocked: Bool) -> String {
-        guard isLocked else { return border.displayName }
-        if let season = border.season { return "\(season.displayName) · opens in \(season.startMonthName)" }
-        return lockedLabel(border.displayName, item: WardrobeItem(slot: .border, value: border.rawValue))
+    /// One ring swatch: the same token and ring the presentation would name
+    /// for this border, so the live preview draws exactly what a save would.
+    private static func ringOption(_ value: String, for spec: AvatarSpec, isLocked: Bool) -> AvatarPickerOption {
+        var preview = spec
+        preview.border = AvatarBorder(rawValue: value) ?? .none
+        // A sample is the ring a STUDENT would wear: staff never see the
+        // samples, only the note, so the staff ring has no sample.
+        let drawn = AvatarPresentation(for: preview, size: .standard, accessibility: .decorative, isStaff: false)
+        return AvatarPickerOption(
+            value: value,
+            label: borderLabel(preview.border, isLocked: isLocked),
+            token: drawn.borderToken,
+            ringRef: drawn.ringSymbolRef,
+            checked: value == spec.border.rawValue,
+            isNone: value == AvatarBorder.none.rawValue,
+            season: preview.border.season?.rawValue ?? "")
     }
 
-    /// A locked earned item's name: "Chirp · earned by a first graded
-    /// submission" when a rule earns it (`WardrobeItem.howToEarn`), and
-    /// "Spectrum · earned" for an item no rule earns yet.
-    static func lockedLabel(_ name: String, item: WardrobeItem?) -> String {
-        guard let item else { return "\(name) · earned" }
-        return "\(name) · earned \(item.howToEarn)"
+    /// A ring's name. A seasonal ring is named by its term: "Fall" among the
+    /// open rings, "Winter · opens in January" under "Not open yet". No other
+    /// ring is ever shown locked.
+    static func borderLabel(_ border: AvatarBorder, isLocked: Bool) -> String {
+        guard isLocked, let season = border.season else { return border.displayName }
+        return "\(season.displayName) · opens in \(season.startMonthName)"
+    }
+}
+
+/// One earned item in "How you earned these": "Stitched: earned for a
+/// comeback on three assignments".
+struct AvatarEarnedItem: Encodable {
+    let text: String
+
+    init(_ item: WardrobeItem) {
+        let name: String? =
+            switch item.slot {
+            case .expression: AvatarExpression(rawValue: item.value)?.displayName
+            case .border: AvatarBorder(rawValue: item.value)?.displayName
+            case .backdrop: item.value.capitalized
+            }
+        text = "\(name ?? item.value): earned \(item.howEarned)"
     }
 }
 
@@ -220,8 +231,6 @@ struct AvatarBirdOption: Encodable {
     let value: String
     let label: String
     let checked: Bool
-    /// An unlockable face before it is unlocked: shown, not selectable.
-    let isLocked: Bool
     let presentation: AvatarPresentation
 }
 
@@ -238,9 +247,6 @@ struct AvatarPickerOption: Encodable {
     let checked: Bool
     /// The "no border" option, drawn as a dashed ring rather than a colour.
     let isNone: Bool
-    /// An earned or special ring, or a seasonal ring out of its term: shown,
-    /// but not selectable now.
-    let isLocked: Bool
     /// The term of a seasonal ring ("fall"); empty for every other option.
     /// The visual-regression harness reads it to pin the one part of the page
     /// that changes with the date.

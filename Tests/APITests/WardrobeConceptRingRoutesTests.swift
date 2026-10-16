@@ -96,14 +96,15 @@ import VaporTesting
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let before = try await getHTML("/account", cookie: cookie, on: app)
-            #expect(before.contains("Ouroboros · earned when every test passes on a loops lab"))
+            #expect(!before.contains("Ouroboros"))
 
             try await gradeSubmission(
                 id: "cr_s1", setupID: "cr_a", concept: .loops, statuses: [.pass, .pass], on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(try await storedUnlocks(on: app).contains("border.ouroboros"))
             #expect(html.contains(#"name="border" value="ouroboros""#))
-            #expect(html.contains("Pulse · earned when every test passes on a health data lab"))
+            #expect(html.contains("Ouroboros: earned when every test passed on a loops lab"))
+            #expect(!html.contains(#"name="border" value="pulse""#))
         }
     }
 

@@ -141,7 +141,7 @@ import VaporTesting
         }
     }
 
-    @Test func thePageOffersTheStarterFacesAndShowsTheOthersLocked() async throws {
+    @Test func thePageOffersTheStarterFacesAndHidesTheOthers() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginUser(
                 username: "face_page", password: "pw", role: "student", on: app)
@@ -159,10 +159,10 @@ import VaporTesting
                     try faceRadio(in: html, value: face.rawValue)
                         .contains("data-av-expression=\"#av-expression-\(face.rawValue)\""))
             }
-            // The unlockable faces are listed, locked, and are not inputs.
+            // The unlockable faces are not shown until they are earned.
             for face in [AvatarExpression.chirp, .sly, .dreamy] {
                 #expect(!html.contains(#"name="expression" value="\#(face.rawValue)""#), "\(face) is offered")
-                #expect(html.contains("\(face.displayName) · earned"), "\(face) is not listed")
+                #expect(!html.contains("\(face.displayName) · earned"), "\(face) is listed")
             }
             // No colourway choice: the species and colours come with the bird.
             #expect(!html.contains("name=\"cap\""))

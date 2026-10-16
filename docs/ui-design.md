@@ -496,7 +496,7 @@ duplicate.
   student's own bird wearing a face, an `Avatar` at the roster size, so the
   face reads; it brings its own properties, so it shows the SAVED backdrop
   and ring, not the previewed ones, while the ring samples follow the preview).
-  An option that cannot be chosen yet is not a swatch: see `.bird-locked`.
+  A seasonal ring out of its term is not a swatch: see `.bird-locked`.
   Used by the account page's `.bird-card`.
 - **`.bird-hatch`** — the hero bird on the first page after a hatch (#2590):
   the bird with `.bird-hatch-egg` over it, two `.bird-hatch-shell` halves
@@ -528,10 +528,16 @@ duplicate.
   tile, and a backdrop keeps the ring around its disc.  A backdrop is the one
   swatch whose name is `.visually-hidden`: the eight discs are the choice,
   and the checked one has the ring.  `.bird-locked` lists
-  the faces and rings not open yet under a dashed rule: a dimmed sample, a lock icon and
-  "Name · earned", or for a term ring "Winter · opens in January".  They are list items, not disabled
+  the seasonal rings out of their term under a dashed rule: a dimmed sample, a lock icon and
+  "Winter · opens in January".  They are list items, not disabled
   radios, because nothing about them can be chosen.  The ring a student
-  already wears is never listed there.  The live preview (`avatar-picker.js`)
+  already wears is never listed there.  A face or ring that a student earns
+  is not shown at all until it is earned: items are surprises, and a list of
+  items not earned yet reads as a list of failures (#2615).
+  `.bird-card-earned` is the closed "How you earned these" `<details>` under
+  the card body, with a `.disclosure-summary`: one line per earned item, in
+  the past tense, "Stitched: earned for a comeback on three assignments".
+  It is absent while the student has earned nothing.  The live preview (`avatar-picker.js`)
   copies the checked option's tokens onto the hero bird and points its ring
   and face layers at the checked symbols; it also keeps Save disabled and "Undo changes"
   hidden until a choice changes.  See [student-wardrobe.md](student-wardrobe.md)

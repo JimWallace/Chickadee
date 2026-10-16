@@ -26,12 +26,10 @@ import VaporTesting
 
     /// A seasonal ring is named by its term whether or not it is open: "Fall"
     /// among the open rings, "Fall · opens in September" under "Not open yet".
-    /// Any other locked ring is earned.
     @Test func aSeasonalRingAlwaysNamesItsTerm() {
         #expect(AvatarPickerContext.borderLabel(.maple, isLocked: true) == "Fall · opens in September")
         #expect(AvatarPickerContext.borderLabel(.snowflake, isLocked: true) == "Winter · opens in January")
         #expect(AvatarPickerContext.borderLabel(.blossom, isLocked: true) == "Spring · opens in May")
-        #expect(AvatarPickerContext.borderLabel(.spectrum, isLocked: true) == "Spectrum · earned")
         #expect(AvatarPickerContext.borderLabel(.maple, isLocked: false) == "Fall")
         #expect(AvatarPickerContext.borderLabel(.rainbow, isLocked: false) == "Rainbow")
     }
