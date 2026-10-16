@@ -34,9 +34,9 @@ is the bridge-first command channel of `notebook.js`.
 |---|---|---|
 | `chickadee:set-theme` | `{theme: "light" \| "dark"}` | Selects "Chickadee" or "Chickadee dark". |
 | `chickadee:configure` | `{patterns: [String]}` | Sets the definition patterns that `ck:active-cell` and `chickadee:reveal` use. |
-| `chickadee:set-guide` | `{guide}` | Stores the student guide (`docs/notebook-guide.md`). NB4 draws from it. |
+| `chickadee:set-guide` | `{guide}` | Draws the student guide (`docs/notebook-guide.md`, "In the editor"): the task headers and the checks lines. |
 | `chickadee:set-suite` | `{suite}` | Stores the instructor suite. NB7 draws from it. |
-| `chickadee:reveal` | `{cellId}`, `{index}`, `{name}` or `{section}` | Selects the cell and scrolls to it. A `name` finds the last cell that defines the name. A `section` finds the first code cell after the `## ` heading. |
+| `chickadee:reveal` | `{cellId}`, `{index}`, `{name}`, `{section}` or `{tag}` | Selects the cell and scrolls to it. A `name` finds the last cell that defines the name. A `section` finds the first code cell after the `## ` heading. A `tag` finds the first cell with that tag. |
 
 `notebook-toolbar.js` sends `chickadee:configure` and `chickadee:set-theme` on
 the first `ck:kernel` event of each editor document. It sends
@@ -50,7 +50,8 @@ Each event is a `postMessage` to the parent window, for this origin only. The
 | Event | Fields | Reader |
 |---|---|---|
 | `ck:kernel` | `status`: `starting`, `idle`, `busy` or `dead` | The kernel chip, and the loading panel (idle or busy closes it). |
-| `ck:active-cell` | `cellId`, `index`, `names` | NB4 (the outline). `names` are the names that the cell defines. |
+| `ck:active-cell` | `cellId`, `index`, `names`, `task` | The outline. `names` are the names that the cell defines. `task` is the `sectionID` of the task that holds the cell, or null. |
+| `ck:tasks` | `tasks`: `[{sectionID, status}]`, `reflections`: `[{tag, status}]` | The outline. Sent after each redraw of the guide, in the guide's task order, with the status that the editor shows (`starter` included). A reflection is `written` or `empty`. |
 | `ck:cell-ran` | `cellId`, `status`: `ok` or `error` | NB4 (the "ran without errors" signal). |
 | `ck:saved` | `state`: `started`, `completed` or `failed` | The save state in the toolbar. |
 

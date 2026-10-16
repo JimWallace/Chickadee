@@ -16,8 +16,10 @@ import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application'
 import { IThemeManager } from '@jupyterlab/apputils';
 import { INotebookTracker, Notebook, NotebookActions, NotebookPanel } from '@jupyterlab/notebook';
 
-import { compilePatterns, definedNames, sectionHeading } from './definitions';
-import { kernelState, post } from './events';
+import { compilePatterns, definedNames, sectionHeading } from './definitions.js';
+import { kernelState, post } from './events.js';
+import { Guide } from './guide.js';
+import { GuideView } from './guideView.js';
 
 const LIGHT = 'Chickadee';
 const DARK = 'Chickadee dark';
@@ -53,8 +55,8 @@ const themePlugin: JupyterFrontEndPlugin<void> = {
 /** What the page has told the extension so far. NB4 and NB7 render from it. */
 class PageState {
   patterns: RegExp[] = [];
-  guide: unknown = null;
   suite: unknown = null;
+  constructor(readonly view: GuideView) {}
 }
 
 /** The bridge commands and the events. */
@@ -64,7 +66,7 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker, IThemeManager],
   activate: (app: JupyterFrontEnd, tracker: INotebookTracker, manager: IThemeManager) => {
-    const state = new PageState();
+    const state = new PageState(new GuideView(() => tracker.currentWidget?.content ?? null));
 
     app.commands.addCommand('chickadee:set-theme', {
       label: 'Set the Chickadee theme',
@@ -83,6 +85,7 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
         state.patterns = Array.isArray(patterns)
           ? compilePatterns(patterns.filter((p): p is string => typeof p === 'string'))
           : [];
+        state.view.setPatterns(state.patterns);
         postActiveCell(tracker, state);
       }
     });
@@ -90,7 +93,8 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand('chickadee:set-guide', {
       label: 'Set the student guide',
       execute: args => {
-        state.guide = args['guide'] ?? null;
+        const guide = args['guide'];
+        state.view.setGuide(isGuide(guide) ? guide : null);
       }
     });
 
@@ -124,6 +128,7 @@ const bridgePlugin: JupyterFrontEndPlugin<void> = {
     hideNotebookChrome(app, tracker);
     watchKernel(tracker);
     watchSaves(tracker);
+    watchEdits(tracker, state.view);
     tracker.activeCellChanged.connect(() => postActiveCell(tracker, state));
     NotebookActions.executed.connect((_, { cell, success }) => {
       post({ ck: 'ck:cell-ran', cellId: cell.model.id, status: success ? 'ok' : 'error' });
@@ -188,6 +193,27 @@ function watchSaves(tracker: INotebookTracker): void {
   tracker.widgetAdded.connect((_, panel) => watch(panel));
 }
 
+/** An edit or a cell added, moved or removed redraws the guide, after quiet. */
+function watchEdits(tracker: INotebookTracker, view: GuideView): void {
+  const watch = (panel: NotebookPanel) => {
+    const connect = () => panel.model?.contentChanged.connect(() => view.edited());
+    if (panel.model) {
+      connect();
+    } else {
+      void panel.context.ready.then(connect);
+    }
+  };
+  tracker.forEach(watch);
+  tracker.widgetAdded.connect((_, panel) => watch(panel));
+  tracker.currentChanged.connect(() => view.schedule());
+}
+
+/** The payload's shape, checked once at the door. */
+function isGuide(value: unknown): value is Guide {
+  const guide = value as Guide | null;
+  return !!guide && typeof guide === 'object' && Array.isArray(guide.tasks) && typeof guide.starterSources === 'object';
+}
+
 function postActiveCell(tracker: INotebookTracker, state: PageState): void {
   const notebook = tracker.currentWidget?.content;
   const cell = tracker.activeCell;
@@ -195,7 +221,8 @@ function postActiveCell(tracker: INotebookTracker, state: PageState): void {
     return;
   }
   const names = cell.model.type === 'code' ? definedNames(cell.model.sharedModel.getSource(), state.patterns) : [];
-  post({ ck: 'ck:active-cell', cellId: cell.model.id, index: notebook.activeCellIndex, names });
+  const index = notebook.activeCellIndex;
+  post({ ck: 'ck:active-cell', cellId: cell.model.id, index, names, task: state.view.taskOf(index) });
 }
 
 /**
@@ -223,6 +250,14 @@ function findCell(notebook: Notebook, args: { [key: string]: unknown }, patterns
       }
     }
     return null;
+  }
+  const tag = args['tag'];
+  if (typeof tag === 'string') {
+    const index = cells.findIndex(c => {
+      const tags = c.model.getMetadata('tags');
+      return Array.isArray(tags) && tags.includes(tag);
+    });
+    return index === -1 ? null : index;
   }
   const section = args['section'];
   if (typeof section === 'string') {

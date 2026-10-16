@@ -760,6 +760,27 @@ duplicate.
   new one with this view, not by hand.  One exception remains:
   `NotebookBody.helpLink` writes the anchor by hand, because
   `notebook-slow-notice.test.mjs` reads its body.
+- **`.nb-workspace`**, **`.nb-outline`** — the student's task outline beside
+  the editor (design frame 18a), drawn by `notebook-guide.js` from the guide
+  payload (`docs/notebook-guide.md`).  `.nb-workspace` puts the outline and the
+  `.nb-stage` side by side.  The outline holds an `.outline-attempt` card
+  (an `.outline-caption`, the `.outline-figure` percent, an `.outline-meta` line
+  and a link to the results), a second `.outline-caption`, and an
+  `.outline-tasks` list of `.outline-row` buttons.  Each row has an
+  `.outline-glyph`, an `.outline-name` and its points; `data-status` colours the
+  glyph, and the glyph character and the editor's pill always say the status
+  too.  `aria-current` marks the task under the cursor.  A Reflection row,
+  `written` or `empty`, follows the tasks.  A task row carries an
+  `.outline-wide` name and an `.outline-short` label: below 1100px the same nodes
+  become a row of chips at least 44px tall, and below 640px the outline is
+  hidden.  A hidden status word follows each row's name, because the glyph is
+  `aria-hidden` and the pill is inside the editor.  It is not a `.card` list,
+  because a row is a button that moves the editor, not a link to another page.
+  The narrow rows are chip-shaped buttons, not `.chip`, which is a label, not
+  a control.  The attempt card is not a `.diagnostic-card`, because it holds a
+  link and a sentence, not one measured value.  `.outline-caption` is the
+  small uppercase label of this one component; the kickers of other pages
+  belong to their own cards.
 - **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
   disclosure (the audit log, alert firings).  A log row shows when, who, what
   and how it went; everything else — category, target, remote address,

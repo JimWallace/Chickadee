@@ -36,7 +36,9 @@ __metadata:
     "@jupyterlab/application": ~4.6.4
     "@jupyterlab/apputils": ~4.7.4
     "@jupyterlab/builder": ~4.5.11
+    "@jupyterlab/cells": ~4.6.4
     "@jupyterlab/notebook": ~4.6.4
+    "@lumino/widgets": ^2.7.0
     typescript: ~5.5.4
   languageName: unknown
   linkType: soft
@@ -530,7 +532,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jupyterlab/cells@npm:^4.6.4":
+"@jupyterlab/cells@npm:^4.6.4, @jupyterlab/cells@npm:~4.6.4":
   version: 4.6.4
   resolution: "@jupyterlab/cells@npm:4.6.4"
   dependencies:
@@ -1336,7 +1338,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@lumino/widgets@npm:^1.37.2 || ^2.8.0, @lumino/widgets@npm:^2.10.0, @lumino/widgets@npm:^2.7.5, @lumino/widgets@npm:^2.8.0":
+"@lumino/widgets@npm:^1.37.2 || ^2.8.0, @lumino/widgets@npm:^2.10.0, @lumino/widgets@npm:^2.7.0, @lumino/widgets@npm:^2.7.5, @lumino/widgets@npm:^2.8.0":
   version: 2.10.0
   resolution: "@lumino/widgets@npm:2.10.0"
   dependencies:

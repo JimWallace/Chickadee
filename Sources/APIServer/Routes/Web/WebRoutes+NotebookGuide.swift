@@ -93,14 +93,17 @@ extension WebRoutes {
                 for: assignment, setup: setup, db: req.db,
                 testSetupsDirectory: req.application.testSetupsDirectory)
         } catch {
-            // No solution yet: script tests then anchor by section.
             req.logger.debug("notebook_guide no_solution setup=\(setup.id ?? "-"): \(error)")
         }
-        let solution =
-            solutionData.map { scanNotebookDefinitions($0, language: language) }
-            ?? NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
         let starter = await personalizedStarterNotebook(
             setup: setup, userID: userID, on: req.db, application: req.application, logger: req.logger)
+        // No solution yet: the starter has the same headings and, usually, the
+        // same function stubs, so it gives the anchors instead. With neither,
+        // every test is unlinked.
+        let anchorSource = solutionData ?? starter
+        let solution =
+            anchorSource.map { scanNotebookDefinitions($0, language: language) }
+            ?? NotebookDefinitionScan(definitions: [], sections: [], codeCellIndices: [])
         var scripts: [String: String] = [:]
         for entry in manifest.testSuites where !entry.isGenerated {
             scripts[entry.script] = await readScriptFromZip(zipPath: setup.zipPath, filename: entry.script)
