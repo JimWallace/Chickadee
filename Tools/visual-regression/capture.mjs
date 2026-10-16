@@ -215,6 +215,11 @@ async function main() {
             .forEach((el) => {
               (el.closest(".swatch") ?? el).remove();
             });
+          // The "Not open yet" list holds only seasonal rings, so removing
+          // them empties it. Remove the empty list too, as the page would.
+          document.querySelectorAll(".bird-locked").forEach((list) => {
+            if (!list.querySelector("li")) list.remove();
+          });
           // The Users table sorts by last seen, and last_seen_at refreshes at
           // most once a minute per user. So which of the two seeded users was
           // seen last depends on where those refreshes fall in the capture
