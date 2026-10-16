@@ -9,6 +9,13 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.685] - 2026-10-16
+
+### Added
+
+- **Six concept rings (locked).** Life ring, Green light, Ouroboros, Function, Binary and Pulse: one earned ring per lab concept, with their sprite art and palette tokens. They show under "Not open yet" until the unlock rule ships.
+
+
 ## [0.5.684] - 2026-10-15
 
 ### Added
