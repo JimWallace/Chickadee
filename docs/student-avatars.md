@@ -856,11 +856,10 @@ other.
    not give the hatch back. On the first page after a hatch the new bird
    comes out of an egg (#2590; `.bird-hatch` in docs/ui-design.md), and a
    reader who asked for less motion sees the bird at once. Each hatch records
-   the species it came from and went to, and the bird card ends with a
-   **life list** (#2593): every species, the ones the student's birds have
-   been at full strength, the others dimmed. It is private, the account page
-   only. Hatch rows from before the record add nothing; no species is
-   guessed. Each hatch is a
+   the species it came from and went to (#2593); a row from before the
+   record has neither. The account page once showed these as a **life
+   list** of every species. It was removed: a student has one bird that
+   represents them, not a collection to complete. Each hatch is a
    row in `avatar_hatches` (user, term key such as "2026-fall", date), which
    the data export includes and an account deletion removes. Nothing else may
    change a stored bird's species (decision 2). Not built: blocking a hatch

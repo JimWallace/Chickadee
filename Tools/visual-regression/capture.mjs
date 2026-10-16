@@ -206,18 +206,6 @@ async function main() {
               el.textContent = "Hatched Jan 1, 2026";
             });
           });
-          // The life list marks the species the student has had, and the
-          // seeded bird's species is drawn at random. Mark the first species
-          // as seen and the others as not yet, so the list is the same for
-          // every draw.
-          document
-            .querySelectorAll('ul[aria-labelledby="bird-life-list-label"] > li')
-            .forEach((item, index) => {
-              const text = item.lastChild;
-              const name = text.textContent.replace("· not yet", "").trim();
-              item.classList.toggle("bird-locked-had", index === 0);
-              text.textContent = index === 0 ? ` ${name}` : ` ${name} · not yet`;
-            });
           // Which seasonal ring is open depends on today's Waterloo term, so
           // one of the three would move from "Not open yet" to the open rings
           // every January, May and September. Removing all three seasonal

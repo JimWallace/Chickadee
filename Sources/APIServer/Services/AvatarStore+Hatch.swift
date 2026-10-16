@@ -131,18 +131,4 @@ extension AvatarStore {
             .filter(\.$termKey == termKey)
             .count()
     }
-
-    /// The species `user`'s birds have been, for the life list (#2593).
-    static func lifeList(for user: APIUser, on db: any Database) async throws -> Set<AvatarSpecies> {
-        let hatches = try await APIAvatarHatch.query(on: db).filter(\.$userID == user.requireID()).all()
-        return AvatarLifeList.seen(
-            current: user.avatarSpecJSON.flatMap(decode)?.species,
-            previous: user.avatarPreviousSpecJSON.flatMap(decode)?.species,
-            hatches: hatches.map {
-                (
-                    from: $0.fromSpecies.flatMap(AvatarSpecies.init(rawValue:)),
-                    to: $0.species.flatMap(AvatarSpecies.init(rawValue:))
-                )
-            })
-    }
 }
