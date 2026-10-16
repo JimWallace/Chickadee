@@ -2,9 +2,8 @@
 //
 // The notebook editor's body: the toolbar, the dismissible notices, the
 // failure panel, the loading panel, the JupyterLite iframe and the page
-// scripts. `NotebookPage`
-// renders it as the whole page, and `WorkbenchPage` renders it in its
-// right-hand pane. It takes plain values and no request.
+// scripts. `NotebookPage` renders it as the whole page, and `WorkbenchPage`
+// renders it in its right-hand pane. It takes plain values and no request.
 //
 // Every id, data attribute, iframe attribute and script tag here is read by
 // `Public/notebook*.js`, `Public/browser-runner.js` and the isolation
