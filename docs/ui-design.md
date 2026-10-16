@@ -754,7 +754,9 @@ duplicate.
   is not a `.chip`, because it carries a status colour.
 - **`NewTabLink`** — a link that opens in a new tab: `target="_blank"`, the
   `i-external` icon and a `.visually-hidden` "(opens in a new tab)".  Write a
-  new one with this view, not by hand.
+  new one with this view, not by hand.  One exception remains:
+  `NotebookBody.helpLink` writes the anchor by hand, because
+  `notebook-slow-notice.test.mjs` reads its body.
 - **`.log-payload`** — the `.detail-grid` inside a log/event row's payload
   disclosure (the audit log, alert firings).  A log row shows when, who, what
   and how it went; everything else — category, target, remote address,
